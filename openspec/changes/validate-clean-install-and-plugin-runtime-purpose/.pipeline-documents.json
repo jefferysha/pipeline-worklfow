@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-27T13:20:32Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/proposal.md",
+      "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-27T15:47:34Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+          "readAt": "2026-07-27T15:48:21Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+          "readAt": "2026-07-27T15:49:07Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",9]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+          "readAt": "2026-07-27T16:42:11Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/design.md",
+      "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-27T15:47:39Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+          "readAt": "2026-07-27T15:48:21Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+          "readAt": "2026-07-27T15:49:07Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",9]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+          "readAt": "2026-07-27T16:42:11Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-27-clean-codex-install-and-plugin-runtime-purpose-design.md",
+      "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-27T15:47:52Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+          "readAt": "2026-07-27T15:48:21Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+          "readAt": "2026-07-27T15:49:07Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",9]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+          "readAt": "2026-07-27T16:42:11Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-27-clean-install-acceptance-and-purpose-only-baseline.md",
+      "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-27T15:47:58Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+          "readAt": "2026-07-27T15:48:21Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+          "readAt": "2026-07-27T15:49:07Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",9]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+          "readAt": "2026-07-27T16:42:11Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/specs/plugin-distribution/spec.md",
+      "sha256": "84feecc73946647b5796df309af117ef65551b57b6482769fdc0e0d93df633f7",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-27T15:48:05Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "84feecc73946647b5796df309af117ef65551b57b6482769fdc0e0d93df633f7",
+          "readAt": "2026-07-27T15:49:07Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",9]"
+        },
+        {
+          "phase": "build",
+          "sha256": "84feecc73946647b5796df309af117ef65551b57b6482769fdc0e0d93df633f7",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "84feecc73946647b5796df309af117ef65551b57b6482769fdc0e0d93df633f7",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/tasks.md",
+      "sha256": "530c960dc97ddf797370a739be5c166d3608c138f2d1e520e45af53e3a7fb75e",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-27T16:42:10Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "530c960dc97ddf797370a739be5c166d3608c138f2d1e520e45af53e3a7fb75e",
+          "readAt": "2026-07-27T16:42:11Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "530c960dc97ddf797370a739be5c166d3608c138f2d1e520e45af53e3a7fb75e",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "530c960dc97ddf797370a739be5c166d3608c138f2d1e520e45af53e3a7fb75e",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-27-clean-codex-install-and-plugin-runtime-purpose.md",
+      "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-27T16:42:10Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-27-clean-codex-install-and-plugin-runtime-purpose.md",
+      "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-27T16:42:11Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+          "readAt": "2026-07-27T16:42:59Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
+          "readAt": "2026-07-27T16:47:02Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-27-validate-clean-install-and-plugin-runtime-purpose-verify.md",
+      "sha256": "7c8b4964c94d1c8cc4d6411f1edf9ee854cc4669d0315172c823d89452fd1094",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-27T16:47:02Z",
+      "reads": []
+    }
+  ]
+}

@@ -106,6 +106,39 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     expect(entries.filter((e) => e.startsWith(LOCK_DIR_NAME))).toEqual([])
   })
 
+  it('新鲜锁的 owner PID 已退出时立即接管，不等待陈旧阈值', async () => {
+    const exited = spawn(process.execPath, ['-e', 'process.exit(0)'])
+    const pid = exited.pid
+    expect(pid).toBeTypeOf('number')
+    await once(exited, 'exit')
+    const lockDir = path.join(dir, LOCK_DIR_NAME)
+    await mkdir(lockDir)
+    await writeFile(
+      path.join(lockDir, LOCK_OWNER_FILE),
+      `${String(pid)}.abandoned.${Date.now()}\n`,
+      'utf8',
+    )
+
+    const start = Date.now()
+    expect(await withLock(dir, async () => 'reclaimed')).toBe('reclaimed')
+    expect(Date.now() - start).toBeLessThan(2_000)
+  })
+
+  it('新鲜锁的 owner PID 含非十进制后缀时不截断为可探测 PID', async () => {
+    const lockDir = path.join(dir, LOCK_DIR_NAME)
+    await mkdir(lockDir)
+    await writeFile(
+      path.join(lockDir, LOCK_OWNER_FILE),
+      `99999999junk.abandoned.${Date.now()}\n`,
+      'utf8',
+    )
+    const release = setTimeout(() => void rm(lockDir, { recursive: true, force: true }), 120)
+    const start = Date.now()
+    expect(await withLock(dir, async () => 'waited')).toBe('waited')
+    expect(Date.now() - start).toBeGreaterThanOrEqual(100)
+    clearTimeout(release)
+  })
+
   it('陈锁存在时的并发 withLock：接管陈锁、临界区互斥(从不双持)、无锁/坟墓残留', async () => {
     const lockDir = path.join(dir, LOCK_DIR_NAME)
     await mkdir(lockDir)
@@ -135,3 +168,5 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     expect(entries.filter((e) => e.startsWith(LOCK_DIR_NAME))).toEqual([])
   })
 })
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'

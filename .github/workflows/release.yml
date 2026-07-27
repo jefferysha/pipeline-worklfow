@@ -72,6 +72,10 @@ jobs:
       - run: npm run build
       - run: bash tools/verify-skills.sh
       - run: bash tools/test-bundle.sh
+      - name: Install pinned Codex CLI for public bootstrap acceptance
+        run: npm install --global @openai/codex@0.144.1
+      - name: Real clean Codex install through public bootstrap
+        run: npm run test:clean-install:public -- --public-ref "$(git rev-parse HEAD)"
 
       - name: Package migration-only legacy bridge
         run: |

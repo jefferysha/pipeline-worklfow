@@ -568,7 +568,27 @@ async function lockAgeMs(lockDir) {
     }
   }
 }
-async function reclaimStale(lockDir) {
+async function lockOwnerProcessIsDead(lockDir) {
+  let owner;
+  try {
+    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
+  } catch {
+    return false;
+  }
+  const pidText = owner.split(".", 1)[0] ?? "";
+  if (!/^[1-9][0-9]*$/.test(pidText))
+    return false;
+  const pid = Number(pidText);
+  if (!Number.isSafeInteger(pid) || pid <= 0)
+    return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return error.code === "ESRCH";
+  }
+}
+async function reclaimAbandoned(lockDir) {
   const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString("hex")}`;
   try {
     await rename2(lockDir, grave);
@@ -609,11 +629,15 @@ async function acquire(lockDir) {
       if (err.code !== "EEXIST")
         throw err;
     }
+    if (await lockOwnerProcessIsDead(lockDir)) {
+      await reclaimAbandoned(lockDir);
+      continue;
+    }
     const age = await lockAgeMs(lockDir);
     if (age === null)
       continue;
     if (age > STALE_LOCK_MS) {
-      await reclaimStale(lockDir);
+      await reclaimAbandoned(lockDir);
       continue;
     }
     if (Date.now() >= deadline) {

@@ -7,6 +7,15 @@ import {
   type DashboardRuntime,
   type ReleasedDashboardStarter,
 } from './dashboard.js'
+import { dashboardPortOpen } from './dashboard-health.js'
+import { sameManagedDashboardIdentity } from './managed-dashboard-identity.js'
+
+export class DashboardInspectionUnverifiableError extends Error {
+  constructor(port: number) {
+    super(`Dashboard port ${port} 存在 listener，但 managed health identity 不可验证`)
+    this.name = 'DashboardInspectionUnverifiableError'
+  }
+}
 
 export function createReleasedDashboardStarter(
   runtime: DashboardRuntime,
@@ -16,7 +25,11 @@ export function createReleasedDashboardStarter(
       const port = opts.port ?? DEFAULT_DASHBOARD_PORT
       const stateScopeId = runtime.resolveStateScopeId()
       const identity = await runtime.probeHealthyServer(port, undefined, stateScopeId, '*')
-      return identity?.releaseId === 'unmanaged' ? null : identity as ManagedDashboardIdentity | null
+      if (identity !== null && identity.releaseId !== 'unmanaged') {
+        return identity as ManagedDashboardIdentity
+      }
+      if (!await dashboardPortOpen(port)) return null
+      throw new DashboardInspectionUnverifiableError(port)
     },
     adopt: async (deps, identity) => {
       const current = await runtime.probeHealthyServer(
@@ -25,10 +38,8 @@ export function createReleasedDashboardStarter(
         identity.stateScopeId,
         identity.transactionId,
       )
-      if (current === null
-        || current.pid !== identity.pid
-        || current.transactionId !== identity.transactionId) return null
-      return releasedDashboardSession(deps, identity, runtime.stopOwnedDashboard)
+      if (current === null || !sameManagedDashboardIdentity(current, identity)) return null
+      return releasedDashboardSession(deps, current, runtime.stopOwnedDashboard)
     },
     start: (deps, payloadRoot, opts) => startReleasedDashboard(deps, payloadRoot, opts, runtime),
   }

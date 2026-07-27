@@ -75,6 +75,10 @@ export type ManagedReleaseJournalPhase =
   | 'runtime-activated'
   | 'starting-dashboard'
   | 'dashboard-ready'
+  | 'stopping-candidate'
+  | 'reverting-activation'
+  | 'restoring-previous'
+  | 'previous-restored'
   | 'evidence-committed'
 
 export interface ManagedReleaseJournalRecord {
@@ -85,15 +89,23 @@ export interface ManagedReleaseJournalRecord {
   readonly phase: ManagedReleaseJournalPhase
   readonly startedAt: string
   readonly updatedAt: string
+  /** Concrete port frozen when the transaction is created and reused for every recovery. */
+  readonly dashboardPort?: number
   readonly candidateRoot?: string
   /** Host inventory snapshot or another small serializable input for the final receipt. */
   readonly evidence?: string
   readonly hostSteps?: readonly ManagedHostStepJournalRecord[]
   readonly activationCheckpoint?: RuntimeActivationCheckpoint
   readonly activation?: RuntimeActivation
-  /** Exact service observed before launch; absent in starting-dashboard means the port was empty. */
+  /** Exact service observed before activation. */
   readonly dashboardBefore?: ManagedDashboardIdentity
+  /** Durable proof that the pre-activation Dashboard probe observed an empty port. */
+  readonly dashboardBeforeAbsent?: true
   readonly dashboard?: ManagedDashboardJournalRecord
+  /** Bounded failure detail carried through crash-safe compensation. */
+  readonly compensationReason?: string
+  /** Exact previous Dashboard identity restored under this transaction's restore identity. */
+  readonly dashboardRestored?: ManagedDashboardIdentity
 }
 
 export interface RuntimeActivationCheckpoint {
@@ -129,8 +141,8 @@ export interface RuntimeInstaller {
 }
 
 export class ManagedRuntimeIndeterminateError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'ManagedRuntimeIndeterminateError'
   }
 }
@@ -186,18 +198,59 @@ async function revertWithinTransaction(
   homeDir: string,
   activation: RuntimeActivation,
 ): Promise<void> {
-  await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection)
+  const store = new RuntimeReleaseStore({ paths })
+  const compensatedSelection = {
+    version: 1 as const,
+    revision: activation.selection.revision + 1,
+    activeRelease: activation.selection.previousRelease,
+    previousRelease: activation.selection.activeRelease,
+  }
+  const sameSelectionCoordinates = (
+    current: RuntimeSelection,
+    expected: Pick<RuntimeSelection, 'version' | 'revision' | 'activeRelease' | 'previousRelease'>,
+  ) => current.version === expected.version
+    && current.revision === expected.revision
+    && current.activeRelease === expected.activeRelease
+    && current.previousRelease === expected.previousRelease
+  const before = await store.inspect()
+  if (sameSelectionCoordinates(before.selection, activation.selection)) {
+    await store.revertActivation(activation.selection)
+  } else if (!sameSelectionCoordinates(before.selection, compensatedSelection)) {
+    throw new ManagedRuntimeIndeterminateError(
+      'runtime selection 既不匹配 journal activation，也不是其精确 compensated revision；拒绝覆盖',
+    )
+  }
   try {
     if (activation.launcherSnapshot !== undefined) {
       await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted)
-      return
+    } else {
+      const inspection = await store.inspect()
+      if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
     }
-    const inspection = await new RuntimeReleaseStore({ paths }).inspect()
-    if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
   } catch (error) {
     throw new ManagedRuntimeIndeterminateError(
       `selection 已补偿，但稳定 launcher 状态无法证明：${String(error)}`,
     )
+  }
+  const after = await store.inspect()
+  if (!sameSelectionCoordinates(after.selection, compensatedSelection)) {
+    throw new ManagedRuntimeIndeterminateError('activation 补偿后 selection 未处于精确 compensated revision')
+  }
+  if (compensatedSelection.activeRelease === null) {
+    if (after.active !== null || after.activeValid) {
+      throw new ManagedRuntimeIndeterminateError('activation 补偿后空 selection 的 runtime 证明不一致')
+    }
+  } else if (
+    !after.activeValid
+    || after.active?.releaseId !== compensatedSelection.activeRelease
+  ) {
+    throw new ManagedRuntimeIndeterminateError('activation 补偿后的 previous runtime 无法通过完整性证明')
+  }
+  if (activation.launcherSnapshot !== undefined) {
+    const currentLaunchers = await captureStableLaunchers(paths, homeDir)
+    if (!sameJson(currentLaunchers, activation.launcherSnapshot)) {
+      throw new ManagedRuntimeIndeterminateError('activation 补偿后的 launcher 与 pre-activation checkpoint 不一致')
+    }
   }
 }
 

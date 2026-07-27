@@ -10,15 +10,17 @@ import { makeDeps } from '../test-support.js'
 import {
   type ReleasedDashboardStarter,
 } from './dashboard.js'
+import { restorePreviousReleasedDashboard } from './dashboard-restore.js'
 import { publishManagedRelease } from './release-coordinator.js'
 
 function dashboardOwnership(
   releaseId = `sha256-${'a'.repeat(64)}`,
   transactionId?: string,
+  port = 18_765,
 ) {
   return {
     version: 1 as const,
-    port: 18765,
+    port,
     pid: 321,
     releaseId,
     stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
@@ -29,11 +31,12 @@ function dashboardOwnership(
 function readyDashboard(
   releaseId = `sha256-${'a'.repeat(64)}`,
   transactionId = 'transaction-1',
+  port = 18_765,
 ) {
   return {
     state: 'ready' as const,
     session: {
-      ownership: dashboardOwnership(releaseId, transactionId),
+      ownership: dashboardOwnership(releaseId, transactionId, port),
       stop: async () => ({ state: 'stopped' as const }),
     },
   }
@@ -72,12 +75,14 @@ function serializedInstaller(
     readonly failCompletedHostStepWriteOnce?: boolean
     readonly recoverActivation?: () => ReturnType<ManagedRuntimeTransaction['recoverActivation']>
     readonly initialJournal?: ManagedReleaseJournalRecord
+    readonly checkpointSelection?: RuntimeActivation['selection']
   } = {},
 ): RuntimeInstaller {
   let tail = Promise.resolve()
   let journal: ManagedReleaseJournalRecord | null = options.initialJournal ?? null
   let journalSequence = 0
   let failedJournalWrite = false
+  let currentActivation = options.initialJournal?.activation
   return {
     withManagedTransaction: async <T>(
       _scope,
@@ -91,7 +96,7 @@ function serializedInstaller(
       try {
         return await operation({
           checkpointActivation: async () => ({
-            selection: {
+            selection: options.checkpointSelection ?? {
               version: 1,
               revision: 0,
               activeRelease: null,
@@ -105,14 +110,24 @@ function serializedInstaller(
           }),
           activate: async (candidateRoot, host) => {
             events.push(`activate:${candidateRoot}`)
-            return activate(candidateRoot, host)
+            currentActivation = activate(candidateRoot, host)
+            return currentActivation
           },
-          recoverActivation: async () => options.recoverActivation?.() ?? ({ state: 'not-started' as const }),
+          recoverActivation: async () => {
+            const recovered = options.recoverActivation?.()
+              ?? (currentActivation === undefined
+                ? { state: 'not-started' as const }
+                : { state: 'activated' as const, activation: currentActivation })
+            if (recovered.state === 'activated') currentActivation = recovered.activation
+            return recovered
+          },
           revertActivation: async () => {
-            events.push('revert')
+            if (currentActivation !== undefined) events.push('revert')
+            currentActivation = undefined
           },
           proveActivation: async (activation) =>
-            activation.selection.activeRelease === activation.release.releaseId,
+            currentActivation?.release.releaseId === activation.release.releaseId
+            && currentActivation.selection.revision === activation.selection.revision,
           journal: {
             create: (operation, source, now) => ({
               version: 1,
@@ -170,6 +185,45 @@ function request(candidateRoot: string) {
 }
 
 describe('managed release coordinator', () => {
+  test('previous Dashboard restore rejects a ready session with mismatched ownership', async () => {
+    const activation = activationFor('/candidate/one', 'codex')
+    const previousRelease = `sha256-${'f'.repeat(64)}`
+    let stops = 0
+    const outcome = await restorePreviousReleasedDashboard(
+      makeDeps(),
+      {
+        ...activation,
+        selection: { ...activation.selection, previousRelease },
+      },
+      {
+        inspect: async () => null,
+        adopt: async () => null,
+        start: async (_deps, _payloadRoot, opts) => ({
+          state: 'ready',
+          session: {
+            ownership: dashboardOwnership(
+              activation.release.releaseId,
+              undefined,
+              opts.port,
+            ),
+            stop: async () => {
+              stops += 1
+              return { state: 'stopped' as const }
+            },
+          },
+        }),
+      },
+      43_210,
+      'transaction-restore',
+    )
+
+    expect(outcome).toMatchObject({
+      state: 'indeterminate',
+      detail: expect.stringContaining('mismatched ownership'),
+    })
+    expect(stops).toBe(0)
+  })
+
   test('serializes activation, launcher ownership, Dashboard readiness, and compensation as one transaction', async () => {
     const events: string[] = []
     let releaseFirstDashboard!: () => void
@@ -186,6 +240,7 @@ describe('managed release coordinator', () => {
             ? `sha256-${'a'.repeat(64)}`
             : `sha256-${'b'.repeat(64)}`,
           opts.transactionId,
+          opts.port,
         )
       },
     }
@@ -200,6 +255,7 @@ describe('managed release coordinator', () => {
       'transaction:start',
       'journal:preparing-host',
       'journal:candidate-resolved',
+      'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/one',
       'journal:runtime-activated',
@@ -213,6 +269,7 @@ describe('managed release coordinator', () => {
       'transaction:start',
       'journal:preparing-host',
       'journal:candidate-resolved',
+      'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/one',
       'journal:runtime-activated',
@@ -225,6 +282,7 @@ describe('managed release coordinator', () => {
       'transaction:end',
       'transaction:start',
       'journal:preparing-host',
+      'journal:candidate-resolved',
       'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/two',
@@ -267,6 +325,7 @@ describe('managed release coordinator', () => {
       'transaction:start',
       'journal:preparing-host',
       'journal:candidate-resolved',
+      'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/one',
       'journal:runtime-activated',
@@ -308,7 +367,7 @@ describe('managed release coordinator', () => {
       adopt: async () => null,
       start: async (_deps, _payloadRoot, opts) => {
         events.push('dashboard:ready')
-        return readyDashboard(undefined, opts.transactionId)
+        return readyDashboard(undefined, opts.transactionId, opts.port)
       },
     }
     const outcome = await publishManagedRelease(makeDeps(), {
@@ -330,7 +389,7 @@ describe('managed release coordinator', () => {
         return {
           state: 'ready',
           session: {
-            ownership: dashboardOwnership(undefined, opts.transactionId),
+            ownership: dashboardOwnership(undefined, opts.transactionId, opts.port),
             stop: async () => {
               events.push('dashboard:candidate:stop')
               return { state: 'stopped' as const }
@@ -353,6 +412,7 @@ describe('managed release coordinator', () => {
       'transaction:start',
       'journal:preparing-host',
       'journal:candidate-resolved',
+      'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/one',
       'journal:runtime-activated',
@@ -360,8 +420,12 @@ describe('managed release coordinator', () => {
       'dashboard:candidate:ready',
       'journal:dashboard-ready',
       'evidence:commit',
+      'journal:stopping-candidate',
       'dashboard:candidate:stop',
+      'journal:reverting-activation',
       'revert',
+      'journal:restoring-previous',
+      'journal:previous-restored',
       'journal:cleared',
       'transaction:end',
     ])
@@ -369,6 +433,7 @@ describe('managed release coordinator', () => {
 
   test('ready evidence failure stops the candidate before reverting and restoring the previous Dashboard', async () => {
     const events: string[] = []
+    const startedPorts: Array<number | undefined> = []
     const previousRelease = `sha256-${'f'.repeat(64)}`
     const installer = serializedInstaller(events, (candidateRoot, host) => {
       const activation = activationFor(candidateRoot, host)
@@ -379,28 +444,41 @@ describe('managed release coordinator', () => {
           previousRelease,
         },
       }
+    }, {
+      checkpointSelection: {
+        version: 1,
+        revision: 0,
+        activeRelease: previousRelease,
+        previousRelease: null,
+        updatedAt: '2026-07-26T00:00:00Z',
+      },
     })
+    let running: ReturnType<typeof dashboardOwnership> | null = null
     const starter: ReleasedDashboardStarter = {
-      inspect: async () => null,
+      inspect: async () => running,
       adopt: async () => null,
       start: async (_deps, payloadRoot, opts) => {
+        startedPorts.push(opts.port)
         if (payloadRoot.includes(previousRelease)) {
           events.push('dashboard:previous:ready')
+          running = dashboardOwnership(previousRelease, opts.transactionId, opts.port)
           return {
             state: 'ready',
             session: {
-              ownership: dashboardOwnership(previousRelease, opts.transactionId),
+              ownership: running,
               stop: async () => ({ state: 'stopped' as const }),
             },
           }
         }
         events.push('dashboard:candidate:ready')
+        running = dashboardOwnership(undefined, opts.transactionId, opts.port)
         return {
           state: 'ready',
           session: {
-            ownership: dashboardOwnership(undefined, opts.transactionId),
+            ownership: running,
             stop: async () => {
               events.push('dashboard:candidate:stop')
+              running = null
               return { state: 'stopped' as const }
             },
           },
@@ -410,6 +488,7 @@ describe('managed release coordinator', () => {
 
     const outcome = await publishManagedRelease(makeDeps(), {
       ...request('/candidate/one'),
+      dashboardPort: 43_210,
       commitReadyEvidence: () => {
         events.push('evidence:commit')
         throw new Error('receipt storage unavailable')
@@ -417,9 +496,11 @@ describe('managed release coordinator', () => {
     }, installer, starter)
 
     expect(outcome).toMatchObject({ ok: false, state: 'restored' })
+    expect(startedPorts).toEqual([43_210, 43_210])
     expect(events).toEqual([
       'transaction:start',
       'journal:preparing-host',
+      'journal:candidate-resolved',
       'journal:candidate-resolved',
       'journal:activating-runtime',
       'activate:/candidate/one',
@@ -428,12 +509,237 @@ describe('managed release coordinator', () => {
       'dashboard:candidate:ready',
       'journal:dashboard-ready',
       'evidence:commit',
+      'journal:stopping-candidate',
       'dashboard:candidate:stop',
+      'journal:reverting-activation',
       'revert',
-      'journal:cleared',
+      'journal:restoring-previous',
       'dashboard:previous:ready',
+      'journal:previous-restored',
+      'journal:cleared',
       'transaction:end',
     ])
+  })
+
+  test.each([
+    'restoring-previous',
+    'previous-restored',
+  ] as const)(
+    'compensation resumes after a crash before %s without duplicate revert or Dashboard restore',
+    async (failedPhase) => {
+      const events: string[] = []
+      const previousRelease = `sha256-${'f'.repeat(64)}`
+      const installer = serializedInstaller(events, (candidateRoot, host) => {
+        const activation = activationFor(candidateRoot, host)
+        return {
+          ...activation,
+          selection: { ...activation.selection, previousRelease },
+        }
+      }, {
+        checkpointSelection: {
+          version: 1,
+          revision: 0,
+          activeRelease: previousRelease,
+          previousRelease: null,
+          updatedAt: '2026-07-26T00:00:00Z',
+        },
+        failJournalWritePhaseOnce: failedPhase,
+      })
+      let running: ReturnType<typeof dashboardOwnership> | null = null
+      const starter: ReleasedDashboardStarter = {
+        inspect: async () => running,
+        adopt: async (_deps, identity) => {
+          if (running === null || JSON.stringify(running) !== JSON.stringify(identity)) return null
+          return {
+            ownership: running,
+            stop: async () => {
+              events.push(`dashboard:stop:${identity.releaseId}`)
+              running = null
+              return { state: 'stopped' as const }
+            },
+          }
+        },
+        start: async (_deps, payloadRoot, opts) => {
+          const releaseId = payloadRoot.includes(previousRelease)
+            ? previousRelease
+            : `sha256-${'a'.repeat(64)}`
+          events.push(`dashboard:start:${releaseId}`)
+          running = dashboardOwnership(releaseId, opts.transactionId, opts.port)
+          return {
+            state: 'ready',
+            session: {
+              ownership: running,
+              stop: async () => {
+                events.push(`dashboard:stop:${releaseId}`)
+                running = null
+                return { state: 'stopped' as const }
+              },
+            },
+          }
+        },
+      }
+      const publish = () => publishManagedRelease(
+        makeDeps(),
+        {
+          ...request('/candidate/one'),
+          commitReadyEvidence: () => {
+            throw new Error('injected evidence failure')
+          },
+        },
+        installer,
+        starter,
+      )
+
+      expect(await publish()).toMatchObject({ ok: false, state: 'indeterminate' })
+      expect(await publish()).toMatchObject({ ok: false, state: 'restored' })
+      expect(events.filter((event) => event === 'revert')).toHaveLength(1)
+      expect(events.filter((event) => event === `dashboard:start:${previousRelease}`)).toHaveLength(1)
+      expect(events.filter((event) => event === `dashboard:stop:sha256-${'a'.repeat(64)}`))
+        .toHaveLength(1)
+      expect(running).toMatchObject({
+        releaseId: previousRelease,
+        transactionId: expect.stringMatching(/:restore$/),
+      })
+    },
+  )
+
+  test('an unverifiable candidate listener keeps stopping-candidate WAL and sends no signal', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const previousRelease = `sha256-${'f'.repeat(64)}`
+    const transactionId = 'transaction-unverifiable'
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId,
+        operation: 'setup',
+        source: 'codex',
+        phase: 'stopping-candidate',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation: {
+          ...activation,
+          selection: { ...activation.selection, previousRelease },
+        },
+        activationCheckpoint: {
+          selection: {
+            version: 1,
+            revision: 0,
+            activeRelease: previousRelease,
+            previousRelease: null,
+            updatedAt: '2026-07-25T00:00:00Z',
+          },
+          launchers: {
+            tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+            hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+          },
+        },
+        dashboardBeforeAbsent: true,
+        dashboard: {
+          ...dashboardOwnership(undefined, transactionId),
+          owner: 'transaction',
+        },
+        compensationReason: 'injected evidence failure',
+      },
+    })
+    let signals = 0
+
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      {
+        inspect: async () => {
+          throw new Error('listener is alive but health is unverifiable')
+        },
+        adopt: async () => {
+          signals += 1
+          return null
+        },
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('health is unverifiable')
+    expect(signals).toBe(0)
+    expect(events).not.toContain('revert')
+    expect(events).not.toContain('journal:reverting-activation')
+  })
+
+  test('fresh retry precisely stops a restored previous Dashboard before starting the candidate again', async () => {
+    const events: string[] = []
+    const previousRelease = `sha256-${'f'.repeat(64)}`
+    const installer = serializedInstaller(events, (candidateRoot, host) => {
+      const activation = activationFor(candidateRoot, host)
+      return {
+        ...activation,
+        selection: { ...activation.selection, previousRelease },
+      }
+    }, {
+      checkpointSelection: {
+        version: 1,
+        revision: 0,
+        activeRelease: previousRelease,
+        previousRelease: null,
+        updatedAt: '2026-07-26T00:00:00Z',
+      },
+    })
+    let running: ReturnType<typeof dashboardOwnership> | null = null
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => running,
+      adopt: async (_deps, identity) => {
+        if (running === null || JSON.stringify(identity) !== JSON.stringify(running)) return null
+        return {
+          ownership: running,
+          stop: async () => {
+            events.push(`dashboard:stop:${identity.releaseId}`)
+            running = null
+            return { state: 'stopped' as const }
+          },
+        }
+      },
+      start: async (_deps, payloadRoot, opts) => {
+        const releaseId = payloadRoot.includes(previousRelease)
+          ? previousRelease
+          : `sha256-${'a'.repeat(64)}`
+        events.push(`dashboard:start:${releaseId}`)
+        running = dashboardOwnership(releaseId, opts.transactionId, opts.port)
+        return {
+          state: 'ready',
+          session: {
+            ownership: running,
+            stop: async () => {
+              events.push(`dashboard:stop:${releaseId}`)
+              running = null
+              return { state: 'stopped' as const }
+            },
+          },
+        }
+      },
+    }
+    let failEvidence = true
+    const publish = () => publishManagedRelease(makeDeps(), {
+      ...request('/candidate/one'),
+      commitReadyEvidence: () => {
+        if (failEvidence) {
+          failEvidence = false
+          throw new Error('injected first evidence failure')
+        }
+      },
+    }, installer, starter)
+
+    expect(await publish()).toMatchObject({ ok: false, state: 'restored' })
+    expect(running?.releaseId).toBe(previousRelease)
+    expect(running?.transactionId).toMatch(/:restore$/)
+
+    expect(await publish()).toMatchObject({ ok: true, state: 'ready' })
+    expect(running?.releaseId).toBe(`sha256-${'a'.repeat(64)}`)
+    expect(events.filter((event) => event === `dashboard:stop:${previousRelease}`)).toHaveLength(1)
+    expect(events.filter((event) => event === `dashboard:start:sha256-${'a'.repeat(64)}`))
+      .toHaveLength(2)
   })
 
   test('Dashboard readiness failure never commits external evidence', async () => {
@@ -545,6 +851,188 @@ describe('managed release coordinator', () => {
     expect(events.filter((event) => event === 'host:prepare')).toHaveLength(1)
     expect(events.filter((event) => event === 'activate:/candidate/one')).toHaveLength(1)
     expect(events).toContain('journal:runtime-activated:failed')
+  })
+
+  test('activated legacy WAL cannot infer missing pre-activation Dashboard evidence or port from retry state', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-legacy-activated',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'runtime-activated',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        candidateRoot: '/candidate/one',
+        activation,
+      },
+    })
+    let inspections = 0
+
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      { ...request('/candidate/one'), dashboardPort: 43_210 },
+      installer,
+      {
+        inspect: async () => {
+          inspections += 1
+          return null
+        },
+        adopt: async () => null,
+        start: async () => readyDashboard(undefined, 'transaction-legacy-activated', 43_210),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('pre-activation')
+    expect(inspections).toBe(0)
+    expect(events).not.toContain('journal:dashboard-ready')
+  })
+
+  test.each([
+    {
+      recoveryState: 'not-started',
+      recover: () => ({ state: 'not-started' as const }),
+    },
+    {
+      recoveryState: 'activated',
+      recover: () => ({
+        state: 'activated' as const,
+        activation: activationFor('/candidate/one', 'codex'),
+      }),
+    },
+  ])(
+    'activating legacy WAL fails closed before $recoveryState recovery can supplement missing pre-activation proof',
+    async ({ recover }) => {
+      const events: string[] = []
+      let recoveryCalls = 0
+      let inspections = 0
+      let adoptions = 0
+      let starts = 0
+      let stops = 0
+      const installer = serializedInstaller(events, activationFor, {
+        initialJournal: {
+          version: 1,
+          transactionId: 'transaction-legacy-activating',
+          operation: 'setup',
+          source: 'codex',
+          phase: 'activating-runtime',
+          startedAt: '2026-07-26T00:00:00Z',
+          updatedAt: '2026-07-26T00:00:00Z',
+          dashboardPort: 43_210,
+          candidateRoot: '/candidate/one',
+          activationCheckpoint: {
+            selection: {
+              version: 1,
+              revision: 0,
+              activeRelease: null,
+              previousRelease: null,
+              updatedAt: '2026-07-25T00:00:00Z',
+            },
+            launchers: {
+              tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+              hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+            },
+          },
+        },
+        recoverActivation: async () => {
+          recoveryCalls += 1
+          return recover()
+        },
+      })
+
+      const outcome = await publishManagedRelease(
+        makeDeps(),
+        { ...request('/candidate/one'), dashboardPort: 43_210 },
+        installer,
+        {
+          inspect: async () => {
+            inspections += 1
+            return null
+          },
+          adopt: async () => {
+            adoptions += 1
+            return {
+              ownership: dashboardOwnership(),
+              stop: async () => {
+                stops += 1
+                return { state: 'stopped' as const }
+              },
+            }
+          },
+          start: async () => {
+            starts += 1
+            return readyDashboard()
+          },
+        },
+      )
+
+      expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+      expect(outcome.detail).toContain('pre-activation')
+      expect(recoveryCalls).toBe(0)
+      expect(inspections).toBe(0)
+      expect(adoptions).toBe(0)
+      expect(starts).toBe(0)
+      expect(stops).toBe(0)
+      expect(events).not.toContain('activate:/candidate/one')
+    },
+  )
+
+  test('activating legacy WAL cannot infer a missing pre-activation Dashboard port from the retry request', async () => {
+    const events: string[] = []
+    let recoveryCalls = 0
+    let inspections = 0
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-legacy-activating-port',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'activating-runtime',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        candidateRoot: '/candidate/one',
+        activationCheckpoint: {
+          selection: {
+            version: 1,
+            revision: 0,
+            activeRelease: null,
+            previousRelease: null,
+            updatedAt: '2026-07-25T00:00:00Z',
+          },
+          launchers: {
+            tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+            hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+          },
+        },
+      },
+      recoverActivation: async () => {
+        recoveryCalls += 1
+        return { state: 'not-started' as const }
+      },
+    })
+
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      { ...request('/candidate/one'), dashboardPort: 43_210 },
+      installer,
+      {
+        inspect: async () => {
+          inspections += 1
+          return null
+        },
+        adopt: async () => null,
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('pre-activation Dashboard port')
+    expect(recoveryCalls).toBe(0)
+    expect(inspections).toBe(0)
+    expect(events).not.toContain('activate:/candidate/one')
   })
 
   test('candidate journal commit 丢失时重放 host preparation 不重复已完成的宿主命令', async () => {
@@ -843,17 +1331,22 @@ describe('managed release coordinator', () => {
   })
 
   test.each([
-    ['普通 Dashboard', undefined],
-    ['其他 transaction Dashboard', 'transaction-other'],
+    ['普通 Dashboard', undefined, false],
+    ['探针之间出现的其他 transaction Dashboard', 'transaction-other', true],
   ])('%s 即使 release/state scope 相同也不会被 release transaction 收养或停止', async (
     _label,
     transactionId,
+    appearsAfterFirstProbe,
   ) => {
     const events: string[] = []
     const installer = serializedInstaller(events)
     const ownership = dashboardOwnership(undefined, transactionId)
+    let probes = 0
     const starter: ReleasedDashboardStarter = {
-      inspect: async () => ownership,
+      inspect: async () => {
+        probes += 1
+        return appearsAfterFirstProbe && probes === 1 ? null : ownership
+      },
       adopt: async () => {
         events.push('dashboard:adopt')
         return null
@@ -875,5 +1368,413 @@ describe('managed release coordinator', () => {
     expect(events).not.toContain('dashboard:adopt')
     expect(events).not.toContain('dashboard:start')
     expect(events).not.toContain('revert')
+  })
+
+  test('same-release repeat setup proves the existing Dashboard as preexisting without adopt or restart', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events)
+    let running: ReturnType<typeof dashboardOwnership> | null = null
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => running,
+      adopt: async () => {
+        events.push('dashboard:adopt')
+        return null
+      },
+      start: async (_deps, _payloadRoot, opts) => {
+        events.push('dashboard:start')
+        running = dashboardOwnership(undefined, opts.transactionId, opts.port)
+        return {
+          state: 'ready',
+          session: {
+            ownership: running,
+            stop: async () => {
+              events.push('dashboard:stop')
+              running = null
+              return { state: 'stopped' as const }
+            },
+          },
+        }
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      starter,
+    )).toMatchObject({ ok: true })
+    const firstIdentity = running
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      starter,
+    )).toMatchObject({ ok: true })
+    expect(running).toEqual(firstIdentity)
+    expect(events.filter((event) => event === 'dashboard:start')).toHaveLength(1)
+    expect(events).not.toContain('dashboard:adopt')
+    expect(events).not.toContain('dashboard:stop')
+  })
+
+  test('managed Dashboard inspect and start use the request-scoped port', async () => {
+    const events: string[] = []
+    const ports: Array<number | undefined> = []
+    const installer = serializedInstaller(events)
+    const starter: ReleasedDashboardStarter = {
+      inspect: async (_deps, opts) => {
+        ports.push(opts.port)
+        return null
+      },
+      adopt: async () => null,
+      start: async (_deps, _payloadRoot, opts) => {
+        ports.push(opts.port)
+        return readyDashboard(undefined, opts.transactionId, opts.port)
+      },
+    }
+    const requestWithPort = {
+      ...request('/candidate/one'),
+      dashboardPort: 43_210,
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      requestWithPort,
+      installer,
+      starter,
+    )).toMatchObject({ ok: true })
+    expect(ports).toEqual([43_210, 43_210, 43_210])
+  })
+
+  test('a started Dashboard on a port other than the frozen request port is indeterminate', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events)
+    let stops = 0
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      { ...request('/candidate/one'), dashboardPort: 43_210 },
+      installer,
+      {
+        inspect: async () => null,
+        adopt: async () => null,
+        start: async (_deps, _payloadRoot, opts) => ({
+          state: 'ready',
+          session: {
+            ownership: dashboardOwnership(undefined, opts.transactionId, 18_765),
+            stop: async () => {
+              stops += 1
+              return { state: 'stopped' as const }
+            },
+          },
+        }),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(events).toContain('journal:starting-dashboard')
+    expect(events).not.toContain('journal:dashboard-ready')
+    expect(events).not.toContain('revert')
+    expect(stops).toBe(0)
+  })
+
+  test('recovery re-proves a durable preexisting Dashboard without adopting it', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const ownership = dashboardOwnership(activation.release.releaseId, 'transaction-before')
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-2',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'dashboard-ready',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBefore: ownership,
+        dashboard: { ...ownership, owner: 'preexisting' },
+      },
+    })
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => ownership,
+      adopt: async () => {
+        events.push('dashboard:adopt')
+        return null
+      },
+      start: async () => {
+        events.push('dashboard:start')
+        return readyDashboard()
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      starter,
+    )).toMatchObject({ ok: true })
+    expect(events).not.toContain('dashboard:adopt')
+    expect(events).not.toContain('dashboard:start')
+  })
+
+  test('dashboard-ready recovery rejects an adopted session whose ownership differs from the WAL', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const ownership = dashboardOwnership(
+      activation.release.releaseId,
+      'transaction-2',
+    )
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-2',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'dashboard-ready',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+        dashboard: { ...ownership, owner: 'transaction' },
+      },
+    })
+
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      {
+        inspect: async () => ownership,
+        adopt: async () => ({
+          ownership: { ...ownership, pid: ownership.pid + 1 },
+          stop: async () => ({ state: 'stopped' as const }),
+        }),
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(events).not.toContain('journal:cleared')
+    expect(events).not.toContain('revert')
+  })
+
+  test('starting-dashboard recovery rejects a mismatched session returned for the inspected identity', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const ownership = dashboardOwnership(
+      activation.release.releaseId,
+      'transaction-2',
+    )
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-2',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'starting-dashboard',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+      },
+    })
+
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      {
+        inspect: async () => ownership,
+        adopt: async () => ({
+          ownership: { ...ownership, stateScopeId: `sha256-v1-${'2'.repeat(64)}` },
+          stop: async () => ({ state: 'stopped' as const }),
+        }),
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(events).not.toContain('journal:dashboard-ready')
+    expect(events).not.toContain('revert')
+  })
+
+  test('failed evidence compensation never stops or restores a preexisting Dashboard', async () => {
+    const events: string[] = []
+    const activeRelease = `sha256-${'a'.repeat(64)}`
+    const installer = serializedInstaller(events, activationFor, {
+      checkpointSelection: {
+        version: 1,
+        revision: 1,
+        activeRelease,
+        previousRelease: null,
+        updatedAt: '2026-07-26T00:00:00Z',
+      },
+    })
+    const ownership = dashboardOwnership(undefined, 'transaction-before')
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => ownership,
+      adopt: async () => {
+        events.push('dashboard:adopt')
+        return null
+      },
+      start: async () => {
+        events.push('dashboard:start')
+        return readyDashboard()
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      {
+        ...request('/candidate/one'),
+        commitReadyEvidence: () => {
+          throw new Error('injected evidence failure')
+        },
+      },
+      installer,
+      starter,
+    )).toMatchObject({ ok: false, state: 'restored' })
+    expect(events).not.toContain('revert')
+    expect(events).not.toContain('dashboard:adopt')
+    expect(events).not.toContain('dashboard:start')
+  })
+
+  test('same-release evidence failure does not revert selection or restore a historical previous Dashboard', async () => {
+    const events: string[] = []
+    const activeRelease = `sha256-${'a'.repeat(64)}`
+    const previousRelease = `sha256-${'f'.repeat(64)}`
+    const selection = {
+      version: 1 as const,
+      revision: 7,
+      activeRelease,
+      previousRelease,
+      updatedAt: '2026-07-26T00:00:00Z',
+    }
+    const installer = serializedInstaller(events, (candidateRoot, host) => ({
+      ...activationFor(candidateRoot, host),
+      selection,
+    }), { checkpointSelection: selection })
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => null,
+      adopt: async () => null,
+      start: async (_deps, payloadRoot, opts) => {
+        events.push(payloadRoot.includes(previousRelease)
+          ? 'dashboard:previous:start'
+          : 'dashboard:candidate:start')
+        return {
+          state: 'ready',
+          session: {
+            ownership: dashboardOwnership(activeRelease, opts.transactionId, opts.port),
+            stop: async () => {
+              events.push('dashboard:candidate:stop')
+              return { state: 'stopped' as const }
+            },
+          },
+        }
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      {
+        ...request('/candidate/one'),
+        commitReadyEvidence: () => {
+          throw new Error('injected evidence failure')
+        },
+      },
+      installer,
+      starter,
+    )).toMatchObject({ ok: false, state: 'restored' })
+    expect(events).not.toContain('revert')
+    expect(events).not.toContain('dashboard:previous:start')
+  })
+
+  test('changed-release evidence failure preserves aligned activation and journal for a preexisting Dashboard retry', async () => {
+    const events: string[] = []
+    const previousActive = `sha256-${'a'.repeat(64)}`
+    const candidateActive = `sha256-${'b'.repeat(64)}`
+    const installer = serializedInstaller(events, activationFor, {
+      checkpointSelection: {
+        version: 1,
+        revision: 4,
+        activeRelease: previousActive,
+        previousRelease: null,
+        updatedAt: '2026-07-26T00:00:00Z',
+      },
+    })
+    const ownership = dashboardOwnership(candidateActive, 'transaction-before')
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => ownership,
+      adopt: async () => {
+        events.push('dashboard:adopt')
+        return null
+      },
+      start: async () => {
+        events.push('dashboard:start')
+        return readyDashboard()
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      {
+        ...request('/candidate/two'),
+        commitReadyEvidence: () => {
+          throw new Error('injected evidence failure')
+        },
+      },
+      installer,
+      starter,
+    )).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(events).not.toContain('revert')
+    expect(events).not.toContain('journal:cleared')
+    expect(events).not.toContain('dashboard:adopt')
+    expect(events).not.toContain('dashboard:start')
+  })
+
+  test('starting-dashboard recovery uses the frozen port even if the retry environment changes', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const inspectedPorts: Array<number | undefined> = []
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-2',
+        operation: 'setup',
+        source: 'codex',
+        phase: 'starting-dashboard',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 43_210,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+      },
+    })
+    const starter: ReleasedDashboardStarter = {
+      inspect: async (_deps, opts) => {
+        inspectedPorts.push(opts.port)
+        return null
+      },
+      adopt: async () => null,
+      start: async (_deps, _payloadRoot, opts) => {
+        inspectedPorts.push(opts.port)
+        return readyDashboard(activation.release.releaseId, opts.transactionId, opts.port)
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      { ...request('/candidate/one'), dashboardPort: 43_211 },
+      installer,
+      starter,
+    )).toMatchObject({ ok: true })
+    expect(inspectedPorts).toEqual([43_210, 43_210])
   })
 })

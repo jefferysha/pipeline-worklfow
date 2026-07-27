@@ -50,6 +50,18 @@ Setup validates the complete package, publishes an immutable managed release,
 creates stable `tenon` and `tenon-hook` launchers, starts the packaged
 Dashboard, and opens it after its health check succeeds.
 
+The published commands are tested at two levels. CI installs a pinned real Codex CLI and
+registers the current checkout as a clean local Marketplace. The release workflow derives the
+exact checked-out commit, downloads that commit's `install.sh`, and passes the same immutable
+`--ref <commit>` to the Marketplace bootstrap in a separate temporary `HOME`, `CODEX_HOME`,
+`TENON_RUNTIME_HOME`, and Dashboard port. Both paths verify the stable launcher, doctor, managed
+runtime, Dashboard API and HTML identity, a new Codex app-server's plugin/Skill/hook discovery,
+and a second identical installation that keeps the same release and listener.
+
+The acceptance never copies a user's Codex credentials and never changes hook trust. Codex
+therefore reports Tenon hooks as untrusted until the user performs the `/hooks` step below; that
+is the expected human safety boundary, not an installation failure.
+
 After installation, use `tenon setup --codex` to repair host wiring and
 `tenon update --codex` (or `--claude`) to update the one complete host plugin. Manual and
 opt-in automatic updates use the same candidate validation, managed release, launcher, and

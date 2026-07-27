@@ -101,7 +101,11 @@ interface RuntimeCalls {
 }
 
 interface DashboardCalls {
-  readonly starts: Array<readonly [string, { readonly openBrowser?: boolean }]>
+  readonly starts: Array<readonly [string, {
+    readonly openBrowser?: boolean
+    readonly port?: number
+    readonly transactionId?: string
+  }]>
 }
 
 function fakeRuntimeInstaller(
@@ -118,7 +122,7 @@ function fakeRuntimeInstaller(
         selection: {
           version: 1,
           revision: 0,
-          activeRelease: null,
+          activeRelease: previousRelease,
           previousRelease: null,
           updatedAt: '2026-07-23T00:00:00Z',
         },
@@ -204,7 +208,7 @@ function fakeDashboardStarter(fail = false): { starter: ReleasedDashboardStarter
               session: {
                 ownership: {
                   version: 1,
-                  port: 18765,
+                  port: opts.port ?? 18_765,
                   pid: 321,
                   releaseId,
                   stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
@@ -287,7 +291,11 @@ describe('①--dry-run —— 按宿主打印计划且零写、零发布', () =>
 describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校验后写入用户配置', () => {
   test('Codex 已有完整已验证插件时复用宿主清单根，--auto-update 写入精确每日更新偏好', async () => {
     const deps = makeDeps()
-    const { env, calls } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
+    const { env, calls } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      runtimeEnv: () => ({ TENON_DASHBOARD_PORT: '43210' }),
+    }, codexInstallExec)
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
 
@@ -306,7 +314,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true, transactionId: 'setup-test-transaction' },
+      { openBrowser: true, port: 43_210, transactionId: 'setup-test-transaction' },
     ]])
   })
 
@@ -761,22 +769,25 @@ describe('②managed runtime 发布边界', () => {
     const previousRelease = `sha256-${'c'.repeat(64)}`
     const runtime = fakeRuntimeInstaller(false, previousRelease)
     const starts: string[] = []
+    let running: Awaited<ReturnType<ReleasedDashboardStarter['inspect']>> = null
     const dashboard: ReleasedDashboardStarter = {
-      inspect: async () => null,
+      inspect: async () => running,
       adopt: async () => null,
-      start: async (_deps, payloadRoot) => {
+      start: async (_deps, payloadRoot, opts) => {
         starts.push(payloadRoot)
         if (starts.length === 1) return { state: 'failed', detail: 'spawn failed' }
+        running = {
+          version: 1,
+          port: opts.port ?? 18_765,
+          pid: 654,
+          releaseId: previousRelease,
+          stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+          ...(opts.transactionId === undefined ? {} : { transactionId: opts.transactionId }),
+        }
         return {
           state: 'ready',
           session: {
-            ownership: {
-              version: 1,
-              port: 18765,
-              pid: 654,
-              releaseId: previousRelease,
-              stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
-            },
+            ownership: running,
             stop: async () => ({ state: 'stopped' as const }),
           },
         }
@@ -843,7 +854,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true, transactionId: 'setup-test-transaction' },
+      { openBrowser: true, port: 18_765, transactionId: 'setup-test-transaction' },
     ]])
   })
 

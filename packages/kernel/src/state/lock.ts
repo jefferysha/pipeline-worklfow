@@ -10,7 +10,9 @@
  * - **owner token**：抢锁成功后在锁目录写 `<lockDir>/owner`（pid+随机 token）。
  * - **心跳刷新 mtime**：持锁期间周期性 utimes owner 文件，令「活着的长任务（fn>60s）」的锁不被误判陈锁
  *   （老实现 mtime 从不刷新 → 长任务被夺锁双持）。
- * - **原子回收**：陈锁不再 `rm -rf` 后 mkdir（两进程都判陈锁会各 rm+mkdir 双持）；改为把陈锁目录
+ * - **存活检测**：owner PID 已消失时立即接管；PID 仍存活或无法确认时才等待心跳陈旧阈值，
+ *   避免真实进程崩溃后每次恢复固定等待 60 秒。
+ * - **原子回收**：废弃锁不再 `rm -rf` 后 mkdir（两进程都判废弃会各 rm+mkdir 双持）；改为把锁目录
  *   `rename` 到唯一坟墓名——rename 原子，多个回收者只有一个成功「移走」，其余得 ENOENT 退回重试 mkdir，
  *   最终持有者恒由原子 mkdir 唯一裁定。
  * - **token 守卫的 release**：只有 owner 仍等于自己的 token 才删锁；被夺锁（token 变更）→ 不删他人的锁
@@ -66,9 +68,29 @@ async function lockAgeMs(lockDir: string): Promise<number | null> {
   }
 }
 
-/** 原子回收陈锁：把陈锁目录 rename 到唯一坟墓名（原子，多回收者只有一个成功），再删坟墓。
+/** owner token 首段是持锁 PID；仅 ESRCH 能证明进程已消失，EPERM/格式异常均保守视为未知。 */
+async function lockOwnerProcessIsDead(lockDir: string): Promise<boolean> {
+  let owner: string
+  try {
+    owner = (await readFile(ownerPathFor(lockDir), 'utf8')).trim()
+  } catch {
+    return false
+  }
+  const pidText = owner.split('.', 1)[0] ?? ''
+  if (!/^[1-9][0-9]*$/.test(pidText)) return false
+  const pid = Number(pidText)
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH'
+  }
+}
+
+/** 原子回收废弃锁：把锁目录 rename 到唯一坟墓名（原子，多回收者只有一个成功），再删坟墓。
  *  rename 失败（他人已移走/替换）→ 静默返回，调用方退回循环重试 mkdir。 */
-async function reclaimStale(lockDir: string): Promise<void> {
+async function reclaimAbandoned(lockDir: string): Promise<void> {
   const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString('hex')}`
   try {
     await rename(lockDir, grave)
@@ -109,11 +131,15 @@ async function acquire(lockDir: string): Promise<Held> {
       }
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
     }
-    // 已被占用：陈锁（owner mtime 超 60s）→ 原子回收后立刻重试；否则轮询等待
+    // 已被占用：owner PID 已死或心跳陈旧 → 原子回收后立刻重试；否则轮询等待。
+    if (await lockOwnerProcessIsDead(lockDir)) {
+      await reclaimAbandoned(lockDir)
+      continue
+    }
     const age = await lockAgeMs(lockDir)
     if (age === null) continue // 锁刚消失，立刻重试 mkdir
     if (age > STALE_LOCK_MS) {
-      await reclaimStale(lockDir)
+      await reclaimAbandoned(lockDir)
       continue
     }
     if (Date.now() >= deadline) {

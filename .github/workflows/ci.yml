@@ -65,6 +65,12 @@ jobs:
       - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
         run: git diff --exit-code -- packages/cli/dist/tenon.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
+      - name: Install pinned Codex CLI for clean-install acceptance
+        run: npm install --global @openai/codex@0.144.1
+
+      - name: Real clean Codex install from current checkout
+        run: npm run test:clean-install
+
       - name: 文档链接与产品声明门禁 (documentation drift)
         run: npm run check:docs
 

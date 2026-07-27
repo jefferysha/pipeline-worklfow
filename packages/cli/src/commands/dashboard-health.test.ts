@@ -1,6 +1,12 @@
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, test } from 'vitest'
 import { probeHealthyDashboard } from './dashboard-health.js'
+import {
+  createReleasedDashboardStarter,
+  DashboardInspectionUnverifiableError,
+} from './released-dashboard-starter.js'
+import { REAL_DASHBOARD_RUNTIME } from './dashboard.js'
+import { makeDeps } from '../test-support.js'
 
 const servers: Server[] = []
 
@@ -93,6 +99,26 @@ describe('Dashboard health probe', () => {
       { wallClockTimeoutMs: 120 },
     )).resolves.toBeNull()
     expect(Date.now() - startedAt).toBeLessThan(500)
+  })
+
+  test('released inspection distinguishes an empty port from an unhealthy live listener', async () => {
+    const stateScopeId = `sha256-v1-${'1'.repeat(64)}`
+    const server = createServer(() => {
+      // A live listener that never produces a health response is unverifiable, not absent.
+    })
+    const port = await listen(server)
+    const starter = createReleasedDashboardStarter({
+      ...REAL_DASHBOARD_RUNTIME,
+      resolveStateScopeId: () => stateScopeId,
+    })
+
+    await expect(starter.inspect(makeDeps(), { port, openBrowser: false }))
+      .rejects.toBeInstanceOf(DashboardInspectionUnverifiableError)
+
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    servers.splice(servers.indexOf(server), 1)
+    await expect(starter.inspect(makeDeps(), { port, openBrowser: false })).resolves.toBeNull()
   })
 
   test('rejects an oversized health body without accumulating it indefinitely', async () => {

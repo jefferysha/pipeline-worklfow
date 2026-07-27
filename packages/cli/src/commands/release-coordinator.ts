@@ -2,71 +2,35 @@ import type { CliDeps } from '../deps.js'
 import {
   ManagedRuntimeIndeterminateError,
   type ManagedReleaseJournalRecord,
-  type ManagedReleaseOperation,
   type ManagedRuntimeTransaction,
   type RuntimeInstaller,
-  type RuntimeInstallerScope,
 } from '../runtime/installer.js'
 import {
   createManagedHostStepRunner,
-  type ManagedHostStepExecution,
 } from '../runtime/managed-host-reconciliation.js'
-import type { NativeRuntimeHost, RuntimeActivation } from '../runtime/types.js'
+import type { RuntimeActivation } from '../runtime/types.js'
 import {
+  DEFAULT_DASHBOARD_PORT,
   type ReleasedDashboardStarter,
 } from './dashboard.js'
-import { restorePreviousReleasedDashboard } from './dashboard-restore.js'
+import { resolveManagedReleaseJournal } from './managed-release-journal-coordinator.js'
 import { coordinateReleaseDashboard } from './release-dashboard-coordinator.js'
+import {
+  isCompensationPhase,
+  resumeManagedReleaseCompensation,
+} from './release-compensation.js'
+import type {
+  ManagedHostPreparationContext,
+  ManagedReleaseOutcome,
+  ManagedReleaseRequest,
+} from './release-coordinator-contract.js'
 
-export type ManagedReleaseFailureState = 'unchanged' | 'restored' | 'indeterminate'
-
-export type ManagedReleaseOutcome =
-  | {
-      readonly ok: true
-      readonly state: 'ready'
-      readonly activation: RuntimeActivation
-    }
-  | {
-      readonly ok: false
-      readonly state: ManagedReleaseFailureState
-      readonly detail: string
-    }
-
-export interface ManagedHostPreparationContext {
-  readonly transactionId: string
-  /**
-   * Executes one retry-safe host command under a durable before/after checkpoint. A completed
-   * step returns its persisted result on recovery instead of replaying earlier host mutations.
-   */
-  runStep(
-    id: string,
-    step: ManagedHostStepExecution,
-  ): Promise<string>
-}
-
-export interface ManagedReleaseRequest {
-  readonly operation: ManagedReleaseOperation
-  readonly source: NativeRuntimeHost | 'adapter'
-  readonly runtime: RuntimeInstallerScope
-  readonly openBrowser: boolean
-  /**
-   * Runs under the same cross-process lock as activation and Dashboard commit.
-   * Native hosts perform marketplace mutation and authoritative inventory resolution here.
-   */
-  readonly prepareCandidate: (host: ManagedHostPreparationContext) => {
-    readonly candidateRoot: string
-    readonly evidence?: string
-  } | Promise<{
-    readonly candidateRoot: string
-    readonly evidence?: string
-  }>
-  /** Dashboard ready 后才提交与 activation 绑定的外部证据。抛错会回滚 runtime 与 Dashboard。 */
-  readonly commitReadyEvidence?: (
-    activation: RuntimeActivation,
-    candidate: { readonly candidateRoot: string; readonly evidence?: string },
-    transactionId: string,
-  ) => void | Promise<void>
-}
+export type {
+  ManagedHostPreparationContext,
+  ManagedReleaseFailureState,
+  ManagedReleaseOutcome,
+  ManagedReleaseRequest,
+} from './release-coordinator-contract.js'
 
 /**
  * The only coordinator allowed to couple host candidate preparation, runtime activation,
@@ -107,25 +71,30 @@ async function publishWithinManagedTransaction(
   transaction: ManagedRuntimeTransaction,
   dashboardStarter: ReleasedDashboardStarter | undefined,
 ): Promise<ManagedReleaseOutcome> {
-  let journal: ManagedReleaseJournalRecord
-  try {
-    const pending = await transaction.journal.read()
-    if (pending !== null) {
-      if (pending.operation !== request.operation || pending.source !== request.source) {
-        throw new ManagedRuntimeIndeterminateError(
-          `存在未完成的 ${pending.operation}/${pending.source} 事务 ${pending.transactionId}，`
-          + `拒绝启动 ${request.operation}/${request.source}`,
-        )
-      }
-      journal = pending
-    } else {
-      journal = transaction.journal.create(request.operation, request.source, deps.clock())
-      await transaction.journal.write(journal)
-    }
-  } catch (error) {
-    throw error instanceof ManagedRuntimeIndeterminateError
-      ? error
-      : new ManagedRuntimeIndeterminateError(`无法读取或创建 write-ahead journal：${String(error)}`)
+  let journal = await resolveManagedReleaseJournal(deps, request, transaction)
+  if (isCompensationPhase(journal.phase)) {
+    return resumeManagedReleaseCompensation(
+      deps,
+      request.source,
+      transaction,
+      journal,
+      dashboardStarter,
+    )
+  }
+  if (
+    dashboardStarter !== undefined
+    && (journal.phase === 'activating-runtime'
+      || journal.phase === 'runtime-activated'
+      || journal.phase === 'starting-dashboard'
+      || journal.phase === 'dashboard-ready'
+      || journal.phase === 'evidence-committed')
+    && journal.dashboardBefore === undefined
+    && journal.dashboardBeforeAbsent !== true
+  ) {
+    throw new ManagedRuntimeIndeterminateError(
+      `旧 journal 已进入 ${journal.phase}，但缺少 pre-activation Dashboard identity/empty proof；`
+      + '拒绝从 activation 后的 retry 环境补证',
+    )
   }
 
   let candidate: { readonly candidateRoot: string; readonly evidence?: string }
@@ -171,6 +140,40 @@ async function publishWithinManagedTransaction(
         ok: false,
         state: error instanceof ManagedRuntimeIndeterminateError ? 'indeterminate' : 'unchanged',
         detail: `宿主候选准备失败；managed runtime 保持不变，journal 已保留供幂等恢复：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
+  if (
+    journal.phase === 'candidate-resolved'
+    && dashboardStarter !== undefined
+    && journal.dashboardBefore === undefined
+  ) {
+    try {
+      const dashboardBefore = await dashboardStarter.inspect(deps, {
+        openBrowser: false,
+        port: journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+      })
+      if (dashboardBefore !== null) {
+        journal = {
+          ...journal,
+          dashboardBefore,
+          updatedAt: deps.clock(),
+        }
+      } else {
+        journal = {
+          ...journal,
+          dashboardBeforeAbsent: true,
+          updatedAt: deps.clock(),
+        }
+      }
+      await transaction.journal.write(journal)
+    } catch (error) {
+      return {
+        ok: false,
+        state: 'indeterminate',
+        detail: `无法在 activation 前冻结既有 Dashboard identity；未开始 runtime 激活：`
           + `${error instanceof Error ? error.message : String(error)}`,
       }
     }
@@ -248,6 +251,9 @@ async function publishWithinManagedTransaction(
               phase: 'preparing-host',
               startedAt: journal.startedAt,
               updatedAt: deps.clock(),
+              ...(journal.dashboardPort === undefined
+                ? {}
+                : { dashboardPort: journal.dashboardPort }),
               ...(journal.hostSteps === undefined ? {} : { hostSteps: journal.hostSteps }),
             }
             await transaction.journal.write(retryable)
@@ -292,6 +298,7 @@ async function publishWithinManagedTransaction(
     journal,
     activation,
     request.openBrowser,
+    journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
     dashboardStarter,
   )
   if (!dashboard.ok) return dashboard
@@ -299,6 +306,8 @@ async function publishWithinManagedTransaction(
   let dashboardFailure = dashboard.dashboardFailure
   const candidateDashboard = dashboard.candidateDashboard
   const dashboardOwner = dashboard.dashboardOwner
+  const activationChangedRelease =
+    journal.activationCheckpoint?.selection.activeRelease !== activation.selection.activeRelease
 
   if (dashboardFailure === '') {
     if (journal.phase === 'evidence-committed') {
@@ -339,40 +348,38 @@ async function publishWithinManagedTransaction(
     }
   }
 
-  try {
-    if (candidateDashboard !== undefined && dashboardOwner === 'transaction') {
-      const stopped = await candidateDashboard.stop()
-      if (stopped.state === 'indeterminate') {
-        return {
-          ok: false,
-          state: 'indeterminate',
-          detail: `${dashboardFailure}；候选 Dashboard 终止状态无法确认，未回滚 selection 或启动 previous Dashboard：${stopped.detail}`,
-        }
-      }
-    }
-    await transaction.revertActivation(activation)
-    await transaction.journal.clear(journal.transactionId)
-    let dashboardDetail = ''
-    if (dashboardStarter !== undefined && dashboardOwner !== 'preexisting') {
-      const dashboardRestored = await restorePreviousReleasedDashboard(deps, activation, dashboardStarter)
-      if (dashboardRestored.state === 'not-required') {
-        dashboardDetail = '；激活前不存在 Dashboard，无需恢复进程'
-      } else if (dashboardRestored.state !== 'ready') {
-        throw new Error(`previous Dashboard 恢复状态为 ${dashboardRestored.state}：${dashboardRestored.detail}`)
-      } else {
-        dashboardDetail = ' 与 previous Dashboard'
-      }
-    }
+  if (dashboardOwner === 'preexisting' && activationChangedRelease) {
     return {
       ok: false,
-      state: 'restored',
-      detail: `${dashboardFailure}；已恢复 managed transaction${dashboardDetail}`,
+      state: 'indeterminate',
+      detail: `${dashboardFailure}；候选 release 与事务前既有 Dashboard 已对齐，`
+        + '但 ready evidence 尚未提交；为保留可恢复的一致状态，未回滚 activation 或清理 journal',
     }
+  }
+
+  try {
+    journal = {
+      ...journal,
+      phase: 'stopping-candidate',
+      activation,
+      compensationReason: dashboardFailure.slice(0, 4_096),
+      updatedAt: deps.clock(),
+    }
+    await transaction.journal.write(journal)
   } catch (rollbackError) {
     return {
       ok: false,
       state: 'indeterminate',
-      detail: `${dashboardFailure}，且精确回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+      detail: `${dashboardFailure}，且补偿 WAL 无法在副作用前提交：`
+        + `${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
     }
   }
+  return resumeManagedReleaseCompensation(
+    deps,
+    request.source,
+    transaction,
+    journal,
+    dashboardStarter,
+    candidateDashboard,
+  )
 }

@@ -219,14 +219,15 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
     value,
     ['version', 'transactionId', 'operation', 'source', 'phase', 'startedAt', 'updatedAt'],
     [
-      'candidateRoot', 'evidence', 'hostSteps', 'activationCheckpoint', 'activation',
-      'dashboardBefore', 'dashboard',
+      'dashboardPort', 'candidateRoot', 'evidence', 'hostSteps', 'activationCheckpoint', 'activation',
+      'dashboardBefore', 'dashboardBeforeAbsent', 'dashboard', 'compensationReason',
+      'dashboardRestored',
     ],
   )) return null
   if (
     value.version !== 1
     || typeof value.transactionId !== 'string'
-    || value.transactionId === ''
+    || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId)
     || !isOperation(value.operation)
     || !isSource(value.source)
     || (value.phase !== 'preparing-host'
@@ -235,17 +236,30 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
       && value.phase !== 'runtime-activated'
       && value.phase !== 'starting-dashboard'
       && value.phase !== 'dashboard-ready'
+      && value.phase !== 'stopping-candidate'
+      && value.phase !== 'reverting-activation'
+      && value.phase !== 'restoring-previous'
+      && value.phase !== 'previous-restored'
       && value.phase !== 'evidence-committed')
     || typeof value.startedAt !== 'string'
     || value.startedAt === ''
     || typeof value.updatedAt !== 'string'
     || value.updatedAt === ''
+    || (value.dashboardPort !== undefined
+      && (!Number.isSafeInteger(value.dashboardPort)
+        || (value.dashboardPort as number) < 1
+        || (value.dashboardPort as number) > 65_535))
     || (value.candidateRoot !== undefined
       && (typeof value.candidateRoot !== 'string'
         || !isAbsolute(value.candidateRoot)
         || normalize(value.candidateRoot) !== value.candidateRoot))
     || (value.evidence !== undefined
       && (typeof value.evidence !== 'string' || value.evidence.length > 1_000_000))
+    || (value.compensationReason !== undefined
+      && (typeof value.compensationReason !== 'string'
+        || value.compensationReason === ''
+        || value.compensationReason.length > 4_096))
+    || (value.dashboardBeforeAbsent !== undefined && value.dashboardBeforeAbsent !== true)
   ) return null
   const activationCheckpoint = value.activationCheckpoint === undefined
     ? undefined
@@ -254,11 +268,13 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
   const hostSteps = decodeManagedHostSteps(value.hostSteps)
   const dashboardBefore = decodeDashboardIdentity(value.dashboardBefore)
   const dashboard = decodeDashboard(value.dashboard)
+  const dashboardRestored = decodeDashboardIdentity(value.dashboardRestored)
   if (activationCheckpoint === null
     || activation === null
     || hostSteps === null
     || dashboardBefore === null
-    || dashboard === null) return null
+    || dashboard === null
+    || dashboardRestored === null) return null
   const expectedLaunchers = expectedStableLaunchers(paths, paths.homeDir)
   const launchersHaveExpectedPaths = (snapshot: RuntimeLauncherSnapshot | undefined) =>
     snapshot === undefined
@@ -278,6 +294,10 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
     || ((value.phase === 'runtime-activated'
       || value.phase === 'starting-dashboard'
       || value.phase === 'dashboard-ready'
+      || value.phase === 'stopping-candidate'
+      || value.phase === 'reverting-activation'
+      || value.phase === 'restoring-previous'
+      || value.phase === 'previous-restored'
       || value.phase === 'evidence-committed')
       && (typeof value.candidateRoot !== 'string' || activation === undefined))
     || ((value.phase === 'dashboard-ready' || value.phase === 'evidence-committed')
@@ -285,6 +305,31 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
       && dashboard === undefined)
     || (dashboard?.owner === 'transaction'
       && dashboard.transactionId !== value.transactionId)
+    || ((value.phase === 'stopping-candidate'
+      || value.phase === 'reverting-activation'
+      || value.phase === 'restoring-previous'
+      || value.phase === 'previous-restored')
+      && (activationCheckpoint === undefined || typeof value.compensationReason !== 'string'))
+    || (dashboardRestored !== undefined
+      && dashboardRestored.transactionId !== `${value.transactionId}:restore`)
+    || (dashboardBefore !== undefined && value.dashboardBeforeAbsent === true)
+    || (value.dashboardPort !== undefined
+      && ((dashboardBefore !== undefined
+        && dashboardBefore.port !== value.dashboardPort)
+        || (dashboard !== undefined
+          && dashboard.port !== value.dashboardPort)
+        || (dashboardRestored !== undefined
+          && dashboardRestored.port !== value.dashboardPort)))
+    || ((value.source === 'codex' || value.source === 'claude')
+      && (value.phase === 'runtime-activated'
+        || value.phase === 'starting-dashboard'
+        || value.phase === 'dashboard-ready'
+        || value.phase === 'stopping-candidate'
+        || value.phase === 'reverting-activation'
+        || value.phase === 'restoring-previous'
+        || value.phase === 'previous-restored'
+        || value.phase === 'evidence-committed')
+      && value.dashboardPort === undefined)
   ) return null
   return {
     version: 1,
@@ -294,13 +339,19 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
     phase: value.phase,
     startedAt: value.startedAt,
     updatedAt: value.updatedAt,
+    ...(value.dashboardPort === undefined ? {} : { dashboardPort: value.dashboardPort as number }),
     ...(value.candidateRoot === undefined ? {} : { candidateRoot: value.candidateRoot }),
     ...(value.evidence === undefined ? {} : { evidence: value.evidence }),
     ...(hostSteps === undefined ? {} : { hostSteps }),
     ...(activationCheckpoint === undefined ? {} : { activationCheckpoint }),
     ...(activation === undefined ? {} : { activation }),
     ...(dashboardBefore === undefined ? {} : { dashboardBefore }),
+    ...(value.dashboardBeforeAbsent === true ? { dashboardBeforeAbsent: true as const } : {}),
     ...(dashboard === undefined ? {} : { dashboard }),
+    ...(value.compensationReason === undefined
+      ? {}
+      : { compensationReason: value.compensationReason }),
+    ...(dashboardRestored === undefined ? {} : { dashboardRestored }),
   }
 }
 
@@ -335,6 +386,9 @@ export function createManagedReleaseJournal(paths: RuntimePaths): ManagedRelease
     },
     read: () => readJournal(path, paths),
     async write(record) {
+      if (decodeJournal(JSON.stringify(record), paths) === null) {
+        throw new Error(`managed release journal 格式非法：${path}`)
+      }
       await mkdir(dirname(path), { recursive: true })
       await atomicWriteFile(path, `${JSON.stringify(record, null, 2)}\n`)
     },

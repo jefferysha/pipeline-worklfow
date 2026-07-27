@@ -44,6 +44,23 @@ exit 97
   }
 })
 
+test('Codex bootstrap threads an explicit immutable Marketplace ref', async () => {
+  const result = await exec(
+    'bash',
+    [
+      join(root, 'install.sh'),
+      '--codex',
+      '--ref',
+      '0123456789abcdef0123456789abcdef01234567',
+      '--dry-run',
+    ],
+  )
+  assert.match(
+    result.stdout,
+    /codex plugin marketplace add jefferysha\/tenon --ref 0123456789abcdef0123456789abcdef01234567/,
+  )
+})
+
 test('Codex one-line bootstrap registers Marketplace and invokes the packaged Tenon setup', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-'))
   try {

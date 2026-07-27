@@ -28,6 +28,7 @@ describe('managed release write-ahead journal', () => {
     await journal.write(initial)
     await journal.write({
       ...initial,
+      dashboardPort: 43_210,
       phase: 'candidate-resolved',
       candidateRoot: '/host/tenon',
       evidence: '{"installed":[]}',
@@ -39,9 +40,112 @@ describe('managed release write-ahead journal', () => {
       operation: 'update',
       source: 'codex',
       phase: 'candidate-resolved',
+      dashboardPort: 43_210,
       candidateRoot: '/host/tenon',
       evidence: '{"installed":[]}',
     })
+  })
+
+  test('rejects an invalid persisted Dashboard port', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(
+      join(paths.managedTransactionRoot, 'release-transaction.json'),
+      JSON.stringify({ ...initial, dashboardPort: 65_536 }),
+      'utf8',
+    )
+
+    await expect(journal.read()).rejects.toThrow('格式非法')
+  })
+
+  test('rejects a non-canonical top-level transaction identity', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(
+      join(paths.managedTransactionRoot, 'release-transaction.json'),
+      JSON.stringify({ ...initial, transactionId: 'contains whitespace' }),
+      'utf8',
+    )
+
+    await expect(journal.read()).rejects.toThrow('格式非法')
+  })
+
+  test('persists an explicit empty pre-activation Dashboard probe', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await journal.write({
+      ...initial,
+      dashboardPort: 43_210,
+      dashboardBeforeAbsent: true,
+    })
+
+    await expect(createManagedReleaseJournal(paths).read()).resolves.toMatchObject({
+      dashboardPort: 43_210,
+      dashboardBeforeAbsent: true,
+    })
+  })
+
+  test('rejects contradictory present and absent pre-activation Dashboard proofs', async () => {
+    const { journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await expect(journal.write({
+      ...initial,
+      dashboardPort: 18_765,
+      dashboardBeforeAbsent: true,
+      dashboardBefore: {
+        version: 1,
+        port: 18_765,
+        pid: 4242,
+        releaseId: `sha256-${'a'.repeat(64)}`,
+        stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+      },
+    })).rejects.toThrow('格式非法')
+  })
+
+  test.each(['dashboardBefore', 'dashboard'] as const)(
+    'rejects %s ownership on a port that conflicts with the frozen Dashboard port',
+    async (field) => {
+      const { paths, journal } = await fixture()
+      const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+      const identity = {
+        version: 1 as const,
+        port: 18_765,
+        pid: 4242,
+        releaseId: `sha256-${'a'.repeat(64)}`,
+        stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+        transactionId: initial.transactionId,
+      }
+      await mkdir(paths.managedTransactionRoot, { recursive: true })
+      await writeFile(
+        join(paths.managedTransactionRoot, 'release-transaction.json'),
+        JSON.stringify({
+          ...initial,
+          dashboardPort: 43_210,
+          [field]: field === 'dashboard' ? { ...identity, owner: 'transaction' } : identity,
+        }),
+        'utf8',
+      )
+
+      await expect(journal.read()).rejects.toThrow('格式非法')
+    },
+  )
+
+  test('rejects an in-memory write with conflicting frozen and owned Dashboard ports', async () => {
+    const { journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await expect(journal.write({
+      ...initial,
+      dashboardPort: 43_210,
+      dashboardBefore: {
+        version: 1,
+        port: 18_765,
+        pid: 4242,
+        releaseId: `sha256-${'a'.repeat(64)}`,
+        stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+      },
+    })).rejects.toThrow('格式非法')
   })
 
   test('persists before/desired/replay policy/observed-after while keeping stdout diagnostic', async () => {
@@ -157,7 +261,7 @@ describe('managed release write-ahead journal', () => {
   })
 
   test('persists exact Dashboard ownership across store recreation', async () => {
-    const { paths, journal } = await fixture()
+    const { root, paths, journal } = await fixture()
     const initial = journal.create('update', 'codex', '2026-07-27T00:00:00Z')
     const releaseId = `sha256-${'a'.repeat(64)}`
     const activation = {
@@ -185,19 +289,37 @@ describe('managed release write-ahead journal', () => {
       stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
       transactionId: initial.transactionId,
     }
+    const dashboardBefore = {
+      ...identity,
+      transactionId: 'transaction-before',
+    }
     await journal.write({
       ...initial,
       phase: 'dashboard-ready',
+      dashboardPort: 18765,
       candidateRoot: '/host/tenon',
       activation,
-      dashboardBefore: identity,
+      activationCheckpoint: {
+        selection: {
+          version: 1,
+          revision: 0,
+          activeRelease: null,
+          previousRelease: null,
+          updatedAt: '2026-07-27T00:00:00Z',
+        },
+        launchers: {
+          tenon: { path: join(root, '.local', 'bin', 'tenon'), state: { kind: 'missing' } },
+          hook: { path: join(root, '.local', 'bin', 'tenon-hook'), state: { kind: 'missing' } },
+        },
+      },
+      dashboardBefore,
       dashboard: { ...identity, owner: 'transaction' },
       updatedAt: '2026-07-27T00:00:02Z',
     })
 
     await expect(createManagedReleaseJournal(paths).read()).resolves.toMatchObject({
       phase: 'dashboard-ready',
-      dashboardBefore: identity,
+      dashboardBefore,
       dashboard: { ...identity, owner: 'transaction' },
     })
   })

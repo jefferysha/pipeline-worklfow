@@ -50,6 +50,16 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 修复宿主接线；更新时运行 `tenon update --codex`（或 `--claude`）。手动更新和显式启用的
 自动更新复用同一个整包事务，不再拆出第二套 CLI 自更新通道。
 
+这些命令有两层真实验收。CI 安装固定版本的真实 Codex CLI，把当前 checkout 作为全新本地
+Marketplace 安装；Release 则提取当前 checkout 的精确 commit，下载该 commit 的 `install.sh`，
+并把同一个不可变 `--ref <commit>` 传给 Marketplace bootstrap，在独立临时 `HOME`、
+`CODEX_HOME`、`TENON_RUNTIME_HOME` 和 Dashboard 端口中执行。两条路径都会检查稳定 launcher、doctor、受管
+runtime、Dashboard API 与 HTML 产品身份、新 Codex app-server 对插件/入口 Skill/hooks 的发现，
+并重复执行相同安装，证明 release 与 listener 均未变化。
+
+验收不会读取或复制用户的 Codex 凭据，也不会替用户信任 hook。因此新 Codex 进程会把 Tenon
+hooks 报告为 `untrusted`，直到用户执行下方 `/hooks` 步骤；这是预期的人工安全边界，不是安装失败。
+
 Marketplace bootstrap 是当前可用且推荐的一步安装入口。仓库同时构建一个薄 npx 发布包，但只有
 维护者配置了 npm publisher scope 并完成公开发布后，文档才会展示真实的
 `npx --yes @<publisher>/tenon setup --codex` 命令；它不会复制第二套 runtime，最终仍执行同一个

@@ -44,6 +44,7 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
       launchDetached: async (serverBundle, env) => {
         calls.detached.push({ serverBundle, env })
         return {
+          pid: 321,
           terminate: async () => {
             calls.terminated += 1
           },
@@ -186,6 +187,32 @@ describe('tenon dashboard', () => {
     expect(calls.expectedTransactionIds).toEqual(['transaction-dashboard-test'])
   })
 
+  test('managed release start rejects health served by a PID other than the spawned child', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const { runtime: dashboard, calls } = runtime({
+      waitForHealthyServer: async (port, expectedReleaseId, expectedStateScopeId, expectedTransactionId) => ({
+        version: 1,
+        port,
+        pid: 999,
+        releaseId: expectedReleaseId ?? 'unmanaged',
+        stateScopeId: expectedStateScopeId,
+        ...(expectedTransactionId === undefined ? {} : { transactionId: expectedTransactionId }),
+      }),
+    })
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      { transactionId: 'transaction-dashboard-test' },
+      dashboard,
+    )).toMatchObject({
+      state: 'failed',
+      detail: expect.stringContaining('identity'),
+    })
+    expect(calls.terminated).toBe(1)
+  })
+
   test('managed startup rejects a payload path without a release identity before spawning', async () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime()
@@ -213,6 +240,7 @@ describe('tenon dashboard', () => {
     const { runtime: dashboard } = runtime({
       waitForHealthyServer: async () => null,
       launchDetached: async () => ({
+        pid: 321,
         terminate: async () => {
           throw new Error('process still owns the port')
         },

@@ -26,7 +26,11 @@ interface RuntimeCalls {
 }
 
 interface DashboardCalls {
-  readonly starts: Array<readonly [string, { readonly openBrowser?: boolean }]>
+  readonly starts: Array<readonly [string, {
+    readonly openBrowser?: boolean
+    readonly port?: number
+    readonly transactionId?: string
+  }]>
 }
 
 function fakeRuntimeInstaller(
@@ -43,7 +47,7 @@ function fakeRuntimeInstaller(
         selection: {
           version: 1,
           revision: 0,
-          activeRelease: null,
+          activeRelease: previousRelease,
           previousRelease: null,
           updatedAt: '2026-07-23T00:00:00Z',
         },
@@ -106,29 +110,35 @@ function fakeRuntimeInstaller(
 
 function fakeDashboardStarter(failures: readonly boolean[] = []): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
   const calls: DashboardCalls = { starts: [] }
+  let running: Awaited<ReturnType<ReleasedDashboardStarter['inspect']>> = null
   return {
     starter: {
-      inspect: async () => null,
+      inspect: async () => running,
       adopt: async () => null,
       start: async (_deps, payloadRoot, opts) => {
         calls.starts.push([payloadRoot, opts])
         const releaseId = payloadRoot.split('/').at(-2) ?? ''
-        return failures[calls.starts.length - 1] === true
-          ? { state: 'failed', detail: 'injected readiness failure' }
-          : {
-              state: 'ready',
-              session: {
-                ownership: {
-                  version: 1,
-                  port: 18765,
-                  pid: 321,
-                  releaseId,
-                  stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
-                  ...(opts.transactionId === undefined ? {} : { transactionId: opts.transactionId }),
-                },
-                stop: async () => ({ state: 'stopped' as const }),
-              },
-            }
+        if (failures[calls.starts.length - 1] === true) {
+          return { state: 'failed', detail: 'injected readiness failure' }
+        }
+        running = {
+          version: 1,
+          port: opts.port ?? 18_765,
+          pid: 321,
+          releaseId,
+          stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+          ...(opts.transactionId === undefined ? {} : { transactionId: opts.transactionId }),
+        }
+        return {
+          state: 'ready',
+          session: {
+            ownership: running,
+            stop: async () => {
+              running = null
+              return { state: 'stopped' as const }
+            },
+          },
+        }
       },
     },
     calls,
@@ -137,12 +147,13 @@ function fakeDashboardStarter(failures: readonly boolean[] = []): { starter: Rel
 
 function updateEnv(
   run: (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string },
+  runtimeEnv: NodeJS.ProcessEnv = {},
 ): { env: SetupEnv; calls: Calls } {
   const calls: Calls = { exec: [], writes: [] }
   const mutationBaselines = new Map<string, number>()
   const env: SetupEnv = {
     homeDir: () => '/home/update-test',
-    runtimeEnv: () => ({}),
+    runtimeEnv: () => runtimeEnv,
     pluginRoot: () => '/old/tenon',
     selfPath: () => '/old/tenon/packages/cli/dist/tenon.mjs',
     mkdirp: () => undefined,
@@ -303,7 +314,7 @@ describe('tenon update', () => {
       if (cmd === 'codex' && args.join(' ') === 'plugin list --json') return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
       if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
       return { code: 0, stdout: '', stderr: '' }
-    })
+    }, { TENON_DASHBOARD_PORT: '43210' })
 
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
@@ -317,7 +328,7 @@ describe('tenon update', () => {
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
-      { openBrowser: true, transactionId: 'update-test-transaction' },
+      { openBrowser: true, port: 43_210, transactionId: 'update-test-transaction' },
     ]])
     expect(deps.outLines.join('\n')).toContain('稳定 tenon launcher 已保持不变')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
@@ -480,7 +491,7 @@ describe('tenon update', () => {
     expect(deps.outLines.join('\n')).toContain('本地 marketplace 不需要 Git fetch')
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
-      { openBrowser: false, transactionId: 'update-test-transaction' },
+      { openBrowser: false, port: 18_765, transactionId: 'update-test-transaction' },
     ]])
   })
 

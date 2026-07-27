@@ -264,8 +264,9 @@ async function startManagedDashboard(
     return { state: 'failed', detail: 'candidate Dashboard process could not be spawned' }
   }
   let healthy: DashboardHealthIdentity | null
+  let expectedStateScopeId: string
   try {
-    const expectedStateScopeId = runtime.resolveStateScopeId()
+    expectedStateScopeId = runtime.resolveStateScopeId()
     healthy = await runtime.waitForHealthyServer(
       port,
       expectedReleaseId,
@@ -286,6 +287,21 @@ async function startManagedDashboard(
       `受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查`,
     )
   }
+  const identityMatchesSpawn = healthy.version === 1
+    && healthy.port === port
+    && healthy.pid === child.pid
+    && Number.isSafeInteger(healthy.pid)
+    && healthy.pid > 0
+    && (expectedReleaseId === undefined || healthy.releaseId === expectedReleaseId)
+    && healthy.stateScopeId === expectedStateScopeId
+    && healthy.transactionId === opts.transactionId
+  if (!identityMatchesSpawn) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      '健康服务 identity 与本次 spawn 的 release/port/PID/state scope/transaction 不一致',
+    )
+  }
   const url = `http://127.0.0.1:${port}/`
   deps.io.out(`[dashboard] 受管服务健康检查通过：${url}`)
   let browserOpened = true
@@ -298,9 +314,6 @@ async function startManagedDashboard(
     // Browser policy/headless hosts can reject an OS open request even though the product is up.
     // The validated URL remains actionable, so do not roll back a healthy immutable runtime.
     deps.io.err(`[dashboard] 无法自动打开浏览器；请在浏览器访问 ${url}`)
-  }
-  if (expectedReleaseId !== undefined && healthy.releaseId !== expectedReleaseId) {
-    return stopFailedCandidate(deps, child, '健康服务 release identity 与候选不一致')
   }
   return {
     state: 'ready',

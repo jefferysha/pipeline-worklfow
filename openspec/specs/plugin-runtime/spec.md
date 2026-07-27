@@ -1,5 +1,11 @@
 # Managed Plugin Runtime Specification
 
+## Purpose
+
+Define the contract that turns a native Tenon plugin installation or update into one
+immutable, recoverable managed runtime with stable launchers, hooks, Dashboard ownership,
+safe Change routing, and an evidence-bound Build-to-Verify handoff.
+
 ## Requirements
 
 ### Requirement: Native installation activates a verified managed release

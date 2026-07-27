@@ -26,6 +26,7 @@ import {
 } from './plugin-host.js'
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
 import { publishManagedRelease } from './release-coordinator.js'
+import { parseDashboardPort } from './dashboard-launch-options.js'
 import { runManagedHostCommand } from './managed-host-command.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import {
@@ -166,6 +167,7 @@ export function cmdUpdate(
   }
 
   let hostBoundary: HostBoundaryState = 'in-progress'
+  const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT)
   const outcome = await publishManagedRelease(
     deps,
     {
@@ -176,6 +178,7 @@ export function cmdUpdate(
         env: env.runtimeEnv(),
       },
       openBrowser: opts.auto !== true,
+      ...(dashboardPort === null ? {} : { dashboardPort }),
       prepareCandidate: async (transaction) => {
         let inventory = ''
         for (let index = 0; index < plan.length; index += 1) {

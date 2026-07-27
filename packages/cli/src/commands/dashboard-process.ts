@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 
 export interface DashboardProcessHandle {
+  readonly pid: number
   terminate(): Promise<void>
 }
 
@@ -88,8 +89,14 @@ export function launchDetachedDashboardProcess(
     const child = spawn(process.execPath, [serverBundle], { detached: true, stdio: 'ignore', env })
     child.once('error', () => finish(null))
     child.once('spawn', () => {
+      const pid = child.pid
+      if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) {
+        finish(null)
+        return
+      }
       child.unref()
       finish({
+        pid,
         terminate: () => confirmedTermination(child),
       })
     })

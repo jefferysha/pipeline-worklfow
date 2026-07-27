@@ -3,6 +3,7 @@ import type { RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeActivation } from '../runtime/types.js'
 import type { SetupEnv } from './setupEnvironment.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
+import { parseDashboardPort } from './dashboard-launch-options.js'
 import { hostFlag, isNativePipelineHost, type PipelineHost } from './plugin-host.js'
 import {
   publishManagedRelease,
@@ -31,6 +32,7 @@ export async function publishSetupManagedRuntime(
   ) => boolean,
 ): Promise<number> {
   const source = isNativePipelineHost(host) ? host : 'adapter'
+  const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT)
   const outcome = await publishManagedRelease(
     deps,
     {
@@ -41,6 +43,7 @@ export async function publishSetupManagedRuntime(
         env: env.runtimeEnv(),
       },
       openBrowser: openDashboard,
+      ...(dashboardPort === null ? {} : { dashboardPort }),
       prepareCandidate,
       ...(afterReady === undefined
         ? {}

@@ -10,10 +10,11 @@ MARKETPLACE_NAME="tenon"
 HOST=""
 AUTO_UPDATE=0
 DRY_RUN=0
+MARKETPLACE_REF="main"
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --codex|--claude [--auto-update] [--dry-run]
+Usage: install.sh --codex|--claude [--ref <main|vX.Y.Z|commit>] [--auto-update] [--dry-run]
 
 Installs the complete Tenon plugin into the selected native marketplace, then runs the packaged
 `tenon setup --<host>`. Other hosts are adapters and should be deployed from an
@@ -29,6 +30,11 @@ while [ $# -gt 0 ]; do
       HOST="${1#--}"
       ;;
     --auto-update) AUTO_UPDATE=1 ;;
+    --ref)
+      [ $# -ge 2 ] || { echo "install.sh: --ref requires a value" >&2; exit 2; }
+      MARKETPLACE_REF="$2"
+      shift
+      ;;
     --dry-run) DRY_RUN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "install.sh: unsupported argument $1" >&2; usage >&2; exit 2 ;;
@@ -36,12 +42,20 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$HOST" ] || { usage >&2; exit 2; }
+[[ "$MARKETPLACE_REF" =~ ^(main|v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?|[0-9a-f]{40})$ ]] || {
+  echo "install.sh: invalid --ref $MARKETPLACE_REF" >&2
+  exit 2
+}
+[ "$HOST" = codex ] || [ "$MARKETPLACE_REF" = main ] || {
+  echo "install.sh: --ref is supported only for Codex Marketplace installs" >&2
+  exit 2
+}
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "[dry-run] Tenon --${HOST} 一步安装计划："
   case "$HOST" in
     codex)
-      echo "  codex plugin marketplace add ${MARKETPLACE_SOURCE} --ref main"
+      echo "  codex plugin marketplace add ${MARKETPLACE_SOURCE} --ref ${MARKETPLACE_REF}"
       echo "  codex plugin add tenon@${MARKETPLACE_NAME} --json"
       echo "  codex plugin list --json"
       ;;
@@ -96,7 +110,7 @@ add_marketplace() {
 
 case "$HOST" in
   codex)
-    add_marketplace codex plugin marketplace add "$MARKETPLACE_SOURCE" --ref main
+    add_marketplace codex plugin marketplace add "$MARKETPLACE_SOURCE" --ref "$MARKETPLACE_REF"
     if ! codex plugin add "tenon@${MARKETPLACE_NAME}" --json; then
       ROOT="$(find_codex_root)"
       [ -n "$ROOT" ] || {

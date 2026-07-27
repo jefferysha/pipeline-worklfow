@@ -177,7 +177,7 @@ function listenerPids(port: number): Promise<number[] | null> {
   })
 }
 
-function portOpen(port: number): Promise<boolean> {
+export function dashboardPortOpen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ host: '127.0.0.1', port })
     socket.setTimeout(250)
@@ -197,7 +197,7 @@ export async function stopOwnedDashboard(identity: DashboardHealthIdentity): Pro
     identity.stateScopeId,
     { expectedTransactionId: identity.transactionId },
   )
-  if (current === null) return !(await portOpen(identity.port))
+  if (current === null) return !(await dashboardPortOpen(identity.port))
   if (current.pid !== identity.pid || current.transactionId !== identity.transactionId) return false
   const listeners = await listenerPids(identity.port)
   if (listeners === null || !listeners.includes(identity.pid)) return false
@@ -208,7 +208,7 @@ export async function stopOwnedDashboard(identity: DashboardHealthIdentity): Pro
   }
   const deadline = Date.now() + 5_000
   while (Date.now() < deadline) {
-    if (!(await portOpen(identity.port))) return true
+    if (!(await dashboardPortOpen(identity.port))) return true
     await sleep(50)
   }
   return false

@@ -3253,7 +3253,27 @@ async function lockAgeMs(lockDir) {
     }
   }
 }
-async function reclaimStale(lockDir) {
+async function lockOwnerProcessIsDead(lockDir) {
+  let owner;
+  try {
+    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
+  } catch {
+    return false;
+  }
+  const pidText = owner.split(".", 1)[0] ?? "";
+  if (!/^[1-9][0-9]*$/.test(pidText))
+    return false;
+  const pid = Number(pidText);
+  if (!Number.isSafeInteger(pid) || pid <= 0)
+    return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return error.code === "ESRCH";
+  }
+}
+async function reclaimAbandoned(lockDir) {
   const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString("hex")}`;
   try {
     await rename2(lockDir, grave);
@@ -3294,11 +3314,15 @@ async function acquire(lockDir) {
       if (err.code !== "EEXIST")
         throw err;
     }
+    if (await lockOwnerProcessIsDead(lockDir)) {
+      await reclaimAbandoned(lockDir);
+      continue;
+    }
     const age = await lockAgeMs(lockDir);
     if (age === null)
       continue;
     if (age > STALE_LOCK_MS) {
-      await reclaimStale(lockDir);
+      await reclaimAbandoned(lockDir);
       continue;
     }
     if (Date.now() >= deadline) {
@@ -43232,8 +43256,14 @@ function launchDetachedDashboardProcess(serverBundle, env) {
     const child = spawn5(process.execPath, [serverBundle], { detached: true, stdio: "ignore", env });
     child.once("error", () => finish(null));
     child.once("spawn", () => {
+      const pid = child.pid;
+      if (pid === void 0 || !Number.isSafeInteger(pid) || pid <= 0) {
+        finish(null);
+        return;
+      }
       child.unref();
       finish({
+        pid,
         terminate: () => confirmedTermination(child)
       });
     });
@@ -43352,7 +43382,7 @@ function listenerPids(port) {
     });
   });
 }
-function portOpen(port) {
+function dashboardPortOpen(port) {
   return new Promise((resolve36) => {
     const socket = createConnection({ host: "127.0.0.1", port });
     socket.setTimeout(250);
@@ -43376,7 +43406,7 @@ async function stopOwnedDashboard(identity) {
     identity.stateScopeId,
     { expectedTransactionId: identity.transactionId }
   );
-  if (current === null) return !await portOpen(identity.port);
+  if (current === null) return !await dashboardPortOpen(identity.port);
   if (current.pid !== identity.pid || current.transactionId !== identity.transactionId) return false;
   const listeners = await listenerPids(identity.port);
   if (listeners === null || !listeners.includes(identity.pid)) return false;
@@ -43387,7 +43417,7 @@ async function stopOwnedDashboard(identity) {
   }
   const deadline = Date.now() + 5e3;
   while (Date.now() < deadline) {
-    if (!await portOpen(identity.port)) return true;
+    if (!await dashboardPortOpen(identity.port)) return true;
     await sleep3(50);
   }
   return false;
@@ -43537,8 +43567,9 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
     return { state: "failed", detail: "candidate Dashboard process could not be spawned" };
   }
   let healthy;
+  let expectedStateScopeId;
   try {
-    const expectedStateScopeId = runtime.resolveStateScopeId();
+    expectedStateScopeId = runtime.resolveStateScopeId();
     healthy = await runtime.waitForHealthyServer(
       port,
       expectedReleaseId,
@@ -43559,6 +43590,14 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
       `\u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5`
     );
   }
+  const identityMatchesSpawn = healthy.version === 1 && healthy.port === port && healthy.pid === child.pid && Number.isSafeInteger(healthy.pid) && healthy.pid > 0 && (expectedReleaseId === void 0 || healthy.releaseId === expectedReleaseId) && healthy.stateScopeId === expectedStateScopeId && healthy.transactionId === opts.transactionId;
+  if (!identityMatchesSpawn) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      "\u5065\u5EB7\u670D\u52A1 identity \u4E0E\u672C\u6B21 spawn \u7684 release/port/PID/state scope/transaction \u4E0D\u4E00\u81F4"
+    );
+  }
   const url = `http://127.0.0.1:${port}/`;
   deps.io.out(`[dashboard] \u53D7\u7BA1\u670D\u52A1\u5065\u5EB7\u68C0\u67E5\u901A\u8FC7\uFF1A${url}`);
   let browserOpened = true;
@@ -43569,9 +43608,6 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
   }
   if (!browserOpened) {
     deps.io.err(`[dashboard] \u65E0\u6CD5\u81EA\u52A8\u6253\u5F00\u6D4F\u89C8\u5668\uFF1B\u8BF7\u5728\u6D4F\u89C8\u5668\u8BBF\u95EE ${url}`);
-  }
-  if (expectedReleaseId !== void 0 && healthy.releaseId !== expectedReleaseId) {
-    return stopFailedCandidate(deps, child, "\u5065\u5EB7\u670D\u52A1 release identity \u4E0E\u5019\u9009\u4E0D\u4E00\u81F4");
   }
   return {
     state: "ready",
@@ -44552,26 +44588,31 @@ function decodeJournal(raw, paths) {
     value,
     ["version", "transactionId", "operation", "source", "phase", "startedAt", "updatedAt"],
     [
+      "dashboardPort",
       "candidateRoot",
       "evidence",
       "hostSteps",
       "activationCheckpoint",
       "activation",
       "dashboardBefore",
-      "dashboard"
+      "dashboardBeforeAbsent",
+      "dashboard",
+      "compensationReason",
+      "dashboardRestored"
     ]
   )) return null;
-  if (value.version !== 1 || typeof value.transactionId !== "string" || value.transactionId === "" || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute19(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6)) return null;
+  if (value.version !== 1 || typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId) || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "stopping-candidate" && value.phase !== "reverting-activation" && value.phase !== "restoring-previous" && value.phase !== "previous-restored" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.dashboardPort !== void 0 && (!Number.isSafeInteger(value.dashboardPort) || value.dashboardPort < 1 || value.dashboardPort > 65535) || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute19(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6) || value.compensationReason !== void 0 && (typeof value.compensationReason !== "string" || value.compensationReason === "" || value.compensationReason.length > 4096) || value.dashboardBeforeAbsent !== void 0 && value.dashboardBeforeAbsent !== true) return null;
   const activationCheckpoint = value.activationCheckpoint === void 0 ? void 0 : decodeActivationCheckpoint(value.activationCheckpoint);
   const activation = value.activation === void 0 ? void 0 : decodeActivation(value.activation);
   const hostSteps = decodeManagedHostSteps(value.hostSteps);
   const dashboardBefore = decodeDashboardIdentity(value.dashboardBefore);
   const dashboard = decodeDashboard(value.dashboard);
-  if (activationCheckpoint === null || activation === null || hostSteps === null || dashboardBefore === null || dashboard === null) return null;
+  const dashboardRestored = decodeDashboardIdentity(value.dashboardRestored);
+  if (activationCheckpoint === null || activation === null || hostSteps === null || dashboardBefore === null || dashboard === null || dashboardRestored === null) return null;
   const expectedLaunchers = expectedStableLaunchers(paths, paths.homeDir);
   const launchersHaveExpectedPaths = (snapshot) => snapshot === void 0 || snapshot.tenon.path === expectedLaunchers.tenon.path && snapshot.hook.path === expectedLaunchers.hook.path;
   if (!launchersHaveExpectedPaths(activationCheckpoint?.launchers) || !launchersHaveExpectedPaths(activation?.launcherSnapshot) || !launchersHaveExpectedPaths(activation?.launcherCommitted) || activation !== void 0 && activation.releaseRoot !== join70(paths.releasesRoot, activation.release.releaseId)) return null;
-  if (value.phase === "candidate-resolved" && typeof value.candidateRoot !== "string" || value.phase === "activating-runtime" && (typeof value.candidateRoot !== "string" || activationCheckpoint === void 0) || (value.phase === "runtime-activated" || value.phase === "starting-dashboard" || value.phase === "dashboard-ready" || value.phase === "evidence-committed") && (typeof value.candidateRoot !== "string" || activation === void 0) || (value.phase === "dashboard-ready" || value.phase === "evidence-committed") && value.dashboard !== void 0 && dashboard === void 0 || dashboard?.owner === "transaction" && dashboard.transactionId !== value.transactionId) return null;
+  if (value.phase === "candidate-resolved" && typeof value.candidateRoot !== "string" || value.phase === "activating-runtime" && (typeof value.candidateRoot !== "string" || activationCheckpoint === void 0) || (value.phase === "runtime-activated" || value.phase === "starting-dashboard" || value.phase === "dashboard-ready" || value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored" || value.phase === "evidence-committed") && (typeof value.candidateRoot !== "string" || activation === void 0) || (value.phase === "dashboard-ready" || value.phase === "evidence-committed") && value.dashboard !== void 0 && dashboard === void 0 || dashboard?.owner === "transaction" && dashboard.transactionId !== value.transactionId || (value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored") && (activationCheckpoint === void 0 || typeof value.compensationReason !== "string") || dashboardRestored !== void 0 && dashboardRestored.transactionId !== `${value.transactionId}:restore` || dashboardBefore !== void 0 && value.dashboardBeforeAbsent === true || value.dashboardPort !== void 0 && (dashboardBefore !== void 0 && dashboardBefore.port !== value.dashboardPort || dashboard !== void 0 && dashboard.port !== value.dashboardPort || dashboardRestored !== void 0 && dashboardRestored.port !== value.dashboardPort) || (value.source === "codex" || value.source === "claude") && (value.phase === "runtime-activated" || value.phase === "starting-dashboard" || value.phase === "dashboard-ready" || value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored" || value.phase === "evidence-committed") && value.dashboardPort === void 0) return null;
   return {
     version: 1,
     transactionId: value.transactionId,
@@ -44580,13 +44621,17 @@ function decodeJournal(raw, paths) {
     phase: value.phase,
     startedAt: value.startedAt,
     updatedAt: value.updatedAt,
+    ...value.dashboardPort === void 0 ? {} : { dashboardPort: value.dashboardPort },
     ...value.candidateRoot === void 0 ? {} : { candidateRoot: value.candidateRoot },
     ...value.evidence === void 0 ? {} : { evidence: value.evidence },
     ...hostSteps === void 0 ? {} : { hostSteps },
     ...activationCheckpoint === void 0 ? {} : { activationCheckpoint },
     ...activation === void 0 ? {} : { activation },
     ...dashboardBefore === void 0 ? {} : { dashboardBefore },
-    ...dashboard === void 0 ? {} : { dashboard }
+    ...value.dashboardBeforeAbsent === true ? { dashboardBeforeAbsent: true } : {},
+    ...dashboard === void 0 ? {} : { dashboard },
+    ...value.compensationReason === void 0 ? {} : { compensationReason: value.compensationReason },
+    ...dashboardRestored === void 0 ? {} : { dashboardRestored }
   };
 }
 async function readJournal(path9, paths) {
@@ -44619,6 +44664,9 @@ function createManagedReleaseJournal(paths) {
     },
     read: () => readJournal(path9, paths),
     async write(record2) {
+      if (decodeJournal(JSON.stringify(record2), paths) === null) {
+        throw new Error(`managed release journal \u683C\u5F0F\u975E\u6CD5\uFF1A${path9}`);
+      }
       await mkdir26(dirname17(path9), { recursive: true });
       await atomicWriteFile(path9, `${JSON.stringify(record2, null, 2)}
 `);
@@ -44638,8 +44686,8 @@ function createManagedReleaseJournal(paths) {
 
 // packages/cli/src/runtime/installer.ts
 var ManagedRuntimeIndeterminateError = class extends Error {
-  constructor(message2) {
-    super(message2);
+  constructor(message2, options) {
+    super(message2, options);
     this.name = "ManagedRuntimeIndeterminateError";
   }
 };
@@ -44680,18 +44728,50 @@ async function activateWithinTransaction(paths, homeDir, candidateRoot, host) {
   }
 }
 async function revertWithinTransaction(paths, homeDir, activation) {
-  await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection);
+  const store2 = new RuntimeReleaseStore({ paths });
+  const compensatedSelection = {
+    version: 1,
+    revision: activation.selection.revision + 1,
+    activeRelease: activation.selection.previousRelease,
+    previousRelease: activation.selection.activeRelease
+  };
+  const sameSelectionCoordinates = (current, expected) => current.version === expected.version && current.revision === expected.revision && current.activeRelease === expected.activeRelease && current.previousRelease === expected.previousRelease;
+  const before = await store2.inspect();
+  if (sameSelectionCoordinates(before.selection, activation.selection)) {
+    await store2.revertActivation(activation.selection);
+  } else if (!sameSelectionCoordinates(before.selection, compensatedSelection)) {
+    throw new ManagedRuntimeIndeterminateError(
+      "runtime selection \u65E2\u4E0D\u5339\u914D journal activation\uFF0C\u4E5F\u4E0D\u662F\u5176\u7CBE\u786E compensated revision\uFF1B\u62D2\u7EDD\u8986\u76D6"
+    );
+  }
   try {
     if (activation.launcherSnapshot !== void 0) {
       await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted);
-      return;
+    } else {
+      const inspection = await store2.inspect();
+      if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir);
     }
-    const inspection = await new RuntimeReleaseStore({ paths }).inspect();
-    if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir);
   } catch (error) {
     throw new ManagedRuntimeIndeterminateError(
       `selection \u5DF2\u8865\u507F\uFF0C\u4F46\u7A33\u5B9A launcher \u72B6\u6001\u65E0\u6CD5\u8BC1\u660E\uFF1A${String(error)}`
     );
+  }
+  const after = await store2.inspect();
+  if (!sameSelectionCoordinates(after.selection, compensatedSelection)) {
+    throw new ManagedRuntimeIndeterminateError("activation \u8865\u507F\u540E selection \u672A\u5904\u4E8E\u7CBE\u786E compensated revision");
+  }
+  if (compensatedSelection.activeRelease === null) {
+    if (after.active !== null || after.activeValid) {
+      throw new ManagedRuntimeIndeterminateError("activation \u8865\u507F\u540E\u7A7A selection \u7684 runtime \u8BC1\u660E\u4E0D\u4E00\u81F4");
+    }
+  } else if (!after.activeValid || after.active?.releaseId !== compensatedSelection.activeRelease) {
+    throw new ManagedRuntimeIndeterminateError("activation \u8865\u507F\u540E\u7684 previous runtime \u65E0\u6CD5\u901A\u8FC7\u5B8C\u6574\u6027\u8BC1\u660E");
+  }
+  if (activation.launcherSnapshot !== void 0) {
+    const currentLaunchers = await captureStableLaunchers(paths, homeDir);
+    if (!sameJson(currentLaunchers, activation.launcherSnapshot)) {
+      throw new ManagedRuntimeIndeterminateError("activation \u8865\u507F\u540E\u7684 launcher \u4E0E pre-activation checkpoint \u4E0D\u4E00\u81F4");
+    }
   }
 }
 async function proveActivationWithinTransaction(paths, homeDir, activation) {
@@ -44861,14 +44941,29 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
   return 1;
 }
 
+// packages/cli/src/commands/managed-dashboard-identity.ts
+function sameManagedDashboardIdentity(left, right) {
+  return left !== void 0 && right !== void 0 && left.version === right.version && left.port === right.port && left.pid === right.pid && left.releaseId === right.releaseId && left.stateScopeId === right.stateScopeId && left.transactionId === right.transactionId;
+}
+
 // packages/cli/src/commands/released-dashboard-starter.ts
+var DashboardInspectionUnverifiableError = class extends Error {
+  constructor(port) {
+    super(`Dashboard port ${port} \u5B58\u5728 listener\uFF0C\u4F46 managed health identity \u4E0D\u53EF\u9A8C\u8BC1`);
+    this.name = "DashboardInspectionUnverifiableError";
+  }
+};
 function createReleasedDashboardStarter(runtime) {
   return {
     inspect: async (_deps, opts) => {
       const port = opts.port ?? DEFAULT_DASHBOARD_PORT;
       const stateScopeId = runtime.resolveStateScopeId();
       const identity = await runtime.probeHealthyServer(port, void 0, stateScopeId, "*");
-      return identity?.releaseId === "unmanaged" ? null : identity;
+      if (identity !== null && identity.releaseId !== "unmanaged") {
+        return identity;
+      }
+      if (!await dashboardPortOpen(port)) return null;
+      throw new DashboardInspectionUnverifiableError(port);
     },
     adopt: async (deps, identity) => {
       const current = await runtime.probeHealthyServer(
@@ -44877,8 +44972,8 @@ function createReleasedDashboardStarter(runtime) {
         identity.stateScopeId,
         identity.transactionId
       );
-      if (current === null || current.pid !== identity.pid || current.transactionId !== identity.transactionId) return null;
-      return releasedDashboardSession(deps, identity, runtime.stopOwnedDashboard);
+      if (current === null || !sameManagedDashboardIdentity(current, identity)) return null;
+      return releasedDashboardSession(deps, current, runtime.stopOwnedDashboard);
     },
     start: (deps, payloadRoot, opts) => startReleasedDashboard(deps, payloadRoot, opts, runtime)
   };
@@ -45323,19 +45418,57 @@ function createManagedHostStepRunner(context) {
   };
 }
 
-// packages/cli/src/commands/dashboard-restore.ts
-import { dirname as dirname19, join as join73 } from "node:path";
-async function restorePreviousReleasedDashboard(deps, activation, starter) {
-  const previousRelease = activation.selection.previousRelease;
-  if (previousRelease === null) return { state: "not-required" };
-  const payloadRoot = join73(dirname19(activation.releaseRoot), previousRelease, "payload");
-  return starter.start(deps, payloadRoot, { openBrowser: false });
+// packages/cli/src/commands/managed-release-journal-coordinator.ts
+async function resolveManagedReleaseJournal(deps, request, transaction) {
+  try {
+    const pending = await transaction.journal.read();
+    if (pending === null) {
+      const created = {
+        ...transaction.journal.create(request.operation, request.source, deps.clock()),
+        dashboardPort: request.dashboardPort ?? DEFAULT_DASHBOARD_PORT
+      };
+      await transaction.journal.write(created);
+      return created;
+    }
+    if (pending.operation !== request.operation || pending.source !== request.source) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u5B58\u5728\u672A\u5B8C\u6210\u7684 ${pending.operation}/${pending.source} \u4E8B\u52A1 ${pending.transactionId}\uFF0C\u62D2\u7EDD\u542F\u52A8 ${request.operation}/${request.source}`
+      );
+    }
+    if (pending.dashboardPort !== void 0) return pending;
+    const inferredPort = pending.dashboard?.port ?? pending.dashboardBefore?.port;
+    const canAdoptRequestedPort = pending.phase === "preparing-host" || pending.phase === "candidate-resolved";
+    if (inferredPort === void 0 && !canAdoptRequestedPort) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u672A\u5B8C\u6210\u4E8B\u52A1 ${pending.transactionId} \u5DF2\u8FDB\u5165 ${pending.phase}\uFF0C\u4F46\u65E7 journal \u7F3A\u5C11 pre-activation Dashboard port\uFF1B\u62D2\u7EDD\u4ECE retry \u73AF\u5883\u8865\u8BC1`
+      );
+    }
+    const migrated = {
+      ...pending,
+      dashboardPort: inferredPort ?? request.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+      updatedAt: deps.clock()
+    };
+    await transaction.journal.write(migrated);
+    return migrated;
+  } catch (error) {
+    throw error instanceof ManagedRuntimeIndeterminateError ? error : new ManagedRuntimeIndeterminateError(
+      `\u65E0\u6CD5\u8BFB\u53D6\u6216\u521B\u5EFA write-ahead journal\uFF1A${String(error)}`,
+      { cause: error }
+    );
+  }
 }
 
 // packages/cli/src/commands/release-dashboard-coordinator.ts
-import { join as join74 } from "node:path";
-async function coordinateReleaseDashboard(deps, transaction, initialJournal, activation, openBrowser2, starter) {
+import { join as join73 } from "node:path";
+async function coordinateReleaseDashboard(deps, transaction, initialJournal, activation, openBrowser2, dashboardPort, starter) {
   let journal = initialJournal;
+  if (journal.dashboardPort !== void 0 && journal.dashboardPort !== dashboardPort) {
+    return {
+      ok: false,
+      state: "indeterminate",
+      detail: `Dashboard frozen port \u4E0E coordinator port \u4E0D\u4E00\u81F4\uFF1A${journal.dashboardPort} != ${dashboardPort}`
+    };
+  }
   if (starter === void 0) {
     if (journal.phase !== "dashboard-ready" && journal.phase !== "evidence-committed") {
       try {
@@ -45357,11 +45490,36 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
     return { ok: true, journal, dashboardFailure: "" };
   }
   try {
+    const inspectOptions = {
+      openBrowser: false,
+      port: dashboardPort
+    };
     if (journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") {
       if (journal.dashboard === void 0) {
         throw new ManagedRuntimeIndeterminateError("Dashboard journal \u7F3A\u5C11 durable ownership");
       }
-      if (journal.dashboard.owner !== "transaction" || journal.dashboard.transactionId !== journal.transactionId) {
+      assertDashboardPort(journal.dashboard, dashboardPort, "durable Dashboard");
+      if (journal.dashboardBefore !== void 0) {
+        assertDashboardPort(journal.dashboardBefore, dashboardPort, "preexisting Dashboard");
+      }
+      if (journal.dashboard.owner === "preexisting") {
+        const current2 = await starter.inspect(deps, {
+          openBrowser: false,
+          port: dashboardPort
+        });
+        if (current2 === null || !sameManagedDashboardIdentity(current2, journal.dashboard)) {
+          throw new ManagedRuntimeIndeterminateError(
+            `journal \u4E2D\u7684 preexisting Dashboard pid=${journal.dashboard.pid} \u5DF2\u6D88\u5931\u6216\u8EAB\u4EFD\u53D8\u5316`
+          );
+        }
+        return {
+          ok: true,
+          journal,
+          dashboardFailure: "",
+          dashboardOwner: "preexisting"
+        };
+      }
+      if (journal.dashboard.transactionId !== journal.transactionId) {
         throw new ManagedRuntimeIndeterminateError(
           "Dashboard journal \u4E0D\u662F\u5F53\u524D release transaction \u7684\u7CBE\u786E ownership"
         );
@@ -45370,6 +45528,11 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       if (adopted === null) {
         throw new ManagedRuntimeIndeterminateError(
           `\u65E0\u6CD5\u6536\u517B journal \u4E2D\u7684 Dashboard pid=${journal.dashboard.pid}`
+        );
+      }
+      if (!sameManagedDashboardIdentity(adopted.ownership, journal.dashboard)) {
+        throw new ManagedRuntimeIndeterminateError(
+          `\u6536\u517B\u7ED3\u679C\u4E0E journal Dashboard pid=${journal.dashboard.pid} \u8EAB\u4EFD\u4E0D\u4E00\u81F4`
         );
       }
       return {
@@ -45381,7 +45544,8 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       };
     }
     if (journal.phase !== "starting-dashboard") {
-      const before = await starter.inspect(deps, { openBrowser: false });
+      const before = journal.dashboardBefore ?? (journal.dashboardBeforeAbsent === true ? null : await starter.inspect(deps, inspectOptions));
+      if (before !== null) assertDashboardPort(before, dashboardPort, "initial Dashboard probe");
       journal = {
         ...journal,
         phase: "starting-dashboard",
@@ -45391,18 +45555,74 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       };
       await transaction.journal.write(journal);
     }
-    const current = await starter.inspect(deps, { openBrowser: false });
-    const currentOwned = current?.transactionId === journal.transactionId && current.releaseId === activation.release.releaseId;
+    let current = await starter.inspect(deps, inspectOptions);
+    const previousRelease = journal.activationCheckpoint?.selection.activeRelease;
+    if (current !== null && previousRelease !== null && previousRelease !== void 0 && previousRelease !== activation.release.releaseId && current.releaseId === previousRelease && journal.dashboardBefore !== void 0 && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
+      const previousIdentity = current;
+      const previousSession = await starter.adopt(deps, previousIdentity);
+      if (previousSession === null || !sameManagedDashboardIdentity(previousSession.ownership, previousIdentity)) {
+        throw new ManagedRuntimeIndeterminateError(
+          `activation \u524D\u51BB\u7ED3\u7684 previous Dashboard pid=${previousIdentity.pid} \u65E0\u6CD5\u7CBE\u786E\u6536\u517B`
+        );
+      }
+      const stopped = await previousSession.stop();
+      if (stopped.state === "indeterminate") {
+        return {
+          ok: false,
+          state: "indeterminate",
+          detail: `previous Dashboard pid=${previousIdentity.pid} \u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF1B\u4FDD\u7559 journal \u4E14\u672A\u542F\u52A8\u5019\u9009 Dashboard\uFF1A${stopped.detail}`
+        };
+      }
+      const afterStop = await starter.inspect(deps, inspectOptions);
+      if (afterStop !== null) {
+        throw new ManagedRuntimeIndeterminateError(
+          `previous Dashboard pid=${previousIdentity.pid} \u62A5\u544A stopped \u540E\u7AEF\u53E3\u4ECD\u88AB\u5360\u7528`
+        );
+      }
+      current = null;
+    }
+    const currentOwned = current !== null && current.transactionId === journal.transactionId && current.releaseId === activation.release.releaseId && current.port === dashboardPort;
+    if (current !== null && current.port === dashboardPort && current.transactionId !== void 0 && current.transactionId !== journal.transactionId && current.releaseId === activation.release.releaseId && journal.dashboardBefore !== void 0 && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
+      journal = {
+        ...journal,
+        phase: "dashboard-ready",
+        activation,
+        dashboard: { ...current, owner: "preexisting" },
+        updatedAt: deps.clock()
+      };
+      await transaction.journal.write(journal);
+      return {
+        ok: true,
+        journal,
+        dashboardFailure: "",
+        dashboardOwner: "preexisting"
+      };
+    }
     if (current !== null && !currentOwned) {
       throw new ManagedRuntimeIndeterminateError(
         `\u7AEF\u53E3\u4E0A\u5B58\u5728\u975E\u5F53\u524D transaction \u7684 Dashboard pid=${current.pid}\uFF1B\u62D2\u7EDD adopt\u3001stop \u6216\u8986\u76D6`
       );
     }
-    const dashboardOutcome = currentOwned ? await starter.adopt(deps, current).then((adopted) => adopted === null ? { state: "indeterminate", detail: "\u5019\u9009 Dashboard identity \u5B58\u5728\u4F46\u65E0\u6CD5\u6536\u517B" } : { state: "ready", session: adopted }) : await starter.start(
-      deps,
-      join74(activation.releaseRoot, "payload"),
-      { openBrowser: openBrowser2, transactionId: journal.transactionId }
-    );
+    let dashboardOutcome;
+    let startedNewDashboard = false;
+    if (current !== null && currentOwned) {
+      const adopted = await starter.adopt(deps, current);
+      dashboardOutcome = adopted === null || !sameManagedDashboardIdentity(adopted.ownership, current) ? {
+        state: "indeterminate",
+        detail: "\u5019\u9009 Dashboard identity \u5B58\u5728\u4F46\u65E0\u6CD5\u7CBE\u786E\u6536\u517B"
+      } : { state: "ready", session: adopted };
+    } else {
+      startedNewDashboard = true;
+      dashboardOutcome = await starter.start(
+        deps,
+        join73(activation.releaseRoot, "payload"),
+        {
+          openBrowser: openBrowser2,
+          port: dashboardPort,
+          transactionId: journal.transactionId
+        }
+      );
+    }
     if (dashboardOutcome.state === "indeterminate") {
       return {
         ok: false,
@@ -45417,12 +45637,11 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
         dashboardFailure: `\u65B0 runtime \u7684 dashboard readiness \u5931\u8D25\uFF1A${dashboardOutcome.detail}`
       };
     }
-    if (dashboardOutcome.session.ownership.releaseId !== activation.release.releaseId) {
-      throw new ManagedRuntimeIndeterminateError("Dashboard session \u4E0E activation release \u4E0D\u4E00\u81F4");
-    }
-    if (dashboardOutcome.session.ownership.transactionId !== journal.transactionId) {
+    const readyIdentity = dashboardOutcome.session.ownership;
+    const readyIdentityValid = readyIdentity.version === 1 && readyIdentity.releaseId === activation.release.releaseId && readyIdentity.port === dashboardPort && readyIdentity.transactionId === journal.transactionId && Number.isSafeInteger(readyIdentity.pid) && readyIdentity.pid > 0 && /^sha256-v1-[a-f0-9]{64}$/.test(readyIdentity.stateScopeId);
+    if (!readyIdentityValid) {
       throw new ManagedRuntimeIndeterminateError(
-        "Dashboard session \u672A\u56DE\u663E\u5F53\u524D release transaction identity"
+        startedNewDashboard ? "starter \u8FD4\u56DE\u9519\u8BEF ownership\uFF1B\u8BE5 session \u4E0D\u6784\u6210\u4FE1\u53F7\u6743\u9650\uFF0C\u4FDD\u7559 journal" : "\u6536\u517B\u7684 Dashboard session \u672A\u56DE\u663E\u7CBE\u786E inspected identity"
       );
     }
     const dashboardOwner = "transaction";
@@ -45430,7 +45649,7 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       ...journal,
       phase: "dashboard-ready",
       activation,
-      dashboard: { ...dashboardOutcome.session.ownership, owner: dashboardOwner },
+      dashboard: { ...readyIdentity, owner: dashboardOwner },
       updatedAt: deps.clock()
     };
     await transaction.journal.write(journal);
@@ -45447,6 +45666,184 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       state: "indeterminate",
       detail: `Dashboard starter\u3001ownership adoption \u6216 journal \u63D0\u4EA4\u672A\u8FD4\u56DE\u53EF\u8BC1\u660E\u72B6\u6001\uFF1B\u4FDD\u7559 journal \u4E14\u672A\u8865\u507F selection\uFF1A${error instanceof Error ? error.message : String(error)}`
     };
+  }
+}
+function assertDashboardPort(identity, expectedPort, label) {
+  if (identity.port !== expectedPort) {
+    throw new ManagedRuntimeIndeterminateError(
+      `${label} port=${identity.port} \u4E0E frozen dashboardPort=${expectedPort} \u4E0D\u4E00\u81F4`
+    );
+  }
+}
+
+// packages/cli/src/commands/dashboard-restore.ts
+import { dirname as dirname19, join as join74 } from "node:path";
+async function restorePreviousReleasedDashboard(deps, activation, starter, dashboardPort, restoreTransactionId) {
+  const previousRelease = activation.selection.previousRelease;
+  if (previousRelease === null) return { state: "not-required" };
+  const payloadRoot = join74(dirname19(activation.releaseRoot), previousRelease, "payload");
+  const outcome = await starter.start(deps, payloadRoot, {
+    openBrowser: false,
+    port: dashboardPort,
+    transactionId: restoreTransactionId
+  });
+  if (outcome.state !== "ready") return outcome;
+  const ownership = outcome.session.ownership;
+  if (ownership.version !== 1 || ownership.releaseId !== previousRelease || ownership.port !== dashboardPort || !Number.isSafeInteger(ownership.pid) || ownership.pid <= 0 || !/^sha256-v1-[a-f0-9]{64}$/.test(ownership.stateScopeId) || ownership.transactionId !== restoreTransactionId) {
+    return {
+      state: "indeterminate",
+      detail: "previous Dashboard restore returned a mismatched ownership identity; coordinator did not signal an untrusted session"
+    };
+  }
+  return outcome;
+}
+
+// packages/cli/src/commands/release-compensation.ts
+function isCompensationPhase(phase) {
+  return phase === "stopping-candidate" || phase === "reverting-activation" || phase === "restoring-previous" || phase === "previous-restored";
+}
+async function resumeManagedReleaseCompensation(deps, source, transaction, initialJournal, dashboardStarter, liveCandidate) {
+  let journal = initialJournal;
+  const activation = journal.activation;
+  const checkpoint = journal.activationCheckpoint;
+  const reason = journal.compensationReason;
+  const port = journal.dashboardPort;
+  if (activation === void 0 || checkpoint === void 0 || reason === void 0 || port === void 0) {
+    return {
+      ok: false,
+      state: "indeterminate",
+      detail: "\u8865\u507F journal \u7F3A\u5C11 activation/checkpoint/reason/dashboardPort\uFF1B\u4FDD\u7559 WAL"
+    };
+  }
+  const activationChangedRelease = checkpoint.selection.activeRelease !== activation.selection.activeRelease;
+  const fail3 = (detail) => ({
+    ok: false,
+    state: "indeterminate",
+    detail: `${reason}\uFF1B${detail}`
+  });
+  try {
+    if (journal.phase === "stopping-candidate") {
+      const owned = journal.dashboard?.owner === "transaction" ? journal.dashboard : void 0;
+      if (owned !== void 0) {
+        let session = liveCandidate;
+        if (session === void 0) {
+          if (dashboardStarter === void 0) return fail3("\u7F3A\u5C11 Dashboard starter\uFF0C\u65E0\u6CD5\u8BC1\u660E candidate \u5DF2\u505C\u6B62");
+          const current = await dashboardStarter.inspect(deps, { openBrowser: false, port });
+          if (current !== null && !sameManagedDashboardIdentity(current, owned)) {
+            return fail3("candidate \u7AEF\u53E3 identity \u5DF2\u6F02\u79FB\uFF1B\u672A\u5411\u672A\u77E5\u8FDB\u7A0B\u53D1\u9001\u4FE1\u53F7");
+          }
+          if (current !== null) {
+            session = await dashboardStarter.adopt(deps, owned) ?? void 0;
+            if (session === void 0 || !sameManagedDashboardIdentity(session.ownership, owned)) {
+              return fail3("candidate \u65E0\u6CD5\u6309 durable identity \u7CBE\u786E\u6536\u517B\uFF1B\u672A\u53D1\u9001\u4FE1\u53F7");
+            }
+          }
+        }
+        if (session !== void 0) {
+          if (!sameManagedDashboardIdentity(session.ownership, owned)) {
+            return fail3("live candidate session \u4E0E durable identity \u4E0D\u4E00\u81F4\uFF1B\u672A\u53D1\u9001\u4FE1\u53F7");
+          }
+          const stopped = await session.stop();
+          if (stopped.state !== "stopped") {
+            return fail3(`candidate \u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF1A${stopped.detail}`);
+          }
+        }
+      }
+      journal = {
+        ...journal,
+        phase: activationChangedRelease ? "reverting-activation" : "previous-restored",
+        updatedAt: deps.clock()
+      };
+      await transaction.journal.write(journal);
+    }
+    if (journal.phase === "reverting-activation") {
+      await transaction.revertActivation(activation);
+      journal = {
+        ...journal,
+        phase: "restoring-previous",
+        updatedAt: deps.clock()
+      };
+      await transaction.journal.write(journal);
+    }
+    if (journal.phase === "restoring-previous") {
+      const previousRelease = checkpoint.selection.activeRelease;
+      if (previousRelease === null) {
+        if (dashboardStarter !== void 0) {
+          const current = await dashboardStarter.inspect(deps, { openBrowser: false, port });
+          if (current !== null) return fail3("activation \u524D\u4E3A\u7A7A\u7684\u7AEF\u53E3\u4ECD\u6709 listener\uFF1B\u672A\u53D1\u9001\u4FE1\u53F7");
+        }
+        journal = {
+          ...journal,
+          phase: "previous-restored",
+          updatedAt: deps.clock()
+        };
+        await transaction.journal.write(journal);
+      } else {
+        if (dashboardStarter === void 0) return fail3("\u7F3A\u5C11 Dashboard starter\uFF0C\u65E0\u6CD5\u6062\u590D previous Dashboard");
+        const restoreTransactionId = `${journal.transactionId}:restore`;
+        let restored = journal.dashboardRestored;
+        if (restored === void 0) {
+          const current = await dashboardStarter.inspect(deps, { openBrowser: false, port });
+          if (current !== null) {
+            const currentValid = current.releaseId === previousRelease && current.port === port && current.transactionId === restoreTransactionId && Number.isSafeInteger(current.pid) && current.pid > 0 && /^sha256-v1-[a-f0-9]{64}$/.test(current.stateScopeId);
+            if (!currentValid) return fail3("previous restore \u7AEF\u53E3\u5B58\u5728\u4E0D\u53EF\u4FE1 listener\uFF1B\u672A\u53D1\u9001\u4FE1\u53F7");
+            restored = current;
+          } else {
+            const outcome = await restorePreviousReleasedDashboard(
+              deps,
+              activation,
+              dashboardStarter,
+              port,
+              restoreTransactionId
+            );
+            if (outcome.state !== "ready") {
+              return fail3(outcome.state === "not-required" ? "checkpoint \u8981\u6C42 previous Dashboard\uFF0C\u4F46 restore \u62A5\u544A not-required" : `previous Dashboard \u6062\u590D\u72B6\u6001\u4E3A ${outcome.state}\uFF1A${outcome.detail}`);
+            }
+            restored = outcome.session.ownership;
+          }
+        }
+        journal = {
+          ...journal,
+          phase: "previous-restored",
+          dashboardRestored: restored,
+          updatedAt: deps.clock()
+        };
+        await transaction.journal.write(journal);
+      }
+    }
+    if (journal.phase === "previous-restored") {
+      const previousRelease = checkpoint.selection.activeRelease;
+      if (dashboardStarter !== void 0) {
+        const current = await dashboardStarter.inspect(deps, { openBrowser: false, port });
+        if (!activationChangedRelease) {
+          if (journal.dashboardBeforeAbsent === true) {
+            if (current !== null) {
+              return fail3("same-release \u8865\u507F\u540E\u4E8B\u52A1\u524D\u4E3A\u7A7A\u7684\u7AEF\u53E3\u4ECD\u6709 listener\uFF1B\u672A\u6E05 WAL");
+            }
+          } else if (!sameManagedDashboardIdentity(current ?? void 0, journal.dashboardBefore)) {
+            return fail3("same-release \u8865\u507F\u540E\u672A\u6062\u590D\u4E8B\u52A1\u524D Dashboard identity\uFF1B\u672A\u6E05 WAL");
+          }
+          if (!await transaction.proveActivation(activation)) {
+            return fail3("same-release \u8865\u507F\u540E\u539F activation \u4E0D\u518D\u53EF\u8BC1\u660E\uFF1B\u672A\u6E05 WAL");
+          }
+        } else if (previousRelease === null) {
+          if (current !== null) return fail3("previous-restored \u8BC1\u660E\u65F6\u7AEF\u53E3\u4E0D\u4E3A\u7A7A\uFF1B\u672A\u6E05 WAL");
+        } else if (!sameManagedDashboardIdentity(current ?? void 0, journal.dashboardRestored)) {
+          return fail3("previous-restored identity \u590D\u6838\u5931\u8D25\uFF1B\u672A\u6E05 WAL");
+        }
+      } else if (activationChangedRelease && previousRelease !== null) {
+        return fail3("\u7F3A\u5C11 Dashboard starter\uFF0C\u65E0\u6CD5\u8BC1\u660E previous-restored");
+      }
+      await transaction.journal.clear(journal.transactionId);
+      return {
+        ok: false,
+        state: "restored",
+        detail: `${reason}\uFF1B\u5DF2\u6062\u590D managed transaction` + (!activationChangedRelease ? "\uFF1B\u4FDD\u6301\u539F activation \u5E76\u6062\u590D\u4E8B\u52A1\u524D Dashboard \u72B6\u6001" : previousRelease === null ? "\uFF1Bactivation \u524D\u65E0 previous Dashboard" : " \u4E0E previous Dashboard")
+      };
+    }
+    return fail3(`\u672A\u77E5\u8865\u507F phase ${journal.phase}`);
+  } catch (error) {
+    return fail3(`\u8865\u507F phase=${journal.phase} \u672A\u5B8C\u6210\uFF1A${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -45472,22 +45869,20 @@ async function publishManagedRelease(deps, request, installer, dashboardStarter)
   }
 }
 async function publishWithinManagedTransaction(deps, request, transaction, dashboardStarter) {
-  let journal;
-  try {
-    const pending = await transaction.journal.read();
-    if (pending !== null) {
-      if (pending.operation !== request.operation || pending.source !== request.source) {
-        throw new ManagedRuntimeIndeterminateError(
-          `\u5B58\u5728\u672A\u5B8C\u6210\u7684 ${pending.operation}/${pending.source} \u4E8B\u52A1 ${pending.transactionId}\uFF0C\u62D2\u7EDD\u542F\u52A8 ${request.operation}/${request.source}`
-        );
-      }
-      journal = pending;
-    } else {
-      journal = transaction.journal.create(request.operation, request.source, deps.clock());
-      await transaction.journal.write(journal);
-    }
-  } catch (error) {
-    throw error instanceof ManagedRuntimeIndeterminateError ? error : new ManagedRuntimeIndeterminateError(`\u65E0\u6CD5\u8BFB\u53D6\u6216\u521B\u5EFA write-ahead journal\uFF1A${String(error)}`);
+  let journal = await resolveManagedReleaseJournal(deps, request, transaction);
+  if (isCompensationPhase(journal.phase)) {
+    return resumeManagedReleaseCompensation(
+      deps,
+      request.source,
+      transaction,
+      journal,
+      dashboardStarter
+    );
+  }
+  if (dashboardStarter !== void 0 && (journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") && journal.dashboardBefore === void 0 && journal.dashboardBeforeAbsent !== true) {
+    throw new ManagedRuntimeIndeterminateError(
+      `\u65E7 journal \u5DF2\u8FDB\u5165 ${journal.phase}\uFF0C\u4F46\u7F3A\u5C11 pre-activation Dashboard identity/empty proof\uFF1B\u62D2\u7EDD\u4ECE activation \u540E\u7684 retry \u73AF\u5883\u8865\u8BC1`
+    );
   }
   let candidate;
   if (journal.phase === "candidate-resolved" || journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") {
@@ -45525,6 +45920,34 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
         ok: false,
         state: error instanceof ManagedRuntimeIndeterminateError ? "indeterminate" : "unchanged",
         detail: `\u5BBF\u4E3B\u5019\u9009\u51C6\u5907\u5931\u8D25\uFF1Bmanaged runtime \u4FDD\u6301\u4E0D\u53D8\uFF0Cjournal \u5DF2\u4FDD\u7559\u4F9B\u5E42\u7B49\u6062\u590D\uFF1A${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+  if (journal.phase === "candidate-resolved" && dashboardStarter !== void 0 && journal.dashboardBefore === void 0) {
+    try {
+      const dashboardBefore = await dashboardStarter.inspect(deps, {
+        openBrowser: false,
+        port: journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT
+      });
+      if (dashboardBefore !== null) {
+        journal = {
+          ...journal,
+          dashboardBefore,
+          updatedAt: deps.clock()
+        };
+      } else {
+        journal = {
+          ...journal,
+          dashboardBeforeAbsent: true,
+          updatedAt: deps.clock()
+        };
+      }
+      await transaction.journal.write(journal);
+    } catch (error) {
+      return {
+        ok: false,
+        state: "indeterminate",
+        detail: `\u65E0\u6CD5\u5728 activation \u524D\u51BB\u7ED3\u65E2\u6709 Dashboard identity\uFF1B\u672A\u5F00\u59CB runtime \u6FC0\u6D3B\uFF1A${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -45593,6 +46016,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
               phase: "preparing-host",
               startedAt: journal.startedAt,
               updatedAt: deps.clock(),
+              ...journal.dashboardPort === void 0 ? {} : { dashboardPort: journal.dashboardPort },
               ...journal.hostSteps === void 0 ? {} : { hostSteps: journal.hostSteps }
             };
             await transaction.journal.write(retryable);
@@ -45633,6 +46057,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
     journal,
     activation,
     request.openBrowser,
+    journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
     dashboardStarter
   );
   if (!dashboard.ok) return dashboard;
@@ -45640,6 +46065,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
   let dashboardFailure = dashboard.dashboardFailure;
   const candidateDashboard = dashboard.candidateDashboard;
   const dashboardOwner = dashboard.dashboardOwner;
+  const activationChangedRelease = journal.activationCheckpoint?.selection.activeRelease !== activation.selection.activeRelease;
   if (dashboardFailure === "") {
     if (journal.phase === "evidence-committed") {
       try {
@@ -45678,47 +46104,43 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
       }
     }
   }
-  try {
-    if (candidateDashboard !== void 0 && dashboardOwner === "transaction") {
-      const stopped = await candidateDashboard.stop();
-      if (stopped.state === "indeterminate") {
-        return {
-          ok: false,
-          state: "indeterminate",
-          detail: `${dashboardFailure}\uFF1B\u5019\u9009 Dashboard \u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF0C\u672A\u56DE\u6EDA selection \u6216\u542F\u52A8 previous Dashboard\uFF1A${stopped.detail}`
-        };
-      }
-    }
-    await transaction.revertActivation(activation);
-    await transaction.journal.clear(journal.transactionId);
-    let dashboardDetail = "";
-    if (dashboardStarter !== void 0 && dashboardOwner !== "preexisting") {
-      const dashboardRestored = await restorePreviousReleasedDashboard(deps, activation, dashboardStarter);
-      if (dashboardRestored.state === "not-required") {
-        dashboardDetail = "\uFF1B\u6FC0\u6D3B\u524D\u4E0D\u5B58\u5728 Dashboard\uFF0C\u65E0\u9700\u6062\u590D\u8FDB\u7A0B";
-      } else if (dashboardRestored.state !== "ready") {
-        throw new Error(`previous Dashboard \u6062\u590D\u72B6\u6001\u4E3A ${dashboardRestored.state}\uFF1A${dashboardRestored.detail}`);
-      } else {
-        dashboardDetail = " \u4E0E previous Dashboard";
-      }
-    }
+  if (dashboardOwner === "preexisting" && activationChangedRelease) {
     return {
       ok: false,
-      state: "restored",
-      detail: `${dashboardFailure}\uFF1B\u5DF2\u6062\u590D managed transaction${dashboardDetail}`
+      state: "indeterminate",
+      detail: `${dashboardFailure}\uFF1B\u5019\u9009 release \u4E0E\u4E8B\u52A1\u524D\u65E2\u6709 Dashboard \u5DF2\u5BF9\u9F50\uFF0C\u4F46 ready evidence \u5C1A\u672A\u63D0\u4EA4\uFF1B\u4E3A\u4FDD\u7559\u53EF\u6062\u590D\u7684\u4E00\u81F4\u72B6\u6001\uFF0C\u672A\u56DE\u6EDA activation \u6216\u6E05\u7406 journal`
     };
+  }
+  try {
+    journal = {
+      ...journal,
+      phase: "stopping-candidate",
+      activation,
+      compensationReason: dashboardFailure.slice(0, 4096),
+      updatedAt: deps.clock()
+    };
+    await transaction.journal.write(journal);
   } catch (rollbackError) {
     return {
       ok: false,
       state: "indeterminate",
-      detail: `${dashboardFailure}\uFF0C\u4E14\u7CBE\u786E\u56DE\u6EDA\u5931\u8D25\uFF1A${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
+      detail: `${dashboardFailure}\uFF0C\u4E14\u8865\u507F WAL \u65E0\u6CD5\u5728\u526F\u4F5C\u7528\u524D\u63D0\u4EA4\uFF1A${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
     };
   }
+  return resumeManagedReleaseCompensation(
+    deps,
+    request.source,
+    transaction,
+    journal,
+    dashboardStarter,
+    candidateDashboard
+  );
 }
 
 // packages/cli/src/commands/setup-managed-runtime.ts
 async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate, host, dashboardStarter, openDashboard, afterReady) {
   const source = isNativePipelineHost(host) ? host : "adapter";
+  const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT);
   const outcome = await publishManagedRelease(
     deps,
     {
@@ -45729,6 +46151,7 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
         env: env.runtimeEnv()
       },
       openBrowser: openDashboard,
+      ...dashboardPort === null ? {} : { dashboardPort },
       prepareCandidate,
       ...afterReady === void 0 ? {} : {
         commitReadyEvidence: (activation2, candidate, transactionId) => {
@@ -47206,6 +47629,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
       return 0;
     }
     let hostBoundary = "in-progress";
+    const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT);
     const outcome = await publishManagedRelease(
       deps,
       {
@@ -47216,6 +47640,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
           env: env.runtimeEnv()
         },
         openBrowser: opts.auto !== true,
+        ...dashboardPort === null ? {} : { dashboardPort },
         prepareCandidate: async (transaction) => {
           let inventory = "";
           for (let index = 0; index < plan.length; index += 1) {
