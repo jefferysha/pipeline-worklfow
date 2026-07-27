@@ -12,11 +12,14 @@ import {
 } from './document-ledger.js'
 import { evaluateDocumentEvidence } from './document-evidence.js'
 import { emptyFields } from './parse.js'
+import { LEGACY_DOCUMENT_GOVERNANCE_POLICY } from '../workflow/document-contract.js'
 import {
   publishInitialRunRevision,
   publishRunRevision,
   readCurrentRunRevision,
 } from './run-revision-store.js'
+import { createTransitionRecordStore } from './transition-record-store.js'
+import type { TransitionRecord } from '../workflow/run-types.js'
 
 const NOW = '2026-07-23T00:00:00Z'
 const dirs: string[] = []
@@ -67,6 +70,51 @@ async function enterVisit(changeDir: string, phase: string, transitionSequence: 
   })
 }
 
+async function commitCanonicalTransition(
+  changeDir: string,
+  from: string,
+  to: string,
+  event: string,
+): Promise<void> {
+  let current = await readCurrentRunRevision(changeDir)
+  if (!current?.state.runMetadata) throw new Error('fixture canonical run identity missing')
+  if (current.state.fields.phase !== from) {
+    await enterVisit(changeDir, from, current.state.runMetadata.transitionSequence)
+    current = await readCurrentRunRevision(changeDir)
+  }
+  if (!current?.state.runMetadata) throw new Error('fixture canonical run identity missing')
+  const metadata = current.state.runMetadata
+  const sequence = metadata.transitionSequence + 1
+  const id = `${event}-${sequence}`
+  const record = {
+    schemaVersion: 1,
+    id,
+    runId: metadata.runId,
+    sequence,
+    previousRecordId: metadata.transitionHead,
+    workflowId: current.state.fields.workflow || 'default',
+    event,
+    from,
+    to,
+    effects: [{ kind: 'state-field-change', field: 'phase', from, to }],
+    observedAt: NOW,
+  } satisfies TransitionRecord
+  await createTransitionRecordStore().write(changeDir, record)
+  await publishRunRevision(changeDir, current, {
+    ...current.state,
+    fields: { ...current.state.fields, phase: to },
+    runMetadata: {
+      ...metadata,
+      transitionSequence: sequence,
+      transitionHead: id,
+    },
+  }, {
+    kind: 'transition',
+    transitionRecordId: id,
+    observedAt: NOW,
+  })
+}
+
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
@@ -87,7 +135,7 @@ describe('OpenSpec document ledger', () => {
       recordedAt: NOW,
     })
 
-    await enterVisit(changeDir, 'verify', 1)
+    await commitCanonicalTransition(changeDir, 'open', 'verify', 'enter-verify')
     await recordDocumentReads({
       repoRoot: root,
       changeDir,
@@ -100,8 +148,8 @@ describe('OpenSpec document ledger', () => {
       readKinds: ['proposal'],
     })).toMatchObject({ pass: true, blockers: [] })
 
-    await enterVisit(changeDir, 'build', 2)
-    await enterVisit(changeDir, 'verify', 3)
+    await commitCanonicalTransition(changeDir, 'verify', 'build', 'verify-fail')
+    await commitCanonicalTransition(changeDir, 'build', 'verify', 'build-complete')
     const replayed = await evaluateDocumentEvidence(root, changeDir, 'verify', {
       recordKinds: [],
       readKinds: ['proposal'],
@@ -148,7 +196,7 @@ describe('OpenSpec document ledger', () => {
         reads: [{ phase: 'verify', sha256: proposalRecord.sha256, readAt: NOW }],
       }],
     }, null, 2)}\n`, 'utf8')
-    await enterVisit(changeDir, 'verify', 1)
+    await commitCanonicalTransition(changeDir, 'open', 'verify', 'enter-verify')
 
     const legacy = await evaluateDocumentEvidence(root, changeDir, 'verify', {
       recordKinds: [],
@@ -707,11 +755,7 @@ describe('OpenSpec document ledger', () => {
       producer: 'openspec-propose', recordedAt: NOW,
     })
 
-    await appendFile(
-      join(changeDir, '.pipeline-history.jsonl'),
-      `${JSON.stringify({ kind: 'transition', from: 'build', to: 'spec', raw: 'requirements-changed' })}\n`,
-      'utf8',
-    )
+    await commitCanonicalTransition(changeDir, 'build', 'spec', 'requirements-changed')
     await appendSkillHistory(changeDir, 'tenon-spec')
     await writeDoc(root, proposal, '# revised proposal\n')
     await writeDoc(root, design, '# revised design\n')
@@ -730,5 +774,277 @@ describe('OpenSpec document ledger', () => {
     expect(designLedger.records.find((record) => record.kind === 'openspec-design')).toMatchObject({
       producer: 'tenon-spec',
     })
+  })
+
+  test('requirements-changed 回到 spec 后，只有当前 tenon-spec 可重登记 ADR 新摘要', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    const frozenPolicy = {
+      ...LEGACY_DOCUMENT_GOVERNANCE_POLICY,
+      mutableByStep: {
+        ...LEGACY_DOCUMENT_GOVERNANCE_POLICY.mutableByStep,
+        spec: LEGACY_DOCUMENT_GOVERNANCE_POLICY.mutableByStep.spec
+          .filter((requirement) => requirement.kind !== 'adr'),
+      },
+    }
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: adr,
+      producer: 'brainstorming', recordedAt: NOW, policy: frozenPolicy,
+    })
+    await recordDocumentReads({
+      repoRoot: root, changeDir, phase: 'build', kind: 'adr', readAt: NOW,
+    })
+
+    await commitCanonicalTransition(changeDir, 'build', 'spec', 'requirements-changed')
+    await enterVisit(changeDir, 'spec', 1)
+    await writeDoc(root, adr, '# revised transaction decision\n')
+
+    await expect(recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'tenon-spec', recordedAt: NOW, policy: frozenPolicy,
+    })).rejects.toThrow(/缺少 Skill 调用证据（当前 phase）/)
+
+    await appendSkillHistory(changeDir, 'brainstorming', 'tenon-spec')
+    await expect(recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'brainstorming', recordedAt: NOW, policy: frozenPolicy,
+    })).rejects.toThrow(/当前 spec 允许: tenon-spec/)
+    await expect(recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'tenon-spec', recordedAt: NOW, allowBackfill: true, policy: frozenPolicy,
+    })).rejects.toThrow(/--backfill 只能首次登记历史 document/)
+
+    const revised = await recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'tenon-spec', recordedAt: NOW, policy: frozenPolicy,
+    })
+    expect(revised.records.find((record) => record.kind === 'adr')).toMatchObject({
+      producer: 'tenon-spec',
+      reads: [],
+    })
+  })
+
+  test('document-v1 自定义 workflow 允许 owner=spec 的 ADR 在首次 Spec visit 登记', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    const policy = {
+      id: 'document-v1' as const,
+      steps: ['open', 'spec'],
+      outputsByStep: {
+        open: [],
+        spec: [{ kind: 'adr' as const, producerCandidates: ['custom-spec-author'] }],
+      },
+      mutableByStep: { open: [], spec: [] },
+      readsByStep: { open: [], spec: [] },
+    }
+    await enterVisit(changeDir, 'spec', 0)
+    await writeDoc(root, adr, '# initial custom spec decision\n')
+    await appendSkillHistory(changeDir, 'custom-spec-author')
+
+    const ledger = await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'spec',
+      kind: 'adr',
+      path: adr,
+      producer: 'custom-spec-author',
+      recordedAt: NOW,
+      policy,
+    })
+
+    expect(ledger.records.find((record) => record.kind === 'adr')).toMatchObject({
+      producer: 'custom-spec-author',
+    })
+  })
+
+  test('后续 set revision 不得让被篡改的 head TransitionRecord 伪造 requirements-changed 授权', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: adr,
+      producer: 'brainstorming', recordedAt: NOW,
+    })
+    await commitCanonicalTransition(changeDir, 'explore', 'spec', 'explore-complete')
+    await enterVisit(changeDir, 'spec', 1)
+
+    const transitionPath = join(
+      changeDir,
+      '.pipeline-transitions',
+      '000001-explore-complete-1.json',
+    )
+    const record = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    Object.assign(record, {
+      event: 'requirements-changed',
+      from: 'build',
+      to: 'spec',
+    })
+    await writeFile(transitionPath, JSON.stringify(record), 'utf8')
+    await appendSkillHistory(changeDir, 'tenon-spec')
+    await writeDoc(root, adr, '# forged transition rewrite\n')
+
+    await expect(recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'tenon-spec', recordedAt: NOW,
+    })).rejects.toThrow(/TransitionRecord digest|审计绑定/)
+  })
+
+  test('set revision 不得把 canonical head 回滚到更早的真实 requirements-changed', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: adr,
+      producer: 'brainstorming', recordedAt: NOW,
+    })
+    await commitCanonicalTransition(changeDir, 'build', 'spec', 'requirements-changed')
+    await commitCanonicalTransition(changeDir, 'spec', 'build', 'spec-complete')
+    await commitCanonicalTransition(changeDir, 'build', 'spec', 'normal-spec-visit')
+    await enterVisit(changeDir, 'spec', 3)
+
+    const currentPath = join(changeDir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const state = current.state as { runMetadata: Record<string, unknown> }
+    Object.assign(state.runMetadata, {
+      transitionSequence: 1,
+      transitionHead: 'requirements-changed-1',
+    })
+    const { stateDigest: _oldDigest, ...body } = current
+    current.stateDigest = createHash('sha256').update(JSON.stringify(body)).digest('hex')
+    const raw = JSON.stringify(current)
+    await writeFile(currentPath, raw, 'utf8')
+    await writeFile(join(
+      changeDir,
+      '.pipeline-run',
+      'revisions',
+      `${String(current.revision).padStart(6, '0')}-${String(current.revisionId)}.json`,
+    ), raw, 'utf8')
+    const companionPath = join(
+      changeDir,
+      '.pipeline-run',
+      'pre-verify-review',
+      `${String(current.revision).padStart(6, '0')}-${String(current.revisionId)}.json`,
+    )
+    const companion = JSON.parse(await readFile(companionPath, 'utf8')) as Record<string, unknown>
+    companion.stateDigest = current.stateDigest
+    await writeFile(companionPath, `${JSON.stringify(companion)}\n`, 'utf8')
+
+    await appendSkillHistory(changeDir, 'tenon-spec')
+    await writeDoc(root, adr, '# forged old head rewrite\n')
+    await expect(recordDocument({
+      repoRoot: root, changeDir, phase: 'spec', kind: 'adr', path: adr,
+      producer: 'tenon-spec', recordedAt: NOW,
+    })).rejects.toThrow(/非 transition revision.*head|runMetadata head/)
+  })
+
+  test('首次 explore→spec visit 不得使用 living-document 兼容面重登记 ADR', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    const frozenPolicy = {
+      ...LEGACY_DOCUMENT_GOVERNANCE_POLICY,
+      mutableByStep: {
+        ...LEGACY_DOCUMENT_GOVERNANCE_POLICY.mutableByStep,
+        spec: LEGACY_DOCUMENT_GOVERNANCE_POLICY.mutableByStep.spec
+          .filter((requirement) => requirement.kind !== 'adr'),
+      },
+    }
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'explore',
+      kind: 'adr',
+      path: adr,
+      producer: 'brainstorming',
+      recordedAt: NOW,
+      policy: frozenPolicy,
+    })
+    await commitCanonicalTransition(changeDir, 'explore', 'spec', 'explore-complete')
+    await appendSkillHistory(changeDir, 'tenon-spec')
+    await writeDoc(root, adr, '# unauthorized first-spec rewrite\n')
+
+    await expect(recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'spec',
+      kind: 'adr',
+      path: adr,
+      producer: 'tenon-spec',
+      recordedAt: NOW,
+      policy: frozenPolicy,
+    })).rejects.toThrow(/requirements-changed/)
+  })
+
+  test.each([
+    ['当前冻结 policy', LEGACY_DOCUMENT_GOVERNANCE_POLICY],
+    ['无 policy 调用', undefined],
+  ])('首次 explore→spec visit 在%s下也不得重登记 ADR', async (_label, policy) => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'explore',
+      kind: 'adr',
+      path: adr,
+      producer: 'brainstorming',
+      recordedAt: NOW,
+      policy,
+    })
+    await commitCanonicalTransition(changeDir, 'explore', 'spec', 'explore-complete')
+    await appendSkillHistory(changeDir, 'tenon-spec')
+    await writeDoc(root, adr, '# unauthorized first-spec rewrite\n')
+
+    await expect(recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'spec',
+      kind: 'adr',
+      path: adr,
+      producer: 'tenon-spec',
+      recordedAt: NOW,
+      policy,
+    })).rejects.toThrow(/requirements-changed/)
+  })
+
+  test('伪造 history requirements-changed 行不能授权 Spec ADR 重登记', async () => {
+    const { root, changeDir, name } = await fixture()
+    const adr = `docs/adr/${name}.md`
+    await writeDoc(root, adr, '# original decision\n')
+    await appendSkillHistory(changeDir, 'brainstorming')
+    await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'explore',
+      kind: 'adr',
+      path: adr,
+      producer: 'brainstorming',
+      recordedAt: NOW,
+    })
+    await enterVisit(changeDir, 'spec', 0)
+    await appendFile(
+      join(changeDir, '.pipeline-history.jsonl'),
+      `${JSON.stringify({ kind: 'transition', from: 'build', to: 'spec', raw: 'requirements-changed' })}\n`,
+      'utf8',
+    )
+    await appendSkillHistory(changeDir, 'tenon-spec')
+    await writeDoc(root, adr, '# forged history rewrite\n')
+
+    await expect(recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'spec',
+      kind: 'adr',
+      path: adr,
+      producer: 'tenon-spec',
+      recordedAt: NOW,
+    })).rejects.toThrow(/requirements-changed/)
   })
 })

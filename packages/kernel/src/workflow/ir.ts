@@ -52,7 +52,7 @@ export interface OutputPresentGuard extends WorkflowConditional {
 export type CompiledGuardConfig = StrictCompiledGuardConfig | OutputPresentGuard
 
 /**
- * 运行/编译层 action 闭集——与定义层同型（4 变体全部原样通过编译，无 nonempty-output 式的
+ * 运行/编译层 action 闭集——与定义层同型（5 变体全部原样通过编译，无 nonempty-output 式的
  * 编译期展开），故直接复用定义层联合，不另立一份。
  */
 export type ActionConfig = WorkflowActionConfig

@@ -29,13 +29,20 @@ export interface StepDef {
 }
 
 export interface WorkflowRules {
+  /**
+   * Compiled execution capability projected by the server. Consumers branch on this closed
+   * capability instead of reconstructing built-in workflow identity from a name or graph shape.
+   * Older in-memory test fixtures may omit it and are treated as step-graph/custom semantics.
+   */
+  executionModel?: 'phase-manifest' | 'step-graph'
   steps: readonly string[]
   /** from step id → 出边列表（event 名 + 目标 step）。 */
   transitions: Record<string, readonly { event: string; to: string }[]>
   gateByStep: Record<string, 'review' | 'confirm' | null>
   /**
-   * step id → 用户设置的展示名（StepDef.label）。观察项①：进度页箭头带优先显示它，缺键/空
-   * label 时消费端回退 step id；default 七相不带此表（走 phases.* i18n，行为逐字不变）。
+   * step id → 展示名（StepDef.label；未声明时规范化为 step id）。服务端 snapshot 中该表
+   * 必须与 steps 精确同键，避免边界解码后再把不完整对象断言成完整 Record；本地 default
+   * 规则仍可省略该表并走 phases.* i18n。
    * 与 gateByStep 同为「每 step 属性表」，故直接挂 WorkflowRules 而非另立扩展接口——ProgressRules
    * = WorkflowRules & StepOutputRules 已含本接口全部字段，箭头带（消费 ProgressRules）随之自然
    * 可见，无需改动 progressModel 的组合面。可选：既有 default/其它 WorkflowRules 构造者不受牵动。
@@ -46,14 +53,12 @@ export interface WorkflowRules {
 /**
  * WorkflowRules 的可选产出扩展面（T6 在 progressModel 定契约，T7 落到这里成为单一定义源，
  * progressModel 原地 re-export 不破既有 import 面）——「自定义 workflow 的 nonempty-output
- * guard」判定所需的每 step 产出声明。rulesFromDef 产出的自定义 rules 自然携带这两张表；
- * DEFAULT_RULES 不带（default 的证据判定走 evidence.ts 的表驱动路径，靠引用相等分支）。
+ * 每 step 产出声明。按 Track 求值后的必需输出属于 Change.workflowExecution，不属于这份
+ * 不可变 plan 结构；否则同一冻结 plan 会被不同 Track 的合法结果撕裂。
  */
 export interface StepOutputRules {
   /** step id → 该步声明的 outputs 字段名列表。 */
   outputsByStep?: Record<string, readonly string[]>
-  /** step id → 该步是否挂了 nonempty-output guard（产出非空方可推进）。 */
-  nonemptyOutputByStep?: Record<string, boolean>
 }
 
 function buildDefaultRules(): WorkflowRules {
@@ -68,7 +73,7 @@ function buildDefaultRules(): WorkflowRules {
       })
     gateByStep[from] = (REVIEW_PHASES as readonly string[]).includes(from) ? 'review' : null
   }
-  return { steps: PHASES, transitions, gateByStep }
+  return { executionModel: 'phase-manifest', steps: PHASES, transitions, gateByStep }
 }
 
 export const DEFAULT_RULES: WorkflowRules = buildDefaultRules()
@@ -79,11 +84,9 @@ export function workflowRulesFromSnapshot(
   const rules = new Map<string, WorkflowRules>()
   for (const project of snapshot?.projects ?? []) {
     if (!project.ok) continue
-    for (const [name, projected] of Object.entries(project.workflowRules)) {
-      rules.set(rulesKey(project.root, name), projected)
+    for (const change of project.changes) {
+      rules.set(snapshotRulesKey(project.root, change.workflowPlanFingerprint), change.workflowRules)
     }
-    // default 的语义特判依赖稳定对象身份；聚合摘要只提供数据，前端仍使用已审计的本地常量。
-    rules.set(rulesKey(project.root, 'default'), DEFAULT_RULES)
   }
   return rules
 }
@@ -92,16 +95,21 @@ export function rulesFromDef(def: { name: string; steps: StepDef[] }): WorkflowR
   const transitions: Record<string, { event: string; to: string }[]> = {}
   const gateByStep: Record<string, 'review' | 'confirm' | null> = {}
   const outputsByStep: Record<string, readonly string[]> = {}
-  const nonemptyOutputByStep: Record<string, boolean> = {}
   const labelByStep: Record<string, string> = {}
   for (const s of def.steps) {
     transitions[s.id] = s.transitions.map((t) => ({ event: t.event, to: t.to }))
     gateByStep[s.id] = s.gate
     outputsByStep[s.id] = s.outputs.map((o) => o.field)
-    nonemptyOutputByStep[s.id] = s.guards.some((g) => g.type === 'nonempty-output')
-    if (s.label) labelByStep[s.id] = s.label // 空串/缺失不落键——消费端安全回退 step id
+    labelByStep[s.id] = s.label || s.id
   }
-  return { steps: def.steps.map((s) => s.id), transitions, gateByStep, outputsByStep, nonemptyOutputByStep, labelByStep }
+  return {
+    executionModel: 'step-graph',
+    steps: def.steps.map((s) => s.id),
+    transitions,
+    gateByStep,
+    outputsByStep,
+    labelByStep,
+  }
 }
 
 // ── (root,name) 模块级缓存 + in-flight 去重 ──
@@ -119,6 +127,15 @@ const inflight = new Map<string, Promise<WorkflowRules>>()
  */
 export function rulesKey(root: string, name: string): string {
   return `${root}\u0000${name}`
+}
+
+export function isBuiltinWorkflowName(name: string): boolean {
+  return name === 'default'
+}
+
+/** Frozen Change snapshots are keyed by immutable plan identity, never by mutable workflow name. */
+export function snapshotRulesKey(root: string, workflowPlanFingerprint: string): string {
+  return `${root}\u0000plan:${workflowPlanFingerprint}`
 }
 
 async function fetchRules(root: string, name: string): Promise<WorkflowRules> {

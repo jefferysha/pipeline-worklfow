@@ -77,6 +77,14 @@ describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', (
     expect(out).toEqual({ patch: { verify_result: 'fail', build_sha: 'null' }, signals: [] })
   })
 
+  it("新的实现 visit 把 pre_verify_review_result 重置为 pending", async () => {
+    const out = await ACTION_HANDLERS['reset-pre-verify-review'](
+      { type: 'reset-pre-verify-review' },
+      makeInput({ pre_verify_review_result: 'pass' }),
+    )
+    expect(out).toEqual({ patch: { pre_verify_review_result: 'pending' }, signals: [] })
+  })
+
   it("L193-196：archive-run → archived='true' + archived_at=clock()", async () => {
     const out = await ACTION_HANDLERS['archive-run']({ type: 'archive-run' }, makeInput())
     expect(out).toEqual({ patch: { archived: 'true', archived_at: CLOCK }, signals: [] })

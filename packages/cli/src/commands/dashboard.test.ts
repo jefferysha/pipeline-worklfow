@@ -9,6 +9,7 @@ import {
   startReleasedDashboard,
   type DashboardRuntime,
 } from './dashboard.js'
+import { createReleasedDashboardStarter } from './released-dashboard-starter.js'
 
 interface Calls {
   launches: Array<{ serverBundle: string; env: NodeJS.ProcessEnv }>
@@ -16,6 +17,7 @@ interface Calls {
   healthPorts: number[]
   expectedReleaseIds: Array<string | undefined>
   expectedStateScopeIds: string[]
+  expectedTransactionIds: Array<string | undefined>
   openedUrls: string[]
   terminated: number
 }
@@ -27,6 +29,7 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
     healthPorts: [],
     expectedReleaseIds: [],
     expectedStateScopeIds: [],
+    expectedTransactionIds: [],
     openedUrls: [],
     terminated: 0,
   }
@@ -47,10 +50,28 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
         }
       },
       resolveStateScopeId: () => `sha256-v1-${'1'.repeat(64)}`,
-      waitForHealthyServer: async (port, expectedReleaseId, expectedStateScopeId) => {
+      waitForHealthyServer: async (
+        port,
+        expectedReleaseId,
+        expectedStateScopeId,
+        expectedTransactionId,
+      ) => {
         calls.healthPorts.push(port)
         calls.expectedReleaseIds.push(expectedReleaseId)
         calls.expectedStateScopeIds.push(expectedStateScopeId)
+        calls.expectedTransactionIds.push(expectedTransactionId)
+        return {
+          version: 1,
+          port,
+          pid: 321,
+          releaseId: expectedReleaseId ?? 'unmanaged',
+          stateScopeId: expectedStateScopeId,
+          ...(expectedTransactionId === undefined ? {} : { transactionId: expectedTransactionId }),
+        }
+      },
+      probeHealthyServer: async () => null,
+      stopOwnedDashboard: async () => {
+        calls.terminated += 1
         return true
       },
       openBrowser: async (url) => {
@@ -97,8 +118,31 @@ describe('tenon dashboard', () => {
     expect(calls.healthPorts).toEqual([18765])
     expect(calls.expectedReleaseIds).toEqual([undefined])
     expect(calls.expectedStateScopeIds).toEqual([`sha256-v1-${'1'.repeat(64)}`])
+    expect(calls.expectedTransactionIds).toEqual([undefined])
     expect(calls.openedUrls).toEqual(['http://127.0.0.1:18765/'])
     expect(deps.outLines.join('\n')).toContain('健康检查通过')
+  })
+
+  test('release coordinator inspect observes any transaction identity without granting ownership', async () => {
+    const identity = {
+      version: 1 as const,
+      port: 18765,
+      pid: 321,
+      releaseId: `sha256-${'a'.repeat(64)}`,
+      stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+      transactionId: 'transaction-other',
+    }
+    const observations: Array<string | undefined> = []
+    const { runtime: dashboard } = runtime({
+      probeHealthyServer: async (_port, _release, _scope, transactionPolicy) => {
+        observations.push(transactionPolicy)
+        return identity
+      },
+    })
+
+    await expect(createReleasedDashboardStarter(dashboard).inspect(makeDeps(), {}))
+      .resolves.toEqual(identity)
+    expect(observations).toEqual(['*'])
   })
 
   test('immutable release startup requires the exact content-addressed health identity', async () => {
@@ -106,14 +150,40 @@ describe('tenon dashboard', () => {
     const { runtime: dashboard, calls } = runtime()
     const releaseId = `sha256-${'a'.repeat(64)}`
 
-    expect(await startReleasedDashboard(
+    const outcome = await startReleasedDashboard(
       deps,
       `/runtime/releases/${releaseId}/payload`,
       {},
       dashboard,
-    )).toEqual({ state: 'ready' })
+    )
+    expect(outcome).toMatchObject({ state: 'ready' })
+    if (outcome.state === 'ready') {
+      expect(await outcome.session.stop()).toEqual({ state: 'stopped' })
+    }
     expect(calls.expectedReleaseIds).toEqual([releaseId])
     expect(calls.expectedStateScopeIds).toEqual([`sha256-v1-${'1'.repeat(64)}`])
+    expect(calls.terminated).toBe(1)
+  })
+
+  test('managed release start threads transaction identity through env and readiness', async () => {
+    const deps = makeDeps()
+    const { runtime: dashboard, calls } = runtime()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+
+    const outcome = await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      { transactionId: 'transaction-dashboard-test' },
+      dashboard,
+    )
+
+    expect(outcome).toMatchObject({
+      state: 'ready',
+      session: { ownership: { transactionId: 'transaction-dashboard-test' } },
+    })
+    expect(calls.detached[0]?.env.TENON_MANAGED_TRANSACTION_ID)
+      .toBe('transaction-dashboard-test')
+    expect(calls.expectedTransactionIds).toEqual(['transaction-dashboard-test'])
   })
 
   test('managed startup rejects a payload path without a release identity before spawning', async () => {
@@ -129,7 +199,7 @@ describe('tenon dashboard', () => {
 
   test('background mode fails closed when the spawned process never exposes a pipeline health endpoint', async () => {
     const deps = makeDeps()
-    const { runtime: dashboard, calls } = runtime({ waitForHealthyServer: async () => false })
+    const { runtime: dashboard, calls } = runtime({ waitForHealthyServer: async () => null })
 
     expect(await cmdDashboard(deps, { background: true, open: true }, dashboard)).toBe(1)
     expect(calls.openedUrls).toEqual([])
@@ -141,7 +211,7 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const releaseId = `sha256-${'a'.repeat(64)}`
     const { runtime: dashboard } = runtime({
-      waitForHealthyServer: async () => false,
+      waitForHealthyServer: async () => null,
       launchDetached: async () => ({
         terminate: async () => {
           throw new Error('process still owns the port')

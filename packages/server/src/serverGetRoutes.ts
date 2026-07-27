@@ -53,6 +53,7 @@ export interface GetRouteDeps {
   token: string
   version: string
   releaseId?: string
+  transactionId?: string
   stateScopeId: string
   isLocalHost: (host: string | undefined, port: number) => boolean
   boundPort: () => number
@@ -92,7 +93,7 @@ export async function handleGet(
 ): Promise<void> {
   const {
     cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
-    version, releaseId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
+    version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
     trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, options, resolveSessionLink,
     errMsg,

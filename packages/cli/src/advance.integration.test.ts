@@ -73,11 +73,15 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     await recordMandatorySkills(name)
   }
 
-  /** 让 build 出口 guard 真通过：tasks.md 全勾 + build_mode/isolation/direct_override */
+  /** 让 build 出口 guard 真通过：tasks.md 全勾 + build mode/isolation/override + pre-Verify 收敛 */
   async function armBuildGuard(name: string): Promise<void> {
     // seedToBuild 的真实 OpenSpec tasks.md 已有三项全部勾选；不得覆写它，否则 hash-bound
     // document ledger 会正确判为 stale，掩盖本用例要覆盖的 advance 行为。
-    await h.run(['set-many', name, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
+    await h.run([
+      'set-many', name,
+      'build_mode=direct', 'isolation=worktree', 'direct_override=true',
+      'pre_verify_review_result=pass',
+    ])
   }
 
   /** 让 verify 出口 guard + verify-pass 事件前置真通过（backend：双 review pass + 报告 + branch_status） */

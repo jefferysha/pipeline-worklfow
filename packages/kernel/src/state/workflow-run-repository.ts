@@ -32,7 +32,7 @@ import { resolveWorkflowName } from '../workflow/engine.js'
 import type {
   TransitionDraft, WorkflowRun, WorkflowRunRepository, WorkflowRunTransaction,
 } from '../workflow/run-types.js'
-import { diffFieldsToEffects } from './run-metadata.js'
+import { diffWireFieldsToEffects } from './run-metadata.js'
 import type { TransitionRecordStore } from './transition-record-store.js'
 import { defaultOpenSpecScaffoldFiles } from './default-openspec-scaffold.js'
 import { DOCUMENT_LEDGER_FILE, initialDocumentLedgerContent } from './document-ledger.js'
@@ -334,7 +334,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
             event: draft.event,
             from: draft.from,
             to: draft.to,
-            effects: diffFieldsToEffects(beforeFields, nextFields),
+            effects: diffWireFieldsToEffects(beforeFields, nextFields),
             actor: draft.actor,
             observedAt,
           }

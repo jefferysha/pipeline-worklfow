@@ -56,8 +56,8 @@ pipeline_review_active_change_name() { # $1=verified project root $2=hook direct
 # Return success only when the v2 projection belongs to the explicitly selected live Change and
 # the stable CLI persisted the canonical approval receipt.  This function never deletes v2 marker
 # files itself; `tenon review acknowledge` owns both the receipt and its projection.
-pipeline_acknowledge_active_review() { # $1=verified project root $2=hook directory [$3=delegated]
-  local root="$1" hook_dir="$2" mode="${3:-manual}" marker expected active
+pipeline_acknowledge_active_review() { # $1=root $2=hook directory [$3=delegated] [$4=host session id]
+  local root="$1" hook_dir="$2" mode="${3:-manual}" host_session="${4:-}" marker expected active
   marker="$root/.pipeline-pending-review"
   expected="$(pipeline_review_marker_change "$marker" || true)"
   [ -n "$expected" ] || return 1
@@ -65,7 +65,11 @@ pipeline_acknowledge_active_review() { # $1=verified project root $2=hook direct
   [ -n "$active" ] && [ "$active" = "$expected" ] || return 1
   command -v tenon >/dev/null 2>&1 || return 1
   case "$mode" in
-    delegated) ( cd "$root" && command tenon review acknowledge "$active" --delegated ) >/dev/null 2>&1 ;;
+    delegated)
+      case "$host_session" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac
+      [ "${#host_session}" -le 128 ] || return 1
+      ( cd "$root" && TENON_HOST_SESSION_ID="$host_session" command tenon review acknowledge "$active" --delegated ) >/dev/null 2>&1
+      ;;
     manual) ( cd "$root" && command tenon review acknowledge "$active" ) >/dev/null 2>&1 ;;
     *) return 1 ;;
   esac

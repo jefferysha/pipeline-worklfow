@@ -10,6 +10,28 @@ import {
 } from './effective-plan.js'
 import { builtinTrack } from '../tracks/builtins.js'
 
+function preVerifyConvergenceWorkflow() {
+  const current = compileEffectiveWorkflowPlan('default').workflow
+  return {
+    ...current,
+    steps: current.steps.map((step) => ({
+      ...step,
+      guards: step.id === 'build'
+        ? step.guards.filter((guard) =>
+            !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
+        : step.guards,
+      transitions: step.transitions.map((transition) => ({
+        ...transition,
+        actions: transition.actions.filter((action) =>
+          action.type !== 'reset-pre-verify-review'
+            && !(step.id === 'verify'
+              && transition.event === 'verify-fail'
+              && action.type === 'mark-verification-failed')),
+      })),
+    })),
+  }
+}
+
 describe('compileEffectiveWorkflowPlan', () => {
   it('compiles default through the shared immutable plan surface', () => {
     const plan = compileEffectiveWorkflowPlan('default', undefined, builtinTrack('backend'))
@@ -43,19 +65,19 @@ describe('compileEffectiveWorkflowPlan', () => {
   })
 
   it('keeps pre-identity-migration v1 default snapshots executable', () => {
-    const current = compileEffectiveWorkflowPlan('default')
+    const legacyWorkflow = preVerifyConvergenceWorkflow()
     const restored = effectiveWorkflowPlanFromSnapshot({
       version: 1,
       workflowId: 'default',
       executionModel: 'phase-manifest',
-      workflow: current.workflow,
+      workflow: legacyWorkflow,
       workflowFingerprint: 'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
     }, builtinTrack('frontend'))
     const roundTripped = effectiveWorkflowPlanFromSnapshot(JSON.parse(JSON.stringify({
       version: 1,
       workflowId: 'default',
       executionModel: 'phase-manifest',
-      workflow: current.workflow,
+      workflow: legacyWorkflow,
       workflowFingerprint: 'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
     })))
 

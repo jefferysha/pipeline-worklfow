@@ -6,6 +6,7 @@ import type {
   ProjectSnapshot,
   Snapshot,
   TerminalActivitySnapshot,
+  TransitionReadinessBlockerSnapshot,
 } from '../types'
 import { isRecord, optionalString, recordOfBooleans, stringArray } from './transport'
 
@@ -94,6 +95,8 @@ function decodeFields(value: unknown): Record<string, string | string[]> | null 
 function decodeChange(value: unknown): ChangeSnapshot | null {
   if (!isRecord(value)) return null
   const fields = decodeFields(value.fields)
+  const workflowRules = decodeWorkflowRules(value.workflowRules)
+  const workflowExecution = decodeWorkflowExecution(value.workflowExecution, workflowRules, value.phase)
   if (typeof value.name !== 'string'
     || typeof value.path !== 'string'
     || typeof value.phase !== 'string'
@@ -102,6 +105,11 @@ function decodeChange(value: unknown): ChangeSnapshot | null {
     || typeof value.preset !== 'string'
     || typeof value.archived !== 'string'
     || typeof value.updated_at !== 'string'
+    || typeof value.workflowPlanFingerprint !== 'string'
+    || !/^[0-9a-f]{64}$/.test(value.workflowPlanFingerprint)
+    || workflowRules === null
+    || workflowExecution === null
+    || !workflowRules.steps.includes(value.phase)
     || !fields) return null
   const todo = value.todo === undefined ? undefined : decodeTodo(value.todo)
   const documents = value.documents === undefined ? undefined : decodeDocuments(value.documents)
@@ -119,54 +127,185 @@ function decodeChange(value: unknown): ChangeSnapshot | null {
     archived: value.archived,
     updated_at: value.updated_at,
     fields,
+    workflowPlanFingerprint: value.workflowPlanFingerprint,
+    workflowRules,
+    workflowExecution,
     ...(todo ? { todo } : {}),
     ...(documents ? { documents } : {}),
     ...(terminalActivity ? { terminalActivity } : {}),
   }
 }
 
-function decodeWorkflowRules(value: unknown): ProjectSnapshot['workflowRules'] | null {
-  if (!isRecord(value)) return null
-  const decoded: NonNullable<ProjectSnapshot['workflowRules']> = {}
-  for (const [name, rules] of Object.entries(value)) {
-    if (!isRecord(rules)
-      || !Array.isArray(rules.steps)
-      || !rules.steps.every((step) => typeof step === 'string')
-      || !isRecord(rules.transitions)
-      || !isRecord(rules.gateByStep)
-      || !isRecord(rules.labelByStep)
-      || !isRecord(rules.outputsByStep)
-      || !isRecord(rules.nonemptyOutputByStep)) return null
-    const transitions: Record<string, Array<{ event: string; to: string }>> = {}
-    for (const [step, edges] of Object.entries(rules.transitions)) {
-      if (!Array.isArray(edges)) return null
-      const decodedEdges: Array<{ event: string; to: string }> = []
-      for (const edge of edges) {
-        if (!isRecord(edge) || typeof edge.event !== 'string' || typeof edge.to !== 'string') return null
-        decodedEdges.push({ event: edge.event, to: edge.to })
+function uniqueNonemptyStrings(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length === new Set(value).size
+    && value.every((item) => typeof item === 'string' && item !== '')
+}
+
+function exactKeys(value: Record<string, unknown>, steps: readonly string[]): boolean {
+  const keys = Object.keys(value).sort()
+  return keys.length === steps.length && keys.every((key, index) => key === [...steps].sort()[index])
+}
+
+function decodeWorkflowRules(value: unknown): ChangeSnapshot['workflowRules'] | null {
+  if (!isRecord(value)
+    || (value.executionModel !== 'phase-manifest' && value.executionModel !== 'step-graph')
+    || !uniqueNonemptyStrings(value.steps)
+    || !isRecord(value.transitions)
+    || !isRecord(value.gateByStep)
+    || !isRecord(value.labelByStep)
+    || !isRecord(value.outputsByStep)) return null
+  const steps = [...value.steps]
+  const stepSet = new Set(steps)
+  if (!exactKeys(value.transitions, steps)
+    || !exactKeys(value.gateByStep, steps)
+    || !exactKeys(value.labelByStep, steps)
+    || !exactKeys(value.outputsByStep, steps)
+  ) return null
+  const transitions: Record<string, Array<{ event: string; to: string }>> = {}
+  for (const step of steps) {
+    const edges = value.transitions[step]
+    if (!Array.isArray(edges)) return null
+    const events = new Set<string>()
+    const decodedEdges: Array<{ event: string; to: string }> = []
+    for (const edge of edges) {
+      if (!isRecord(edge)
+        || typeof edge.event !== 'string'
+        || edge.event === ''
+        || events.has(edge.event)
+        || typeof edge.to !== 'string'
+        || !stepSet.has(edge.to)) return null
+      events.add(edge.event)
+      decodedEdges.push({ event: edge.event, to: edge.to })
+    }
+    transitions[step] = decodedEdges
+  }
+  if (!Object.values(value.gateByStep).every(
+    (gate) => gate === null || gate === 'review' || gate === 'confirm',
+  ) || !Object.values(value.labelByStep).every((label) => typeof label === 'string' && label !== '')) return null
+  const outputsByStep: Record<string, string[]> = {}
+  for (const step of steps) {
+    const outputs = value.outputsByStep[step]
+    if (!Array.isArray(outputs) || outputs.length !== new Set(outputs).size
+      || !outputs.every((output) => typeof output === 'string' && output !== '')) return null
+    outputsByStep[step] = [...outputs] as string[]
+  }
+  return {
+    executionModel: value.executionModel,
+    steps,
+    transitions,
+    gateByStep: value.gateByStep as Record<string, 'review' | 'confirm' | null>,
+    labelByStep: value.labelByStep as Record<string, string>,
+    outputsByStep,
+  }
+}
+
+function decodeWorkflowExecution(
+  value: unknown,
+  rules: ChangeSnapshot['workflowRules'] | null,
+  currentStep: unknown,
+): ChangeSnapshot['workflowExecution'] | null {
+  if (rules === null
+    || typeof currentStep !== 'string'
+    || !rules.steps.includes(currentStep)
+    || !isRecord(value)
+    || !isRecord(value.readinessByTransition)) return null
+  const readinessSteps = Object.keys(value.readinessByTransition)
+  if (!(exactKeys(value.readinessByTransition, rules.steps)
+    || (readinessSteps.length === 1 && readinessSteps[0] === currentStep))) return null
+  const readinessByTransition: ChangeSnapshot['workflowExecution']['readinessByTransition'] = {}
+  for (const step of readinessSteps) {
+    const byEvent = value.readinessByTransition[step]
+    if (!isRecord(byEvent)) return null
+    const events = (rules.transitions[step] ?? []).map((transition) => transition.event)
+    if (!exactKeys(byEvent, events)) return null
+    readinessByTransition[step] = {}
+    for (const event of events) {
+      const readiness = byEvent[event]
+      if (!isRecord(readiness)
+        || typeof readiness.ready !== 'boolean'
+        || !Array.isArray(readiness.blockers)
+        || !Object.keys(readiness).every((key) => key === 'ready' || key === 'blockers')) return null
+      const blockers: TransitionReadinessBlockerSnapshot[] = []
+      for (const candidate of readiness.blockers) {
+        const blocker = decodeTransitionReadinessBlocker(candidate)
+        if (blocker === null) return null
+        blockers.push(blocker)
       }
-      transitions[step] = decodedEdges
-    }
-    if (!Object.values(rules.gateByStep).every(
-      (gate) => gate === null || gate === 'review' || gate === 'confirm',
-    )
-      || !Object.values(rules.labelByStep).every((label) => typeof label === 'string')
-      || !Object.values(rules.outputsByStep).every(
-        (outputs) => Array.isArray(outputs) && outputs.every((output) => typeof output === 'string'),
-      )
-      || !Object.values(rules.nonemptyOutputByStep).every((required) => typeof required === 'boolean')) {
-      return null
-    }
-    decoded[name] = {
-      steps: [...rules.steps],
-      transitions,
-      gateByStep: rules.gateByStep as Record<string, 'review' | 'confirm' | null>,
-      labelByStep: rules.labelByStep as Record<string, string>,
-      outputsByStep: rules.outputsByStep as Record<string, string[]>,
-      nonemptyOutputByStep: rules.nonemptyOutputByStep as Record<string, boolean>,
+      if (readiness.ready !== (blockers.length === 0)
+        || new Set(blockers.map((blocker) => JSON.stringify(blocker))).size !== blockers.length) return null
+      readinessByTransition[step][event] = { ready: readiness.ready, blockers }
     }
   }
-  return decoded
+  return { readinessByTransition }
+}
+
+const GUARD_TYPES = new Set([
+  'tasks-at-least',
+  'field-nonempty',
+  'output-present',
+  'file-exists',
+  'field-equals',
+  'field-in',
+  'full-direct-override',
+  'build-head-unchanged',
+  'spec-migration-applied',
+])
+const GUARD_CAPABILITIES = new Set([
+  'readText', 'fileExists', 'gitHeadSha', 'workspaceFingerprint', 'specMigrationStatus',
+])
+
+function decodeTransitionReadinessBlocker(value: unknown): TransitionReadinessBlockerSnapshot | null {
+  if (!isRecord(value) || typeof value.guardType !== 'string' || !GUARD_TYPES.has(value.guardType)) return null
+  if (value.kind === 'evaluation-error') {
+    if ((value.capability !== undefined
+        && (typeof value.capability !== 'string' || !GUARD_CAPABILITIES.has(value.capability)))
+      || !Object.keys(value).every((key) =>
+        key === 'kind' || key === 'guardType' || key === 'capability')) return null
+    return {
+      kind: 'evaluation-error',
+      guardType: value.guardType,
+      ...(value.capability === undefined ? {} : { capability: value.capability as string }),
+    }
+  }
+  if (value.kind === 'capability-unavailable') {
+    if (typeof value.capability !== 'string'
+      || !GUARD_CAPABILITIES.has(value.capability)
+      || !Object.keys(value).every((key) =>
+        key === 'kind' || key === 'guardType' || key === 'capability')) return null
+    return {
+      kind: 'capability-unavailable',
+      guardType: value.guardType,
+      capability: value.capability,
+    }
+  }
+  if (value.kind !== 'guard-failed'
+    || !optionalString(value.field)
+    || !optionalString(value.actual)
+    || (value.expected !== undefined && !uniqueNonemptyStrings(value.expected))
+    || !Object.keys(value).every((key) =>
+      key === 'kind' || key === 'guardType' || key === 'field' || key === 'actual' || key === 'expected')) return null
+  return {
+    kind: 'guard-failed',
+    guardType: value.guardType,
+    ...(value.field === undefined ? {} : { field: value.field }),
+    ...(value.actual === undefined ? {} : { actual: value.actual }),
+    ...(value.expected === undefined ? {} : { expected: [...value.expected] as string[] }),
+  }
+}
+
+function workflowRulesSemanticKey(rules: ChangeSnapshot['workflowRules']): string {
+  return JSON.stringify({
+    executionModel: rules.executionModel,
+    steps: rules.steps,
+    stepRules: rules.steps.map((step) => ({
+      step,
+      transitions: rules.transitions[step] ?? [],
+      gate: rules.gateByStep[step],
+      outputs: rules.outputsByStep[step] ?? [],
+    })),
+    labels: Object.entries(rules.labelByStep ?? {}).sort(([left], [right]) => left.localeCompare(right)),
+  })
 }
 
 function decodeProject(value: unknown): ProjectSnapshot | null {
@@ -174,21 +313,22 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     || typeof value.root !== 'string'
     || typeof value.ok !== 'boolean'
     || !optionalString(value.error)
-    || !isRecord(value.workflowRules)
     || !Array.isArray(value.changes)) return null
   const changes: ChangeSnapshot[] = []
+  const rulesByFingerprint = new Map<string, string>()
   for (const change of value.changes) {
     const decoded = decodeChange(change)
     if (!decoded) return null
+    const semanticKey = workflowRulesSemanticKey(decoded.workflowRules)
+    const existing = rulesByFingerprint.get(decoded.workflowPlanFingerprint)
+    if (existing !== undefined && existing !== semanticKey) return null
+    rulesByFingerprint.set(decoded.workflowPlanFingerprint, semanticKey)
     changes.push(decoded)
   }
-  const workflowRules = decodeWorkflowRules(value.workflowRules)
-  if (workflowRules === null) return null
   return {
     root: value.root,
     ok: value.ok,
     changes,
-    workflowRules,
     ...(value.error === undefined ? {} : { error: value.error }),
   }
 }
@@ -208,6 +348,9 @@ export function decodeSnapshot(value: unknown): Snapshot | null {
     projects.push(decoded)
   }
   return {
+    ...(value.snapshot_protocol === 'tenon-snapshot/v2'
+      ? { snapshot_protocol: value.snapshot_protocol }
+      : {}),
     version: value.version,
     generated_at: value.generated_at,
     capabilities: value.capabilities,

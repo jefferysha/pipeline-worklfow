@@ -3,8 +3,59 @@ import { decodeSessionLinks } from './auditDecoders'
 import { decodeRouterPreview } from './governanceDecoders'
 import { decodeLoopsSnapshot } from './loopDecoder'
 import { decodeSnapshot } from './snapshotDecoder'
+import { selectProgress } from '../model/progressModel'
+import { workflowRulesFromSnapshot } from '../model/workflowModel'
 
 describe('API bounded-context response decoders', () => {
+  const validRules = {
+    executionModel: 'step-graph',
+    steps: ['open', 'done'],
+    transitions: { open: [{ event: 'finish', to: 'done' }], done: [] },
+    gateByStep: { open: null, done: null },
+    labelByStep: { open: '开始', done: '完成' },
+    outputsByStep: { open: ['result'], done: [] },
+  }
+  const validSnapshot = () => ({
+    version: '1',
+    generated_at: 'now',
+    capabilities: { snapshot: true },
+    project_count: 1,
+    change_count: 1,
+    projects: [{
+      root: '/repo',
+      ok: true,
+      changes: [{
+        name: 'demo',
+        path: '/repo/openspec/changes/demo',
+        phase: 'open',
+        phase_status: 'in_progress',
+        track: 'backend',
+        preset: 'full',
+        archived: 'false',
+        updated_at: 'now',
+        fields: {},
+        workflowPlanFingerprint: 'a'.repeat(64),
+        workflowRules: structuredClone(validRules),
+        workflowExecution: {
+          readinessByTransition: {
+            open: {
+              finish: {
+                ready: false,
+                blockers: [{
+                  kind: 'guard-failed',
+                  guardType: 'field-nonempty',
+                  field: 'result',
+                  actual: '',
+                }],
+              },
+            },
+            done: {},
+          },
+        },
+      }],
+    }],
+  })
+
   it('rejects a snapshot with a malformed nested todo item', () => {
     expect(decodeSnapshot({
       version: '1',
@@ -137,5 +188,97 @@ describe('API bounded-context response decoders', () => {
         'demo@/repo': { found: true, resumeCmd: 42 },
       },
     })).toBeNull()
+  })
+
+  it('rejects frozen workflow graphs whose edge target is outside the step set', () => {
+    const snapshot = validSnapshot()
+    snapshot.projects[0].changes[0].workflowRules.transitions.open[0]!.to = 'ghost'
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects workflow label maps missing a frozen step key', () => {
+    const snapshot = validSnapshot()
+    delete (snapshot.projects[0].changes[0].workflowRules.labelByStep as Record<string, string>).done
+
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects transition readiness with duplicate blockers', () => {
+    const snapshot = validSnapshot()
+    const blocker = snapshot.projects[0].changes[0].workflowExecution
+      .readinessByTransition.open.finish.blockers[0]!
+    snapshot.projects[0].changes[0].workflowExecution
+      .readinessByTransition.open.finish.blockers.push(structuredClone(blocker))
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects transition readiness whose event keys drift from the frozen graph', () => {
+    const snapshot = validSnapshot()
+    const byEvent = snapshot.projects[0].changes[0].workflowExecution
+      .readinessByTransition.open as Record<string, { ready: boolean; blockers: unknown[] }>
+    delete byEvent.finish
+    byEvent.ghost = { ready: true, blockers: [] }
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects readiness that claims ready while retaining a blocker', () => {
+    const snapshot = validSnapshot()
+    snapshot.projects[0].changes[0].workflowExecution.readinessByTransition.open.finish.ready = true
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects a Change whose phase is outside its frozen workflow steps', () => {
+    const snapshot = validSnapshot()
+    snapshot.projects[0].changes[0].phase = 'ghost'
+
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('rejects structurally different workflow rules sharing one fingerprint in the same project', () => {
+    const snapshot = validSnapshot()
+    const collision = structuredClone(snapshot.projects[0].changes[0])
+    collision.name = 'collision'
+    collision.workflowRules.transitions.open[0]!.event = 'complete'
+    snapshot.projects[0].changes.push(collision)
+    snapshot.change_count = 2
+
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('accepts track-effective required outputs that differ under one immutable plan fingerprint', () => {
+    const snapshot = validSnapshot()
+    const gates = snapshot.projects[0].changes[0].workflowRules.gateByStep as Record<
+      string,
+      'review' | 'confirm' | null
+    >
+    gates.open = 'review'
+    const pm = structuredClone(snapshot.projects[0].changes[0])
+    pm.name = 'pm'
+    pm.track = 'pm'
+    pm.workflowExecution.readinessByTransition.open.finish = { ready: true, blockers: [] }
+    snapshot.projects[0].changes.push(pm)
+    snapshot.change_count = 2
+
+    const decoded = decodeSnapshot(snapshot)
+    expect(decoded).not.toBeNull()
+    expect(decoded?.projects[0]?.changes.map((change) => [
+      change.track,
+      change.workflowExecution.readinessByTransition.open.finish,
+    ])).toEqual([
+      ['backend', {
+        ready: false,
+        blockers: [{
+          kind: 'guard-failed',
+          guardType: 'field-nonempty',
+          field: 'result',
+          actual: '',
+        }],
+      }],
+      ['pm', { ready: true, blockers: [] }],
+    ])
+    const selection = selectProgress(decoded, '/repo', workflowRulesFromSnapshot(decoded))
+    expect(new Map(selection.groups[0]?.rows.map((row) => [row.change.track, row.state]))).toEqual(
+      new Map([['backend', 'agent'], ['pm', 'gate']]),
+    )
   })
 })

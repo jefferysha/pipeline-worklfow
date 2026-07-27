@@ -29,6 +29,11 @@ export interface CodexSkillDiscovery {
   readonly project: ReadonlyMap<string, string>
 }
 
+export type HostPluginInventorySource =
+  | { readonly kind: 'native'; readonly host: 'codex' | 'claude'; readonly enabledIds: ReadonlySet<string> }
+  | { readonly kind: 'static' }
+  | { readonly kind: 'unavailable'; readonly host: 'codex' | 'claude'; readonly detail: string }
+
 export interface DoctorProbes {
   /** process.version 形如 'v22.1.0' */
   nodeVersion: () => string
@@ -69,13 +74,10 @@ export interface DoctorProbes {
    * 缺省 undefined 时 doctor 把 Codex 就绪面标为 yellow，而不是把缓存误报为可调用。
    */
   codexProjectSkillNames?: () => ReadonlySet<string>
-  /** 当前 managed runtime 原生宿主及其 enabled plugin ids；null 表示宿主或 inventory 不可验证。 */
-  nativeHostPluginIds?: () => Promise<{
-    readonly host: 'codex' | 'claude'
-    readonly enabledIds: ReadonlySet<string>
-  } | null>
+  /** 明确区分 native inventory、static adapter 与 native inventory 故障。 */
+  hostPluginInventory?: () => Promise<HostPluginInventorySource>
   /** Selected-root aware discovery used to diagnose duplicate projections and shadow conflicts. */
-  codexSkillDiscovery?: () => CodexSkillDiscovery
+  codexSkillDiscovery?: () => Promise<CodexSkillDiscovery>
   /**
    * manifest 强制/推荐 skill 两表（full-install 批2 A1）。main.ts 用 loadManifest(manifestPath())
    * 派生落地（它持有 bundle 里唯一正确的模板路径锚，故两表走探针注入而非 doctor 侧自读——

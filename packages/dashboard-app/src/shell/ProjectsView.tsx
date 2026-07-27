@@ -61,7 +61,7 @@ function MiniTrack({
   return (
     <span
       data-testid={`${rowId}-track`}
-      className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden"
+      className="col-start-2 col-end-4 row-start-2 flex w-full min-w-0 flex-1 items-center gap-3 overflow-hidden sm:w-auto"
     >
       <span
         data-testid={`${rowId}-at`}
@@ -112,7 +112,10 @@ function HealthSummary({
   t: (k: string) => string
 }): JSX.Element {
   return (
-    <span className="flex flex-none items-center gap-4 font-mono text-[13px] tabular-nums" data-testid={`${rowId}-summary`}>
+    <span
+      className="col-start-2 col-end-4 row-start-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[13px] tabular-nums sm:flex-none sm:flex-nowrap"
+      data-testid={`${rowId}-summary`}
+    >
       <span data-testid={`${rowId}-stat-wip`} data-value={wip} className="text-text-3">
         {t('projects.stat_wip')} <span className="font-semibold text-text-2">{wip}</span>
       </span>
@@ -153,16 +156,16 @@ function ProjectRowButton({
       data-need={need}
       aria-label={t('projects.open_aria', { name: row.basename })}
       onClick={() => onOpen(row.root)}
-      className={`group flex w-full items-center gap-4 rounded-xl border px-5 py-4 text-left shadow-sm transition-[border-color,background-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) active:scale-[.995] motion-reduce:transform-none ${
+      className={`group grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-[border-color,background-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) active:scale-[.995] motion-reduce:transform-none sm:flex sm:flex-nowrap sm:gap-4 sm:px-5 ${
         need ? 'border-accent-b bg-accent-t hover:border-(--accent)' : 'border-border bg-card hover:border-border-2 hover:bg-fill'
       }`}
     >
       <span
         aria-hidden="true"
-        className={`h-2 w-2 flex-none rounded-full ${need ? 'bg-(--accent)' : 'border border-border-2 bg-transparent'}`}
+        className={`col-start-1 row-start-1 h-2 w-2 flex-none rounded-full ${need ? 'bg-(--accent)' : 'border border-border-2 bg-transparent'}`}
       />
       <span
-        className="min-w-[190px] flex-none whitespace-nowrap font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent)"
+        className="col-start-2 row-start-1 min-w-0 truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent) sm:min-w-[190px] sm:flex-none"
         title={row.root}
       >
         {row.basename}
@@ -171,7 +174,7 @@ function ProjectRowButton({
       <HealthSummary rowId={rowId} wip={row.wip} need={row.need} running={row.running} t={t} />
       <ChevronRight
         aria-hidden="true"
-        className="h-4 w-4 flex-none text-text-3 opacity-0 transition-opacity group-hover:opacity-100"
+        className="col-start-3 row-start-1 h-4 w-4 flex-none text-text-3 opacity-70 transition-opacity group-hover:opacity-100 sm:opacity-0"
       />
     </button>
   )
@@ -302,7 +305,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
                           aria-hidden="true"
                           className="h-2 w-2 flex-none rounded-full border border-border-2 bg-transparent"
                         />
-                        <span className="min-w-0 flex-1 whitespace-nowrap font-mono text-[14px] text-text-3" title={row.root}>
+                        <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-text-3" title={row.root}>
                           {row.basename}
                         </span>
                         <span className="flex-none text-[12px] font-semibold text-text-3">{t('projects.unreachable')}</span>

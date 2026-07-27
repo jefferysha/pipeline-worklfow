@@ -381,7 +381,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       // preset=full ∧ build_mode=direct 需要显式 direct_override=true（flow/transition-table.ts
       // 的 build-complete 前置校验第三项），否则会先撞这条而不是走到我们要测的 buildShaMissing。
       await createStateStore().setMany(
-        dir, { phase: 'build', build_mode: 'direct', isolation: 'branch', direct_override: 'true' },
+        dir, {
+          phase: 'build', build_mode: 'direct', isolation: 'branch', direct_override: 'true',
+          pre_verify_review_result: 'pass',
+        },
       )
       const app = createTransitionApplication(deps)
       const result = await app.execute({
@@ -399,7 +402,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
-      await createStateStore().set(dir, 'phase', 'build')
+      await createStateStore().setMany(dir, {
+        phase: 'build',
+        pre_verify_review_result: 'pass',
+      })
       await writeFile(join(dir, 'proposal.md'), '# revised during build\n', 'utf8')
 
       const result = await createTransitionApplication(deps).execute({
@@ -410,6 +416,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect((await createStateStore().read(dir)).fields).toMatchObject({
         phase: 'spec',
         phase_status: 'in_progress',
+        pre_verify_review_result: 'pending',
       })
     })
 
@@ -453,7 +460,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
-      await createStateStore().setMany(dir, { phase: 'build', build_mode: 'direct', isolation: 'branch', direct_override: 'true' })
+      await createStateStore().setMany(dir, {
+        phase: 'build', build_mode: 'direct', isolation: 'branch', direct_override: 'true',
+        pre_verify_review_result: 'pass',
+      })
       let shaCalls = 0
       const app = createTransitionApplication(deps)
       const result = await app.execute({
@@ -528,7 +538,8 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
       await createStateStore().setMany(dir, {
-        phase: 'verify', build_sha: 'STALE', review_gate_phase: 'verify', review_gate_status: 'approved',
+        phase: 'verify', build_sha: 'STALE', pre_verify_review_result: 'pass',
+        review_gate_phase: 'verify', review_gate_status: 'approved',
         review_gate_event: 'verify-fail',
         review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
@@ -543,6 +554,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.fields.build_sha).toBe('null')
       expect(state.fields.phase).toBe('build')
       expect(state.fields.phase_status).toBe('in_progress')
+      expect(state.fields.pre_verify_review_result).toBe('pending')
     })
   })
 
@@ -852,6 +864,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const dir = await initCustom(deps, root, 'governed', 'build')
       await createStateStore().setMany(dir, {
         build_mode: 'direct', isolation: 'in-place', direct_override: 'true',
+        pre_verify_review_result: 'pass',
       })
       const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       let current = baseline

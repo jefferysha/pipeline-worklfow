@@ -4,18 +4,26 @@
 
 ## 1. Canonical state 与 `.pipeline.yaml` adapter
 
-- **唯一真相/唯一提交点**：`openspec/changes/<name>/.pipeline-run/current.json`。它是当前完整
-  `PipelineState`、hook 热路径五字段快照、mutation reason/effects 与 state digest 的自包含 revision；
-  同字节 immutable twin 位于 `.pipeline-run/revisions/<revision>-<revisionId>.json`。
+- **唯一真相/唯一提交点**：`openspec/changes/<name>/.pipeline-run/current.json`。它保存当前
+  N-1-compatible wire state、hook 热路径五字段快照、mutation reason/effects 与 state digest；
+  同字节 immutable twin 位于 `.pipeline-run/revisions/<revision>-<revisionId>.json`。需要在旧 wire
+  闭集之外表达的逻辑字段使用 digest-anchored immutable companion；当前
+  `pre_verify_review_result` 位于
+  `.pipeline-run/pre-verify-review/<revision>-<revisionId>.json`。读取端只有在验证
+  current/twin、anchor 与 companion 身份/摘要一致后，才 hydrate 为完整逻辑 `PipelineState`；
+  因此物理 revision 本身不宣称自包含该逻辑字段。
 - **发布顺序**：所有公开 `StateStore.write()` 自行取得同一把 change 锁；transition 先独占发布
-  `TransitionRecord`，普通 mutation 直接构造下一 revision；随后先发布 immutable revision，再以
-  `current.json` 的 tmp+rename 作为唯一 commit。最后才 best-effort 刷新 `.pipeline.yaml`。record/revision
-  已落而 current 未换只是孤儿；current 已换而 YAML 写失败是已提交状态，返回 projection pending，
-  不得回滚或伪装失败。
-- **完整性**：current 必须通过 closed schema、SHA-256、immutable twin 字节一致、直接 previous 身份与
-  effects 真实 diff 校验。transition mutation 还必须绑定 `transitionRecordId` 与该 record 精确字节的
-  `transitionRecordDigest`；history 冷路径遍历全部 immutable revisions，任一祖先 revision/record
-  缺失或摘要不符均 fail-loud，不用 JSONL/YAML 补洞。
+  `TransitionRecord`，普通 mutation 直接构造下一 revision；随后按
+  `digest-anchored companion → immutable revision → current.json` 发布，`current.json` 的
+  tmp+rename 仍是唯一 commit。最后才 best-effort 刷新 `.pipeline.yaml`。TransitionRecord、
+  companion 或 revision 已落而 current 未换都只是不可达孤儿；current 已换而 YAML 写失败是已提交
+  状态，返回 projection pending，不得回滚或伪装失败。
+- **完整性**：current 必须通过 closed wire schema、SHA-256、immutable twin 字节一致、直接 previous
+  身份与 effects 真实 diff 校验；声明 companion anchor 且 companion 存在时，还必须验证精确
+  revision/revisionId 与 payload digest，错配或篡改均 fail-loud。companion 缺失统一降为
+  `pending` 失败关闭，绝不继承旧 `pass`。transition mutation 还必须绑定 `transitionRecordId`
+  与该 record 精确字节的 `transitionRecordDigest`；history 冷路径遍历全部 immutable revisions，
+  任一祖先 revision/record 损坏或 companion 身份/摘要不符均 fail-loud，不用 JSONL/YAML 补洞。
 - **兼容断代**：只有 `current.json` 目录项完全不存在时才读取 legacy `.pipeline.yaml`。current 一旦出现，
   即使损坏、不可读、是 symlink 或读取中消失，也绝不授权 YAML fallback。首次官方写把 legacy YAML
   固化为 migration revision 0，再提交目标 mutation。
@@ -30,7 +38,7 @@
 ### 1.1 `.pipeline.yaml` 格式契约（与老内核字节级兼容）
 
 - 位置：`openspec/changes/<name>/.pipeline.yaml`（相对项目根）。
-- **字段序固定**：见 `types.ts::FIELD_ORDER`（40 字段；2026-07-11 v5 T4 决策 G **末尾追加**
+- **字段序固定**：见 `types.ts::FIELD_ORDER`（46 字段；2026-07-11 v5 T4 决策 G **末尾追加**
   `automation_current_phase`——沙箱内当前阶段，automation runner 检出 [TRANSITION] 行运行期回写、
   run 结算清空；老文件缺该行读作空串，容忍不变。新字段必须末尾追加：老版本窄解析器把首个未知
   key 起整段当 opaqueTail，插中段会让老读者回写时重复 key 腐蚀文件，见 types.ts 注释。
@@ -38,6 +46,16 @@
   `_tag` 干净判定落盘（`cancelled`/`conflict`/`timeout`/`verify-fail`/`agent-exit`/`no-op` 开放集，
   空串=未知，读取端 fallback regex 分类 `automation_last_error` 文本），与 `automation_last_error`
   **同写同清**；老文件缺该行读作空串，容忍不变，末尾追加理由同上）。
+  review-gate v2 五字段之后继续末尾追加逻辑字段 `pre_verify_review_result`：YAML 精确缺少这一尾
+  字段时读作 `pending`；缺任意其他普通字段仍 fail-loud，不能借迁移兼容放宽闭合 schema。
+  WorkflowRun schemaVersion=1 的物理 `state.fields` 为保持真实 N-1 runtime 可回滚而不扩张旧闭集；
+  该逻辑 canonical 值写入 `.pipeline-run/pre-verify-review/<revision>-<revisionId>.json` 不可变
+  companion，并由 wire `opaqueTail` 中的内部 anchor 把 result 摘要纳入 `stateDigest`。companion
+  在 current 提交前发布，缺失按 `pending` 失败关闭，身份/摘要不一致 fail-loud。
+  `.pipeline.yaml` 同样投影 N-1 wire 闭集：省略该逻辑字段，并在内部元数据后保留同一 anchor
+  comment；否则真实上一发行版会把未知尾字段后的 run/projection metadata 一并当作 opaqueTail，
+  导致可读但首次合法 mutation 因 projection drift 失败。当前 runtime 的 `get`、guard 与
+  Dashboard 从 canonical companion 恢复逻辑值，不依赖 YAML 展示。
   写回时严格按此序全量输出，缺省字段写空串。
 - **标量引号契约（单层去引号）**：读取时若值首尾为同一对 `"` 或 `'` 则剥一层，不递归；写入时
   值含 `: `、` #`、换行或首字符为引号 → 拒写（fail-loud，对齐老内核 yaml_set 四闸）。
@@ -145,6 +163,14 @@
   必须由 `pipeline-spec` 重登记 proposal/design/tasks 的当前 SHA、补读取收据并重新通过 spec review。
 - **Phase-scoped Todo gate**：有标准阶段标题的 `tasks.md` 在出口只统计截至当前 phase 的未完成项；
   未来 phase 任务仍由 UI 展示，但不反向阻塞。无阶段标题的历史文件保留“build 全清单完成”兼容语义。
+- **Build pre-Verify 全量收敛门**：`pre_verify_review_result` 初始为 `pending`。Build 必须先对完整
+  待冻结 diff、全部受影响 capability / ADR / plan / 调用方 / 兼容边界和适用 release gate 做
+  Standards + Spec 双轴审查，等待全部适用检查后一次性聚合 findings；只有
+  Critical/High/Medium 全部清零且证据完整时才可置 `pass`，不得以批准偏差把已知 Medium
+  带入 Verify。
+  `build-complete` 硬性要求该字段为 `pass`；`spec-complete`、`requirements-changed` 与
+  `verify-fail` 都会重置为 `pending`。若通过后交付面再变化，Build 协议要求立即重置并重跑全量审查。
+  这道门负责在 Build 内一次收敛，不替代 Verify 对冻结基线的独立全量复核。
 - **Build→Verify 可复验基线**：状态字段仍命名为 `build_sha` 以兼容既有 state ABI，但它是
   “构建基线”而非永远的 Git SHA。`isolation=branch|worktree` 冻结 `git rev-parse HEAD`；
   `isolation=in-place` 冻结 `workspace:sha256:<64 hex>`，即排除 `.git`、依赖、OpenSpec/文档证据、
@@ -159,9 +185,10 @@
   **confirm 300s**（漏确认安全网，爆炸半径 5min）；**review / interaction 1800s**（跨整个
   决策 phase，缩短会中途误清 → 绕过强制复核）。边界同老内核：age > TTL 才陈旧。
 - **持续交互授权投影（不是第四道 gate）**：用户在正常对话明确说“后续不用问 / 自主执行完成”后，
-  `pipeline session activate <change> --continuous` 或 UserPromptSubmit 会写
+  `pipeline session activate <change> --continuous --host-session <id>` 或带合法 `session_id` 的 UserPromptSubmit 会写
   `.pipeline-interaction-authority`。它是版本化、原子发布、只含 `change/scope/review/issued_at` 的
-  Change 绑定投影，只有 `.pipeline-active` 指向同一 live Change 时 `interactive-skill-gate.sh` 才会
+  Change 与 host-session 双重绑定投影，只有 `.pipeline-active` 指向同一 live Change、且 hook
+  输入携带同一 `session_id` 时 `interactive-skill-gate.sh` 才会
   识别；格式不完整、换 Change、已归档或撤回均 fail-closed 回到普通 interaction gate。它只避免每次
   读取 `brainstorming` 等交互式 skill 时重复要求低风险确认，同时在 Change history 留下最小化审计行；
   **绝不**清 `-review`、不写 canonical approval receipt、不能自动 transition，也不能替代涉及范围、

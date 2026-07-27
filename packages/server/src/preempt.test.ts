@@ -44,6 +44,44 @@ describe('decidePreemption —— bind / reuse / preempt', () => {
   it('无既有 server → bind', () => {
     expect(decidePreemption(null, '0.1.0', undefined, stateScopeId)).toBe('bind')
   })
+  it('managed transaction 不得抢占普通 Dashboard 或其他 transaction', () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.1.0', releaseId, stateScopeId },
+      '9.0.0',
+      releaseId,
+      stateScopeId,
+      'transaction-a',
+    )).toBe('reuse')
+    expect(decidePreemption(
+      {
+        ok: true,
+        scope: 'global',
+        version: '0.1.0',
+        releaseId,
+        stateScopeId,
+        transactionId: 'transaction-b',
+      },
+      '9.0.0',
+      releaseId,
+      stateScopeId,
+      'transaction-a',
+    )).toBe('reuse')
+    expect(decidePreemption(
+      {
+        ok: true,
+        scope: 'global',
+        version: '0.1.0',
+        releaseId,
+        stateScopeId,
+        transactionId: 'transaction-a',
+      },
+      '9.0.0',
+      releaseId,
+      stateScopeId,
+      'transaction-a',
+    )).toBe('preempt')
+  })
   it('既有同版本 → reuse', () => {
     expect(decidePreemption(
       { ok: true, scope: 'global', version: '0.1.0', stateScopeId },
@@ -257,6 +295,29 @@ describe('preemptOldServer —— 真读 pidfile + 真 SIGTERM 干掉旧进程',
     const pid = childPid(child)
 
     const ok = await preemptOldServer(pidfile, port, '127.0.0.1', { waitMs: 300, legacyPid: pid - 1 })
+    expect(ok).toBe(false)
+    expect(await probePortOpen(port, '127.0.0.1', 100)).toBe(true)
+  })
+
+  it('pidfile transaction id 不精确匹配时绝不 signal 真实 listener', async () => {
+    const home = await makeTempHome()
+    const pidfile = join(home, 'dashboard-server.json')
+    const port = await freePort()
+    const child = await listenerChild(port)
+    children.push(child)
+    const pid = childPid(child)
+    await writeFile(pidfile, JSON.stringify({
+      pid,
+      port,
+      version: '1.0.1',
+      transactionId: 'transaction-other',
+    }), 'utf8')
+
+    const ok = await preemptOldServer(pidfile, port, '127.0.0.1', {
+      waitMs: 300,
+      transactionId: 'transaction-current',
+    })
+
     expect(ok).toBe(false)
     expect(await probePortOpen(port, '127.0.0.1', 100)).toBe(true)
   })

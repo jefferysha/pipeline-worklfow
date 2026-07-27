@@ -82,17 +82,20 @@ describe('真实 e2e —— session activate（.pipeline-active 真落盘）', (
   })
 
   test('activate --continuous → 原子写 Change 绑定授权并留下隐私最小化审计行', async () => {
-    const r = await session(h, 'activate', ['feat', '--continuous'])
+    const sessionId = '019f92c7-6e66-7290-9352-f9d915266f14'
+    const r = await session(h, 'activate', ['feat', '--continuous', '--host-session', sessionId])
     expect(r.code).toBe(0)
     expect(r.err.join('\n')).toContain('持续交互授权')
     const authority = await readFile(join(h.cwd, '.pipeline-interaction-authority'), 'utf8')
-    expect(authority).toContain('pipeline-interaction-authority-v1')
+    expect(authority).toContain('pipeline-interaction-authority-v2')
     expect(authority).toContain('change=feat')
+    expect(authority).toContain(`host_session=${sessionId}`)
     expect(authority).toContain('scope=interactive-skills')
     expect(authority).toContain('review=delegated')
     const history = await readFile(join(h.cwd, 'openspec/changes/feat/.pipeline-history.jsonl'), 'utf8')
     expect(history).toContain('interaction-authority:enabled')
     expect(history).toContain('review=delegated')
+    expect(history).toContain(`host_session=${sessionId}`)
   })
 
   test('activate --host-session → 真写会话到 Change 的非 canonical 绑定，供 host hook 精确投影运行心跳', async () => {

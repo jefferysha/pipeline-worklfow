@@ -58,6 +58,7 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set<string>(FIELD_ORDER)
 const FIELD_TYPES = ['string', 'file_path', 'boolean'] as const
 const ACTION_TYPES: ReadonlySet<string> = new Set<ActionConfig['type']>([
   'freeze-build-sha',
+  'reset-pre-verify-review',
   'mark-verification-passed',
   'mark-verification-failed',
   'archive-run',
@@ -297,6 +298,16 @@ function compileStep(step: unknown, index: number, allowedPolicies: ReadonlySet<
   const transitions = asArray(rec.transitions, `${path}.transitions`).map((t, j) =>
     compileTransition(t as StepTransition, `${path}.transitions[${j}]`, outputs),
   )
+  const transitionEvents = new Set<string>()
+  transitions.forEach((transition, transitionIndex) => {
+    if (transitionEvents.has(transition.event)) {
+      compileError(
+        `${path}.transitions[${transitionIndex}].event`,
+        `同一步不得重复声明 event '${transition.event}'`,
+      )
+    }
+    transitionEvents.add(transition.event)
+  })
   return {
     id, label: rec.label, gate: gate as GateKind,
     ...(prompt === undefined ? {} : { prompt }),

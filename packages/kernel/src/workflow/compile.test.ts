@@ -100,6 +100,17 @@ describe('v1 → IR 下沉', () => {
     expect(ir.steps[0]!.transitions).toEqual([{ event: 'draft-done', to: 'draft', guards: [], actions: [] }])
   })
 
+  it('同一步重复 event 在 canonical 编译边界拒绝，避免 runtime 与 Dashboard 分叉', () => {
+    expect(() => compileWorkflow(
+      v1Def([v1Step({
+        transitions: [
+          { event: 'continue', to: 'draft' },
+          { event: 'continue', to: 'draft' },
+        ],
+      })]),
+    )).toThrow(/steps\[0\]\.transitions\[1\]\.event.*重复.*continue/)
+  })
+
   it('step 元数据逐字进 IR：id/label/gate/skills（含 depends_on）/inputs/outputs', () => {
     const ir = compileWorkflow(
       v1Def([

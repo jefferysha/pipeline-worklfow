@@ -6,7 +6,10 @@ import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, t
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
-import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
+import {
+  REAL_RELEASED_DASHBOARD_STARTER,
+} from './released-dashboard-starter.js'
+import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,

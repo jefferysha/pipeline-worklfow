@@ -264,17 +264,9 @@ describe('WorkflowRunRepository.establishRun —— 新 change 在 init 时钉�
     const { repo, store } = makeRepo()
     const dir = await initChange(store, root)
     await repo.establishRun(dir)
-    await store.withLock(dir, async () => {
-      const state = await store.read(dir)
-      const metadata = state.runMetadata
-      if (!metadata) throw new Error('fixture runMetadata missing')
-      await store.writeUnderLock(dir, {
-        ...state,
-        runMetadata: {
-          runId: metadata.runId,
-          transitionSequence: 7,
-          transitionHead: 'record-7',
-        },
+    await repo.transact(dir, async (tx) => {
+      await tx.commit(withPhase(tx.state, 'explore'), {
+        event: 'open-complete', from: 'open', to: 'explore',
       })
     })
     await rm(join(dir, '.pipeline-workflow-governance.json'))
@@ -283,12 +275,12 @@ describe('WorkflowRunRepository.establishRun —— 新 change 在 init 时钉�
     const upgraded = await repo.establishRun(dir, binding)
     expect(upgraded).toMatchObject({
       id: 'id-1',
-      transitionSequence: 7,
-      transitionHead: 'record-7',
+      transitionSequence: 1,
+      transitionHead: 'id-2',
       ...binding,
     })
     expect(await repo.establishRun(dir, binding)).toEqual(upgraded)
-    expect(idSeq).toBe(1)
+    expect(idSeq).toBe(2)
   })
 
   test('已有治理绑定与请求不一致时拒绝覆盖并保持原值', async () => {

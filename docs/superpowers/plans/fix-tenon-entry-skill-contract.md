@@ -56,7 +56,67 @@ locale: zh-CN
 - [ ] 覆盖项目被移除、浏览器前进/后退、显式选择、清除选择、非 Dashboard query 保留和单项目
   环境仍不自动选择，运行 Dashboard 聚焦测试证明红转绿。
 
-## 阶段 5：真实安装与交付
+## 阶段 5：曳光弹——宿主步骤期望状态对账
+
+> 子阶段边界：完成后建议 `/clear`。
+
+- [ ] 先在 `packages/cli/src/commands/release-coordinator.test.ts` 与
+  `packages/cli/src/runtime/managed-release-journal.test.ts` 写失败用例：命令成功但 completed 写入
+  失败后恢复不得重放；before 状态允许执行；desired 状态只补 checkpoint；第三状态 fail closed；
+  旧 `started` WAL 缺少对账数据时 fail closed。运行定向测试确认按预期失败。
+- [ ] 先在 `packages/kernel/src/state/document-ledger.test.ts` 写失败用例：经
+  `requirements-changed` 回到 Spec 后，当前 `tenon-spec` 可以重新登记 ADR，而旧 producer、
+  `--backfill` 和缺少当前 phase Skill evidence 均被拒绝；再把 `adr` 加入 Spec living-document
+  policy。实现后受控回 Spec 更新本 ADR 并重建全部 read receipts。
+- [ ] 在 `packages/cli/src/runtime/installer.ts` 定义可序列化 host step plan/observation/replay policy，
+  在独立模块实现 codec 与三分支 reconcile domain policy；`managed-release-journal.ts` 只负责严格
+  codec/原子持久化，`release-coordinator.ts` 只编排。
+- [ ] 重构 `managed-host-command.ts`、`setupHost.ts` 与 `update.ts`：由宿主权威 inventory 生成稳定
+  observation，mutation 前写 before/desired，恢复先 observe，执行后再次证明 desired；命令 stdout
+  仅作诊断。运行 CLI/runtime 聚焦测试完成红→绿→重构。
+
+## 阶段 6：Dashboard 事务身份曳光弹
+
+> 子阶段边界：完成后建议 `/clear`。
+
+- [ ] 先在 `dashboard.test.ts`、`dashboard-health.test.ts`、`release-coordinator.test.ts`、
+  `packages/server/src/server.test.ts` 与 `preempt.test.ts` 写失败用例：普通同 release 服务在 probe
+  窗口出现时不得 adopt/stop；同事务服务可在 journal 丢失后恢复；其他 transaction id fail closed；
+  健康与 pidfile id 不一致不得收养。
+- [ ] 将 transaction id 作为受管启动参数传入 `dashboard.ts`，经环境注入 `packages/server/src/main.ts`；
+  扩展 health response、pidfile/preemption codec、`ManagedDashboardIdentity`、WAL 与
+  `release-dashboard-coordinator.ts`，让 inspect/adopt/stop 精确匹配该 id。普通 dashboard 保持无 id。
+- [ ] 运行 Server/CLI 聚焦测试和真实 18771 候选 smoke，证明事务服务可恢复、普通服务不被误接管、
+  端口/pid/release/stateScope/transaction 五元身份一致。
+
+## 阶段 7：持续授权契约与全链路收敛
+
+> 子阶段边界：完成后建议 `/clear`。
+
+- [ ] 对照 `normal-chat-routing` delta 回读共享 prompt classifier、session activation、
+  review acknowledge 与生成式 Skill 交互块；补齐拒绝/修改优先、Change 隔离、撤销、exact event
+  delegated receipt 的定向测试，禁止新增第二套解析器。
+- [ ] 运行 `openspec validate fix-tenon-entry-skill-contract --strict`，在隔离副本演练
+  archive/apply，证明新增 `plugin-runtime` delta 可应用且真实主规格 digest 不变。
+
+## 阶段 8：Build→Verify 全量收敛契约
+
+> 子阶段边界：完成后建议 `/clear`。
+
+- [ ] 先在 `packages/kernel/src/flow/default-event-policy.test.ts`、`flow.test.ts`、
+  `guard.test.ts` 和 CLI transition/integration 测试写红测：Build 的
+  `pre_verify_review_result` 非 pass 时拒绝 `build-complete`；`spec-complete`、
+  `requirements-changed`、`verify-fail` 均重置为 pending；pass 时才冻结。
+- [ ] 在 `packages/kernel/src/types.ts` 末尾追加 `pre_verify_review_result`，为上一版本
+  canonical revision 增加只接受精确尾字段缺失的兼容读取；同步 state init、field enum、
+  default event policy、legacy guard、默认 workflow 模板/生成物和 Dashboard readiness 投影。
+- [ ] 更新 `skills/tenon-build/SKILL.md`、`skills/tenon-verify/SKILL.md` 与
+  `agents/tenon-reviewer.md`：Build 冻结前必须完整 diff/契约/发行门禁收敛；Verify Reviewer
+  禁止窄 repair brief，所有并行轨完成后一次性聚合 findings；重试同时做旧 finding 回归和全 diff。
+- [ ] 运行 canonical state 旧/新 fixture、default workflow freshness、guard/transition、
+  Dashboard readiness 与 Skill/bundle 测试，证明新字段不会放宽损坏状态或跳过独立 Verify。
+
+## 阶段 9：真实安装与交付
 
 > 子阶段边界：完成后建议 `/clear`。
 
@@ -72,6 +132,8 @@ locale: zh-CN
 - `npm run generate:identity && npm run check:identity`
 - `node --test tools/product-identity.node-test.mjs tools/check-repository-hygiene.node-test.mjs`
 - `npx vitest run packages/cli/src/commands/doctor.test.ts`
+- `npx vitest run packages/kernel/src/flow/default-event-policy.test.ts packages/kernel/src/flow/flow.test.ts packages/kernel/src/flow/guard.test.ts packages/kernel/src/state/store.test.ts packages/cli/src/commands/transition.test.ts`
+- `npx vitest run packages/cli/src/commands/release-coordinator.test.ts packages/cli/src/commands/dashboard.test.ts packages/cli/src/commands/dashboard-health.test.ts packages/cli/src/runtime/managed-release-journal.test.ts packages/server/src/server.test.ts packages/server/src/preempt.test.ts`
 - `npx vitest run packages/dashboard-app/src/shell/dashboardLocation.test.tsx packages/dashboard-app/src/App.test.tsx`
 - `bash tools/test-adapters.sh && bash tools/verify-skills.sh && bash tools/test-hooks.sh`
 - `npm run build && npm test && npm run test:web && npm run oracle`
@@ -82,6 +144,13 @@ locale: zh-CN
 
 - 代码提交可用普通 Git revert 回退；不改写历史，不删除用户文件。
 - managed runtime 使用已验证的 `tenon runtime rollback` 回到 previous release。
+- pending host step 不做盲目自动回滚；before/desired 无法证明时保留 WAL 并返回 indeterminate，
+  由诊断确认宿主 inventory 后再恢复。
+- ADR 只通过修复后的 Spec living-document contract 重登记，不手改 `.pipeline-documents.json`；
+  若新 policy 回滚，保留旧 ADR 并让 stale guard 失败关闭。
 - 宿主插件登记只通过 Codex/Claude 官方插件管理器恢复；Tenon 不直接恢复或覆盖宿主 cache。
 - Dashboard 提交失败时沿用现有原子补偿，恢复 selection、launcher 与上一健康进程。
+- Dashboard 补偿只停止 transaction id 精确匹配的进程；普通或其他事务服务始终保留。
 - Dashboard 项目上下文变更可用普通 Git revert 回退；不得通过恢复首项目 fallback 作为运行时兜底。
+- 回滚 `pre_verify_review_result` 时必须同时回滚 FIELD_ORDER、旧 revision 精确兼容、默认 workflow
+  guard/action 与 Skill/Reviewer brief；不得只删 guard 而留下被误读的 canonical 字段。

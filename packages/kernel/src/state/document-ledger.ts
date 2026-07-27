@@ -27,6 +27,11 @@ import {
   resolveDocument,
 } from './document-path.js'
 import { HISTORY_FILE } from './history.js'
+import {
+  currentSpecVisitEnteredViaRequirementsChanged,
+  skillsEquivalent,
+  requiresRequirementsChangedForSpecAdr,
+} from './document-record-policy.js'
 import { readCurrentRunRevision } from './run-revision-store.js'
 
 export { DocumentLedgerError } from './document-path.js'
@@ -202,21 +207,6 @@ async function writeDocumentLedger(changeDir: string, ledger: DocumentLedger): P
   await atomicReplaceFile(join(changeDir, DOCUMENT_LEDGER_FILE), content)
 }
 
-function skillsEquivalent(left: string, right: string): boolean {
-  const aliases = (id: string): readonly string[] => {
-    const values = new Set<string>([id])
-    if (id.startsWith('tenon:')) values.add(id.slice('tenon:'.length))
-    if (id.startsWith('superpowers:')) values.add(id.slice('superpowers:'.length))
-    if (id === 'opsx:propose') values.add('openspec-propose')
-    if (id === 'openspec-propose') values.add('opsx:propose')
-    if (id === 'opsx:apply') values.add('openspec-apply-change')
-    if (id === 'openspec-apply-change') values.add('opsx:apply')
-    return [...values]
-  }
-  const leftAliases = new Set(aliases(left))
-  return aliases(right).some((candidate) => leftAliases.has(candidate))
-}
-
 async function hasSkillEvidence(
   changeDir: string,
   producer: string,
@@ -339,6 +329,12 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
       )
     }
   } else {
+    if (requiresRequirementsChangedForSpecAdr(input)
+      && !await currentSpecVisitEnteredViaRequirementsChanged(input.changeDir)) {
+      throw new DocumentLedgerError(
+        "ADR living-document 兼容面只允许当前 requirements-changed 回到 spec 的 visit",
+      )
+    }
     const recordAllowed = input.policy
       ? isDocumentRecordAllowedInPolicyStep(input.policy, input.kind, input.phase)
       : isDocumentContractPhase(input.phase) && isDocumentRecordAllowedInPhase(input.kind, input.phase)

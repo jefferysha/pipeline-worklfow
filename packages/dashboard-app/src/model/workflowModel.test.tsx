@@ -76,7 +76,7 @@ describe('rulesFromDef —— WorkflowDef → WorkflowRules 映射', () => {
     expect(rules.gateByStep['ship']).toBe('confirm')
   })
 
-  it('T7 产出扩展面：outputs/guards → outputsByStep/nonemptyOutputByStep 随 rules 自然携带（兑现 T6 契约）', () => {
+  it('产出扩展面只携带不可变 outputs；按 Track 求值结果不混入 plan 规则', () => {
     const def = relDef()
     def.steps[1] = {
       ...def.steps[1]!,
@@ -85,24 +85,22 @@ describe('rulesFromDef —— WorkflowDef → WorkflowRules 映射', () => {
     }
     const rules = rulesFromDef(def)
     expect(rules.outputsByStep).toEqual({ draft: [], review: ['release_notes', 'changelog'], ship: [] })
-    expect(rules.nonemptyOutputByStep).toEqual({ draft: false, review: true, ship: false })
   })
 
-  it('T7 产出扩展面：tasks-at-least guard 不算 nonempty-output（判据只认产出非空守卫）', () => {
+  it('guard 不改变不可变 outputs 投影', () => {
     const def = relDef()
     def.steps[1] = { ...def.steps[1]!, guards: [{ type: 'tasks-at-least', n: 3 }] }
     const rules = rulesFromDef(def)
-    expect(rules.nonemptyOutputByStep?.['review']).toBe(false)
+    expect(rules.outputsByStep?.['review']).toEqual([])
   })
 
-  it('观察项①：labelByStep 携带非空 label；空 label 不落键（消费端安全回退 step id）', () => {
+  it('观察项①：labelByStep 覆盖全部 step；空 label 规范化为 step id', () => {
     const def = relDef()
     def.steps[0] = { ...def.steps[0]!, label: '起草' }
     def.steps[1] = { ...def.steps[1]!, label: '人工复核' }
     // steps[2] 'ship' 的 label 保持 ''（relDef 缺省）→ 该键不落，消费端回退 step id
     const rules = rulesFromDef(def)
-    expect(rules.labelByStep).toEqual({ draft: '起草', review: '人工复核' })
-    expect(rules.labelByStep?.['ship']).toBeUndefined()
+    expect(rules.labelByStep).toEqual({ draft: '起草', review: '人工复核', ship: 'ship' })
   })
 })
 

@@ -1,7 +1,8 @@
 /**
  * IR action handler 注册表（G2 P1）——default 轨（DefaultEventPolicy，G2 P3 起）与 custom 轨共用的
- * 状态副作用实现。语义源 = 老仓 skills/pipeline/scripts/state-transition.sh cmd_transition case 块
- * 的四个事件专属 mutation 体（build-complete / verify-pass / verify-fail / archived）。裁决钉死的
+ * 状态副作用实现。语义源包括老仓 skills/pipeline/scripts/state-transition.sh cmd_transition case 块
+ * 的四个事件专属 mutation 体（build-complete / verify-pass / verify-fail / archived），以及
+ * Tenon 全局 pre-Verify 收敛状态的显式 reset。裁决钉死的
  * 形状差：老仓就地改 state.fields，本层回 patch（不原地 mutate），落盘合并由调用方做。
  * 单测 action-handlers.test.ts 逐分支手写期望值（对齐老仓 case 块，不 import 任何旧函数当 oracle）。
  *
@@ -46,6 +47,12 @@ export const ACTION_HANDLERS: ActionHandlerRegistry = Object.freeze({
     if (sha !== '') return { patch: { build_sha: sha }, signals: [] }
     return { patch: {}, signals: [{ kind: 'build-sha-missing' }] }
   },
+
+  /** 进入任一新的实现 visit 时，旧候选的 Build 收敛审查不得继承。 */
+  'reset-pre-verify-review': () => ({
+    patch: { pre_verify_review_result: 'pending' },
+    signals: [],
+  }),
 
   /** 老仓 state-transition.sh verify-pass 事件体：verify_result=pass + verified_at=clock()。 */
   'mark-verification-passed': (_config, input) => ({

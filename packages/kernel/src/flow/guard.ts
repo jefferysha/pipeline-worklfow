@@ -89,6 +89,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'nonempty', field: 'build_mode' },
     { kind: 'nonempty', field: 'isolation' },
     { kind: 'full-direct-override' },
+    { kind: 'eq', field: 'pre_verify_review_result', value: 'pass' },
     { kind: 'depends-archived' },
   ],
   // verify 出口（manifest.yaml:239-247；verify_result 仅 pm——fe/be 由 verify-pass 事件体落值）

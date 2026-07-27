@@ -3,6 +3,26 @@ name: tenon-verify
 description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha 基线。"
 ---
 
+<!-- TENON:INTERACTION-MODE:START -->
+## 交互模式契约（生成区，优先于本 Skill 的普通模式措辞）
+
+进入本 Skill 时，先从 `<tenon-dispatch>.continuous_execution`、当前 Change 的
+`pipeline-interaction-authority-v2`（Change 与 host session 均精确匹配）注入上下文和
+`tenon session activate --continuous --host-session <id>` 的成功结果
+判定模式；不得仅凭对话记忆猜测。若三者均无有效证据，则使用普通交互模式。
+
+- 普通交互模式：执行本 Skill 下文声明的提问、方案选择和 review 确认。
+- 持续自主模式：不得为 preset、调研维度、低风险实现细节、build mode、原型数量/推荐方向、
+  verify-fail 的“修复或接受偏差”、归档沉淀等具有安全默认值的例行选择暂停或强制用户输入。
+  应选择最保守、可逆、可审计的推荐值并写入 Assumptions / Decision Log；verify-fail 一律默认修复，
+  不得默认接受偏差；没有高质量可复用内容时默认跳过用户级沉淀。
+- 下文出现的“必须询问 / 暂停 / 等用户 / HARD GATE”默认描述普通交互模式；持续自主模式按上一条
+  执行。只有会实质改变范围、安全、费用、生产/外部状态，或不存在安全可逆默认值时才暂停。
+- 持续自主模式不跳过 Skill、OpenSpec 文档、ADR、验证、guard 或读取收据。review 产物和精确
+  `review request --event` 完成后，使用 `review acknowledge --delegated` 留下 Change-bound 回执。
+  发布、推送、部署等外部动作仍要求本次任务已有明确授权；持续模式本身不扩大授权。
+<!-- TENON:INTERACTION-MODE:END -->
+
 # /tenon-verify — Phase 5: Verify
 
 > **语言：** verification report 沿用 Change 固定 locale（默认中文，显式 `en` 时使用英文）；验证范围、结果、失败和剩余
@@ -47,6 +67,21 @@ tenon handoff "$TENON_CHANGE_NAME" --bundle --target verify --json
 > **review 门提示**：verify 是 review 相位，但进入时不会落 marker；三轨验证、报告生成和文档读取必须
 > 先完整执行。`tenon check` 是 `verify-pass` 的成功出口校验，放在 Step 4 跑；回退则走独立的
 > `tenon review request --event verify-fail` 证据校验，不能拿通过路径的 guard 卡死失败决策。
+
+> **全量聚合规则（HARD）**：所有适用轨必须读取同一冻结基线。Reviewer 必须审完整冻结 diff、
+> 全部 changed/untracked 交付文件与所有受影响 capability，调用方给出的“重点关注”只能增加专项，
+> 不能缩小范围。任一轨先发现 CRITICAL/HIGH 时，其余已适用轨仍要完成；主线等待全部轨返回后，
+> 去重并一次性聚合全部 findings 再作 pass/fail。verify-fail 后的下一轮既回归已知 finding，也重新
+> 全量审冻结 diff，禁止只复查上轮问题。
+
+> **repo-zero-output barrier（HARD）**：`in-place` 从读取 `build_sha` 到全部轨聚合完成期间，
+> 真实工作区必须保持零实现/配置/生成物写入，且 dispatch 前必须确认没有仍在运行的 writer。
+> build、bundle、codegen、release asset 生成、会重写 tracked snapshot 的测试等命令必须在 Build
+> 冻结前完成；Verify 如需重跑，只能在保留权限和 symlink 的隔离副本执行。截图、Playwright
+> snapshot、trace、coverage、各轨原始审查产物与日志必须显式写到仓库外的临时目录。全部轨结束并
+> 一次性聚合后，workflow 声明的 canonical `verification_report` 是唯一允许写入仓库并登记的
+> 治理产物；不得由某一轨边跑边写。每轨前后都重算 fingerprint；
+> 任一瞬时不一致即该轨无效并走 `verify-fail`，不得通过删除/还原产物来“恢复”冻结结论。
 
 ### Step 1: Track 分支调用
 
@@ -126,17 +161,24 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 **含 UI 改动时强制（视觉轨；下面三轨全是代码/行为验证、不覆盖视觉）**：
 
 5. **含 UI 改动时禁止跳过**：把视觉审作为**第四并行轨**——与上面三轨**同消息** dispatch 一个 **`tenon-design-reviewer` agent**（本仓 agents/tenon-design-reviewer.md，隔离上下文，读冻结的 `build_sha` 固定靶），让它加载 `web-design-guidelines` + `design-taste-frontend`，对**跑起来的 app**做视觉审查（截图关键屏 + 主要状态、查交互态/材质/反模板红线/无 emoji）。
-   - 它回传 REVIEW.md 路径 + 「已无 high/critical」结论；主线把视觉结论并入 verification_report，有 high/critical 则 verify-fail 回 build。主线**不内联**跑视觉审。
+   - Verify 视觉轨严格只读，不写仓库内 REVIEW.md、不修页面；截图/trace 只能写仓库外临时目录。
+     它回传 severity findings + 「已无 critical/high/medium」结论；主线把视觉结论并入
+     verification_report，有 critical/high/medium 或证据不完整则 verify-fail 回 build。主线
+     **不内联**跑视觉审。
 
 **可选 Skill**：
 - 使用 Skill 工具加载 `run` — 启动 dev server
 - 使用 Skill 工具加载 `security-review`（builtin）
 
 **【轨道 1】Reviewer Agent（并行）**：
-- Agent 工具调用 `tenon-reviewer`（本仓 agents/tenon-reviewer.md）— 读冻结构建基线；Git 基线审提交区间 diff，in-place 审当前未漂移工作区，按改动语言套评审视角（TS/JS 专项 + 通用），回传 severity 发现 + PASS/FAIL。固定靶 brief 已收进 agent，无需在此重述。
+- Agent 工具调用 `tenon-reviewer`（本仓 agents/tenon-reviewer.md）— 读冻结构建基线；Git 基线审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，按改动语言套评审视角（TS/JS 专项 + 通用），回传 coverage、全部 severity 发现 + PASS/FAIL。固定靶全量 brief 已收进 agent，无需在此重述。
 
 **【轨道 2】E2E（并行）**：
-- dispatch 一个通用子 agent（Agent 工具），brief：Git 基线时 checkout/read 冻结 `BUILD_SHA`；in-place 时读取当前未漂移工作区，加载 `e2e-testing` skill 跑 Playwright E2E、回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，若本机装有可直接用。）
+- dispatch 一个通用子 agent（Agent 工具），brief：Git 基线时 checkout/read 冻结 `BUILD_SHA`；
+  in-place 时读取当前未漂移工作区，加载 `e2e-testing` skill 跑 repo-zero-output E2E；所有截图、
+  snapshot、trace、coverage 与日志写仓库外临时目录，会写 tracked 产物的命令改在隔离副本运行；
+  前后 fingerprint 必须精确一致，回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，
+  若本机装有可直接用。）
 
 **【轨道 3】Codex CLI（并行，审冻结 SHA 的提交区间；缺失优雅降级）**：
 
@@ -177,7 +219,7 @@ fi
 - 使用 Skill 工具加载 `python-testing`（若 Python）
 
 **【轨道 1】强制 Reviewer Agent（并行）**：
-- Agent 工具调用 `tenon-reviewer` — 读冻结构建基线；Git 基线审提交区间 diff，in-place 审当前未漂移工作区，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 severity 发现 + PASS/FAIL。多语言路由已收进 agent，**无需逐语言列 reviewer**。
+- Agent 工具调用 `tenon-reviewer` — 读冻结构建基线；Git 基线审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 coverage、全部 severity 发现 + PASS/FAIL。多语言全量 brief 已收进 agent，**无需逐语言列 reviewer**。
 - `database-reviewer`（外部，若装有）— 涉及 DB schema/查询时（专项，tenon-reviewer 不覆盖）
 
 **【轨道 2】E2E（并行）**：
@@ -251,7 +293,8 @@ archive 必须成功且产出的 main spec 通过 strict validate。缺少官方
 
 ### Step 2: 聚合 review 结果
 
-完成后必须显式写入状态（防止下一阶段误判）：
+必须等待全部适用轨完成；合并、去重 findings，并保留每轨覆盖面与未验证项。完成后才可显式写入状态
+（防止下一阶段误判）：
 
 ```bash
 # 若所有 reviewer agent 都 pass
@@ -335,7 +378,9 @@ tenon review request "$TENON_CHANGE_NAME" --event verify-fail
 
 该 request 只校验失败决策可审计所需的报告与文档证据；用户确认回退决定后，hook 写入同一个
 `verify-fail` receipt，再手动运行 `tenon transition "$TENON_CHANGE_NAME" verify-fail`。CLI 会落
-`verify_result=fail` 并清空 `build_sha`。`verify-fail` receipt 不能用于 `verify-pass`，反之亦然。
+`verify_result=fail`、清空 `build_sha`，并把 `pre_verify_review_result` 重置为 `pending`。
+返工后的下一轮必须同时回归已知 finding 与重新全量审查新冻结 diff。
+`verify-fail` receipt 不能用于 `verify-pass`，反之亦然。
 
 ## 出口
 

@@ -44,7 +44,11 @@ import { checkDefaultEventPreconditions, DEFAULT_EVENT_POLICY } from '../flow/de
 import { applyStepTransition, planStepTransition, resolveStep } from './engine.js'
 import { applyActions } from './action-handlers.js'
 import { evaluateConstraintPolicy, type ConstraintDecision } from '../loops/automation-policy.js'
-import type { ActionConfig, CompiledGuardConfig, WorkflowIR } from './ir.js'
+import type { WorkflowIR } from './ir.js'
+import {
+  governedLifecyclePolicy,
+  mergeLifecycleActions,
+} from './governed-lifecycle-policy.js'
 import {
   isDocumentContractPhase, isDocumentPolicyStep, shouldEnforceDocumentPolicyOnTransition,
 } from './document-contract.js'
@@ -69,32 +73,6 @@ function isRejection(x: PreparedTransition | TransitionRejection): x is Transiti
 
 function fieldStr(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v.join(',') : (v ?? '')
-}
-
-/**
- * A workflow that explicitly adopts the OpenSpec contract also adopts the canonical build/verify
- * lifecycle.  These rules live next to the default policy rather than being copied into each YAML:
- * a missing optional action must not downgrade a governed workflow into a non-verifiable one.
- */
-function governedLifecyclePolicy(
-  governed: boolean,
-  from: string,
-  to: string,
-): { readonly guards: readonly CompiledGuardConfig[]; readonly actions: readonly ActionConfig[] } | undefined {
-  if (!governed) return undefined
-  if (from === 'build' && to === 'verify') return DEFAULT_EVENT_POLICY['build-complete']
-  if (from === 'verify' && to === 'ship') return DEFAULT_EVENT_POLICY['verify-pass']
-  if (from === 'verify' && to === 'build') return DEFAULT_EVENT_POLICY['verify-fail']
-  if (from === 'ship' && to === 'archive') return DEFAULT_EVENT_POLICY['ship-complete']
-  return undefined
-}
-
-function mergeLifecycleActions(
-  declared: readonly ActionConfig[],
-  required: readonly ActionConfig[] | undefined,
-): readonly ActionConfig[] {
-  if (!required || required.length === 0) return declared
-  return [...declared, ...required.filter((candidate) => !declared.some((action) => action.type === candidate.type))]
 }
 
 // planner 只收 flow+clock，不收完整 TransitionApplicationDeps——deps 里有 runRepository 与两个

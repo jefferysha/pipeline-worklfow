@@ -22,7 +22,8 @@ export const TENON_HOSTS = [
 
 export type PipelineHost = (typeof TENON_HOSTS)[number]
 export type NativePipelineHost = Extract<PipelineHost, 'codex' | 'claude'>
-export type HostPluginScope = 'user' | 'project' | 'local'
+export type HostPluginScope = 'user' | 'project' | 'local' | 'managed'
+export type RemovableHostPluginScope = Exclude<HostPluginScope, 'managed'>
 
 /** The release marketplace is the distribution channel for the one packaged plugin. */
 export const TENON_MARKETPLACE_SOURCE = 'jefferysha/tenon'
@@ -92,7 +93,7 @@ export function parseHostPluginInventory(
     const enabled = item.enabled !== false
     const scope = item.scope === undefined
       ? 'user'
-      : item.scope === 'user' || item.scope === 'project' || item.scope === 'local'
+      : item.scope === 'user' || item.scope === 'project' || item.scope === 'local' || item.scope === 'managed'
         ? item.scope
         : null
     if (scope === null) return null
@@ -146,7 +147,7 @@ export function enabledHostPluginIds(
 export function nativePluginRemovalPlan(
   host: NativePipelineHost,
   pluginId: string,
-  scope: HostPluginScope = 'user',
+  scope: RemovableHostPluginScope = 'user',
 ): readonly HostCommandPlanItem[] {
   return host === 'codex'
     ? [{ cmd: 'codex', args: ['plugin', 'remove', pluginId, '--json'] }]

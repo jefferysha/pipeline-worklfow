@@ -78,6 +78,17 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     expect(within(row).getByTestId('project-row-repo-a-stat-running')).toHaveAttribute('data-value', '1')
   })
 
+  it('移动端项目行使用收缩安全的三列网格，摘要换行且桌面恢复单行布局', () => {
+    renderView()
+    const row = screen.getByTestId('project-row-repo-a')
+    const name = within(row).getByTitle('/code/repo-a')
+    const summary = within(row).getByTestId('project-row-repo-a-summary')
+
+    expect(row).toHaveClass('min-w-0', 'grid', 'grid-cols-[auto_minmax(0,1fr)_auto]', 'sm:flex')
+    expect(name).toHaveClass('min-w-0', 'truncate', 'sm:min-w-[190px]')
+    expect(summary).toHaveClass('min-w-0', 'flex-wrap', 'sm:flex-nowrap')
+  })
+
   it('need==0 的行不渲染「动手/运行」摘要项（只留在制）', () => {
     renderView()
     const row = screen.getByTestId('project-row-repo-b')
@@ -202,6 +213,15 @@ describe('ProjectsView 读不到（ok=false）可折叠区', () => {
     expect(screen.getByTestId('section-rest')).toBeInTheDocument()
     // broken 折叠不可见；不在 rest 里
     expect(within(screen.getByTestId('section-rest')).queryByTestId('project-row-broken')).toBeNull()
+  })
+
+  it('不可达项目的超长 basename 在窄屏行内截断，不与状态标签重叠', () => {
+    const basename = 'this-is-a-very-long-unreachable-project-name-that-must-truncate'
+    const root = `/code/${basename}`
+    renderView({ snapshot: makeSnapshot([makeProject(root, [], { ok: false })]) })
+    fireEvent.click(screen.getByTestId('unreachable-toggle'))
+    const label = within(screen.getByTestId(`project-row-${basename}`)).getByTitle(root)
+    expect(label).toHaveClass('truncate')
   })
 })
 

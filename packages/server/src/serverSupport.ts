@@ -49,6 +49,12 @@ export function errMsg(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export function assertDashboardTransactionId(value: string | undefined): void {
+  if (value !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value)) {
+    throw new Error('Dashboard managed transaction identity 格式非法')
+  }
+}
+
 export function shQuote(value: string): string {
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value
   return `'${value.replace(/'/g, `'\\''`)}'`

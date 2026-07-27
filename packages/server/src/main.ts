@@ -33,6 +33,15 @@ function cadencePollInterval(): number {
   return Number.isSafeInteger(raw) && raw >= 100 ? raw : 30_000
 }
 
+function managedTransactionId(): string | undefined {
+  const value = process.env.TENON_MANAGED_TRANSACTION_ID
+  if (value === undefined || value === '') return undefined
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value)) {
+    throw new Error('TENON_MANAGED_TRANSACTION_ID 格式非法')
+  }
+  return value
+}
+
 /** dist/dashboard.mjs → 插件仓根（dist → server → packages → 根）。 */
 function pluginRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -70,6 +79,7 @@ async function main(): Promise<void> {
   const root = pluginRoot()
   const version = resolveReleaseVersion(root)
   const releaseId = resolvePayloadReleaseId(root)
+  const transactionId = managedTransactionId()
   const stateScopeId = machineStateScopeId(paths.stateRoot)
 
   // Product state must exist before token/pid publication. Failure is fatal: a server without
@@ -78,7 +88,7 @@ async function main(): Promise<void> {
 
   // ── B4 版本抢占 ──
   const existing = await probeHealth(port, host, 400)
-  const decision = decidePreemption(existing, version, releaseId, stateScopeId)
+  const decision = decidePreemption(existing, version, releaseId, stateScopeId, transactionId)
   if (decision === 'reuse') {
     process.stdout.write(`[dashboard-server] 复用既有 Global server :${port}（版本 ${existing?.version} ≥ ${version}）\n`)
     return
@@ -91,6 +101,7 @@ async function main(): Promise<void> {
     const freed = await preemptOldServer(paths.pidfilePath, port, host, {
       waitMs: 4000,
       legacyPid: existing?.pid,
+      transactionId,
     })
     if (!freed) {
       process.stderr.write('[dashboard-server] 旧实例未在期限内让出端口，启动失败\n')
@@ -103,6 +114,7 @@ async function main(): Promise<void> {
   const srv = createDashboardServer({
     version,
     releaseId,
+    transactionId,
     paths,
     hostHome: paths.homeDir,
     token,
@@ -133,7 +145,13 @@ async function main(): Promise<void> {
 
   // pidfile（供后来者版本抢占读旧 pid）
   try {
-    writeFileSync(paths.pidfilePath, JSON.stringify({ pid: process.pid, port, version, started: Date.now() }), 'utf8')
+    writeFileSync(paths.pidfilePath, JSON.stringify({
+      pid: process.pid,
+      port,
+      version,
+      started: Date.now(),
+      ...(transactionId === undefined ? {} : { transactionId }),
+    }), 'utf8')
   } catch { /* best-effort */ }
 
   process.stdout.write(

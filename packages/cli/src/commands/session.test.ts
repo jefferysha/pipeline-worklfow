@@ -15,11 +15,11 @@ const MONO: PackageDecl[] = [
 
 function fakeFs(over: Partial<SessionFs> = {}): SessionFs & {
   bind: ReturnType<typeof spy<[string, string], Promise<void>>>
-  grant: ReturnType<typeof spy<[string, string], Promise<void>>>
+  grant: ReturnType<typeof spy<[string, string, string], Promise<void>>>
   bindTerminal: ReturnType<typeof spy<[string, string, string], Promise<void>>>
 } {
   const bind = spy(async (_cwd: string, _name: string): Promise<void> => {})
-  const grant = spy(async (_cwd: string, _name: string): Promise<void> => {})
+  const grant = spy(async (_cwd: string, _name: string, _sessionId: string): Promise<void> => {})
   const bindTerminal = spy(async (_cwd: string, _name: string, _sessionId: string): Promise<void> => {})
   return {
     loadPackages: async () => null,
@@ -81,13 +81,28 @@ describe('activate（老仓 cmd_activate state-session.sh:33-45）', () => {
     expect(deps.errLines.join('\n')).toContain('degraded')
   })
 
-  test('activate --continuous → 只为刚绑定的 Change 写持续交互授权投影', async () => {
+  test('activate --continuous 缺少 host session 时不生成可跨会话复用的授权', async () => {
     const deps = makeDeps({ state: mockState() })
     const fs = fakeFs()
     expect(await cmdSession(deps, 'activate', ['chg', '--continuous'], fs)).toBe(0)
     expect(fs.bind.calls).toEqual([['/repo', 'chg']])
-    expect(fs.grant.calls).toEqual([['/repo', 'chg']])
-    expect(deps.errLines.join('\n')).toContain('持续交互授权')
+    expect(fs.grant.calls).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('缺少 --host-session')
+  })
+
+  test('activate --continuous --host-session → 授权与精确 host session 同时绑定', async () => {
+    const deps = makeDeps({ state: mockState() })
+    const fs = fakeFs()
+    const sessionId = '019f92c7-6e66-7290-9352-f9d915266f14'
+    expect(await cmdSession(
+      deps,
+      'activate',
+      ['chg', '--continuous', '--host-session', sessionId],
+      fs,
+    )).toBe(0)
+    expect(fs.bind.calls).toEqual([['/repo', 'chg']])
+    expect(fs.bindTerminal.calls).toEqual([['/repo', 'chg', sessionId]])
+    expect(fs.grant.calls).toEqual([['/repo', 'chg', sessionId]])
   })
 
   test('activate --host-session 仅绑定精确 host session，不改 phase 或复用 repo 级指针推断', async () => {

@@ -41,6 +41,7 @@ function decodeHealthInfo(value: unknown): HealthInfo | null {
   const releaseId = Reflect.get(value, 'releaseId')
   const stateScopeId = Reflect.get(value, 'stateScopeId')
   const pid = Reflect.get(value, 'pid')
+  const transactionId = Reflect.get(value, 'transactionId')
   return {
     ok,
     scope,
@@ -48,6 +49,10 @@ function decodeHealthInfo(value: unknown): HealthInfo | null {
     ...(typeof releaseId === 'string' ? { releaseId } : {}),
     ...(typeof stateScopeId === 'string' ? { stateScopeId } : {}),
     ...(typeof pid === 'number' ? { pid } : {}),
+    ...(typeof transactionId === 'string'
+      && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(transactionId)
+      ? { transactionId }
+      : {}),
   }
 }
 
@@ -57,7 +62,13 @@ export function readPidfile(pidfilePath: string): Pidfile | null {
     if (raw && typeof raw === 'object') {
       const o = raw as Record<string, unknown>
       if (typeof o.pid === 'number' && typeof o.port === 'number' && typeof o.version === 'string') {
-        return { pid: o.pid, port: o.port, version: o.version, started: typeof o.started === 'number' ? o.started : undefined }
+        return {
+          pid: o.pid,
+          port: o.port,
+          version: o.version,
+          started: typeof o.started === 'number' ? o.started : undefined,
+          ...(typeof o.transactionId === 'string' ? { transactionId: o.transactionId } : {}),
+        }
       }
     }
     return null
@@ -121,8 +132,13 @@ export function decidePreemption(
   myVersion: string,
   myReleaseId: string | undefined,
   myStateScopeId: string,
+  myTransactionId?: string,
 ): PreemptDecision {
   if (!existing) return 'bind'
+  // A release transaction may replace only its own exact process. Ordinary dashboards and other
+  // transactions remain untouched; readiness will report the identity mismatch to the coordinator.
+  if (existing.transactionId !== myTransactionId
+    && (existing.transactionId !== undefined || myTransactionId !== undefined)) return 'reuse'
   // Only a content-addressed managed release owns the right to replace a service from another
   // state domain or an already managed release. A direct source/dist invocation has no immutable
   // ownership identity, so it may observe/reuse but must never hijack the production singleton.
@@ -205,13 +221,18 @@ export async function preemptOldServer(
   pidfilePath: string,
   port: number,
   host = '127.0.0.1',
-  opts?: { waitMs?: number; legacyPid?: number },
+  opts?: { waitMs?: number; legacyPid?: number; transactionId?: string },
 ): Promise<boolean> {
   const pf = readPidfile(pidfilePath)
   const expected = new Set<number>()
-  if (pf !== null && pf.port === port) expected.add(pf.pid)
+  if (pf !== null
+    && pf.port === port
+    && pf.transactionId === opts?.transactionId) expected.add(pf.pid)
   const legacyPid = opts?.legacyPid
-  if (typeof legacyPid === 'number' && Number.isSafeInteger(legacyPid) && legacyPid > 0) expected.add(legacyPid)
+  if (opts?.transactionId === undefined
+    && typeof legacyPid === 'number'
+    && Number.isSafeInteger(legacyPid)
+    && legacyPid > 0) expected.add(legacyPid)
 
   const listeners = await listenerPids(port)
   if (listeners === null) return false

@@ -50,7 +50,7 @@ function isLinear(rules: ProgressRules | undefined): boolean {
 
 export function buildCanvasGroups({
   selection,
-  rulesByKey,
+  rulesByKey: _rulesByKey,
   rowsByKey,
   workflowFilter,
   deckTab,
@@ -63,7 +63,7 @@ export function buildCanvasGroups({
   for (const group of selection.groups) {
     if (group.rows.length === 0) continue
     if (workflowFilter !== 'all' && group.workflow !== workflowFilter) continue
-    const rules = rulesByKey.get(group.key) as ProgressRules | undefined
+    const rules = group.rules
     const stepIds = rules ? [...rules.steps] : []
     for (const row of [...group.rows, ...group.archived]) {
       if (!stepIds.includes(row.change.phase)) stepIds.push(row.change.phase)

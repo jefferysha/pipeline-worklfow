@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { withLock } from '@tenon/kernel'
 import {
   captureStableLaunchers,
@@ -12,9 +13,12 @@ import { RuntimeReleaseStore } from './release-store.js'
 import type {
   RuntimeActivation,
   RuntimeInspection,
+  RuntimeLauncherSnapshot,
   RuntimePaths,
   RuntimeReleaseSource,
+  RuntimeSelection,
 } from './types.js'
+import { createManagedReleaseJournal } from './managed-release-journal.js'
 
 /**
  * Boundary between the mutable marketplace checkout and the managed local runtime.
@@ -24,8 +28,88 @@ import type {
  * selection; stable launchers are written only after that publication succeeds.
  */
 export interface ManagedRuntimeTransaction {
+  checkpointActivation(): Promise<RuntimeActivationCheckpoint>
   activate(candidateRoot: string, host: RuntimeReleaseSource['host']): Promise<RuntimeActivation>
+  recoverActivation(
+    checkpoint: RuntimeActivationCheckpoint,
+    host: RuntimeReleaseSource['host'],
+  ): Promise<{ readonly state: 'not-started' } | { readonly state: 'activated'; readonly activation: RuntimeActivation }>
   revertActivation(activation: RuntimeActivation): Promise<void>
+  proveActivation(activation: RuntimeActivation): Promise<boolean>
+  readonly journal: ManagedReleaseJournal
+}
+
+export interface ManagedHostStepJournalRecord {
+  readonly id: string
+  readonly state: 'started' | 'completed'
+  /** Canonical host-owned inventory captured and committed before the mutation. */
+  readonly before?: string
+  /** Canonical postcondition which must be proven from a fresh host observation. */
+  readonly desired?: string
+  readonly replayPolicy?: 'observe-before-replay-v1'
+  /** Fresh canonical observation which proved the completed checkpoint. */
+  readonly observedAfter?: string
+  /** Bounded diagnostic output only; never treated as proof that the mutation committed. */
+  readonly result?: string
+}
+
+export interface ManagedDashboardIdentity {
+  readonly version: 1
+  readonly port: number
+  readonly pid: number
+  readonly releaseId: string
+  readonly stateScopeId: string
+  /** Absent only for an ordinary `tenon dashboard` process. */
+  readonly transactionId?: string
+}
+
+export interface ManagedDashboardJournalRecord extends ManagedDashboardIdentity {
+  readonly owner: 'transaction' | 'preexisting'
+}
+
+export type ManagedReleaseOperation = 'setup' | 'update' | 'adapter'
+export type ManagedReleaseJournalPhase =
+  | 'preparing-host'
+  | 'candidate-resolved'
+  | 'activating-runtime'
+  | 'runtime-activated'
+  | 'starting-dashboard'
+  | 'dashboard-ready'
+  | 'evidence-committed'
+
+export interface ManagedReleaseJournalRecord {
+  readonly version: 1
+  readonly transactionId: string
+  readonly operation: ManagedReleaseOperation
+  readonly source: RuntimeReleaseSource['host']
+  readonly phase: ManagedReleaseJournalPhase
+  readonly startedAt: string
+  readonly updatedAt: string
+  readonly candidateRoot?: string
+  /** Host inventory snapshot or another small serializable input for the final receipt. */
+  readonly evidence?: string
+  readonly hostSteps?: readonly ManagedHostStepJournalRecord[]
+  readonly activationCheckpoint?: RuntimeActivationCheckpoint
+  readonly activation?: RuntimeActivation
+  /** Exact service observed before launch; absent in starting-dashboard means the port was empty. */
+  readonly dashboardBefore?: ManagedDashboardIdentity
+  readonly dashboard?: ManagedDashboardJournalRecord
+}
+
+export interface RuntimeActivationCheckpoint {
+  readonly selection: RuntimeSelection
+  readonly launchers: RuntimeLauncherSnapshot
+}
+
+export interface ManagedReleaseJournal {
+  create(
+    operation: ManagedReleaseOperation,
+    source: RuntimeReleaseSource['host'],
+    now: string,
+  ): ManagedReleaseJournalRecord
+  read(): Promise<ManagedReleaseJournalRecord | null>
+  write(record: ManagedReleaseJournalRecord): Promise<void>
+  clear(expectedTransactionId: string): Promise<void>
 }
 
 export interface RuntimeInstallerScope {
@@ -117,6 +201,80 @@ async function revertWithinTransaction(
   }
 }
 
+async function proveActivationWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+  activation: RuntimeActivation,
+): Promise<boolean> {
+  const inspection = await new RuntimeReleaseStore({ paths }).inspect()
+  if (
+    !inspection.activeValid
+    || inspection.selection.revision !== activation.selection.revision
+    || inspection.selection.activeRelease !== activation.release.releaseId
+    || inspection.active?.releaseId !== activation.release.releaseId
+    || inspection.active.payloadDigest !== activation.release.payloadDigest
+  ) return false
+  if (activation.launcherCommitted === undefined) return true
+  const currentLaunchers = await captureStableLaunchers(paths, homeDir)
+  return JSON.stringify(currentLaunchers) === JSON.stringify(activation.launcherCommitted)
+}
+
+async function checkpointActivationWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+): Promise<RuntimeActivationCheckpoint> {
+  const selection = (await new RuntimeReleaseStore({ paths }).inspect()).selection
+  return {
+    selection,
+    launchers: await captureStableLaunchers(paths, homeDir),
+  }
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+async function recoverActivationWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+  checkpoint: RuntimeActivationCheckpoint,
+  host: RuntimeReleaseSource['host'],
+): Promise<{ readonly state: 'not-started' } | { readonly state: 'activated'; readonly activation: RuntimeActivation }> {
+  const store = new RuntimeReleaseStore({ paths })
+  const inspection = await store.inspect()
+  const launchers = await captureStableLaunchers(paths, homeDir)
+  if (sameJson(inspection.selection, checkpoint.selection) && sameJson(launchers, checkpoint.launchers)) {
+    return { state: 'not-started' }
+  }
+  const active = inspection.active
+  const expectedPrevious = checkpoint.selection.activeRelease === active?.releaseId
+    ? checkpoint.selection.previousRelease
+    : checkpoint.selection.activeRelease
+  if (
+    active !== null
+    && inspection.activeValid
+    && active.source.host === host
+    && inspection.selection.revision === checkpoint.selection.revision + 1
+    && inspection.selection.activeRelease === active.releaseId
+    && inspection.selection.previousRelease === expectedPrevious
+    && sameJson(launchers, expectedStableLaunchers(paths, homeDir))
+  ) {
+    return {
+      state: 'activated',
+      activation: {
+        selection: inspection.selection,
+        release: active,
+        releaseRoot: join(paths.releasesRoot, active.releaseId),
+        launcherSnapshot: checkpoint.launchers,
+        launcherCommitted: launchers,
+      },
+    }
+  }
+  throw new ManagedRuntimeIndeterminateError(
+    'activation checkpoint 与当前 selection/launcher 不一致，无法证明激活未开始或已完整提交',
+  )
+}
+
 async function rollbackWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
@@ -156,10 +314,17 @@ async function withExclusiveRuntimeTransaction<T>(
   const paths = pathsFor(scope)
   await mkdir(paths.managedTransactionRoot, { recursive: true })
   return withLock(paths.managedTransactionRoot, () => operation({
+    checkpointActivation: () =>
+      checkpointActivationWithinTransaction(paths, scope.homeDir),
     activate: (candidateRoot, host) =>
       activateWithinTransaction(paths, scope.homeDir, candidateRoot, host),
+    recoverActivation: (checkpoint, host) =>
+      recoverActivationWithinTransaction(paths, scope.homeDir, checkpoint, host),
     revertActivation: (activation) =>
       revertWithinTransaction(paths, scope.homeDir, activation),
+    proveActivation: (activation) =>
+      proveActivationWithinTransaction(paths, scope.homeDir, activation),
+    journal: createManagedReleaseJournal(paths),
   }))
 }
 

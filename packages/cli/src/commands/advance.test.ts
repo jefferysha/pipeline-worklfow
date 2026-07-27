@@ -31,6 +31,7 @@ const READY: Partial<Record<FieldName, string | string[]>> = {
   plan: 'openspec/changes/demo/plan.md',
   build_mode: 'direct',
   isolation: 'worktree',
+  pre_verify_review_result: 'pass',
   verification_report: 'openspec/changes/demo/verify.md',
   branch_status: 'handled',
   agent_review_result: 'pass',

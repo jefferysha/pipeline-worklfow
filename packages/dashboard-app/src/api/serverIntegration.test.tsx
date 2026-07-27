@@ -165,6 +165,11 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     expect(selectInbox(snap, started.root, RULES).map((i) => i.change.name)).not.toContain('demo')
 
     // agent 真落产出字段（走真 store 改真盘，snapshot 的 path 就是 changeDir）→ 人现在能拍板 → 进收件箱。
+    await mkdir(join(started.root, 'docs'), { recursive: true })
+    await Promise.all([
+      writeFile(join(started.root, 'docs', 'design.md'), '# design\n', 'utf8'),
+      writeFile(join(started.root, 'docs', 'plan.md'), '# plan\n', 'utf8'),
+    ])
     await started.store.setMany(demo!.path, { design_doc: 'docs/design.md', plan: 'docs/plan.md' })
     const snap2 = (await (await fetch(url('/api/snapshot'))).json()) as Snapshot
     const inbox = selectInbox(snap2, started.root, RULES)

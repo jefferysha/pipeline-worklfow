@@ -12,9 +12,7 @@ const REL_RULES = rulesFromDef({
   ],
 })
 
-/** review 步挂 nonempty-output guard 的同名 workflow——T7 起 rulesFromDef 自然携带产出表，
- *  不再需要测试侧手工拼 outputsByStep/nonemptyOutputByStep（progressModel.test 的 REL_RULES_GUARDED
- *  是 T6 时代的手工扩展写法，这里走正门钉 rulesFromDef → 准入的端到端链路）。 */
+/** review 步声明 release_notes；按 Track 求值后的必需输出由 Change.execution 单独承载。 */
 const REL_RULES_GUARDED = rulesFromDef({
   name: 'release-train',
   steps: [
@@ -32,6 +30,30 @@ const REL_RULES_GUARDED = rulesFromDef({
     { id: 'ship', label: '', gate: 'confirm', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
   ],
 })
+const REL_EXECUTION_REQUIRED = {
+  readinessByTransition: {
+    draft: { approved: { ready: true, blockers: [] } },
+    review: {
+      shipped: {
+        ready: false,
+        blockers: [{
+          kind: 'guard-failed' as const,
+          guardType: 'field-nonempty',
+          field: 'release_notes',
+          actual: '',
+        }],
+      },
+    },
+    ship: {},
+  },
+}
+const REL_EXECUTION_READY = {
+  readinessByTransition: {
+    draft: { approved: { ready: true, blockers: [] } },
+    review: { shipped: { ready: true, blockers: [] } },
+    ship: {},
+  },
+}
 
 /** verify 门三轨证据齐（可拍板）的 fields（同 progressModel.test 的 VERIFY_OK 口径）。 */
 const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
@@ -59,10 +81,10 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
     expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
-  it('default：门阶段但缺产出/证据 → 不在等（判给进度「等 agent 补产出」）', () => {
+  it('default：单出口门缺字段时不在等；verify 的无前置 fail 出口仍可交给人决策', () => {
     expect(isAwaitingDecision(makeChange('c', 'explore'), DEFAULT_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } }), DEFAULT_RULES)).toBe(false)
-    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(true)
   })
 
   it('default：verify 三轨齐但 verification_report/build_sha 未设仍在等（产物没产出不等于验证没过）', () => {
@@ -81,14 +103,21 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
   })
 
   it('自定义 workflow：review 门无产出声明（无自动证据）→ 在等；gate=confirm/null 不在等', () => {
-    expect(isAwaitingDecision(makeChange('c', 'review'), REL_RULES)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_READY,
+    }), REL_RULES)).toBe(true)
     expect(isAwaitingDecision(makeChange('c', 'ship'), REL_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'draft'), REL_RULES)).toBe(false)
   })
 
-  it('自定义 workflow：nonempty-output guard 缺产出不进，产出齐才进（rulesFromDef 自然携带产出表）', () => {
-    expect(isAwaitingDecision(makeChange('c', 'review'), REL_RULES_GUARDED)).toBe(false)
-    expect(isAwaitingDecision(makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), REL_RULES_GUARDED)).toBe(true)
+  it('自定义 workflow：逐 Change 有效输出缺失不进，产出齐才进', () => {
+    expect(isAwaitingDecision(makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_REQUIRED,
+    }), REL_RULES_GUARDED)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'review', {
+      fields: { release_notes: 'notes.md' },
+      workflowExecution: REL_EXECUTION_READY,
+    }), REL_RULES_GUARDED)).toBe(true)
   })
 
   it('automation ∈ {paused, failed, conflict} → 在等（不论阶段，人要拍板放行/重试/放弃）', () => {
@@ -139,7 +168,7 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
     expect(items.map((i) => i.change.name)).toEqual(['a-verify'])
   })
 
-  it('缺产出的 gate 卡不进收件箱（T7 决策 B：判给进度「等 agent」）', () => {
+  it('单出口缺字段不进收件箱；多出口只要无前置的 fail 出口可走就进入', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
         makeChange('evidence-ok', 'verify', { fields: { ...VERIFY_OK } }),
@@ -147,7 +176,10 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
         makeChange('plan-missing', 'spec', { fields: { design_doc: 'docs/d.md' } }),
       ]),
     ])
-    expect(selectInbox(snap, '/a', RULES).map((i) => i.change.name)).toEqual(['evidence-ok'])
+    expect(selectInbox(snap, '/a', RULES).map((i) => i.change.name)).toEqual([
+      'evidence-missing',
+      'evidence-ok',
+    ])
   })
 
   it('automation failed/paused 卡进收件箱，running/queued 不进', () => {
@@ -165,7 +197,10 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
   it('自定义 workflow 的 gate 卡也进收件箱（G17 修复证据；无产出声明 = 无自动证据可直接拍板）', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('rel-x', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('rel-x', 'review', {
+          fields: { workflow: 'release-train' },
+          workflowExecution: REL_EXECUTION_READY,
+        }),
         makeChange('rel-y', 'draft', { fields: { workflow: 'release-train' } }),
       ]),
     ])

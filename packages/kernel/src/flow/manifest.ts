@@ -16,7 +16,7 @@
  *         hooks/router.sh:202-203 source 后每轮注入提示；② dashboard 配置面——
  *         packages/server/src/config.ts:60 flattenMandatorySkills → server.ts:512 GET /api/config。
  *       两表在 router 注入面的差别**只是文案分级**（router.sh:215-216「推荐 skill」/「本相位强制 skill」）：
- *       老仓 evidence 的「强制缺失 = [HARD] 阻断」判定未移植（GUARD-RULES.md:119，O6/E4/S6/B7/V8/V9/P5
+ *       老仓 evidence 的「强制缺失 = [HARD] 阻断」判定未移植（GUARD-RULES.md:119，O6/E4/S6/B8/V8/V9/P5
  *       全 ❌），故 mandatory 缺失**不阻断 phase transition，也不影响 AFK scheduler**。
  *       但它并非全无后果：`tenon doctor` 对两表分级处置（doctor.ts:236 起——mandatory 缺失报
  *       **red 且返回非零**，recommended 缺失只报 yellow），即它会让 doctor 的就绪检查失败。

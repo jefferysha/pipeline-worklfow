@@ -680,9 +680,61 @@ if command -v node >/dev/null 2>&1; then
   assert_exit "router: FE prompt → exit 0" 0 "$RRC"
   assert_contains "router: FE 特征 prompt → 选 frontend Track" "$ROUT" "track=frontend"
   run_router "{\"prompt\":\"确认。后续不用问我，自己执行完成；请实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_contains "router: 首轮明确持续授权透传到 pipeline dispatch" "$ROUT" "continuous_execution: true"
+  assert_not_contains "router: 复合请求不得把 authority 子串升级为持续授权" "$ROUT" "continuous_execution: true"
   run_router "{\"prompt\":\"用户已明确授权后续自主执行；请实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_contains "router: 常用措辞后续自主执行同样透传持续授权" "$ROUT" "continuous_execution: true"
+  assert_not_contains "router: 转述 authority 不得升级为持续授权" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"所有操作我都批准，不用问我；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: authority 与任务混写时保守失败关闭" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"全部允许，修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: authority 后有未知词法时不得持续授权" "$ROUT" "continuous_execution: true"
+  AUTHORITY_INTENT="$(bash -c '. "$1"; pipeline_prompt_approval_intent "$2"' _ \
+    "$ROOT/hooks/prompt-intent.sh" "全部允许" 2>/dev/null || true)"
+  [ "$AUTHORITY_INTENT" = authorize ] \
+    && ok "classifier: 封闭肯定句允许显式持续授权" \
+    || bad "classifier: 封闭肯定句允许显式持续授权" "实际 intent=${AUTHORITY_INTENT:-<empty>}"
+  AUTHORITY_INTENT="$(bash -c '. "$1"; pipeline_prompt_approval_intent "$2"' _ \
+    "$ROOT/hooks/prompt-intent.sh" "确认。后续不用问我，自己执行完成" 2>/dev/null || true)"
+  [ "$AUTHORITY_INTENT" = authorize ] \
+    && ok "classifier: 封闭肯定句允许确认前缀与多个授权短语" \
+    || bad "classifier: 封闭肯定句允许确认前缀与多个授权短语" "实际 intent=${AUTHORITY_INTENT:-<empty>}"
+  run_router "{\"prompt\":\"不要继续，即使后续不用问我\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 拒绝优先于授权短语" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我没有说所有操作我都批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 否认曾授权不得命中批准子串" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"不是所有操作我都批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 范围否定优先于批准子串" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我没有说全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 否认全部允许不得命中批准子串" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"不是全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 全部允许的直接否定必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我不认为应该全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 质疑批准语义不得生成持续授权" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我只是引用‘全部批准’这句话；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 引用批准短语不得生成持续授权" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我不想全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 不想授权必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我不能全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 不能授权必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我不会全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 不会授权必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"我从未说全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 从未授权必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"请不要全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 请不要授权必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"不要把全部允许理解成授权；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 否定元语义不得生成授权" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"禁止全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 禁止 authority 必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"拒绝全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 拒绝 authority 必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"取消全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 取消 authority 必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"反对全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 反对 authority 必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"do not 全部允许；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 英文 do not authority 必须 fail closed" "$ROUT" "continuous_execution: true"
+  run_router "{\"prompt\":\"never 全部批准；请修复这个 React 页面\",\"cwd\":\"$rproj\"}"
+  assert_not_contains "router: 英文 never authority 必须 fail closed" "$ROUT" "continuous_execution: true"
   [ -f "$RCACHE" ] && ok "router: 首轮无缓存 → 派生缓存已生成" || bad "router: 首轮无缓存 → 派生缓存已生成" "缓存未生成"
   assert_contains "router: 缓存 schema 为 TENON_ROUTER_V5" "$(cat "$RCACHE" 2>/dev/null)" "TENON_ROUTER_V5"
   assert_not_contains "router: data cache 不含可 source 的 FE_PATTERN 赋值" "$(cat "$RCACHE" 2>/dev/null)" "FE_PATTERN="
@@ -1133,11 +1185,12 @@ done
 # 这覆盖真实 Codex 正常对话的自锁回归：UserPromptSubmit 已清一次 interaction marker，随后读取
 # brainstorming 又由 PostToolUse 重新落 marker，导致用户已说“后续不用问我”仍无法连续执行。
 proj="$TMP/ptu-interaction-authority"; mkdir -p "$proj/openspec/changes/autonomy-live" "$proj/openspec/changes/other-live"
+authority_sid='session-authority-live'
 printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$proj/openspec/changes/autonomy-live/.pipeline.yaml"
 printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$proj/openspec/changes/other-live/.pipeline.yaml"
 printf 'autonomy-live\n' > "$proj/.pipeline-active"
 write_v2_review_marker "$proj" autonomy-live explore
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_TENON_BIN:/usr/bin:/bin" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"$authority_sid\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_TENON_BIN:/usr/bin:/bin" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-interaction-authority" ] \
   && ok "持续自主执行: 明确授权投影绑定当前 Change" \
   || bad "持续自主执行: 明确授权投影绑定当前 Change" "缺少 authority projection"
@@ -1150,15 +1203,24 @@ grep -Fq 'review acknowledge autonomy-live --delegated' "$FAKE_TENON_LOG" 2>/dev
 grep -Fq 'review=delegated' "$proj/.pipeline-interaction-authority" 2>/dev/null \
   && ok "持续自主执行: authority 明确声明 delegated review 语义" \
   || bad "持续自主执行: authority 明确声明 delegated review 语义" "authority 仍是旧语义"
-OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+grep -Fq "host_session=$authority_sid" "$proj/.pipeline-interaction-authority" 2>/dev/null \
+  && ok "持续自主执行: authority 绑定精确 host session" \
+  || bad "持续自主执行: authority 绑定精确 host session" "缺少 host_session"
+OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"$authority_sid\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
 [ ! -f "$proj/.pipeline-pending-interaction" ] \
   && ok "持续自主执行: 同一 Change 读取 brainstorming 不重落 interaction 门" \
   || bad "持续自主执行: 同一 Change 读取 brainstorming 不重落 interaction 门" "interaction marker 被重新写入"
 assert_contains "持续自主执行: 注入可审计的保守默认指引" "$OUT" "自主执行授权"
 assert_not_contains "持续自主执行: 不再要求 AskUserQuestion" "$OUT" "AskUserQuestion"
+# 同一 Change 的另一 host session 不继承授权。
+OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"session-authority-other\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+[ -f "$proj/.pipeline-pending-interaction" ] \
+  && ok "持续自主执行: 不跨 host session，另一会话重新落 interaction 门" \
+  || bad "持续自主执行: 不跨 host session，另一会话应落 interaction 门" "marker 未落"
+rm -f "$proj/.pipeline-pending-interaction"
 # 授权绝不跨 Change：切换 selected Change 后，原 projection 必须 fail-closed 并恢复正常硬门。
 printf 'other-live\n' > "$proj/.pipeline-active"
-OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"$authority_sid\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
 [ -f "$proj/.pipeline-pending-interaction" ] \
   && ok "持续自主执行: 不跨 Change，切换后重新落 interaction 门" \
   || bad "持续自主执行: 不跨 Change，切换后应落 interaction 门" "marker 未落"
@@ -1166,11 +1228,11 @@ assert_contains "持续自主执行: 非授权 Change 仍要求 AskUserQuestion"
 # 用户可显式撤回持续授权；撤回后当前 Change 的互动 skill 回到正常硬门。
 rm -f "$proj/.pipeline-pending-interaction"
 printf 'autonomy-live\n' > "$proj/.pipeline-active"
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"恢复逐步确认\"}" | bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"$authority_sid\",\"prompt\":\"恢复逐步确认\"}" | bash "$CP" >/dev/null 2>&1
 [ ! -f "$proj/.pipeline-interaction-authority" ] \
   && ok "持续自主执行: 显式撤回会删除当前 Change projection" \
   || bad "持续自主执行: 显式撤回会删除当前 Change projection" "authority projection 仍在"
-OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"session_id\":\"$authority_sid\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
 [ -f "$proj/.pipeline-pending-interaction" ] \
   && ok "持续自主执行: 撤回后 interaction 门恢复" \
   || bad "持续自主执行: 撤回后 interaction 门恢复" "marker 未落"

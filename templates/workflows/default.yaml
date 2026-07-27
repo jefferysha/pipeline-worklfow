@@ -48,6 +48,8 @@ steps:
     transitions:
       - event: spec-complete
         to: build
+        actions:
+          - type: reset-pre-verify-review
   - id: build
     label: 实现
     gate: null
@@ -60,12 +62,17 @@ steps:
     outputs:
       - field: build_sha
         type: string
-    guards: []
+    guards:
+      - type: field-equals
+        field: pre_verify_review_result
+        value: pass
     transitions:
       - event: build-complete
         to: verify
       - event: requirements-changed
         to: spec
+        actions:
+          - type: reset-pre-verify-review
   - id: verify
     label: 验证
     gate: review
@@ -86,6 +93,9 @@ steps:
         to: ship
       - event: verify-fail
         to: build
+        actions:
+          - type: mark-verification-failed
+          - type: reset-pre-verify-review
   - id: ship
     label: 交付
     gate: null

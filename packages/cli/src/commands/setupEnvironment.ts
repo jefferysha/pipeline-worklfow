@@ -7,7 +7,10 @@ import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, t
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
-import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
+import {
+  REAL_RELEASED_DASHBOARD_STARTER,
+} from './released-dashboard-starter.js'
+import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,
@@ -65,6 +68,20 @@ export interface SetupEnv {
    * 测试注入 spy（记录调用、伪造成功/失败），不起真装。dry-run 路径**绝不调用**（零执行不变量）。
    */
   runCommand(cmd: string, args: string[]): { code: number; stdout: string; stderr: string }
+  /**
+   * Optional native-host observation adapter. Tests and future hosts can inject the same
+   * desired-state contract without emulating a private CLI schema; production uses the built-in
+   * Codex/Claude inventory adapter when omitted.
+   */
+  managedHostReconciliation?(
+    host: 'codex' | 'claude',
+    stepId: string,
+    command: { readonly cmd: string; readonly args: readonly string[] },
+  ): {
+    readonly desired: string
+    observe(): string
+    isDesired(observation: string): boolean
+  }
   /**
    * 终端 y/N 确认（非 dry-run 且非 --yes 时问一次）——真实现同步读 stdin fd0;
    * 非 TTY / 无输入 → false（fail-closed,不误装;自动化用 --yes 跳过）。测试注入定值。

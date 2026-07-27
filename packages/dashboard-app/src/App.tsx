@@ -91,7 +91,7 @@ function AppShell(): JSX.Element {
     if (flash && flashRef.current) toastIn(flashRef.current)
   }, [flash])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
-  const { currentRoot, setCurrentRoot } = useProjectSelection({
+  const { currentRoot, selectProject } = useProjectSelection({
     snapshot,
     view,
     selectedChange,
@@ -212,7 +212,25 @@ function AppShell(): JSX.Element {
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {view === 'overview' ? (
+        {snapshot === null && !loading && error ? (
+          <section
+            className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d max-[720px]:mt-4 max-[720px]:p-5"
+            role="alert"
+            aria-live="assertive"
+            data-testid="snapshot-error"
+          >
+            <h1 className="text-lg font-bold text-text">{t('common.snapshot_error_title')}</h1>
+            <p className="mt-2 break-words text-[13px] leading-6">{error}</p>
+            <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
+            <button
+              type="button"
+              className="mt-4 cursor-pointer rounded-lg border border-red-b bg-card px-3.5 py-2 text-[13px] font-bold text-red-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+              onClick={refresh}
+            >
+              {t('common.snapshot_retry')}
+            </button>
+          </section>
+        ) : view === 'overview' ? (
           <SolutionView />
         ) : snapshot && snapshot.project_count === 0 && view !== 'machine' ? (
           <Onboarding kind="no-project" />
@@ -231,7 +249,7 @@ function AppShell(): JSX.Element {
             snapshot={snapshot}
             rulesByKey={rulesByKey}
             onOpenProject={(root) => {
-              setCurrentRoot(root)
+              selectProject(root, 'progress')
               setView('progress')
             }}
           />
@@ -293,7 +311,7 @@ function AppShell(): JSX.Element {
             snapshot={snapshot}
             currentRoot={currentRoot}
             onOpenProject={(root) => {
-              setCurrentRoot(root)
+              selectProject(root, 'progress')
               setView('progress')
             }}
           />

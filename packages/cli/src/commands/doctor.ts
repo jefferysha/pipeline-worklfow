@@ -304,10 +304,10 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
   }
 
   try {
-    const inventory = p.nativeHostPluginIds === undefined
+    const inventory = p.hostPluginInventory === undefined
       ? undefined
-      : await p.nativeHostPluginIds()
-    checks.push(checkCodexProjectSkills(p, inventory, await p.nativeRuntimeHost()))
+      : await p.hostPluginInventory()
+    checks.push(await checkCodexProjectSkills(p, inventory))
   } catch (e) {
     checks.push(red(
       'integration:codex-project-skills',

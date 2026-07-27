@@ -1,9 +1,10 @@
 /**
  * G1 canonical WorkflowRun state.
  *
- * `.pipeline-run/current.json` is a self-contained copy of the committed revision. The matching
- * immutable file under `revisions/` must contain identical bytes. A current file that is malformed,
- * fails its digest, or lacks its immutable twin is corruption and never authorizes a YAML fallback.
+ * `.pipeline-run/current.json` is the N-1-compatible committed wire revision. The matching immutable
+ * file under `revisions/` must contain identical bytes; post-v1 logical fields may be restored only
+ * from revision-bound companion records. A current file that is malformed, fails its digest, or
+ * lacks its immutable twin is corruption and never authorizes a YAML fallback.
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { lstatSync, readFileSync } from 'node:fs'
@@ -13,20 +14,27 @@ import {
   type PipelineState,
   type StateProjectionMetadata,
 } from '../types.js'
+import type { TransitionRecord } from '../workflow/run-types.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
-import { diffFieldsToEffects } from './run-metadata.js'
+import { diffWireFieldsToEffects } from './run-metadata.js'
 import {
   RunStateCorruptError,
   createRunRevision,
   parseRunRevision,
+  serializeRunRevision,
   type RunRevision,
   type RunStateMutation,
 } from './run-revision-codec.js'
 import { TRANSITION_RECORDS_DIR } from './transition-record-store.js'
+import {
+  hydratePreVerifyReview,
+  hydratePreVerifyReviewFromSync,
+  publishPreVerifyReviewRecord,
+} from './pre-verify-review-store.js'
+import { assertRunMetadataContinuity } from './run-revision-continuity.js'
 
 export {
   RunStateCorruptError,
-  createRunRevision,
   hookStateFor,
   type RunHookState,
   type RunRevision,
@@ -87,7 +95,12 @@ function revisionFileName(revision: number, revisionId: string): string {
   return `${String(revision).padStart(6, '0')}-${revisionId}.json`
 }
 
-function assertTransitionRevisionLink(current: RunRevision, transition: unknown, raw: string): void {
+function assertTransitionRevisionLink(
+  current: RunRevision,
+  transition: unknown,
+  raw: string,
+  previous?: RunRevision,
+): void {
   const observedDigest = createHash('sha256').update(raw).digest('hex')
   if (observedDigest !== current.mutation.transitionRecordDigest) {
     throw new RunStateCorruptError('TransitionRecord digest 与 canonical revision 审计绑定不一致')
@@ -102,20 +115,27 @@ function assertTransitionRevisionLink(current: RunRevision, transition: unknown,
   if (record.id !== current.mutation.transitionRecordId
     || record.sequence !== metadata.transitionSequence
     || record.runId !== metadata.runId
+    || (previous !== undefined
+      && record.previousRecordId !== previous.state.runMetadata?.transitionHead)
     || JSON.stringify(record.effects) !== JSON.stringify(current.mutation.effects)) {
     throw new RunStateCorruptError('transition revision 与 TransitionRecord 不一致')
   }
 }
 
 function assertMutationEffects(current: RunRevision, previous: RunRevision): void {
-  const expected = diffFieldsToEffects(previous.state.fields, current.state.fields)
+  const expected = diffWireFieldsToEffects(previous.state.fields, current.state.fields)
   if (JSON.stringify(current.mutation.effects) !== JSON.stringify(expected)) {
     throw new RunStateCorruptError('canonical mutation.effects 与 previous→current 真实 diff 不一致')
   }
+  assertRunMetadataContinuity(current, previous)
 }
 
-async function assertTransitionRecordFile(changeDir: string, revision: RunRevision): Promise<void> {
-  if (revision.mutation.kind !== 'transition') return
+async function assertTransitionRecordFile(
+  changeDir: string,
+  revision: RunRevision,
+  previous?: RunRevision,
+): Promise<TransitionRecord | undefined> {
+  if (revision.mutation.kind !== 'transition') return undefined
   const metadata = revision.state.runMetadata
   if (metadata === undefined || metadata.transitionHead === undefined || metadata.transitionSequence < 1) {
     throw new RunStateCorruptError('transition revision 缺 canonical run head/sequence')
@@ -134,7 +154,8 @@ async function assertTransitionRecordFile(changeDir: string, revision: RunRevisi
   } catch (error) {
     throw new RunStateCorruptError(`TransitionRecord 损坏: ${String(error)}`)
   }
-  assertTransitionRevisionLink(revision, transition, transitionRaw)
+  assertTransitionRevisionLink(revision, transition, transitionRaw, previous)
+  return transition as TransitionRecord
 }
 
 export function projectionMetadataFor(revision: RunRevision): StateProjectionMetadata {
@@ -159,7 +180,8 @@ export async function publishInitialRunRevision(
     revision: 0,
     mutation: { kind, observedAt, effects: [] },
   })
-  const raw = JSON.stringify(revision)
+  await publishPreVerifyReviewRecord(changeDir, revision, state)
+  const raw = serializeRunRevision(revision)
   await atomicLinkPublish(
     revisionsDir,
     '.tmp',
@@ -212,11 +234,17 @@ export async function publishRunRevision(
     previousRevisionId: current.revisionId,
     mutation: {
       ...mutationWithDigest,
-      effects: diffFieldsToEffects(current.state.fields, state.fields),
+      effects: diffWireFieldsToEffects(current.state.fields, state.fields),
     },
   })
-  if (transitionRaw !== undefined) assertTransitionRevisionLink(revision, transition, transitionRaw)
-  const raw = JSON.stringify(revision)
+  // Reject an invalid metadata/effects chain before publishing the companion or immutable bytes;
+  // every successful publish must be readable by the same validator immediately.
+  assertMutationEffects(revision, current)
+  if (transitionRaw !== undefined) {
+    assertTransitionRevisionLink(revision, transition, transitionRaw, current)
+  }
+  await publishPreVerifyReviewRecord(changeDir, revision, state)
+  const raw = serializeRunRevision(revision)
   await atomicLinkPublish(
     revisionsDir,
     '.tmp',
@@ -231,7 +259,7 @@ export async function readCurrentRunRevision(changeDir: string): Promise<RunRevi
   const currentPath = join(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE)
   const raw = await readRegularTextIfExists(currentPath)
   if (raw === undefined) return undefined
-  const current = parseRunRevision(raw, currentPath)
+  const current = await hydratePreVerifyReview(changeDir, parseRunRevision(raw, currentPath))
   const immutablePath = join(
     changeDir,
     RUN_STATE_DIR,
@@ -242,11 +270,12 @@ export async function readCurrentRunRevision(changeDir: string): Promise<RunRevi
   if (immutableRaw === undefined) {
     throw new RunStateCorruptError(`current 引用的 immutable revision 缺失: ${immutablePath}`)
   }
-  parseRunRevision(immutableRaw, immutablePath)
+  await hydratePreVerifyReview(changeDir, parseRunRevision(immutableRaw, immutablePath))
   if (immutableRaw !== raw) throw new RunStateCorruptError('current 与 immutable revision 字节不一致')
+  let previous: RunRevision | undefined
   if (current.revision > 0) {
     const previousRevisionId = previousRevisionIdFor(current)
-    const previous = await readImmutableRunRevision(
+    previous = await readImmutableRunRevision(
       changeDir, current.revision - 1, previousRevisionId,
     )
     if (previous === undefined) {
@@ -258,7 +287,7 @@ export async function readCurrentRunRevision(changeDir: string): Promise<RunRevi
     }
     assertMutationEffects(current, previous)
   }
-  await assertTransitionRecordFile(changeDir, current)
+  await assertTransitionRecordFile(changeDir, current, previous)
   return current
 }
 
@@ -283,7 +312,43 @@ export async function validateCanonicalRevisionHistory(changeDir: string): Promi
       throw new RunStateCorruptError('canonical history previous revision 身份不一致')
     }
     assertMutationEffects(cursor, previous)
-    await assertTransitionRecordFile(changeDir, previous)
+    await assertTransitionRecordFile(changeDir, cursor, previous)
+    cursor = previous
+  }
+}
+
+/**
+ * Resolve the current metadata head through the immutable revision that committed it, validating
+ * the TransitionRecord bytes against that revision's anchored digest. Later set revisions may
+ * preserve the head but can never make an unbound/mutated record authoritative.
+ */
+export async function readValidatedTransitionHead(
+  changeDir: string,
+): Promise<{ readonly current: RunRevision; readonly record: TransitionRecord } | undefined> {
+  const current = await readCurrentRunRevision(changeDir)
+  const metadata = current?.state.runMetadata
+  if (current === undefined || metadata?.transitionHead === undefined
+    || metadata.transitionSequence < 1) return undefined
+  let cursor = current
+  while (true) {
+    if (cursor.revision === 0) {
+      throw new RunStateCorruptError('canonical transition head 缺提交 revision')
+    }
+    const previousId = previousRevisionIdFor(cursor)
+    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousId)
+    if (previous === undefined || previous.revisionId !== previousId) {
+      throw new RunStateCorruptError('canonical transition head 回溯链损坏')
+    }
+    assertMutationEffects(cursor, previous)
+    if (cursor.mutation.kind === 'transition'
+      && cursor.mutation.transitionRecordId === metadata.transitionHead) {
+      const record = await assertTransitionRecordFile(changeDir, cursor, previous)
+      if (record === undefined || record.sequence !== metadata.transitionSequence
+        || record.runId !== metadata.runId) {
+        throw new RunStateCorruptError('canonical transition head 与提交 revision 不一致')
+      }
+      return { current, record }
+    }
     cursor = previous
   }
 }
@@ -350,15 +415,20 @@ export function readCurrentRunRevisionFromSync(
   const raw = readText(currentRel)
   if (raw === undefined) return undefined
   const currentSource = join(sourceRoot, currentRel)
-  const current = parseRunRevision(raw, currentSource)
+  const current = hydratePreVerifyReviewFromSync(readText, parseRunRevision(raw, currentSource), sourceRoot)
   const revisionsRel = join(RUN_STATE_DIR, RUN_REVISIONS_DIR)
   const immutableRel = join(revisionsRel, revisionFileName(current.revision, current.revisionId))
   const immutableRaw = readText(immutableRel)
   if (immutableRaw === undefined) {
     throw new RunStateCorruptError(`current 引用的 immutable revision 缺失: ${join(sourceRoot, immutableRel)}`)
   }
-  parseRunRevision(immutableRaw, join(sourceRoot, immutableRel))
+  hydratePreVerifyReviewFromSync(
+    readText,
+    parseRunRevision(immutableRaw, join(sourceRoot, immutableRel)),
+    sourceRoot,
+  )
   if (immutableRaw !== raw) throw new RunStateCorruptError('current 与 immutable revision 字节不一致')
+  let previous: RunRevision | undefined
   if (current.revision > 0) {
     const previousRevisionId = previousRevisionIdFor(current)
     const previousRel = join(
@@ -367,7 +437,11 @@ export function readCurrentRunRevisionFromSync(
     )
     const previousRaw = readText(previousRel)
     if (previousRaw === undefined) throw new RunStateCorruptError('current 引用的 previous revision 缺失')
-    const previous = parseRunRevision(previousRaw, join(sourceRoot, previousRel))
+    previous = hydratePreVerifyReviewFromSync(
+      readText,
+      parseRunRevision(previousRaw, join(sourceRoot, previousRel)),
+      sourceRoot,
+    )
     if (previous.revisionId !== previousRevisionId
       || previous.revision !== current.revision - 1) {
       throw new RunStateCorruptError('current 引用的 previous revision 身份不一致')
@@ -393,7 +467,7 @@ export function readCurrentRunRevisionFromSync(
     } catch (error) {
       throw new RunStateCorruptError(`TransitionRecord 损坏: ${String(error)}`)
     }
-    assertTransitionRevisionLink(current, transition, transitionRaw)
+    assertTransitionRevisionLink(current, transition, transitionRaw, previous)
   }
   return current
 }
@@ -413,5 +487,7 @@ export async function readImmutableRunRevision(
   if (!Number.isSafeInteger(revision) || revision < 0 || !SAFE_ID_RE.test(revisionId)) return undefined
   const pathname = join(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(revision, revisionId))
   const raw = await readRegularTextIfExists(pathname)
-  return raw === undefined ? undefined : parseRunRevision(raw, pathname)
+  return raw === undefined
+    ? undefined
+    : hydratePreVerifyReview(changeDir, parseRunRevision(raw, pathname))
 }

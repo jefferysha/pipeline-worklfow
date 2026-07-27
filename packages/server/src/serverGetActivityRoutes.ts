@@ -15,7 +15,7 @@ export async function handleGetActivityRoutes(
 ): Promise<void> {
   const {
     cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
-    version, releaseId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
+    version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, errMsg,
   } = deps
   const boundPort = deps.boundPort()
@@ -41,6 +41,7 @@ export async function handleGetActivityRoutes(
         scope: 'global',
         version,
         ...(releaseId === undefined ? {} : { releaseId }),
+        ...(transactionId === undefined ? {} : { transactionId }),
         stateScopeId,
         pid: process.pid,
       })

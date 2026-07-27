@@ -107,9 +107,14 @@ row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$7"
 # 剥 ANSI 颜色转义（老内核 red()/green() 用 \033[..m 包裹错误行；新 CLI 明文）——stderr 逐字比前先归一。
 strip_ansi() { awk '{ gsub(/\033\[[0-9;]*m/, ""); print }' "$1"; }
 
-# types.ts::FIELD_ORDER 的当前 40 字段，以及 G1 canonical 首次写入前仍可读的旧版 37 字段。
-# 降级模式只接受其中一套完整顺序；不接受字段缺失、混排或部分升级。
-FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause"
+# types.ts::FIELD_ORDER 的当前 46 字段、N-1 wire 保留非空 review receipt 的 45 字段、
+# 空 review receipt 但含逻辑 pre-Verify 字段的 41 字段、当前空 receipt N-1 wire 的 40 字段，
+# 以及 G1 canonical 首次写入前仍可读的旧版 37 字段。
+# 降级模式只接受其中一套精确完整顺序；不接受任意缺字段、混排或部分 review receipt。
+FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause review_gate_phase review_gate_status review_gate_event review_requested_at review_acknowledged_at pre_verify_review_result"
+WIRE_WITH_RECEIPT_FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause review_gate_phase review_gate_status review_gate_event review_requested_at review_acknowledged_at"
+PROJECTED_FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause pre_verify_review_result"
+PRE_VERIFY_FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause"
 LEGACY_FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived"
 
 FAILS=0
@@ -132,6 +137,10 @@ is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 #       —— 仅兼容早期开发快照；新 Change 的不可变绑定在独立 sidecar。
 #   · pipeline_document_locale —— 仅为兼容曾短暂产出该字段的开发快照；正式实现使用独立 sidecar。
 #   · automation_current_phase/_cause —— 分叉后 automation 子系统新增字段。
+#   · review_gate_* / pre_verify_review_result —— 新 Tenon 精确出口收据与 Build 收敛门；
+#                                                  老脚本 oracle 不产出。
+#   · tenon-internal-pre-verify-review-v1 comment —— companion 内容的 N-1 rollback anchor；
+#                                                    业务值由真实 N-1 双向 bundle 门验证。
 #   · 已声明的状态演进（目前仅 pm-history 的 `spec-complete` 自动 AFK 入队）：harness 先逐字
 #     验证 old=`off`、new=`queued` 和 new 的入队时间戳，再仅从该单步的 YAML 比较中剥除这两个字段。
 #     这不是泛化豁免；没有 fixture sidecar 的任何 automation 差异仍会失败。
@@ -144,7 +153,8 @@ normalize_yaml() {
         if ($0 ~ /^[[:space:]]+- /) next
         inhist = 0
       }
-      if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_locale|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
+      if ($0 ~ /^# tenon-internal-pre-verify-review-v1: [A-Za-z0-9_-]+$/) next
+      if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_locale|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause|review_gate_phase|review_gate_status|review_gate_event|review_requested_at|review_acknowledged_at|pre_verify_review_result):/) next
       if (omit_declared_automation == "1" && $0 ~ /^(automation|automation_queued_at):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
@@ -214,12 +224,19 @@ declared_state_extension_for_step() {
   return 1
 }
 
-# 契约 §1：当前 40 字段或旧版 37 字段按各自 FIELD_ORDER 全量在序（未知行/历史区不计）
+# 契约 §1：当前逻辑 46、N-1 wire 45/40、逻辑空 receipt 41 或旧版 37 字段
+# 按各自 FIELD_ORDER 全量在序
+# （未知行/历史区不计）
 keyorder_ok() {
   local got
-  got=$(awk -v current="$FIELD_ORDER_STR" -v legacy="$LEGACY_FIELD_ORDER_STR" '
+  got=$(awk -v current="$FIELD_ORDER_STR" -v wire_receipt="$WIRE_WITH_RECEIPT_FIELD_ORDER_STR" \
+    -v projected="$PROJECTED_FIELD_ORDER_STR" \
+    -v preverify="$PRE_VERIFY_FIELD_ORDER_STR" -v legacy="$LEGACY_FIELD_ORDER_STR" '
     BEGIN {
       n = split(current, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
+      n = split(wire_receipt, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
+      n = split(projected, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
+      n = split(preverify, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
       n = split(legacy, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
     }
     match($0, /^[a-z_]+:/) {
@@ -227,7 +244,11 @@ keyorder_ok() {
       if (k in known) { printf "%s%s", sep, k; sep = " " }
     }
   ' "$1")
-  [ "$got" = "$FIELD_ORDER_STR" ] || [ "$got" = "$LEGACY_FIELD_ORDER_STR" ]
+  [ "$got" = "$FIELD_ORDER_STR" ] \
+    || [ "$got" = "$WIRE_WITH_RECEIPT_FIELD_ORDER_STR" ] \
+    || [ "$got" = "$PROJECTED_FIELD_ORDER_STR" ] \
+    || [ "$got" = "$PRE_VERIFY_FIELD_ORDER_STR" ] \
+    || [ "$got" = "$LEGACY_FIELD_ORDER_STR" ]
 }
 
 # 老/新两侧参数映射（老: init <name> <track> <preset> / check <name> <phase>；
@@ -452,6 +473,16 @@ bootstrap_new_review_receipt() {
   run_new_cli "$dir" review acknowledge "$change"
 }
 
+# Legacy oracle predates the global Build convergence gate. Once the legacy side has proved that a
+# build-complete exit succeeds, model the new protocol's completed full-diff review on the new side
+# before comparing the transition's business effect. As with review receipts, this never runs for a
+# legacy rejection, so it cannot mask the guard failure that a fixture intends to compare.
+bootstrap_new_pre_verify_review() {
+  local dir="$1" change="$2" event="$3"
+  [ "$event" = build-complete ] || return 0
+  run_new_cli "$dir" set "$change" pre_verify_review_result pass
+}
+
 # ---------- 双跑单步 ----------
 stderr_divergence_reason() {
   local base="$1" idx="$2" file
@@ -470,7 +501,7 @@ run_step_dual() {
   shift 5
   local args=("$@")
   local change="${args[0]}"
-  local old_rc new_rc bootstrap_rc review_bootstrap_rc f_out f_exit f_yaml label
+  local old_rc new_rc bootstrap_rc review_bootstrap_rc convergence_bootstrap_rc f_out f_exit f_yaml label
 
   bootstrap_rc=0
   # `check` shares transition's exact document-evidence predicate, so bootstrap it too.  Otherwise
@@ -487,13 +518,20 @@ run_step_dual() {
   (cd "$base/old" && TENON_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \
     > "$step_dir/old.out" 2> "$step_dir/old.err"
   old_rc=$?
+  convergence_bootstrap_rc=0
+  if [ "$bootstrap_rc" -eq 0 ] && [ "$old_rc" -eq 0 ] && [ "$cmd" = transition ]; then
+    bootstrap_new_pre_verify_review "$base/new" "$change" "${args[1]:-}" \
+      > "$step_dir/new.convergence-bootstrap.out" 2> "$step_dir/new.convergence-bootstrap.err" \
+      || convergence_bootstrap_rc=$?
+  fi
   review_bootstrap_rc=0
-  if [ "$bootstrap_rc" -eq 0 ] && [ "$old_rc" -eq 0 ] \
+  if [ "$bootstrap_rc" -eq 0 ] && [ "$convergence_bootstrap_rc" -eq 0 ] && [ "$old_rc" -eq 0 ] \
     && [ "$cmd" = transition ] && [ "$REVIEW_RECEIPT_BOOTSTRAP" = 1 ]; then
     bootstrap_new_review_receipt "$base/new" "$change" "${args[1]:-}" \
       > "$step_dir/new.review-bootstrap.out" 2> "$step_dir/new.review-bootstrap.err" || review_bootstrap_rc=$?
   fi
-  if [ "$bootstrap_rc" -eq 0 ] && [ "$review_bootstrap_rc" -eq 0 ]; then
+  if [ "$bootstrap_rc" -eq 0 ] && [ "$convergence_bootstrap_rc" -eq 0 ] \
+    && [ "$review_bootstrap_rc" -eq 0 ]; then
     run_new_cli "$base/new" "${NEW_ARGS[@]}" > "$step_dir/new.out" 2> "$step_dir/new.err"
     new_rc=$?
   else
@@ -502,6 +540,9 @@ run_step_dual() {
       if [ "$bootstrap_rc" -ne 0 ]; then
         printf 'ERROR: oracle document bootstrap 失败（exit=%s）\n' "$bootstrap_rc"
         cat "$step_dir/new.document-bootstrap.err"
+      elif [ "$convergence_bootstrap_rc" -ne 0 ]; then
+        printf 'ERROR: oracle Build convergence bootstrap 失败（exit=%s）\n' "$convergence_bootstrap_rc"
+        cat "$step_dir/new.convergence-bootstrap.err"
       else
         printf 'ERROR: oracle review receipt bootstrap 失败（exit=%s）\n' "$review_bootstrap_rc"
         cat "$step_dir/new.review-bootstrap.err"
@@ -605,6 +646,8 @@ run_step_dual() {
     say "  x [$fx #$idx $label] exit 不一致: old=$old_rc new=$new_rc"
     if [ "$bootstrap_rc" -ne 0 ]; then
       say "      new document bootstrap 失败（见 $step_dir/new.document-bootstrap.err）"
+    elif [ "$convergence_bootstrap_rc" -ne 0 ]; then
+      say "      new Build convergence bootstrap 失败（见 $step_dir/new.convergence-bootstrap.err）"
     elif [ "$review_bootstrap_rc" -ne 0 ]; then
       say "      new review receipt bootstrap 失败（见 $step_dir/new.review-bootstrap.err）"
     fi
@@ -674,7 +717,8 @@ run_step_degraded() {
     esac
   fi
 
-  # yaml 面：契约 §1 字段序（40 字段全量在序）
+  # yaml 面：契约 §1 字段序（当前逻辑 46、N-1 wire 45/40、逻辑空 receipt 41
+  # 或旧版 37 字段全量在序）
   local ny="$base/new/openspec/changes/$change/.pipeline.yaml"
   if [ -f "$ny" ]; then
     if keyorder_ok "$ny"; then f_yaml=PASS; else f_yaml=FAIL; fi

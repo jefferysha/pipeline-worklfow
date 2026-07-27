@@ -6,7 +6,14 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { createStateStore } from './store.js'
 import { createTransitionRecordStore } from './transition-record-store.js'
 import { createWorkflowRunRepository } from './workflow-run-repository.js'
-import { stateStorageSourcePathSync } from './run-revision-store.js'
+import {
+  publishRunRevision,
+  readCurrentRunRevision,
+  readCurrentRunRevisionSync,
+  stateStorageSourcePathSync,
+} from './run-revision-store.js'
+import { hydratePreVerifyReviewFromSync } from './pre-verify-review-store.js'
+import { parseRunRevision } from './run-revision-codec.js'
 import { REVIEW_GATE_FIELDS } from '../types.js'
 
 const roots: string[] = []
@@ -31,7 +38,137 @@ function rehash(record: Record<string, unknown>): void {
   record.stateDigest = createHash('sha256').update(JSON.stringify(body)).digest('hex')
 }
 
+function companionPath(
+  dir: string,
+  record: { readonly revision?: unknown; readonly revisionId?: unknown },
+): string {
+  return join(
+    dir,
+    '.pipeline-run',
+    'pre-verify-review',
+    `${String(record.revision).padStart(6, '0')}-${String(record.revisionId)}.json`,
+  )
+}
+
+async function dropCompanion(dir: string, record: Record<string, unknown>): Promise<void> {
+  await unlink(companionPath(dir, record)).catch(() => {})
+}
+
+async function rebindCompanion(dir: string, record: Record<string, unknown>): Promise<void> {
+  const pathname = companionPath(dir, record)
+  const companion = JSON.parse(await readFile(pathname, 'utf8')) as Record<string, unknown>
+  companion.stateDigest = record.stateDigest
+  await writeFile(pathname, `${JSON.stringify(companion)}\n`, 'utf8')
+}
+
 describe('G1 canonical revision 对抗校验', () => {
+  test('pre-Verify 逻辑 canonical 值由 revision companion 恢复，wire 对 N-1 保持旧闭集', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    await store.set(dir, 'pre_verify_review_result', 'pass')
+
+    expect(await store.get(dir, 'pre_verify_review_result')).toBe('pass')
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    expect((current.state as { fields: Record<string, unknown> }).fields)
+      .not.toHaveProperty('pre_verify_review_result')
+    expect((current.state as { opaqueTail: string }).opaqueTail)
+      .toContain('# tenon-internal-pre-verify-review-v1: ')
+    const projection = await readFile(join(dir, '.pipeline.yaml'), 'utf8')
+    expect(projection).not.toContain('pre_verify_review_result:')
+    expect(projection).toContain('tenon-internal-pre-verify-review-v1')
+    expect(JSON.parse(await readFile(companionPath(dir, current), 'utf8')))
+      .toMatchObject({
+        revision: current.revision,
+        revisionId: current.revisionId,
+        stateDigest: current.stateDigest,
+        result: 'pass',
+      })
+    await store.set(dir, 'scope', 'after-pass')
+    expect(await store.get(dir, 'pre_verify_review_result')).toBe('pass')
+    expect(await store.get(dir, 'scope')).toBe('after-pass')
+  })
+
+  test('pre-Verify companion 缺失按 pending 失败关闭，不继承上一代 pass', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    await store.set(dir, 'pre_verify_review_result', 'pass')
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as Record<string, unknown>
+    await unlink(companionPath(dir, current))
+
+    expect(await store.get(dir, 'pre_verify_review_result')).toBe('pending')
+  })
+
+  test('pre-Verify companion 身份或 revision digest 被篡改时 fail-loud', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as Record<string, unknown>
+    const pathname = companionPath(dir, current)
+    const companion = JSON.parse(await readFile(pathname, 'utf8')) as Record<string, unknown>
+    companion.stateDigest = 'f'.repeat(64)
+    await writeFile(pathname, `${JSON.stringify(companion)}\n`, 'utf8')
+
+    await expect(store.read(dir)).rejects.toThrow(/companion.*摘要|revision.*摘要/i)
+  })
+
+  test('pre-Verify companion 结果被单独篡改时 async/sync 都拒绝，不能把 pending 变成 pass', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as Record<string, unknown>
+    const pathname = companionPath(dir, current)
+    const companion = JSON.parse(await readFile(pathname, 'utf8')) as Record<string, unknown>
+    companion.result = 'pass'
+    await writeFile(pathname, `${JSON.stringify(companion)}\n`, 'utf8')
+
+    await expect(store.read(dir)).rejects.toThrow(/companion 内容.*anchor 摘要/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/companion 内容.*anchor 摘要/i)
+  })
+
+  test('旧 runtime 保留上一 revision anchor 时失败关闭为 pending，不继承旧 pass', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    await store.set(dir, 'pre_verify_review_result', 'pass')
+    const raw = await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8')
+    const parsed = parseRunRevision(raw, 'current')
+    const stale = {
+      ...parsed,
+      revision: parsed.revision + 1,
+      revisionId: 'old-runtime-next',
+      previousRevisionId: parsed.revisionId,
+    }
+
+    const hydrated = hydratePreVerifyReviewFromSync(() => undefined, stale)
+    expect(hydrated.state.fields.pre_verify_review_result).toBe('pending')
+    expect(hydrated.state.opaqueTail).not.toContain('tenon-internal-pre-verify-review-v1')
+  })
+
+  test('publish 在落任何新 canonical bytes 前拒绝非 transition 改写 head/sequence', async () => {
+    const { dir } = await fresh()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const before = await readFile(currentPath, 'utf8')
+    const current = await readCurrentRunRevision(dir)
+    if (current?.state.runMetadata === undefined) throw new Error('fixture run metadata missing')
+
+    await expect(publishRunRevision(dir, current, {
+      ...current.state,
+      runMetadata: {
+        ...current.state.runMetadata,
+        transitionSequence: current.state.runMetadata.transitionSequence + 1,
+        transitionHead: 'forged-head',
+      },
+    }, {
+      kind: 'set',
+      observedAt: clock(),
+    })).rejects.toThrow(/非 transition revision.*head|runMetadata head/)
+    expect(await readFile(currentPath, 'utf8')).toBe(before)
+  })
+
   test('状态来源选择以 canonical current 为先；只有 current 不存在才兼容 legacy YAML', async () => {
     const { dir } = await fresh()
     const current = join(dir, '.pipeline-run', 'current.json')
@@ -64,6 +201,7 @@ describe('G1 canonical revision 对抗校验', () => {
     const fields = (current.state as { fields: Record<string, unknown> }).fields
     for (const field of REVIEW_GATE_FIELDS) delete fields[field]
     rehash(current)
+    await dropCompanion(dir, current)
     const legacyRaw = JSON.stringify(current)
     await writeFile(currentPath, legacyRaw, 'utf8')
     await writeFile(join(
@@ -94,6 +232,66 @@ describe('G1 canonical revision 对抗校验', () => {
     for (const field of REVIEW_GATE_FIELDS) expect(upgradedYaml).not.toContain(`${field}:`)
   })
 
+  test('自动更新兼容：精确缺 pre-Verify 尾字段的上一版本 canonical/projection 可读并升级为 pending', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const fields = (current.state as { fields: Record<string, unknown> }).fields
+    delete fields.pre_verify_review_result
+    rehash(current)
+    await dropCompanion(dir, current)
+    const legacyRaw = JSON.stringify(current)
+    await writeFile(currentPath, legacyRaw, 'utf8')
+    await writeFile(join(
+      dir, '.pipeline-run', 'revisions', `000000-${String(current.revisionId)}.json`,
+    ), legacyRaw, 'utf8')
+
+    const yamlPath = join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    await writeFile(
+      yamlPath,
+      yaml
+        .replace(/^pre_verify_review_result:.*\n/m, '')
+        .replace(/pipeline_state_digest: [0-9a-f]{64}/, `pipeline_state_digest: ${String(current.stateDigest)}`),
+      'utf8',
+    )
+
+    const recovered = await store.read(dir)
+    expect(recovered.fields.pre_verify_review_result).toBe('pending')
+    expect(await store.inspectProjection(dir)).toMatchObject({ status: 'current', revision: 0 })
+
+    await store.set(dir, 'phase', 'explore')
+    const upgraded = JSON.parse(await readFile(currentPath, 'utf8')) as {
+      revision: number
+      revisionId: string
+      stateDigest: string
+      state: { fields: Record<string, unknown> }
+    }
+    expect(upgraded.state.fields).not.toHaveProperty('pre_verify_review_result')
+    expect(JSON.parse(await readFile(companionPath(dir, upgraded), 'utf8')))
+      .toMatchObject({ result: 'pending', stateDigest: upgraded.stateDigest })
+    expect(await readFile(yamlPath, 'utf8')).not.toContain('pre_verify_review_result:')
+  })
+
+  test('缺 pre-Verify 尾字段时再缺任一普通字段仍拒绝，不泛化为缺字段默认', async () => {
+    const { dir } = await fresh()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const fields = (current.state as { fields: Record<string, unknown> }).fields
+    delete fields.pre_verify_review_result
+    delete fields.branch_status
+    rehash(current)
+    await dropCompanion(dir, current)
+    const raw = JSON.stringify(current)
+    await writeFile(currentPath, raw, 'utf8')
+    await writeFile(join(
+      dir, '.pipeline-run', 'revisions', `000000-${String(current.revisionId)}.json`,
+    ), raw, 'utf8')
+
+    await expect(createStateStore().read(dir)).rejects.toThrow(/FIELD_ORDER 闭集|canonical/i)
+  })
+
   test('自动更新兼容：早期四字段 receipt 缺 exact event 且 receipt 为空时可读并在下一次写入升级', async () => {
     const { dir } = await fresh()
     const store = createStateStore()
@@ -102,6 +300,7 @@ describe('G1 canonical revision 对抗校验', () => {
     const fields = (current.state as { fields: Record<string, unknown> }).fields
     delete fields.review_gate_event
     rehash(current)
+    await dropCompanion(dir, current)
     const legacyRaw = JSON.stringify(current)
     await writeFile(currentPath, legacyRaw, 'utf8')
     await writeFile(join(
@@ -171,6 +370,7 @@ describe('G1 canonical revision 对抗校验', () => {
     const mutation = record.mutation as Record<string, unknown>
     mutation.effects = []
     rehash(record)
+    await rebindCompanion(dir, record)
     const raw = JSON.stringify(record)
     await writeFile(currentPath, raw, 'utf8')
     await writeFile(join(

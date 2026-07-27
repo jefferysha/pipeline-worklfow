@@ -12,7 +12,7 @@
  * 纯函数，供 InboxView / App（导航徽章计数）与真组件测试共用。
  */
 import type { ChangeSnapshot, ProjectSnapshot, Snapshot } from '../types'
-import { rulesKey, type WorkflowRules } from '../model/workflowModel'
+import { rulesKey, snapshotRulesKey, type WorkflowRules } from '../model/workflowModel'
 import { changeProgressState, type ProgressRules } from '../model/progressModel'
 import { changeWorkflow } from '../model/changeModel'
 export { changeWorkflow, decisionKind } from '../model/changeModel'
@@ -60,7 +60,10 @@ export function selectInbox(
     if (!p.ok) continue
     if (currentRoot !== '' && p.root !== currentRoot) continue
     for (const c of p.changes) {
-      if (isAwaitingDecision(c, rulesByKey.get(rulesKey(p.root, changeWorkflow(c))))) items.push({ root: p.root, change: c })
+      const rules = rulesByKey.get(snapshotRulesKey(p.root, c.workflowPlanFingerprint))
+        ?? rulesByKey.get(rulesKey(p.root, changeWorkflow(c)))
+        ?? c.workflowRules
+      if (isAwaitingDecision(c, rules)) items.push({ root: p.root, change: c })
     }
   }
   items.sort((a, b) => {

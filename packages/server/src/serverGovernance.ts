@@ -1,5 +1,4 @@
 import { readdir } from 'node:fs/promises'
-import { statSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { join, resolve as resolvePath } from 'node:path'
 import {
@@ -28,6 +27,7 @@ import {
   type WorkflowRootAnchor,
 } from './workflows.js'
 import { errMsg } from './serverSupport.js'
+import { projectFileExists } from './projectCapabilities.js'
 
 export interface ServerGovernanceOptions {
   registry: () => string[]
@@ -128,13 +128,7 @@ async function mutateTrackForApi<T>(
   })
 }
 
-const fileExists = (root: string, relPath: string): boolean => {
-  try {
-    return statSync(join(root, relPath)).isFile()
-  } catch {
-    return false
-  }
-}
+const fileExists = projectFileExists
 
 // 信任锚单源：19 处「两侧规范化再比较」的唯一落点——注册表条目经 dedupeRoots 已 resolve
 // （且过滤空条目，防 resolvePath('')=cwd 混入可信集），提交的 root 此处同样 resolvePath，

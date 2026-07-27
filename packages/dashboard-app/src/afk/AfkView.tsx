@@ -166,7 +166,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
   const rows = useMemo(() => {
     const out: AfkRow[] = []
     for (const g of sel.groups) {
-      const rules = rulesByKey.get(g.key)
+      const rules = g.rules
       for (const r of g.rows) {
         if (executionProvenance(r.change) === 'automation' && inSandbox(r.state)) {
           out.push({ row: r, rules })

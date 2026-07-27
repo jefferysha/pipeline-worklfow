@@ -71,34 +71,54 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
   test('delegated acknowledge requires a current Change-bound user authority and records that source', async () => {
     const marker = join(h.cwd, '.pipeline-pending-review')
     const authority = join(h.cwd, '.pipeline-interaction-authority')
+    const sessionId = '019f92c7-6e66-7290-9352-f9d915266f14'
+    const previousSession = process.env.TENON_HOST_SESSION_ID
+    process.env.TENON_HOST_SESSION_ID = sessionId
     await expect(h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).resolves.toBe(0)
 
-    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
-    expect(h.err.join('\n')).toContain('没有有效的用户委托')
+    try {
+      expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
+      expect(h.err.join('\n')).toContain('没有有效的用户委托')
 
-    await writeFile(join(h.cwd, '.pipeline-active'), 'demo\n', 'utf8')
-    await writeFile(authority, [
-      'pipeline-interaction-authority-v1',
-      'change=demo',
-      'scope=interactive-skills',
-      'review=required',
-      'issued_at=2026-07-24T00:00:00Z',
-      '',
-    ].join('\n'), 'utf8')
-    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
+      await writeFile(join(h.cwd, '.pipeline-active'), 'demo\n', 'utf8')
+      await writeFile(authority, [
+        'pipeline-interaction-authority-v1',
+        'change=demo',
+        'scope=interactive-skills',
+        'review=delegated',
+        'issued_at=2026-07-24T00:00:00Z',
+        '',
+      ].join('\n'), 'utf8')
+      expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
 
-    await writeFile(authority, [
-      'pipeline-interaction-authority-v1',
-      'change=demo',
-      'scope=interactive-skills',
-      'review=delegated',
-      'issued_at=2026-07-24T00:00:00Z',
-      '',
-    ].join('\n'), 'utf8')
-    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(0)
-    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' })
-    const history = await readFile(join(h.cwd, 'openspec/changes/demo/.pipeline-history.jsonl'), 'utf8')
-    expect(history).toContain('review:delegated-ack phase=explore event=explore-complete')
-    expect(history).toContain('authority_issued_at=2026-07-24T00:00:00Z')
+      await writeFile(authority, [
+        'pipeline-interaction-authority-v2',
+        'change=demo',
+        'host_session=session-other',
+        'scope=interactive-skills',
+        'review=delegated',
+        'issued_at=2026-07-24T00:00:00Z',
+        '',
+      ].join('\n'), 'utf8')
+      expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
+
+      await writeFile(authority, [
+        'pipeline-interaction-authority-v2',
+        'change=demo',
+        `host_session=${sessionId}`,
+        'scope=interactive-skills',
+        'review=delegated',
+        'issued_at=2026-07-24T00:00:00Z',
+        '',
+      ].join('\n'), 'utf8')
+      expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(0)
+      await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+      const history = await readFile(join(h.cwd, 'openspec/changes/demo/.pipeline-history.jsonl'), 'utf8')
+      expect(history).toContain('review:delegated-ack phase=explore event=explore-complete')
+      expect(history).toContain(`authority_host_session=${sessionId}`)
+    } finally {
+      if (previousSession === undefined) delete process.env.TENON_HOST_SESSION_ID
+      else process.env.TENON_HOST_SESSION_ID = previousSession
+    }
   })
 })

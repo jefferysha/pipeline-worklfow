@@ -11,7 +11,7 @@ import {
   WorkflowCanvas,
   type CanvasDotTone,
 } from './WorkflowCanvas'
-import { missingGateArtifacts, selectProgress, type ProgressRules } from '../model/progressModel'
+import { missingGateArtifacts, selectProgress } from '../model/progressModel'
 import './progress.css'
 import { CreateChangeDialog } from './CreateChangeDialog'
 import { useProgressDrawer } from './useProgressDrawer'
@@ -142,11 +142,11 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const flatRows: FlatRow[] = useMemo(() => {
     const out: FlatRow[] = []
     for (const group of base.groups) {
-      const rules = rulesByKey.get(group.key) as ProgressRules | undefined
+      const rules = group.rules
       for (const row of group.rows) out.push(toFlatRow(row, rules, group.workflow))
     }
     return out
-  }, [base, rulesByKey])
+  }, [base])
   const frByKey = useMemo(() => new Map(flatRows.map((fr) => [fr.key, fr])), [flatRows])
 
   const {

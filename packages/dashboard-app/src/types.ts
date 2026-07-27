@@ -14,6 +14,9 @@ export interface ChangeSnapshot {
   archived: string
   updated_at: string
   fields: Record<string, string | string[]>
+  workflowPlanFingerprint: string
+  workflowRules: WorkflowRulesSnapshot
+  workflowExecution: WorkflowExecutionSnapshot
   /** OpenSpec tasks.md projected by the server onto ordered workflow phases. */
   todo?: PipelineTodoProjection
   /** Server-evaluated OpenSpec document contract evidence. */
@@ -62,25 +65,53 @@ export interface PipelineTodoProjection {
 }
 
 export interface WorkflowRulesSnapshot {
+  executionModel: 'phase-manifest' | 'step-graph'
   steps: string[]
   transitions: Record<string, Array<{ event: string; to: string }>>
   gateByStep: Record<string, 'review' | 'confirm' | null>
   labelByStep: Record<string, string>
   outputsByStep: Record<string, string[]>
-  nonemptyOutputByStep: Record<string, boolean>
 }
+
+export interface WorkflowExecutionSnapshot {
+  readinessByTransition: Record<string, Record<string, TransitionReadinessSnapshot>>
+}
+
+export interface TransitionReadinessSnapshot {
+  ready: boolean
+  blockers: TransitionReadinessBlockerSnapshot[]
+}
+
+export type TransitionReadinessBlockerSnapshot =
+  | {
+      kind: 'guard-failed'
+      guardType: string
+      field?: string
+      actual?: string
+      expected?: string[]
+    }
+  | {
+      kind: 'capability-unavailable'
+      guardType: string
+      capability: string
+    }
+  | {
+      kind: 'evaluation-error'
+      guardType: string
+      capability?: string
+    }
 
 /** 单个已注册 Project 的聚合。 */
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
-  workflowRules: Record<string, WorkflowRulesSnapshot>
   error?: string
 }
 
 /** GET /api/snapshot 的完整响应体。 */
 export interface Snapshot {
+  snapshot_protocol?: 'tenon-snapshot/v2'
   version: string
   generated_at: string
   /** 能力声明（GOAL B6）：前端按声明渲染，未接线域不谎报（Advanced 占位据此标注）。 */

@@ -305,7 +305,11 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     expectPhaseDispatch(r, 'build')
     expect(r.stdout).toContain('phase=build')
     await runMandatorySkillsForPhase('build')
-    expect(await h.run(['set-many', CHANGE, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])).toBe(0)
+    expect(await h.run([
+      'set-many', CHANGE,
+      'build_mode=direct', 'isolation=worktree', 'direct_override=true',
+      'pre_verify_review_result=pass',
+    ])).toBe(0)
 
     // ── build-complete → verify（review 相位）──
     expect(await h.run(['transition', CHANGE, 'build-complete'])).toBe(0)

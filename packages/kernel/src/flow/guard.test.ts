@@ -294,17 +294,32 @@ describe('spec 出口（S1-S5）', () => {
 
 // ───────────────────────────────── build ─────────────────────────────────
 
-describe('build 出口（GG3 + B1-B6；B8 build_sha 投影撤销）', () => {
+describe('build 出口（GG3 + B1-B7；B9 build_sha 投影撤销）', () => {
   const buildFiles = (tasks = '- [x] a\n- [x] b\n- [x] c\n') => ({
     [`${CH}/.pipeline.yaml`]: 'track: backend\n',
     [`${CH}/tasks.md`]: tasks,
   })
   const be = (over: Partial<Record<FieldName, string | string[]>> = {}) =>
-    makeState({ phase: 'build', track: 'backend', preset: 'full', build_mode: 'worktree', isolation: 'worktree', ...over })
+    makeState({
+      phase: 'build',
+      track: 'backend',
+      preset: 'full',
+      build_mode: 'worktree',
+      isolation: 'worktree',
+      pre_verify_review_result: 'pass',
+      ...over,
+    })
 
-  it('B8 锚：全合规且 build_sha 为空 → pass（老仓 guard 出口不查 build_sha，SHA 由 build-complete 事件冻结）', () => {
+  it('B9 锚：全合规且 build_sha 为空 → pass（老仓 guard 出口不查 build_sha，SHA 由 build-complete 事件冻结）', () => {
     const r = evaluateGuard(be(), ctxOf(buildFiles()))
     expect(r).toEqual({ pass: true, failures: [] })
+  })
+
+  it('pre-Verify 全量收敛非 pass → Build 出口失败', () => {
+    expect(fails(
+      evaluateGuard(be({ pre_verify_review_result: 'pending' }), ctxOf(buildFiles())),
+      'pre_verify_review_result=pass',
+    )).toHaveLength(1)
   })
 
   it('B2 tasks.md 有未勾任务 → fail；文件缺失也 fail（老 tasks_all_done 语义）', () => {

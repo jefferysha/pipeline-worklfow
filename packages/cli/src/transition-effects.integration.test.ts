@@ -7,7 +7,7 @@
  *   explore-complete   校验 design_doc 非空/非 null/文件存在（老仓 L120-126）
  *   spec-complete      track≠pm 校验 plan（L127-138）
  *   build-complete     build_mode/isolation 已设 + isolation 枚举 + full·direct→
- *                      direct_override=true + build_sha 冻结（L139-162）
+ *                      direct_override=true + pre-Verify 全量收敛 pass + build_sha 冻结（L139-162）
  *   verify-pass        verification_report / branch_status=handled / 非 pm 双 review=pass /
  *                      barrier HEAD==build_sha + verify_result=pass + verified_at（L163-205）
  *   verify-fail        verify_result=fail + build_sha=null + phase_status=in_progress（L206-211）
@@ -85,6 +85,7 @@ async function advanceTo(name: string, phase: 'explore' | 'spec' | 'build' | 've
   await h.run(['set', name, 'build_mode', 'direct'])
   await h.run(['set', name, 'isolation', 'worktree'])
   await h.run(['set', name, 'direct_override', 'true'])
+  await h.run(['set', name, 'pre_verify_review_result', 'pass'])
   expect(await h.run(['transition', name, 'build-complete'])).toBe(0)
   if (phase === 'verify') return
   await seed('docs/verify.md')
@@ -179,6 +180,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     expect(h.err).toContain('ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true')
     expect(await h.read('demo')).toMatch(/^build_sha: null$/m) // 拒绝时不冻结
     await h.run(['set', 'demo', 'direct_override', 'true'])
+    await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: verify$/m)
@@ -190,6 +192,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     await advanceTo('demo', 'build')
     await h.run(['set', 'demo', 'build_mode', 'direct'])
     await h.run(['set', 'demo', 'isolation', 'branch'])
+    await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: verify$/m)
   })
@@ -201,6 +204,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     await h.run(['set', 'demo', 'build_mode', 'direct'])
     await h.run(['set', 'demo', 'isolation', 'in-place'])
     await h.run(['set', 'demo', 'direct_override', 'true'])
+    await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: verify$/m)
@@ -260,6 +264,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'demo', 'build_mode', 'direct'])
     await h.run(['set', 'demo', 'isolation', 'in-place'])
     await h.run(['set', 'demo', 'direct_override', 'true'])
+    await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^build_sha: workspace:sha256:[a-f0-9]{64}$/m)
 
@@ -302,6 +307,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'pmx', 'build_mode', 'direct'])
     await h.run(['set', 'pmx', 'isolation', 'branch'])
     await h.run(['set', 'pmx', 'direct_override', 'true']) // full+direct 规则不分 track
+    await h.run(['set', 'pmx', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'pmx', 'build-complete'])).toBe(0)
     await seed('docs/verify.md')
     await h.seedArtifact('pmx', 'verification_report', 'docs/verify.md')
@@ -378,7 +384,8 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
     await h.seedArtifact('demo', 'verification_report', 'docs/verify-fail.md')
     await approveReviewExit('demo', 'verify-fail')
     expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0) // → build，build_sha=null
-    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0) // 前置字段仍在，重新冻结
+    await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0) // 重新收敛后冻结
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
     await seed('docs/verify.md')
     await h.seedArtifact('demo', 'verification_report', 'docs/verify.md')

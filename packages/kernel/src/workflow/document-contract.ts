@@ -72,6 +72,11 @@ const OUTPUTS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly Document
   archive: [],
 }
 
+const SPEC_ADR_LIVING_DOCUMENT: DocumentOutputRequirement = {
+  kind: 'adr',
+  producerCandidates: ['tenon-spec', 'tenon:tenon-spec'],
+}
+
 /**
  * A small number of governed documents deliberately remain living documents after their first
  * phase. Their newest digest must identify the *current* phase skill that changed it; retaining
@@ -96,6 +101,7 @@ const MUTABLE_RECORDS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly 
     { kind: 'openspec-design', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
     { kind: 'tasks', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
     { kind: 'superpower-design', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
+    SPEC_ADR_LIVING_DOCUMENT,
   ],
   build: [
     { kind: 'tasks', producerCandidates: ['tenon-build', 'tenon:tenon-build'] },
@@ -230,10 +236,20 @@ function recordRequirementForPolicy(
   kind: DocumentKind,
   step: string,
 ): DocumentOutputRequirement | undefined {
-  return [
+  const frozenRequirement = [
     ...outputsRequiredForPolicyStep(policy, step),
     ...(policy.mutableByStep[step] ?? []),
   ].find((requirement) => requirement.kind === kind)
+  if (frozenRequirement) return frozenRequirement
+
+  // A WorkflowRun freezes its graph and baseline document matrix, but living-document provenance
+  // fixes must also repair an already-running default Change. Keep this evolution deliberately
+  // narrower than a policy replacement: only openspec-v1 Spec may refresh ADR, and only the
+  // current tenon-spec producer can supply the new digest. Outputs, reads, owner steps, workflow
+  // edges, old producer receipts, and every other mutable kind remain exactly as frozen.
+  return policy.id === 'openspec-v1' && step === 'spec' && kind === 'adr'
+    ? SPEC_ADR_LIVING_DOCUMENT
+    : undefined
 }
 
 export function isDocumentRecordAllowedInPolicyStep(

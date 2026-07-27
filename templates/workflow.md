@@ -45,7 +45,8 @@ confirm 新鲜期 5 分钟，review / interaction 新鲜期 30 分钟。
 3. **终态 = 用户在硬取舍上做了承诺，不是文档写出来了**。review 相位先 `check → review request --event <event> → 展示产物 → acknowledge`，再 transition；非 review 相位同样要展示产物并等明确确认，不 solo 跑完直接推进。
 4. 高风险问题当场逼出明确决断，不许「都要 / 先这样」收场。
 5. **明确持续授权是 Change 绑定的委托，不是总开关**：用户明确说“后续不用问 / 自主执行完成”时，入口以
-   `tenon session activate <change> --continuous` 写入只绑定该 live Change 的版本化授权投影。
+   `tenon session activate <change> --continuous --host-session <id>` 写入同时绑定该 live Change 与
+   当前 host session 的版本化授权投影。
    交互式 skill 可对低风险细节采用保守默认，并把假设/理由写入产物；它不得跨 Change 继承，用户说
    “恢复逐步确认 / 撤回自主执行”即可撤回。该投影允许在 **真实 review 证据、OpenSpec 文档读取收据与
    guard 均已通过之后**，用 `tenon review acknowledge <change> --delegated` 记录一条带授权时间的

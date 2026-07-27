@@ -8,7 +8,7 @@
 # delegated the review acknowledgement after the review evidence has been produced.  It never
 # skips evidence, guards, verification, or external/publication authority.
 
-TENON_INTERACTION_AUTHORITY_PROTOCOL='pipeline-interaction-authority-v1'
+TENON_INTERACTION_AUTHORITY_PROTOCOL='pipeline-interaction-authority-v2'
 TENON_INTERACTION_AUTHORITY_FILE='.pipeline-interaction-authority'
 
 pipeline_interaction_authority_path() { # $1=verified project root
@@ -21,10 +21,16 @@ pipeline_interaction_authority_valid_name() { # $1=Change name
   return 0
 }
 
-# Prints the Change encoded by a complete authority projection.  Unknown/duplicate fields are
+# Host session ids are supplied by the host, never invented from repository state.
+pipeline_interaction_authority_valid_session() { # $1=host session id
+  case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac
+  [ "${#1}" -le 128 ]
+}
+
+# Prints one requested field from a complete authority projection.  Unknown/duplicate fields are
 # rejected so a partial write, a stale old format, or an operator typo cannot silently widen scope.
-pipeline_interaction_authority_change() { # $1=authority marker path
-  local marker="$1" first='' line='' line_number=0 change='' scope='' review='' issued_at=''
+pipeline_interaction_authority_value() { # $1=authority marker path $2=change|host_session
+  local marker="$1" requested="$2" first='' line='' line_number=0 change='' host_session='' scope='' review='' issued_at=''
   [ -f "$marker" ] && [ ! -L "$marker" ] && [ -r "$marker" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     line_number=$((line_number + 1))
@@ -37,6 +43,10 @@ pipeline_interaction_authority_change() { # $1=authority marker path
       change=*)
         [ -z "$change" ] || return 1
         change="${line#change=}"
+        ;;
+      host_session=*)
+        [ -z "$host_session" ] || return 1
+        host_session="${line#host_session=}"
         ;;
       scope=*)
         [ -z "$scope" ] || return 1
@@ -55,21 +65,36 @@ pipeline_interaction_authority_change() { # $1=authority marker path
   done < "$marker"
   [ "$line_number" -ge 2 ] || return 1
   pipeline_interaction_authority_valid_name "$change" || return 1
+  pipeline_interaction_authority_valid_session "$host_session" || return 1
   [ "$scope" = 'interactive-skills' ] || return 1
   case "$review" in required|delegated) ;; *) return 1 ;; esac
   case "$issued_at" in ''|*[!0-9TZ:.-]*) return 1 ;; esac
-  printf '%s' "$change"
+  case "$requested" in
+    change) printf '%s' "$change" ;;
+    host_session) printf '%s' "$host_session" ;;
+    *) return 1 ;;
+  esac
 }
 
-# True only for the caller's exact active Change.  A projection for a previous Change remains
-# harmless until it is replaced or explicitly revoked; it cannot affect a new normal conversation.
-pipeline_interaction_authority_for_change() { # $1=root $2=live Change name
-  local path encoded
+pipeline_interaction_authority_change() { # $1=authority marker path
+  pipeline_interaction_authority_value "$1" change
+}
+
+pipeline_interaction_authority_host_session() { # $1=authority marker path
+  pipeline_interaction_authority_value "$1" host_session
+}
+
+# True only for the caller's exact active Change and host session.  A projection for a previous
+# Change or another conversation remains harmless until it is replaced or explicitly revoked.
+pipeline_interaction_authority_for_change() { # $1=root $2=live Change name $3=host session id
+  local path encoded encoded_session
   pipeline_interaction_authority_valid_name "$2" || return 1
+  pipeline_interaction_authority_valid_session "$3" || return 1
   path="$(pipeline_interaction_authority_path "$1" || true)"
   [ -n "$path" ] || return 1
   encoded="$(pipeline_interaction_authority_change "$path" || true)"
-  [ "$encoded" = "$2" ]
+  encoded_session="$(pipeline_interaction_authority_host_session "$path" || true)"
+  [ "$encoded" = "$2" ] && [ "$encoded_session" = "$3" ]
 }
 
 pipeline_interaction_authority_now() {
@@ -79,10 +104,11 @@ pipeline_interaction_authority_now() {
 # Publish a complete projection with a same-directory temporary file.  The marker is policy
 # metadata, not a security boundary (the repository belongs to the user), but this avoids readers
 # observing a half-written authority and keeps malformed data fail-closed.
-pipeline_write_interaction_authority() { # $1=root $2=live Change name
-  local root="$1" change="$2" marker tmp now
+pipeline_write_interaction_authority() { # $1=root $2=live Change name $3=host session id
+  local root="$1" change="$2" host_session="$3" marker tmp now
   [ -d "$root" ] || return 1
   pipeline_interaction_authority_valid_name "$change" || return 1
+  pipeline_interaction_authority_valid_session "$host_session" || return 1
   marker="$(pipeline_interaction_authority_path "$root" || true)"
   [ -n "$marker" ] && [ ! -L "$marker" ] || return 1
   now="$(pipeline_interaction_authority_now || true)"
@@ -93,6 +119,7 @@ pipeline_write_interaction_authority() { # $1=root $2=live Change name
     umask 077
     printf '%s\n' "$TENON_INTERACTION_AUTHORITY_PROTOCOL"
     printf 'change=%s\n' "$change"
+    printf 'host_session=%s\n' "$host_session"
     printf 'scope=interactive-skills\n'
     printf 'review=delegated\n'
     printf 'issued_at=%s\n' "$now"
@@ -103,20 +130,21 @@ pipeline_write_interaction_authority() { # $1=root $2=live Change name
 
 # Revocation is intentionally Change-bound too: switching to another selected Change cannot delete
 # a previous Change's audit projection merely by saying "resume questions" in the new conversation.
-pipeline_revoke_interaction_authority() { # $1=root $2=live Change name
+pipeline_revoke_interaction_authority() { # $1=root $2=live Change name $3=host session id
   local marker
   marker="$(pipeline_interaction_authority_path "$1" || true)"
   [ -n "$marker" ] || return 1
-  pipeline_interaction_authority_for_change "$1" "$2" || return 1
+  pipeline_interaction_authority_for_change "$1" "$2" "$3" || return 1
   rm -f "$marker" 2>/dev/null
 }
 
 # Keep an auditable, privacy-preserving record.  We deliberately record the resulting policy, not
 # the whole user prompt, and reuse the existing per-Change history ledger rather than inventing a
 # second event store.
-pipeline_record_interaction_authority_event() { # $1=root $2=live Change name $3=enabled|revoked
-  local root="$1" change="$2" action="$3" dir history now
+pipeline_record_interaction_authority_event() { # $1=root $2=live Change name $3=enabled|revoked $4=host session id
+  local root="$1" change="$2" action="$3" host_session="$4" dir history now
   pipeline_interaction_authority_valid_name "$change" || return 1
+  pipeline_interaction_authority_valid_session "$host_session" || return 1
   case "$action" in enabled|revoked) ;; *) return 1 ;; esac
   dir="$root/openspec/changes/$change"
   [ -d "$dir" ] && [ ! -L "$dir" ] || return 1
@@ -124,6 +152,6 @@ pipeline_record_interaction_authority_event() { # $1=root $2=live Change name $3
   [ ! -L "$history" ] || return 1
   now="$(pipeline_interaction_authority_now || true)"
   [ -n "$now" ] || return 1
-  printf '{"ts":"%s","kind":"prompt","raw":"interaction-authority:%s scope=interactive-skills review=delegated"}\n' \
-    "$now" "$action" >> "$history"
+  printf '{"ts":"%s","kind":"prompt","raw":"interaction-authority:%s scope=interactive-skills review=delegated host_session=%s"}\n' \
+    "$now" "$action" "$host_session" >> "$history"
 }

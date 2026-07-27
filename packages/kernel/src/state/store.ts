@@ -9,6 +9,7 @@ import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import {
   QuoteGateError,
   FIELD_ORDER,
+  PRE_VERIFY_REVIEW_FIELD,
   REVIEW_GATE_FIELDS,
   type FieldName,
   type InitOptions,
@@ -27,6 +28,11 @@ import {
   readCurrentRunRevision, readImmutableRunRevision,
   type RunRevision,
 } from './run-revision-store.js'
+import { splitPreVerifyReviewAnchor } from './run-revision-codec.js'
+import {
+  priorLogicalProjectionContent,
+  projectionContent,
+} from './state-projection-codec.js'
 import {
   defaultStateClock,
   detectBaseBranch,
@@ -96,17 +102,6 @@ function gateValue(field: FieldName, value: string | string[]): void {
   }
 }
 
-function projectionState(revision: RunRevision): PipelineState {
-  return {
-    ...structuredClone(revision.state),
-    projectionMetadata: projectionMetadataFor(revision),
-  }
-}
-
-function projectionContent(revision: RunRevision): string {
-  return serializePipeline(projectionState(revision))
-}
-
 function stateWithoutProjection(state: PipelineState): PipelineState {
   return {
     fields: structuredClone(state.fields),
@@ -121,12 +116,12 @@ const FIELD_SET = new Set<string>(FIELD_ORDER)
 const REVIEW_GATE_FIELD_SET = new Set<string>(REVIEW_GATE_FIELDS)
 
 /**
- * A release immediately before review-gate v2 wrote an otherwise identical projection without the
- * four append-only receipt fields. Accept only that exact omission when its projection metadata
- * still pins it to the current canonical revision and parsing recreates the same semantic state.
- * This is deliberately narrower than generic "missing YAML field = default" compatibility.
+ * Older releases can omit the complete five-field review receipt, the later pre-Verify tail field,
+ * or both. Accept only those exact omission shapes when projection metadata still pins the YAML to
+ * the current canonical revision and parsing recreates the same semantic state. This is
+ * deliberately narrower than generic "missing YAML field = default" compatibility.
  */
-function isLegacyReviewGateProjection(
+function isPreciseLegacyFieldProjection(
   raw: string,
   parsed: PipelineState,
   current: RunRevision,
@@ -138,7 +133,8 @@ function isLegacyReviewGateProjection(
     || metadata.stateRevisionId !== expected.stateRevisionId
     || metadata.stateDigest !== expected.stateDigest) return false
   try {
-    if (serializePipeline(stateWithoutProjection(parsed)) !== serializePipeline(current.state)) return false
+    const normalized = splitPreVerifyReviewAnchor(stateWithoutProjection(parsed)).state
+    if (serializePipeline(normalized) !== serializePipeline(current.state)) return false
   } catch {
     return false
   }
@@ -152,8 +148,13 @@ function isLegacyReviewGateProjection(
     if (seen.has(key)) return false
     seen.add(key)
   }
-  return REVIEW_GATE_FIELDS.every((field) => !seen.has(field))
-    && FIELD_ORDER.every((field) => REVIEW_GATE_FIELD_SET.has(field) || seen.has(field))
+  const omitsCompleteReviewGate = REVIEW_GATE_FIELDS.every((field) => !seen.has(field))
+  const omitsPreVerifyReview = !seen.has(PRE_VERIFY_REVIEW_FIELD)
+  if (!omitsCompleteReviewGate && !omitsPreVerifyReview) return false
+  return FIELD_ORDER.every((field) =>
+    seen.has(field)
+    || (omitsCompleteReviewGate && REVIEW_GATE_FIELD_SET.has(field))
+    || (omitsPreVerifyReview && field === PRE_VERIFY_REVIEW_FIELD))
 }
 
 async function inspectProjectionAgainst(
@@ -169,7 +170,9 @@ async function inspectProjectionAgainst(
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { status: 'missing', ...identity }
     throw error
   }
-  if (raw === projectionContent(current)) return { status: 'current', ...identity }
+  if (raw === projectionContent(current) || raw === priorLogicalProjectionContent(current)) {
+    return { status: 'current', ...identity }
+  }
   let parsed: PipelineState
   try {
     parsed = parsePipeline(raw)
@@ -192,12 +195,16 @@ async function inspectProjectionAgainst(
       reason: 'canonical 存在但 adapter 无 revision 且内容不同',
     }
   }
-  if (isLegacyReviewGateProjection(raw, parsed, current)) {
+  if (isPreciseLegacyFieldProjection(raw, parsed, current)) {
     return { status: 'current', ...identity }
   }
   const referenced = await readImmutableRunRevision(changeDir, metadata.stateRevision, metadata.stateRevisionId)
   if (referenced !== undefined && referenced.stateDigest === metadata.stateDigest
-    && raw === projectionContent(referenced)) return { status: 'stale', ...identity }
+    && (
+      raw === projectionContent(referenced)
+      || raw === priorLogicalProjectionContent(referenced)
+      || isPreciseLegacyFieldProjection(raw, parsed, referenced)
+    )) return { status: 'stale', ...identity }
   return {
     status: 'drift', ...identity,
     reason: 'revision metadata 与 adapter 内容不一致',

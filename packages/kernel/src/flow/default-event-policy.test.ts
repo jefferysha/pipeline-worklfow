@@ -34,12 +34,17 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 9 事件 + action 一一映射
     )
   })
 
-  test('action 映射：build/verify-pass/verify-fail/archived 各一，其余空（对齐老仓四个 mutation 分支）', () => {
+  test('action 映射：新实现 visit 重置 pre-Verify，build 冻结，verify/archive 保留既有副作用', () => {
     expect(DEFAULT_EVENT_POLICY['build-complete'].actions).toEqual([{ type: 'freeze-build-sha' }])
     expect(DEFAULT_EVENT_POLICY['verify-pass'].actions).toEqual([{ type: 'mark-verification-passed' }])
-    expect(DEFAULT_EVENT_POLICY['verify-fail'].actions).toEqual([{ type: 'mark-verification-failed' }])
+    expect(DEFAULT_EVENT_POLICY['spec-complete'].actions).toEqual([{ type: 'reset-pre-verify-review' }])
+    expect(DEFAULT_EVENT_POLICY['requirements-changed'].actions).toEqual([{ type: 'reset-pre-verify-review' }])
+    expect(DEFAULT_EVENT_POLICY['verify-fail'].actions).toEqual([
+      { type: 'mark-verification-failed' },
+      { type: 'reset-pre-verify-review' },
+    ])
     expect(DEFAULT_EVENT_POLICY.archived.actions).toEqual([{ type: 'archive-run' }])
-    for (const ev of ['open-complete', 'explore-complete', 'spec-complete', 'requirements-changed', 'ship-complete'] as const) {
+    for (const ev of ['open-complete', 'explore-complete', 'ship-complete'] as const) {
       expect(DEFAULT_EVENT_POLICY[ev].actions).toEqual([])
     }
   })
@@ -47,7 +52,7 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 9 事件 + action 一一映射
   test('guard 映射：explore/spec/build/verify-pass 与 Ship 迁移门禁有前置 guard，其余空', () => {
     expect(DEFAULT_EVENT_POLICY['explore-complete'].guards.length).toBe(1)
     expect(DEFAULT_EVENT_POLICY['spec-complete'].guards.length).toBe(1)
-    expect(DEFAULT_EVENT_POLICY['build-complete'].guards.length).toBe(4)
+    expect(DEFAULT_EVENT_POLICY['build-complete'].guards.length).toBe(5)
     expect(DEFAULT_EVENT_POLICY['verify-pass'].guards.length).toBe(5)
     expect(DEFAULT_EVENT_POLICY['ship-complete'].guards).toEqual([{ type: 'spec-migration-applied' }])
     for (const ev of ['open-complete', 'requirements-changed', 'verify-fail', 'archived'] as const) {
@@ -136,20 +141,31 @@ describe('checkDefaultEventPreconditions —— build-complete（老仓 L139-153
     expect(r).toEqual(['ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true'])
   })
 
+  test('全量收敛 review 非 pass → 最后一道 Build guard 拒绝冻结', async () => {
+    const r = await checkDefaultEventPreconditions('build-complete', mkState({
+      preset: 'full',
+      build_mode: 'direct',
+      isolation: 'worktree',
+      direct_override: 'true',
+      pre_verify_review_result: 'pending',
+    }))
+    expect(r).toEqual(['ERROR: build-complete 要求 pre_verify_review_result=pass (当前=pending)'])
+  })
+
   test('full+direct+direct_override=true → 通过', async () => {
-    const r = await checkDefaultEventPreconditions('build-complete', mkState({ preset: 'full', build_mode: 'direct', isolation: 'worktree', direct_override: 'true' }))
+    const r = await checkDefaultEventPreconditions('build-complete', mkState({ preset: 'full', build_mode: 'direct', isolation: 'worktree', direct_override: 'true', pre_verify_review_result: 'pass' }))
     expect(r).toBeNull()
   })
 
   test('hotfix preset + direct 不锁 direct_override → 通过', async () => {
-    const r = await checkDefaultEventPreconditions('build-complete', mkState({ preset: 'hotfix', build_mode: 'direct', isolation: 'branch' }))
+    const r = await checkDefaultEventPreconditions('build-complete', mkState({ preset: 'hotfix', build_mode: 'direct', isolation: 'branch', pre_verify_review_result: 'pass' }))
     expect(r).toBeNull()
   })
 
   test('full+direct+in-place+direct_override=true → 通过（受限 Codex 沙盒不伪造 Git 隔离）', async () => {
     const r = await checkDefaultEventPreconditions(
       'build-complete',
-      mkState({ preset: 'full', build_mode: 'direct', isolation: 'in-place', direct_override: 'true' }),
+      mkState({ preset: 'full', build_mode: 'direct', isolation: 'in-place', direct_override: 'true', pre_verify_review_result: 'pass' }),
     )
     expect(r).toBeNull()
   })
@@ -278,7 +294,11 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
   // 并对照证明 custom 轨（evaluateGuards 直吃原始 fields）同字段仍 throw——只 default 轨放宽。
 
   test("build_mode=['direct'] → 归一 'direct' → field-nonempty 放行（不 throw；续查 isolation/override 全过）", async () => {
-    const r = await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: ['direct'], isolation: 'branch' }))
+    const r = await checkDefaultEventPreconditions('build-complete', mkState({
+      build_mode: ['direct'],
+      isolation: 'branch',
+      pre_verify_review_result: 'pass',
+    }))
     expect(r).toBeNull()
   })
 
@@ -288,7 +308,11 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
   })
 
   test("isolation=['branch'] → 归一 'branch' → field-in 放行", async () => {
-    const r = await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: 'direct', isolation: ['branch'] }))
+    const r = await checkDefaultEventPreconditions('build-complete', mkState({
+      build_mode: 'direct',
+      isolation: ['branch'],
+      pre_verify_review_result: 'pass',
+    }))
     expect(r).toBeNull()
   })
 
@@ -328,7 +352,11 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
     ).rejects.toThrow(/数组值|绕过编译器/)
     // 同输入走 default 轨：归一后放行（不 throw）——证明放宽只发生在 default 轨。
     expect(
-      await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: ['direct'], isolation: 'branch' })),
+      await checkDefaultEventPreconditions('build-complete', mkState({
+        build_mode: ['direct'],
+        isolation: 'branch',
+        pre_verify_review_result: 'pass',
+      })),
     ).toBeNull()
   })
 

@@ -59,6 +59,7 @@ import { handleGet as handleGetRoute } from './serverGetRoutes.js'
 import { handleDeleteRoute, handlePatchRoute } from './serverMutationRoutes.js'
 import { handlePostRoute } from './serverPostRoutes.js'
 import {
+  assertDashboardTransactionId,
   errMsg,
   indexHtml,
   isoNow,
@@ -84,6 +85,8 @@ export { isLocalHost } from './serverSupport.js'
 export function createDashboardServer(options: DashboardServerOptions): DashboardServer {
   const version = options.version ?? SERVER_VERSION
   const releaseId = options.releaseId
+  const transactionId = options.transactionId
+  assertDashboardTransactionId(transactionId)
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
   const paths = options.paths
@@ -193,6 +196,8 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
     version,
     clock,
     capabilities,
+    gitHeadSha,
+    workspaceFingerprint,
     ...(nowMs === undefined ? {} : { now: () => nowMs }),
   })
 
@@ -302,7 +307,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   const handleGet = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handleGetRoute(req, res, path, {
       cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
-      version, releaseId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
+      version, releaseId, transactionId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
       hostHome, options, resolveSessionLink, errMsg,

@@ -283,7 +283,11 @@ export async function cmdReview(
         throw new Error(`acknowledge 的 event '${opts.event}' 与待确认 receipt '${event}' 不一致`)
       }
       const delegatedAuthority = opts.delegated === true
-        ? await readDelegatedReviewAuthority(deps.cwd, name)
+        ? await readDelegatedReviewAuthority(
+            deps.cwd,
+            name,
+            deps.env?.('TENON_HOST_SESSION_ID') ?? deps.env?.('CODEX_THREAD_ID'),
+          )
         : null
       if (opts.delegated === true && delegatedAuthority === null) {
         throw new Error(`当前 Change '${name}' 没有有效的用户委托 review 授权；请等待正常确认，或先由用户明确授权后续自主执行`)
@@ -316,7 +320,9 @@ export async function cmdReview(
         kind: 'tool',
         raw: acknowledged.delegatedAuthority === null
           ? `review:acknowledge phase=${acknowledged.phase} event=${acknowledged.event}`
-          : `review:delegated-ack phase=${acknowledged.phase} event=${acknowledged.event} authority_issued_at=${acknowledged.delegatedAuthority.issuedAt}`,
+          : `review:delegated-ack phase=${acknowledged.phase} event=${acknowledged.event} `
+            + `authority_issued_at=${acknowledged.delegatedAuthority.issuedAt} `
+            + `authority_host_session=${acknowledged.delegatedAuthority.hostSessionId}`,
       })
     }
     deps.io.out(

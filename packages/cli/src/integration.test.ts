@@ -134,7 +134,11 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
     expect(await h.run(['transition', 'demo', 'spec-complete'])).toBe(0)
     // build 出口：build_mode + isolation 必设；full+direct 须显式 direct_override=true（老仓 L144-151）
-    await h.run(['set-many', 'demo', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
+    await h.run([
+      'set-many', 'demo',
+      'build_mode=direct', 'isolation=worktree', 'direct_override=true',
+      'pre_verify_review_result=pass',
+    ])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: verify$/m)
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
@@ -267,11 +271,13 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
   })
 
   test('session：activate --continuous 经真实 Commander 参数层到达 Change 绑定授权', async () => {
+    const sessionId = '019f92c7-6e66-7290-9352-f9d915266f14'
     await h.run(['init', 'continuous', '--track', 'backend', '--preset', 'full'])
-    expect(await h.run(['session', 'activate', 'continuous', '--continuous'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'continuous', '--continuous', '--host-session', sessionId])).toBe(0)
     const authority = await readFile(join(h.cwd, '.pipeline-interaction-authority'), 'utf8')
-    expect(authority).toContain('pipeline-interaction-authority-v1')
+    expect(authority).toContain('pipeline-interaction-authority-v2')
     expect(authority).toContain('change=continuous')
+    expect(authority).toContain(`host_session=${sessionId}`)
     expect(authority).toContain('review=delegated')
     const history = await readFile(join(h.cwd, 'openspec/changes/continuous/.pipeline-history.jsonl'), 'utf8')
     expect(history).toContain('interaction-authority:enabled')
@@ -337,7 +343,11 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     await writeFile(join(cd, 'plan.md'), '# plan\n', 'utf8')
     await h.seedArtifact('e2e', 'plan', 'openspec/changes/e2e/plan.md') // P6：artifact 白盒预置
     await step('spec-complete')
-    await h.run(['set-many', 'e2e', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
+    await h.run([
+      'set-many', 'e2e',
+      'build_mode=direct', 'isolation=worktree', 'direct_override=true',
+      'pre_verify_review_result=pass',
+    ])
     await step('build-complete')
     // verify 出口：报告 + branch_status + 双 review pass + barrier（build_sha 已=DEADBEEF）
     await h.seedArtifact('e2e', 'verification_report', 'docs/superpowers/reports/e2e.md') // P6：复用 hash-bound verification report

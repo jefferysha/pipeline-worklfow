@@ -22,8 +22,12 @@
  *     判不了门就归 agent（不误报「等你确认」）；automation 活跃态不依赖 rules，照常判定。
  */
 import type { ChangeSnapshot, Snapshot } from '../types'
-import { DEFAULT_RULES, rulesKey, type StepOutputRules, type WorkflowRules } from './workflowModel'
-import { gateEvidence, VERIFY_STATUS_FIELDS } from './evidence'
+import {
+  rulesKey,
+  snapshotRulesKey,
+  type StepOutputRules,
+  type WorkflowRules,
+} from './workflowModel'
 
 /** 五态字典（顺序即筛选条 chips 顺序，键对齐 demo v5 的 data-f-state）。 */
 export const PROGRESS_STATES = ['gate', 'agent', 'running', 'queued', 'failed'] as const
@@ -41,18 +45,11 @@ const AUTOMATION_PROVENANCE_STATES = new Set([
 
 /**
  * WorkflowRules 的可选产出扩展面——「自定义 workflow 的 nonempty-output guard」判定所需的
- * 每 step 产出声明。T6 在这里先定契约，T7 兑现：定义收敛进 workflowModel（rulesFromDef 产出
- * 的自定义 rules 自然携带这两张表），本处 re-export 保住既有 import 面，本模块的判定一行未改。
- * 缺省（T6 时代的裸 WorkflowRules）视为「gate 无自动证据」——人可直接拍板，不会把自定义门
- * 误判成等 agent。
+ * 每 step 产出声明。不可变 plan 结构由 rules 承载；按 Change/Track 求值后的必需输出只从
+ * Change.workflowExecution 读取，避免同 fingerprint 的合法 Track 差异被组内第一条规则覆盖。
  */
 export type { StepOutputRules } from './workflowModel'
 export type ProgressRules = WorkflowRules & StepOutputRules
-
-/** 老内核 cmd_get 口径：空串或字面 'null' 都算未设（同 evidence.ts 的模块私有 isUnset）。 */
-function isUnset(v: string): boolean {
-  return v === '' || v === 'null'
-}
 
 /** fields 值可能是 string[]；非字符串一律当未设（同 evidence.ts fieldStr 口径）。 */
 function fieldStr(c: ChangeSnapshot, key: string): string {
@@ -89,24 +86,36 @@ export function isDashboardGate(rules: WorkflowRules | undefined, phase: string)
 /**
  * 「等 agent 补产出」的欠账清单——gate 阶段下 agent 还欠哪些证据/产出字段（badge 文案数据源，
  * demo「等 agent · 补产出 plan」）。空数组 = 证据/产出齐，人现在能拍板。
- *   · DEFAULT_RULES 表驱动路径：消费 gateEvidence 的 pending chips；verify 阶段只认三轨判定
- *     字段（VERIFY_STATUS_FIELDS）——verification_report/build_sha 是产物不是判定，
- *     「产物没产出不等于验证没过」（evidence.ts Important-1 教训），不入欠账。
- *   · 自定义 rules：只有当前步挂了 nonempty-output guard 才点名未设的 outputs；
- *     无产出声明（含今天的裸 WorkflowRules）→ 无自动证据，返回空。
+ * 服务端已经用 kernel canonical guard evaluator 生成逐 Change/step/event 的结构化 readiness；
+ * 前端不解释字段值或 guard 谓词，只负责选择可达出口并把 blocker 转成 badge 标识。
+ *
+ * 多出口必须分别判断：任一出口 ready 即可交给人决策；全部未齐时，只展示 blocker 数最少
+ * 的可达出口，数量并列时按冻结 transition 声明顺序选择，绝不把互斥出口合并成并集。
  */
 export function missingGateArtifacts(c: ChangeSnapshot, rules: ProgressRules | undefined): string[] {
   if (!rules) return []
-  if (rules === DEFAULT_RULES) {
-    const pending = gateEvidence(c, rules).filter((chip) => chip.tone === 'pending')
-    if (c.phase === 'verify') {
-      return pending.filter((chip) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(chip.key)).map((chip) => chip.key)
+  const transitions = rules.transitions[c.phase] ?? []
+  if (transitions.length === 0) return []
+  const readiness = c.workflowExecution.readinessByTransition[c.phase] ?? {}
+  const byTransition = transitions.map(({ event }) => readiness[event])
+  if (byTransition.some((result) => result?.ready === true)) return []
+  const blockers = byTransition.map((result) => result?.blockers ?? [{
+    kind: 'capability-unavailable' as const,
+    guardType: 'unknown',
+    capability: 'readiness',
+  }])
+  const selected = blockers.reduce((best, current) =>
+    current.length < best.length ? current : best,
+  )
+  return selected.map((blocker) => {
+    if (blocker.kind === 'capability-unavailable') return `capability:${blocker.capability}`
+    if (blocker.kind === 'evaluation-error') {
+      return blocker.capability === undefined
+        ? `guard:${blocker.guardType}`
+        : `capability:${blocker.capability}`
     }
-    return pending.map((chip) => chip.key)
-  }
-  if (!rules.nonemptyOutputByStep?.[c.phase]) return []
-  const outputs = rules.outputsByStep?.[c.phase] ?? []
-  return outputs.filter((key) => isUnset(fieldStr(c, key)))
+    return blocker.field ?? `guard:${blocker.guardType}`
+  })
 }
 
 /** 单 change 五态判定（优先级见文件头）。archived 排除是 selectProgress 的事，本函数不管。 */
@@ -132,11 +141,13 @@ export interface ProgressRow {
   state: ProgressState
 }
 
-/** 项目×workflow 一组（进度视图一张卡）。key 恒为 rulesKey(root,workflow)，消费方禁手拼。 */
+/** 项目×冻结 workflow plan 一组（进度视图一张卡）。 */
 export interface ProgressGroup {
   key: string
   root: string
   workflow: string
+  workflowPlanFingerprint: string
+  rules: ProgressRules
   /** 未归档行，updated_at 倒序（并列 name 升序，同收件箱时间轴口径）。 */
   rows: ProgressRow[]
   /** 决议 #5：archived 排除出行，组头尾缀「· N 已归档」的计数来源。 */
@@ -207,20 +218,30 @@ export function selectProgress(
     if (currentRoot !== '' && p.root !== currentRoot) continue
     for (const c of p.changes) {
       const workflow = changeWorkflowName(c)
-      const key = rulesKey(p.root, workflow)
+      const key = snapshotRulesKey(p.root, c.workflowPlanFingerprint)
+      const rules = rulesByKey.get(key) ?? rulesByKey.get(rulesKey(p.root, workflow)) ?? c.workflowRules
       let group = byKey.get(key)
       if (!group) {
-        group = { key, root: p.root, workflow, rows: [], archivedCount: 0, archived: [] }
+        group = {
+          key,
+          root: p.root,
+          workflow,
+          workflowPlanFingerprint: c.workflowPlanFingerprint,
+          rules,
+          rows: [],
+          archivedCount: 0,
+          archived: [],
+        }
         byKey.set(key, group)
       }
       if (c.archived === 'true') {
         group.archivedCount += 1
         // #2：archived 行仍算出 state（同 changeProgressState 判定，不进 counts）——展开时只读
         // 渲染消费；counts 不变式（各态之和 === total === 各组行数之和）只认 group.rows，本行不入。
-        group.archived.push({ root: p.root, change: c, state: changeProgressState(c, rulesByKey.get(key)) })
+        group.archived.push({ root: p.root, change: c, state: changeProgressState(c, rules) })
         continue
       }
-      const state = changeProgressState(c, rulesByKey.get(key))
+      const state = changeProgressState(c, rules)
       group.rows.push({ root: p.root, change: c, state })
       counts[state] += 1
     }

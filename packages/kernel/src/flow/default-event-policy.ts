@@ -26,7 +26,7 @@
  */
 import type { FieldName, PipelineState } from '../types.js'
 import type { EventName, TransitionContext } from './transition-table.js'
-import type { ActionConfig, CompiledGuardConfig } from '../workflow/ir.js'
+import type { ActionConfig, CompiledGuardConfig, GuardInput } from '../workflow/ir.js'
 import { evaluateGuards, type GuardEvaluation } from '../workflow/guard-handlers.js'
 import { NON_PM, NON_PM_OR_FREE } from '../workflow/predicates.js'
 
@@ -43,7 +43,8 @@ export interface DefaultEventPolicy {
  *     fileExists 未注入则 skipped=放行——与老仓 `isUnset(v) || !fileExists(v)` 且 fileExists
  *     缺省视为存在同判）。when:NON_PM 承载原流程的 PM 豁免：PM 仍须完成 OpenSpec/Superpower
  *     文档账本中的 plan 文档，但不要求 legacy state 的 `plan` artifact 字段。
- *   · actions：老 applyTransitionEffects 四个 mutation 分支的 typed 等价（一一映射，其余事件空）。
+ *   · actions：转换副作用的 typed 等价；除冻结/验证/归档外，Tenon 全局 pre-Verify 收敛状态也
+ *     通过显式 reset action 管理，不能藏在 phase switch 或调用方约定里。
  */
 export const DEFAULT_EVENT_POLICY = {
   'open-complete': { guards: [], actions: [] },
@@ -56,18 +57,19 @@ export const DEFAULT_EVENT_POLICY = {
     // 老仓 L127-138：仅非 PM 轨要求 legacy `plan` artifact；PM 的文档链由 OpenSpec ledger
     // 单独强制，不能用一个新增 state 字段要求破坏原有 default transition 兼容性。
     guards: [{ type: 'file-exists', path: { kind: 'field', field: 'plan' }, when: NON_PM }],
-    actions: [],
+    actions: [{ type: 'reset-pre-verify-review' }],
   },
-  'requirements-changed': { guards: [], actions: [] },
+  'requirements-changed': { guards: [], actions: [{ type: 'reset-pre-verify-review' }] },
   'build-complete': {
     // 首错优先：build_mode 必设 → isolation 必设 → isolation ∈ {branch,worktree,in-place}
-    // → full+direct 锁 direct_override。in-place 明确表示受限 agent 仅能在当前工作目录写文件，
-    // 不得把它伪装成已创建的 Git branch/worktree。
+    // → full+direct 锁 direct_override → pre-Verify 全量收敛通过。in-place 明确表示受限 agent
+    // 仅能在当前工作目录写文件，不得把它伪装成已创建的 Git branch/worktree。
     guards: [
       { type: 'field-nonempty', field: 'build_mode' },
       { type: 'field-nonempty', field: 'isolation' },
       { type: 'field-in', field: 'isolation', values: ['branch', 'worktree', 'in-place'] },
       { type: 'full-direct-override' },
+      { type: 'field-equals', field: 'pre_verify_review_result', value: 'pass' },
     ],
     // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
     actions: [{ type: 'freeze-build-sha' }],
@@ -88,7 +90,7 @@ export const DEFAULT_EVENT_POLICY = {
   'verify-fail': {
     guards: [],
     // 老仓 L207-210：verify_result=fail + build_sha=null（barrier 复位；phase_status 在 flow）。
-    actions: [{ type: 'mark-verification-failed' }],
+    actions: [{ type: 'mark-verification-failed' }, { type: 'reset-pre-verify-review' }],
   },
   'ship-complete': { guards: [{ type: 'spec-migration-applied' }], actions: [] },
   archived: {
@@ -128,7 +130,7 @@ function fieldStr(state: PipelineState, k: FieldName): string {
  *     FIELD_ORDER 的非列表字段（LIST_FIELDS 不进任何 default guard），join 归一是老 switch 既有的、
  *     对外可观测的历史等价行为，非新语义。
  */
-function normalizeGuardFields(fields: PipelineState['fields']): Record<FieldName, string> {
+export function normalizeDefaultGuardFields(fields: PipelineState['fields']): Record<FieldName, string> {
   const out: Partial<Record<FieldName, string>> = {}
   for (const k of Object.keys(fields) as FieldName[]) {
     out[k] = fstr(fields[k])
@@ -163,6 +165,9 @@ export function renderPreconditionViolation(
       if (guard.type === 'field-in') return [`ERROR: 非法值 '${actual}'，允许: branch worktree in-place`]
       if (guard.type === 'full-direct-override') {
         return ['ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true']
+      }
+      if (guard.type === 'field-equals' && guard.field === 'pre_verify_review_result') {
+        return [`ERROR: build-complete 要求 pre_verify_review_result=pass (当前=${actual})`]
       }
       break
     case 'verify-pass':
@@ -216,14 +221,15 @@ export async function checkDefaultEventPreconditions(
   const track = fieldStr(state, 'track')
   // 阻断 1 修复：交 typed guard 前先按老仓 fstr 归一字段值（数组→join、缺省→''），令 default 轨
   // scalar guard 对数组/undefined 边界输入逐字等价老 switch（副本入参，不污染 state / action 求值）。
-  const evaluations = await evaluateGuards(policy.guards, {
-    fields: normalizeGuardFields(state.fields),
+  const input: GuardInput = {
+    fields: normalizeDefaultGuardFields(state.fields),
     track,
     fileExists: ctx?.fileExists,
     gitHeadSha: ctx?.gitHeadSha,
     workspaceFingerprint: ctx?.workspaceFingerprint,
     specMigrationStatus: ctx?.specMigrationStatus,
-  })
+  }
+  const evaluations = await evaluateGuards(policy.guards, input)
   const failed = evaluations.find((e) => e.decision.kind === 'failed')
   if (!failed) return null
   return renderPreconditionViolation(event, failed, track)

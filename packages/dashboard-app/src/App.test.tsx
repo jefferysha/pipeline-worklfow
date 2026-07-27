@@ -87,6 +87,42 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
   })
 })
 
+describe('App 初始 snapshot 错误恢复', () => {
+  it('首次 500 显示明确错误与重试入口，重试成功后恢复项目总览', async () => {
+    window.history.replaceState({}, '', '/?view=projects')
+    let snapshotAttempts = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url !== '/api/snapshot') throw new Error(`unexpected fetch ${url}`)
+      snapshotAttempts += 1
+      if (snapshotAttempts === 1) {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, error: 'snapshot 暂时不可用' }),
+        }
+      }
+      return {
+        ok: true,
+        json: async () => makeSnapshot([makeProject('/repo', [makeChange('recovered', 'verify')])]),
+      }
+    }))
+
+    render(<App />)
+
+    const errorState = await screen.findByTestId('snapshot-error')
+    expect(errorState).toHaveAttribute('role', 'alert')
+    expect(errorState).toHaveTextContent('快照获取失败（500）')
+    const retry = screen.getByRole('button', { name: '重试加载' })
+
+    fireEvent.click(retry)
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    expect(await screen.findByTestId('project-row-repo')).toBeInTheDocument()
+    expect(screen.queryByTestId('snapshot-error')).toBeNull()
+    expect(snapshotAttempts).toBe(2)
+  })
+})
+
 describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', () => {
   it('有已注册项目但 URL 无 root：保持未选择、进入项目总览且不调用 per-root API', async () => {
     window.history.replaceState({}, '', '/?debug=1&view=progress')
@@ -163,19 +199,24 @@ describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', (
           ok: true,
           json: async () => makeSnapshot([
             makeProject('/repo-custom', [
-              makeChange('review-me', 'review', { fields: { workflow: 'compact' } }),
-            ], {
-              workflowRules: {
-                compact: {
+              makeChange('review-me', 'review', {
+                fields: { workflow: 'compact' },
+                workflowRules: {
+                  executionModel: 'step-graph',
                   steps: ['review', 'done'],
                   transitions: { review: [{ event: 'approve', to: 'done' }], done: [] },
                   gateByStep: { review: 'review', done: null },
                   labelByStep: { review: '复核', done: '完成' },
                   outputsByStep: { review: [], done: [] },
-                  nonemptyOutputByStep: { review: false, done: false },
                 },
-              },
-            }),
+                workflowExecution: {
+                  readinessByTransition: {
+                    review: { approve: { ready: true, blockers: [] } },
+                    done: {},
+                  },
+                },
+              }),
+            ]),
           ]),
         }
       }
@@ -531,12 +572,31 @@ describe('App v10c 契约护栏（旧聚合偏好 root=\'\' + 进度视图 → �
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
+    const push = vi.spyOn(window.history, 'pushState')
     render(<App />)
     fireEvent.click(await screen.findByTestId('project-row-repo-b'))
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
     // v10c：下方列表已退役，单项目 change 现由画布 change 卡承载（prg-cv-chg-*）。
     await waitFor(() => expect(screen.getByTestId('prg-cv-chg-b1')).toBeInTheDocument())
     expect(screen.queryByTestId('prg-cv-chg-a1')).toBeNull()
+    expect(push).toHaveBeenCalled()
+    expect(new URLSearchParams(window.location.search).get('root')).toBe('/repo-b')
+  })
+
+  it('未选择项目时不把首个项目写进 URL，只停留在项目总览', async () => {
+    window.history.replaceState({}, '', '/?view=progress')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([
+          makeProject('/repo-a', [makeChange('a1', 'build')]),
+          makeProject('/repo-b', [makeChange('b1', 'build')]),
+        ]) }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    render(<App />)
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('root')).toBeNull()
   })
 })
 

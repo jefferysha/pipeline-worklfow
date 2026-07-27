@@ -94,6 +94,10 @@ export type {
   EffectiveWorkflowPlan, PersistedDocumentGovernanceBinding, WorkflowPlanSnapshot,
 } from './workflow/effective-plan.js'
 export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
+export { readinessByTransition } from './workflow/transition-readiness.js'
+export type {
+  ReadinessByTransition, TransitionReadiness, TransitionReadinessBlocker,
+} from './workflow/transition-readiness.js'
 // default workflow artifact declaration 查询层（G2 P4/P5）：只读生成表 default-workflow.generated.ts 的
 // track-aware 查询接缝——P5 artifact register 经本 API 取 default declaration，不再读 YAML/复制字段表。
 export { defaultArtifactForField, defaultArtifactsForStep, defaultArtifactDeclaredForField } from './workflow/default-artifacts.js'

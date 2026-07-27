@@ -42,3 +42,41 @@ Skill/hook 集合。
 - **WHEN** 只有 `tenon@tenon` 负责 Tenon 的 Skill 与 hook
 - **THEN** setup 可继续验证并发布 managed runtime
 - **AND** 新会话只加载当前 Tenon 的入口和阶段 Skill。
+
+### Requirement: 宿主 mutation SHALL 通过期望状态对账恢复
+
+原生 setup/update 的每个宿主 mutation 步骤 SHALL 在执行外部命令前，向 durable WAL 写入规范化
+before inventory、desired postcondition 与 replay policy。恢复 SHALL 先读取宿主权威 inventory：
+已满足 desired 时 SHALL 只补提交步骤；仍精确等于 before 时 MAY 执行命令；任何第三状态 SHALL
+fail closed。系统 MUST NOT 仅因步骤处于 `started` 就盲目重放非幂等命令。
+
+#### Scenario: 命令成功后 completed journal 写入失败
+
+- **GIVEN** 宿主命令已经把 inventory 变成 desired state
+- **AND** 进程在持久化 completed checkpoint 前终止
+- **WHEN** 相同 setup/update 事务恢复
+- **THEN** 系统重新观察 inventory 并直接提交该步骤
+- **AND** 不再次调用宿主 mutation 命令。
+
+#### Scenario: 恢复时观察到第三状态
+
+- **GIVEN** WAL 记录 before A 与 desired B
+- **WHEN** 权威 inventory 为既非 A 也不满足 B 的状态 C
+- **THEN** 事务返回 indeterminate 并保留诊断证据
+- **AND** 不执行 mutation、runtime 激活或补偿猜测。
+
+### Requirement: Requirements-changed SHALL 允许 Spec 诚实更新 ADR
+
+当 Build 或 Verify 发现已批准的架构语义需要变化并通过 `requirements-changed` 回到 Spec 时，
+document contract SHALL 允许当前 `tenon-spec` 在实际 Skill 证据下重新登记 proposal、OpenSpec
+design、tasks、Superpowers design 与 ADR 的新 digest。旧 producer 与旧 read receipt SHALL 保留
+在 append-only history，但 MUST NOT 被当作新 digest 的证据。更新后所有后续 phase SHALL 重新读取
+精确版本。
+
+#### Scenario: Verify 发现新的事务不变量
+
+- **GIVEN** Change 已有 Explore 阶段登记的 ADR
+- **WHEN** `requirements-changed` 回到 Spec 并修订 ADR
+- **THEN** `tenon-spec` 可用当前 phase 的真实 Skill evidence 重登记该 ADR
+- **AND** 旧摘要的 read receipts 不再满足后续 phase
+- **AND** 未调用 `tenon-spec`、使用 `--backfill` 或手改 ledger 均被拒绝。

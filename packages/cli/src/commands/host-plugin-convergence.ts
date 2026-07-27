@@ -12,10 +12,13 @@ import {
   type HostPluginScope,
   type NativePipelineHost,
   type ParsedHostPluginInventory,
+  type RemovableHostPluginScope,
 } from './plugin-host.js'
 
 export interface HostPluginConvergenceReceipt {
-  readonly version: 2
+  readonly version: 3
+  /** Managed release WAL owner; makes evidence replay a compare-and-return operation. */
+  readonly transactionId: string
   readonly state: 'cleanup-pending' | 'completed'
   readonly host: NativePipelineHost
   readonly conflictPluginId: string
@@ -65,15 +68,16 @@ function parseReceipt(raw: string, host: NativePipelineHost): HostPluginConverge
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const receipt = value as Partial<HostPluginConvergenceReceipt>
+  const receiptVersion = Reflect.get(value, 'version')
   if (
-    receipt.version !== 2
+    (receiptVersion !== 2 && receiptVersion !== 3)
     || (receipt.state !== 'cleanup-pending' && receipt.state !== 'completed')
     || receipt.host !== host
     || receipt.conflictPluginId !== LEGACY_PLUGIN_IDENTITY
     || !Array.isArray(receipt.conflictScopes)
-    || receipt.conflictScopes.length === 0
+    || (receipt.state === 'cleanup-pending' && receipt.conflictScopes.length === 0)
     || receipt.conflictScopes.some(
-      (scope) => scope !== 'user' && scope !== 'project' && scope !== 'local',
+      (scope) => scope !== 'user' && scope !== 'project' && scope !== 'local' && scope !== 'managed',
     )
     || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length
     || !isReleaseId(receipt.releaseId)
@@ -89,7 +93,14 @@ function parseReceipt(raw: string, host: NativePipelineHost): HostPluginConverge
     || typeof receipt.updatedAt !== 'string'
     || receipt.updatedAt === ''
   ) return null
-  return receipt as HostPluginConvergenceReceipt
+  const transactionId = Reflect.get(value, 'transactionId')
+  if (receiptVersion === 3
+    && (typeof transactionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(transactionId))) return null
+  return {
+    ...(receipt as Omit<HostPluginConvergenceReceipt, 'version' | 'transactionId'>),
+    version: 3,
+    transactionId: receiptVersion === 3 ? transactionId as string : 'legacy-v2',
+  }
 }
 
 export function readHostPluginConvergenceReceipt(
@@ -161,8 +172,36 @@ export function recordPendingHostPluginConflict(
   inventory: ParsedHostPluginInventory,
   activation: RuntimeActivation,
   candidateRoot: string,
+  transactionId: string,
 ): boolean {
   if (!inventory.enabledIds.has(LEGACY_PLUGIN_IDENTITY)) return true
+  if (!/^[a-zA-Z0-9_-]+$/.test(transactionId)) {
+    deps.io.err('ERROR: managed release transaction id 非法；未创建收敛 receipt。')
+    return false
+  }
+  const existing = readHostPluginConvergenceReceipt(env, host)
+  if (existing.state === 'invalid') {
+    deps.io.err(`ERROR: ${existing.detail}；拒绝覆盖不可审计的收敛 receipt。`)
+    return false
+  }
+  if (existing.state === 'receipt') {
+    const receipt = existing.receipt
+    const sameRelease = receipt.releaseId === activation.release.releaseId
+      && receipt.releaseRoot === join(activation.releaseRoot, 'payload')
+      && receipt.candidateRoot === candidateRoot
+    if (receipt.transactionId === transactionId) {
+      if (!sameRelease) {
+        deps.io.err('ERROR: 同一 transaction id 的收敛 receipt 与当前 activation 不一致。')
+        return false
+      }
+      return true
+    }
+    if (receipt.state === 'cleanup-pending') {
+      deps.io.err('ERROR: 冲突清理 receipt 归属于另一个 managed transaction；拒绝覆盖。')
+      return false
+    }
+    if (sameRelease) return true
+  }
   const conflictScopes = [...(inventory.enabledScopes.get(LEGACY_PLUGIN_IDENTITY) ?? [])]
   if (conflictScopes.length === 0) {
     deps.io.err('ERROR: 冲突插件登记缺少可验证 scope；未创建清理事务。')
@@ -175,7 +214,8 @@ export function recordPendingHostPluginConflict(
     return false
   }
   const receipt: HostPluginConvergenceReceipt = {
-    version: 2,
+    version: 3,
+    transactionId,
     state: 'cleanup-pending',
     host,
     conflictPluginId: LEGACY_PLUGIN_IDENTITY,
@@ -214,10 +254,23 @@ export async function finalizePendingHostPluginConflict(
   receipt: HostPluginConvergenceReceipt,
 ): Promise<ConvergenceFinalizeResult> {
   if (receipt.state === 'completed') return { state: 'none' }
-  const inspection = await installer.inspect({
-    homeDir: env.homeDir(),
-    env: env.runtimeEnv(),
-  })
+  const runtime = { homeDir: env.homeDir(), env: env.runtimeEnv() }
+  try {
+    return await installer.withManagedTransaction(runtime, async () =>
+      finalizePendingHostPluginConflictWithinTransaction(deps, env, installer, host, receipt))
+  } catch (error) {
+    return { state: 'failed', detail: `宿主收敛事务锁定失败：${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+
+async function finalizePendingHostPluginConflictWithinTransaction(
+  deps: CliDeps,
+  env: SetupEnv,
+  installer: RuntimeInstaller,
+  host: NativePipelineHost,
+  receipt: HostPluginConvergenceReceipt,
+): Promise<ConvergenceFinalizeResult> {
+  const inspection = await installer.inspect({ homeDir: env.homeDir(), env: env.runtimeEnv() })
   if (
     !inspection.activeValid
     || inspection.selection.activeRelease !== receipt.releaseId
@@ -253,15 +306,24 @@ export async function finalizePendingHostPluginConflict(
   if (!before.enabledIds.has(TENON_PLUGIN_IDENTITY)) {
     return { state: 'failed', detail: '宿主 inventory 未证明 Tenon 登记仍启用；未执行清理' }
   }
-  if (before.enabledIds.has(receipt.conflictPluginId)) {
-    const liveScopes = before.enabledScopes.get(receipt.conflictPluginId) ?? new Set<HostPluginScope>()
-    if (
-      liveScopes.size !== receipt.conflictScopes.length
-      || receipt.conflictScopes.some((scope) => !liveScopes.has(scope))
-    ) {
+  let current = before
+  if (current.enabledIds.has(receipt.conflictPluginId)) {
+    const liveScopes = current.enabledScopes.get(receipt.conflictPluginId) ?? new Set<HostPluginScope>()
+    if ([...liveScopes].some((scope) => !receipt.conflictScopes.includes(scope))) {
       return { state: 'failed', detail: '冲突登记 scope 已变化；拒绝按陈旧 receipt 执行清理' }
     }
-    for (const scope of receipt.conflictScopes) {
+    let remaining = receipt.conflictScopes.filter((scope) => liveScopes.has(scope))
+    for (const scope of [...remaining]) {
+      if (scope === 'managed') {
+        return { state: 'failed', detail: '检测到 managed scope 冲突登记；需要宿主管理员在同一 scope 完成清理' }
+      }
+      const tenonScopes = current.enabledScopes.get(TENON_PLUGIN_IDENTITY) ?? new Set<HostPluginScope>()
+      if (!tenonScopes.has(scope)) {
+        return {
+          state: 'failed',
+          detail: `Tenon 尚未在 ${scope} scope 启用；拒绝删除该 scope 的旧工作流插件`,
+        }
+      }
       for (const item of nativePluginRemovalPlan(host, receipt.conflictPluginId, scope)) {
         deps.io.out(`[setup] 新会话已证明 Tenon 可用；通过宿主插件管理器清理：$ ${commandText(item.cmd, item.args)}`)
         const result = env.runCommand(item.cmd, [...item.args])
@@ -271,6 +333,24 @@ export async function finalizePendingHostPluginConflict(
             detail: result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`,
           }
         }
+      }
+      const checkpointResult = env.runCommand(list.cmd, [...list.args])
+      const checkpoint = checkpointResult.code === 0
+        ? parseHostPluginInventory(host, checkpointResult.stdout)
+        : null
+      if (checkpoint === null
+        || (checkpoint.enabledScopes.get(receipt.conflictPluginId) ?? new Set()).has(scope)
+        || !(checkpoint.enabledScopes.get(TENON_PLUGIN_IDENTITY) ?? new Set()).has(scope)) {
+        return { state: 'failed', detail: `清理 ${scope} scope 后的宿主 inventory 未收敛` }
+      }
+      current = checkpoint
+      remaining = remaining.filter((candidate) => candidate !== scope)
+      if (remaining.length > 0 && !writeReceipt(deps, env, {
+        ...receipt,
+        conflictScopes: remaining,
+        updatedAt: deps.clock(),
+      })) {
+        return { state: 'failed', detail: `已清理 ${scope} scope，但剩余 scope checkpoint 持久化失败` }
       }
     }
   }
@@ -292,6 +372,7 @@ export async function finalizePendingHostPluginConflict(
   const completed: HostPluginConvergenceReceipt = {
     ...receipt,
     state: 'completed',
+    conflictScopes: [],
     updatedAt: deps.clock(),
   }
   if (!writeReceipt(deps, env, completed)) {

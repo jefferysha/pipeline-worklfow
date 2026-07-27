@@ -9,8 +9,14 @@ import {
   type ProgressCounts,
   type ProgressRules,
 } from './progressModel'
-import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from './workflowModel'
-import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import {
+  DEFAULT_RULES,
+  rulesFromDef,
+  snapshotRulesKey,
+  workflowRulesFromSnapshot,
+  type WorkflowRules,
+} from './workflowModel'
+import { CUSTOM_WORKFLOW_FINGERPRINT, DEFAULT_WORKFLOW_FINGERPRINT, makeChange, makeProject, makeSnapshot } from '../testkit'
 import type { ChangeSnapshot } from '../types'
 
 /** demo 语境的 release-train：draft → review(review 门) → ship(confirm 门)。 */
@@ -30,7 +36,30 @@ const REL_RULES: WorkflowRules = rulesFromDef(REL_DEF)
 const REL_RULES_GUARDED: ProgressRules = {
   ...rulesFromDef(REL_DEF),
   outputsByStep: { review: ['release_notes'] },
-  nonemptyOutputByStep: { review: true },
+}
+const REL_EXECUTION_REQUIRED = {
+  readinessByTransition: {
+    draft: { approved: { ready: true, blockers: [] } },
+    review: {
+      shipped: {
+        ready: false,
+        blockers: [{
+          kind: 'guard-failed' as const,
+          guardType: 'field-nonempty',
+          field: 'release_notes',
+          actual: '',
+        }],
+      },
+    },
+    ship: {},
+  },
+}
+const REL_EXECUTION_READY = {
+  readinessByTransition: {
+    draft: { approved: { ready: true, blockers: [] } },
+    review: { shipped: { ready: true, blockers: [] } },
+    ship: {},
+  },
 }
 
 /** verify 三轨证据齐（可拍板）的 fields。 */
@@ -42,14 +71,48 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
     ['verify 三轨全 pass → gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
     ['verify 有 fail 判定（可打回）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, verify_result: 'fail' } }), DEFAULT_RULES, 'gate'],
     ['verify 三轨齐但 verification_report/build_sha 未设 → gate（产物没产出不等于验证没过）', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
-    ['explore 双产出齐 → gate', makeChange('c', 'explore', { fields: { design_doc: 'docs/d.md', plan: 'docs/p.md' } }), DEFAULT_RULES, 'gate'],
-    ['自定义 review 步无产出声明（无自动证据）→ gate', makeChange('c', 'review'), REL_RULES, 'gate'],
-    ['自定义 review 步 nonempty guard 且产出已设 → gate', makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), REL_RULES_GUARDED, 'gate'],
+    ['explore 只要求当前事件的 design_doc，不能被未来 spec 的 plan 阻塞', makeChange('c', 'explore', {
+      fields: { design_doc: 'docs/d.md' },
+      workflowExecution: {
+        readinessByTransition: {
+          open: { 'open-complete': { ready: true, blockers: [] } },
+          explore: { 'explore-complete': { ready: true, blockers: [] } },
+          spec: { 'spec-complete': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'file-exists', field: 'plan', actual: '' }] } },
+          build: { 'build-complete': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'field-nonempty', field: 'build_mode', actual: '' }] }, 'requirements-changed': { ready: true, blockers: [] } },
+          verify: { 'verify-pass': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'file-exists', field: 'verification_report', actual: '' }] }, 'verify-fail': { ready: true, blockers: [] } },
+          ship: { 'ship-complete': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'spec-migration-applied', actual: 'missing' }] } },
+          archive: {},
+        },
+      },
+    }), DEFAULT_RULES, 'gate'],
+    ['自定义 review 步无产出声明（无自动证据）→ gate', makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_READY,
+    }), REL_RULES, 'gate'],
+    ['自定义 review 步 nonempty guard 且产出已设 → gate', makeChange('c', 'review', {
+      fields: { release_notes: 'notes.md' },
+      workflowExecution: REL_EXECUTION_READY,
+    }), REL_RULES_GUARDED, 'gate'],
     // ── agent（等 agent 补产出 / 活在终端里）──
-    ['spec 缺 plan → agent', makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } }), DEFAULT_RULES, 'agent'],
+    ['PM spec 不要求 legacy plan → gate', makeChange('c', 'spec', {
+      track: 'pm',
+      fields: { design_doc: 'docs/d.md' },
+      workflowExecution: {
+        readinessByTransition: {
+          open: { 'open-complete': { ready: true, blockers: [] } },
+          explore: { 'explore-complete': { ready: true, blockers: [] } },
+          spec: { 'spec-complete': { ready: true, blockers: [] } },
+          build: { 'build-complete': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'field-nonempty', field: 'build_mode', actual: '' }] }, 'requirements-changed': { ready: true, blockers: [] } },
+          verify: { 'verify-pass': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'file-exists', field: 'verification_report', actual: '' }] }, 'verify-fail': { ready: true, blockers: [] } },
+          ship: { 'ship-complete': { ready: false, blockers: [{ kind: 'guard-failed', guardType: 'spec-migration-applied', actual: 'missing' }] } },
+          archive: {},
+        },
+      },
+    }), DEFAULT_RULES, 'gate'],
     ["explore 的 design_doc 是字面 'null' → agent（cmd_get 口径未设）", makeChange('c', 'explore', { fields: { design_doc: 'null', plan: 'docs/p.md' } }), DEFAULT_RULES, 'agent'],
-    ['verify 三轨全 pending → agent', makeChange('c', 'verify'), DEFAULT_RULES, 'agent'],
-    ['自定义 review 步 nonempty guard 且产出未设 → agent', makeChange('c', 'review'), REL_RULES_GUARDED, 'agent'],
+    ['verify 三轨全 pending 但 verify-fail 出口无字段前置 → gate', makeChange('c', 'verify'), DEFAULT_RULES, 'gate'],
+    ['自定义 review 步 nonempty guard 且产出未设 → agent', makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_REQUIRED,
+    }), REL_RULES_GUARDED, 'agent'],
     ['default 非门阶段（build）无自动化 → agent', makeChange('c', 'build'), DEFAULT_RULES, 'agent'],
     ['default 非门阶段（open）无自动化 → agent', makeChange('c', 'open'), DEFAULT_RULES, 'agent'],
     ['confirm 门是终端会话内的秒级门，不是 dashboard 拍板点 → agent', makeChange('c', 'ship'), REL_RULES, 'agent'],
@@ -87,10 +150,19 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
   it.each(table)('%s', (_desc, change, rules, expected) => {
     expect(changeProgressState(change, rules)).toBe(expected)
   })
+
+  it('反序列化后的 default 规则仍逐 event 消费 Change 执行投影', () => {
+    const deserializedDefaultRules = structuredClone(DEFAULT_RULES)
+
+    expect(changeProgressState(
+      makeChange('c', 'verify'),
+      deserializedDefaultRules,
+    )).toBe('gate')
+  })
 })
 
-describe('changeProgressState —— T7 兑现 T6 契约：rulesFromDef 产出的 rules 自然携带产出表', () => {
-  it('def 声明 outputs+nonempty guard 后，判定不需要测试侧手工扩展 outputsByStep', () => {
+describe('changeProgressState —— plan 结构与逐 Change 有效执行投影分层', () => {
+  it('def 只声明 outputs；按 Track 求值的必需输出由 Change.workflowExecution 驱动', () => {
     const rules = rulesFromDef({
       ...REL_DEF,
       steps: REL_DEF.steps.map((s) =>
@@ -99,8 +171,13 @@ describe('changeProgressState —— T7 兑现 T6 契约：rulesFromDef 产出�
           : s,
       ),
     })
-    expect(changeProgressState(makeChange('c', 'review'), rules)).toBe('agent')
-    expect(changeProgressState(makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), rules)).toBe('gate')
+    expect(changeProgressState(makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_REQUIRED,
+    }), rules)).toBe('agent')
+    expect(changeProgressState(makeChange('c', 'review', {
+      fields: { release_notes: 'notes.md' },
+      workflowExecution: REL_EXECUTION_READY,
+    }), rules)).toBe('gate')
   })
 })
 
@@ -110,14 +187,61 @@ describe('missingGateArtifacts —— 「等 agent 补产出」的欠账清单',
     expect(missingGateArtifacts(c, DEFAULT_RULES)).toEqual(['plan'])
   })
 
-  it('verify 三轨 pending 的字段逐个点名；verification_report/build_sha 未设不入欠账', () => {
+  it('verify-fail 出口无字段前置时不把 verify-pass 的字段并集当成欠账', () => {
     const c = makeChange('c', 'verify', { fields: { verify_result: 'pass' } })
-    expect(missingGateArtifacts(c, DEFAULT_RULES)).toEqual(['agent_review_result', 'codex_review_result'])
+    expect(missingGateArtifacts(c, DEFAULT_RULES)).toEqual([])
   })
 
   it('自定义 nonempty guard：未设产出点名；无 guard 声明 → 空（无自动证据）', () => {
-    expect(missingGateArtifacts(makeChange('c', 'review'), REL_RULES_GUARDED)).toEqual(['release_notes'])
-    expect(missingGateArtifacts(makeChange('c', 'review'), REL_RULES)).toEqual([])
+    expect(missingGateArtifacts(makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_REQUIRED,
+    }), REL_RULES_GUARDED)).toEqual(['release_notes'])
+    expect(missingGateArtifacts(makeChange('c', 'review', {
+      workflowExecution: REL_EXECUTION_READY,
+    }), REL_RULES)).toEqual([])
+  })
+
+  it('多出口逐 event 求值：任一出口证据齐即 gate；全部未齐时只显示最小可达出口', () => {
+    const rules: ProgressRules = {
+      executionModel: 'step-graph',
+      steps: ['review', 'done'],
+      transitions: {
+        review: [{ event: 'accept', to: 'done' }, { event: 'revise', to: 'done' }],
+        done: [],
+      },
+      gateByStep: { review: 'review', done: null },
+      labelByStep: {},
+      outputsByStep: { review: ['plan', 'scope', 'verification_report'], done: [] },
+    }
+    const blockedExecution = {
+      readinessByTransition: {
+        review: {
+          accept: {
+            ready: false,
+            blockers: [
+              { kind: 'guard-failed' as const, guardType: 'field-nonempty', field: 'plan', actual: '' },
+              { kind: 'guard-failed' as const, guardType: 'field-nonempty', field: 'scope', actual: '' },
+              { kind: 'guard-failed' as const, guardType: 'field-nonempty', field: 'verification_report', actual: '' },
+            ],
+          },
+          revise: {
+            ready: false,
+            blockers: [{ kind: 'guard-failed' as const, guardType: 'field-nonempty', field: 'plan', actual: '' }],
+          },
+        },
+        done: {},
+      },
+    }
+    const readyExecution = structuredClone(blockedExecution)
+    readyExecution.readinessByTransition.review.revise = { ready: true, blockers: [] }
+
+    expect(missingGateArtifacts(makeChange('ready-via-revise', 'review', {
+      fields: { plan: 'docs/plan.md' },
+      workflowExecution: readyExecution,
+    }), rules)).toEqual([])
+    expect(missingGateArtifacts(makeChange('not-ready', 'review', {
+      workflowExecution: blockedExecution,
+    }), rules)).toEqual(['plan'])
   })
 
   it('default 非门阶段 / rules 缺失 → 空', () => {
@@ -138,9 +262,9 @@ describe('isDashboardGate —— 收件箱准入同源的门判据（T7 复用�
 
 describe('selectProgress —— 项目×workflow 分组选择器', () => {
   const RULES = new Map<string, WorkflowRules>([
-    [rulesKey('/a', 'default'), DEFAULT_RULES],
-    [rulesKey('/a', 'release-train'), REL_RULES_GUARDED],
-    [rulesKey('/b', 'default'), DEFAULT_RULES],
+    [snapshotRulesKey('/a', DEFAULT_WORKFLOW_FINGERPRINT), DEFAULT_RULES],
+    [snapshotRulesKey('/a', CUSTOM_WORKFLOW_FINGERPRINT), REL_RULES_GUARDED],
+    [snapshotRulesKey('/b', DEFAULT_WORKFLOW_FINGERPRINT), DEFAULT_RULES],
   ])
 
   it('null snapshot → 空组 + 全零计数', () => {
@@ -154,15 +278,18 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     const snap = makeSnapshot([
       makeProject('/b', [makeChange('b1', 'open')]),
       makeProject('/a', [
-        makeChange('a1', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('a1', 'review', {
+          fields: { workflow: 'release-train' },
+          workflowExecution: REL_EXECUTION_READY,
+        }),
         makeChange('a2', 'open'),
       ]),
     ])
     const sel = selectProgress(snap, '', RULES)
     expect(sel.groups.map((g) => g.key)).toEqual([
-      rulesKey('/a', 'default'),
-      rulesKey('/a', 'release-train'),
-      rulesKey('/b', 'default'),
+      snapshotRulesKey('/a', DEFAULT_WORKFLOW_FINGERPRINT),
+      snapshotRulesKey('/a', CUSTOM_WORKFLOW_FINGERPRINT),
+      snapshotRulesKey('/b', DEFAULT_WORKFLOW_FINGERPRINT),
     ])
     expect(sel.groups[0]).toMatchObject({ root: '/a', workflow: 'default' })
     expect(sel.groups[1]).toMatchObject({ root: '/a', workflow: 'release-train' })
@@ -178,6 +305,124 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     ])
     const sel = selectProgress(snap, '/a', RULES)
     expect(sel.groups[0]!.rows.map((r) => r.change.name)).toEqual(['tie-a', 'tie-b', 'older'])
+  })
+
+  it('同名 workflow 的两个冻结修订按 plan fingerprint 分组且各用自己的 gate 规则', () => {
+    const reviewRules = rulesFromDef(REL_DEF)
+    const noGateRules = { ...reviewRules, gateByStep: { ...reviewRules.gateByStep, review: null } }
+    const firstFingerprint = '2'.repeat(64)
+    const secondFingerprint = '3'.repeat(64)
+    const snap = makeSnapshot([makeProject('/a', [
+      makeChange('old-plan', 'review', {
+        fields: { workflow: 'release-train' },
+        workflowPlanFingerprint: firstFingerprint,
+        workflowRules: {
+          executionModel: 'step-graph',
+          steps: [...reviewRules.steps],
+          transitions: reviewRules.transitions as Record<string, Array<{ event: string; to: string }>>,
+          gateByStep: reviewRules.gateByStep,
+          labelByStep: reviewRules.labelByStep ?? {},
+          outputsByStep: Object.fromEntries(reviewRules.steps.map((step) => [step, []])),
+        },
+        workflowExecution: {
+          readinessByTransition: {
+            draft: { approved: { ready: true, blockers: [] } },
+            review: { shipped: { ready: true, blockers: [] } },
+            ship: {},
+          },
+        },
+      }),
+      makeChange('new-plan', 'review', {
+        fields: { workflow: 'release-train' },
+        workflowPlanFingerprint: secondFingerprint,
+        workflowRules: {
+          executionModel: 'step-graph',
+          steps: [...noGateRules.steps],
+          transitions: noGateRules.transitions as Record<string, Array<{ event: string; to: string }>>,
+          gateByStep: noGateRules.gateByStep,
+          labelByStep: noGateRules.labelByStep ?? {},
+          outputsByStep: Object.fromEntries(noGateRules.steps.map((step) => [step, []])),
+        },
+        workflowExecution: {
+          readinessByTransition: {
+            draft: { approved: { ready: true, blockers: [] } },
+            review: { shipped: { ready: true, blockers: [] } },
+            ship: {},
+          },
+        },
+      }),
+    ])])
+    const rules = new Map([
+      [snapshotRulesKey('/a', firstFingerprint), reviewRules],
+      [snapshotRulesKey('/a', secondFingerprint), noGateRules],
+    ])
+    const selection = selectProgress(snap, '/a', rules)
+    expect(selection.groups).toHaveLength(2)
+    expect(new Map(selection.groups.map((group) => [group.workflowPlanFingerprint, group.rows[0]?.state]))).toEqual(
+      new Map([[firstFingerprint, 'gate'], [secondFingerprint, 'agent']]),
+    )
+  })
+
+  it('同一冻结 plan 的不同 Track 逐 Change 消费自己的有效输出投影', () => {
+    const fingerprint = '4'.repeat(64)
+    const snap = makeSnapshot([makeProject('/a', [
+      makeChange('backend-change', 'review', {
+        track: 'backend',
+        fields: { workflow: 'release-train' },
+        workflowPlanFingerprint: fingerprint,
+        workflowRules: {
+          executionModel: 'step-graph',
+          steps: [...REL_RULES_GUARDED.steps],
+          transitions: REL_RULES_GUARDED.transitions as Record<string, Array<{ event: string; to: string }>>,
+          gateByStep: REL_RULES_GUARDED.gateByStep,
+          labelByStep: REL_RULES_GUARDED.labelByStep ?? {},
+          outputsByStep: { review: ['release_notes'], draft: [], ship: [] },
+        },
+        workflowExecution: {
+          readinessByTransition: {
+            draft: { approved: { ready: true, blockers: [] } },
+            review: {
+              shipped: {
+                ready: false,
+                blockers: [{
+                  kind: 'guard-failed',
+                  guardType: 'field-nonempty',
+                  field: 'release_notes',
+                  actual: '',
+                }],
+              },
+            },
+            ship: {},
+          },
+        },
+      }),
+      makeChange('pm-change', 'review', {
+        track: 'pm',
+        fields: { workflow: 'release-train' },
+        workflowPlanFingerprint: fingerprint,
+        workflowRules: {
+          executionModel: 'step-graph',
+          steps: [...REL_RULES_GUARDED.steps],
+          transitions: REL_RULES_GUARDED.transitions as Record<string, Array<{ event: string; to: string }>>,
+          gateByStep: REL_RULES_GUARDED.gateByStep,
+          labelByStep: REL_RULES_GUARDED.labelByStep ?? {},
+          outputsByStep: { review: ['release_notes'], draft: [], ship: [] },
+        },
+        workflowExecution: {
+          readinessByTransition: {
+            draft: { approved: { ready: true, blockers: [] } },
+            review: { shipped: { ready: true, blockers: [] } },
+            ship: {},
+          },
+        },
+      }),
+    ])])
+
+    const selection = selectProgress(snap, '/a', workflowRulesFromSnapshot(snap))
+    expect(selection.groups).toHaveLength(1)
+    expect(new Map(selection.groups[0]?.rows.map((row) => [row.change.track, row.state]))).toEqual(
+      new Map([['backend', 'agent'], ['pm', 'gate']]),
+    )
   })
 
   it('currentRoot 非空只看该项目；空串聚合全部且行各自带 root', () => {
@@ -229,6 +474,7 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
           archived: 'true',
           updated_at: '2026-07-06T00:00:00Z',
           fields: { workflow: 'release-train', release_notes: 'n.md' },
+          workflowExecution: REL_EXECUTION_READY,
         }),
       ]),
     ])
@@ -297,7 +543,10 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
         makeChange('a-agent', 'spec'),
         makeChange('a-run', 'build', { fields: { automation: 'running' } }),
         makeChange('a-archived', 'ship', { archived: 'true' }),
-        makeChange('a-rel', 'review', { fields: { workflow: 'release-train', release_notes: 'n.md' } }),
+        makeChange('a-rel', 'review', {
+          fields: { workflow: 'release-train', release_notes: 'n.md' },
+          workflowExecution: REL_EXECUTION_READY,
+        }),
       ]),
       makeProject('/b', [
         makeChange('b-queue', 'open', { fields: { automation: 'queued' } }),

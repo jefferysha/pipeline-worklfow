@@ -86,8 +86,9 @@
 | B4 | `isolation` 已设 | yaml_nonempty | 全部 | M222 | ✅（lite 已有）|
 | B5 | preset=full 且 build_mode=direct → `direct_override=true` | yaml_eq | 条件步 | G537-542 | ✅ 纯字段 |
 | B6 | `depends_on` 逐项：活跃（`openspec/changes/<dep>/` 存在）→ FAIL「必须先归档（当前活跃）」；归档区（`archive/*-<dep>` 目录）无匹配 → FAIL「不存在（既不在活跃也不在归档）」；已归档 → PASS | test -d / find（G544-559） | 值空或 `null` 跳过；逗号分隔、逐项 trim | G544-559 | ✅ ctx.dirExists + ctx.changeArchived（新仓列表字段数组与老式逗号标量都认）|
-| B7 | mandatory skills | — | full 硬卡 | G560 | ❌ 同 O6 |
-| B8 | ~~build_sha 非空~~（**lite 投影，非老仓规则**——老仓 build-complete 事件体自动冻结 SHA，guard 出口不查；新仓 transition.ts build-complete 已实现同款自动冻结，故本投影随全量移植**撤销**） | — | — | 老仓无此条 | ↩️ 回对齐老仓 |
+| B7 | `pre_verify_review_result=pass`：完整 diff、全部 capability 与适用发布门禁已在 Build 内收敛 | yaml_eq | 全部 | Tenon 全局治理新增 | ✅ 纯字段；`spec-complete` / `requirements-changed` / `verify-fail` 重置 `pending` |
+| B8 | mandatory skills | — | full 硬卡 | G560 | ❌ 同 O6 |
+| B9 | ~~build_sha 非空~~（**lite 投影，非老仓规则**——老仓 build-complete 事件体自动冻结 SHA，guard 出口不查；新仓 transition.ts build-complete 已实现同款自动冻结，故本投影随全量移植**撤销**） | — | — | 老仓无此条 | ↩️ 回对齐老仓 |
 
 ## 5. verify 出口（G564-577；M239-247）
 
@@ -124,7 +125,7 @@
 2. **文件类规则的无注入语义**：`guardCheck(state)`（无 ctx）= 纯字段面，文件类规则静默跳过，
    不在 failures 里注水——老仓没有「无 fs」运行模式可对照，选静默跳过以保持 lite 纯函数调用面
    向后兼容；CLI `check` 命令经 `deps.guardCtx` 全量注入后即为老仓全语义。
-3. **skill/工具留痕类检查全部未移植**（O6/E4/S6/B7/V8/V9/P5 + recommended WARN G224-234）：
+3. **skill/工具留痕类检查全部未移植**（O6/E4/S6/B8/V8/V9/P5 + recommended WARN G224-234）：
    证据链（PostToolUse skill-tracker → tools_history）在新仓尚不存在（BACKLOG #18/#21），
    且新仓无 `log` 命令可补录——现在移植会把 full preset 永久卡死。留痕面落地后按本表补植。
 4. **--preview / --pass / --apply / --json 模式**（G64-105, 182-197, 608-616）：guard 的旁路
@@ -133,7 +134,7 @@
    （state-fields.sh:466-546，规则约等于「上一相位出口」的弱化子集），guard 是**出相位**校验。
    新仓 `check <name>` 按 CONTRACT 白名单①委托 guardCheck 查当前相位出口。oracle 双跑的 check
    步与老 cmd_check 比 exit 面——fixtures 已按「合规 change」构造使两面一致（见 tools/oracle/fixtures）。
-6. **lite 两处投影撤销**（B8/V7）：build_sha 出口必填与 verify_result 全 track 必 pass 是
+6. **lite 两处投影撤销**（B9/V7）：build_sha 出口必填与 verify_result 全 track 必 pass 是
    lite 早期无 transition 副作用时的补偿；transition.ts 现已逐字实现老仓事件体副作用
    （build-complete 冻结 SHA / verify-pass 落 pass），guard 回对齐老仓原语义。
    CONTRACT §3 白名单④「自动副作用改显式 set」一句已过时（记报告，不改契约文档）。

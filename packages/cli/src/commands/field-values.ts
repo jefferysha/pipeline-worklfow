@@ -8,6 +8,7 @@ import {
 import { errMsg, type CliDeps } from '../deps.js'
 
 const REVIEWISH = ['pending', 'pass', 'fail', 'handled', 'skipped'] as const
+const PRE_VERIFY_REVIEW = ['pending', 'pass'] as const
 export const REVIEW_GATE_FIELDS = new Set<FieldName>([
   'review_gate_phase', 'review_gate_status', 'review_gate_event', 'review_requested_at', 'review_acknowledged_at',
 ])
@@ -21,6 +22,7 @@ const STATIC_ENUMS: Partial<Record<FieldName, readonly string[]>> = {
   codex_review_result: REVIEWISH,
   verify_result: REVIEWISH,
   branch_status: REVIEWISH,
+  pre_verify_review_result: PRE_VERIFY_REVIEW,
   direct_override: ['true', 'false'],
   archived: ['true', 'false'],
   automation: ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'],

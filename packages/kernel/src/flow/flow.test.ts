@@ -208,15 +208,21 @@ describe('FlowEngine · guardCheck（lite 相位出口必填字段表）', () =>
     ).toBe(true)
   })
 
-  it('build 出口：build_mode + isolation 必非空；build_sha 不查（老仓由 build-complete 事件冻结，BACKLOG #12 回对齐）', () => {
+  it('build 出口：实现参数与 pre-Verify 全量收敛必须完成；build_sha 仍由事件冻结', () => {
     const base = { phase: 'build' as const, track: 'backend' }
     const r = engine.guardCheck(makeState(base))
     expect(r.pass).toBe(false)
     expect(r.failures.some((f) => f.includes('build_mode'))).toBe(true)
     expect(r.failures.some((f) => f.includes('isolation'))).toBe(true)
+    expect(r.failures.some((f) => f.includes('pre_verify_review_result'))).toBe(true)
     // build_sha 为空不阻断（老 guard 出口无此条，SHA 由 transition build-complete 自动冻结）
     expect(
-      engine.guardCheck(makeState({ ...base, build_mode: 'worktree', isolation: 'branch' })),
+      engine.guardCheck(makeState({
+        ...base,
+        build_mode: 'worktree',
+        isolation: 'branch',
+        pre_verify_review_result: 'pass',
+      })),
     ).toEqual({ pass: true, failures: [] })
   })
 

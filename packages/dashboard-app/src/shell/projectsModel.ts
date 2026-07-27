@@ -1,5 +1,5 @@
 import { changeWorkflowName, selectProgress } from '../model/progressModel'
-import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
+import { DEFAULT_RULES, isBuiltinWorkflowName, type WorkflowRules } from '../model/workflowModel'
 import type { ChangeSnapshot, Snapshot } from '../types'
 
 export type CellState = 'done' | 'current' | 'todo'
@@ -34,24 +34,30 @@ function phaseLabel(t: (key: string) => string, rules: WorkflowRules, phase: str
 
 function dominantRules(
   changes: readonly ChangeSnapshot[],
-  root: string,
-  rulesByKey: ReadonlyMap<string, WorkflowRules>,
+  _root: string,
+  _rulesByKey: ReadonlyMap<string, WorkflowRules>,
 ): WorkflowRules {
-  const byWorkflow = new Map<string, number>()
+  const byPlan = new Map<string, { count: number; workflow: string }>()
   for (const change of changes) {
     if (change.archived === 'true') continue
-    const workflow = changeWorkflowName(change)
-    byWorkflow.set(workflow, (byWorkflow.get(workflow) ?? 0) + 1)
+    const fingerprint = change.workflowPlanFingerprint
+    const current = byPlan.get(fingerprint)
+    byPlan.set(fingerprint, { count: (current?.count ?? 0) + 1, workflow: changeWorkflowName(change) })
   }
-  let best = 'default'
+  let best = ''
+  let bestWorkflow = 'default'
   let bestCount = 0
-  for (const [workflow, count] of byWorkflow) {
-    if (count > bestCount || (count === bestCount && best !== 'default' && (workflow === 'default' || workflow < best))) {
-      best = workflow
-      bestCount = count
+  for (const [fingerprint, candidate] of byPlan) {
+    if (candidate.count > bestCount
+      || (candidate.count === bestCount && !isBuiltinWorkflowName(bestWorkflow)
+        && (isBuiltinWorkflowName(candidate.workflow) || candidate.workflow < bestWorkflow))) {
+      best = fingerprint
+      bestWorkflow = candidate.workflow
+      bestCount = candidate.count
     }
   }
-  return rulesByKey.get(rulesKey(root, best)) ?? DEFAULT_RULES
+  const selected = changes.find((change) => change.workflowPlanFingerprint === best)
+  return selected?.workflowRules ?? DEFAULT_RULES
 }
 
 function buildCells(

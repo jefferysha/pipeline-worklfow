@@ -74,9 +74,424 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(beta.name).toBe('beta')
     expect(beta.phase).toBe('open')
     expect(beta.track).toBe('pm')
-    expect(snap.projects.find((p) => p.root === b)?.workflowRules.default).toMatchObject({
+    expect(beta.workflowRules).toMatchObject({
       steps: ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'],
       gateByStep: { explore: 'review', spec: 'review', verify: 'review' },
+    })
+    expect(Object.keys(beta.workflowExecution.readinessByTransition)).toEqual(['open'])
+    expect(beta.workflowExecution.readinessByTransition.open).toEqual({
+      'open-complete': { ready: true, blockers: [] },
+    })
+    expect((snap.projects.find((p) => p.root === b) as unknown as {
+      workflowRules: Record<string, { nonemptyOutputByStep: Record<string, boolean> }>
+    }).workflowRules.default.nonemptyOutputByStep).toHaveProperty('open')
+  })
+
+  it('default Build readiness 投影 pre-Verify 全量收敛门，pending 不得显示可冻结', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'pre-verify-readiness')
+    await store.setMany(dir, {
+      phase: 'build',
+      build_mode: 'direct',
+      isolation: 'in-place',
+      direct_override: 'true',
+    })
+
+    const blocked = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(
+      blocked.projects[0]?.changes[0]?.workflowExecution
+        .readinessByTransition.build?.['build-complete'],
+    ).toEqual({
+      ready: false,
+      blockers: [{
+        kind: 'guard-failed',
+        guardType: 'field-equals',
+        field: 'pre_verify_review_result',
+        actual: 'pending',
+        expected: ['pass'],
+      }],
+    })
+
+    await store.set(dir, 'pre_verify_review_result', 'pass')
+    const ready = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(
+      ready.projects[0]?.changes[0]?.workflowExecution
+        .readinessByTransition.build?.['build-complete'],
+    ).toEqual({ ready: true, blockers: [] })
+  })
+
+  it('非当前 phase 不求值 workspace fingerprint，当前求值异常只投影 blocker 而不让项目离线', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'fingerprint-read-model')
+    await store.set(dir, 'build_sha', `workspace:sha256:${'a'.repeat(64)}`)
+    let calls = 0
+    const fingerprint = async () => {
+      calls += 1
+      throw new Error('workspace changed during traversal')
+    }
+
+    const open = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+      workspaceFingerprint: fingerprint,
+    })
+    expect(calls).toBe(0)
+    expect(open.projects[0]?.ok).toBe(true)
+
+    await store.set(dir, 'phase', 'verify')
+    const verify = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+      workspaceFingerprint: fingerprint,
+    })
+    expect(calls).toBe(1)
+    expect(verify.projects[0]?.ok).toBe(true)
+    expect(
+      verify.projects[0]?.changes[0]?.workflowExecution.readinessByTransition.verify?.['verify-pass'],
+    ).toMatchObject({
+      ready: false,
+      blockers: expect.arrayContaining([{
+        kind: 'evaluation-error',
+        guardType: 'build-head-unchanged',
+        capability: 'workspaceFingerprint',
+      }]),
+    })
+  })
+
+  it('条件 nonempty guard 只为适用 Track 投影必需输出', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'conditional-output.yaml'), `name: conditional-output
+steps:
+  - id: shape
+    label: Shape
+    gate: review
+    skills: []
+    inputs: []
+    outputs:
+      - field: plan
+        type: file_path
+      - field: scope
+        type: string
+    guards:
+      - type: nonempty-output
+        when:
+          track_in: [backend]
+    transitions:
+      - event: continue
+        to: shape
+`, 'utf8')
+    await initChange(store, root, 'conditional-backend', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'conditional-output', phase: 'shape' },
+    })
+    await initChange(store, root, 'conditional-pm', {
+      track: 'pm',
+      initialWorkflow: { workflow: 'conditional-output', phase: 'shape' },
+    })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+    const byName = new Map(snapshot.projects[0]?.changes.map((change) => [change.name, change]))
+
+    expect(byName.get('conditional-backend')?.workflowExecution.readinessByTransition.shape)
+      .toEqual({
+        continue: {
+          ready: false,
+          blockers: [
+            { kind: 'guard-failed', guardType: 'field-nonempty', field: 'plan', actual: 'null' },
+            { kind: 'guard-failed', guardType: 'output-present', field: 'scope', actual: 'null' },
+          ],
+        },
+      })
+    expect(byName.get('conditional-pm')?.workflowExecution.readinessByTransition.shape)
+      .toEqual({ continue: { ready: true, blockers: [] } })
+    expect(byName.get('conditional-backend')?.workflowRules)
+      .toEqual(byName.get('conditional-pm')?.workflowRules)
+  })
+
+  it('workflow label 投影覆盖每个 step；未声明展示名时用 step id 保持边界契约完整', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'partial-labels.yaml'), `name: partial-labels
+steps:
+  - id: draft
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: finish
+        to: done
+  - id: done
+    label: 完成
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    await initChange(store, root, 'partial-labels', {
+      initialWorkflow: { workflow: 'partial-labels', phase: 'draft' },
+    })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+
+    expect(snapshot.projects[0]?.changes[0]?.workflowRules.labelByStep).toEqual({
+      draft: 'draft',
+      done: '完成',
+    })
+  })
+
+  it('逐 event 投影 step + edge guard，多个出口不得合并成 step 级并集', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'edge-evidence.yaml'), `name: edge-evidence
+steps:
+  - id: review
+    label: Review
+    gate: review
+    skills: []
+    inputs: []
+    outputs:
+      - field: plan
+        type: file_path
+      - field: scope
+        type: string
+    guards:
+      - type: nonempty-output
+    transitions:
+      - event: accept
+        to: done
+        guards:
+          - type: field-nonempty
+            field: verification_report
+      - event: revise
+        to: done
+  - id: done
+    label: Done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    await initChange(store, root, 'edge-evidence', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'edge-evidence', phase: 'review' },
+    })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+
+    expect(snapshot.projects[0]?.changes[0]?.workflowExecution.readinessByTransition).toEqual({
+      review: {
+        accept: {
+          ready: false,
+          blockers: [
+            { kind: 'guard-failed', guardType: 'field-nonempty', field: 'plan', actual: 'null' },
+            { kind: 'guard-failed', guardType: 'output-present', field: 'scope', actual: 'null' },
+            { kind: 'guard-failed', guardType: 'field-nonempty', field: 'verification_report', actual: 'null' },
+          ],
+        },
+        revise: {
+          ready: false,
+          blockers: [
+            { kind: 'guard-failed', guardType: 'field-nonempty', field: 'plan', actual: 'null' },
+            { kind: 'guard-failed', guardType: 'output-present', field: 'scope', actual: 'null' },
+          ],
+        },
+      },
+    })
+  })
+
+  it('逐 event readiness 复用 canonical guard 语义，不得把非空字段误判为谓词通过', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'semantic-readiness.yaml'), `name: semantic-readiness
+steps:
+  - id: review
+    label: Review
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards:
+      - type: tasks-at-least
+        n: 2
+    transitions:
+      - event: accept
+        to: done
+        guards:
+          - type: field-equals
+            field: branch_status
+            value: handled
+          - type: field-in
+            field: verify_result
+            values: [pass]
+          - type: file-exists
+            field: verification_report
+  - id: done
+    label: Done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const dir = await initChange(store, root, 'semantic-readiness', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'semantic-readiness', phase: 'review' },
+    })
+    await store.setMany(dir, {
+      branch_status: 'pending',
+      verify_result: 'fail',
+      verification_report: 'docs/missing.md',
+    })
+    await writeFile(join(dir, 'tasks.md'), '- [x] only-one\n', 'utf8')
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+    expect(snapshot.projects[0]?.error).toBeUndefined()
+    const execution = snapshot.projects[0]?.changes[0]?.workflowExecution as unknown as {
+      readinessByTransition: Record<string, Record<string, {
+        ready: boolean
+        blockers: Array<{ guardType: string; field?: string; actual?: string; expected?: readonly string[] }>
+      }>>
+    }
+
+    expect(execution.readinessByTransition.review.accept).toEqual({
+      ready: false,
+      blockers: [
+        { kind: 'guard-failed', guardType: 'tasks-at-least', actual: '1', expected: ['2'] },
+        {
+          kind: 'guard-failed',
+          guardType: 'field-equals',
+          field: 'branch_status',
+          actual: 'pending',
+          expected: ['handled'],
+        },
+        {
+          kind: 'guard-failed',
+          guardType: 'field-in',
+          field: 'verify_result',
+          actual: 'fail',
+          expected: ['pass'],
+        },
+        {
+          kind: 'guard-failed',
+          guardType: 'file-exists',
+          field: 'verification_report',
+          actual: 'docs/missing.md',
+        },
+      ],
+    })
+  })
+
+  it('无法取得 Git capability 时 readiness 失败关闭，取得后仍按 canonical SHA 谓词求值', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'sha-readiness.yaml'), `name: sha-readiness
+steps:
+  - id: verify
+    label: Verify
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: pass
+        to: done
+        guards:
+          - type: build-head-unchanged
+            field: build_sha
+  - id: done
+    label: Done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const dir = await initChange(store, root, 'sha-readiness', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'sha-readiness', phase: 'verify' },
+    })
+    await store.set(dir, 'build_sha', 'abc123')
+
+    const unavailable = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+    expect(
+      unavailable.projects[0]?.changes[0]?.workflowExecution.readinessByTransition.verify?.pass,
+    ).toEqual({
+      ready: false,
+      blockers: [{
+        kind: 'capability-unavailable',
+        guardType: 'build-head-unchanged',
+        capability: 'gitHeadSha',
+      }],
+    })
+
+    const mismatch = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+      gitHeadSha: async () => 'def456',
+    })
+    expect(
+      mismatch.projects[0]?.changes[0]?.workflowExecution.readinessByTransition.verify?.pass,
+    ).toEqual({
+      ready: false,
+      blockers: [{
+        kind: 'guard-failed',
+        guardType: 'build-head-unchanged',
+        field: 'build_sha',
+        actual: 'def456',
+        expected: ['abc123'],
+      }],
     })
   })
 
@@ -280,7 +695,25 @@ steps:
   it('Tenon server 继续投影身份迁移前冻结的 default v1 workflow snapshot', async () => {
     const store = newStore()
     const root = await makeProject()
-    const legacyWorkflow = compileEffectiveWorkflowPlan('default').workflow
+    const currentWorkflow = compileEffectiveWorkflowPlan('default').workflow
+    const legacyWorkflow = {
+      ...currentWorkflow,
+      steps: currentWorkflow.steps.map((step) => ({
+        ...step,
+        guards: step.id === 'build'
+          ? step.guards.filter((guard) =>
+              !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
+          : step.guards,
+        transitions: step.transitions.map((transition) => ({
+          ...transition,
+          actions: transition.actions.filter((action) =>
+            action.type !== 'reset-pre-verify-review'
+              && !(step.id === 'verify'
+                && transition.event === 'verify-fail'
+                && action.type === 'mark-verification-failed')),
+        })),
+      })),
+    }
     const legacyChangeDir = await store.init({
       repoRoot: root,
       name: 'legacy-v1-live',

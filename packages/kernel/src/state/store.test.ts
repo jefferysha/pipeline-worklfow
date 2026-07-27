@@ -33,6 +33,13 @@ function stripProjectionMetadata(raw: string): string {
   )
 }
 
+function stripRollbackProjectionEnvelope(raw: string): string {
+  return stripProjectionMetadata(raw).replace(
+    /^# tenon-internal-pre-verify-review-v1: [A-Za-z0-9_-]+\n/m,
+    '',
+  )
+}
+
 beforeEach(async () => {
   repoRoot = await mkdtemp(path.join(tmpdir(), 'pl-store-'))
   store = createStateStore()
@@ -92,13 +99,13 @@ describe('read / write / get', () => {
     await rm(outside, { recursive: true, force: true })
   })
 
-  it('read 解析 legacy 文件；write 迁入 canonical 后除三行 adapter metadata 外与原文件逐字节等价', async () => {
+  it('read 解析 legacy 文件；write 迁入 canonical 后用 rollback envelope 保持其余字节等价', async () => {
     const dir = await seedChange('rt', 'dashboard-interaction-fixes.pipeline.yaml')
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
     const state = await store.read(dir)
     await store.write(dir, state)
     const after = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
-    expect(stripProjectionMetadata(after)).toBe(before)
+    expect(stripRollbackProjectionEnvelope(after)).toBe(before)
   })
 
   it('get 返回裸值（去引号后）；列表字段返回数组', async () => {
@@ -220,7 +227,9 @@ describe('set / setMany / cas', () => {
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
     await store.set(dir, 'phase', 'verify')
     const after = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
-    expect(stripProjectionMetadata(after)).toBe(before.replace('phase: build\n', 'phase: verify\n'))
+    expect(stripRollbackProjectionEnvelope(after)).toBe(
+      before.replace('phase: build\n', 'phase: verify\n'),
+    )
   })
 
   it('set 列表字段为数组 → 块序列；空数组 → []', async () => {
@@ -327,12 +336,15 @@ archived: false
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
+pre_verify_review_result: pending
 `
 
   it('建 change 骨架：目录 + .pipeline.yaml 与老仓 heredoc 逐字节一致（注入时钟）', async () => {
     const dir = await store.init({ repoRoot, name: 'my-change', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     expect(dir).toBe(path.join(repoRoot, 'openspec', 'changes', 'my-change'))
-    expect(stripProjectionMetadata(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8'))).toBe(HEREDOC)
+    expect(stripRollbackProjectionEnvelope(
+      await readFile(path.join(dir, '.pipeline.yaml'), 'utf8'),
+    )).toBe(HEREDOC.replace('pre_verify_review_result: pending\n', ''))
   })
 
   it('运行时缺 reviewSeed 不得发布一份下一次读必坏的 canonical current', async () => {
@@ -444,7 +456,8 @@ automation_cause: ""
     const dir = await store.init({ repoRoot, name: 'clean-tmp', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     const files = await readdir(dir)
     expect(files.sort()).toEqual(['.pipeline-document-locale.json', '.pipeline-run', '.pipeline.yaml'])
-    expect((await readdir(path.join(dir, '.pipeline-run'))).sort()).toEqual(['current.json', 'revisions'])
+    expect((await readdir(path.join(dir, '.pipeline-run'))).sort())
+      .toEqual(['current.json', 'pre-verify-review', 'revisions'])
     expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(1)
   })
 

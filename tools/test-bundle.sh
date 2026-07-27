@@ -35,6 +35,34 @@ for asset in \
   [ -f "$ROOT/$asset" ] && ok "bundle: $asset 存在" \
     || bad "bundle: $asset 存在" "治理文档 Registry 必须随完整插件发布"
 done
+plugin_runtime_spec="$ROOT/openspec/changes/fix-tenon-entry-skill-contract/specs/plugin-runtime/spec.md"
+if [ ! -f "$plugin_runtime_spec" ]; then
+  plugin_runtime_spec="$ROOT/openspec/specs/plugin-runtime/spec.md"
+fi
+grep -q 'Critical/High/Medium 全部清零' "$ROOT/docs/CONTRACT.md" \
+  && grep -q '所有 MEDIUM 同样必须修复' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q '完整待冻结 diff 与全部 capability' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q '不得发现第一个 CRITICAL/HIGH 就提前停止' "$ROOT/skills/tenon-build/SKILL.md" \
+  && [ "$(grep -c '全部 critical/high/medium' "$ROOT/skills/tenon-build/SKILL.md")" -ge 2 ] \
+  && ! grep -qi 'medium 尽量修' "$ROOT/skills/tenon-build/SKILL.md" \
+  && ! grep -qi '无 high/critical' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q 'Critical/High/Medium 全部清零' "$plugin_runtime_spec" \
+  && ok "bundle: Build 全量收敛要求完整聚合且 C/H/M 清零" \
+  || bad "bundle: Build 全量收敛要求完整聚合且 C/H/M 清零" "治理契约或 delta spec 未闭环"
+grep -q 'repo-zero-output barrier' "$ROOT/skills/tenon-verify/SKILL.md" \
+  && grep -q '每轨前后都重算 fingerprint' "$ROOT/skills/tenon-verify/SKILL.md" \
+  && grep -q '截图、Playwright' "$ROOT/skills/tenon-verify/SKILL.md" \
+  && grep -q '隔离副本' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q 'repo-zero-output' "$plugin_runtime_spec" \
+  && grep -q 'canonical `verification_report`.*唯一例外' "$plugin_runtime_spec" \
+  && ok "bundle: Build/Verify 冻结交接强制零写入、外置产物与逐轨指纹" \
+  || bad "bundle: Build/Verify 冻结交接强制零写入、外置产物与逐轨指纹" "冻结验证约束缺失"
+grep -q 'repo-zero-output' "$ROOT/agents/tenon-reviewer.md" \
+  && grep -q '审查前后.*fingerprint 必须一致' "$ROOT/agents/tenon-design-reviewer.md" \
+  && grep -q '已无 critical/high/medium' "$ROOT/agents/tenon-design-reviewer.md" \
+  && grep -q '截图、snapshot、trace 与日志只能写仓库外' "$ROOT/agents/tenon-design-reviewer.md" \
+  && ok "bundle: 代码与视觉 reviewer 使用只读冻结靶且 C/H/M 清零" \
+  || bad "bundle: 代码与视觉 reviewer 使用只读冻结靶且 C/H/M 清零" "reviewer brief 未闭环"
 
 # 2. 自足性：不残留对 npm 包的运行时 import（node: 内建豁免）
 if [ -f "$BUNDLE" ]; then
@@ -68,6 +96,16 @@ if [ -f "$BUNDLE" ]; then
     || bad "bundle: 默认 proposal 使用中文模板" "$(head -1 "$TMP/openspec/changes/t8-smoke/proposal.md" 2>/dev/null)"
   phase="$(cd "$TMP" && node "$BUNDLE" get t8-smoke phase 2>/dev/null)"
   [ "$phase" = "open" ] && ok "bundle: get phase = open" || bad "bundle: get phase = open" "得到 '$phase'"
+  ( cd "$TMP" && node "$BUNDLE" set t8-smoke pre_verify_review_result pass ) >/dev/null 2>&1
+  pre_verify="$(cd "$TMP" && node "$BUNDLE" get t8-smoke pre_verify_review_result 2>/dev/null)"
+  [ "$pre_verify" = "pass" ] \
+    && ok "bundle: companion-backed pre-Verify pass 可读" \
+    || bad "bundle: companion-backed pre-Verify pass 可读" "得到 '$pre_verify'"
+  ( cd "$TMP" && node "$BUNDLE" set t8-smoke scope current-after-pass ) >/dev/null 2>&1
+  scope="$(cd "$TMP" && node "$BUNDLE" get t8-smoke scope 2>/dev/null)"
+  [ "$scope" = "current-after-pass" ] \
+    && ok "bundle: pre-Verify pass 后下一次 mutation 可提交" \
+    || bad "bundle: pre-Verify pass 后下一次 mutation 可提交" "得到 '$scope'"
 
   # Evidence is intentionally attached only after an explicit target selection.  This is the same
   # `pipeline` entry-skill sequence used by normal conversations, and prevents an mtime-selected
@@ -157,6 +195,24 @@ if [ -f "$BUNDLE" ]; then
     [ "$?" -eq 0 ] && printf '%s' "$n_minus_real" | grep -q '"phase":"explore"' \
       && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" \
       || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" "$n_minus_real"
+    n_minus_write="$(cd "$TMP" && node "$N_MINUS_CLI" set t8-smoke scope n1-compatible 2>&1)"
+    n_minus_write_code="$?"
+    n_minus_scope="$(cd "$TMP" && node "$BUNDLE" get t8-smoke scope 2>/dev/null)"
+    [ "$n_minus_write_code" -eq 0 ] && [ "$n_minus_scope" = "n1-compatible" ] \
+      && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）可继续合法 mutation" \
+      || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）可继续合法 mutation" \
+        "exit=$n_minus_write_code scope=$n_minus_scope $n_minus_write"
+    after_n_minus_pre="$(cd "$TMP" && node "$BUNDLE" get t8-smoke pre_verify_review_result 2>/dev/null)"
+    [ "$after_n_minus_pre" = "pending" ] \
+      && ok "bundle: N-1 新 revision 缺 companion 时 pre-Verify 失败关闭" \
+      || bad "bundle: N-1 新 revision 缺 companion 时 pre-Verify 失败关闭" \
+        "得到 '$after_n_minus_pre'"
+    ( cd "$TMP" && node "$BUNDLE" set t8-smoke related_files current-after-n1 ) >/dev/null 2>&1
+    after_n_minus_current="$(cd "$TMP" && node "$BUNDLE" get t8-smoke related_files 2>/dev/null)"
+    [ "$after_n_minus_current" = "current-after-n1" ] \
+      && ok "bundle: 当前 runtime 可接续 N-1 stale anchor 后 mutation" \
+      || bad "bundle: 当前 runtime 可接续 N-1 stale anchor 后 mutation" \
+        "得到 '$after_n_minus_current'"
   else
     printf 'info - 真实上一发行版 CLI 未安装；已执行可离线冻结严格读取器\n'
   fi

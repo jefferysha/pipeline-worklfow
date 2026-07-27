@@ -79,11 +79,13 @@ export const GUARD_DATA_KEYS = {
 } as const satisfies Record<WorkflowGuardConfig['type'], readonly string[]>
 
 /**
- * action 定义层闭集（4 变体，与运行层同型）。一一对应老仓 state-transition.sh cmd_transition
- * 的四个事件专属副作用体（build-complete/verify-pass/verify-fail/archived）。不提供任意 set-field action。
+ * action 定义层闭集（5 变体，与运行层同型）。除老仓 state-transition.sh cmd_transition
+ * 的四个事件专属副作用体（build-complete/verify-pass/verify-fail/archived）外，新增一个
+ * Tenon 全局 pre-Verify reset action；仍不提供任意 set-field action。
  */
 export type WorkflowActionConfig =
   | { readonly type: 'freeze-build-sha' }
+  | { readonly type: 'reset-pre-verify-review' }
   | { readonly type: 'mark-verification-passed' }
   | { readonly type: 'mark-verification-failed' }
   | { readonly type: 'archive-run' }

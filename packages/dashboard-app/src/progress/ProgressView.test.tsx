@@ -4,9 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import gsap from 'gsap'
 import { I18nProvider } from '../i18n'
 import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
-import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from '../model/workflowModel'
+import {
+  DEFAULT_RULES,
+  rulesFromDef,
+  rulesKey,
+  type StepOutputRules,
+  type WorkflowRules,
+} from '../model/workflowModel'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
-import type { Snapshot } from '../types'
+import type { Snapshot, WorkflowExecutionSnapshot, WorkflowRulesSnapshot } from '../types'
 import { ProgressView } from './ProgressView'
 
 const ROOT_A = '/tmp/proj-a'
@@ -59,6 +65,44 @@ const MULTI_EDGE_RULES = rulesFromDef({
   ],
 })
 
+function readyWorkflowExecution(rules: WorkflowRulesSnapshot): WorkflowExecutionSnapshot {
+  return {
+    readinessByTransition: Object.fromEntries(rules.steps.map((step) => [
+      step,
+      Object.fromEntries((rules.transitions[step] ?? []).map(({ event }) => [
+        event,
+        { ready: true, blockers: [] },
+      ])),
+    ])),
+  }
+}
+
+function snapshotRules(rules: WorkflowRules & StepOutputRules): WorkflowRulesSnapshot {
+  return {
+    executionModel: rules.executionModel ?? 'step-graph',
+    steps: [...rules.steps],
+    transitions: Object.fromEntries(rules.steps.map((step) => [
+      step,
+      [...(rules.transitions[step] ?? [])].map(({ event, to }) => ({ event, to })),
+    ])),
+    gateByStep: Object.fromEntries(rules.steps.map((step) => [
+      step,
+      rules.gateByStep[step] ?? null,
+    ])),
+    labelByStep: Object.fromEntries(rules.steps.map((step) => [
+      step,
+      rules.labelByStep?.[step] ?? step,
+    ])),
+    outputsByStep: Object.fromEntries(rules.steps.map((step) => [
+      step,
+      [...(rules.outputsByStep?.[step] ?? [])],
+    ])),
+  }
+}
+
+const RELEASE_TRAIN_SNAPSHOT_RULES = snapshotRules(RELEASE_TRAIN_RULES)
+const MULTI_EDGE_SNAPSHOT_RULES = snapshotRules(MULTI_EDGE_RULES)
+
 function makeFixture(): Snapshot {
   return makeSnapshot([
     makeProject(ROOT_A, [
@@ -91,6 +135,8 @@ function makeFixture(): Snapshot {
         track: 'chat',
         updated_at: '2026-07-13T09:30:00Z',
         fields: { workflow: 'release-train' },
+        workflowRules: RELEASE_TRAIN_SNAPSHOT_RULES,
+        workflowExecution: readyWorkflowExecution(RELEASE_TRAIN_SNAPSHOT_RULES),
       }),
       makeChange('old-demo', 'archive', { archived: 'true' }),
     ]),
@@ -546,7 +592,11 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
   function renderMultiEdge(): ReturnType<typeof renderView> {
     return renderView({
       snapshot: makeSnapshot([
-        makeProject(ROOT_A, [makeChange('multi-demo', 'review', { fields: { workflow: 'multi-edge' } })]),
+        makeProject(ROOT_A, [makeChange('multi-demo', 'review', {
+          fields: { workflow: 'multi-edge' },
+          workflowRules: MULTI_EDGE_SNAPSHOT_RULES,
+          workflowExecution: readyWorkflowExecution(MULTI_EDGE_SNAPSHOT_RULES),
+        })]),
       ]),
       rulesByKey: new Map([[rulesKey(ROOT_A, 'multi-edge'), MULTI_EDGE_RULES]]),
     })

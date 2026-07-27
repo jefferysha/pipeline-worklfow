@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   FIELD_ORDER,
   LIST_FIELDS,
+  PRE_VERIFY_REVIEW_DEFAULT,
+  PRE_VERIFY_REVIEW_FIELD,
   REVIEW_GATE_FIELD_DEFAULTS,
   REVIEW_GATE_FIELDS,
   type FieldName,
@@ -11,12 +13,17 @@ import {
 } from '../types.js'
 import type { StateFieldEffect } from '../workflow/run-types.js'
 import { validateAutomationPolicySnapshot } from '../loops/automation-policy.js'
-import { diffFieldsToEffects } from './run-metadata.js'
 import { withoutWorkflowGovernanceBinding } from './workflow-governance-binding.js'
 
 const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/
 const FIELD_SET = new Set<string>(FIELD_ORDER)
 const LIST_FIELD_SET = new Set<string>(LIST_FIELDS)
+const PRE_VERIFY_REVIEW_ANCHOR_PREFIX = '# tenon-internal-pre-verify-review-v1: '
+const SHA256_RE = /^[0-9a-f]{64}$/
+
+export interface PreVerifyReviewAnchor {
+  readonly schemaVersion: 1; readonly revision: number; readonly revisionId: string; readonly payloadDigest: string
+}
 
 export interface RunStateMutation {
   readonly kind: StateMutationKind
@@ -45,6 +52,113 @@ export interface RunRevision {
   readonly state: PipelineState
   readonly mutation: RunStateMutation
   readonly stateDigest: string
+}
+
+/**
+ * N-1 wire revisions deliberately omit the post-v1 logical field. The current runtime restores it
+ * from a revision-bound companion record; an older runtime safely observes the legacy default.
+ */
+function preVerifyReviewResult(state: PipelineState): string {
+  const result = state.fields[PRE_VERIFY_REVIEW_FIELD]
+  if (typeof result !== 'string' || !['pending', 'pass'].includes(result)) {
+    throw new RunStateCorruptError(
+      `canonical ${PRE_VERIFY_REVIEW_FIELD} 非法：仅允许 pending/pass`,
+    )
+  }
+  return result
+}
+
+export function preVerifyReviewPayloadDigest(
+  revision: number,
+  revisionId: string,
+  result: string,
+): string {
+  return createHash('sha256').update(JSON.stringify({
+    schemaVersion: 1,
+    revision,
+    revisionId,
+    result,
+  })).digest('hex')
+}
+
+function parsePreVerifyReviewAnchor(encoded: string): PreVerifyReviewAnchor {
+  let value: unknown
+  try {
+    value = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))
+  } catch (error) {
+    throw new RunStateCorruptError(`pre-Verify opaqueTail anchor 损坏（${String(error)}）`)
+  }
+  const raw = ownRecord(value)
+  if (!raw
+    || Object.keys(raw).sort().join(',') !== 'payloadDigest,revision,revisionId,schemaVersion'
+    || raw.schemaVersion !== 1
+    || typeof raw.revision !== 'number' || !Number.isSafeInteger(raw.revision) || raw.revision < 0
+    || typeof raw.revisionId !== 'string' || !SAFE_ID_RE.test(raw.revisionId)
+    || typeof raw.payloadDigest !== 'string' || !SHA256_RE.test(raw.payloadDigest)) {
+    throw new RunStateCorruptError('pre-Verify opaqueTail anchor 形状非法')
+  }
+  return {
+    schemaVersion: 1,
+    revision: raw.revision,
+    revisionId: raw.revisionId,
+    payloadDigest: raw.payloadDigest,
+  }
+}
+
+/**
+ * Remove the runtime-reserved suffix from a wire state. opaqueTail is the schemaVersion=1
+ * extension point and stateDigest covers its bytes; logical callers never observe this suffix.
+ */
+export function splitPreVerifyReviewAnchor(state: PipelineState): {
+  readonly state: PipelineState
+  readonly anchor?: PreVerifyReviewAnchor
+} {
+  if (!state.opaqueTail.startsWith(PRE_VERIFY_REVIEW_ANCHOR_PREFIX)) return { state }
+  const lineEnd = state.opaqueTail.indexOf('\n')
+  const encoded = lineEnd < 0
+    ? ''
+    : state.opaqueTail.slice(PRE_VERIFY_REVIEW_ANCHOR_PREFIX.length, lineEnd)
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new RunStateCorruptError('pre-Verify opaqueTail anchor 编码非法')
+  }
+  return {
+    state: {
+      ...state,
+      opaqueTail: state.opaqueTail.slice(lineEnd + 1),
+    },
+    anchor: parsePreVerifyReviewAnchor(encoded),
+  }
+}
+
+function withoutPreVerifyReviewField(
+  state: PipelineState,
+  revision: number,
+  revisionId: string,
+): PipelineState {
+  const logical = splitPreVerifyReviewAnchor(state).state
+  const fields = structuredClone(state.fields) as Record<string, string | string[]>
+  delete fields[PRE_VERIFY_REVIEW_FIELD]
+  const anchor: PreVerifyReviewAnchor = {
+    schemaVersion: 1,
+    revision,
+    revisionId,
+    payloadDigest: preVerifyReviewPayloadDigest(
+      revision,
+      revisionId,
+      preVerifyReviewResult(logical),
+    ),
+  }
+  const encodedAnchor = Buffer.from(JSON.stringify(anchor), 'utf8').toString('base64url')
+  return {
+    fields: fields as Record<FieldName, string | string[]>,
+    ...(logical.runMetadata === undefined ? {} : { runMetadata: logical.runMetadata }),
+    opaqueTail: `${PRE_VERIFY_REVIEW_ANCHOR_PREFIX}${encodedAnchor}\n${logical.opaqueTail}`,
+  }
+}
+
+/** Exact rollback-compatible state body used by the schemaVersion=1 wire and YAML projection. */
+export function rollbackCompatibleState(revision: RunRevision): PipelineState {
+  return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId)
 }
 
 export class RunStateCorruptError extends Error {
@@ -138,7 +252,7 @@ function canonicalRunMetadata(value: unknown): RunMetadata | undefined {
  * unreadable rather than being allowed to approve an arbitrary transition. New writes always
  * publish the complete current shape.
  */
-function canonicalState(value: unknown, opts: { allowLegacyReviewGateOmission?: boolean } = {}): PipelineState {
+function canonicalState(value: unknown, opts: { allowLegacyFieldOmissions?: boolean } = {}): PipelineState {
   const raw = ownRecord(value)
   if (!raw || Object.keys(raw).some((key) => !['fields', 'runMetadata', 'opaqueTail'].includes(key))) {
     throw new RunStateCorruptError('canonical state 形状非法')
@@ -155,18 +269,30 @@ function canonicalState(value: unknown, opts: { allowLegacyReviewGateOmission?: 
     && REVIEW_GATE_FIELDS
       .filter((field) => field !== 'review_gate_event')
       .every((field) => rawFields?.[field] === '')
-  const legacyReviewGateDefaults = opts.allowLegacyReviewGateOmission === true
+  const legacyReviewGateDefaults = opts.allowLegacyFieldOmissions === true
     && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent)
     ? new Set<FieldName>(missingReviewGateFields)
     : new Set<FieldName>()
+  const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true
+    && missing.includes(PRE_VERIFY_REVIEW_FIELD)
+    ? new Set<FieldName>([PRE_VERIFY_REVIEW_FIELD])
+    : new Set<FieldName>()
+  const allowedLegacyDefaults = new Set<FieldName>([
+    ...legacyReviewGateDefaults,
+    ...legacyPreVerifyDefault,
+  ])
   if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key))
-    || (legacyReviewGateDefaults.size === 0 && missing.length !== 0)) {
+    || missing.some((field) => !allowedLegacyDefaults.has(field))) {
     throw new RunStateCorruptError('canonical state.fields 不是 FIELD_ORDER 闭集')
   }
   const fields = {} as Record<FieldName, string | string[]>
   for (const field of FIELD_ORDER) {
     if (legacyReviewGateDefaults.has(field)) {
       fields[field] = REVIEW_GATE_FIELD_DEFAULTS[field as typeof REVIEW_GATE_FIELDS[number]]
+      continue
+    }
+    if (legacyPreVerifyDefault.has(field)) {
+      fields[field] = PRE_VERIFY_REVIEW_DEFAULT
       continue
     }
     const fieldValue = rawFields[field]
@@ -236,23 +362,42 @@ export function createRunRevision(input: {
   // undefined 塞进 `Record<FieldName, ...>`；若直接 JSON.stringify，undefined 键会被静默丢弃，
   // 造成 publish 报成功、下一次 read 却因字段闭集不完整而永久失败。发布前先走与读取端同一份
   // closed-schema 规范化，保证任何成功写出的 revision 都能被本实现重新读取。
-  const state = canonicalState({
+  const state = splitPreVerifyReviewAnchor(canonicalState({
     fields: structuredClone(input.state.fields),
     ...(input.state.runMetadata === undefined
       ? {}
       : { runMetadata: withoutWorkflowGovernanceBinding(structuredClone(input.state.runMetadata)) }),
     opaqueTail: input.state.opaqueTail,
-  })
+  })).state
+  const revisionId = input.revisionId ?? randomUUID()
   const body = revisionBody({
     schemaVersion: 1,
     hookState: hookStateFor(state),
     revision: input.revision,
-    revisionId: input.revisionId ?? randomUUID(),
+    revisionId,
     ...(input.previousRevisionId === undefined ? {} : { previousRevisionId: input.previousRevisionId }),
     state,
     mutation: input.mutation,
   })
-  return { ...body, stateDigest: digestBody(body) }
+  const wireBody = revisionBody({
+    ...body,
+    state: withoutPreVerifyReviewField(state, input.revision, revisionId),
+  })
+  return { ...body, stateDigest: digestBody(wireBody) }
+}
+
+/**
+ * Serialize a logical revision into the rollback-compatible wire shape. Callers must not use bare
+ * JSON.stringify: the public RunRevision keeps a complete logical PipelineState while the v1 wire
+ * body intentionally omits the companion-backed field.
+ */
+export function serializeRunRevision(revision: RunRevision): string {
+  const { stateDigest, ...logicalBody } = revision
+  const wireBody = revisionBody({ ...logicalBody, state: rollbackCompatibleState(revision) })
+  if (digestBody(wireBody) !== stateDigest) {
+    throw new RunStateCorruptError('待发布 revision 的 wire digest 与逻辑状态不一致')
+  }
+  return JSON.stringify({ ...wireBody, stateDigest })
 }
 
 export function parseRunRevision(raw: string, source: string): RunRevision {
@@ -309,7 +454,7 @@ export function parseRunRevision(raw: string, source: string): RunRevision {
   if (observedDigest !== record.stateDigest) {
     throw new RunStateCorruptError(`${source}: digest 不匹配`)
   }
-  const state = canonicalState(record.state, { allowLegacyReviewGateOmission: true })
+  const state = canonicalState(record.state, { allowLegacyFieldOmissions: true })
   const effects = mutation.effects.map(canonicalEffect)
   const transitionRecordId = typeof mutation.transitionRecordId === 'string'
     ? mutation.transitionRecordId

@@ -9,7 +9,10 @@
 import { isAbsolute, join } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
-import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
+import {
+  REAL_RELEASED_DASHBOARD_STARTER,
+} from './released-dashboard-starter.js'
+import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   isNativePipelineHost,
@@ -23,6 +26,7 @@ import {
 } from './plugin-host.js'
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
 import { publishManagedRelease } from './release-coordinator.js'
+import { runManagedHostCommand } from './managed-host-command.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import {
   finalizePendingHostPluginConflict,
@@ -161,77 +165,84 @@ export function cmdUpdate(
     return 0
   }
 
-  let inventory = ''
   let hostBoundary: HostBoundaryState = 'in-progress'
-  for (let index = 0; index < plan.length; index += 1) {
-    const item = plan[index]!
-    const result = env.runCommand(item.cmd, [...item.args])
-    if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
-    if (result.code !== 0) {
-      if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
-        continue
-      }
-      // `plugin add` is the host's only cross-version reinstall primitive.  Some host releases
-      // return a non-zero "already installed" result instead of treating it as idempotent.  In
-      // that narrow case, inventory is the authoritative confirmation; network/auth/update errors
-      // remain hard failures and never switch the launcher.
-      if (index === 1 && isAlreadyInstalledResult(result)) {
-        const inventoryItem = plan[plan.length - 1]!
-        const inventoryResult = env.runCommand(inventoryItem.cmd, [...inventoryItem.args])
-        const parsedInventory = inventoryResult.code === 0
-          ? parseHostPluginInventory(host, inventoryResult.stdout)
-          : null
-        if (parsedInventory?.tenonRoot !== null && parsedInventory?.tenonRoot !== undefined) {
-          inventory = inventoryResult.stdout
-          break
-        }
-      }
-      const detail = `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`
-      deps.io.err(`ERROR: ${detail}`)
-      reportHostBoundary(deps, host, hostBoundary)
-      return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
-    }
-    inventory = result.stdout
-  }
-  const parsedInventory = parseHostPluginInventory(host, inventory)
-  if (parsedInventory === null) {
-    const detail = `${hostFlag(host)} 更新后的宿主插件清单响应畸形；未切换 launcher。`
-    deps.io.err(`ERROR: ${detail}`)
-    reportHostBoundary(deps, host, hostBoundary)
-    return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
-  }
-  const root = parsedInventory.tenonRoot
-  if (root === null) {
-    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`
-    deps.io.err(`ERROR: ${detail}`)
-    reportHostBoundary(deps, host, hostBoundary)
-    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
-  }
-  hostBoundary = 'committed'
-  if (!verifyUpdatedRoot(deps, env, root)) {
-    const detail = '宿主刷新后的 tenon 候选未通过打包资产校验'
-    reportHostBoundary(deps, host, hostBoundary)
-    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
-  }
   const outcome = await publishManagedRelease(
     deps,
     {
-      candidateRoot: root,
+      operation: 'update',
       source: host,
       runtime: {
         homeDir: env.homeDir(),
         env: env.runtimeEnv(),
       },
       openBrowser: opts.auto !== true,
-      afterActivate: (activation) => {
+      prepareCandidate: async (transaction) => {
+        let inventory = ''
+        for (let index = 0; index < plan.length; index += 1) {
+          const item = plan[index]!
+          const stepId = index === 0
+            ? 'marketplace-refresh'
+            : index === 1
+              ? 'plugin-install'
+              : 'inventory-after'
+          const result = await runManagedHostCommand(transaction, stepId, env, item)
+          if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
+          if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
+            deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
+            continue
+          }
+          if (result.code !== 0) {
+            // `plugin add` is the host's only cross-version reinstall primitive. Some host releases
+            // report an idempotent existing install as non-zero; inventory is the sole proof.
+            if (index === 1 && isAlreadyInstalledResult(result)) {
+              const inventoryItem = plan[plan.length - 1]!
+              const inventoryResult = await runManagedHostCommand(
+                transaction,
+                'inventory-after',
+                env,
+                inventoryItem,
+              )
+              const parsedInventory = inventoryResult.code === 0
+                ? parseHostPluginInventory(host, inventoryResult.stdout)
+                : null
+              if (parsedInventory?.tenonRoot !== null && parsedInventory?.tenonRoot !== undefined) {
+                inventory = inventoryResult.stdout
+                break
+              }
+            }
+            throw new Error(
+              `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`,
+            )
+          }
+          inventory = result.stdout
+        }
+        const parsedInventory = parseHostPluginInventory(host, inventory)
+        if (parsedInventory === null) {
+          throw new Error(`${hostFlag(host)} 更新后的宿主插件清单响应畸形；未切换 launcher。`)
+        }
+        const root = parsedInventory.tenonRoot
+        if (root === null) {
+          throw new Error(`${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`)
+        }
+        hostBoundary = 'committed'
+        if (!verifyUpdatedRoot(deps, env, root)) {
+          throw new Error('宿主刷新后的 tenon 候选未通过打包资产校验')
+        }
+        return { candidateRoot: root, evidence: inventory }
+      },
+      commitReadyEvidence: (activation, candidate, transactionId) => {
+        const parsedInventory = candidate.evidence === undefined
+          ? null
+          : parseHostPluginInventory(host, candidate.evidence)
+        if (parsedInventory === null) throw new Error('journal 中的宿主 inventory evidence 无效')
         if (!recordPendingHostPluginConflict(
           deps,
           env,
           host,
           parsedInventory,
           activation,
-          root,
+          candidate.candidateRoot,
+          transactionId,
         )) throw new Error('宿主插件收敛 receipt 未能持久化')
       },
     },

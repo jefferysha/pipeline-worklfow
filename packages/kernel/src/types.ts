@@ -30,6 +30,8 @@ export const REVIEW_GATE_FIELD_DEFAULTS: Readonly<Record<ReviewGateField, string
   review_requested_at: '',
   review_acknowledged_at: '',
 }
+export const PRE_VERIFY_REVIEW_FIELD = 'pre_verify_review_result' as const
+export const PRE_VERIFY_REVIEW_DEFAULT = 'pending'
 
 export const FIELD_ORDER = [
   'track', 'preset', 'created_by', 'assignee', 'phase', 'phase_status',
@@ -59,6 +61,9 @@ export const FIELD_ORDER = [
   // 必须是待离开 phase 的确切出边，不能让 verify-fail 的确认误授权给 verify-pass（反之亦然）。
   // 必须继续只追加在末尾，原因同上面的 automation_*：旧窄解析器会把未知尾字段原样保留。
   ...REVIEW_GATE_FIELDS,
+  // Build→Verify 全量收敛门：新实现 visit 必须重新完成完整 diff/契约/发行门禁审查，不能继承
+  // 上一候选的 pass。继续严格末尾追加，使旧窄解析器把这一行及其后的提交元数据原样保留。
+  PRE_VERIFY_REVIEW_FIELD,
 ] as const
 
 export type FieldName = (typeof FIELD_ORDER)[number]

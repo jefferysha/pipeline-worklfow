@@ -7,9 +7,9 @@ import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/instal
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
 import {
-  REAL_RELEASED_DASHBOARD_STARTER,
   type ReleasedDashboardStarter,
 } from './dashboard.js'
+import { REAL_RELEASED_DASHBOARD_STARTER } from './released-dashboard-starter.js'
 import {
   hostFlag,
   isNativePipelineHost,
@@ -21,7 +21,9 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
-import { publishManagedRelease } from './release-coordinator.js'
+import { publishSetupManagedRuntime } from './setup-managed-runtime.js'
+import { runManagedHostCommand } from './managed-host-command.js'
+import type { ManagedHostPreparationContext } from './release-coordinator.js'
 import { migrateLegacyProjectRegistry } from '../migration/legacy-project-registry.js'
 import {
   finalizePendingHostPluginConflict,
@@ -89,6 +91,7 @@ interface NativePluginCandidate {
   readonly verified: boolean
   /** Authoritative enabled ids from the same inventory snapshot that resolved `root`. */
   readonly inventory: ParsedHostPluginInventory
+  readonly inventoryRaw: string
 }
 
 class NativePluginInventoryError extends Error {
@@ -101,15 +104,21 @@ class NativePluginInventoryError extends Error {
  * explicit release-refresh operation.  An incomplete/corrupt existing package
  * is never trusted; setup falls through to the release marketplace plan.
  */
-function verifiedInstalledNativePlugin(
+async function verifiedInstalledNativePlugin(
   deps: CliDeps,
   env: SetupEnv,
   host: NativePipelineHost,
-): NativePluginCandidate | null {
+  transaction: ManagedHostPreparationContext,
+): Promise<NativePluginCandidate | null> {
   const inventoryCommand = nativeInstallPlan(host).at(-1)
   if (inventoryCommand === undefined) return null
   deps.io.out(`[setup] $ ${commandText(inventoryCommand.cmd, inventoryCommand.args)}`)
-  const inventory = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
+  const inventory = await runManagedHostCommand(
+    transaction,
+    'inventory-before',
+    env,
+    inventoryCommand,
+  )
   if (inventory.code !== 0) {
     throw new NativePluginInventoryError(
       `宿主 plugin inventory 读取失败：${inventory.stderr.trim() || inventory.stdout.trim() || `退出码 ${inventory.code}`}`,
@@ -124,17 +133,18 @@ function verifiedInstalledNativePlugin(
     return null
   }
   deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 tenon；复用宿主登记的安装。`)
-  return { root, verified: true, inventory: parsed }
+  return { root, verified: true, inventory: parsed, inventoryRaw: inventory.stdout }
 }
 
-function installNativePlugin(
+async function installNativePlugin(
   deps: CliDeps,
   env: SetupEnv,
   host: NativePipelineHost,
-): NativePluginCandidate | null {
+  transaction: ManagedHostPreparationContext,
+): Promise<NativePluginCandidate | null> {
   let existing: NativePluginCandidate | null
   try {
-    existing = verifiedInstalledNativePlugin(deps, env, host)
+    existing = await verifiedInstalledNativePlugin(deps, env, host, transaction)
   } catch (error) {
     if (error instanceof NativePluginInventoryError) {
       deps.io.err(`ERROR: ${error.message}；未执行安装或清理。`)
@@ -149,7 +159,12 @@ function installNativePlugin(
     const item = plan[index]
     if (!item) continue
     deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
-    const result = env.runCommand(item.cmd, [...item.args])
+    const stepId = index === 0
+      ? 'marketplace-register'
+      : index === 1
+        ? 'plugin-install'
+        : 'inventory-after'
+    const result = await runManagedHostCommand(transaction, stepId, env, item)
     if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
     if (result.code === 0) {
       if (index === plan.length - 1) inventory = result.stdout
@@ -171,13 +186,23 @@ function installNativePlugin(
         deps.io.err(`[setup] ${hostFlag(host)} 安装计划缺少 inventory 命令。`)
         return null
       }
-      const inventoryResult = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
+      const inventoryResult = await runManagedHostCommand(
+        transaction,
+        'inventory-after',
+        env,
+        inventoryCommand,
+      )
       const parsed = inventoryResult.code === 0
         ? parseHostPluginInventory(host, inventoryResult.stdout)
         : null
       if (parsed?.tenonRoot !== null && parsed?.tenonRoot !== undefined) {
         deps.io.out(`[setup] ${hostFlag(host)} 已有 tenon，复用宿主登记的安装。`)
-        return { root: parsed.tenonRoot, verified: false, inventory: parsed }
+        return {
+          root: parsed.tenonRoot,
+          verified: false,
+          inventory: parsed,
+          inventoryRaw: inventoryResult.stdout,
+        }
       }
     }
 
@@ -195,56 +220,12 @@ function installNativePlugin(
     deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 tenon；未切换 launcher。`)
     return null
   }
-  return { root: parsed.tenonRoot, verified: false, inventory: parsed }
-}
-
-function publishManagedRuntime(
-  deps: CliDeps,
-  env: SetupEnv,
-  installer: RuntimeInstaller,
-  candidateRoot: string,
-  host: PipelineHost,
-  dashboardStarter: ReleasedDashboardStarter | undefined,
-  openDashboard: boolean,
-  afterReady?: (activation: import('../runtime/types.js').RuntimeActivation) => boolean,
-): Promise<number> {
-  const source = isNativePipelineHost(host) ? host : 'adapter'
-  return publishManagedRelease(
-    deps,
-    {
-      candidateRoot,
-      source,
-      runtime: {
-        homeDir: env.homeDir(),
-        env: env.runtimeEnv(),
-      },
-      openBrowser: openDashboard,
-      ...(afterReady === undefined
-        ? {}
-        : {
-            afterActivate: (activation: import('../runtime/types.js').RuntimeActivation) => {
-              if (!afterReady(activation)) throw new Error('宿主插件收敛 receipt 未能持久化')
-            },
-          }),
-    },
-    installer,
-    dashboardStarter,
-  ).then((outcome) => {
-    if (!outcome.ok) {
-      deps.io.err(`ERROR: ${outcome.detail}`)
-      if (isNativePipelineHost(host)) {
-        deps.io.err(
-          `[setup] ${hostFlag(host)} 宿主插件登记由宿主 CLI 独立管理；` +
-          'Tenon 未读取、复制或回滚宿主私有缓存，仅补偿自己的 managed transaction。',
-        )
-      }
-      return 1
-    }
-    const { activation } = outcome
-    deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-    deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
-    return 0
-  })
+  return {
+    root: parsed.tenonRoot,
+    verified: false,
+    inventory: parsed,
+    inventoryRaw: inventory,
+  }
 }
 
 /** Host-specific installation that keeps native marketplaces and non-native adapters separate. */
@@ -295,30 +276,47 @@ export function cmdSetupHost(
         return 0
       }
 
-      const candidate = installNativePlugin(deps, env, host)
-      if (candidate === null) return 1
-      const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
-      if (assetCode !== 0) return assetCode
-      if (host === 'codex') {
-        const migrationCode = migrateLegacyCodexHooks(deps, env)
-        if (migrationCode !== 0) return migrationCode
-      }
-      const runtimeCode = await publishManagedRuntime(
+      const runtimeCode = await publishSetupManagedRuntime(
         deps,
         env,
         installer,
-        candidate.root,
+        async (transaction) => {
+          const candidate = await installNativePlugin(deps, env, host, transaction)
+          if (candidate === null) throw new Error('宿主插件未能解析为可发布候选')
+          const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
+          if (assetCode !== 0) throw new Error('宿主候选未通过插件资产校验')
+          if (host === 'codex') {
+            // Hook migration owns its own idempotent file transaction; it is not a host CLI
+            // mutation and therefore must not masquerade as a host-inventory WAL checkpoint.
+            const migrationCode = migrateLegacyCodexHooks(deps, env)
+            if (migrationCode !== 0) throw new Error('旧 Codex hook 迁移失败')
+          }
+          return {
+            candidateRoot: candidate.root,
+            evidence: candidate.inventoryRaw,
+          }
+        },
         host,
         dashboardStarter,
         openDashboard,
-        (activation) => recordPendingHostPluginConflict(
-          deps,
-          env,
-          host,
-          candidate.inventory,
-          activation,
-          candidate.root,
-        ),
+        (activation, candidate, transactionId) => {
+          const inventory = candidate.evidence === undefined
+            ? null
+            : parseHostPluginInventory(host, candidate.evidence)
+          if (inventory === null) {
+            deps.io.err('ERROR: journal 中的宿主 inventory evidence 无效；拒绝提交收敛 receipt。')
+            return false
+          }
+          return recordPendingHostPluginConflict(
+            deps,
+            env,
+            host,
+            inventory,
+            activation,
+            candidate.candidateRoot,
+            transactionId,
+          )
+        },
       )
       if (runtimeCode !== 0) return runtimeCode
       const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry
@@ -342,7 +340,15 @@ export function cmdSetupHost(
     const root = resolvePipelineRoot(env)
     const assetCode = verifyPackagedAssets(deps, env, root, false)
     if (assetCode !== 0) return assetCode
-    return publishManagedRuntime(deps, env, installer, root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+    return publishSetupManagedRuntime(
+      deps,
+      env,
+      installer,
+      () => ({ candidateRoot: root }),
+      host,
+      dashboardStarter,
+      openDashboard,
+    ).then((runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode
       const adapter = join(root, 'adapters', 'install.sh')
       const args = [adapter, hostFlag(host), '--target', opts.target ?? deps.cwd, '--yes']

@@ -35,6 +35,7 @@ interface SpyCalls {
 type ExecStub = (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }
 function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true): { env: SetupEnv; calls: SpyCalls } {
   const calls: SpyCalls = { mkdirp: [], writeText: [], exec: [] }
+  const mutationBaselines = new Map<string, number>()
   const env: SetupEnv = {
     homeDir: () => '/home/test',
     runtimeEnv: () => ({}),
@@ -61,6 +62,24 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
       rejected: 0,
     }),
     runCommand: (cmd, args) => { calls.exec.push([cmd, args]); return exec ? exec(cmd, args) : { code: 0, stdout: '', stderr: '' } },
+    managedHostReconciliation: (_host, stepId, command) => {
+      const key = `${command.cmd}\u0000${command.args.join('\u0000')}`
+      const baseline = calls.exec.filter(([cmd, args]) =>
+        `${cmd}\u0000${args.join('\u0000')}` === key).length
+      mutationBaselines.set(stepId, baseline)
+      const desired = `test-desired:${stepId}`
+      return {
+        desired,
+        observe: () => {
+          const executions = calls.exec.filter(([cmd, args]) =>
+            `${cmd}\u0000${args.join('\u0000')}` === key).length
+          return executions > (mutationBaselines.get(stepId) ?? baseline)
+            ? desired
+            : `test-before:${stepId}:${baseline}`
+        },
+        isDesired: (observation) => observation === desired,
+      }
+    },
     confirm: () => confirmAns,
     ...over,
   }
@@ -92,8 +111,22 @@ function fakeRuntimeInstaller(
 ): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], reverts: [] }
   const releaseId = `sha256-${'a'.repeat(64)}`
+  let journal: import('../runtime/installer.js').ManagedReleaseJournalRecord | null = null
   const installer: RuntimeInstaller = {
     withManagedTransaction: async (scope, operation) => operation({
+      checkpointActivation: async () => ({
+        selection: {
+          version: 1,
+          revision: 0,
+          activeRelease: null,
+          previousRelease: null,
+          updatedAt: '2026-07-23T00:00:00Z',
+        },
+        launchers: {
+          tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+          hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+        },
+      }),
       activate: async (candidateRoot, host) => {
         calls.activations.push([candidateRoot, host, scope.homeDir])
         if (fail) throw new Error('candidate rejected')
@@ -115,8 +148,25 @@ function fakeRuntimeInstaller(
           releaseRoot: `/runtime/releases/${releaseId}`,
         }
       },
+      recoverActivation: async () => ({ state: 'not-started' as const }),
       revertActivation: async (activation) => {
         calls.reverts.push([scope.homeDir, activation.release.releaseId])
+      },
+      proveActivation: async (activation) =>
+        activation.selection.activeRelease === activation.release.releaseId,
+      journal: {
+        create: (operationName, source, now) => ({
+          version: 1,
+          transactionId: 'setup-test-transaction',
+          operation: operationName,
+          source,
+          phase: 'preparing-host',
+          startedAt: now,
+          updatedAt: now,
+        }),
+        read: async () => journal,
+        write: async (record) => { journal = record },
+        clear: async () => { journal = null },
       },
     }),
     inspect: async () => ({
@@ -142,11 +192,27 @@ function fakeDashboardStarter(fail = false): { starter: ReleasedDashboardStarter
   const calls: DashboardCalls = { starts: [] }
   return {
     starter: {
+      inspect: async () => null,
+      adopt: async () => null,
       start: async (_deps, payloadRoot, opts) => {
         calls.starts.push([payloadRoot, opts])
+        const releaseId = payloadRoot.split('/').at(-2) ?? ''
         return fail
           ? { state: 'failed', detail: 'injected readiness failure' }
-          : { state: 'ready' }
+          : {
+              state: 'ready',
+              session: {
+                ownership: {
+                  version: 1,
+                  port: 18765,
+                  pid: 321,
+                  releaseId,
+                  stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+                  ...(opts.transactionId === undefined ? {} : { transactionId: opts.transactionId }),
+                },
+                stop: async () => ({ state: 'stopped' as const }),
+              },
+            }
       },
     },
     calls,
@@ -240,7 +306,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true },
+      { openBrowser: true, transactionId: 'setup-test-transaction' },
     ]])
   })
 
@@ -357,7 +423,8 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const receiptWrite = calls.writeText.find(([path]) => path === receiptPath)
     expect(receiptWrite).toBeDefined()
     expect(JSON.parse(receiptWrite?.[1] ?? '{}')).toMatchObject({
-      version: 2,
+      version: 3,
+      transactionId: 'setup-test-transaction',
       state: 'cleanup-pending',
       host: 'codex',
       releaseId: `sha256-${'a'.repeat(64)}`,
@@ -454,7 +521,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(deps.outLines.join('\n')).toContain('等待新宿主会话')
   })
 
-  test('Claude 按 inventory 报告的 project/local scope 分别清理冲突登记', async () => {
+  test('Claude 仅 user scope Tenon 时拒绝清理 project/local 旧登记', async () => {
     const deps = makeDeps()
     const releaseId = `sha256-${'a'.repeat(64)}`
     const legacyId = String.fromCharCode(
@@ -511,13 +578,11 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     })
     const runtime = fakeRuntimeInstaller(false, null, releaseId)
 
-    expect(await cmdSetupHost(deps, 'claude', { claude: true }, env, runtime.installer)).toBe(0)
+    expect(await cmdSetupHost(deps, 'claude', { claude: true }, env, runtime.installer)).toBe(1)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['claude', 'plugin list --json'],
-      ['claude', `plugin uninstall ${legacyId} --scope project`],
-      ['claude', `plugin uninstall ${legacyId} --scope local`],
-      ['claude', 'plugin list --json'],
     ])
+    expect(deps.errLines.join('\n')).toContain('project scope')
   })
 
   test('activation 后 receipt 原子写失败会在同一 managed transaction 精确回滚', async () => {
@@ -697,10 +762,24 @@ describe('②managed runtime 发布边界', () => {
     const runtime = fakeRuntimeInstaller(false, previousRelease)
     const starts: string[] = []
     const dashboard: ReleasedDashboardStarter = {
+      inspect: async () => null,
+      adopt: async () => null,
       start: async (_deps, payloadRoot) => {
         starts.push(payloadRoot)
         if (starts.length === 1) return { state: 'failed', detail: 'spawn failed' }
-        return { state: 'ready' }
+        return {
+          state: 'ready',
+          session: {
+            ownership: {
+              version: 1,
+              port: 18765,
+              pid: 654,
+              releaseId: previousRelease,
+              stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+            },
+            stop: async () => ({ state: 'stopped' as const }),
+          },
+        }
       },
     }
 
@@ -764,7 +843,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true },
+      { openBrowser: true, transactionId: 'setup-test-transaction' },
     ]])
   })
 

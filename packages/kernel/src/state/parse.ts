@@ -7,6 +7,8 @@ import {
   FIELD_ORDER,
   LIST_FIELDS,
   QuoteGateError,
+  PRE_VERIFY_REVIEW_DEFAULT,
+  PRE_VERIFY_REVIEW_FIELD,
   REVIEW_GATE_FIELDS,
   type FieldName,
   type PipelineState,
@@ -37,13 +39,19 @@ export function unquoteScalar(s: string): string {
 }
 
 /**
- * 全量 40 字段骨架，缺省空串（CONTRACT §1：写回时缺省字段写空串）；
+ * 全量 46 字段骨架，缺省空串（CONTRACT §1：写回时缺省字段写空串）；
  * `workflow` 例外，缺省 `'default'`——下游需能直接判断"是否为默认 workflow"，
  * 不应该还要处理"空串等价于 default"这种隐式约定。
  */
 export function emptyFields(): Record<FieldName, string | string[]> {
   const fields = {} as Record<FieldName, string | string[]>
-  for (const f of FIELD_ORDER) fields[f] = f === 'workflow' ? 'default' : ''
+  for (const f of FIELD_ORDER) {
+    fields[f] = f === 'workflow'
+      ? 'default'
+      : f === PRE_VERIFY_REVIEW_FIELD
+        ? PRE_VERIFY_REVIEW_DEFAULT
+        : ''
+  }
   return fields
 }
 
@@ -128,13 +136,17 @@ export function parsePipeline(content: string): PipelineState {
  * 不含用户输入）；再拼回 opaqueTail。空串标量写 `""`（对齐老内核 heredoc 的 automation_* 空值
  * 表示），空列表写 `[]`。
  */
-export function serializePipeline(state: PipelineState): string {
+export function serializePipeline(
+  state: PipelineState,
+  options: { readonly omitPreVerifyReview?: boolean } = {},
+): string {
   const out: string[] = []
   const hasReviewGateReceipt = REVIEW_GATE_FIELDS.some((field) => {
     const value = state.fields[field]
     return Array.isArray(value) ? value.length > 0 : value !== ''
   })
   for (const field of FIELD_ORDER) {
+    if (field === PRE_VERIFY_REVIEW_FIELD && options.omitPreVerifyReview === true) continue
     if (REVIEW_GATE_FIELD_SET.has(field) && !hasReviewGateReceipt) continue
     const value = state.fields[field] ?? ''
     if (Array.isArray(value)) {

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { PRODUCT_IDENTITY, type SkillTable } from '@tenon/kernel'
-import type { DoctorProbes } from '../deps.js'
+import type { DoctorProbes, HostPluginInventorySource } from '../deps.js'
 import {
   LEGACY_PLUGIN_IDENTITY,
   TENON_PLUGIN_IDENTITY,
@@ -128,25 +128,19 @@ const CODEX_PROJECT_CONTRACT_SKILLS = [
   'e2e-testing',
 ] as const
 
-export function checkCodexProjectSkills(
+export async function checkCodexProjectSkills(
   p: DoctorProbes,
-  hostInventory: {
-    readonly host: 'codex' | 'claude'
-    readonly enabledIds: ReadonlySet<string>
-  } | null | undefined,
-  activeHost: 'codex' | 'claude' | null,
-): DoctorCheck {
-  if (p.nativeHostPluginIds !== undefined) {
-    if (hostInventory === null || hostInventory === undefined) {
+  inventory: HostPluginInventorySource | undefined,
+): Promise<DoctorCheck> {
+  if (inventory?.kind === 'unavailable') {
       return red(
         'integration:codex-project-skills',
-        '当前 managed runtime 的宿主 plugin inventory 不可用或响应畸形，无法证明唯一工作流插件身份',
-        activeHost === null
-          ? '先确认 managed runtime 宿主，再修复其 plugin inventory 并重新运行 tenon setup'
-          : `先运行 ${activeHost} plugin list --json 修复宿主 inventory，再运行 tenon setup --${activeHost}`,
+        `当前 ${inventory.host} managed runtime 的宿主 plugin inventory 不可用：${inventory.detail}`,
+        `先运行 ${inventory.host} plugin list --json 修复宿主 inventory，再运行 tenon setup --${inventory.host}`,
       )
-    }
-    const { host, enabledIds: hostPluginIds } = hostInventory
+  }
+  if (inventory?.kind === 'native') {
+    const { host, enabledIds: hostPluginIds } = inventory
     if (hostPluginIds.has(LEGACY_PLUGIN_IDENTITY)) {
       return red(
         'integration:codex-project-skills',
@@ -163,7 +157,7 @@ export function checkCodexProjectSkills(
     }
   }
   if (p.codexSkillDiscovery !== undefined) {
-    const discovery = p.codexSkillDiscovery()
+    const discovery = await p.codexSkillDiscovery()
     const native = discovery.selectedRoot !== undefined
     const active = native ? discovery.selected : discovery.project
     const missing = CODEX_PROJECT_CONTRACT_SKILLS.filter((name) => !active.has(name))

@@ -247,9 +247,15 @@ function parseGuardsBlock(cur: Cursor, baseIndent: number): WorkflowGuardConfig[
   return guards
 }
 
-const ACTION_TYPES = ['freeze-build-sha', 'mark-verification-passed', 'mark-verification-failed', 'archive-run'] as const
+const ACTION_TYPES = [
+  'freeze-build-sha',
+  'reset-pre-verify-review',
+  'mark-verification-passed',
+  'mark-verification-failed',
+  'archive-run',
+] as const
 
-/** edge action 块（G2 P2）：`- type: X` 逐项（4 变体，无 sub-field）；未知 type → fail-loud。 */
+/** edge action 块（G2 P2）：`- type: X` 逐项（闭集、无 sub-field）；未知 type → fail-loud。 */
 function parseActionsBlock(cur: Cursor, baseIndent: number): WorkflowActionConfig[] {
   const actions: WorkflowActionConfig[] = []
   while (cur.i < cur.lines.length) {

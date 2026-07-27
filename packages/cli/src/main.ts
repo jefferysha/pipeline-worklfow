@@ -295,14 +295,14 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
-    nativeHostPluginIds: async () => {
+    hostPluginInventory: async () => {
       const scope = runtimeScope()
       const active = (await REAL_RUNTIME_INSTALLER.inspect({
         homeDir: scope.homeDir,
         env: scope.env,
       })).active
       const host = active?.source.host
-      if (host !== 'codex' && host !== 'claude') return null
+      if (host !== 'codex' && host !== 'claude') return { kind: 'static' as const }
       try {
         const stdout = execFileSync(host, ['plugin', 'list', '--json'], {
           encoding: 'utf8',
@@ -310,17 +310,26 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
           timeout: 5_000,
         })
         const enabledIds = enabledHostPluginIds(host, stdout)
-        return enabledIds === null ? null : { host, enabledIds }
-      } catch {
-        return null
+        return enabledIds === null
+          ? { kind: 'unavailable' as const, host, detail: '宿主返回畸形 JSON' }
+          : { kind: 'native' as const, host, enabledIds }
+      } catch (error) {
+        return { kind: 'unavailable' as const, host, detail: error instanceof Error ? error.message : String(error) }
       }
     },
-    codexSkillDiscovery: () => ({
-      selectedRoot: root,
-      projectRoot: join(process.cwd(), '.agents', 'skills'),
-      selected: scanSkillDigests(join(root, 'skills')),
-      project: scanSkillDigests(join(process.cwd(), '.agents', 'skills')),
-    }),
+    codexSkillDiscovery: async () => {
+      const active = (await REAL_RUNTIME_INSTALLER.inspect({
+        homeDir: runtimeScope().homeDir,
+        env: runtimeScope().env,
+      })).active?.source.host
+      const native = active === 'codex' || active === 'claude'
+      return {
+        ...(native ? { selectedRoot: root } : {}),
+        projectRoot: join(process.cwd(), '.agents', 'skills'),
+        selected: native ? scanSkillDigests(join(root, 'skills')) : new Map(),
+        project: scanSkillDigests(join(process.cwd(), '.agents', 'skills')),
+      }
+    },
     manifestSkills: () => {
       try {
         const m = loadManifest(manifestPath())

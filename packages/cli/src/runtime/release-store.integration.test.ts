@@ -94,6 +94,33 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).activeValid).toBe(true)
   }, 30_000)
 
+  it('recovers an activation crash window from the pre-activation selection and launcher checkpoint', async () => {
+    const root = await freshRoot('activation-checkpoint')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const scope = isolatedScope(home)
+
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(scope, async (transaction) => {
+      const checkpoint = await transaction.checkpointActivation()
+      await expect(transaction.recoverActivation(checkpoint, 'codex')).resolves.toEqual({
+        state: 'not-started',
+      })
+
+      const activation = await transaction.activate(candidate, 'codex')
+      const recovered = await transaction.recoverActivation(checkpoint, 'codex')
+
+      expect(recovered).toMatchObject({
+        state: 'activated',
+        activation: {
+          selection: activation.selection,
+          release: activation.release,
+          releaseRoot: activation.releaseRoot,
+          launcherSnapshot: checkpoint.launchers,
+        },
+      })
+    })
+  }, 30_000)
+
   it('reuses a fully verified content-addressed release when an idempotent publish collides', async () => {
     const root = await freshRoot('idempotent-release')
     const candidate = await candidateCopy(root)

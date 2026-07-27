@@ -6,7 +6,10 @@
  * （archived/非 gate 阶段由调用方自行决定要不要调用/展示，见 inbox.ts isAwaitingDecision）。
  */
 import type { ChangeSnapshot } from '../types'
-import { DEFAULT_RULES, type StepOutputRules, type WorkflowRules } from './workflowModel'
+import {
+  type StepOutputRules,
+  type WorkflowRules,
+} from './workflowModel'
 
 export interface EvidenceChip {
   key: string // 字段名，mono 展示
@@ -82,15 +85,15 @@ export function artifactChips(c: ChangeSnapshot): EvidenceChip[] {
 
 /**
  * 按 change 当前 gate 阶段返回应展示的证据 chips。
- * 分支判据（评审收紧后）：rules === DEFAULT_RULES（严格引用相等）且 phase ∈ {verify, explore,
- * spec} 映射表内 → 按 phase 走对应的表驱动规则；其余情况（自定义 rules / rules 未提供
- * / phase 不在表内）一律走"自定义 workflow"兜底分支（只出非空路径字段，空的剔除）——
- * rules===undefined 不再被误判为"非自定义"从而误入表驱动分支。
+ * 分支判据：服务端投影的编译能力为 phase-manifest，并且 phase 属于
+ * {verify, explore, spec} 映射表，才走内置表驱动规则。前端不从 workflow 名或图结构反推能力。
  */
 export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined): EvidenceChip[] {
   const inMappingTable = c.phase === 'verify' || c.phase === 'explore' || c.phase === 'spec'
 
-  if (rules === DEFAULT_RULES && inMappingTable) {
+  if (rules !== undefined
+    && rules.executionModel === 'phase-manifest'
+    && inMappingTable) {
     if (c.phase === 'verify') {
       const chips: EvidenceChip[] = VERIFY_STATUS_FIELDS.map((key) => {
         const value = fieldStr(c, key)
@@ -140,14 +143,16 @@ function stageChip(c: ChangeSnapshot, key: string): EvidenceChip {
 
 /**
  * stageArtifacts（T7）—— 每阶段产物清单：按 rules.steps 顺序逐阶段给出 outputs 的实值 chip
- * 与未产出占位。default 走 DEFAULT_STAGE_OUTPUTS 映射（引用相等分支，同 gateEvidence 判据）；
+ * 与未产出占位。phase-manifest 走 DEFAULT_STAGE_OUTPUTS 映射（同 gateEvidence 的编译能力判据）；
  * 自定义 rules 消费 rulesFromDef 携带的 outputsByStep（T6 时代的裸 rules 无产出声明 → 每步
  * 空清单，不伪造产物）；rules 缺失（定义拉取失败）→ []，消费方回落 artifactChips 产物正门
  * （G17 底线：时间线留白但卡不消失）。
  */
 export function stageArtifacts(rules: (WorkflowRules & StepOutputRules) | undefined, c: ChangeSnapshot): StageArtifacts[] {
   if (!rules) return []
-  const outputsByStep = rules === DEFAULT_RULES ? DEFAULT_STAGE_OUTPUTS : rules.outputsByStep
+  const outputsByStep = rules.executionModel === 'phase-manifest'
+    ? DEFAULT_STAGE_OUTPUTS
+    : rules.outputsByStep
   return rules.steps.map((step) => ({
     step,
     chips: (outputsByStep?.[step] ?? []).map((key) => stageChip(c, key)),

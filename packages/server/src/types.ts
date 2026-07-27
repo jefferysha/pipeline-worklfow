@@ -10,6 +10,7 @@ import type {
   Phase,
   PipelineTodoProjection,
   ProductPaths,
+  ReadinessByTransition,
   StateStore,
 } from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
@@ -34,6 +35,12 @@ export interface ChangeSnapshot {
   archived: string
   updated_at: string
   fields: Record<FieldName, string | string[]>
+  /** Exact immutable workflow plan used by this Change. */
+  workflowPlanFingerprint: string
+  /** Rules projected from the same immutable plan, never from the current workflow name. */
+  workflowRules: WorkflowRulesSnapshot
+  /** Change/Track-effective guard projection; intentionally not part of immutable plan identity. */
+  workflowExecution: WorkflowExecutionSnapshot
   /** OpenSpec tasks.md projected onto the workflow stages; omitted only for an older server response. */
   todo?: PipelineTodoProjection
   /** Governed OpenSpec artifact/reader evidence, calculated from the immutable document ledger. */
@@ -68,12 +75,21 @@ export interface DocumentEvidenceSnapshot {
 }
 
 export interface WorkflowRulesSnapshot {
+  executionModel: 'phase-manifest' | 'step-graph'
   steps: string[]
   transitions: Record<string, Array<{ event: string; to: string }>>
   gateByStep: Record<string, 'review' | 'confirm' | null>
   labelByStep: Record<string, string>
   outputsByStep: Record<string, string[]>
+}
+
+/** Rolling-upgrade projection consumed only by an already-open pre-v1.0.1 Dashboard. */
+export interface LegacyWorkflowRulesSnapshot extends Omit<WorkflowRulesSnapshot, 'executionModel'> {
   nonemptyOutputByStep: Record<string, boolean>
+}
+
+export interface WorkflowExecutionSnapshot {
+  readinessByTransition: ReadinessByTransition
 }
 
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
@@ -81,12 +97,14 @@ export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
-  workflowRules: Record<string, WorkflowRulesSnapshot>
+  /** Remove only after the declared rolling compatibility window ends. */
+  workflowRules: Record<string, LegacyWorkflowRulesSnapshot>
   error?: string
 }
 
 /** GET /api/snapshot 的完整响应体：聚合本机所有注册 Project。 */
 export interface Snapshot {
+  snapshot_protocol: 'tenon-snapshot/v2'
   version: string
   generated_at: string
   /** 能力声明（GOAL B6 起步）：前端按声明渲染，未接线域不谎报。 */
@@ -106,6 +124,8 @@ export interface HealthInfo {
   /** Opaque identity of the canonical machine-state Home served by this process. */
   stateScopeId?: string
   pid?: number
+  /** Managed release transaction owner; absent for an ordinary dashboard process. */
+  transactionId?: string
 }
 
 export type PreemptDecision = 'bind' | 'reuse' | 'preempt'
@@ -115,12 +135,15 @@ export interface Pidfile {
   port: number
   version: string
   started?: number
+  transactionId?: string
 }
 
 export interface DashboardServerOptions {
   version?: string
   /** Immutable managed-release identity used to refresh a same-semver dashboard safely. */
   releaseId?: string
+  /** Managed release transaction owner; absent for ordinary dashboard starts. */
+  transactionId?: string
   /**
    * 进程装配层已经解析并冻结的产品路径。注入后 Server 不再解释进程环境或从 home 推导状态目录。
    */

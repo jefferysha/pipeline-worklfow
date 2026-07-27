@@ -66,10 +66,15 @@ export function validateWorkflow(
         errors.push(`step '${step.id}' 的字段 '${ref.field}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
       }
     }
+    const transitionEvents = new Set<string>()
     for (const t of step.transitions) {
       if (!IDENT_RE.test(t.event)) {
         errors.push(`step '${step.id}' 的 transitions 里 event '${t.event}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
       }
+      if (transitionEvents.has(t.event)) {
+        errors.push(`step '${step.id}' 的 transitions 重复声明 event '${t.event}'`)
+      }
+      transitionEvents.add(t.event)
     }
     const skillIds = step.skills.map((s) => s.id)
     const dependsOn = new Map(step.skills.map((s) => [s.id, [...(s.depends_on ?? [])]]))

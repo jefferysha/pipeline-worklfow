@@ -75,6 +75,9 @@ MATCHED_DISPLAY="${MATCHED//$'\n'/、}"
 # === 硬门：落 .pipeline-pending-interaction（供 gate.sh 在写类工具前挡产出；人类提问工具精确放行）===
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
+HOST_SESSION_ID="$(json_get session_id || true)"
+case "$HOST_SESSION_ID" in ''|*[!A-Za-z0-9_-]*) HOST_SESSION_ID='' ;; esac
+[ "${#HOST_SESSION_ID}" -le 128 ] || HOST_SESSION_ID=''
 # 必须与 gate.sh 选到同一项目根。旧代码把 marker 写进子目录，gate 却在项目根读，导致
 # 交互式 skill 的硬门悄然失效；共享 helper 同时避免跨普通父目录误写别的项目。
 ROOT="$CWD"
@@ -105,7 +108,8 @@ if [ -n "$ROOT" ] && [ -d "$ROOT" ] && [ -r "$AUTHORITY_HELPER" ] && [ -r "$STAT
   . "$ACTIVE_HELPER"
   ACTIVE_DIR="$(pipeline_active_change_dir "$ROOT" || true)"
   ACTIVE_CHANGE="${ACTIVE_DIR##*/}"
-  if [ -n "$ACTIVE_DIR" ] && pipeline_interaction_authority_for_change "$ROOT" "$ACTIVE_CHANGE"; then
+  if [ -n "$ACTIVE_DIR" ] \
+    && pipeline_interaction_authority_for_change "$ROOT" "$ACTIVE_CHANGE" "$HOST_SESSION_ID"; then
     AUTONOMOUS=1
   fi
 fi
@@ -117,7 +121,7 @@ fi
 # === 软提醒：注入 L2.6 交互硬姿态（additionalContext，non-blocking）===
 if [ "$AUTONOMOUS" -eq 1 ]; then
   CTX="$(cat <<EOF
-【交互式 skill 自主执行授权 · Change=${ACTIVE_CHANGE} · 由 interactive-skill-gate 注入】
+【交互式 skill 自主执行授权 · Change=${ACTIVE_CHANGE} · host_session=${HOST_SESSION_ID} · 由 interactive-skill-gate 注入】
 当前用户已明确授权当前 Change 连续执行。请完整执行刚加载的交互式 skill「${MATCHED_DISPLAY}」，采用保守、
 可撤销、可审计的默认；把所有非硬性假设及其理由写入本阶段产物的 Assumptions/Decision Log。
 这项授权允许在 review 产物、OpenSpec 文档读取收据和 phase guard 都真实通过后，使用

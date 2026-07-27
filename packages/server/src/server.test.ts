@@ -64,6 +64,7 @@ interface Harness {
 async function start(opts?: {
   version?: string
   releaseId?: string
+  transactionId?: string
   hostHome?: string
   paths?: ServerPaths
   token?: string
@@ -95,6 +96,7 @@ async function start(opts?: {
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
     releaseId: opts?.releaseId,
+    transactionId: opts?.transactionId,
     hostHome,
     paths,
     token: opts?.token ?? 'secret-token-abc',
@@ -128,6 +130,20 @@ async function startWithConfig(opts?: { version?: string; token?: string }): Pro
 }
 
 describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () => {
+  it('managed start 回显 transaction identity，普通 start 不伪造 ownership', async () => {
+    const managed = await start({ transactionId: 'transaction-health-test' })
+    const managedBody = JSON.parse((await reqGet(managed.port, '/api/health')).body) as {
+      transactionId?: string
+    }
+    expect(managedBody.transactionId).toBe('transaction-health-test')
+
+    const ordinary = await start()
+    const ordinaryBody = JSON.parse((await reqGet(ordinary.port, '/api/health')).body) as {
+      transactionId?: string
+    }
+    expect(ordinaryBody.transactionId).toBeUndefined()
+  })
+
   it('回显 ok/scope/version/releaseId/stateScopeId 且不泄露 state home', async () => {
     const releaseId = `sha256-${'a'.repeat(64)}`
     const stateHome = '/tmp/private-dashboard-state-home'

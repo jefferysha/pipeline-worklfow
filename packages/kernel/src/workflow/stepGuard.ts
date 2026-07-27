@@ -5,6 +5,7 @@ import { evaluateGuards, type GuardEvaluation } from './guard-handlers.js'
 import type { CompiledGuardConfig, GuardInput, StepIR } from './ir.js'
 import type { StepDef } from './types.js'
 import type { PipelineState, GuardResult } from '../types.js'
+import { normalizeDefaultGuardFields } from '../flow/default-event-policy.js'
 
 /**
  * 自定义 workflow 当前 step 的出口 guard 评估（G2 P2：v1 两变体经 compileStepGuards 下沉后走
@@ -48,6 +49,15 @@ export function buildStepGuardInput(state: PipelineState, ctx: StepGuardContext)
     gitHeadSha: ctx.gitHeadSha,
     workspaceFingerprint: ctx.workspaceFingerprint,
     specMigrationStatus: ctx.specMigrationStatus,
+  }
+}
+
+/** Default transitions share the same infrastructure capabilities but preserve legacy fstr fields. */
+export function buildDefaultGuardInput(state: PipelineState, ctx: StepGuardContext): GuardInput {
+  return {
+    ...buildStepGuardInput(state, ctx),
+    fields: normalizeDefaultGuardFields(state.fields),
+    track: fieldStr(state.fields.track),
   }
 }
 

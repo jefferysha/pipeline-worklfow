@@ -14,6 +14,7 @@
 import { buildStepGuardInput, evaluateCompiledGuards, type StepGuardContext } from './stepGuard.js'
 import type { ActionConfig, StepIR, WorkflowIR } from './ir.js'
 import type { FieldName, PipelineState } from '../types.js'
+import { mergeLifecycleGuards } from './governed-lifecycle-policy.js'
 
 /** 字段值 → 字符串（列表按逗号连接；undefined → 空串）——cli str / server fstr 同款强转。 */
 function fieldStr(state: PipelineState, k: FieldName): string {
@@ -83,13 +84,9 @@ export async function planStepTransition(
   if (!edge) {
     return { ok: false, kind: 'event-unsupported', stepId, available: step.transitions.map((t) => t.event) }
   }
-  const guards = [...step.guards, ...edge.guards]
-  for (const additional of additionalGuards) {
-    // A governed custom workflow may declare the canonical guard itself.  Evaluate it only once:
-    // duplicate build-head-unchanged would otherwise read a moving workspace twice and could
-    // produce a false drift result during a single transition transaction.
-    if (!guards.some((existing) => JSON.stringify(existing) === JSON.stringify(additional))) guards.push(additional)
-  }
+  // A governed custom workflow may declare a canonical guard itself. Evaluate it only once:
+  // duplicate build-head-unchanged could read a moving workspace twice in one transaction.
+  const guards = mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards)
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx))
   if (!guardResult.pass) {
     return { ok: false, kind: 'guard-failed', stepId, failures: guardResult.failures }

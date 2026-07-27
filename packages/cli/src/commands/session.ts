@@ -61,7 +61,7 @@ export interface SessionFs {
   loadPackages: (cwd: string) => Promise<PackageDecl[] | null>
   bindPointer: (cwd: string, name: string) => Promise<void>
   /** Optional for legacy injected test/degraded adapters; missing means --continuous is safely unavailable. */
-  writeInteractionAuthority?: (cwd: string, name: string) => Promise<void>
+  writeInteractionAuthority?: (cwd: string, name: string, sessionId: string) => Promise<void>
   /** Optional host-session identity for exact resume routing and terminal liveness. It never mutates workflow state. */
   bindTerminalSession?: (cwd: string, name: string, sessionId: string) => Promise<void>
 }
@@ -130,12 +130,14 @@ async function writeTerminalSessionBinding(cwd: string, name: string, sessionId:
   }
 }
 
-async function writeAuthorityProjection(cwd: string, name: string): Promise<void> {
+async function writeAuthorityProjection(cwd: string, name: string, sessionId: string): Promise<void> {
+  if (!isTerminalSessionId(sessionId)) throw new Error('host session id 格式非法')
   const target = join(cwd, INTERACTION_AUTHORITY_FILE)
   const timestamp = authorityTimestamp()
   const body = [
     INTERACTION_AUTHORITY_PROTOCOL,
     `change=${name}`,
+    `host_session=${sessionId}`,
     'scope=interactive-skills',
     'review=delegated',
     `issued_at=${timestamp}`,
@@ -154,7 +156,8 @@ async function writeAuthorityProjection(cwd: string, name: string): Promise<void
   await assertRegularOrMissing(history)
   await appendFile(
     history,
-    `${JSON.stringify({ ts: timestamp, kind: 'prompt', raw: 'interaction-authority:enabled scope=interactive-skills review=delegated' })}\n`,
+    `${JSON.stringify({ ts: timestamp, kind: 'prompt',
+      raw: `interaction-authority:enabled scope=interactive-skills review=delegated host_session=${sessionId}` })}\n`,
     'utf8',
   )
 }
@@ -248,24 +251,34 @@ async function cmdActivate(deps: CliDeps, args: string[], fs: SessionFs): Promis
     deps.io.err(`[activate] 活跃指针写入失败 → degraded（回退对话上下文），未落 session 指针: ${errMsg(e)}`)
     return 0
   }
+  let terminalSessionBound = false
   if (options.hostSessionId !== undefined) {
     if (fs.bindTerminalSession === undefined) {
       deps.io.err('[activate] 终端会话绑定未写入 → degraded（当前 fs adapter 不支持 --host-session；不影响 Change 绑定或流程状态）')
     } else {
       try {
         await fs.bindTerminalSession(deps.cwd, name, options.hostSessionId)
+        terminalSessionBound = true
       } catch (e) {
         deps.io.err(`[activate] 终端会话绑定未写入 → degraded（dashboard 将把该会话显示为等待）：${errMsg(e)}`)
       }
     }
   }
   if (options.continuous) {
+    if (options.hostSessionId === undefined) {
+      deps.io.err('[activate] 持续交互授权未写入 → degraded（缺少 --host-session，授权不得跨宿主会话复用）')
+      return 0
+    }
+    if (!terminalSessionBound) {
+      deps.io.err('[activate] 持续交互授权未写入 → degraded（精确 host session 绑定未获证明）')
+      return 0
+    }
     if (fs.writeInteractionAuthority === undefined) {
       deps.io.err('[activate] 持续交互授权未写入 → degraded（当前 fs adapter 不支持 --continuous；普通 confirmation/review 门不受影响）')
       return 0
     }
     try {
-      await fs.writeInteractionAuthority(deps.cwd, name)
+      await fs.writeInteractionAuthority(deps.cwd, name, options.hostSessionId)
     } catch (e) {
       deps.io.err(`[activate] 持续交互授权未写入 → degraded（仍已绑定 Change，interaction skill 将按常规提问）：${errMsg(e)}`)
       return 0

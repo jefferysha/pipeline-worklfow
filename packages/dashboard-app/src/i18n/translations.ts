@@ -197,6 +197,9 @@ export const zh: Dict = {
     switch_to_chinese: '中文',
     theme_toggle: '主题',
     loading: '加载中…',
+    snapshot_error_title: '无法加载 Tenon 数据',
+    snapshot_error_hint: '服务暂时没有返回可用快照。可检查连接后重试，不需要刷新整个页面。',
+    snapshot_retry: '重试加载',
     connected: '实时已连接',
     // 意图迁移（评审 P2-13，Task 5）：旧「离线（轮询）」暗示仍在悄悄轮询兜底，与实况不符
     // （SSE 断线后并无轮询兜底）；新文案只陈述真相 + 提示数据可能过期，配断线横幅的「重连」钮。
@@ -1449,6 +1452,9 @@ export const en: Dict = {
     switch_to_chinese: 'Chinese',
     theme_toggle: 'Theme',
     loading: 'Loading…',
+    snapshot_error_title: 'Unable to load Tenon data',
+    snapshot_error_hint: 'The service did not return a usable snapshot. Check the connection and retry without reloading the page.',
+    snapshot_retry: 'Retry loading',
     connected: 'Live connected',
     offline: 'Disconnected — data may be stale',
     reconnect: 'Reconnect',

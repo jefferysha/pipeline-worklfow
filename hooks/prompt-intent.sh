@@ -69,17 +69,64 @@ pipeline_prompt_requests_resume() { # $1=prompt $2=候选 change 名；0=允许�
 # context check: `contextual-confirm` is valid only when the exact project has a pending
 # confirm/interaction/review receipt.  Keeping classification here prevents router and unlock hooks
 # from accepting different Chinese/English phrases.
+pipeline_prompt_contains_authority_phrase() { # $1=prompt; 0=contains an explicit authority phrase
+  case "${1:-}" in
+    *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|\
+    *自主执行完成*|*自己执行完成*|*不用问我*|*不必问我*|*无需问我*|*不要再问*|\
+    *所有操作我都批准*|*全部操作我都批准*|*所有操作都批准*|*全部操作都批准*|\
+    *全部允许*|*全都允许*|*全部批准*) return 0 ;;
+  esac
+  return 1
+}
+
+pipeline_prompt_has_unsafe_authority_context() { # $1=prompt; 0=authority use is not plainly affirmative
+  local remainder="${1:-}" separator
+
+  # Authority is security-sensitive: recognize only a closed affirmative statement.  Normalize
+  # harmless separators, then require the entire prompt to be a sequence of approved affirmative
+  # tokens.  Substring deletion is deliberately avoided: overlapping phrases such as
+  # `后续不用问我` must not leave a suffix, and a hostile prefix/suffix must never disappear.
+  # This is intentionally stricter than trying to enumerate every Chinese/English negation,
+  # quotation, condition, or meta-expression: `禁止`, `拒绝`, `do not`, `never`, and future unknown
+  # wording all fail closed without needing another deny-list entry.
+  remainder="${remainder// /}"
+  remainder="${remainder//$'\t'/}"
+  remainder="${remainder//$'\r'/}"
+  remainder="${remainder//$'\n'/}"
+  for separator in '，' '。' '！' '；' '：' ',' '.' '!' ';' ':'
+  do
+    remainder="${remainder//$separator/}"
+  done
+
+  if [[ "$remainder" =~ ^(确认|后续不用问我|后续不用问|后续无需询问|后续不需要确认|后续自行执行|后续自己执行|后续自主执行|自主执行完成|自己执行完成|不用问我|不必问我|无需问我|不要再问|所有操作我都批准|全部操作我都批准|所有操作都批准|全部操作都批准|全部允许|全都允许|全部批准)+$ ]]; then
+    return 1
+  fi
+  return 0
+}
+
 pipeline_prompt_approval_intent() { # $1=prompt; stdout=intent; 0=matched, 1=unrelated
   local prompt="${1:-}"
   case "$prompt" in
     *恢复逐步确认*|*恢复询问*|*停止自主执行*|*撤回自主执行*|*每步确认*)
       printf 'revoke'; return 0 ;;
-    *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*)
-      printf 'authorize'; return 0 ;;
     *不可以*|*不同意*|*不批准*|*不要继续*|*别继续*|*不要执行*|*别执行*|*暂停执行*)
       printf 'reject'; return 0 ;;
     *继续*但*|*继续*但是*|*继续*不过*|*继续*先别*|*可以*但*|*可以*但是*|*同意*但*)
       printf 'modify'; return 0 ;;
+    *没有说*批准*|*没说*批准*|*不是所有操作*批准*|*并非所有操作*批准*|\
+    *不代表*批准*|*不等于*批准*|*这句话*所有操作我都批准*|\
+    *\"所有操作我都批准\"*|*“所有操作我都批准”*)
+      printf 'reject'; return 0 ;;
+  esac
+  if pipeline_prompt_contains_authority_phrase "$prompt"; then
+    if pipeline_prompt_has_unsafe_authority_context "$prompt"; then
+      printf 'reject'
+    else
+      printf 'authorize'
+    fi
+    return 0
+  fi
+  case "$prompt" in
     *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*)
       printf 'confirm'; return 0 ;;
     继续|继续。|继续！|接着|接着。|可以|可以。|可以！|同意|同意。|好|好的|没问题|按推荐|按推荐方案|按你的推荐|按照你的推荐|\

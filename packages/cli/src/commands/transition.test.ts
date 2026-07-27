@@ -56,7 +56,12 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
   })
 
   test('新状态经 store.write 落盘，且整体在 withLock 内', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'build', build_mode: 'direct', isolation: 'worktree' }) })
+    const deps = makeDeps({ state: mockState({
+      phase: 'build',
+      build_mode: 'direct',
+      isolation: 'worktree',
+      pre_verify_review_result: 'pass',
+    }) })
     await cmdTransition(deps, 'demo', 'build-complete')
     expect(deps.store.withLock.calls).toHaveLength(1)
     expect(deps.store.write.calls).toHaveLength(1)

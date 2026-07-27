@@ -7,6 +7,13 @@ function fixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
 }
 
+function withPreVerifyReviewDefault(raw: string): string {
+  return raw.replace(
+    /^(automation_cause:.*)$/m,
+    '$1\npre_verify_review_result: pending',
+  )
+}
+
 const REAL_FIXTURES = [
   'dashboard-interaction-fixes.pipeline.yaml',
   'zz-container-e2e.pipeline.yaml',
@@ -32,6 +39,7 @@ describe('parsePipeline（窄解析器）', () => {
     expect(state.fields.phase).toBe('ship')
     expect(state.fields.automation_queued_at).toBe('')
     expect(state.fields.automation_attempts).toBe('0')
+    expect(state.fields.pre_verify_review_result).toBe('pending')
     expect(state.fields.pr_url).toBe(
       'draft（未推送，留 afk-full-pipeline-autodrive 分支待整体确认；草稿见 pr-draft.md）',
     )
@@ -82,9 +90,9 @@ describe('parsePipeline（窄解析器）', () => {
 
 describe('serializePipeline（严格 FIELD_ORDER 全量写回）', () => {
   for (const name of REAL_FIXTURES) {
-    it(`read→write 往返逐字节等价: ${name}`, () => {
+    it(`read→write 精确升级 pre-Verify 默认值，其余逐字节等价: ${name}`, () => {
       const raw = fixture(name)
-      expect(serializePipeline(parsePipeline(raw))).toBe(raw)
+      expect(serializePipeline(parsePipeline(raw))).toBe(withPreVerifyReviewDefault(raw))
     })
   }
 
@@ -157,7 +165,7 @@ describe('parsePipeline/serializePipeline —— 内部提交元数据三行块�
     const lastFieldKey = [...FIELD_ORDER].reverse().find((field) =>
       lines.some((line) => line.startsWith(`${field}:`)),
     )
-    expect(lastFieldKey).toBe('automation_cause')
+    expect(lastFieldKey).toBe('pre_verify_review_result')
     const metaIdx = lines.indexOf('pipeline_run_id: run-9')
     const lastFieldIdx = lines.findIndex((l) => l.startsWith(`${lastFieldKey!}:`))
     expect(metaIdx).toBe(lastFieldIdx + 1)
@@ -170,9 +178,9 @@ describe('parsePipeline/serializePipeline —— 内部提交元数据三行块�
     expect(roundTripped.runMetadata).toEqual(state.runMetadata)
   })
 
-  it('往返：runMetadata 为 undefined 时序列化不新增任何字节、opaqueTail 逐字不变（现有 fixture 零回归的直接证明）', () => {
+  it('往返：runMetadata 为 undefined 时只补 pre-Verify 默认值，opaqueTail 逐字不变', () => {
     const raw = fixture('dashboard-html-parity-restore.pipeline.yaml')
-    expect(serializePipeline(parsePipeline(raw))).toBe(raw)
+    expect(serializePipeline(parsePipeline(raw))).toBe(withPreVerifyReviewDefault(raw))
   })
 })
 

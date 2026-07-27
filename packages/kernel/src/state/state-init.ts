@@ -104,6 +104,7 @@ export function initialFields(
   fields.codex_review_result = opts.reviewSeed
   fields.verify_result = 'pending'
   fields.branch_status = 'pending'
+  fields.pre_verify_review_result = 'pending'
   fields.direct_override = 'false'
   fields.prd_path = 'null'
   fields.pr_url = 'null'

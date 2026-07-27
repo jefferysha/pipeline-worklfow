@@ -6,7 +6,7 @@ import { resolveProjectSelection, selectedProjectRoot } from './projectSelection
 
 export interface ProjectSelectionController {
   readonly currentRoot: string
-  readonly setCurrentRoot: (root: string) => void
+  readonly selectProject: (root: string, view: View) => void
 }
 
 export function useProjectSelection(input: {
@@ -27,7 +27,15 @@ export function useProjectSelection(input: {
     () => selectedProjectRoot(resolveProjectSelection(input.snapshot?.projects ?? [], preferredRoot)),
     [input.snapshot, preferredRoot],
   )
-  const setCurrentRoot = useCallback((root: string) => {
+  const selectProject = useCallback((root: string, view: View) => {
+    try {
+      const search = dashboardSearch(window.location.search, { view, root, change: null })
+      const next = `${window.location.pathname}${search}${window.location.hash}`
+      const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      if (next !== now) window.history.pushState(window.history.state, '', next)
+    } catch {
+      // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
+    }
     setPreferredRoot(root)
     input.onSelectedChange(null)
   }, [input.onSelectedChange])
@@ -67,5 +75,5 @@ export function useProjectSelection(input: {
     return () => window.removeEventListener('popstate', onPopState)
   }, [input.onPopView, input.onSelectedChange])
 
-  return { currentRoot, setCurrentRoot }
+  return { currentRoot, selectProject }
 }

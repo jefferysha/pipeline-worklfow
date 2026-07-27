@@ -44,6 +44,9 @@ esac
 CWD="$(json_get cwd || true)"
 [ -n "$CWD" ] || CWD="$PWD"
 [ -d "$CWD" ] || exit 0
+HOST_SESSION_ID="$(json_get session_id || true)"
+case "$HOST_SESSION_ID" in ''|*[!A-Za-z0-9_-]*) HOST_SESSION_ID='' ;; esac
+[ "${#HOST_SESSION_ID}" -le 128 ] || HOST_SESSION_ID=''
 
 ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 [ -r "$ROOT_HELPER" ] || exit 0
@@ -82,13 +85,13 @@ if [ "$INTENT" = 'authorize' ] || [ "$INTENT" = 'revoke' ]; then
     . "$ACTIVE_HELPER"
     ACTIVE_DIR="$(pipeline_active_change_dir "$ROOT" || true)"
     ACTIVE_NAME="${ACTIVE_DIR##*/}"
-    if [ -n "$ACTIVE_DIR" ]; then
+    if [ -n "$ACTIVE_DIR" ] && [ -n "$HOST_SESSION_ID" ]; then
       if [ "$INTENT" = 'authorize' ]; then
-        pipeline_write_interaction_authority "$ROOT" "$ACTIVE_NAME" \
-          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" enabled || true
+        pipeline_write_interaction_authority "$ROOT" "$ACTIVE_NAME" "$HOST_SESSION_ID" \
+          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" enabled "$HOST_SESSION_ID" || true
       else
-        pipeline_revoke_interaction_authority "$ROOT" "$ACTIVE_NAME" \
-          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" revoked || true
+        pipeline_revoke_interaction_authority "$ROOT" "$ACTIVE_NAME" "$HOST_SESSION_ID" \
+          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" revoked "$HOST_SESSION_ID" || true
       fi
     fi
   fi
@@ -110,7 +113,7 @@ if [ -r "$REVIEW_HELPER" ]; then
   # shellcheck source=review-ack.sh
   . "$REVIEW_HELPER"
   if [ "$INTENT" = 'authorize' ]; then
-    pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" delegated || true
+    pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" delegated "$HOST_SESSION_ID" || true
   else
     pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" manual || true
   fi

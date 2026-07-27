@@ -23,7 +23,45 @@ afterEach(async () => {
 })
 
 describe('Dashboard health probe', () => {
-  test('settles false when a 200 response aborts after a partial JSON body', async () => {
+  test('accepts only the exact managed transaction identity and keeps ordinary health distinct', async () => {
+    const stateScopeId = `sha256-v1-${'1'.repeat(64)}`
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        ok: true,
+        scope: 'global',
+        version: '1.0.1',
+        releaseId,
+        stateScopeId,
+        pid: process.pid,
+        transactionId: 'transaction-a',
+      }))
+    })
+    const port = await listen(server)
+
+    await expect(probeHealthyDashboard(
+      port,
+      releaseId,
+      stateScopeId,
+      { expectedTransactionId: 'transaction-a' },
+    )).resolves.toMatchObject({ transactionId: 'transaction-a' })
+    await expect(probeHealthyDashboard(
+      port,
+      releaseId,
+      stateScopeId,
+      { expectedTransactionId: 'transaction-b' },
+    )).resolves.toBeNull()
+    await expect(probeHealthyDashboard(port, releaseId, stateScopeId)).resolves.toBeNull()
+    await expect(probeHealthyDashboard(
+      port,
+      releaseId,
+      stateScopeId,
+      { observeAnyTransaction: true },
+    )).resolves.toMatchObject({ transactionId: 'transaction-a' })
+  })
+
+  test('settles null when a 200 response aborts after a partial JSON body', async () => {
     const server = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.write('{"ok":')
@@ -36,7 +74,7 @@ describe('Dashboard health probe', () => {
       undefined,
       `sha256-v1-${'1'.repeat(64)}`,
       { wallClockTimeoutMs: 300 },
-    )).resolves.toBe(false)
+    )).resolves.toBeNull()
   })
 
   test('uses a wall-clock deadline even when a peer continuously drip-feeds the body', async () => {
@@ -53,7 +91,7 @@ describe('Dashboard health probe', () => {
       undefined,
       `sha256-v1-${'1'.repeat(64)}`,
       { wallClockTimeoutMs: 120 },
-    )).resolves.toBe(false)
+    )).resolves.toBeNull()
     expect(Date.now() - startedAt).toBeLessThan(500)
   })
 
@@ -69,6 +107,6 @@ describe('Dashboard health probe', () => {
       undefined,
       `sha256-v1-${'1'.repeat(64)}`,
       { maxResponseBytes: 64 },
-    )).resolves.toBe(false)
+    )).resolves.toBeNull()
   })
 })

@@ -6,21 +6,15 @@
 import { lstat, readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
-  builtinWorkflow,
-  compileWorkflow,
   evaluateDocumentEvidence,
   isDocumentPolicyStep,
-  loadWorkflow,
   liveTerminalActivity,
   parseTerminalActivityRecord,
   projectPipelineTodo,
-  resolveBoundEffectiveWorkflowPlan,
   stateStorageSourcePathSync,
   TERMINAL_ACTIVITY_FILE,
   type EffectiveWorkflowPlan,
-  type PipelineTodoStageDefinition,
   type StateStore,
-  type WorkflowPlanSnapshot,
 } from '@tenon/kernel'
 import type {
   ChangeSnapshot,
@@ -28,10 +22,17 @@ import type {
   ProjectSnapshot,
   Snapshot,
   TerminalActivitySnapshot,
-  WorkflowRulesSnapshot,
 } from './types.js'
+import {
+  legacySnapshotWorkflowRules,
+  resolveSnapshotEffectivePlan,
+  snapshotTodoStages,
+  snapshotWorkflowExecution,
+  snapshotWorkflowRules,
+  type WorkflowSnapshotCapabilityDeps,
+} from './workflowSnapshot.js'
 
-export interface SnapshotDeps {
+export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
   store: StateStore
   version: string
@@ -88,58 +89,6 @@ async function readTerminalActivity(
     }
   } catch {
     return undefined
-  }
-}
-
-function effectivePlan(
-  root: string,
-  workflowName: string,
-  binding: {
-    readonly documentProfile?: 'legacy-full' | 'document-v1'
-    readonly documentGovernanceFingerprint?: string
-    readonly workflowPlanFingerprint?: string
-    readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
-  },
-): EffectiveWorkflowPlan {
-  const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
-    const definition = builtinWorkflow(name) ?? loadWorkflow(root, name)
-    return definition === null ? null : compileWorkflow(definition)
-  }, undefined, binding.workflowPlanSnapshot)
-  if (plan === null) throw new Error(`workflow '${workflowName}' 未找到`)
-  return plan
-}
-
-function todoStages(plan: EffectiveWorkflowPlan | undefined, phase: string): readonly PipelineTodoStageDefinition[] {
-  if (plan) {
-    return plan.workflow.steps.map((step) => ({
-      id: step.id,
-      label: step.label || step.id,
-      transitions: step.transitions.map((transition) => transition.to),
-    }))
-  }
-  // A bad/missing custom definition must not make a default-looking Todo. Retain the actual step.
-  return phase === '' ? [] : [{ id: phase, label: phase }]
-}
-
-function workflowRulesSnapshot(plan: EffectiveWorkflowPlan): WorkflowRulesSnapshot {
-  return {
-    steps: plan.workflow.steps.map((step) => step.id),
-    transitions: Object.fromEntries(plan.workflow.steps.map((step) => [
-      step.id,
-      step.transitions.map((transition) => ({ event: transition.event, to: transition.to })),
-    ])),
-    gateByStep: Object.fromEntries(plan.workflow.steps.map((step) => [step.id, step.gate])),
-    labelByStep: Object.fromEntries(
-      plan.workflow.steps.filter((step) => step.label !== '').map((step) => [step.id, step.label]),
-    ),
-    outputsByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
-      step.id,
-      step.outputs.map((output) => output.field),
-    ])),
-    nonemptyOutputByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
-      step.id,
-      step.guards.some((guard) => guard.type === 'output-present'),
-    ])),
   }
 }
 
@@ -208,7 +157,8 @@ export function dedupeRoots(roots: string[]): string[] {
   return out
 }
 
-async function scanProject(store: StateStore, root: string, nowMs: number): Promise<ProjectSnapshot> {
+async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Promise<ProjectSnapshot> {
+  const { store } = deps
   let isDir = false
   try {
     isDir = (await stat(root)).isDirectory()
@@ -227,8 +177,35 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
   }
 
   const changes: ChangeSnapshot[] = []
-  const workflowRules: Record<string, WorkflowRulesSnapshot> = {}
+  const legacyWorkflowRules: ProjectSnapshot['workflowRules'] = {}
   const errors: string[] = []
+  let gitHeadPromise: Promise<string> | undefined
+  const workspaceFingerprints = new Map<string, Promise<string>>()
+  const gitHeadSha = deps.gitHeadSha
+  const workspaceFingerprint = deps.workspaceFingerprint
+  const capabilityDeps: WorkflowSnapshotCapabilityDeps = {
+    ...(deps.fileExists === undefined ? {} : { fileExists: deps.fileExists }),
+    ...(gitHeadSha === undefined
+      ? {}
+      : {
+          gitHeadSha: () => {
+            gitHeadPromise ??= gitHeadSha(root)
+            return gitHeadPromise
+          },
+        }),
+    ...(workspaceFingerprint === undefined
+      ? {}
+      : {
+          workspaceFingerprint: (_root, changeName) => {
+            let pending = workspaceFingerprints.get(changeName)
+            if (pending === undefined) {
+              pending = workspaceFingerprint(root, changeName)
+              workspaceFingerprints.set(changeName, pending)
+            }
+            return pending
+          },
+        }),
+  }
   for (const e of entries) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const changeDir = join(changesRoot, e.name)
@@ -256,13 +233,13 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
       const phase = str(f.phase)
       const workflowName = str(f.workflow) || 'default'
       const track = str(f.track)
-      const plan = effectivePlan(root, workflowName, {
+      const plan = resolveSnapshotEffectivePlan(root, workflowName, {
         documentProfile: state.runMetadata?.documentProfile,
         documentGovernanceFingerprint: state.runMetadata?.documentGovernanceFingerprint,
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
       })
-      workflowRules[workflowName] ??= workflowRulesSnapshot(plan)
+      legacyWorkflowRules[workflowName] ??= legacySnapshotWorkflowRules(plan)
       const [documents, terminalActivity] = await Promise.all([
         documentEvidence(root, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs),
@@ -270,7 +247,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
       const todo = projectPipelineTodo({
         phase,
         tasksMarkdown: await readTasksMarkdown(changeDir),
-        stages: todoStages(plan, phase),
+        stages: snapshotTodoStages(plan, phase),
         additionalItemsByStage: documentTodoItems(plan, documents),
       })
       changes.push({
@@ -283,6 +260,16 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
         archived: str(f.archived),
         updated_at: str(f.updated_at),
         fields: f,
+        workflowPlanFingerprint: plan.workflowFingerprint,
+        workflowRules: snapshotWorkflowRules(plan),
+        workflowExecution: await snapshotWorkflowExecution(
+          plan,
+          state,
+          root,
+          changeDir,
+          e.name,
+          capabilityDeps,
+        ),
         todo,
         documents,
         ...(terminalActivity === undefined ? {} : { terminalActivity }),
@@ -298,7 +285,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
     root,
     ok: errors.length === 0,
     changes,
-    workflowRules,
+    workflowRules: legacyWorkflowRules,
     ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
   }
 }
@@ -306,9 +293,10 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const roots = dedupeRoots(deps.registry())
   const nowMs = deps.now?.() ?? Date.now()
-  const projects = await Promise.all(roots.map((r) => scanProject(deps.store, r, nowMs)))
+  const projects = await Promise.all(roots.map((r) => scanProject(deps, r, nowMs)))
   const change_count = projects.reduce((n, p) => n + p.changes.length, 0)
   return {
+    snapshot_protocol: 'tenon-snapshot/v2',
     version: deps.version,
     generated_at: deps.clock(),
     // 能力声明（GOAL B6）：基线 4 域恒 true；afk/traffic 等由 server 按真实接线注入合并（未接线不谎报）。

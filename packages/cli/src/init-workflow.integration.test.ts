@@ -314,7 +314,11 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(await h.run(['review', 'acknowledge', name])).toBe(0)
     expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
 
-    expect(await h.run(['set-many', name, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])).toBe(0)
+    expect(await h.run([
+      'set-many', name,
+      'build_mode=direct', 'isolation=worktree', 'direct_override=true',
+      'pre_verify_review_result=pass',
+    ])).toBe(0)
     await recordSkills('writing-plans', 'test-driven-development')
     expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['transition', name, 'build-complete'])).toBe(0)

@@ -66,6 +66,7 @@ const WORKFLOW_IDENTITY_COMPAT = new Map([
     { code: "changeWorkflow(change) !== 'default'", reason: 'reader-facing built-in workflow category projection' },
   ]],
   ['packages/dashboard-app/src/model/workflowModel.ts', [
+    { code: "name === 'default'", reason: 'central reader-facing built-in workflow identity predicate' },
     { code: "n !== 'default'", reason: 'built-in workflow rules are packaged rather than project-fetched' },
     { code: "name === 'default'", reason: 'built-in workflow rules are packaged rather than project-fetched' },
     { code: "name !== 'default'", reason: 'built-in workflow rules are packaged rather than project-fetched' },

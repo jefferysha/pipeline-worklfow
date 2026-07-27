@@ -36,8 +36,22 @@ function fakeRuntimeInstaller(
 ): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
+  let journal: import('../runtime/installer.js').ManagedReleaseJournalRecord | null = null
   const installer: RuntimeInstaller = {
     withManagedTransaction: async (scope, operation) => operation({
+      checkpointActivation: async () => ({
+        selection: {
+          version: 1,
+          revision: 0,
+          activeRelease: null,
+          previousRelease: null,
+          updatedAt: '2026-07-23T00:00:00Z',
+        },
+        launchers: {
+          tenon: { path: '/home/update-test/.local/bin/tenon', state: { kind: 'missing' } },
+          hook: { path: '/home/update-test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+        },
+      }),
       activate: async (candidateRoot, host) => {
         calls.activations.push([candidateRoot, host, scope.homeDir])
         if (fail) throw new Error('candidate rejected')
@@ -47,8 +61,25 @@ function fakeRuntimeInstaller(
           releaseRoot: `/runtime/releases/${releaseId}`,
         }
       },
+      recoverActivation: async () => ({ state: 'not-started' as const }),
       revertActivation: async (activation) => {
         calls.reverts.push([scope.homeDir, activation.release.releaseId])
+      },
+      proveActivation: async (activation) =>
+        activation.selection.activeRelease === activation.release.releaseId,
+      journal: {
+        create: (operationName, source, now) => ({
+          version: 1,
+          transactionId: 'update-test-transaction',
+          operation: operationName,
+          source,
+          phase: 'preparing-host',
+          startedAt: now,
+          updatedAt: now,
+        }),
+        read: async () => journal,
+        write: async (record) => { journal = record },
+        clear: async () => { journal = null },
       },
     }),
     inspect: async () => ({
@@ -77,11 +108,27 @@ function fakeDashboardStarter(failures: readonly boolean[] = []): { starter: Rel
   const calls: DashboardCalls = { starts: [] }
   return {
     starter: {
+      inspect: async () => null,
+      adopt: async () => null,
       start: async (_deps, payloadRoot, opts) => {
         calls.starts.push([payloadRoot, opts])
+        const releaseId = payloadRoot.split('/').at(-2) ?? ''
         return failures[calls.starts.length - 1] === true
           ? { state: 'failed', detail: 'injected readiness failure' }
-          : { state: 'ready' }
+          : {
+              state: 'ready',
+              session: {
+                ownership: {
+                  version: 1,
+                  port: 18765,
+                  pid: 321,
+                  releaseId,
+                  stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+                  ...(opts.transactionId === undefined ? {} : { transactionId: opts.transactionId }),
+                },
+                stop: async () => ({ state: 'stopped' as const }),
+              },
+            }
       },
     },
     calls,
@@ -92,6 +139,7 @@ function updateEnv(
   run: (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string },
 ): { env: SetupEnv; calls: Calls } {
   const calls: Calls = { exec: [], writes: [] }
+  const mutationBaselines = new Map<string, number>()
   const env: SetupEnv = {
     homeDir: () => '/home/update-test',
     runtimeEnv: () => ({}),
@@ -111,6 +159,24 @@ function updateEnv(
     runCommand: (cmd, args) => {
       calls.exec.push([cmd, args])
       return run(cmd, args)
+    },
+    managedHostReconciliation: (_host, stepId, command) => {
+      const key = `${command.cmd}\u0000${command.args.join('\u0000')}`
+      const baseline = calls.exec.filter(([cmd, args]) =>
+        `${cmd}\u0000${args.join('\u0000')}` === key).length
+      mutationBaselines.set(stepId, baseline)
+      const desired = `test-desired:${stepId}`
+      return {
+        desired,
+        observe: () => {
+          const executions = calls.exec.filter(([cmd, args]) =>
+            `${cmd}\u0000${args.join('\u0000')}` === key).length
+          return executions > (mutationBaselines.get(stepId) ?? baseline)
+            ? desired
+            : `test-before:${stepId}:${baseline}`
+        },
+        isDesired: (observation) => observation === desired,
+      }
     },
     confirm: () => true,
   }
@@ -156,6 +222,14 @@ describe('native plugin update plans', () => {
     expect(enabledHostPluginIds('codex', 'not json')).toBeNull()
     expect(enabledHostPluginIds('codex', JSON.stringify({ installed: 'not-an-array' }))).toBeNull()
     expect(enabledHostPluginIds('codex', JSON.stringify({ installed: [] }))).toEqual(new Set())
+  })
+
+  test('Claude inventory preserves managed scope for administrator-required convergence', () => {
+    const parsed = parseHostPluginInventory('claude', JSON.stringify([
+      { id: 'pipeline-lite@pipeline-lite', enabled: true, scope: 'managed' },
+      { id: 'tenon@tenon', enabled: true, scope: 'user', installPath: '/installed/tenon' },
+    ]))
+    expect(parsed?.enabledScopes.get('pipeline-lite@pipeline-lite')).toEqual(new Set(['managed']))
   })
 
   test('inventory decoder 对禁用根、畸形 enabled、重复登记和非绝对路径全部失败关闭', () => {
@@ -243,7 +317,7 @@ describe('tenon update', () => {
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
-      { openBrowser: true },
+      { openBrowser: true, transactionId: 'update-test-transaction' },
     ]])
     expect(deps.outLines.join('\n')).toContain('稳定 tenon launcher 已保持不变')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
@@ -406,7 +480,7 @@ describe('tenon update', () => {
     expect(deps.outLines.join('\n')).toContain('本地 marketplace 不需要 Git fetch')
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
-      { openBrowser: false },
+      { openBrowser: false, transactionId: 'update-test-transaction' },
     ]])
   })
 
@@ -423,7 +497,8 @@ describe('tenon update', () => {
     expect(runtime.calls.activations).toEqual([])
     expect(runtime.calls.failures).toEqual([[
       '/home/update-test',
-      'host=committed; managed=unchanged; 宿主刷新后的 tenon 候选未通过打包资产校验',
+      'host=committed; managed=unchanged; 宿主候选准备失败；managed runtime 保持不变，'
+      + 'journal 已保留供幂等恢复：宿主刷新后的 tenon 候选未通过打包资产校验',
     ]])
     expect(deps.errLines.join('\n')).toContain('宿主插件缓存已由 Codex 更新')
     expect(deps.errLines.join('\n')).toContain('Tenon 未回滚宿主私有缓存')

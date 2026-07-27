@@ -62,11 +62,15 @@ fi
 # Carry a strong, explicit continuous-execution authorisation through the normal-chat dispatch.
 # The router does not itself create authority (there may be no Change yet); the Tenon root skill
 # consumes this exact flag only after it has created or re-selected an exact Change and uses
-# `tenon session activate --continuous` to bind the resulting projection safely.
+# `tenon session activate --continuous --host-session <id>` to bind it safely.
 CONTINUOUS_EXECUTION='false'
-case "$PROMPT" in
-  *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*) CONTINUOUS_EXECUTION='true' ;;
-esac
+INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
+if [ -r "$INTENT_HELPER" ]; then
+  # shellcheck source=prompt-intent.sh
+  . "$INTENT_HELPER"
+  [ "$(pipeline_prompt_approval_intent "$PROMPT" 2>/dev/null || true)" = 'authorize' ] \
+    && CONTINUOUS_EXECUTION='true'
+fi
 
 STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
 if [ -r "$STATE_HELPER" ]; then
@@ -746,7 +750,11 @@ elif [ "$NON_DEFAULT_WORKFLOW_DISPATCH" = "1" ]; then
   fi
 fi
 if [ "$CONTINUOUS_EXECUTION" = 'true' ]; then
-  TAIL="$TAIL 用户已在本轮明确授权后续连续执行。创建或精确恢复 Change 后，入口必须用 tenon session activate <change> --continuous 绑定授权；每个 phase 仍须完成真实 OpenSpec/skill/guard 证据，review 出口只能用 --delegated 写审计化确认，绝不跳过验证、发布或外部副作用边界。"
+  if [ -n "$HOST_SESSION_ID" ]; then
+    TAIL="$TAIL 用户已在本轮明确授权后续连续执行。创建或精确恢复 Change 后，入口必须用 tenon session activate <change> --continuous --host-session ${HOST_SESSION_ID} 绑定授权；每个 phase 仍须完成真实 OpenSpec/skill/guard 证据，review 出口只能用 --delegated 写审计化确认，绝不跳过验证、发布或外部副作用边界。"
+  else
+    TAIL="$TAIL 用户表达了连续执行意图，但宿主没有提供可绑定的 host session id；不得创建持续授权投影，继续遵守逐项交互与 review 确认。"
+  fi
 fi
 
 printf '\n<workflow-state>\nrouter: %s\n' "$HDR"

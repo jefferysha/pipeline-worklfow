@@ -77,7 +77,7 @@ tenon session activate <change-name>
 Continuous delegated interaction can be recorded explicitly:
 
 ```bash
-tenon session activate <change-name> --continuous
+tenon session activate <change-name> --continuous --host-session <host-session-id>
 ```
 
 This does not waive Skills, documents, review receipts, guards, publication
@@ -123,4 +123,3 @@ failure. Follow the read-only diagnostics in
 
 Read [routing and workflows](routing-and-workflows.md) or continue through the
 [default workflow](default-workflow.md).
-

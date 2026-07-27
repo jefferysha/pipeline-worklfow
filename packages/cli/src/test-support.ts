@@ -342,7 +342,7 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
       'writing-plans', 'test-driven-development', 'verification-before-completion',
       'finishing-a-development-branch', 'browser-qa', 'e2e-testing',
     ]),
-    nativeHostPluginIds: async () => ({ host: 'claude', enabledIds: new Set(['tenon@tenon']) }),
+    hostPluginInventory: async () => ({ kind: 'native', host: 'claude', enabledIds: new Set(['tenon@tenon']) }),
     manifestSkills: () => DEFAULT_MANIFEST_SKILLS,
     // AFK 就绪四检（R1）：缺省全就绪（docker 可用 / 镜像在位 / 两 runner 凭证已配）→ afk:* 四绿基线；
     // 单测按需覆写 afkReadiness 制造 docker 缺 / 镜像缺 / 凭证缺 各态。
