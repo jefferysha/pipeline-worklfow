@@ -73,3 +73,8 @@
 {"ts":"2026-07-27T16:44:38Z","kind":"set","field":"agent_review_result","to":"pass"}
 {"ts":"2026-07-27T16:44:38Z","kind":"set","field":"codex_review_result","to":"pass"}
 {"ts":"2026-07-27T16:44:38Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-27T17:12:21Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-27T17:12:30Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-27T17:12:30Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-27T15:46:16Z authority_host_session=019fa237-c9de-7b00-abce-70d9f9cf1237"}
+{"ts":"2026-07-27T17:12:31Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"7bfdcc1e-73a9-4e02-bf04-d90767658218"}
+{"ts":"2026-07-27T17:14:55Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}

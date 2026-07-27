@@ -39,7 +39,7 @@
 ## 验证
 
 - [x] 在同一冻结候选上完成独立 Reviewer、全量回归和发布包验收。
-- [ ] 在隔离干净状态执行真实公网 bootstrap、Codex Marketplace、runtime、doctor 和 Dashboard 验收。
+- [x] 在隔离干净状态执行真实公网 bootstrap、Codex Marketplace、runtime、doctor 和 Dashboard 验收。
 - [x] 证明 Purpose 前后 requirements 内容逐字一致，并 strict validate 相关主规格与归档演练。
 
 ## 交付

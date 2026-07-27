@@ -7,8 +7,7 @@
 - Standards：C0 / H0 / M0 / L0。
 - Spec：C0 / H0 / M0 / L0。
 - 本地候选、发布包、运行时恢复、OpenSpec Purpose-only 与相关严格校验均通过。
-- 本轮没有把尚未推送的候选冒充为真实公网 Marketplace 验收；真实公网 exact-ref 安装留到获得
-  push/release 授权并存在可下载 commit 后执行。
+- 候选推送后，真实公网 exact-ref Marketplace 安装、重复安装和新 Codex 进程发现全部通过。
 
 ## 冻结候选验证
 
@@ -18,6 +17,7 @@
 | `npm test -- --reporter=dot` | PASS；315/315 files，5399 passed，5 个有明确环境原因的 skip |
 | `npm run test:web -- --reporter=dot` | PASS；50/50 files，963/963 tests |
 | `npm run test:clean-install` | PASS；local release `sha256-b1726672de7c3f3e9a1600d6dec363f148b209e5a3c1b4fdfd6412234747ea5c`，重复安装 PID `74875`，hook trust 如实为 `untrusted` |
+| public exact-ref clean install | PASS；ref `776027084caca02adce7bed018689f2d94881489`，release `sha256-b1726672de7c3f3e9a1600d6dec363f148b209e5a3c1b4fdfd6412234747ea5c`，隔离端口 `61691`，重复安装 PID `16113` |
 | release coordinator + real release store | PASS；57/57，包含四个真实跨进程补偿崩溃阶段 |
 | `packages/cli/src/tap.integration.test.ts` | PASS；并行全量中的一次 SIGINT 资源竞争失败，独立复跑 7/7，随后串行核心全量未复现 |
 | comments / architecture / identity / hygiene | PASS；architecture 扫描 614 个生产文件，5 个仅尺寸例外 |
@@ -116,7 +116,7 @@ openspec validate plugin-distribution --strict
 --strict` 得到 11 passed / 12 failed；失败项均为本 Change 范围外的既有 Change/基线债务，因此
 不把它们记作本 Change 通过，也不扩大本次修复范围。
 
-## 未执行与剩余边界
+## 公网验收与剩余边界
 
 - 远端当前 `main` 为 `d1aaea5237642a264dfeec066944bd329a224ce0`。以该 commit 运行新增
   exact-ref 公网验收时，旧 `install.sh` 以 `unsupported argument --ref` 非零退出；这证明本地候选
@@ -126,8 +126,11 @@ openspec validate plugin-distribution --strict
   但远端旧 runtime 忽略隔离 Dashboard 端口并尝试占用 `18765`；该端口已有用户拥有的健康 Tenon
   listener，因此候选安全退出、未停止或覆盖未知进程。现场结果为 FAIL，恰好复现本 Change 已在
   本地候选修复的端口/所有权问题。
-- 未执行当前未推送候选的真实公网 raw URL 安装，因为其 immutable ref 尚不存在于远端，且本次
-  没有 push/release 授权。
+- 用户授权提交并推送后，候选 `776027084caca02adce7bed018689f2d94881489` 已进入远端。执行
+  `node tools/clean-codex-install-acceptance.mjs --mode public --public-ref
+  776027084caca02adce7bed018689f2d94881489` 得到 PASS：raw `install.sh` 与 Marketplace 使用同一
+  immutable ref，runtime、doctor、Dashboard API/HTML、新 Codex app-server 插件/Skill/hooks 发现
+  及重复安装全部通过，临时 listener 已按精确 ownership 清理。
 - Release workflow 已强制从当前 checkout 导出精确 commit、下载同一 commit 的 `install.sh`，并传递
-  同一 `--ref`；公开轨只有在该 commit 可下载后才能形成真实外部 PASS。
+  同一 `--ref`；本轮已在该 commit 可下载后形成真实外部 PASS。
 - 新安装后仍需用户在新 Codex 会话中通过 `/hooks` 信任 Tenon hook；自动验收刻意不绕过此人工安全门。

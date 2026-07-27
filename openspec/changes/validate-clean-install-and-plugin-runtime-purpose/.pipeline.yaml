@@ -2,7 +2,7 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: verify
+phase: ship
 phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-27-clean-codex-install-and-plugin-runtime-purpose-design.md
 plan: docs/superpowers/plans/2026-07-27-clean-codex-install-and-plugin-runtime-purpose.md
@@ -12,7 +12,7 @@ isolation: in-place
 build_sha: workspace:sha256:6688d4aec0c3d469713ab07c483ffa6c5f3031d97fcea5c9222f086b0ca81349
 agent_review_result: pass
 codex_review_result: pass
-verify_result: fail
+verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-27T13:20:32Z
-updated_at: 2026-07-27T16:43:00Z
-verified_at: null
+updated_at: 2026-07-27T17:12:31Z
+verified_at: 2026-07-27T17:12:31Z
 archived_at: null
 archived: false
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 9f940ae8-c24c-42b5-a198-06f11edf532f
-pipeline_transition_sequence: 12
-pipeline_transition_head: 86d0561e-624d-4373-8c92-893f61aac283
-pipeline_state_revision: 37
-pipeline_state_revision_id: faf4b5d9-51de-458c-a539-9313fcf13be6
-pipeline_state_digest: 51ec2309cccf0d2301b5ccf926ae7a3cd10e41794aa01143bc3cfd2903944e81
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzcsInJldmlzaW9uSWQiOiJmYWY0YjVkOS01MWRlLTQ1OGMtYTUzOS05MzEzZmNmMTNiZTYiLCJwYXlsb2FkRGlnZXN0IjoiM2NlY2VkOTM5YjFlOTFjMjQwODRiYzUyNWFhMTI1ZWQzM2Q0M2I0ODlhNjcxY2M2ODYzNjc4ZDM5OGVkZGUyYiJ9
+pipeline_transition_sequence: 13
+pipeline_transition_head: 7bfdcc1e-73a9-4e02-bf04-d90767658218
+pipeline_state_revision: 40
+pipeline_state_revision_id: 57fe374a-9890-4eaa-ac0f-2d58e8fb31f0
+pipeline_state_digest: 679d3ee3bbaa626365f43ab0c69502c2ce8d02eefafc8dda763594fb14cf81b3
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDAsInJldmlzaW9uSWQiOiI1N2ZlMzc0YS05ODkwLTRlYWEtYWMwZi0yZDU4ZThmYjMxZjAiLCJwYXlsb2FkRGlnZXN0IjoiZTNkMDRjN2M2MjgyMmEwZTRhNmVhOWM1ZWUzMDg1NTg2OGI5YTFiMTQyNzg5MmJhZTMzOTlmZGI3NGI2NGZhOCJ9
