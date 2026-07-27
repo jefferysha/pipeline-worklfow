@@ -43,7 +43,7 @@
         {
           "phase": "ship",
           "sha256": "f8c109677badecc9a9b777cfe7ca9fd4bd78b51da3336ced63e683c91d358913",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -88,7 +88,7 @@
         {
           "phase": "ship",
           "sha256": "057861578f69bec9ba8d7e501217afec8360866a756f60aee37f22cd3b04149a",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -133,7 +133,7 @@
         {
           "phase": "ship",
           "sha256": "c26ebf1af1aca05c1acec4fad200e215626d75c08ba0f8f0f239f5f3bb917172",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -178,7 +178,7 @@
         {
           "phase": "ship",
           "sha256": "c738ade49f8d0606a7b56ddbf5c16f9335d71a81bb734c1bdf82d4a2faf01430",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -211,7 +211,7 @@
         {
           "phase": "ship",
           "sha256": "84feecc73946647b5796df309af117ef65551b57b6482769fdc0e0d93df633f7",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -238,7 +238,7 @@
         {
           "phase": "ship",
           "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -265,28 +265,7 @@
         {
           "phase": "ship",
           "sha256": "efdadee7177d627e3fa1d3bf3dd4f0708cf1442400c98896d9e5e43ccb405ebe",
-          "readAt": "2026-07-27T17:14:55Z",
-          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/tasks.md",
-      "sha256": "86647531de9db9a9a0406442ff71d8df28017b980cbb0acf93b4201fa90b5992",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-07-27T17:12:21Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "86647531de9db9a9a0406442ff71d8df28017b980cbb0acf93b4201fa90b5992",
-          "readAt": "2026-07-27T17:12:21Z",
-          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",12]"
-        },
-        {
-          "phase": "ship",
-          "sha256": "86647531de9db9a9a0406442ff71d8df28017b980cbb0acf93b4201fa90b5992",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -301,7 +280,7 @@
         {
           "phase": "ship",
           "sha256": "3cc16e9303cf02ceaa9263fbb3dbd017ee01474a20688269c6cd6a7cf7a8e48a",
-          "readAt": "2026-07-27T17:14:55Z",
+          "readAt": "2026-07-27T17:23:01Z",
           "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
         }
       ]
@@ -313,6 +292,21 @@
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-27T17:14:55Z",
       "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/validate-clean-install-and-plugin-runtime-purpose/tasks.md",
+      "sha256": "b753faea208a038f2373d02359f719f2006abe64ae549ceb7fdc85cf0104d02f",
+      "producer": "tenon-ship",
+      "recordedAt": "2026-07-27T17:23:01Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "b753faea208a038f2373d02359f719f2006abe64ae549ceb7fdc85cf0104d02f",
+          "readAt": "2026-07-27T17:23:01Z",
+          "visitId": "[\"9f940ae8-c24c-42b5-a198-06f11edf532f\",13]"
+        }
+      ]
     }
   ]
 }
