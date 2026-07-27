@@ -2,8 +2,8 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/fix-tenon-entry-skill-contract-design.md
 plan: docs/superpowers/plans/fix-tenon-entry-skill-contract.md
 verification_report: docs/superpowers/reports/2026-07-27-fix-tenon-entry-skill-contract-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/commit/8f716852952d34fcffbaad30628a249fd1d3f143
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -32,17 +32,17 @@ spec_scope: null
 depends_on:
   - align-tenon-entry-skill-contract
 created_at: 2026-07-26T13:54:15Z
-updated_at: 2026-07-27T11:14:55Z
+updated_at: 2026-07-27T11:41:02Z
 verified_at: 2026-07-27T11:14:55Z
-archived_at: null
-archived: false
+archived_at: 2026-07-27T11:41:02Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: e6b57669-b1a9-4a5d-9f68-855a9e067e27
-pipeline_transition_sequence: 51
-pipeline_transition_head: 5bb20be7-4095-4793-bb18-b5ab21bd8074
-pipeline_state_revision: 162
-pipeline_state_revision_id: ec1c76d1-8f99-460b-a1de-9d2c6f139d0e
-pipeline_state_digest: 5b72c59c792f2c19908f7bd52421103464986202972977fa3959ac766e3850e6
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTYyLCJyZXZpc2lvbklkIjoiZWMxYzc2ZDEtOGY5OS00NjBiLWExZGUtOWQyYzZmMTM5ZDBlIiwicGF5bG9hZERpZ2VzdCI6ImNjNTM2MDIyYjNjNTQzOTYwYTk2OWQ1ZTg0NTRmODZlZmYyNjk2OTJiZjBmM2JlYTdmZWJkZGZmNTRmMmNiODAifQ
+pipeline_transition_sequence: 53
+pipeline_transition_head: df8284e7-90ee-4deb-8b0a-a55066ca0bc1
+pipeline_state_revision: 165
+pipeline_state_revision_id: 8f66c86d-1dbd-4184-a9f0-4ab6dbcf31aa
+pipeline_state_digest: fc25f33e56c8747e38261ad40ba7856124df608d02d8f5005e053571d374f9e1
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTY1LCJyZXZpc2lvbklkIjoiOGY2NmM4NmQtMWRiZC00MTg0LWE5ZjAtNGFiNmRiY2YzMWFhIiwicGF5bG9hZERpZ2VzdCI6ImZkYThiZTQ0YmM0YjlkOGQyNzliMDM2OGQxYzQ5YjE1NmQ3YjM4ODExZjMwNDRkMjQyNDZjN2QzOTIyMjNlMmQifQ

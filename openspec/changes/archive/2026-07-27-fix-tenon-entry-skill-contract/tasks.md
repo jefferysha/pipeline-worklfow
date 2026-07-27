@@ -142,10 +142,10 @@
 
 ## 交付
 
-- [ ] 提交并推送修复，通过远端 CI。
-- [ ] 发布并验证 `v1.0.1` GitHub Release 与 Pages。
-- [ ] 从最终插件更新本机 managed runtime，在 18765 复验 URL、项目来源隔离并确认 doctor 无入口 Skill 红黄项。
+- [x] 提交并推送修复，通过远端 CI。
+- [x] 发布并验证 `v1.0.1` GitHub Release 与 Pages。
+- [x] 从最终插件更新本机 managed runtime，在 18765 复验 URL、项目来源隔离并确认 doctor 无入口 Skill 红黄项。
 
 ## 归档
 
-- [ ] 归档 Change，清理临时状态并确认工作区、远端和运行时一致。
+- [x] 归档 Change，清理临时状态并确认工作区、远端和运行时一致。

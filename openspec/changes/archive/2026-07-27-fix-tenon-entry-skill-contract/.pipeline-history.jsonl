@@ -326,3 +326,10 @@
 {"ts":"2026-07-27T11:14:54Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-27T08:26:16Z authority_host_session=019fa237-c9de-7b00-abce-70d9f9cf1237"}
 {"ts":"2026-07-27T11:14:55Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"5bb20be7-4095-4793-bb18-b5ab21bd8074"}
 {"ts":"2026-07-27T11:20:27Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-27T11:34:32Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/commit/8f716852952d34fcffbaad30628a249fd1d3f143"}
+{"ts":"2026-07-27T11:34:32Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-27T11:34:46Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-27T11:34:46Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"f422cbb7-9236-4b1c-8036-382ed02b4e12"}
+{"ts":"2026-07-27T11:40:32Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa237-c9de-7b00-abce-70d9f9cf1237"}
+{"ts":"2026-07-27T11:40:49Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-27T11:41:02Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"df8284e7-90ee-4deb-8b0a-a55066ca0bc1"}
