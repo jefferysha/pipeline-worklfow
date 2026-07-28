@@ -1,7 +1,7 @@
 import { useT } from '../i18n'
 import type { ChangeSnapshot } from '../types'
 import type { VerificationEvidenceLocale } from '../api/client'
-import { VerificationEvidenceComposer } from './VerificationEvidenceComposer'
+import { VerificationEvidenceComposer } from '../verification/VerificationEvidenceComposer'
 
 export interface TaskDocumentsSectionProps {
   documents: NonNullable<ChangeSnapshot['documents']>

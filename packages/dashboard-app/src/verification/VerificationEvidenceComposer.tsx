@@ -6,7 +6,7 @@ import {
   type VerificationEvidenceLocale,
 } from '../api/client'
 import { useT } from '../i18n'
-import { Dialog } from './Dialog'
+import { Dialog } from '../shared/Dialog'
 import {
   VerificationEvidenceEntryEditor,
   type VerificationEvidenceEditorEntry,

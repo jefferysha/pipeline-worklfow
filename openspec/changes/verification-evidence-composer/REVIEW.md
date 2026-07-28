@@ -83,3 +83,24 @@ mapping. Full repository names and immutable URLs remain in the automation memor
 Build re-review after all generated artifacts stabilized: Critical 0, High 0, Medium 0. The
 pre-existing Vite chunk-size warning remains informational and does not change this feature's
 runtime contract.
+
+## Second Verify-fail repair round
+
+The frozen `41481ab` browser tracks found one remaining keyboard defect: forward Tab from the
+last focusable control in the nested composer escaped to the outer TaskDetail close button. The
+integrated ProgressView regression was added first and failed with that exact focus target. The
+outer progress drawer now yields the complete keyboard boundary whenever a nested modal exists,
+so the shared Dialog alone owns both Tab directions and Escape. The focused suite then passed
+58/58.
+
+The frozen reviewer also reported one Low directory-boundary issue: the two composer-only
+components were under `src/shared/` despite having a single feature consumer. They now live under
+`src/verification/`; only the stable shared Dialog and TaskDocuments integration remain shared.
+The move preserved the focused tests and Dashboard typecheck without changing the public API,
+visual treatment, copy, or governed data boundary.
+
+Post-repair machine gates: focused nested/composer tests 58/58; Dashboard 52 files and 975/975;
+full workspace 316 files with 5,415 passed and 5 honestly skipped; production build; architecture,
+comment honesty, repository hygiene, docs, identity, npx package, and hooks 482/482 all passed.
+Existing React `act(...)` diagnostics and the Vite chunk-size warning remain non-failing baseline
+output and are unrelated to this keyboard-boundary repair.

@@ -84,10 +84,10 @@ export function useProgressDrawer({
     if (!drawerOpen) return
     document.documentElement.classList.add('prg9-lock')
     function onKey(event: KeyboardEvent): void {
+      // A nested modal owns its complete keyboard boundary. Let its focus trap and Escape
+      // handler run without the surrounding drawer moving focus or closing underneath it.
+      if (drawerRef.current?.querySelector('[role="dialog"][aria-modal="true"]')) return
       if (event.key === 'Escape') {
-        // The shared Dialog owns the topmost Escape. This guard is evaluated before either
-        // listener can synchronously unmount that nested surface.
-        if (drawerRef.current?.querySelector('[role="dialog"][aria-modal="true"]')) return
         closeDrawer()
         return
       }

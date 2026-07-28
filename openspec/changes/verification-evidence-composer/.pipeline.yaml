@@ -3,10 +3,10 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-28-verification-evidence-composer-design.md
 plan: docs/superpowers/plans/2026-07-28-verification-evidence-composer.md
-verification_report: docs/superpowers/reports/2026-07-28-verification-evidence-composer-verify-fail.md
+verification_report: docs/superpowers/reports/2026-07-28-verification-evidence-composer-verify-fail-2.md
 build_mode: direct
 isolation: worktree
 build_sha: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T04:13:41Z
-updated_at: 2026-07-28T05:27:49Z
+updated_at: 2026-07-28T05:49:47Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: f0ef9d0f-b6f0-4cf2-8861-50518602672d
-pipeline_transition_sequence: 9
-pipeline_transition_head: 09671991-e0f2-41df-aedc-d136b1205357
-pipeline_state_revision: 26
-pipeline_state_revision_id: 19448481-13d3-462b-b38a-2d5258fa9a22
-pipeline_state_digest: 00346b5858bda34d62a1658b20d345798000291ca9c1c7e902ec23b79a996064
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjYsInJldmlzaW9uSWQiOiIxOTQ0ODQ4MS0xM2QzLTQ2MmItYjM4YS0yZDUyNThmYTlhMjIiLCJwYXlsb2FkRGlnZXN0IjoiOTNiYmU3MTYwN2Y5N2MyMDVjMDYyODk5ODYzZmVkY2IzOWE3YzQ4MmVmYTIyMjk4ZmVmZWFlNWQ3Zjk1M2NkNCJ9
+pipeline_transition_sequence: 11
+pipeline_transition_head: 95a811df-e831-4974-9c4a-c1fed22e7c95
+pipeline_state_revision: 32
+pipeline_state_revision_id: 3f0dcf28-fddf-431d-911d-4c86d2de3190
+pipeline_state_digest: 00fd276e8b4e64ca5eb0c6f4ff9e18dcd7fb515e8b181d63bf6dfc07c004796e
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzIsInJldmlzaW9uSWQiOiIzZjBkY2YyOC1mZGRmLTQzMWQtOTExZC00Yzg2ZDJkZTMxOTAiLCJwYXlsb2FkRGlnZXN0IjoiZDkxYTgxMWYwMzRkYzdhYWI1NjMwNjAyMDk1YmFjNDY1MGI5NGQwMzY5OWE0NTU1MDUzNWQ2Y2M4MGQ5ZDliYSJ9

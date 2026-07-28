@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { VerificationEvidenceComposer } from './VerificationEvidenceComposer'
-import { TaskDocumentsSection } from './TaskDocumentsSection'
+import { TaskDocumentsSection } from '../shared/TaskDocumentsSection'
 
 function renderComposer(locale: 'zh' | 'en' = 'zh', onToast = vi.fn()): ReturnType<typeof render> {
   localStorage.setItem('tenon-dashboard-lang', locale)

@@ -841,6 +841,35 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(opener).toHaveFocus()
   })
 
+  it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    expect(first).toBeDefined()
+    expect(last).toBeDefined()
+    last!.focus()
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(document.activeElement).toBe(first)
+    expect(screen.getByTestId('detail-close')).not.toHaveFocus()
+  })
+
   it('running 行抽屉：TaskDetail 之下挂日志区，2.5s 轮询；抽屉关闭即停（组件卸载）', async () => {
     vi.useFakeTimers()
     renderView()
