@@ -384,3 +384,46 @@ run `30401772822` 的 build、freshness、clean install、docs、sandcastle 与 
 该修复只改变测试同步语义，不改变 production source、Dashboard bundle 或视觉合同；此前
 Spec、Rules/Architecture/Security 与 `design-taste-frontend` 的产品结论继续适用。必须把测试
 修复与本记录提交、普通推送，并重新取得新的 exact-head CI，不能 rerun 失败的旧 SHA 充数。
+
+### Governance head CI 失败与 tap readiness 生命周期修复
+
+测试同步修复 head `791432ee31c7eab1fc0a8a3f48bd023bf1dee256` 的 exact-head CI run
+`30403139200` 全绿。随后关闭最后 Build task、重新登记 `tasks`、设置
+`pre_verify_review_result=pass` 的治理 head `e8dfcc1ffeaacd2a2f0316fed7793e9132572ee5`
+在 run `30403750908` 失败，因此没有进入 Verify。失败是
+`tap.integration.test.ts:147` 的真实子进程收到 `{code:null, signal:"SIGINT"}`，而不是干净
+执行 daemon stop 后 `{code:0, signal:null}`；该 run 的 root 结果为
+`319 files passed / 1 file failed`、`5526 passed / 1 failed / 7 skipped`。
+
+第一次修复仅把 SIGINT/SIGTERM handler 提前到 export 行之前。独立 Rules/Architecture/Security
+复审拒绝该实现并记录 `0 Critical / 1 High / 0 Medium / 1 Low`：
+
+- stderr launch summary 与 `--json` summary 仍早于 handler；首条 readiness 即发送 SIGINT 的
+  黑盒压测分别有 36/40、38/40 被信号直接终止；
+- Node 的 Windows `child.kill('SIGINT')` 是强制终止语义，POSIX handler 验收不能不加平台边界。
+
+最终修复在 daemon 模式先建立唯一 termination 状态机，再输出 stderr summary、JSON summary 或
+export；首个信号同步移除 SIGINT/SIGTERM 两个 listener，只调用一次 `daemon.stop()`，stop
+rejection 继续传播到 CLI 顶层。命令透传模式的既有输出顺序与退出合同不变。两条真实子进程测试
+分别在首条 stderr/JSON readiness 到达时立刻发送 SIGINT，每条执行 12 次并严格断言
+`{code:0, signal:null}`；原 export 用例同样严格断言 signal。两条 POSIX 信号语义测试均显式
+`skipIf(process.platform === 'win32')`，其他 tap E2E 在 Windows 仍执行。
+
+最终证据：
+
+| Gate | 结果 |
+| --- | --- |
+| readiness TDD / stress | 定向 8/8 PASS；10 个完整定向套件累计 240 次首 stderr/JSON 信号全部 PASS。 |
+| root tests | 320 files / 5521 passed / 14 honest conditional skips。 |
+| Dashboard | 59 files / 1056 passed；正式资产仍为 `index-C8TGqQ2X.js` 与 `index-vq5iwRxt.css`。 |
+| build / typecheck / bundle | PASS；独立 reviewer 从源码重建的 CLI bundle 与入库 dist digest 一致。 |
+| clean install / N-1 bundle | PASS；clean-install 返回 `ok=true`，bundle 31/31。 |
+| architecture / comments | 639 production files、5 个既有 size-only exception；comment honesty PASS。 |
+| 其余 CI 同构门禁 | identity、hygiene、npx、legacy bridge、docs/templates/site、hooks 482、adapters 272、skills、CAS 13、oracle 0 differences 全部 PASS。 |
+| OpenSpec 隔离 | `/private/tmp/tenon-pr7-build5-openspec.QswJaF/repo` 中 1.6.0 strict archive/apply 为 1 ADDED + 5 MODIFIED；共享 fingerprint `25d9025d…a941` 前后相同。 |
+| Dashboard 视觉 | 相对 `e8dfcc1f` 的 Dashboard source/CSS/dist diff 为零；既有 `frontend-design`、`web-design-guidelines`、`design-taste-frontend` 结论继续为 C0/H0/M0/L0。 |
+
+最终独立复审为 Spec/Correctness C0/H0/M0/L0、Rules/Architecture/Security
+C0/H0/M0/L0、Dashboard visual/accessibility C0/H0/M0/L0。最后 Build task 与
+`pre_verify_review_result` 仍保持 pending，必须先提交并普通推送本轮 product/review head，取得
+新的 exact-head CI 后才可关闭。

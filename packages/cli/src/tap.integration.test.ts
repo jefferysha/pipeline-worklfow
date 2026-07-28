@@ -52,6 +52,42 @@ async function startFakeUpstream(): Promise<FakeUpstream> {
   return { port, requests, close: () => new Promise<void>((resolve) => server.close(() => resolve())) }
 }
 
+async function signalDaemonAtFirstOutput(opts: {
+  args: string[]
+  env: Record<string, string>
+  stream: 'stdout' | 'stderr'
+  pattern: RegExp
+}): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
+  const child = spawn(process.execPath, [BUNDLE, ...opts.args], { env: { ...process.env, ...opts.env } })
+  let stdout = ''
+  let stderr = ''
+  child.stdout?.on('data', (c: Buffer) => { stdout += c.toString('utf8') })
+  child.stderr?.on('data', (c: Buffer) => { stderr += c.toString('utf8') })
+  const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }))
+  })
+  const readiness = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`等首条 ${opts.stream} readiness 超时: stdout=${stdout}; stderr=${stderr}`)), 5000)
+    const check = (): void => {
+      const output = opts.stream === 'stdout' ? stdout : stderr
+      if (opts.pattern.test(output)) {
+        clearTimeout(timer)
+        resolve()
+      }
+    }
+    child[opts.stream]?.on('data', check)
+    check()
+  })
+  try {
+    await readiness
+    if (!child.kill('SIGINT')) throw new Error('SIGINT 未发送：子进程已提前退出')
+    const outcome = await exitPromise
+    return { ...outcome, stdout, stderr }
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  }
+}
+
 describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () => {
   let h: Harness
   let tapDir: string
@@ -123,7 +159,7 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
     expect(upstream.requests[0]!.url).toBe('/v1/messages')
   }, 20_000)
 
-  it('daemon 模式（无 -- 命令）：真打印可 source 的 export 行，SIGINT 后真关 daemon 干净退出', async () => {
+  it.skipIf(process.platform === 'win32')('daemon 模式（无 -- 命令）：真打印可 source 的 export 行，SIGINT 后真关 daemon 干净退出', async () => {
     const child = spawn(process.execPath, [
       BUNDLE, 'tap', 'start', 'claude',
     ], { env: { ...process.env, TENON_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` } })
@@ -143,9 +179,30 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
       child.on('exit', (code, signal) => resolve({ code, signal }))
     })
     child.kill('SIGINT')
-    const { code } = await exitPromise
-    expect(code).toBe(0) // 真收到 SIGINT → 真关 daemon → 干净退出，不是被信号杀死（signal 应为 null）
+    const { code, signal } = await exitPromise
+    expect({ code, signal }).toEqual({ code: 0, signal: null }) // 真收到 SIGINT → 真关 daemon → 干净退出，不是被信号杀死
   }, 15_000)
+
+  it.skipIf(process.platform === 'win32')('首条 stderr/JSON readiness 出现时立刻 SIGINT，也必须先关 daemon 再以 code 0 退出', async () => {
+    const env = { TENON_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` }
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const stderrOutcome = await signalDaemonAtFirstOutput({
+        args: ['tap', 'start', 'claude'],
+        env,
+        stream: 'stderr',
+        pattern: /\[tap\] claude/,
+      })
+      expect(stderrOutcome).toMatchObject({ code: 0, signal: null })
+
+      const jsonOutcome = await signalDaemonAtFirstOutput({
+        args: ['tap', 'start', 'claude', '--json'],
+        env,
+        stream: 'stdout',
+        pattern: /^\{"clients":/,
+      })
+      expect(jsonOutcome).toMatchObject({ code: 0, signal: null })
+    }
+  }, 20_000)
 
   it('未知 client → exit 1，不绑任何端口', async () => {
     expect(await h.run(['tap', 'start', 'not-a-real-client'])).toBe(1)

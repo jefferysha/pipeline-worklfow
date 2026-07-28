@@ -33,7 +33,7 @@
 - [x] 以红测固定默认 workflow 英文阶段/动作标签，保持 custom 作者标签，并完成最小实现。
 - [x] 串行复跑 focus 相关 Web 测试、全量门禁、生成物、独立复审与精确 head CI，冻结新的 Verify SHA。
 - [x] 以红测复现父抽屉原 trigger 被同 key 新节点替换后的焦点丢失，并实现稳定、精确的连接节点 fallback。
-- [x] 使用强制隔离目录断言重跑 OpenSpec 演练、前后端全量门禁、Dashboard 真实浏览器与独立复审，取得新的精确 head CI。
+- [ ] 使用强制隔离目录断言重跑 OpenSpec 演练、前后端全量门禁、Dashboard 真实浏览器与独立复审，并修复 readiness 前 SIGINT 竞态后取得新的精确 head CI。
 
 ## 验证
 

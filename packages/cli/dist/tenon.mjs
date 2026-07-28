@@ -42781,6 +42781,13 @@ function envLines(clients) {
   for (const c of clients) Object.assign(merged, c.env);
   return Object.entries(merged).map(([k, v]) => `export ${k}=${JSON.stringify(v)}`);
 }
+function emitLaunchSummary(deps, clients, json) {
+  if (json) {
+    deps.io.out(JSON.stringify({ clients: clients.map(({ client, mode, port, target }) => ({ client, mode, port, target })) }));
+    return;
+  }
+  for (const c of clients) deps.io.err(`[tap] ${c.client} (${c.mode}) \u2192 127.0.0.1:${c.port}\uFF08\u771F\u5B9E\u4E0A\u6E38 ${c.target}\uFF09`);
+}
 async function cmdTap(deps, sub, args) {
   switch (sub) {
     case "start": {
@@ -42803,12 +42810,8 @@ async function cmdTap(deps, sub, args) {
         deps.io.err(`ERROR: ${errMsg(e)}`);
         return 1;
       }
-      if (json) {
-        deps.io.out(JSON.stringify({ clients: result.clients.map(({ client, mode, port, target }) => ({ client, mode, port, target })) }));
-      } else {
-        for (const c of result.clients) deps.io.err(`[tap] ${c.client} (${c.mode}) \u2192 127.0.0.1:${c.port}\uFF08\u771F\u5B9E\u4E0A\u6E38 ${c.target}\uFF09`);
-      }
       if (command.length > 0) {
+        emitLaunchSummary(deps, result.clients, json);
         const executable = command[0];
         if (executable === void 0) {
           await result.daemon.stop();
@@ -42827,14 +42830,21 @@ async function cmdTap(deps, sub, args) {
         await result.daemon.stop();
         return code;
       }
-      for (const line of envLines(result.clients)) deps.io.out(line);
-      await new Promise((resolve36) => {
+      const termination = new Promise((resolve36, reject3) => {
+        const cleanup2 = () => {
+          process.off("SIGINT", stop);
+          process.off("SIGTERM", stop);
+        };
         const stop = () => {
-          void result.daemon.stop().then(resolve36);
+          cleanup2();
+          void result.daemon.stop().then(resolve36, reject3);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
       });
+      emitLaunchSummary(deps, result.clients, json);
+      for (const line of envLines(result.clients)) deps.io.out(line);
+      await termination;
       return 0;
     }
     default:
