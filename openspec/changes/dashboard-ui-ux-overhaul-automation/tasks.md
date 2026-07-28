@@ -18,6 +18,8 @@
 - [x] 记录 AppHeader 无生产消费者的需求变化，并以 `requirements-changed` 回退 Spec。
 - [x] 复核 PR #5–#8 的 Dashboard 文件集合，选择生产可达且无重叠的 SolutionView。
 - [x] 修订 `dashboard-ui-ux-system` delta spec、验收场景与可执行计划。
+- [x] 根据第二次 Verify 将范围收敛到本 Change 修改的桌面 shell、共享原语与涉及流程。
+- [x] 将 PR #5 重叠从“避开或等待”修订为可审计的独立提交、review 与 rebase 风险。
 
 ## 实现
 
@@ -31,6 +33,10 @@
 - [x] 统一高频共享原语、空态与恢复操作的 focus、disabled 和 reduced-motion 基线。
 - [x] 补齐 Button 桌面尺寸、主题/导航生命周期与设计系统契约测试。
 - [x] 按最终电脑端定位撤销移动触控专项规则、手机截图与对应测试声明。
+- [x] 修复 App 加载、错误和 flash 的 live-region 语义，并为可恢复错误提供明确操作。
+- [x] 将非模态设置浮层改为自然 Tab 顺序，保留初始焦点、Escape 与焦点返回，避免嵌套 Escape 双关闭。
+- [x] 为 App 的 GSAP flash tween 增加卸载/更新清理，并补主题 listener 清理测试。
+- [x] 为零项目 Onboarding 增加唯一 H1，为复制命令提供可区分名称和至少 24px 的桌面点击高度。
 
 ## 验证
 

@@ -22,7 +22,10 @@ Dashboard MUST 面向本地开发者的电脑端工作流，在 1024px 至 1920p
 
 ### Requirement: 键盘与屏幕阅读器可操作
 
-所有交互控件 MUST 具有可访问名称、正确角色和可见焦点；菜单与对话框 MUST 支持 Escape、Tab/Shift+Tab、焦点返回及状态通告。
+本 Change 修改的 Dashboard shell、共享交互原语、SolutionView 与 Onboarding 流程 MUST
+提供可访问名称、正确角色和可见焦点。设置浮层为非模态浮层，MUST 在打开时聚焦首个控件、
+保持浏览器自然 Tab/Shift+Tab 顺序、支持 Escape，并在关闭后把焦点返回设置入口；它 MUST NOT
+模拟模态焦点圈定。
 
 #### Scenario: 键盘定位概览章节
 
@@ -40,12 +43,19 @@ Dashboard MUST 面向本地开发者的电脑端工作流，在 1024px 至 1920p
 
 ### Requirement: 完整状态反馈
 
-表单、按钮、卡片、表格、对话框和提示区域 MUST 为可达的 loading、error、empty、disabled 与 success 分支提供一致视觉和语义反馈。
+本 Change 触及的 App 快照加载/错误/闪现提示、Onboarding 空态，以及 Button、Input、Select、
+Tabs、Dialog、DropdownMenu 等共享交互原语 MUST 为其实际可达的 loading、error、empty、
+disabled 与 success 分支提供一致视觉和语义反馈。
 
 #### Scenario: 异步操作失败
 
-- **WHEN** Dashboard 异步操作返回失败
-- **THEN** 用户看到可理解的错误状态，辅助技术收到适当通告，重试或恢复路径在适用时可达
+- **WHEN** App 快照不可用、快照流失败或本 Change 涉及的异步操作失败
+- **THEN** 用户看到可理解的错误状态，辅助技术通过 alert 或适当 live region 收到通告，并可使用适用的重试或恢复路径
+
+#### Scenario: 空项目进入 Onboarding
+
+- **WHEN** Dashboard 成功加载但没有项目
+- **THEN** Onboarding 页面具有唯一可识别的一级标题，每个复制命令按钮具有区分具体命令的可访问名称和至少 24px 的桌面点击高度
 
 ### Requirement: 可审查的增量交付
 
@@ -54,4 +64,4 @@ Dashboard MUST 面向本地开发者的电脑端工作流，在 1024px 至 1920p
 #### Scenario: 并行 UI 改动存在
 
 - **WHEN** 其他活跃分支正在修改同一 Dashboard 文件
-- **THEN** 当前切片选择无冲突文件或等待，不复制实现、不强推覆盖
+- **THEN** 当前 Change 记录重叠 PR 与具体文件，保持独立提交、review 与 rebase 计划，不复制 canonical state、不复用对方提交且不强推覆盖

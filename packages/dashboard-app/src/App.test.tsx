@@ -53,6 +53,14 @@ afterEach(() => {
 })
 
 describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯一在制面）', () => {
+  it('首帧加载文案使用 polite status live region', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)))
+    render(<App />)
+    const loading = screen.getByText('加载中…')
+    expect(loading).toHaveAttribute('role', 'status')
+    expect(loading).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('首屏渲染进度视图，而非工作台；收件箱视图不复存在', async () => {
     render(<App />)
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
@@ -337,7 +345,11 @@ describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
       throw new Error(`unexpected fetch ${url}`)
     })
     render(<App />)
-    expect(await screen.findByTestId('wb-no-root')).toHaveTextContent('没有可读取的项目')
+    const unavailable = await screen.findByTestId('wb-no-root')
+    expect(unavailable).toHaveTextContent('没有可读取的项目')
+    expect(unavailable).toHaveAttribute('role', 'alert')
+    // Shell 会自动恢复到项目总览，用户无需在不可达工作台中继续操作。
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
@@ -463,7 +475,7 @@ describe('App 深浅色自适应 + i18n', () => {
     })))
     localStorage.setItem('tenon-dashboard-theme', 'system')
 
-    render(<App />)
+    const view = render(<App />)
     await screen.findByTestId('progress-view')
     await waitFor(() => {
       expect(document.documentElement.dataset.themePreference).toBe('system')
@@ -473,6 +485,12 @@ describe('App 深浅色自适应 + i18n', () => {
     dark = false
     act(() => listeners.forEach((listener) => listener()))
     expect(document.documentElement.dataset.theme).toBe('light')
+
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(listeners.size).toBe(0)
+    view.unmount()
+    expect(listeners.size).toBe(0)
   })
 
   it('语言切换 zh→en：一级导航文案真更新', async () => {

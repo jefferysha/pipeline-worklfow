@@ -44,4 +44,10 @@ describe('Dashboard 设计系统契约', () => {
   ])('%s 明确声明 reduced-motion 终态', (relativePath) => {
     expect(readSource(relativePath)).toMatch(/motion-reduce:/)
   })
+
+  it('App 的 flash 区分 error alert 与普通 status，并清理 toast tween', () => {
+    const source = readSource('App.tsx')
+    expect(source).toMatch(/role=\{flash\.kind === 'error' \? 'alert' : 'status'\}/)
+    expect(source).toMatch(/return \(\) => \{\s*tween\.kill\(\)\s*\}/)
+  })
 })

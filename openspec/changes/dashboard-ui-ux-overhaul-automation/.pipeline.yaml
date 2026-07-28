@@ -3,7 +3,7 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: in_progress
+phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automation-design.md
 plan: docs/superpowers/plans/2026-07-28-dashboard-ui-ux-overhaul-automation.md
 verification_report: docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-2.md
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T03:19:49Z
-updated_at: 2026-07-28T09:24:38Z
+updated_at: 2026-07-28T09:28:54Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: f1a268c0-e5b7-437d-8b73-558d24813d2b
-pipeline_transition_sequence: 13
-pipeline_transition_head: cb8b7b55-8a7c-4fc8-b8f8-0ed40e5d7439
-pipeline_state_revision: 40
-pipeline_state_revision_id: 2fb3b851-e48b-4810-ba3d-935d44d358fc
-pipeline_state_digest: 5e03c755eac89b8d3a449e9eb7127f30ccfcd3bf5a00d7bb975e519eb42bf784
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDAsInJldmlzaW9uSWQiOiIyZmIzYjg1MS1lNDhiLTQ4MTAtYmEzZC05MzVkNDRkMzU4ZmMiLCJwYXlsb2FkRGlnZXN0IjoiYTM3ODVlN2Y2YmI1NTZhMzBhZTRjZDI1Mjg0ZDRhY2I2N2ZhZWUwZWVkYmU3NTVmM2VlY2ZhZjU0NjBmNmU3MiJ9
+pipeline_transition_sequence: 15
+pipeline_transition_head: 343b6d45-964d-497a-839d-fa3400b6d9d8
+pipeline_state_revision: 45
+pipeline_state_revision_id: eb25ae1a-0d58-4f3e-8294-ceb7e33c3eb6
+pipeline_state_digest: 11d188db585dad906b09ec4babc93c2cc0d93388fc8f3d68be944831580deb77
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDUsInJldmlzaW9uSWQiOiJlYjI1YWUxYS0wZDU4LTRmM2UtODI5NC1jZWI3ZTMzYzNlYjYiLCJwYXlsb2FkRGlnZXN0IjoiMjg3Mzk4N2Y0NmRhYjc3ODJhZjZkODg4MzhmZDVjNWY0N2Q5NWVlYzQxMDlkYzBhZTU3MjE3ODJmNmIyZGI4MCJ9

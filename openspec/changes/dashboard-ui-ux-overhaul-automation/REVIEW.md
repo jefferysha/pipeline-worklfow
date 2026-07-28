@@ -184,3 +184,88 @@ H1 为“让 coding agents 按可验证流程交付”，避免把其他端口�
 
 复评结果：视觉层级保持“安静的操作台”，电脑端密度、键盘语义、状态反馈与动效降级一致；
 Critical / High / Medium = 0 / 0 / 0。
+
+## Verify 第 2 轮失败与桌面语义闭环
+
+第二次 Verify 对冻结 SHA `eabfb33f7e07de7f09b562c144941e115d1789b7` 的隔离 E2E 全部通过，
+但 Reviewer 与 Visual 仍发现两组 High、四组 Medium/Low 风险：
+
+- 原 delta spec 对未触及功能域宣称 Dashboard-wide 完成，并把 PR #5 的真实文件重叠写成
+  “选择无冲突文件或等待”；已通过 `verify-fail → build → requirements-changed → spec` 修订为
+  本 Change 的生产可达桌面范围，并明确独立提交、review、rebase 与不强推策略。
+- App 普通加载缺少 polite live region，工作台不可达状态不是 alert，error flash 与普通 toast
+  都使用 status；现已分别使用 `status/polite`、`alert` 与按 kind 区分的 live-region 语义。
+  初始 snapshot 错误仍提供重试；不可达工作台由 shell 自动恢复到项目总览。
+- `aria-modal=false` 的设置浮层错误模拟 Tab 困笼；现保留初始焦点、自然 Tab/Shift+Tab、
+  Escape 与焦点返回，并忽略已由嵌套交互 `preventDefault` 的 Escape。
+- App 直接调用 `toastIn` 未清理；现 `toastIn` 返回 tween，effect 更新或卸载时调用 `kill()`，
+  flash timeout 也在覆盖和卸载时清理。
+- 零项目 Onboarding 从 H2 修正为页面唯一 H1；两个复制按钮以完整命令形成不同的双语
+  accessible name，并以 `min-h-6` 保证至少 24px 的电脑端点击高度。
+- system 主题 listener 新增从 system 切出和卸载时的清理断言。
+
+### TDD 证据
+
+- 红：5 个定向测试文件产生 8 个预期失败，分别命中上述语义、生命周期与尺寸缺口。
+- 绿：5 个文件 / 99 tests 通过；既有 Workbench `act(...)` 警告未转为失败。
+- stale release asset：另一个只读验收执行 `build:web` 后生成
+  `index-D1Cbva3k.js` / `index-g5mQ93zY.css`。相同输出已由冻结 `eabfb33f` 的隔离副本复现，
+  因此作为构建产物修复保留，不回退到旧哈希。
+
+本轮 UI/UX 复评结论：修改均使用现有 token、Lucide、Tailwind 与 GSAP，没有增加移动端专项、
+视觉装饰或新依赖；Critical / High / Medium = 0 / 0 / 0。进入第三次 pre-Verify 前仍需完成
+全量测试、生产构建和真实电脑端浏览器复验。
+
+## 第三次 pre-Verify：电脑端最终候选
+
+审查边界为第二次冻结 SHA `eabfb33f7e07de7f09b562c144941e115d1789b7` 之后的规格修订、
+语义/生命周期修复、对应测试与重新生成的 Dashboard 发布资产，并结合前两轮 review 对
+`origin/main...HEAD` 的全部历史改动复核。最终定位仍为 1024–1920px 电脑端，不新增手机端
+验收或专项样式。
+
+### 自动验证
+
+- TDD 红：5 个定向文件产生 8 个预期失败；实现后 5 文件 / 99 tests 通过。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 文件 / 992 tests 通过。
+- `npm run build`：通过；当前源码重新生成
+  `index-BQAhnybq.js` / `index-DnZ1mCZ2.css`，不回退到已证明陈旧的发布资产。
+- 非失败噪声仍为既有 `act(...)`、GSAP target 与 Vite >500kB chunk 提示。
+
+### 真实电脑端浏览器复验
+
+环境为当前 worktree 生产服务 `http://127.0.0.1:18836`；每个场景均确认页面标题
+`Tenon Dashboard` 与目标 H1，未复用端口上的其他应用。
+
+- 1024×768 浅色概览：7 个章节链接可达对应锚点，根级无横向溢出；设置浮层首焦点为主题，
+  Shift+Tab 自然返回设置触发器而非形成伪模态困笼，Escape 关闭后焦点返回触发器。
+- 1200×800 system 深色 + reduced-motion：系统深色与减弱动效 media query 生效，
+  `document.getAnimations()` 无 running animation，根级无横向溢出且无 console error。
+- 1440×900 浅色真实零项目：页面唯一 H1 为“还没有注册任何项目”；两个复制按钮的
+  accessible name 分别包含完整命令，高度均为 24px，根级无横向溢出且无 console error。
+- 1200×800 浅色 + reduced-motion 受控故障：同时阻断 `/api/snapshot` 与 `/api/stream`，
+  快照错误以 `role=alert` / `aria-live=assertive` 呈现并提供“重试加载”；解除故障并重试后
+  alert 消失，恢复真实零项目 H1。控制台错误仅对应注入的 500 与 stream abort。
+
+最终截图：
+
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-desktop-1024-light-final.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-desktop-1200-dark-reduced-final.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-empty-desktop-1440-light-final.png`
+- `docs/superpowers/reports/evidence/dashboard-ui-ux-overhaul-automation/system-error-desktop-1200-light-reduced-final.png`
+
+### Standards + Spec 结论
+
+- Correctness：加载、普通通知、错误通知、不可达工作台和初始快照错误使用与严重度一致的
+  live-region 语义；错误重试可恢复，不伪造成功状态。
+- Lifecycle：flash tween 在 effect 更新/卸载时 `kill()`，覆盖 timeout 与卸载 timeout 均清理；
+  主题 media listener 的切换和卸载清理由测试约束。
+- Accessibility：非模态设置使用自然 Tab 顺序；嵌套交互已消费的 Escape 不会二次关闭；
+  空项目页拥有唯一 H1、不同复制名称与电脑端最小 24px 点击高度。
+- Compatibility：无 API、数据模型、依赖或移动端专项扩张；PR #5 的同文件重叠通过独立提交、
+  review、普通 rebase 与禁止 force push 的交付策略如实保留。
+- Maintainability：动效仍集中在共享 motion helper，状态规则留在 App/state 边界，可见文案
+  同步维护中英文。
+
+最终冻结前审查结论：Critical / High / Medium = 0 / 0 / 0；没有需要带入第三次 Verify 的
+已知可修复偏差。

@@ -68,6 +68,7 @@ function AppShell(): JSX.Element {
   const [theme, setThemeState] = useState<ThemePreference>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
   const flashRef = useRef<HTMLDivElement>(null)
+  const flashTimerRef = useRef<number | null>(null)
 
   const setView = useCallback((v: View) => {
     setViewState(v)
@@ -82,8 +83,15 @@ function AppShell(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (flash && flashRef.current) toastIn(flashRef.current)
+    if (!flash || !flashRef.current) return
+    const tween = toastIn(flashRef.current)
+    return () => {
+      tween.kill()
+    }
   }, [flash])
+  useEffect(() => () => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
+  }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
   const { currentRoot, selectProject } = useProjectSelection({
     snapshot,
@@ -154,8 +162,12 @@ function AppShell(): JSX.Element {
   }, [view, snapshot, currentRoot, setView])
 
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
     setFlash({ kind, msg })
-    window.setTimeout(() => setFlash(null), 4000)
+    flashTimerRef.current = window.setTimeout(() => {
+      flashTimerRef.current = null
+      setFlash(null)
+    }, 4000)
   }, [])
 
   // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
@@ -183,6 +195,7 @@ function AppShell(): JSX.Element {
         <div
           className="flex items-center gap-2.5 border-b border-red-b bg-red-t px-5 py-2 text-[12.5px] font-semibold text-red-d"
           role="status"
+          aria-live="polite"
           data-testid="offline-banner"
         >
           <span className="flex-1">{t('common.offline')}</span>
@@ -203,7 +216,8 @@ function AppShell(): JSX.Element {
           className={`pointer-events-none fixed bottom-[26px] left-1/2 z-60 flex max-w-[70vw] -translate-x-1/2 items-center gap-[7px] rounded-full px-3.5 py-2 text-[12.5px] font-semibold shadow-md ${
             flash.kind === 'error' ? 'bg-red text-white' : 'bg-ink text-ink-fg'
           }`}
-          role="status"
+          role={flash.kind === 'error' ? 'alert' : 'status'}
+          aria-live={flash.kind === 'error' ? 'assertive' : 'polite'}
           data-tone={flash.kind}
           data-testid={`flash-${flash.kind}`}
         >
@@ -275,7 +289,7 @@ function AppShell(): JSX.Element {
               onSelectedChange={setSelectedChange}
             />
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'afk' && (
@@ -293,7 +307,7 @@ function AppShell(): JSX.Element {
               onToast={(m) => showFlash('toast', m)}
             />
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'workbench' && (
@@ -305,9 +319,15 @@ function AppShell(): JSX.Element {
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。
-            <p className="p-5 text-[13px] text-red" data-testid="wb-no-root">{t('workbench.no_reachable_root')}</p>
+            <section
+              className="m-5 rounded-xl border border-red-b bg-red-t p-5 text-[13px] text-red-d"
+              role="alert"
+              data-testid="wb-no-root"
+            >
+              <p>{t('workbench.no_reachable_root')}</p>
+            </section>
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'machine' && (

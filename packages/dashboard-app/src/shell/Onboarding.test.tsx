@@ -27,6 +27,7 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
   it('渲染标题 + 诚实框架，不再要求用户输入本机绝对路径', () => {
     renderOb()
     const card = screen.getByTestId('onboard-no-project')
+    expect(screen.getByRole('heading', { level: 1, name: '还没有注册任何项目' })).toBeInTheDocument()
     expect(card).toBeInTheDocument()
     expect(card.textContent).toContain('终端')
     expect(screen.queryByTestId('project-register-form')).toBeNull()
@@ -46,6 +47,8 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     // 每条都有独立复制钮
     expect(screen.getByTestId('onboard-copy')).toBeInTheDocument()
     expect(screen.getByTestId('onboard-copy-doctor')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `复制命令：tenon init my-change --track chat` })).toHaveClass('min-h-6')
+    expect(screen.getByRole('button', { name: '复制命令：tenon doctor' })).toHaveClass('min-h-6')
     expect(screen.queryByTestId('onboard-cmd-setup')).toBeNull()
     expect(screen.getByTestId('onboard-no-project')).not.toHaveTextContent('tenon setup')
   })

@@ -11,7 +11,7 @@
   accessible name、Button 消费者矩阵证据不足和设计文档生命周期漂移；Change 已按
   `verify-fail → build → requirements-changed → spec` 路径返回修订。
 - 第二批以系统基线闭环：accent 主动作 token、system/light/dark 主题、Nav 与设置焦点语义、
-  共享交互原语、空态/错误恢复触控目标和全局 reduced-motion 终态。
+ 共享交互原语、空态/错误恢复操作和全局 reduced-motion 终态。
 - 用户最终明确产品只服务电脑端本地开发工作流；1024–1920px 是受支持验收范围，移动触控目标、
   手机布局和手机截图不属于交付范围。
 - 浏览器基线、方案比较和红队自检记录在 `docs/research/2026-07-28-dashboard-ui-ux-overhaul-automation-audit.md` 与 `docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automation-design.md`。
@@ -30,5 +30,7 @@
 - PR #5–#8 的 review/CI/合并状态；后续每轮必须复核。
 - PR #5 与 App/Nav/i18n/Solution 存在已知文件重叠；本 Change 不复用其 state 或提交、不 force push，
   并以独立整改提交保留可选合并/回滚边界。
-- 第二次 Verify 必须重新覆盖完整 diff、1024/1200/1440px 桌面视口、真实 zero-project 空态、
-  受控 snapshot/stream 故障恢复、system 主题变化、设置焦点圈定和 reduced-motion。
+- 第三次 Verify 必须重新覆盖完整 diff、1024/1200/1440px 桌面视口、真实 zero-project 空态、
+  受控 snapshot/stream 故障恢复、system 主题变化、设置自然 Tab 顺序和 reduced-motion。
+- 第二次 Verify 已确认 PR #5 与当前实现有真实文件重叠；这不是不存在冲突的证据。后续以独立提交、
+  精确文件清单、非强推分支和合并前 rebase/重测控制风险。

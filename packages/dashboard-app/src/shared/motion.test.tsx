@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import gsap from 'gsap'
-import { revealStages } from './motion'
+import { revealStages, toastIn } from './motion'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -73,5 +73,14 @@ describe('revealStages（motion 正分支与兜底）', () => {
     revealStages(targets)
     expect(fromTo).not.toHaveBeenCalled()
     expect(set).toHaveBeenCalledWith(targets, expect.objectContaining({ autoAlpha: 1, y: 0 }))
+  })
+})
+
+describe('toastIn 生命周期', () => {
+  it('返回所属 tween，使 React effect 可在更新或卸载时 kill', () => {
+    stubMatchMedia({ reduce: false, motion: true })
+    const tween = { kill: vi.fn() }
+    vi.spyOn(gsap, 'fromTo').mockReturnValue(tween as unknown as gsap.core.Tween)
+    expect(toastIn(document.createElement('div'))).toBe(tween)
   })
 })

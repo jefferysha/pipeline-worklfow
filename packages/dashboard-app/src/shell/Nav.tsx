@@ -68,21 +68,11 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
     focusable?.[0]?.focus()
 
     const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return
       if (event.key === 'Escape') {
         event.preventDefault()
         setSettingsOpen(false)
         settingsTriggerRef.current?.focus()
-        return
-      }
-      if (event.key !== 'Tab' || !focusable || focusable.length === 0) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
       }
     }
     document.addEventListener('keydown', handleKeyDown)

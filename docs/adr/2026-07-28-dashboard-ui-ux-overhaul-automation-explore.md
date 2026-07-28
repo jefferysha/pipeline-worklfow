@@ -44,7 +44,7 @@ reduced-motion 仍有缺口。并行 PR 已触及这些具体文件。原先选�
 High failure；E2E 同时发现移动 rail 34px 和无名设置按钮。Change 已按规则 Verify→Build 回退。
 
 本轮决定在同一 Change 内增加最小系统基线：accent 主动作 token、system 主题、Nav/设置键盘语义、
-共享交互原语、空态/错误恢复触控目标和全局 reduced-motion 终态。该修订不改变 API、业务规则或
+共享交互原语、空态/错误恢复操作和全局 reduced-motion 终态。该修订不改变 API、业务规则或
 依赖。它与 PR #5 存在已知文件重叠，但不复用对方 Change/state、不 force push，并保持整改为独立
 提交，供合并时选择或回滚。
 
@@ -54,3 +54,16 @@ High failure；E2E 同时发现移动 rail 34px 和无名设置按钮。Change �
 移动验收要求被本次明确指令覆盖。最终支持范围收敛为 1024–1920px 电脑端；保留键盘、屏幕阅读器、
 明暗/system 主题、状态反馈和 reduced-motion，但撤销 44px 移动触控专项规则及手机截图。此决策
 减少无真实用户场景的实现、测试和长期维护成本。
+
+## 第二次 Verify 后的契约修订
+
+第二次 Verify 通过隔离 E2E，但 Reviewer 与 Visual 发现规格仍将未触及功能域写成全局 MUST，
+并发现 App 状态通告、非模态设置浮层 Tab 行为、GSAP 清理、零项目 H1 与复制命令可访问名称仍有
+可修复缺口。最终决策是：
+
+1. 可验证范围限定为本 Change 修改的 Dashboard shell、共享交互原语、SolutionView 与
+   Onboarding 流程，不宣称一次修复全部历史功能域。
+2. 设置浮层保持 `aria-modal=false`，使用自然 Tab 顺序，不模拟模态焦点圈定；保留初始焦点、
+   Escape 和关闭后的焦点返回。
+3. PR #5 的文件重叠作为既成风险管理：记录具体文件、保持独立提交、合并前 rebase/重测；
+   不再把“选择无冲突文件或等待”作为无法满足的冻结验收条件。

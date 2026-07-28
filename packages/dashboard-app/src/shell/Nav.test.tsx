@@ -221,7 +221,7 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
   })
 
-  it('设置 dialog 打开后聚焦首控件，Tab 困笼，Escape 关闭并归还触发器焦点', async () => {
+  it('非模态设置浮层聚焦首控件但不圈定 Tab，Escape 关闭并归还触发器焦点', async () => {
     renderNav()
     const trigger = screen.getByTestId('nav-settings')
     fireEvent.click(trigger)
@@ -230,15 +230,25 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     await waitFor(() => expect(theme).toHaveFocus())
 
     language.focus()
-    fireEvent.keyDown(document, { key: 'Tab' })
-    expect(theme).toHaveFocus()
-
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(fireEvent.keyDown(document, { key: 'Tab' })).toBe(true)
     expect(language).toHaveFocus()
+
+    theme.focus()
+    expect(fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })).toBe(true)
+    expect(theme).toHaveFocus()
 
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
     expect(trigger).toHaveFocus()
+  })
+
+  it('已被嵌套交互处理的 Escape 不会穿透关闭设置浮层', () => {
+    renderNav()
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    event.preventDefault()
+    document.dispatchEvent(event)
+    expect(screen.getByTestId('nav-settings-panel')).toBeInTheDocument()
   })
 
   it('离线状态只在设置浮层内呈现', () => {

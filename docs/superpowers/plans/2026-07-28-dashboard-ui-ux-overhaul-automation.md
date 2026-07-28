@@ -7,7 +7,9 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 
 ## 目标与交付策略
 
-在同一个 Change/PR 中按无冲突、可验证的纵向切片持续优化 Dashboard。每次 Build 只完成一组连贯改动；若并行 worktree 新增重叠，改选下一组或等待。
+在同一个 Change/PR 中按可验证、可独立回滚的纵向切片持续优化电脑端 Dashboard。每次 Build
+只完成一组连贯改动；若并行 PR 与本 Change 重叠，记录具体文件、保持独立提交并在合并前
+rebase/重测，不复制 canonical state 或强推覆盖。
 
 ## Build 子阶段 1：SolutionView 章节导航 tracer bullet
 
@@ -49,10 +51,24 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 
 1. 已将主动作从 success green 分离为 accent blue，并以 CSS 契约测试锁定浅/深主题语义。
 2. 已增加显式 system 主题偏好和系统主题实时响应；新增文案同步中英文。
-3. 已补 Nav 设置弹层的初始焦点、Tab/Shift+Tab 圈定、Escape 关闭与焦点返回。
+3. 已补 Nav 设置浮层的初始焦点、Escape 关闭与焦点返回；第二次 Verify 发现它是非模态浮层，
+   后续修订为浏览器自然 Tab/Shift+Tab 顺序，不模拟模态焦点圈定。
 4. 已补 Nav、离线恢复、快照错误重试和 Onboarding 的焦点与 reduced-motion 状态。
 5. 已通过真实零项目 API 验收 empty 状态，并通过受控中断 snapshot/stream 验收 error 与恢复路径；
    UI fault injection 明确标注，不伪装为生产故障。
+
+**此处建议 /clear**
+
+## Build 子阶段 4：第二次 Verify 的桌面语义闭环
+
+1. 先在 `App.test.tsx`、`Nav.test.tsx`、`Onboarding.test.tsx` 和动效相邻测试补失败用例：
+   loading/error/flash live region、主题 listener 清理、非模态自然 Tab、唯一 H1、复制按钮名称/高度、
+   GSAP tween 清理。
+2. 修改 `App.tsx`、`shell/Nav.tsx`、`shell/Onboarding.tsx`、`shared/motion.ts` 和双语 i18n，
+   只修复可达桌面流程，不扩大 API 或业务规则。
+3. 运行定向 Vitest，并复核 nested dialog 的 Escape 不会穿透关闭父级设置浮层。
+4. 重跑全量前端测试、类型检查、构建与 1024/1200/1440px 真实浏览器验收。
+5. 回滚边界为本子阶段独立提交；若 PR #5 先合并，rebase 后按重叠文件逐项复核。
 
 **此处建议 /clear**
 
@@ -72,6 +88,6 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 ## 兼容与风险
 
 - 不升级依赖、不改变服务端 API、不迁移数据。
-- PR #5–#8 若先合并，先 rebase 后重跑完整视觉基线；solution 域文件保持独立。
+- PR #5 若先合并，先 rebase 后按重叠文件解决冲突并重跑完整视觉基线；所有整改保持独立提交。
 - UI primitive 修改可能放大到多个消费者，必须在子阶段 2 单独执行。
 - 浏览器 fixture 只验证真实渲染与交互，不替代真实本地项目 API 验收。

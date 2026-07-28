@@ -33,12 +33,11 @@ export function revealDialog(backdrop: gsap.TweenTarget, content: gsap.TweenTarg
 }
 
 /** toast 底部滑入：y 14→0 + fade，200ms power2.out。 */
-export function toastIn(el: gsap.TweenTarget): void {
+export function toastIn(el: gsap.TweenTarget): gsap.core.Tween {
   if (prefersReducedMotion()) {
-    gsap.set(el, { opacity: 1, y: 0 })
-    return
+    return gsap.set(el, { opacity: 1, y: 0 })
   }
-  gsap.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' })
+  return gsap.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' })
 }
 
 /* ==== T8 ==== */

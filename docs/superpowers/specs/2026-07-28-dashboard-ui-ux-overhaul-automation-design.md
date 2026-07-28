@@ -73,7 +73,7 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
 - App 将主题偏好明确建模为 `system | light | dark`。system 使用
   `matchMedia('(prefers-color-scheme: dark)')` 解析，并在系统主题变化时更新；离开 system 或卸载时清理 listener。
 - Nav 的品牌、五个主入口与设置入口均具有双语 accessible name；
-  设置弹层在打开时聚焦首控件，Tab/Shift+Tab 圈定焦点，Escape 关闭并把焦点返回触发器。
+  设置浮层在打开时聚焦首控件，保持浏览器自然 Tab/Shift+Tab 顺序，Escape 关闭并把焦点返回触发器。
 - Button、Input、Select、Tabs、Dialog、DropdownMenu 等共享交互原语统一可见焦点、禁用辨识
   和 reduced-motion 终态；尺寸继续服从现有桌面密度。
 - App 的离线恢复、快照错误重试和 Onboarding 复制/创建操作使用相同焦点基线。
@@ -132,6 +132,9 @@ stateDiagram-v2
 6. 与 PR #5 的文件重叠被记录为集成风险；本分支不复用其 Change/state、不强推覆盖，所有修复保持
    独立提交并在 PR 中声明可按提交回滚。
 7. 用户最终明确只支持电脑端；撤销 44px 移动触控专项投入和手机验收，保留桌面键盘与辅助技术要求。
+8. 第二次 Verify 把剩余缺口限定为 App live-region/GSAP 清理、非模态设置浮层 Tab 语义、
+   Onboarding H1 与复制命令名称/高度，以及主题 listener 清理测试；本轮规格不再对未触及功能域作
+   Dashboard-wide 完成声明。
 
 ## 红队自检
 
