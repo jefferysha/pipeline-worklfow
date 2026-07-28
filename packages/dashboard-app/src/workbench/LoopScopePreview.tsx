@@ -1,0 +1,192 @@
+import { useRef, useState } from 'react'
+import { CircleAlert, ScanSearch, ShieldCheck, ShieldX } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { postLoopScopePreview, type LoopScopePreviewResponse } from '../api/loopScopePreview'
+import { useT } from '../i18n'
+import { Dialog } from '../shared/Dialog'
+import { ERR_BLOCK_TW, WB_TW } from './loopCardModel'
+
+const MAX_PATHS = 100
+const MAX_PATH_BYTES = 1024
+const MAX_TOTAL_BYTES = 32768
+
+function previewPaths(raw: string): string[] | null {
+  const paths = raw.split(/\r?\n/).filter((path) => path !== '')
+  if (paths.length === 0 || paths.length > MAX_PATHS) return null
+  let total = 0
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const path of paths) {
+    const segments = path.split('/')
+    const invalid = path.includes('\0')
+      || path.includes('\\')
+      || path.startsWith('/')
+      || path.endsWith('/')
+      || segments.some((segment) => segment === '' || segment === '.' || segment === '..')
+    const bytes = new TextEncoder().encode(path).length
+    total += bytes
+    if (invalid || bytes > MAX_PATH_BYTES || total > MAX_TOTAL_BYTES) return null
+    if (!seen.has(path)) {
+      seen.add(path)
+      result.push(path)
+    }
+  }
+  return result
+}
+
+export function LoopScopePreview({ root, loopId }: { root: string; loopId: string }): JSX.Element {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  const [raw, setRaw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<LoopScopePreviewResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const requestRef = useRef(0)
+  const paths = previewPaths(raw)
+
+  const close = (): void => {
+    requestRef.current += 1
+    setOpen(false)
+    setRaw('')
+    setBusy(false)
+    setResult(null)
+    setError(null)
+  }
+
+  const submit = async (): Promise<void> => {
+    if (paths === null || busy) return
+    const request = requestRef.current + 1
+    requestRef.current = request
+    setBusy(true)
+    setError(null)
+    try {
+      const nextResult = await postLoopScopePreview({ root, loopId, paths })
+      if (requestRef.current !== request) return
+      setResult(nextResult)
+    } catch (nextError) {
+      if (requestRef.current !== request) return
+      setResult(null)
+      setError(nextError instanceof Error ? nextError.message : String(nextError))
+    } finally {
+      if (requestRef.current === request) setBusy(false)
+    }
+  }
+
+  return <>
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] border border-border bg-fill/60 p-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] font-bold text-text">{t('workbench.lp_scope_title')}</p>
+        <p className={WB_TW.note}>{t('workbench.lp_scope_desc')}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="shrink-0 gap-1.5"
+        data-testid="lp-scope-open"
+        aria-label={t('workbench.lp_scope_open')}
+        onClick={() => setOpen(true)}
+      >
+        <ScanSearch className="size-3.5" aria-hidden="true" />
+        {t('workbench.lp_scope_open')}
+      </Button>
+    </div>
+    {open && (
+      <Dialog
+        title={t('workbench.lp_scope_dialog_title', { id: loopId })}
+        onClose={close}
+        testid="lp-scope-dialog"
+        panelClassName="w-[min(680px,94vw)]"
+        initialFocusRef={inputRef}
+        actions={<>
+          <Button variant="ghost" size="sm" onClick={close}>{t('workbench.lp_scope_close')}</Button>
+          <Button
+            size="sm"
+            data-testid="lp-scope-submit"
+            disabled={paths === null || busy}
+            onClick={() => void submit()}
+          >
+            {busy ? t('workbench.lp_scope_loading') : t('workbench.lp_scope_submit')}
+          </Button>
+        </>}
+      >
+        <p className="mb-3 text-[12.5px] leading-[1.55] text-text-2">{t('workbench.lp_scope_help')}</p>
+        <label className="mb-1.5 block text-xs font-bold text-text-2" htmlFor={`lp-scope-input-${loopId}`}>
+          {t('workbench.lp_scope_input_label')}
+        </label>
+        <textarea
+          ref={inputRef}
+          id={`lp-scope-input-${loopId}`}
+          className={cn(WB_TW.input, 'min-h-28 resize-y font-mono leading-5')}
+          data-testid="lp-scope-input"
+          value={raw}
+          disabled={busy}
+          placeholder={t('workbench.lp_scope_placeholder')}
+          onChange={(event) => {
+            setRaw(event.target.value)
+            setResult(null)
+            setError(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault()
+              void submit()
+            }
+          }}
+        />
+        <p className={cn(WB_TW.note, 'mt-1.5')}>
+          {raw !== '' && paths === null ? t('workbench.lp_scope_invalid') : t('workbench.lp_scope_limits')}
+        </p>
+        {busy && (
+          <p className="mt-3 text-[12.5px] font-semibold text-accent-d" data-testid="lp-scope-loading" role="status">
+            {t('workbench.lp_scope_loading')}
+          </p>
+        )}
+        {error && (
+          <div className={cn(ERR_BLOCK_TW, 'mt-3')} data-testid="lp-scope-error" data-tone="error" role="alert">
+            <CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />
+            {error}
+            <button type="button" className="ml-2 font-bold underline underline-offset-2" data-testid="lp-scope-retry" onClick={() => void submit()}>
+              {t('workbench.lp_scope_retry')}
+            </button>
+          </div>
+        )}
+        {result && (
+          <div className="mt-3" aria-live="polite">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-bg p-2.5" data-testid="lp-scope-summary">
+              <span className="font-mono text-xs font-bold text-text">{result.summary.total}</span>
+              <span className="text-xs text-text-2">{t('workbench.lp_scope_total')}</span>
+              <span className="rounded-full border border-green-b bg-green-t px-2 py-0.5 text-xs font-bold text-green-d">
+                {t('workbench.lp_scope_allowed', { n: result.summary.allowed })}
+              </span>
+              <span className="rounded-full border border-red-b bg-red-t px-2 py-0.5 text-xs font-bold text-red-d">
+                {t('workbench.lp_scope_blocked', { n: result.summary.blocked })}
+              </span>
+            </div>
+            <ul className="mt-2 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
+              {result.items.map((item) => (
+                <li key={item.path} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-border bg-card p-2.5">
+                  {item.verdict === 'allowed'
+                    ? <ShieldCheck className="mt-0.5 size-4 text-green-d" aria-hidden="true" />
+                    : <ShieldX className="mt-0.5 size-4 text-red-d" aria-hidden="true" />}
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-xs font-bold text-text">{item.path}</p>
+                    <p className="mt-0.5 text-[11.5px] text-text-3">
+                      {t(`workbench.lp_scope_reason_${item.reason.replace(/-/g, '_')}`)}
+                      {item.matched_pattern !== null && <> · <span className="font-mono">{item.matched_pattern}</span></>}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className={cn(WB_TW.note, 'mt-2')}>{result.enforced_for_unattended_merge
+              ? t('workbench.lp_scope_fresh_l3')
+              : t('workbench.lp_scope_fresh_simulation')}</p>
+          </div>
+        )}
+      </Dialog>
+    )}
+  </>
+}

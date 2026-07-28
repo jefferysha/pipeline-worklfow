@@ -235,6 +235,7 @@ function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}, _o
 async function openGovernance(): Promise<HTMLElement> {
   const button = await screen.findByTestId('wb-governance-open')
   await waitFor(() => expect(button).toBeEnabled())
+  expect(button).toBeVisible()
   fireEvent.click(button)
   return screen.findByTestId('wb-side-col')
 }

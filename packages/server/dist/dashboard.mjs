@@ -743,6 +743,15 @@ function deepFreeze(value) {
     deepFreeze(child);
   return Object.freeze(value);
 }
+function compileConstraintPolicy(loop) {
+  return deepFreeze({
+    schema_version: 1,
+    admission: { require_active: true },
+    write: { allowlist: [...loop.allowlist], denylist: [...loop.denylist] },
+    transition: { require_active: true, human_gates: [...loop.human_gates] },
+    merge: { require_active: true, allowlist: [...loop.allowlist], denylist: [...loop.denylist] }
+  });
+}
 function validateAutomationPolicySnapshot(input) {
   if (!isRecord2(input))
     throw new Error("AutomationPolicy: expected object");
@@ -855,12 +864,23 @@ function validateAutomationPolicySnapshot(input) {
     throw new Error("AutomationPolicy.captured_at: invalid timestamp");
   return deepFreeze({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
 }
-function pathDecision(allowlist, denylist, input) {
-  const paths = input.paths ?? [];
-  const denied = paths.filter((path7) => denylist.some((pattern) => input.matches(path7, pattern)));
+function explainConstraintPaths(policy, operation, paths, matches) {
+  const { allowlist, denylist } = policy[operation];
+  return paths.map((path7) => {
+    const deniedBy = denylist.find((pattern) => matches(path7, pattern));
+    if (deniedBy !== void 0) {
+      return { path: path7, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
+    }
+    const allowedBy = allowlist.find((pattern) => matches(path7, pattern));
+    return allowedBy === void 0 ? { path: path7, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path7, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
+  });
+}
+function pathDecision(policy, operation, input) {
+  const explanations = explainConstraintPaths(policy, operation, input.paths ?? [], input.matches);
+  const denied = explanations.filter((item2) => item2.reason === "path-denied").map((item2) => item2.path);
   if (denied.length > 0)
     return { allowed: false, reason: "path-denied", paths: denied };
-  const outside = paths.filter((path7) => !allowlist.some((pattern) => input.matches(path7, pattern)));
+  const outside = explanations.filter((item2) => item2.reason === "path-outside-allowlist").map((item2) => item2.path);
   if (outside.length > 0)
     return { allowed: false, reason: "path-outside-allowlist", paths: outside };
   return { allowed: true };
@@ -874,7 +894,7 @@ function evaluateConstraintPolicy(policy, input) {
     const humanGateApplies = input.transitionTarget === void 0 ? policy.transition.human_gates.length > 0 : policy.transition.human_gates.includes(input.transitionTarget);
     return humanGateApplies && input.humanGateSatisfied !== true ? { allowed: false, reason: "human-gate-required" } : { allowed: true };
   }
-  return input.operation === "write" ? pathDecision(policy.write.allowlist, policy.write.denylist, input) : pathDecision(policy.merge.allowlist, policy.merge.denylist, input);
+  return input.operation === "write" ? pathDecision(policy, "write", input) : pathDecision(policy, "merge", input);
 }
 
 // packages/kernel/dist/state/run-metadata.js
@@ -14064,6 +14084,37 @@ var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA25
 // packages/automation/dist/lifecycle/worktree.js
 var CANCEL_MARKER_FILE = ".cancel-requested";
 
+// packages/automation/dist/lifecycle/denylist.js
+var globToRegExp = (glob) => {
+  let re = "";
+  let i = 0;
+  while (i < glob.length) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        if (glob[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 3;
+        } else {
+          re += ".*";
+          i += 2;
+        }
+      } else {
+        re += "[^/]*";
+        i += 1;
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+      i += 1;
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      i += 1;
+    }
+  }
+  return new RegExp(`^${re}$`);
+};
+var matchesPathGlob = (path7, glob) => globToRegExp(glob).test(path7);
+
 // packages/automation/dist/verifier/git-revision-verifier.js
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
   kind: "host-verifier",
@@ -19204,6 +19255,66 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 // packages/server/src/serverPostOperationsRoutes.ts
 import { lstatSync as lstatSync7 } from "node:fs";
 import { join as join46 } from "node:path";
+
+// packages/server/src/loopScopePreview.ts
+import { posix as posix2 } from "node:path";
+var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
+var MAX_PATHS = 100;
+var MAX_PATH_BYTES = 1024;
+var MAX_TOTAL_PATH_BYTES = 32768;
+var LoopScopePreviewInputError = class extends Error {
+  name = "LoopScopePreviewInputError";
+};
+function invalid(message) {
+  throw new LoopScopePreviewInputError(message);
+}
+function isCanonicalRelativePath(path7) {
+  if (path7 === "" || path7.includes("\0") || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/")) return false;
+  const segments = path7.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return false;
+  return posix2.normalize(path7) === path7;
+}
+function parseLoopScopePreviewRequest(input) {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) invalid("\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61");
+  const body = input;
+  for (const key of Object.keys(body)) if (!REQUEST_KEYS.has(key)) invalid(`\u672A\u77E5\u5B57\u6BB5 '${key}'`);
+  if (typeof body.root !== "string" || body.root === "") invalid("root \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
+  if (typeof body.loop_id !== "string" || body.loop_id.trim() === "") invalid("loop_id \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
+  if (!Array.isArray(body.paths) || body.paths.length === 0 || body.paths.length > MAX_PATHS) {
+    invalid(`paths \u5FC5\u987B\u5305\u542B 1-${MAX_PATHS} \u6761\u8DEF\u5F84`);
+  }
+  let totalBytes = 0;
+  const paths = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of body.paths) {
+    if (typeof value !== "string" || !isCanonicalRelativePath(value)) invalid("paths \u53EA\u63A5\u53D7 canonical \u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84");
+    const bytes = Buffer.byteLength(value, "utf8");
+    if (bytes > MAX_PATH_BYTES) invalid(`\u5355\u6761\u8DEF\u5F84\u4E0D\u5F97\u8D85\u8FC7 ${MAX_PATH_BYTES} UTF-8 bytes`);
+    totalBytes += bytes;
+    if (totalBytes > MAX_TOTAL_PATH_BYTES) invalid(`\u8DEF\u5F84\u603B\u8BA1\u4E0D\u5F97\u8D85\u8FC7 ${MAX_TOTAL_PATH_BYTES} UTF-8 bytes`);
+    if (!seen.has(value)) {
+      seen.add(value);
+      paths.push(value);
+    }
+  }
+  return { root: body.root, loopId: body.loop_id.trim(), paths };
+}
+function buildLoopScopePreviewResponse(loop, paths, matches) {
+  const items = explainConstraintPaths(compileConstraintPolicy(loop), "merge", paths, matches);
+  const allowed = items.filter((item2) => item2.verdict === "allowed").length;
+  return {
+    ok: true,
+    schema_version: 1,
+    loop_id: loop.id,
+    loop_status: loop.status,
+    autonomy_level: loop.autonomy_level,
+    enforced_for_unattended_merge: loop.status === "active" && loop.autonomy_level === "L3",
+    summary: { total: items.length, allowed, blocked: items.length - allowed },
+    items
+  };
+}
+
+// packages/server/src/serverPostOperationsRoutes.ts
 async function handlePostOperationsRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -19238,6 +19349,66 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
   const REAL_GRADUATION_FS2 = deps.realGraduationFs;
   function isWorkflowName4(name) {
     return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
+  }
+  if (path7 === "/api/loops/scope-preview") {
+    let input;
+    try {
+      input = parseLoopScopePreviewRequest(await readJsonBody(req));
+    } catch (error) {
+      const message = error instanceof LoopScopePreviewInputError ? error.message : "\u8BF7\u6C42\u4F53\u4E0D\u662F\u6709\u6548 JSON";
+      return sendJson(res, 400, { ok: false, code: "LOOP_SCOPE_REQUEST_INVALID", error: message });
+    }
+    const rootCheck = workflowRootForRequest(input.root);
+    if (!rootCheck.ok) {
+      return sendJson(res, rootCheck.code, {
+        ok: false,
+        code: rootCheck.code === 404 ? "LOOP_SCOPE_ROOT_NOT_FOUND" : "LOOP_SCOPE_ROOT_UNTRUSTED",
+        error: rootCheck.error
+      });
+    }
+    try {
+      assertWorkflowRootAnchor(rootCheck.anchor);
+    } catch {
+      return sendJson(res, 403, {
+        ok: false,
+        code: "LOOP_SCOPE_ROOT_UNTRUSTED",
+        error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
+      });
+    }
+    try {
+      const loaded = loadRegistry(rootCheck.anchor.path);
+      if (loaded.data === null || loaded.errors.length > 0) {
+        return sendJson(res, 409, {
+          ok: false,
+          code: "LOOP_SCOPE_REGISTRY_INVALID",
+          error: "Loop registry \u65E0\u6CD5\u5F62\u6210\u53EF\u4FE1\u7B56\u7565"
+        });
+      }
+      const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId);
+      if (loop === void 0) {
+        return sendJson(res, 404, {
+          ok: false,
+          code: "LOOP_SCOPE_LOOP_NOT_FOUND",
+          error: "Loop \u4E0D\u5B58\u5728"
+        });
+      }
+      try {
+        assertWorkflowRootAnchor(rootCheck.anchor);
+      } catch {
+        return sendJson(res, 403, {
+          ok: false,
+          code: "LOOP_SCOPE_ROOT_UNTRUSTED",
+          error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
+        });
+      }
+      return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob));
+    } catch {
+      return sendJson(res, 409, {
+        ok: false,
+        code: "LOOP_SCOPE_REGISTRY_INVALID",
+        error: "Loop registry \u65E0\u6CD5\u5F62\u6210\u53EF\u4FE1\u7B56\u7565"
+      });
+    }
   }
   if (path7 === "/api/router/preview") {
     const raw = await readJsonBody(req);

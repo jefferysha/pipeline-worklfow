@@ -113,11 +113,13 @@ export {
   compileAutomationPolicySnapshot,
   compileConstraintPolicy,
   evaluateConstraintPolicy,
+  explainConstraintPaths,
   validateAutomationPolicySnapshot,
   type AutomationPolicySnapshot,
   type ConstraintDecision,
   type ConstraintEvaluationInput,
   type ConstraintOperation,
+  type ConstraintPathExplanation,
   type ConstraintPolicy,
 } from './automation-policy.js'
 export type {

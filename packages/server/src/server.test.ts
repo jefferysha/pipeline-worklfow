@@ -1695,6 +1695,90 @@ loops:
     autonomy_level: L1
 `
 
+describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', () => {
+  it('复用受保护 POST 与生产 glob，返回逐路径解释且不改盘', async () => {
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    const yaml = `${SEED_LOOP_YAML_READY_FOR_L2.trimEnd()}
+    allowlist:
+      - src/**
+      - docs/**
+    denylist:
+      - src/secrets/**
+`
+    const registryPath = join(h.root, '.pipeline', 'loops.yaml')
+    await writeFile(registryPath, yaml, 'utf8')
+    const before = await readFile(registryPath, 'utf8')
+
+    const response = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root,
+      loop_id: 'build-loop',
+      paths: ['src/app.ts', 'src/secrets/key.txt', 'assets/logo.svg'],
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toMatchObject({
+      ok: true,
+      schema_version: 1,
+      loop_id: 'build-loop',
+      loop_status: 'active',
+      autonomy_level: 'L1',
+      enforced_for_unattended_merge: false,
+      summary: { total: 3, allowed: 1, blocked: 2 },
+      items: [
+        { path: 'src/app.ts', verdict: 'allowed', reason: 'allowlist', matched_pattern: 'src/**' },
+        { path: 'src/secrets/key.txt', verdict: 'blocked', reason: 'path-denied', matched_pattern: 'src/secrets/**' },
+        { path: 'assets/logo.svg', verdict: 'blocked', reason: 'path-outside-allowlist', matched_pattern: null },
+      ],
+    })
+    expect(await readFile(registryPath, 'utf8')).toBe(before)
+  })
+
+  it('稳定区分无效请求、未知 root、未知 Loop 与损坏 registry', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+
+    const invalid = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['../secret'],
+    }, auth)
+    expect(invalid.status).toBe(400)
+    expect(invalid.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+
+    const unknownRoot = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: '/tmp/not-registered', loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(unknownRoot.status).toBe(404)
+    expect(unknownRoot.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_NOT_FOUND' })
+
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    const unknownLoop = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'missing-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(unknownLoop.status).toBe(404)
+    expect(unknownLoop.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_LOOP_NOT_FOUND' })
+
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), 'version: 1\nloops: invalid\n', 'utf8')
+    const invalidRegistry = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(invalidRegistry.status).toBe(409)
+    expect(invalidRegistry.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REGISTRY_INVALID' })
+  })
+
+  it('沿用公共 POST 的 token 与 JSON content-type 安全闸', async () => {
+    const h = await start()
+    const body = { root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'] }
+    expect((await reqPost(h.port, '/api/loops/scope-preview', body)).status).toBe(401)
+    expect((await reqPost(h.port, '/api/loops/scope-preview', body, {
+      headers: {
+        Authorization: `Bearer ${h.token}`,
+        'Content-Type': 'text/plain',
+      },
+    })).status).toBe(400)
+  })
+})
+
 describe('POST /api/loops/level —— 升降档写回', () => {
   it('对 token + root 在注册表里 → 200 且真改盘 loops.yaml', async () => {
     const { mkdir, writeFile } = await import('node:fs/promises')

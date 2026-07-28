@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-28T07:59:37Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/loop-scope-preview/proposal.md",
+      "sha256": "c31ebb565b2f08058e33722e0b28a8a0f5d7446e27d3dc742174a25f9cc3fcd4",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T08:07:32Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "c31ebb565b2f08058e33722e0b28a8a0f5d7446e27d3dc742174a25f9cc3fcd4",
+          "readAt": "2026-07-28T08:07:34Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c31ebb565b2f08058e33722e0b28a8a0f5d7446e27d3dc742174a25f9cc3fcd4",
+          "readAt": "2026-07-28T08:13:03Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c31ebb565b2f08058e33722e0b28a8a0f5d7446e27d3dc742174a25f9cc3fcd4",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/loop-scope-preview/design.md",
+      "sha256": "92b787508f61dd1810d215c705a9ffd87e4bc48df44e754f511287747c9f69f8",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T08:07:33Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "92b787508f61dd1810d215c705a9ffd87e4bc48df44e754f511287747c9f69f8",
+          "readAt": "2026-07-28T08:07:34Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "92b787508f61dd1810d215c705a9ffd87e4bc48df44e754f511287747c9f69f8",
+          "readAt": "2026-07-28T08:13:03Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "92b787508f61dd1810d215c705a9ffd87e4bc48df44e754f511287747c9f69f8",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-28-loop-scope-preview-explore.md",
+      "sha256": "81c13cd6a4ac9b429ef3eddd460fd4cbbc9b0cf6c89a30cdf6805e1553370c0b",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-28T08:07:33Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "81c13cd6a4ac9b429ef3eddd460fd4cbbc9b0cf6c89a30cdf6805e1553370c0b",
+          "readAt": "2026-07-28T08:13:03Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "81c13cd6a4ac9b429ef3eddd460fd4cbbc9b0cf6c89a30cdf6805e1553370c0b",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/loop-scope-preview/specs/loop-scope-preview/spec.md",
+      "sha256": "6762ce1a834f68a3a2ad613cc9c4dd20fc46c769a77d8e77c97323bd6ff12d3f",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T08:13:02Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "6762ce1a834f68a3a2ad613cc9c4dd20fc46c769a77d8e77c97323bd6ff12d3f",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-loop-scope-preview.md",
+      "sha256": "73f0cee2aed17084b1e18cd5b852861667ee0f16ecdfe81669fb0e858583e337",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T08:13:02Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "73f0cee2aed17084b1e18cd5b852861667ee0f16ecdfe81669fb0e858583e337",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-28-loop-scope-preview.md",
+      "sha256": "73f0cee2aed17084b1e18cd5b852861667ee0f16ecdfe81669fb0e858583e337",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T08:13:02Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "73f0cee2aed17084b1e18cd5b852861667ee0f16ecdfe81669fb0e858583e337",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-28-loop-scope-preview-design.md",
+      "sha256": "cc54c84403d0ceb0597b7bc63012b68f5a87899c3e53986d8ec53a6ba73cb915",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-28T08:13:03Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "cc54c84403d0ceb0597b7bc63012b68f5a87899c3e53986d8ec53a6ba73cb915",
+          "readAt": "2026-07-28T08:13:03Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cc54c84403d0ceb0597b7bc63012b68f5a87899c3e53986d8ec53a6ba73cb915",
+          "readAt": "2026-07-28T08:13:39Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/loop-scope-preview/tasks.md",
+      "sha256": "781724634ab7b07334746043325f842dffc7a1776ba2784fad7ec29fc489998b",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T08:45:16Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "781724634ab7b07334746043325f842dffc7a1776ba2784fad7ec29fc489998b",
+          "readAt": "2026-07-28T08:45:16Z",
+          "visitId": "[\"670c6a60-c9a5-421c-9f9f-86e26c4335ec\",3]"
+        }
+      ]
+    }
+  ]
+}
