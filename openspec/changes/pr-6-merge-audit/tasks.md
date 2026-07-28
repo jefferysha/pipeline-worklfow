@@ -27,7 +27,7 @@
 - [x] 独立 pre-Verify 全量复审通过后非强制 push 新 exact head，并等待 GitHub CI。
 - [x] 第二轮 Verify 后以 TDD 修复不可信数组 canonical snapshot 与非治理 Verify 入口。
 - [x] 补旧请求晚失败回归，并重建与新 head 匹配的正式产物及 sandcastle 验证环境。
-- [ ] 串行重跑定向/全量门禁与独立 pre-Verify 全量复审，非强制 push 后等待 exact-head CI。
+- [x] 串行重跑定向/全量门禁与独立 pre-Verify 全量复审，非强制 push 后等待 exact-head CI。
 
 ## 验证
 

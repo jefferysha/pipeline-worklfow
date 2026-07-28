@@ -268,5 +268,8 @@ PASS on the complete third-Build worktree relative to base
 The Spec reviewer reproduced the five formal Dashboard/server/CLI artifacts byte-for-byte in an
 isolated root. The Rules reviewer independently proved revoked and throwing proxies return stable
 errors, and a 100,000-entry proxy returns `entries_too_many` without `ownKeys` or index-descriptor
-reads. The exact committed SHA, non-force remote update and fresh GitHub CI result remain Build exit
-evidence and must be recorded before freezing the third Verify.
+reads. Product/review evidence commit `40892e0bab9f1f7302352ddc67ab60dfe29adacd` was fast-forward
+pushed without force and exact-head GitHub CI run `30369887369` passed in 7m29s, including build
+freshness, clean install, full repository and Dashboard tests, hooks, adapters, Skill inventory,
+migration CAS, N-1 bundle and golden oracle. GitHub reports the PR MERGEABLE/CLEAN. The final
+governance commit and its fresh exact-head CI remain required before freezing the third Verify.
