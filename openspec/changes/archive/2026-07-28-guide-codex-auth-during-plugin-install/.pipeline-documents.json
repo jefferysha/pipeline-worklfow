@@ -85,8 +85,14 @@
         {
           "phase": "ship",
           "sha256": "a85904b7476c104d7c8c83cbcc5ed9f6944126779bd052564aef194a311fd7a5",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "a85904b7476c104d7c8c83cbcc5ed9f6944126779bd052564aef194a311fd7a5",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -142,8 +148,14 @@
         {
           "phase": "ship",
           "sha256": "56b89ae9bf068edb1aedd6c4b6b716d3eb1797281eb72ed4ed6444b4dc1e4ff2",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "56b89ae9bf068edb1aedd6c4b6b716d3eb1797281eb72ed4ed6444b4dc1e4ff2",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -187,8 +199,14 @@
         {
           "phase": "ship",
           "sha256": "42173cb4dbc6b267bcd164af89758bc49da1af6aa58687eaa58c69f796f5f94e",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "42173cb4dbc6b267bcd164af89758bc49da1af6aa58687eaa58c69f796f5f94e",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -244,8 +262,14 @@
         {
           "phase": "ship",
           "sha256": "c90a23fd180ffaf1d1f8a72752dc555b0b4367bdb3d8422625eb9f3b70ea6fd0",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c90a23fd180ffaf1d1f8a72752dc555b0b4367bdb3d8422625eb9f3b70ea6fd0",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -289,8 +313,14 @@
         {
           "phase": "ship",
           "sha256": "429427c989eabc104b99af1e9d583c7d46fe00296c26fe7892c9a43c715a847c",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "429427c989eabc104b99af1e9d583c7d46fe00296c26fe7892c9a43c715a847c",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -334,8 +364,14 @@
         {
           "phase": "ship",
           "sha256": "429427c989eabc104b99af1e9d583c7d46fe00296c26fe7892c9a43c715a847c",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "429427c989eabc104b99af1e9d583c7d46fe00296c26fe7892c9a43c715a847c",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -379,8 +415,14 @@
         {
           "phase": "ship",
           "sha256": "6652469cc904de9ce10ef1ca47abb9a06b9f659dee24df061ece02773cd950cc",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "6652469cc904de9ce10ef1ca47abb9a06b9f659dee24df061ece02773cd950cc",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -394,8 +436,14 @@
         {
           "phase": "ship",
           "sha256": "c18c45c6ab3ad92c7369a0e068a4efe9d21dfb9a31933390ebfa7f58f6610ba3",
-          "readAt": "2026-07-28T05:47:37Z",
+          "readAt": "2026-07-28T05:51:01Z",
           "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c18c45c6ab3ad92c7369a0e068a4efe9d21dfb9a31933390ebfa7f58f6610ba3",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     },
@@ -405,20 +453,27 @@
       "sha256": "9906cbfee807f9d284887aa0028f1496c36e586685f971ce2fc15fbd771db9bf",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-28T05:47:36Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "9906cbfee807f9d284887aa0028f1496c36e586685f971ce2fc15fbd771db9bf",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
+        }
+      ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/guide-codex-auth-during-plugin-install/tasks.md",
-      "sha256": "cb16919540e4ace28515ba735dc9e2361f6a7455cd730d75130a4a66bf097f8d",
-      "producer": "tenon-ship",
-      "recordedAt": "2026-07-28T05:47:37Z",
+      "sha256": "9f74fdab39809d5b50246a1457f513fd18f42be57cc54036ef79355a2d79154c",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-28T05:51:42Z",
       "reads": [
         {
-          "phase": "ship",
-          "sha256": "cb16919540e4ace28515ba735dc9e2361f6a7455cd730d75130a4a66bf097f8d",
-          "readAt": "2026-07-28T05:47:37Z",
-          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",15]"
+          "phase": "archive",
+          "sha256": "9f74fdab39809d5b50246a1457f513fd18f42be57cc54036ef79355a2d79154c",
+          "readAt": "2026-07-28T05:51:43Z",
+          "visitId": "[\"7e07f07b-20ca-47d3-a70c-ce030a796e07\",16]"
         }
       ]
     }

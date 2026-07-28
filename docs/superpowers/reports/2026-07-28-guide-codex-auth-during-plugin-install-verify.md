@@ -1,10 +1,8 @@
 # guide-codex-auth-during-plugin-install Verify 报告
 
-日期：2026-07-28
-
-冻结基线：`workspace:sha256:e49f1fd6b19567ac5e9dec104850f69ded8caf0f045bb862d9b513cf42018b4f`
-
-本轮结论：**PASS**
+日期：2026-07-28  
+冻结基线：`workspace:sha256:e49f1fd6b19567ac5e9dec104850f69ded8caf0f045bb862d9b513cf42018b4f`  
+本轮结论：**PASS**  
 聚合严重级别：**Critical 0 / High 0 / Medium 0 / Low 1**
 
 ## 三轨聚合
