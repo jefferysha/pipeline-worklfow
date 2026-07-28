@@ -71,3 +71,45 @@ TDD 红灯：Button 两项与当前章节一项共 3 个断言按预期失败。
 
 复评结论：Critical / High / Medium = 0 / 0 / 0。当前章节只跟随 URL hash，不引入
 IntersectionObserver、滚动监听或 GSAP，避免高频观察器和额外清理负担。
+
+## pre-Verify 全量 Standards + Spec 审查
+
+冻结候选实现边界：`origin/main...40f5cab`。审查覆盖全部应用源码、测试、生成的 Dashboard
+dist、OpenSpec/Tenon 证据与浏览器截图，而不是只看最近一次 finding。
+
+| 文件组 | Capability / requirement | 审查结论 |
+| --- | --- | --- |
+| `solutionModel.ts`、`SolutionView.tsx` | 稳定章节身份、可识别标题、无根级横向溢出 | 配置集中；七个 target 与 heading 一一对应 |
+| `SolutionSectionNav.tsx` | 响应式定位、键盘、屏幕阅读器、当前状态、reduced motion | 原生链接、`aria-current`、hashchange 清理与 token 化状态符合规格 |
+| `components/ui/button.tsx` | 共享触控目标、disabled、focus 与 reduced motion | 仅常规/图标尺寸在移动端提升；xs 保留给明确紧凑语境 |
+| 相邻测试 | 回归防护 | 先红后绿；导航配置漂移、hash 状态与 Button 类契约均被覆盖 |
+| Dashboard dist | 可发布资产 | 由当前源码运行 `npm run build` 生成，未手改 |
+| 治理文档与截图 | 可审查增量交付 | Change、设计、任务、review、基线和运行态证据完整 |
+
+### Standards 轴
+
+- Correctness：hash 只接受七个已声明 section；未知/空 hash 不产生伪当前状态。
+- Lifecycle：只注册一个 `hashchange` listener，并在卸载时移除；未引入 observer、timer 或 GSAP。
+- Compatibility：不改变 API、i18n、数据模型或依赖；PR #5–#8 无同文件实现冲突。
+- Accessibility：语义 navigation/list/link、稳定 target、`aria-labelledby`、`aria-current`、
+  可见 focus、44px 移动目标与 reduced-motion 均有测试和浏览器证据。
+- Maintainability：section 类型、顺序和 id 在 domain model 单点定义；导航与内容共用同一配置。
+
+### Spec 轴
+
+- SolutionView 的 375–1440px 无根级横向溢出、七章节定位、键盘与 reduced-motion 场景全部通过。
+- Button 原语补齐跨消费者的移动目标与状态降级，不修改明确的 xs 紧凑变体。
+- 未新增可见文案，因此中英文资源无漂移；未修改异步业务状态或服务端契约。
+- “并行 UI 改动存在”场景已执行：避开 PR #5–#8 的 App/Nav/i18n/progress/workbench/shared/API 文件。
+
+### 门禁结果
+
+- 定向 Vitest：2 files / 10 tests passed。
+- `npm run typecheck:web`：passed。
+- `npm run test:web`：51 files / 967 tests passed。
+- `npm run build`：passed；Dashboard、server 和 CLI 产物均生成成功。
+- `git diff --check`：passed。
+- 已有非失败噪声：Vite >500kB chunk warning，以及既有 AFK/Workbench `act(...)` 与 TaskDetail
+  GSAP target warnings；本 diff 未修改对应文件或引入新失败。
+
+全量审查结论：Critical / High / Medium = 0 / 0 / 0；没有需要带入 Verify 的已知偏差。
