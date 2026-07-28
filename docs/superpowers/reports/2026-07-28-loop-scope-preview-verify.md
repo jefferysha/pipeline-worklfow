@@ -2,93 +2,77 @@
 
 ## 结论
 
-FAIL。冻结构建 `0809a5fadc430e20919409c99a776ea1d838bc05` 的 Spec / E2E 与真实浏览器轨通过；
-Standards 和独立 Codex CLI 审查发现两项 Medium、一项 Low。汇总为
-Critical 0 / High 0 / Medium 2 / Low 1。持续自主模式不接受偏差，本轮按确切
-`verify-fail` 返回 Build。
+FAIL。冻结构建 `d632ad7442b085637ae5247e8706ed43cb9e3c0e` 的完整四轨验证汇总为
+Critical 0 / High 0 / Medium 1 / Low 0。Reviewer、Spec/E2E 与独立 Codex CLI
+共同确认 Loop 身份切换时存在结果串线；视觉轨的既有矩阵通过，但未覆盖该身份切换。
+持续自主模式不接受偏差，本轮按确切 `verify-fail` 返回 Build。
 
 ## 冻结坐标与零输出边界
 
 - base / merge-base：`2394ac71efc87193350d476266a3219c320bb5b1`
-- build SHA：`0809a5fadc430e20919409c99a776ea1d838bc05`
+- build SHA：`d632ad7442b085637ae5247e8706ed43cb9e3c0e`
+- tree：`0ddc71539e99d8c3c62145641c700b505efe1734`
 - 所有写测试、构建、浏览器证据和 OpenSpec archive/apply 均在精确 `git archive`
-  的仓库外隔离目录执行。
-- 共享树实现 fingerprint 前后均为
-  `d4627b5279aae8972c6ed1718c215b9d33e46ffd510c630bfaeca0eca7b78510`；
-  Verify 期间只有 Tenon 当前 phase 的治理文件变化。
+  的仓库外隔离目录执行；共享实现树保持冻结。
 
 ## 四轨结果
 
 | 轨道 | 结论 | 证据与边界 |
 | --- | --- | --- |
-| Reviewer / Standards | FAIL · M1 | 完整审查 175 个 changed files；Node 22 clean build、全仓测试、静态门禁和 tracked bundle freshness 通过。发现响应闭集 decoder 可接受数组伪装的枚举。 |
-| E2E / Spec | PASS | 175/175 文件映射，5 requirements / 21 scenarios 对应完整。Root 5462 pass / 5 条件跳过，Web 1004/1004；OpenSpec show/strict/archive/apply 隔离演练通过，真实主规格 digest 未改变。 |
-| Codex CLI | FAIL · M1/L1 | 只读审查完整冻结 diff；发现重新提交期间仍显示旧成功结果，以及非 2xx body-read abort 身份丢失。 |
-| 视觉审查 | PASS | 从冻结 commit 启动并确认正确 Tenon Dashboard 与资产哈希；双语、成功/拒绝、错误/重试、abort、dirty/save、键盘、焦点、375/768/1440 和 light/dark 矩阵通过。 |
+| Reviewer / Standards | FAIL · M1 | 完整审查 191/191 changed files、3470/3470 blobs、全量源码/治理/生成物和门禁；独立 SSR rerender 证明 completed 与 in-flight 两类结果均可跨 Loop 串线。 |
+| E2E / Spec | FAIL · M1 | 191/191 文件映射、5 requirements / 21 scenarios、OpenSpec 隔离演练与既有测试通过；新增临时安全回归 2/2 按预期失败，确认违反 R4 身份绑定。 |
+| Codex CLI | FAIL · M1 | 只读审查完整冻结 diff，独立定位同一 row-switch 代际失效缺口。它同时提示最终 PASS 报告尚未生成；该项是 Verify 本阶段先审查、后生成报告的规定时序，不计 finding。 |
+| 视觉审查 | PASS | 冻结 Dashboard 身份/资产、重提 pending、2xx/非 2xx abort、dirty/save、双语、错误/重试、键盘、焦点、响应式与对比度矩阵通过；未覆盖 Loop row 切换。 |
 
 ## 必须修复的发现
 
-1. **Medium · 闭集 decoder 接受数组伪装的枚举**
+### Medium · Loop 身份切换未使预检代际失效
 
-   `decodeLoopScopePreview` 用 `String(value.loop_status)` 和
-   `String(value.autonomy_level)` 做枚举判断，却未要求原值为 string。
-   `["active"]` / `["L3"]` 会通过闭集检查并原样返回，随后严格派生比较又把它们当作
-   非 active-L3，可将畸形响应显示为 simulation。
+`LoopCard` 在同一组件树内切换 `loops.selected`，`LoopAdvancedFields` 随后只更新
+`LoopScopePreview` 的 `root` / `loopId` props，没有 key。组件内部的 open、raw、busy、
+result、error、request generation 和 AbortController 因而保留；唯一 cleanup effect 只在
+unmount 时取消。结果有两条确定性失败路径：
 
-   修复要求：对两个字段先做严格 string 类型检查，再检查枚举；补 array、object、number
-   负测以及派生一致性负测。
+1. Loop A 已成功后切换到 Loop B，A 的 summary/items 仍显示在 B 的 Dialog 标题下。
+2. Loop A 请求在途时切换到 Loop B，A 的迟到响应仍通过 request generation 检查并发布到 B。
 
-2. **Medium · 重新预检时旧成功结果仍可见**
+这违反 R4 对成功响应绑定当前 Loop/请求、串线响应不得渲染的要求。预检不是执行许可且真实 gate
+仍会 fresh 重检，因此定级 Medium，而不是 High。
 
-   `LoopScopePreview.submit()` 开始新请求时只设置 loading 并清除 error，没有清除上次
-   `result`。在 fresh registry read 等待期间，用户仍能看到过时的 allow/block 结果，
-   与预检不是 permit、每次 fresh 读取的安全表达冲突。
-
-   修复要求：每次提交开始时清除旧 result，补“成功后重新提交、pending 期间旧摘要不可见”
-   的组件测试。
-
-3. **Low · 非 2xx body-read abort 身份丢失**
-
-   client 的非 2xx 分支捕获 `readJson()` 所有失败后继续按 HTTP status 抛出领域错误，
-   其中包括 `AbortError`。2xx 分支已保留取消身份，两条路径行为不一致。
-
-   修复要求：非 2xx body-read 也原样抛出 `AbortError`，补 headers 已返回但错误响应体读取
-   被取消的测试。
+修复要求：`root` 或 `loopId` 改变时必须使请求代际失效、取消当前 controller 并清空或关闭
+全部 Dialog 状态；补已完成与在途两条身份切换回归，重建受跟踪 Web bundle 后重新冻结并重跑四轨。
 
 ## 通过的验证
 
 - Node `v22.23.1` / npm `11.16.0`，clean `npm ci` 与 `npm run build` 通过。
-- Dashboard JS `index-D_2MYC93.js`
-  SHA-256 `005523716de320fc5dea933e29fd6c80eb2eb75f82bb3812d3b278a200eb8c76`；
+- Dashboard JS `index-CNYyyV41.js`
+  SHA-256 `bcd2bfd3787305a8d04aa7d780a46d88bb2c7fb7e5c0c688fac69f60396e4273`；
   CSS `index-EnliBiGT.css`
   SHA-256 `c04ba7a1885866622f632f7ea09d60fd0947b0147c988668566813afadc646fc`；
-  server bundle SHA-256
+  server SHA-256
   `be57d276671203669606ec09cc963ab69e3e3e6c0d17b546c2bf4b2e3abe6b60`。
-  Dashboard、server、CLI tracked bundles 与 clean rebuild 逐字节一致。
-- `npm test`：317 files，5462 passed，5 honest skipped。
-- `npm run test:web`：56 files，1004 passed。
-- kernel/server 定向测试 293/293；client/UI 定向测试 54/54。
+  Dashboard、server、CLI 与 clean rebuild 逐字节一致。
+- Root：317/317 files，5462 passed，5 honest skipped。
+- Web：56/56 files，1006/1006；focused server 286/286，client/UI 56/56。
 - repository hygiene、architecture（622 production files）、comments、default-workflow
-  freshness、bundle 31/31、`git diff --check` 与 secret scan 通过。
-- 5 requirements / 21 scenarios 分布为 `[3, 9, 2, 6, 1]`；隔离 archive/apply
-  `specsUpdated=true`，应用后的新主规格 strict validate 通过，真实主规格未变化。
-- 浏览器覆盖 goal-only dirty、allow/deny dirty 双语阻断、save 500、save success +
-  reload、全部/部分拒绝、403/409/500、200 empty/non-JSON、retry、body-read abort、
-  Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape、焦点返回及 375/768/1440。
-- placeholder 对比度 light `7.75:1`、dark `8.63:1`。
+  freshness、bundle 31/31、hooks 482/482、adapters 272/272、skills、oracle、identity、
+  docs、templates、migration 与 `git diff --check` 通过。
+- OpenSpec 5 requirements / 21 scenarios；隔离 show/strict/archive/apply 成功，真实
+  `openspec/specs` digest 未变化。
+- 浏览器覆盖重提 stale 清除、2xx/500 headers/body abort、goal-only dirty、allow/deny
+  dirty 双语阻断、save 500、save success + reload、成功/全部与部分拒绝、403/409/500、
+  200 empty/non-JSON、retry、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape、焦点返回、
+  375/768/1440、light/dark；placeholder 对比度 light `7.75:1`、dark `8.63:1`。
 
 ## 已知基线与剩余风险
 
-- clean install 报告 7 个既有依赖漏洞；本 Change 未修改 package manifest 或 lockfile，
-  不计为新增 finding。
-- 两条全量测试首次运行分别出现无关 tap JSON EOF 和 Web 异步等待抖动；隔离复跑与随后
-  完整复跑均通过，记录为高负载 flake 风险。
-- 5 个条件跳过来自未开启真实 Codex 门和缺少外部 Claude OAuth secret；与代码失败分开记录。
-- 无 `openat` 平台仍沿用项目既有同-principal-writer 信任边界；预检不是 permit，真实运行继续
-  fresh 执行生产约束 gate。
+- clean install 报告 7 个既有依赖漏洞；本 Change 未修改 package manifest 或 lockfile。
+- 高负载 Web 首轮出现一个既有 ProgressView GSAP 时序失败；隔离与完整复跑均通过。
+- 5 个条件跳过来自未开启真实 Codex 门和缺少外部 Claude OAuth secret，与代码失败分开记录。
+- 无 `openat` 平台仍沿用项目既有同-principal-writer 信任边界；预检不是 permit。
 
 ## 决策
 
 精确请求 `verify-fail`，使用当前 Change 与 host session 绑定的 delegated receipt 返回 Build。
-以测试先行修复两项 Medium 与一项 Low，重建 Dashboard bundle，重新冻结并再次执行全部四轨；
-不得只复查本次 finding。
+以测试先行补齐 completed 与 in-flight Loop identity 两条回归，修复后重新执行全量 Build 收敛和
+冻结四轨；不得只复查本次 finding。

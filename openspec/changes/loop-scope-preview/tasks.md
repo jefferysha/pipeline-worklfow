@@ -29,6 +29,7 @@
 - [x] B2h client 返工：以 TDD 将 2xx 空体与 malformed JSON 归一化为稳定 `response` 错误、保留 body-read abort 身份并重建 Dashboard bundle。
 - [x] B2i 交互返工：仅在路径策略草稿未保存时阻止预检，补齐中英文提示，并修复 light/dark placeholder 对比度。
 - [x] B2j 冻结返工：严格关闭响应枚举类型，清除重新提交期间的旧结果，并保留非 2xx body-read abort 身份。
+- [x] B2k 身份返工：切换项目或 Loop 时重挂载预检状态机，取消旧请求并拒绝已完成或迟到的跨 Loop 结果。
 
 ## 验证
 
