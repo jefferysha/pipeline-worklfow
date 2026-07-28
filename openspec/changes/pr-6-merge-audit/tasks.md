@@ -24,7 +24,7 @@
 - [x] 完成独立 pre-Verify 复审，提交并非强制 push 到原 PR 分支。
 - [x] 以 TDD 修复 shared 依赖、title 保真、root 失败关闭、请求取消/过期响应和字段错误定位。
 - [x] 补全 OpenSpec 隔离 apply，正式重建生成物并重跑风险匹配的定向与全量门禁。
-- [ ] 独立 pre-Verify 全量复审通过后非强制 push 新 exact head，并等待 GitHub CI。
+- [x] 独立 pre-Verify 全量复审通过后非强制 push 新 exact head，并等待 GitHub CI。
 
 ## 验证
 

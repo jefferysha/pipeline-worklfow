@@ -61,3 +61,4 @@
 {"ts":"2026-07-28T12:45:39Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T11:06:58Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
 {"ts":"2026-07-28T12:45:39Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"1f89fcf7-fca6-43cd-9c5e-eb70bdfef73b"}
 {"ts":"2026-07-28T13:18:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T13:37:16Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

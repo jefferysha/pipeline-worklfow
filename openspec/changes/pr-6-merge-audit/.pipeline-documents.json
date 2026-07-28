@@ -209,14 +209,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/pr-6-merge-audit/tasks.md",
-      "sha256": "fb62bf18f40f5a5898cd47871c749eeeef666a427363371c489fd6ab29882929",
+      "sha256": "1f28b44f05df625a50f02062b9bcfef09c2c21eafec5d1597bed0aaf5739708a",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-28T13:18:10Z",
+      "recordedAt": "2026-07-28T13:37:15Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "fb62bf18f40f5a5898cd47871c749eeeef666a427363371c489fd6ab29882929",
-          "readAt": "2026-07-28T13:18:10Z",
+          "sha256": "1f28b44f05df625a50f02062b9bcfef09c2c21eafec5d1597bed0aaf5739708a",
+          "readAt": "2026-07-28T13:37:15Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",9]"
         }
       ]
