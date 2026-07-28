@@ -157,10 +157,12 @@ function planFor(host: HostId, operation: Operation) {
   if (native) {
     steps.push({ id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null })
   }
-  steps.push(
-    { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
-    { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
-  )
+  if (native || operation === 'setup') {
+    steps.push(
+      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+    )
+  }
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',

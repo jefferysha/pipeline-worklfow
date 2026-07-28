@@ -71,10 +71,11 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     ])
   })
 
-  test('adapter 计划仅描述 project-scope 外层流程并固定使用 <project> 占位', () => {
-    const plan = createHostTargetPlan('cursor', 'update')
+  test('adapter setup/update 分别对齐真实外层流程并固定使用 <project> 占位', () => {
+    const setup = createHostTargetPlan('cursor', 'setup')
+    const update = createHostTargetPlan('cursor', 'update')
 
-    expect(plan).toMatchObject({
+    expect(update).toMatchObject({
       schema_version: 'host-target-plan/v1',
       side_effects: 'none',
       operation: 'update',
@@ -89,7 +90,14 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
         'host-plan.notice.project-placeholder',
       ],
     })
-    expect(plan.steps).toEqual([
+    expect(setup.steps.map(({ id }) => id)).toEqual([
+      'package-assets',
+      'managed-runtime',
+      'adapter-deploy',
+      'bundled-skills',
+      'runtime-readiness',
+    ])
+    expect(update.steps).toEqual([
       { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
       {
@@ -101,8 +109,6 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
           display: 'tenon update --cursor --target <project>',
         },
       },
-      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
-      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
     ])
   })
 

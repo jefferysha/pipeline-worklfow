@@ -203,8 +203,9 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
         { id: 'package-assets' },
         { id: 'managed-runtime' },
         { id: 'adapter-deploy', executable: command.executable, args: command.args },
-        { id: 'bundled-skills' },
-        { id: 'runtime-readiness' },
+        ...(operation === 'setup'
+          ? [{ id: 'bundled-skills' }, { id: 'runtime-readiness' }]
+          : []),
       ]
   return host.kind === 'native'
     ? [...operationSteps, ...PRODUCT_STEP_IDS.map((id) => ({ id }))]

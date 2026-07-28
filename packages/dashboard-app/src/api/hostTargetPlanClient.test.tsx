@@ -98,8 +98,12 @@ function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
       { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
       { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: hostCommand },
-      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
-      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+      ...(operation === 'setup'
+        ? [
+            { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+            { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+          ]
+        : []),
     ],
     notices: [
       'host-plan.notice.read-only-generation',
@@ -162,6 +166,21 @@ describe('host target plan read-only client', () => {
 
     await expect(fetchHostTargetPlan(host, operation)).resolves.toEqual(value)
   })
+
+  it.each(['setup', 'update'] as const)(
+    'accepts the exact adapter %s step boundary',
+    async (operation) => {
+      const value = adapterPlan('cursor', operation)
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(value), { status: 200 }),
+      ))
+
+      await expect(fetchHostTargetPlan('cursor', operation)).resolves.toEqual(value)
+      expect(value.steps.map(({ id }) => id)).toEqual(operation === 'setup'
+        ? ['package-assets', 'managed-runtime', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
+        : ['package-assets', 'managed-runtime', 'adapter-deploy'])
+    },
+  )
 
   it('strictly validates plan command, step commands/order, and notices', async () => {
     const fetchMock = vi.fn()

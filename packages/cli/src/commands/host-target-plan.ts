@@ -131,13 +131,18 @@ function nativeSteps(
   ]
 }
 
-function adapterSteps(manualCommand: HostPlanCommand): readonly HostTargetPlanStep[] {
-  return [
+function adapterSteps(
+  operation: HostTargetOperation,
+  manualCommand: HostPlanCommand,
+): readonly HostTargetPlanStep[] {
+  const deploymentSteps: readonly HostTargetPlanStep[] = [
     { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
     PRODUCT_STEPS[0],
     { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: manualCommand },
-    ...PRODUCT_STEPS.slice(1),
   ]
+  return operation === 'setup'
+    ? [...deploymentSteps, ...PRODUCT_STEPS.slice(1)]
+    : deploymentSteps
 }
 
 export function createHostTargetPlan(
@@ -154,7 +159,7 @@ export function createHostTargetPlan(
         operation,
         operation === 'setup' ? nativeInstallPlan(host) : nativeUpdatePlan(host),
       )
-    : adapterSteps(manualCommand)
+    : adapterSteps(operation, manualCommand)
   return {
     schema_version: HOST_TARGET_PLAN_SCHEMA_VERSION,
     side_effects: 'none',

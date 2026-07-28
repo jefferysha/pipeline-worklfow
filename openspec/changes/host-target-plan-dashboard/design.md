@@ -21,5 +21,6 @@
 - Catalog 与单计划共享 `host-target-plan/v1`，但使用不同顶层 DTO。
 - API 不接收 root/target；adapter 命令用 `<project>` 占位。
 - 只展示 CLI 可证明的 native/adapter、scope 与有限能力，不复制完整 adapter tier。
+- Adapter setup 计划包含部署后的 `bundled-skills`/`runtime-readiness`，update 计划在 `adapter-deploy` 后结束；该差异由真实命令集成测试锁定，三端 fixture 不得把错误语义互相复制成“契约”。
 - UI 只提供复制命令，没有执行按钮。
 - 详细契约、状态机、错误、安全与验证矩阵见 `docs/superpowers/specs/host-target-plan-dashboard-design.md`；架构取舍见 `docs/adr/host-target-plan-dashboard.md`。

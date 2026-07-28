@@ -26,6 +26,7 @@ import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
 import { createHostTargetPlan } from './host-target-plan.js'
+import { cmdUpdate } from './update.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -875,6 +876,31 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     ]
     expect(actualStepIndexes.every((index) => index >= 0)).toBe(true)
     expect(actualStepIndexes).toEqual([...actualStepIndexes].sort((left, right) => left - right))
+  })
+
+  test('adapter update 计划在真实 update 重新部署后结束，不包含 setup-only 步骤', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText })
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdUpdate(
+      deps,
+      { cursor: true, target: '/workspace' },
+      env,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('cursor', 'update').steps.map((step) => step.id)).toEqual([
+      'package-assets',
+      'managed-runtime',
+      'adapter-deploy',
+    ])
+    expect(deps.outLines.some((line) => line.includes('/adapters/install.sh --cursor'))).toBe(true)
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
   })
 
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {

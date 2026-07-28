@@ -179,3 +179,54 @@ Codex 的完整 `origin/main` 差异审查没有发现新的源码或契约缺�
 `index-BStVpnm7.js`、`dist/index.html` 和旧 `index-D_k5gMMg.js` 删除原子纳入本次提交处理，
 并将在冻结后的干净检出 E2E 中复验。Codex 隔离环境中的 server bind 测试因 `listen EPERM`
 无法运行；同一源码已在真实 worktree 的上述全量 `npm test` 中通过。
+
+## 第四轮 Verify 回环发现与第五轮 Build 修复
+
+冻结提交 `1176d52a4f00110c2367697d33cb00e3f01de1f4` 的第四轮 Verify 中，浏览器视觉轨和
+完整 reviewer 均通过，但 Codex/E2E 对抗轨发现一项 MEDIUM：所有 10 个 adapter 的 update
+计划错误包含 setup-only 的 `bundled-skills` 与 `runtime-readiness`。现有 CLI、server 和
+Dashboard fixture 同时锁定错误的五步数组，因而三端测试互相通过却未证明真实 `cmdUpdate` 语义。
+
+本轮先通过 `requirements-changed` 返回 Spec，把契约明确为：
+
+- adapter setup：`package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`
+- adapter update：`package-assets → managed-runtime → adapter-deploy`
+
+TDD 证据：
+
+1. 在纯计划测试和注入式真实 `cmdUpdate(cursor)` 集成测试中先写三步断言；RED 为 2 files /
+   2 failed / 60 passed，失败差异精确显示多余的两个 setup-only 步骤。
+2. `adapterSteps` 接收 operation 并只为 setup 追加产品后续步骤；同一命令 GREEN 为 2 files /
+   62 passed。
+3. server 严格 decoder/12×2 fixture 与 Dashboard decoder/fixture 同步按 operation 分支；
+   CLI/server focused 为 4 files / 151 passed，Dashboard focused 为 2 files / 32 passed。
+4. 独立只读审计回读真实 `cmdSetup`/`cmdUpdate` 控制流，确认 setup 在部署后继续 skills/readiness，
+   update 直接返回 `cmdSetupHost`，与修订后的契约一致。
+
+第五轮 Build 全量收敛：
+
+- `npm run build`：通过；Dashboard 新 hash `index-BY2_aTHg.js`，server/CLI tracked bundle 已更新。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 files / 999 tests 通过；只有既有 React `act(...)` / GSAP 警告。
+- `npm test`：317 files 通过；5485 passed / 5 honest skips（5490 total）。
+- `bash tools/test-bundle.sh`：31/31。
+- `npm run check:npx-package`：35/35。
+- `npm run check:docs`：10/10，39 canonical Markdown files。
+- `npm run check:repository-hygiene`：6/6，repository PASS。
+- `npm run check:architecture`、`npm run check:comments`、`git diff --check`：通过。
+- built CLI 对 10 个 adapter × setup/update 的真实 JSON 烟测全部通过：
+  setup 均为五步、update 均为三步，`mismatches=0`。
+
+本轮没有改变 UI 布局、交互状态、i18n token 或执行边界；视觉影响仅为 adapter update 预览少显示
+两个不应存在的步骤。最终浏览器轨仍需在新冻结提交上复验真实 update 预览、桌面/移动/键盘和
+状态矩阵；在此之前不复用第四轮冻结的 PASS。
+
+第五轮冻结前独立审查覆盖 `origin/main` 起的完整 tracked/untracked 差异，并在暂存前识别出
+Dashboard 新 hash asset 尚未纳入 Git index 的 HIGH 交付风险。随后将旧 asset 删除、新
+`index-BY2_aTHg.js` 与 `dist/index.html` 原子暂存，复审确认 `R097` rename、HTML 引用、
+Git index 中的 JS/CSS 和第五轮 bundle 语义均一致，`git diff --cached --check` 通过。
+
+最终预 Verify 结论为 PASS：CRITICAL / HIGH / MEDIUM 均为 0；保留 2 个非阻断 LOW（ADR
+列表编号重复、早期实施计划仍使用合并式 client 文件名）。两项均属于已在 Spec phase 登记并
+锁定 hash 的历史文案，不影响运行时、契约或交付完整性；本轮不通过伪造 producer 或滥用
+`requirements-changed` 在 Build phase 越权改写。

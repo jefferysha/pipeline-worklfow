@@ -16,6 +16,7 @@ capability: host-target-plan
 - P1 仅接受 `TENON_HOSTS`，不实现 Comet 的 custom target。
 - Trellis 只 clean-room 借鉴按目标、有界、版本化上下文原则；不复制 AGPL-3.0 代码。
 - 持续自主模式下不插入一次性 prototype：现有 CLI plan、`PipelineCliRunner` 和 Dashboard view 都有稳定接缝，风险可由首个 tracer bullet 和契约测试更直接地暴露。
+- Adapter 计划按真实命令控制流区分：setup 为五步，update 为前三步；不能用三端一致的 fixture 替代对 `cmdSetup`/`cmdUpdate` 的独立集成证明。
 
 ## 子阶段 1：Tracer bullet，贯通 Codex setup 计划
 
@@ -58,7 +59,20 @@ capability: host-target-plan
 
 **此处建议 /clear**
 
-## 子阶段 4：验证、浏览器与交付证据
+## 子阶段 4：Adapter setup/update 语义回归修复
+
+1. 先在 CLI 命令集成测试中对已注册 adapter 写入失败断言：setup 为五步，update 仅为前三步且排除 `bundled-skills`/`runtime-readiness`；立即运行并确认 RED。
+2. 在 `packages/cli/src/commands/host-target-plan.ts` 以 operation 分支生成最小正确步骤，保持 catalog、native 计划与真实 setup/update 写路径不变。
+3. 同步 CLI/server/Dashboard 的严格 decoder fixtures 与组件预览断言；测试必须分别断言 setup/update，禁止三个 fixture 互相复制同一错误数组。
+4. 运行 CLI/server/Dashboard 定向测试与真实 10 adapter × 2 operation 烟测，确认 setup 5 步、update 3 步、零副作用。
+
+验收：所有 adapter 的 update 计划均在 `adapter-deploy` 后结束；setup 仍包含部署后的 skills/readiness，且现有只读 API/UI 正确展示。
+
+回滚：仅回退 operation-specific 步骤分支与对应测试/fixture，不影响 host catalog、API 路由或 UI 状态机。
+
+**此处建议 /clear**
+
+## 子阶段 5：验证、浏览器与交付证据
 
 1. 运行定向 CLI/server/Dashboard 测试、`npm run typecheck:web`、`npm run test:web`、`npm run build`、`npm test`、bundle 与受影响门禁；修复全部可修复失败。
 2. 启动真实 Tenon Dashboard，先用标题、导航和 API health 确认页面身份；验证真实成功路径。

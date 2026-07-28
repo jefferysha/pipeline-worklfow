@@ -45123,13 +45123,13 @@ function nativeSteps(operation, plan) {
     ...PRODUCT_STEPS
   ];
 }
-function adapterSteps(manualCommand) {
-  return [
+function adapterSteps(operation, manualCommand) {
+  const deploymentSteps = [
     { id: "package-assets", label: "host-plan.step.package-assets", command: null },
     PRODUCT_STEPS[0],
-    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand },
-    ...PRODUCT_STEPS.slice(1)
+    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand }
   ];
+  return operation === "setup" ? [...deploymentSteps, ...PRODUCT_STEPS.slice(1)] : deploymentSteps;
 }
 function createHostTargetPlan(host, operation) {
   const target = targetFor2(host);
@@ -45138,7 +45138,7 @@ function createHostTargetPlan(host, operation) {
   const steps = isNativePipelineHost(host) ? nativeSteps(
     operation,
     operation === "setup" ? nativeInstallPlan(host) : nativeUpdatePlan(host)
-  ) : adapterSteps(manualCommand);
+  ) : adapterSteps(operation, manualCommand);
   return {
     schema_version: HOST_TARGET_PLAN_SCHEMA_VERSION,
     side_effects: "none",

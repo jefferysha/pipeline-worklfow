@@ -21,7 +21,7 @@
 
 ### Requirement: 单目标 setup/update 计划
 
-系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 操作生成 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标元数据、可复制命令、有序步骤与 notices。native 步骤 SHALL 复用现有 install/update plan 真相；adapter 步骤仅描述稳定的 release adapter 外层流程，不执行或解析脚本。
+系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 操作生成 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标元数据、可复制命令、有序步骤与 notices。native 步骤 SHALL 复用现有 install/update plan 真相；adapter 步骤 SHALL 与当前真实命令编排一致，并仅描述稳定的 release adapter 外层流程，不执行或解析脚本。
 
 #### Scenario: native setup 计划
 
@@ -33,8 +33,15 @@
 #### Scenario: adapter update 计划
 
 - **WHEN** 为已注册 adapter 请求 update 计划
-- **THEN** 返回 `tenon update --<host>` 命令和 project-scope adapter 步骤
+- **THEN** 返回 `tenon update --<host>` 命令和按 `package-assets`、`managed-runtime`、`adapter-deploy` 排列的 project-scope adapter 步骤
+- **AND** 不包含仅由完整 setup 后续执行的 `bundled-skills` 或 `runtime-readiness`
 - **AND** target 使用 `<project>` 语义占位，不接受调用方目录输入
+
+#### Scenario: adapter setup 计划
+
+- **WHEN** 为已注册 adapter 请求 setup 计划
+- **THEN** 返回按 `package-assets`、`managed-runtime`、`adapter-deploy`、`bundled-skills`、`runtime-readiness` 排列的五个步骤
+- **AND** 步骤顺序与真实 `cmdSetup` 在 adapter 部署后的 skills/readiness 编排一致
 
 #### Scenario: 非法操作
 
