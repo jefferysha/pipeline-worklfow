@@ -34,3 +34,32 @@
 {"ts":"2026-07-28T08:53:27Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
 {"ts":"2026-07-28T08:53:27Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T08:41:10Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
 {"ts":"2026-07-28T08:53:27Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"586efd0a-784e-45cb-803c-1ec04660697c"}
+{"ts":"2026-07-28T09:01:21Z","kind":"set","field":"build_sha","to":"097620611054a000cbce4b279abd120b5a7fb808"}
+{"ts":"2026-07-28T09:01:21Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T09:01:21Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T09:01:21Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T09:01:38Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T09:01:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T09:01:38Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"25e4a095-9cbb-4258-ba31-5a2e8f634e8e"}
+{"ts":"2026-07-28T09:10:12Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-linux-stat-verify.md"}
+{"ts":"2026-07-28T09:10:15Z","kind":"set","field":"verify_result","to":"pass"}
+{"ts":"2026-07-28T09:10:16Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T09:10:16Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T09:10:16Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T09:10:34Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-linux-stat-verify.md"}
+{"ts":"2026-07-28T09:10:34Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T09:10:35Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T09:10:35Z","kind":"set","field":"verify_result","to":"pass"}
+{"ts":"2026-07-28T09:10:35Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T09:10:36Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T09:10:36Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T09:10:43Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-28T09:10:43Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T08:41:10Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T09:10:43Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"43c95394-76d1-4004-9b01-1913ac1e4190"}
+{"ts":"2026-07-28T09:11:40Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-28T09:11:40Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/9"}
+{"ts":"2026-07-28T09:12:17Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-28T09:12:18Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-28T09:12:18Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"b9cffd6e-62f6-4b34-ae49-6ae03de07eb9"}
+{"ts":"2026-07-28T09:12:39Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-28T09:12:45Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"4871a673-d0ae-4092-bf91-b101cd845cb0"}

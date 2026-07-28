@@ -18,12 +18,12 @@
 
 ## 验证
 
-- [ ] 运行 macOS/Linux hook 回归、完整门禁并核对 GitHub CI。 (verify)
+- [x] 运行 macOS/Linux hook 回归、完整门禁并核对 GitHub CI。 (verify)
 
 ## 交付
 
-- [ ] 推送 remediation commit 并更新 PR 证据。 (ship)
+- [x] 推送 remediation commit 并更新 PR 证据。 (ship)
 
 ## 归档
 
-- [ ] 应用规格并归档 remediation Change。 (archive)
+- [x] 应用规格并归档 remediation Change。 (archive)
