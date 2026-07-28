@@ -818,6 +818,29 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(document.documentElement.classList.contains('prg9-lock')).toBe(false)
   })
 
+  it('嵌套证据 composer 的 Escape 只关闭内层并把焦点归还入口', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    const opener = screen.getByTestId('evidence-compose-open')
+    fireEvent.click(opener)
+    expect(screen.getByTestId('evidence-compose-dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).toBeNull()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  })
+
   it('running 行抽屉：TaskDetail 之下挂日志区，2.5s 轮询；抽屉关闭即停（组件卸载）', async () => {
     vi.useFakeTimers()
     renderView()

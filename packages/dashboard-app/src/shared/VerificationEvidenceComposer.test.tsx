@@ -97,6 +97,31 @@ describe('VerificationEvidenceComposer', () => {
     expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
   })
 
+  it('preserves evidence body whitespace in the request while using trimmed views for validation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# Verification evidence draft',
+      entryCount: 1,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComposer('en')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.change(screen.getByTestId('evidence-command-1'), { target: { value: ' \tnpm test\n ' } })
+    fireEvent.change(screen.getByTestId('evidence-result-1'), { target: { value: '\n 42 passed \t\n' } })
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    await screen.findByTestId('evidence-output')
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const body = JSON.parse(String(request.body)) as {
+      entries: Array<{ command?: string; result?: string }>
+    }
+    expect(body.entries[0]).toMatchObject({
+      command: ' \tnpm test\n ',
+      result: '\n 42 passed \t\n',
+    })
+  })
+
   it('blocks incomplete entries client-side without making a request', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

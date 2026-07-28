@@ -7,7 +7,7 @@
 
 ## 调研
 
-- [x] 固定 Trellis 与 Comet 默认分支、稳定版本和一手源码证据。
+- [x] 固定 上游 A 与 上游 B 默认分支、稳定版本和一手源码证据。
 - [x] 对照 Tenon 当前 kernel/server/dashboard 实现，完成方案比较、风险与 ADR。 (explore)
 
 ## 规格

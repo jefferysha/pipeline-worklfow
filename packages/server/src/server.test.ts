@@ -1478,6 +1478,43 @@ describe('POST /api/verification-evidence/compose —— 受保护的无状态�
     })
   })
 
+  it('闭集 DTO 拒绝自有 __proto__，非对象错误保持可解码 envelope', async () => {
+    const h = await start()
+    const auth = { Authorization: `Bearer ${h.token}` }
+    const withProto = JSON.parse(JSON.stringify({
+      root: h.root,
+      locale: 'en',
+      entries: [entry],
+    }).replace('{', '{"__proto__":null,')) as unknown
+    const unknownField = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      withProto,
+      { headers: auth },
+    )
+    expect(unknownField.status).toBe(400)
+    expect(unknownField.json()).toMatchObject({
+      ok: false,
+      code: 'verification_evidence_invalid',
+      details: [{ code: 'unknown_field', path: '__proto__' }],
+      overflow: false,
+    })
+
+    const nonObject = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      null,
+      { headers: auth },
+    )
+    expect(nonObject.status).toBe(400)
+    expect(nonObject.json()).toMatchObject({
+      ok: false,
+      code: 'verification_evidence_invalid',
+      details: [{ code: 'object_invalid', path: '' }],
+      overflow: false,
+    })
+  })
+
   it('复用 token 与 registered-root 安全边界', async () => {
     const h = await start()
     const missingToken = await reqPost(

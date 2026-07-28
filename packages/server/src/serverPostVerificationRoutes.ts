@@ -19,6 +19,7 @@ export async function handlePostVerificationRoutes(
       code: 'verification_evidence_invalid',
       error: 'Verification evidence request must be a JSON object',
       details: [{ code: 'object_invalid', path: '' }],
+      overflow: false,
     })
   }
   const body = raw as Record<string, unknown>
@@ -33,7 +34,7 @@ export async function handlePostVerificationRoutes(
   } catch (error) {
     return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error) })
   }
-  const composerInput: Record<string, unknown> = {}
+  const composerInput = Object.create(null) as Record<string, unknown>
   for (const [key, value] of Object.entries(body)) {
     if (key !== 'root') composerInput[key] = value
   }

@@ -7,8 +7,8 @@
 ## Context
 
 Verify reports need concrete checks, outcomes, skipped reasons, and risks, but
-the Dashboard only exposes document evidence. Trellis demonstrates concise
-structured session sections that omit empty content. Comet demonstrates
+the Dashboard only exposes document evidence. 上游 A demonstrates concise
+structured session sections that omit empty content. 上游 B demonstrates
 closed, deterministic verification evidence with mutually exclusive evidence
 and skip semantics. Tenon separately has a trusted `VerificationResult`
 contract whose integrity must remain unchanged.

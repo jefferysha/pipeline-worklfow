@@ -133,6 +133,31 @@ describe('verification evidence composer', () => {
     expect(result.markdown).not.toContain('\r')
   })
 
+  test('preserves leading and trailing whitespace in evidence bodies while rejecting blank values', () => {
+    const result = compose([
+      commandEntry({
+        command: ' \tprintf ok\r\n ',
+        result: '\n result with evidence \t\n',
+      }),
+      {
+        kind: 'browser',
+        title: 'Skipped browser',
+        status: 'skipped',
+        skipReason: '\n unavailable in sandbox \t\n',
+      },
+    ])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.markdown).toContain('```text\n \tprintf ok\n \n```')
+    expect(result.markdown).toContain('```text\n\n result with evidence \t\n\n```')
+    expect(result.markdown).toContain('```text\n\n unavailable in sandbox \t\n\n```')
+
+    expect(compose([commandEntry({ result: ' \t\n ' })])).toMatchObject({
+      ok: false,
+      errors: [{ code: 'field_required', path: 'entries[0].result' }],
+    })
+  })
+
   test('rejects empty and oversized entry collections', () => {
     const empty = compose([])
     expect(empty).toMatchObject({

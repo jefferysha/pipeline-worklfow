@@ -127,6 +127,7 @@ function normalizeText(
   maxBytes: number,
   collector: ErrorCollector,
   required: boolean,
+  preserveWhitespace = false,
 ): string | undefined {
   if (value === undefined) {
     if (required) addError(collector, 'field_required', path)
@@ -144,16 +145,17 @@ function normalizeText(
     addError(collector, 'control_character', path)
     return undefined
   }
-  const normalized = value.replace(/\r\n?/gu, '\n').trim()
-  if (normalized === '') {
+  const normalized = value.replace(/\r\n?/gu, '\n')
+  const canonical = preserveWhitespace ? normalized : normalized.trim()
+  if (canonical.trim() === '') {
     if (required) addError(collector, 'field_required', path)
     return undefined
   }
-  if (encoder.encode(normalized).byteLength > maxBytes) {
+  if (encoder.encode(canonical).byteLength > maxBytes) {
     addError(collector, 'field_too_large', path)
     return undefined
   }
-  return normalized
+  return canonical
 }
 
 function enumValue<T extends string>(
@@ -213,6 +215,7 @@ function entryFromUnknown(
         VERIFICATION_EVIDENCE_LIMITS.commandBytes,
         collector,
         false,
+        true,
       )
     }
   }
@@ -227,6 +230,7 @@ function entryFromUnknown(
       VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes,
       collector,
       true,
+      true,
     )
   } else if (status === 'passed' || status === 'failed') {
     result = normalizeText(
@@ -234,6 +238,7 @@ function entryFromUnknown(
       `${path}.result`,
       VERIFICATION_EVIDENCE_LIMITS.resultBytes,
       collector,
+      true,
       true,
     )
     if (record.skipReason !== undefined) {

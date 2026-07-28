@@ -26,6 +26,6 @@ Tenon 的 Verify 报告要求记录真实命令、结果、失败与风险，但
 
 ## Explore Evidence
 
-- Trellis `main` 与最新语义版本 tag `v0.6.9` 固定到 `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`；GitHub 无 Release，已明确回退到 tag。其结构化 session 段落提供“显式字段、空段省略”的输入依据。
-- Comet `master` 固定到 `2945693e4061c369be0d400ed2999a66fa87c680`，最新 release `0.4.0-beta.9` 固定到 `84038b0d6b7c185b233f0f36b294ae74dd9121d0`；其 acceptance evidence 提供闭集字段、skip/result 互斥、预算与 canonical serialization 依据。
+- 上游 A `main` 与最新语义版本 tag `v0.6.9` 固定到 `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`；GitHub 无 Release，已明确回退到 tag。其结构化 session 段落提供“显式字段、空段省略”的输入依据。
+- 上游 B `master` 固定到 `2945693e4061c369be0d400ed2999a66fa87c680`，最新 release `0.4.0-beta.9` 固定到 `84038b0d6b7c185b233f0f36b294ae74dd9121d0`；其 acceptance evidence 提供闭集字段、skip/result 互斥、预算与 canonical serialization 依据。
 - 选择“共享 kernel 格式化器 + 受保护无状态路由 + Verify-only Dashboard Dialog”，拒绝浏览器内重复协议和自动写 report 两种方案。

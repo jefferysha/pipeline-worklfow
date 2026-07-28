@@ -14,14 +14,14 @@ against immutable source:
 
 | Source | Pin | Evidence used |
 | --- | --- | --- |
-| mindfold-ai/Trellis default `main` | [`12e279a8af00456b1d0d4e3d0f7f59e7b702202e`](https://github.com/mindfold-ai/Trellis/commit/12e279a8af00456b1d0d4e3d0f7f59e7b702202e) | `add_session.py` accepts repeatable `--change`, `--test`, and `--next-step` values and omits empty sections; journal files use an append-friendly union merge rule. |
-| mindfold-ai/Trellis stable version | [`v0.6.9`](https://github.com/mindfold-ai/Trellis/tree/v0.6.9), same commit as `main` | GitHub reported no Release, so the latest semantic version tag is the explicit fallback. |
-| rpamis/comet default `master` | [`2945693e4061c369be0d400ed2999a66fa87c680`](https://github.com/rpamis/comet/commit/2945693e4061c369be0d400ed2999a66fa87c680) | Native acceptance evidence rejects unknown fields, requires either evidence or a skip reason, and serializes in one canonical form. |
-| rpamis/comet stable release | [`0.4.0-beta.9`](https://github.com/rpamis/comet/releases/tag/0.4.0-beta.9), tag commit `84038b0d6b7c185b233f0f36b294ae74dd9121d0` | Latest published release used as the compatibility baseline. |
+| 上游 A default `main` | `12e279a8af00456b1d0d4e3d0f7f59e7b702202e` | `add_session.py` accepts repeatable `--change`, `--test`, and `--next-step` values and omits empty sections; journal files use an append-friendly union merge rule. |
+| 上游 A stable version | `v0.6.9`, same commit as `main` | GitHub reported no Release, so the latest semantic version tag is the explicit fallback. |
+| 上游 B default `master` | `2945693e4061c369be0d400ed2999a66fa87c680` | Native acceptance evidence rejects unknown fields, requires either evidence or a skip reason, and serializes in one canonical form. |
+| 上游 B stable release | `0.4.0-beta.9`, tag commit `84038b0d6b7c185b233f0f36b294ae74dd9121d0` | Latest published release used as the compatibility baseline. |
 
 The feature maps those ideas rather than copying either implementation:
-Trellis contributes compact structured authoring and omission of empty
-sections; Comet contributes closed input, mutually exclusive skip/result
+上游 A contributes compact structured authoring and omission of empty
+sections; 上游 B contributes closed input, mutually exclusive skip/result
 semantics, input budgets, and deterministic serialization.
 
 ## Current Tenon comparison

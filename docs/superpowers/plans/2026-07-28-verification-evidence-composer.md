@@ -74,7 +74,7 @@ server Markdown，尽早暴露包导出、route 接线、root guard 和组件 pr
    内容，再覆盖 Verify 入口、空态、成功、server error、copy、Tab/Escape/focus return，并保存截图/日志证据。
 3. 检查 `git diff --check`、生产文件大小、依赖变化和仅本轮文件；写 verification report，完成 Verify
    exact-event delegated review。
-4. 应用 delta spec，更新 tasks、提交、推送并创建非草稿 PR；PR 包含 Trellis/Comet 固定来源、差异映射、
+4. 应用 delta spec，更新 tasks、提交、推送并创建非草稿 PR；PR 包含 上游 A/上游 B 固定来源、差异映射、
    API/持久化/兼容、真实测试/浏览器证据和回滚。检查 CI，修复代码失败，外部阻塞如实记录。
 
 ## 兼容、回滚与风险

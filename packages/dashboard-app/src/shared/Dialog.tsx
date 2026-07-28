@@ -115,6 +115,10 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
       if (dialogStack[dialogStack.length - 1] !== id) return
 
       if (e.key === 'Escape') {
+        // onClose synchronously unmounts this Dialog. Without consuming the same native event,
+        // a later document listener can observe the now-exposed outer surface and close it too.
+        e.preventDefault()
+        e.stopImmediatePropagation()
         onClose()
         return
       }

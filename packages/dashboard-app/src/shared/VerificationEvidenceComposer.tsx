@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   postVerificationEvidenceCompose,
   VerificationEvidenceApiError,
@@ -23,10 +23,10 @@ function draftEntry(entry: VerificationEvidenceEditorEntry): VerificationEvidenc
     kind: entry.kind,
     title: entry.title.trim(),
     status: entry.status,
-    ...(entry.kind === 'command' && entry.command.trim() !== '' ? { command: entry.command.trim() } : {}),
+    ...(entry.kind === 'command' && entry.command.trim() !== '' ? { command: entry.command } : {}),
     ...(entry.status === 'skipped'
-      ? { skipReason: entry.skipReason.trim() }
-      : { result: entry.result.trim() }),
+      ? { skipReason: entry.skipReason }
+      : { result: entry.result }),
   }
 }
 
@@ -43,6 +43,20 @@ export function VerificationEvidenceComposer({
   const [markdown, setMarkdown] = useState('')
   const [copyError, setCopyError] = useState('')
   const nextId = useRef(1)
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const restoreFocusRef = useRef(false)
+
+  useEffect(() => {
+    if (!open && restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      openerRef.current?.focus()
+    }
+  }, [open])
+
+  function closeComposer(): void {
+    restoreFocusRef.current = true
+    setOpen(false)
+  }
 
   function resetOutcome(): void {
     setError('')
@@ -125,6 +139,7 @@ export function VerificationEvidenceComposer({
       <button
         className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-text transition hover:border-(--accent) hover:bg-fill"
         data-testid="evidence-compose-open"
+        ref={openerRef}
         onClick={() => setOpen(true)}
         type="button"
       >
@@ -134,7 +149,7 @@ export function VerificationEvidenceComposer({
         <Dialog
           actions={(
             <>
-              <button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-2 hover:bg-fill" onClick={() => setOpen(false)} type="button">
+              <button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-2 hover:bg-fill" onClick={closeComposer} type="button">
                 {t('detail.evidence_cancel')}
               </button>
               <button
@@ -149,7 +164,7 @@ export function VerificationEvidenceComposer({
             </>
           )}
           closeLabel={t('detail.evidence_cancel')}
-          onClose={() => setOpen(false)}
+          onClose={closeComposer}
           panelClassName="w-[min(780px,94vw)]"
           testid="evidence-compose-dialog"
           title={t('detail.evidence_dialog_title')}

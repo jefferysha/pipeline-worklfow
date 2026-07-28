@@ -12912,7 +12912,7 @@ function hasInvalidSurrogate(value) {
 function hasUnsafeControl(value) {
   return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value);
 }
-function normalizeText(value, path7, maxBytes, collector, required2) {
+function normalizeText(value, path7, maxBytes, collector, required2, preserveWhitespace = false) {
   if (value === void 0) {
     if (required2)
       addError(collector, "field_required", path7);
@@ -12930,17 +12930,18 @@ function normalizeText(value, path7, maxBytes, collector, required2) {
     addError(collector, "control_character", path7);
     return void 0;
   }
-  const normalized2 = value.replace(/\r\n?/gu, "\n").trim();
-  if (normalized2 === "") {
+  const normalized2 = value.replace(/\r\n?/gu, "\n");
+  const canonical = preserveWhitespace ? normalized2 : normalized2.trim();
+  if (canonical.trim() === "") {
     if (required2)
       addError(collector, "field_required", path7);
     return void 0;
   }
-  if (encoder2.encode(normalized2).byteLength > maxBytes) {
+  if (encoder2.encode(canonical).byteLength > maxBytes) {
     addError(collector, "field_too_large", path7);
     return void 0;
   }
-  return normalized2;
+  return canonical;
 }
 function enumValue(value, values, path7, collector) {
   if (value === void 0) {
@@ -12976,7 +12977,7 @@ function entryFromUnknown(value, index, collector) {
     if (kind !== void 0 && kind !== "command") {
       addError(collector, "field_forbidden", `${path7}.command`);
     } else {
-      command = normalizeText(record2.command, `${path7}.command`, VERIFICATION_EVIDENCE_LIMITS.commandBytes, collector, false);
+      command = normalizeText(record2.command, `${path7}.command`, VERIFICATION_EVIDENCE_LIMITS.commandBytes, collector, false, true);
     }
   }
   let result;
@@ -12984,9 +12985,9 @@ function entryFromUnknown(value, index, collector) {
   if (status === "skipped") {
     if (record2.result !== void 0)
       addError(collector, "field_forbidden", `${path7}.result`);
-    skipReason = normalizeText(record2.skipReason, `${path7}.skipReason`, VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes, collector, true);
+    skipReason = normalizeText(record2.skipReason, `${path7}.skipReason`, VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes, collector, true, true);
   } else if (status === "passed" || status === "failed") {
-    result = normalizeText(record2.result, `${path7}.result`, VERIFICATION_EVIDENCE_LIMITS.resultBytes, collector, true);
+    result = normalizeText(record2.result, `${path7}.result`, VERIFICATION_EVIDENCE_LIMITS.resultBytes, collector, true, true);
     if (record2.skipReason !== void 0) {
       addError(collector, "field_forbidden", `${path7}.skipReason`);
     }
@@ -19728,7 +19729,8 @@ async function handlePostVerificationRoutes(req, res, path7, deps) {
       ok: false,
       code: "verification_evidence_invalid",
       error: "Verification evidence request must be a JSON object",
-      details: [{ code: "object_invalid", path: "" }]
+      details: [{ code: "object_invalid", path: "" }],
+      overflow: false
     });
   }
   const body = raw;
@@ -19742,7 +19744,7 @@ async function handlePostVerificationRoutes(req, res, path7, deps) {
   } catch (error) {
     return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error) });
   }
-  const composerInput = {};
+  const composerInput = /* @__PURE__ */ Object.create(null);
   for (const [key, value] of Object.entries(body)) {
     if (key !== "root") composerInput[key] = value;
   }

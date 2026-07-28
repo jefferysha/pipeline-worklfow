@@ -4,7 +4,7 @@
 
 ### Requirement: 系统必须用独立闭集契约编排不可信验证草稿
 
-kernel 必须提供与可信 `VerificationResult` 分离的纯
+kernel `MUST` 提供与可信 `VerificationResult` 分离的纯
 `VerificationEvidenceDraft` 校验与格式化能力。输入必须显式包含 `zh-CN` 或
 `en` locale，以及 1–12 条按用户顺序排列的 evidence entry。entry 仅允许：
 
@@ -44,7 +44,7 @@ machine code 和 field path；更多错误必须用 overflow 标志表达，不�
 
 ### Requirement: 格式化输出必须确定、可审查且不能伪造结构
 
-格式化器必须只从通过校验的 canonical copy 生成 Markdown，不读盘、不写盘、不取时间或环境状态。
+格式化器 `MUST` 只从通过校验的 canonical copy 生成 Markdown，不读盘、不写盘、不取时间或环境状态。
 相同 canonical input 和 locale 必须得到逐字节相同、UTF-8 不超过 32 KiB 的输出。输出必须包含本地化的
 “仅为草稿、未执行、未保存、不改变 Verify gate”声明，固定字段/段落/换行顺序，并保留 entry 输入顺序。
 title/result/reason 必须按各自 Markdown 语境转义；command 必须使用能包住输入中最长 backtick run 的
@@ -70,7 +70,7 @@ title/result/reason 必须按各自 Markdown 语境转义；command 必须使用
 
 ### Requirement: Dashboard API 必须在既有本地安全边界内无状态生成
 
-server 必须提供 `POST /api/verification-evidence/compose`，请求为
+server `MUST` 提供 `POST /api/verification-evidence/compose`，请求为
 `{ root, locale, entries }`。该端点必须位于现有 POST router 后，复用 loopback Host、Bearer token、
 `application/json`、64 KiB body limit 与 workflow registered-root anchor 校验。成功响应必须为
 `{ ok: true, markdown, entryCount }`。validation 失败必须返回 HTTP 400 与
@@ -100,7 +100,7 @@ ledger/canonical state，或触发 transition。
 
 ### Requirement: Dashboard 必须提供 Verify-only 完整编排交互
 
-Change detail 的 document evidence 区域必须仅在 `phase=verify` 时显示“编排验证证据”入口。入口必须打开
+Change detail 的 document evidence 区域 `MUST` 仅在 `phase=verify` 时显示“编排验证证据”入口。入口必须打开
 现有 accessible `Dialog`，清楚说明输出只生成、不执行、不保存、不改变 gate。编辑器必须提供真实空态、
 添加/删除 entry、kind/status、title、command 与 status-specific result/skipReason 控件；当前 Dashboard
 locale 必须显式传给 API。
@@ -140,7 +140,7 @@ error/live feedback 呈现且保留草稿；成功后必须显示只读 Markdown
 
 ### Requirement: 新能力必须保持现有验证治理兼容
 
-该能力不得修改现有 `VerificationResult` 类型/信任判定、verification report 格式、document ledger、
+新能力 `MUST` 保持现有验证治理兼容，不得修改现有 `VerificationResult` 类型/信任判定、verification report 格式、document ledger、
 CAS/原子写、build fingerprint、review receipt 或 phase gate。删除新增 formatter、route、API client 和
 UI 入口必须能完整回滚，不要求 state/schema/data migration，不新增 runtime dependency。
 
