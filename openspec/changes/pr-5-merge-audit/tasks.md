@@ -29,13 +29,13 @@
 
 ## 验证
 
-- [ ] 运行定向测试、前端与全仓构建/测试、适用静态和分发门禁。
-- [ ] 对真实 Tenon Dashboard 执行桌面/移动、明/暗、键盘及受影响状态浏览器验收。
-- [ ] 复核 GitHub CI、mergeability、review threads 与最新 main，产出验证报告。
+- [x] 运行定向测试、前端与全仓构建/测试、适用静态和分发门禁。
+- [x] 对真实 Tenon Dashboard 执行桌面/移动、明/暗、键盘及受影响状态浏览器验收。
+- [x] 复核 GitHub CI、mergeability、review threads 与最新 main，产出验证报告。
 
 ## 交付
 
-- [ ] 应用审计 delta、确认 README/docs 与回滚说明，登记 applied-spec。
+- [x] 应用审计 delta、确认 README/docs 与回滚说明，登记 applied-spec。
 - [ ] 在所有门禁成功后以仓库允许的方法合并 PR #5 并记录 merge SHA。
 
 ## 归档
