@@ -35,3 +35,4 @@
 {"ts":"2026-07-28T07:31:48Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"b6a4b4ac-f106-41ee-b7c4-815b69636d34"}
 {"ts":"2026-07-28T07:40:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T07:57:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
+{"ts":"2026-07-28T08:05:39Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
