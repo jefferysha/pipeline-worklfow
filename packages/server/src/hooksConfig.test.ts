@@ -294,4 +294,29 @@ describe('prompt routing bypass —— 读取、校验与字段互保', () => {
     expect(text).toContain('"prompt_skip_keyword": ""')
     expect(text).not.toContain('promptSkipKeyword')
   })
+
+  it('拒绝 symlink .pipeline，写入不得逃逸到项目外', async () => {
+    const root = await tempRoot()
+    const external = await tempRoot()
+    await symlink(external, join(root, '.pipeline'))
+
+    await expect(writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' }))
+      .rejects.toThrow()
+    expect(existsSync(join(external, 'hooks.json'))).toBe(false)
+  })
+
+  it('预置可预测临时文件 symlink 不得被跟随或改写外部目标', async () => {
+    const root = await tempRoot()
+    const pipeline = join(root, '.pipeline')
+    const external = join(root, 'external.txt')
+    await mkdir(pipeline, { recursive: true })
+    await writeFile(external, 'sentinel\n', 'utf8')
+    for (let sequence = 1; sequence <= 256; sequence += 1) {
+      await symlink(external, join(pipeline, `hooks.json.tmp.${process.pid}.${sequence}`))
+    }
+
+    await writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' })
+    expect(await readFile(external, 'utf8')).toBe('sentinel\n')
+    expect(readHooksConfig(root).promptSkipKeyword).toBe('skip-tenon')
+  })
 })

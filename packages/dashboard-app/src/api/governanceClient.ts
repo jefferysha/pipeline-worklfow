@@ -12,6 +12,7 @@ import {
   decodeNames,
   decodeRoot,
   decodeRouterPreview,
+  isPromptSkipKeyword,
 } from './governanceDecoders'
 import { ApiError, getToken, readJson, throwApiError, wrapNetwork } from './transport'
 
@@ -115,7 +116,7 @@ export async function postPromptRoutingBypass(
   if (!response.ok) await throwApiError(response, '单轮旁路词写回失败')
   const body = await readJson(response)
   if (typeof body !== 'object' || body === null
-    || typeof (body as Record<string, unknown>).prompt_skip_keyword !== 'string') {
+    || !isPromptSkipKeyword((body as Record<string, unknown>).prompt_skip_keyword)) {
     throw new ApiError('单轮旁路词响应形状无效', response.status)
   }
   return (body as { prompt_skip_keyword: string }).prompt_skip_keyword

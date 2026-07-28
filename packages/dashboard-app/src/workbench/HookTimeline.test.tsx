@@ -391,6 +391,10 @@ describe('UserPromptSubmit 单轮旁路词', () => {
       label: 'malformed response',
       response: () => Promise.resolve(new Response(JSON.stringify({ ok: true, prompt_skip_keyword: 42 }), { status: 200 })),
     },
+    {
+      label: 'out-of-contract string response',
+      response: () => Promise.resolve(new Response(JSON.stringify({ ok: true, prompt_skip_keyword: 'bad value' }), { status: 200 })),
+    },
   ])('英文 POST $label 不泄漏中文底层详情', async ({ response }) => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     const baseFetch = global.fetch

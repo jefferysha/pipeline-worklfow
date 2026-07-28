@@ -18,6 +18,11 @@ function isHookEvent(value: unknown): value is WbHookEvent {
     || value === 'PostToolUse'
 }
 
+export function isPromptSkipKeyword(value: unknown): value is string {
+  return typeof value === 'string'
+    && (value === '' || /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(value))
+}
+
 export function decodeRoot(value: unknown): { root: string } | null {
   return isRecord(value) && typeof value.root === 'string' ? { root: value.root } : null
 }
@@ -52,7 +57,7 @@ export function decodeHooksConfig(value: unknown): WbHooksConfig | null {
   const promptSkipKeyword = value.prompt_skip_keyword === undefined
     ? 'no-tenon'
     : value.prompt_skip_keyword
-  if (typeof promptSkipKeyword !== 'string') return null
+  if (!isPromptSkipKeyword(promptSkipKeyword)) return null
   return { hooks, matrix, promptSkipKeyword }
 }
 

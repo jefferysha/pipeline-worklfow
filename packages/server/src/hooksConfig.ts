@@ -5,11 +5,11 @@
  * `{ version: 1, prompt_skip_keyword: "no-tenon", matrix: { "<hook>.<阶段>": false } }`。
  *   · 矩阵**只存禁用项**（值恒为 false）：缺文件 / 缺键 = 启用（缺省全启用，fail-open）——
  *     enable 操作是删键而非写 true，保证 sh 侧判定只需要找一种键形。
- *   · **canonical 落盘契约（sh 侧 grep -F 依赖，勿改）**：JSON.stringify(…, null, 2) 输出
+ *   · **canonical 落盘契约（sh 侧有界快照行匹配依赖，勿改）**：JSON.stringify(…, null, 2) 输出
  *     一键一行 `"<hook>.<阶段>": false`（冒号后恰一空格）。hooks/*.sh 是 PreToolUse/
  *     UserPromptSubmit 等热路径，禁 spawn node/jq（CONTRACT §5.4），只能
- *     `grep -Fq '"<hook>.<阶段>": false'` 定长匹配——格式在设计时就为 bash 可解析服务。
- *   · 手改格式漂移/损坏 JSON：sh 侧 grep 不中 → fail-open 启用；本模块读到损坏 → 空矩阵，
+ *     精确行匹配——格式在设计时就为 Bash 可解析服务。
+ *   · 手改格式漂移/损坏 JSON：sh 侧匹配不中 → fail-open 启用；本模块读到损坏 → 空矩阵，
  *     写时重建。两侧行为都与本配置诞生之前完全一致。
  *
  * 强制常开（决议#2）：gate.sh 交互门与 interactive-skill-gate.sh 安全门不可关——
@@ -17,16 +17,32 @@
  *   confirm-clear（gate 的解封配对，关了会把交互门锁死到 TTL）与 decision-recorder 本轮
  *   同样不开放开关（sh 侧未接线，开了就是「设置不起效」，违反交付门槛②）。
  */
+import { randomUUID } from 'node:crypto'
 import {
-  closeSync,
   constants,
   fstatSync,
+  fsyncSync,
   openSync,
   readSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
 } from 'node:fs'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withLock } from '@tenon/kernel'
+import {
+  assertDirectoryStillTrusted,
+  assertWorkflowRootAnchor,
+  captureWorkflowRootAnchor,
+  childEntry,
+  closeWorkflowRootAnchor,
+  ensureWorkflowProjectCoordinationPath,
+  safeClose,
+  withTrustedDirectoryChain,
+  type OpenDirectory,
+  type WorkflowRoot,
+  type WorkflowRootAnchor,
+} from './workflowTrustedFs.js'
 
 export interface HookMeta {
   id: string
@@ -65,21 +81,27 @@ export interface HooksRuntimeConfig {
   matrix: Record<string, false>
 }
 
-/** O_NOFOLLOW + fstat + fixed-size read：项目可控文件不能借 symlink/FIFO/无限增长阻塞 server。 */
-function readBoundedHooksConfig(root: string): string | null {
+/** O_NONBLOCK + O_NOFOLLOW + same-fd fstat/read：项目可控叶子不能借 FIFO/symlink 阻塞 server。 */
+function readBoundedHooksConfig(root: WorkflowRootAnchor, pipeline: OpenDirectory): string | null {
+  assertDirectoryStillTrusted(pipeline, root)
+  const file = childEntry(pipeline, 'hooks.json')
   let fd: number | undefined
   try {
-    fd = openSync(hooksConfigPath(root), constants.O_RDONLY | constants.O_NOFOLLOW)
+    fd = openSync(
+      file.operation,
+      constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+    )
     const stat = fstatSync(fd)
     if (!stat.isFile() || stat.size > HOOKS_CONFIG_MAX_BYTES) return null
     const buffer = Buffer.alloc(HOOKS_CONFIG_MAX_BYTES + 1)
     const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, 0)
     if (bytesRead > HOOKS_CONFIG_MAX_BYTES) return null
+    assertDirectoryStillTrusted(pipeline, root)
     return buffer.toString('utf8', 0, bytesRead)
   } catch {
     return null
   } finally {
-    if (fd !== undefined) closeSync(fd)
+    if (fd !== undefined) safeClose(fd)
   }
 }
 
@@ -132,9 +154,38 @@ export function hooksConfigPath(root: string): string {
   return join(root, '.pipeline', 'hooks.json')
 }
 
+function acquireHooksRoot(root: WorkflowRoot): { anchor: WorkflowRootAnchor; owned: boolean } {
+  if (typeof root !== 'string') {
+    assertWorkflowRootAnchor(root)
+    return { anchor: root, owned: false }
+  }
+  return { anchor: captureWorkflowRootAnchor(root), owned: true }
+}
+
+function withHooksPipeline<T>(
+  rootInput: WorkflowRoot,
+  create: boolean,
+  onMissing: () => T,
+  use: (root: WorkflowRootAnchor, pipeline: OpenDirectory) => T,
+): T {
+  const { anchor, owned } = acquireHooksRoot(rootInput)
+  try {
+    return withTrustedDirectoryChain(anchor, ['.pipeline'], create, onMissing, (pipeline) => (
+      use(anchor, pipeline)
+    ))
+  } finally {
+    if (owned) closeWorkflowRootAnchor(anchor)
+  }
+}
+
 /** 完整运行时配置。keyword 只认与 Bash 一致的 canonical 文本；matrix 保持既有逐项 fail-open。 */
-export function readHooksConfig(root: string): HooksRuntimeConfig {
-  const text = readBoundedHooksConfig(root)
+export function readHooksConfig(root: WorkflowRoot): HooksRuntimeConfig {
+  const text = withHooksPipeline(
+    root,
+    false,
+    () => null,
+    (anchor, pipeline) => readBoundedHooksConfig(anchor, pipeline),
+  )
   if (text === null) {
     return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
   }
@@ -169,7 +220,7 @@ export function readHooksConfig(root: string): HooksRuntimeConfig {
 }
 
 /** 禁用矩阵（只含 false 项）。缺文件/损坏/形状不对 → 空矩阵（缺省全启用，fail-open）。 */
-export function readHooksMatrix(root: string): Record<string, false> {
+export function readHooksMatrix(root: WorkflowRoot): Record<string, false> {
   return readHooksConfig(root).matrix
 }
 
@@ -227,56 +278,86 @@ export function validatePromptRoutingBypassBody(body: unknown): PromptRoutingByp
   return { ok: true, value: { promptSkipKeyword: keyword } }
 }
 
-let tempSequence = 0
-
-async function writeHooksConfig(root: string, config: HooksRuntimeConfig): Promise<void> {
-  const dir = join(root, '.pipeline')
-  await mkdir(dir, { recursive: true })
-  const file = hooksConfigPath(root)
-  tempSequence += 1
-  const tmp = `${file}.tmp.${process.pid}.${tempSequence}`
+function writeHooksConfig(
+  root: WorkflowRootAnchor,
+  pipeline: OpenDirectory,
+  config: HooksRuntimeConfig,
+): void {
+  assertDirectoryStillTrusted(pipeline, root)
+  const file = childEntry(pipeline, 'hooks.json')
+  const tmp = childEntry(pipeline, `hooks.json.tmp.${process.pid}.${randomUUID()}`)
+  let fd: number | undefined
   try {
-    await writeFile(tmp, `${JSON.stringify({
+    fd = openSync(
+      tmp.operation,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    )
+    writeFileSync(fd, `${JSON.stringify({
       version: 1,
       prompt_skip_keyword: config.promptSkipKeyword,
       matrix: config.matrix,
     }, null, 2)}\n`, 'utf8')
-    await rename(tmp, file)
+    fsyncSync(fd)
+    safeClose(fd)
+    fd = undefined
+    assertDirectoryStillTrusted(pipeline, root)
+    renameSync(tmp.operation, file.operation)
+    assertDirectoryStillTrusted(pipeline, root)
   } catch (error) {
-    await rm(tmp, { force: true }).catch(() => {})
+    if (fd !== undefined) safeClose(fd)
+    try { unlinkSync(tmp.operation) } catch { /* best-effort cleanup of our O_EXCL temp */ }
     throw error
   }
 }
 
-async function withHooksConfigLock(root: string, operation: () => Promise<void>): Promise<void> {
-  const dir = join(root, '.pipeline')
-  await mkdir(dir, { recursive: true })
-  await withLock(dir, operation)
+async function withHooksConfigLock(
+  rootInput: WorkflowRoot,
+  operation: (root: WorkflowRootAnchor) => void,
+): Promise<void> {
+  const { anchor, owned } = acquireHooksRoot(rootInput)
+  try {
+    ensureWorkflowProjectCoordinationPath(anchor)
+    await withLock(join(anchor.path, '.pipeline'), async () => {
+      assertWorkflowRootAnchor(anchor)
+      operation(anchor)
+    })
+  } finally {
+    if (owned) closeWorkflowRootAnchor(anchor)
+  }
 }
 
 /**
  * 真改盘：enabled=false 写入禁用键、enabled=true 删除该键（幂等）。
- * 同目录 tmp+rename 原子写（对齐 workflows.ts::writeWorkflowForApi）；既有文件损坏 →
+ * 信任锚目录内随机 O_EXCL/O_NOFOLLOW tmp+rename 原子写；既有文件损坏 →
  * readHooksMatrix 已 fail-open 成空矩阵，等价于重建。
  */
-export async function writeHookToggle(root: string, toggle: HookToggle): Promise<void> {
-  await withHooksConfigLock(root, async () => {
-    const config = readHooksConfig(root)
-    const key = `${toggle.hook}.${toggle.phase}`
-    if (toggle.enabled) {
-      delete config.matrix[key]
-    } else {
-      config.matrix[key] = false
-    }
-    // canonical 契约：null,2 缩进让矩阵一键一行 `"<hook>.<阶段>": false`——sh 侧 grep -F 的唯一判据。
-    await writeHooksConfig(root, config)
+export async function writeHookToggle(root: WorkflowRoot, toggle: HookToggle): Promise<void> {
+  await withHooksConfigLock(root, (anchor) => {
+    withHooksPipeline(anchor, true, () => {
+      throw new Error('Hook 配置目录创建失败')
+    }, (trustedRoot, pipeline) => {
+      const config = readHooksConfig(trustedRoot)
+      const key = `${toggle.hook}.${toggle.phase}`
+      if (toggle.enabled) {
+        delete config.matrix[key]
+      } else {
+        config.matrix[key] = false
+      }
+      // canonical 契约：null,2 缩进让矩阵一键一行 `"<hook>.<阶段>": false`——sh 侧有界快照的唯一判据。
+      writeHooksConfig(trustedRoot, pipeline, config)
+    })
   })
 }
 
-export async function writePromptRoutingBypass(root: string, value: PromptRoutingBypass): Promise<void> {
-  await withHooksConfigLock(root, async () => {
-    const config = readHooksConfig(root)
-    config.promptSkipKeyword = value.promptSkipKeyword
-    await writeHooksConfig(root, config)
+export async function writePromptRoutingBypass(root: WorkflowRoot, value: PromptRoutingBypass): Promise<void> {
+  await withHooksConfigLock(root, (anchor) => {
+    withHooksPipeline(anchor, true, () => {
+      throw new Error('Hook 配置目录创建失败')
+    }, (trustedRoot, pipeline) => {
+      const config = readHooksConfig(trustedRoot)
+      config.promptSkipKeyword = value.promptSkipKeyword
+      writeHooksConfig(trustedRoot, pipeline, config)
+    })
   })
 }

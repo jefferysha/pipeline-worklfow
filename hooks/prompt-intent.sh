@@ -5,26 +5,13 @@
 # 继续（或点名 change）时，调用方才可把该候选注入为当前任务。这里仅做 shell
 # pattern 判定；用户文本始终保持数据，绝不 eval/source。
 
-pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
-  local root="${1:-}" file line trimmed raw value size keyword='no-tenon'
-  file="$root/.pipeline/hooks.json"
-  [ ! -L "$file" ] && [ -f "$file" ] && [ -r "$file" ] || {
-    printf 'no-tenon'
-    return 0
-  }
-  size="$(stat -f '%z' "$file" 2>/dev/null || true)"
-  case "$size" in ''|*[!0-9]*) size="$(stat -c '%s' "$file" 2>/dev/null || true)" ;; esac
-  case "$size" in
-    ''|*[!0-9]*)
-      printf 'no-tenon'
-      return 0
-      ;;
-  esac
-  [ "$size" -le 4096 ] || {
-    printf 'no-tenon'
-    return 0
-  }
+HOOKS_CONFIG_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/hooks-config.sh"
+[ -r "$HOOKS_CONFIG_HELPER" ] || return 0 2>/dev/null || exit 0
+# shellcheck source=hooks-config.sh
+. "$HOOKS_CONFIG_HELPER"
 
+pipeline_prompt_skip_keyword_from_snapshot() { # stdout=有效 keyword（空表示显式禁用）
+  local line trimmed raw value keyword='no-tenon'
   {
   IFS= read -r line || {
     printf 'no-tenon'
@@ -96,12 +83,21 @@ pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表
     esac
   done
   printf '%s' "$keyword"
-  } < "$file"
+  } <<< "$PIPELINE_HOOKS_CONFIG_SNAPSHOT"
+}
+
+pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
+  pipeline_hooks_config_snapshot "${1:-}" || {
+    printf 'no-tenon'
+    return 0
+  }
+  pipeline_prompt_skip_keyword_from_snapshot
 }
 
 pipeline_prompt_should_skip_routing() { # $1=项目根 $2=prompt；0=只抑制本轮 router/breadcrumb
   local root="${1:-}" prompt="${2:-}" keyword regex matched=1 restore_nocasematch=0
-  keyword="$(pipeline_prompt_skip_keyword "$root")"
+  pipeline_hooks_config_snapshot "$root" || true
+  keyword="$(pipeline_prompt_skip_keyword_from_snapshot)"
   [ -n "$keyword" ] || return 1
   local LC_ALL=C
   regex="(^|[^A-Za-z0-9_-])${keyword}($|[^A-Za-z0-9_-])"

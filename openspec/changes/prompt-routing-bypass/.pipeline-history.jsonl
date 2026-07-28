@@ -111,3 +111,6 @@
 {"ts":"2026-07-28T05:59:04Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
 {"ts":"2026-07-28T05:59:04Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T04:26:00Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
 {"ts":"2026-07-28T05:59:05Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"cc5ecd7f-ae2d-4afc-b03c-5f98e06fd1b8"}
+{"ts":"2026-07-28T07:23:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T07:28:13Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T07:30:58Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

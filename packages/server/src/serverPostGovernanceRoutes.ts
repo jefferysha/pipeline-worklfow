@@ -177,12 +177,10 @@ export async function handlePostGovernanceRoutes(
       if (!root) {
         return sendJson(res, 400, { ok: false, error: 'root 必填' })
       }
-      // 信任锚：同 /api/loops/level、/api/workflows/:name 共用的「两侧规范化再比较」模式。
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        await writeHookToggle(root, validated.value)
+        await writeHookToggle(rootCheck.anchor, validated.value)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -197,11 +195,10 @@ export async function handlePostGovernanceRoutes(
         ? (rawBody as Record<string, unknown>).root as string
         : ''
       if (!root) return sendJson(res, 400, { ok: false, error: 'root 必填' })
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        await writePromptRoutingBypass(root, validated.value)
+        await writePromptRoutingBypass(rootCheck.anchor, validated.value)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

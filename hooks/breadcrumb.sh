@@ -49,16 +49,6 @@ else
 fi
 yget() { pipeline_state_get "$1" "$2"; }
 
-# 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
-# canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
-# 纯 bash 热路径（CONTRACT §5.4：零解释器/外部 JSON 解析器 spawn）：grep -F 定长匹配即可判定；缺文件/缺键/
-# 手改格式漂移/损坏 JSON → 一律 fail-open 到启用（行为与本配置诞生之前完全一致）。
-# gate.sh 交互门与 interactive-skill-gate.sh 安全门强制常开：不读本配置（server 写端点也拒绝这两个 id）。
-hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
-  [ -n "$1" ] && [ -n "$3" ] || return 1
-  grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
-}
-
 # dashboard/CLI 的 `.pipeline-active` 是仓库级恢复候选。只有明确恢复意图才可拿它
 # 注入本轮；否则即使存在 REAL_AGENT_TASK.md 也绝不能泄漏到一条独立新任务。
 ACTIVE_NAME=""
@@ -170,7 +160,7 @@ else
 fi
 
 newest="$RESUME_DIR/.breadcrumb"
-if ! hook_disabled "$PROOT" breadcrumb "$(yget "$RESUME_STATE" phase)" && [ -f "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ ! -L "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ -r "$RESUME_DIR/REAL_AGENT_TASK.md" ]; then
+if ! pipeline_hook_disabled "$PROOT" breadcrumb "$(yget "$RESUME_STATE" phase)" && [ -f "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ ! -L "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ -r "$RESUME_DIR/REAL_AGENT_TASK.md" ]; then
   printf '\n<pipeline-active-task>\nchange: %s\nphase: %s\n用户任务：\n' "$RESUME_NAME" "$(yget "$RESUME_STATE" phase)"
   cat "$RESUME_DIR/REAL_AGENT_TASK.md" 2>/dev/null
   printf '\n</pipeline-active-task>\n'
@@ -181,7 +171,7 @@ fi
 # ── 阶段×hook 开关（v5 T5 / 决议#2）：newest 所属 change 的阶段被配置禁用 → 静默退出 ──
 NEWEST_CHANGE_DIR="$(dirname "$newest")"
 NEWEST_STATE="$(pipeline_state_source "$NEWEST_CHANGE_DIR" || true)"
-hook_disabled "$PROOT" breadcrumb "$(yget "$NEWEST_STATE" phase)" && exit 0
+pipeline_hook_disabled "$PROOT" breadcrumb "$(yget "$NEWEST_STATE" phase)" && exit 0
 
 cat "$newest" 2>/dev/null
 exit 0

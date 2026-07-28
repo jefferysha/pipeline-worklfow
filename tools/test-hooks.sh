@@ -360,6 +360,17 @@ assert_contains "breadcrumb: 词内后缀不触发旁路" "$out" "ONLY-CRUMB"
 printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {}\n}\n' > "$proj/.pipeline/hooks.json"
 out="$(printf '{"prompt":"继续实现当前功能 no-tenon","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_contains "breadcrumb: 空字符串禁用旁路" "$out" "ONLY-CRUMB"
+rm -f "$proj/.pipeline/hooks.json"
+mkfifo "$proj/.pipeline/hooks.json"
+FIFO_BREADCRUMB_RESULT="$(node -e '
+  const { spawnSync } = require("node:child_process")
+  const input = JSON.stringify({ prompt: "继续实现当前功能", cwd: process.argv[2] })
+  const result = spawnSync("bash", [process.argv[1]], { input, encoding: "utf8", timeout: 1000 })
+  process.stdout.write(`${result.error?.code ?? ""}|${result.status ?? ""}|${result.stdout}`)
+' "$BC" "$proj")"
+assert_not_contains "breadcrumb: 完整 hook 遇 FIFO 有界返回" "$FIFO_BREADCRUMB_RESULT" "ETIMEDOUT"
+assert_contains "breadcrumb: FIFO fail-open 后仍输出 breadcrumb" "$FIFO_BREADCRUMB_RESULT" "ONLY-CRUMB"
+rm -f "$proj/.pipeline/hooks.json"
 
 proj="$TMP/bc-none"
 mkdir -p "$proj/openspec/changes/empty-change"
@@ -695,6 +706,30 @@ if command -v node >/dev/null 2>&1; then
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"请处理（SKIP-TENON）这个 React 页面\",\"cwd\":\"$rproj\"}"
   assert_empty "router: custom keyword 大小写不敏感且标点构成边界" "$ROUT"
+  chmod 0444 "$rproj/.pipeline/hooks.json"
+  READONLY_KEYWORD="$(bash -c '. "$1"; pipeline_prompt_skip_keyword "$2"' _ \
+    "$ROOT/hooks/prompt-intent.sh" "$rproj" 2>/dev/null || true)"
+  [ "$READONLY_KEYWORD" = skip-tenon ] \
+    && ok "router: 只读 hooks config 仍读取 custom keyword" \
+    || bad "router: 只读 hooks config 仍读取 custom keyword" "实际 ${READONLY_KEYWORD:-<empty>}"
+  chmod 0644 "$rproj/.pipeline/hooks.json"
+  printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
+  chmod 0444 "$rproj/.pipeline/hooks.json"
+  bash -c '. "$1"; pipeline_prompt_should_skip_routing "$2" "no-tenon 请继续"' _ \
+    "$ROOT/hooks/prompt-intent.sh" "$rproj" >/dev/null 2>&1
+  [ "$?" -eq 1 ] \
+    && ok "router: 只读 hooks config 的空 keyword 仍显式禁用旁路" \
+    || bad "router: 只读 hooks config 的空 keyword 仍显式禁用旁路" "错误回退默认 no-tenon"
+  chmod 0644 "$rproj/.pipeline/hooks.json"
+  printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {\n    "router.build": false\n  }\n}\n' > "$rproj/.pipeline/hooks.json"
+  chmod 0444 "$rproj/.pipeline/hooks.json"
+  bash -c '. "$1"; pipeline_hooks_config_snapshot "$2"; pipeline_hook_disabled "$2" router build' _ \
+    "$ROOT/hooks/prompt-intent.sh" "$rproj" >/dev/null 2>&1
+  [ "$?" -eq 0 ] \
+    && ok "router: 只读 hooks config 仍应用 matrix 禁用项" \
+    || bad "router: 只读 hooks config 仍应用 matrix 禁用项" "matrix 被错误 fail-open"
+  chmod 0644 "$rproj/.pipeline/hooks.json"
+  printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"请处理 foo-skip-tenon 这个 React 页面\",\"cwd\":\"$rproj\"}"
   assert_contains "router: 连字符前缀属于 token 字符，不误旁路" "$ROUT" "<tenon-dispatch>"
   printf '{\n  "version": 1,\n  "nested": {\n    "prompt_skip_keyword": "skip-tenon"\n  },\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
@@ -727,6 +762,25 @@ if command -v node >/dev/null 2>&1; then
   } > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"skip-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
   assert_contains "router: 超过 4096 bytes 的 hooks config 回退默认值" "$ROUT" "<tenon-dispatch>"
+  {
+    printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip'
+    printf '\0'
+    printf '%s' '-tenon",'
+    printf '\n  "matrix": {}\n}\n'
+  } > "$rproj/.pipeline/hooks.json"
+  run_router "{\"prompt\":\"skip-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: 4096 bytes 内含 NUL 的配置回退默认值" "$ROUT" "<tenon-dispatch>"
+  {
+    printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n'
+    dd if=/dev/zero bs=4097 count=1 2>/dev/null
+  } > "$rproj/.pipeline/hooks.json"
+  run_router "{\"prompt\":\"skip-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: NUL 填充的超限配置按磁盘字节数回退默认值" "$ROUT" "<tenon-dispatch>"
+  if grep -Eq '^[[:space:]]*dd bs=4097 count=1 <&9 ' "$ROOT/hooks/hooks-config.sh"; then
+    ok "router: hooks config fd 读取以 4097 bytes 硬限界"
+  else
+    bad "router: hooks config fd 读取以 4097 bytes 硬限界" "缺少同 fd 的 dd hard bound"
+  fi
   rm -f "$rproj/.pipeline/hooks.json"
   mkfifo "$rproj/.pipeline/hooks.json"
   FIFO_RESULT="$(node -e '
@@ -740,6 +794,19 @@ if command -v node >/dev/null 2>&1; then
   [ "$FIFO_RESULT" = "|0|no-tenon" ] \
     && ok "router: FIFO hooks config 有界回退默认值" \
     || bad "router: FIFO hooks config 有界回退默认值" "实际 ${FIFO_RESULT:-<empty>}"
+  FIFO_ROUTER_RESULT="$(node -e '
+    const { spawnSync } = require("node:child_process")
+    const input = JSON.stringify({ prompt: "帮我实现一个 React 响应式页面", cwd: process.argv[4] })
+    const result = spawnSync("bash", [process.argv[1]], {
+      input,
+      encoding: "utf8",
+      timeout: 1000,
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: process.argv[2], TENON_ROUTER_CACHE: process.argv[3] },
+    })
+    process.stdout.write(`${result.error?.code ?? ""}|${result.status ?? ""}|${result.stdout}`)
+  ' "$R" "$ROOT" "$RCACHE" "$rproj")"
+  assert_not_contains "router: 完整 hook 遇 FIFO 有界返回" "$FIFO_ROUTER_RESULT" "ETIMEDOUT"
+  assert_contains "router: FIFO fail-open 后仍继续正常路由" "$FIFO_ROUTER_RESULT" "<tenon-dispatch>"
   rm -f "$rproj/.pipeline/hooks.json"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"

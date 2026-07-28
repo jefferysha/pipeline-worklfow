@@ -2,8 +2,8 @@
  * Hook 配置跨进程锁验收：holder 先持有真实 kernel lock 并更新 matrix；并发 writer
  * 必须等待锁释放，再在锁内重读并更新 keyword。最终两个字段都保留。
  */
-import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -40,6 +40,13 @@ const [root] = process.argv.slice(2)
 process.stdout.write('attempting\\n')
 await writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' })
 process.stdout.write('done\\n')
+`
+
+const READER_SOURCE = `
+import { readHooksConfig } from './hooksConfig.ts'
+
+const [root] = process.argv.slice(2)
+process.stdout.write(JSON.stringify(readHooksConfig(root)) + '\\n')
 `
 
 async function bundle(source: string, dir: string, name: string): Promise<string> {
@@ -96,11 +103,13 @@ describe('Hook config 跨进程 read-modify-rename', () => {
   let scriptDir: string
   let holderScript: string
   let writerScript: string
+  let readerScript: string
 
   beforeAll(async () => {
     scriptDir = await mkdtemp(join(tmpdir(), 'hooks-config-xproc-script-'))
     holderScript = await bundle(HOLDER_SOURCE, scriptDir, 'holder.mjs')
     writerScript = await bundle(WRITER_SOURCE, scriptDir, 'writer.mjs')
+    readerScript = await bundle(READER_SOURCE, scriptDir, 'reader.mjs')
   })
 
   afterAll(async () => {
@@ -128,4 +137,22 @@ describe('Hook config 跨进程 read-modify-rename', () => {
       await rm(root, { recursive: true, force: true })
     }
   }, 60_000)
+
+  test('稳定 FIFO 配置不会阻塞同步读取或 Node 事件循环', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hooks-config-fifo-root-'))
+    try {
+      await writeFile(join(root, '.keep'), '', 'utf8')
+      await mkdir(join(root, '.pipeline'), { recursive: true })
+      execFileSync('mkfifo', [join(root, '.pipeline', 'hooks.json')])
+      const reader = start(readerScript, [root])
+      const completed = await Promise.race([
+        reader.exit.then(() => true),
+        sleep(500).then(() => false),
+      ])
+      if (!completed) reader.child.kill('SIGKILL')
+      expect(completed).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

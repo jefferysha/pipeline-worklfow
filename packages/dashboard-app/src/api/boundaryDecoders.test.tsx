@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodeSessionLinks } from './auditDecoders'
-import { decodeRouterPreview } from './governanceDecoders'
+import { decodeHooksConfig, decodeRouterPreview } from './governanceDecoders'
 import { decodeLoopsSnapshot } from './loopDecoder'
 import { decodeSnapshot } from './snapshotDecoder'
 import { selectProgress } from '../model/progressModel'
@@ -54,6 +54,19 @@ describe('API bounded-context response decoders', () => {
         },
       }],
     }],
+  })
+
+  it('rejects Hook config keyword strings outside the shared empty-or-ASCII-token contract', () => {
+    const base = {
+      hooks: [],
+      matrix: {},
+    }
+    expect(decodeHooksConfig({ ...base, prompt_skip_keyword: '' })?.promptSkipKeyword).toBe('')
+    expect(decodeHooksConfig({ ...base, prompt_skip_keyword: 'skip_Tenon-2' })?.promptSkipKeyword)
+      .toBe('skip_Tenon-2')
+    for (const invalid of ['bad value', '-leading', 'a'.repeat(33), '中文']) {
+      expect(decodeHooksConfig({ ...base, prompt_skip_keyword: invalid })).toBeNull()
+    }
   })
 
   it('rejects a snapshot with a malformed nested todo item', () => {

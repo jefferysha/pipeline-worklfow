@@ -147,27 +147,6 @@
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/prompt-routing-bypass/tasks.md",
-      "sha256": "68e1b2602dd370131f22964bad349804cba975efd447f1b0ce02756e3b20da0d",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T05:59:03Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "68e1b2602dd370131f22964bad349804cba975efd447f1b0ce02756e3b20da0d",
-          "readAt": "2026-07-28T05:59:04Z",
-          "visitId": "[\"d0bb40d2-ad2d-463d-aa5e-a9bbcba83274\",12]"
-        },
-        {
-          "phase": "build",
-          "sha256": "68e1b2602dd370131f22964bad349804cba975efd447f1b0ce02756e3b20da0d",
-          "readAt": "2026-07-28T06:02:33Z",
-          "visitId": "[\"d0bb40d2-ad2d-463d-aa5e-a9bbcba83274\",13]"
-        }
-      ]
-    },
-    {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/2026-07-28-prompt-routing-bypass-design.md",
       "sha256": "1f178a0f5f9f2c9a4072c7bc140a0e281a6566de1f5e5174fdd44cedbb30ed86",
@@ -229,6 +208,21 @@
           "phase": "build",
           "sha256": "42fc92a8af8a3a5073e47e33d0b649b0c423ba642dc6045e1c4ecbc1d229cf2f",
           "readAt": "2026-07-28T06:02:33Z",
+          "visitId": "[\"d0bb40d2-ad2d-463d-aa5e-a9bbcba83274\",13]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/prompt-routing-bypass/tasks.md",
+      "sha256": "332c4a1de47bd665ba1bf54d3a8fb64f9f84068754596908e9817aa55ce807d0",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T07:28:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "332c4a1de47bd665ba1bf54d3a8fb64f9f84068754596908e9817aa55ce807d0",
+          "readAt": "2026-07-28T07:28:13Z",
           "visitId": "[\"d0bb40d2-ad2d-463d-aa5e-a9bbcba83274\",13]"
         }
       ]

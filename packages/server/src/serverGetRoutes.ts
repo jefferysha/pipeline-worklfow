@@ -196,11 +196,10 @@ export async function handleGet(
     //    /api/config、/api/skills/registry：本机回环 GET 不鉴权。
     if (path === '/api/hooks') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        const { matrix, promptSkipKeyword } = readHooksConfig(root)
+        const { matrix, promptSkipKeyword } = readHooksConfig(rootCheck.anchor)
         return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })

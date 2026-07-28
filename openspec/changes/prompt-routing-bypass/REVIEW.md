@@ -93,7 +93,61 @@ Oracle 双跑，均通过。全仓 `npm test` 首轮因资源竞争出现 2 个�
 
 红态证据：server 新增用例分别因 matrix 牵连 keyword、symlink 被跟随而失败；跨进程 writer 在
 holder 释放前即退出；修复后 server 304/304（含 1 个真实跨进程用例）、Dashboard 定向 22/22、
-hooks 498/498、`typecheck:web` 与生产 build 通过。最终全量门禁与浏览器复评在下一轮冻结前登记。
+hooks 498/498、`typecheck:web` 与生产 build 通过。
 
-结论：SHIP。视觉 baseline 不存在，因此像素回归项为 INCONCLUSIVE；功能、响应式、键盘、错误恢复与
-WCAG AA 对比度验收通过。
+## 最新 main 重放后的冻结前复评
+
+- 本轮起点为 `2d103e33`；远端 `main` 在 Build 期间前移到 `15fe619b`，四个本轮提交已干净重放，
+  最终比较边界的 merge-base 精确等于 `origin/main`，没有夹带或回退 Codex auth 安装引导改动。
+- 重放后的全仓 `npm test` 为 317/317 files、5459 pass、5 个缺外部凭据的 honest skip；
+  `npm run test:web` 为 50/50 files、979/979，既有 React `act(...)` / GSAP 警告不属于本切片。
+- server 定向 304/304、Dashboard 定向 22/22、hooks 498/498、adapters 272/272、bundle 31/31；
+  `typecheck:web`、生产 build、identity、repository hygiene、architecture、comments、skills 全通过。
+- Oracle 五个 fixture 双跑 0 处不一致；仅报告既有的 `in-place` isolation 与 PM 自动入队产品扩展。
+- 独立 E2E 在 HEAD 隔离快照重跑 986/986；独立视觉轨在真实 Chromium 覆盖中英文、
+  1440/375、loading/ready/error/invalid/busy/retry/success/disabled、Enter 与 Tab 路径，
+  `scrollWidth=innerWidth=375`，console/pageerror 均为 0。
+
+## 第四次冻结前审查修复
+
+全量 Standards + Spec reviewer 阻断的 3 个 HIGH 与 2 个 MEDIUM 已在 Build 内闭环：
+
+| 严重度 | 问题 | 修复 |
+| --- | --- | --- |
+| HIGH | server 在确认类型前以阻塞模式打开 FIFO | `O_NONBLOCK \| O_NOFOLLOW` 打开后在同一 fd `fstat`；子进程和真 HTTP 用例证明 FIFO 有界回退 |
+| HIGH | router/breadcrumb 的旧矩阵 `grep` 与 keyword pathname 重开仍可被 FIFO/换位阻塞 | 新增共享 Bash 3.2 有界 fd 快照：读写打开避免 FIFO 阻塞、pathname/fd inode 对账、4097-byte 上限；keyword 与 matrix 复用同一快照 |
+| HIGH | 写端点只做词法注册判断，且可预测 tmp 会跟随 symlink | GET/POST 改用 `workflowRootForRequest` inode 锚；拒绝 `.pipeline` symlink；随机 tmp 以 `O_EXCL \| O_NOFOLLOW` 创建并在 trusted parent 内 rename |
+| MEDIUM | GET/POST 客户端只验证响应是 string | 两条响应路径复用 empty-or-ASCII-token validator，非法字符串进入本地化错误态而非假成功 |
+| MEDIUM | tasks ledger 漂移 | 最终候选冻结前须以真实 `tenon-build` producer 重录并生成当前 phase read receipt；未完成前不得声明关闭 |
+
+红态证据：server 2 files 出现 3 个预期失败；完整 breadcrumb/router 分别返回 `ETIMEDOUT`；
+前端 decoder 与 POST 非法字符串各出现 1 个预期失败。修复后 server 309/309、前端定向 36/36、
+hooks 502/502、`typecheck:web` 与生产 build 通过。
+
+冻结前全量重跑为 `npm test` 317/317 files、5464 pass、5 个缺外部凭据的 honest skip；
+`test:web` 50/50 files、981/981；adapters 272/272、bundle 31/31、skills 66/62/0/62，
+identity、repository hygiene、architecture（619 files / 5 size-only exceptions）、comments、
+diff-check 与 Oracle 五 fixture / 0 difference 全通过。
+
+主验收浏览器精确绑定 bfb9 worktree 的 `Tenon Dashboard`，覆盖非法值本地化 alert、Enter 保存、
+保存中禁用、成功恢复 `no-tenon`、英文文案与 375px 布局；移动端
+`scrollWidth = clientWidth = 375`，console 0 error / 0 warning。独立代码、E2E 与视觉轨的最终结论
+将在冻结前复审完成后登记；视觉 baseline 不存在，因此像素回归项保持 INCONCLUSIVE。
+
+## 第五次冻结前审查修复
+
+第四轮复审继续发现 `hooks-config.sh` 在初始 `stat` 后遇可写文件持续增长时，`od` 仍可能无界读取；
+只读超时路径也可能在内层读取未结束时遗留子进程。修复将同一 fd 的读取改为
+`dd bs=4097 count=1 <&9 | od`，再按 hex 字节流计数并拒绝超过 4096 bytes 的输入，同时保留
+读取前后 fd identity/size 对账。由此，FIFO 只可能在创建任何 `dd`/`od` 子进程之前阻塞于
+`exec 9<`；普通文件一旦打开，内层读取即有 4097-byte 硬上限。
+
+新增机制回归固定同 fd 的 `dd` 上限；完整 hooks 重跑 508/508，`bash -n` 与
+`git diff --check` 通过。修复后 `hooks-config.sh` SHA-256 为
+`ee076f438a5c16d1285b5ddd44d1f379c1504595985b39b98469e1267f04307e`。
+独立 Standards + Spec 基于该确切快照复审为 PASS：
+Critical 0 / High 0 / Medium 0 / Low 0；确认持续增长有硬上限，FIFO 超时发生在创建
+`stat`/`dd`/`od` 后代之前，先前 HIGH 已关闭。独立 E2E 在隔离副本复验 hooks 508/508、
+server 309/309、frontend 36/36，共 853/853，Critical / High / Medium / Low 均为 0。
+独立视觉轨复验中英文、1440/375、主要状态与键盘路径为 PASS，Critical / High / Medium / Low
+均为 0；视觉 baseline 不存在，像素回归项继续如实记为 INCONCLUSIVE。
