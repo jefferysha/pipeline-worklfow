@@ -21,7 +21,7 @@
 ### 功能偏差
 
 - 捕获记录加载态绕过 i18n。
-- `max-[720px]` 在 Tailwind v4 中不包含精确 720px，与规范冲突。
+- `max-[720px]` 在 Tailwind v4 中不包含精确 720px，`SolutionView` 的两个 `min-[720px]` 又会在该边界启用桌面网格，与规范冲突。
 - 进度抽屉关闭动画是 ease-in，而规范要求 ease-out。
 - 官方进度页截图仍展示旧视觉语言。
 - 三个 Markdown 文件有 `diff --check` 可见的空白问题。
@@ -32,7 +32,7 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 
 ## 实施方案
 
-1. 为 Tailwind 增加 `mobile` custom variant，使用 `(max-width: 720px)`，并统一替换 Dashboard 源码与测试的旧变体。
+1. 为 Tailwind 增加边界互补的 `mobile` / `desktop` custom variant，并统一替换 Dashboard 源码与测试中 `max-[720px]` / `min-[720px]` 的旧变体。
 2. 为 `TrafficPanel` 加成对的中英文 key，并保持空闲、加载、成功、失败四态可辨。
 3. 将进度抽屉关闭缓动改成 `power1.out` / `power3.out`，在单元测试中锁定。
 4. 修复 Markdown 空白；在真实 Dashboard 的验收状态下刷新进度页 WebP。
@@ -42,7 +42,7 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 
 | 风险 | 自动验证 | 浏览器验证 |
 | --- | --- | --- |
-| 720px 临界点 | 构建 CSS 包含 inclusive media；class 测试使用 `mobile:` | 精确 720px 显示移动 shell |
+| 720px 临界点 | 构建 CSS 的移动/桌面 media 互补；class 测试使用共享 `mobile:` / `desktop:` | 精确 720px 的 shell 和 Overview 内容均为移动布局 |
 | i18n | zh/en key 对称测试与 TrafficPanel 测试 | 切换语言时加载态无硬编码中文 |
 | motion | hook 测试断言 ease-out | 打开/关闭抽屉且 reduced-motion 可用 |
 | 视觉与可访问性 | 主题对比度、组件测试、类型检查 | 桌面/移动、亮/暗、键盘焦点 |

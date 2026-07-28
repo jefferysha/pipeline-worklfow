@@ -23,7 +23,7 @@
 ## 必须修复
 
 1. `TrafficPanel` 新增加载文本是硬编码中文，须增加成对翻译 key 并通过 `useT` 使用。
-2. Tailwind v4 的 `max-[720px]` 编译为排除 `min-width: 720px`，与“≤720px 为移动布局”的既有规范不符。统一引入包含边界的 `mobile` custom variant，并更新源码和相应测试。
+2. Tailwind v4 的 `max-[720px]` 编译为排除 `min-width: 720px`，而 `SolutionView` 的两个 `min-[720px]` 又会在精确 720px 启用桌面网格，与“≤720px 为移动布局”的既有规范不符。统一引入边界互补的 `mobile` / `desktop` custom variant，并更新源码和相应测试。
 3. `useProgressDrawer` 关闭动画使用 `power1.in` / `power3.in`，须改为 ease-out，并增加测试断言。
 4. 官方进度页 WebP 仍展示旧的红绿左侧状态条，须在真实应用验收后刷新。
 5. 三个 Markdown 文件存在尾随空格或文件末空行，须修正以让 `git diff --check` 通过。
@@ -34,7 +34,7 @@
 
 ## 修复决策
 
-- 在 Tailwind 入口声明单一 `mobile` 变体，并机械替换 Dashboard 源码和相关测试中的 `max-[720px]`。这让所有 720px 断点语义一致，避免只修新 shell 后同一页面内部仍存在一像素分裂。
+- 在 Tailwind 入口声明互补的 `mobile` / `desktop` 变体，并机械替换 Dashboard 源码和相关测试中的 `max-[720px]` / `min-[720px]`。这让所有 720px 断点语义一致，避免新 shell 与 Overview 内容在精确边界同时使用两套布局。
 - 只修正审计确认的问题，不新增依赖、不改公共契约、不借机重构。
 - 浏览器验收覆盖 1440px 与精确 720px、亮暗主题、键盘焦点、reduced-motion；截图只从确认属于 Tenon Dashboard 的真实页面生成。
 

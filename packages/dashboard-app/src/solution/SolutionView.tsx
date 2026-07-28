@@ -176,7 +176,7 @@ export function SolutionView(): JSX.Element {
           title={t('solution.sections.evidence_title')}
           description={t('solution.sections.evidence_desc')}
         />
-        <ol className="grid min-w-0 grid-cols-1 gap-4 min-[720px]:grid-cols-5" data-testid="solution-evidence">
+        <ol className="grid min-w-0 grid-cols-1 gap-4 desktop:grid-cols-5" data-testid="solution-evidence">
           {evidenceSteps.map((step, index) => (
             <li key={step} className="rounded-2xl border border-border bg-card p-5">
               <CheckCircle2 className="mb-4 size-5 text-(--accent)" aria-hidden="true" />
@@ -194,7 +194,7 @@ export function SolutionView(): JSX.Element {
           title={t('solution.sections.modules_title')}
           description={t('solution.sections.modules_desc')}
         />
-        <div className="grid min-w-0 grid-cols-1 gap-4 min-[720px]:grid-cols-2 min-[1080px]:grid-cols-3" data-testid="solution-modules">
+        <div className="grid min-w-0 grid-cols-1 gap-4 desktop:grid-cols-2 min-[1080px]:grid-cols-3" data-testid="solution-modules">
           {solutionModules.map((module, index) => {
             const icons = [Terminal, Workflow, LayoutDashboard, PlugZap, Bot, ScanSearch]
             const Icon = icons[index]

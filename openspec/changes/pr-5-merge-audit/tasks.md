@@ -18,7 +18,7 @@
 
 ## 实现
 
-- [x] 增加 inclusive `mobile` variant，统一替换 720px class 并更新临界点测试。
+- [x] 增加互补的 `mobile` / `desktop` variant，统一替换 720px class 并更新临界点测试。
 - [x] 补齐 TrafficPanel i18n，修正抽屉关闭 easing 并增加定向测试。
 - [x] 修复 Markdown 空白并从真实 Dashboard 刷新进度页截图。
 - [x] 提交修复与治理产物，以非强制 push 更新原 PR head。

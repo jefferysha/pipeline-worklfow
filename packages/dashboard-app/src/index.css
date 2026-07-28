@@ -15,6 +15,7 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 /* 与产品规范一致：精确 720px 仍属于移动布局。 */
 @custom-variant mobile (@media (max-width: 720px));
+@custom-variant desktop (@media (min-width: 720.02px));
 
 :root {
   color-scheme: light;

@@ -15,9 +15,9 @@ design-doc: docs/superpowers/specs/2026-07-28-pr-5-merge-audit-design.md
 
 目标是先从样式声明、组件 class、测试到生产 CSS 和真实路由打通最小端到端链路。
 
-1. 在 `packages/dashboard-app/src/index.css` 定义包含 720px 的 `mobile` custom variant。
-2. 将 `packages/dashboard-app/src/**/*.tsx` 及对应测试中的 `max-[720px]:` 统一改为 `mobile:`，避免同页边界分裂。
-3. 更新 `App.test.tsx`、`shell/Nav.test.tsx`、`progress/WorkflowCanvas.test.tsx` 的 class 断言，并增加生产 CSS 临界查询验证。
+1. 在 `packages/dashboard-app/src/index.css` 定义包含 720px 的 `mobile` custom variant，以及只在大于 720px 生效的互补 `desktop` custom variant。
+2. 将 `packages/dashboard-app/src/**/*.tsx` 及对应测试中的 `max-[720px]:` 统一改为 `mobile:`，将 `min-[720px]:` 统一改为 `desktop:`，避免精确 720px 同时命中桌面与移动布局。
+3. 更新 `App.test.tsx`、`shell/Nav.test.tsx`、`progress/WorkflowCanvas.test.tsx`、`solution/SolutionView.test.tsx` 的 class 断言，并增加生产 CSS 临界查询验证。
 4. 运行 Dashboard 定向测试和 `npm run build:web`；确认产物包含 `max-width:720px` 的查询。
 
 验证：
@@ -28,7 +28,7 @@ npm run build:web
 rg -n "max-width:\\s*720px" packages/dashboard-app/dist/assets
 ```
 
-回滚：恢复 custom variant、class 和断言的同一提交块。
+回滚：恢复成对 custom variant、class 和断言的同一提交块。
 
 **此处建议 /clear**
 

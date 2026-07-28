@@ -41,9 +41,14 @@
 | --- | --- | --- | --- |
 | Standards | Medium | 实施计划把翻译表和新增 hook 测试写成了不存在的路径 | 计划改为真实路径 `src/i18n/translations.ts` 与 `useProgressDrawer.test.tsx`；由于计划摘要发生变化，按 `requirements-changed` 回到 Spec，重新登记、读取并取得 exact-event review 后再进入 Build |
 | Spec | Medium | 初版 delta 把单个加载态修复扩大成了所有用户可见状态文案的全局义务 | delta 收窄为“本 Change 新增的捕获记录加载态文案”，再次按 `requirements-changed` 回到 Spec，重新登记 delta、计划和任务并取得 exact-event review |
+| Spec | Medium | 收窄后的 Scenario 仍写成“页面不出现硬编码中文”，与同屏既有中文文案冲突 | Scenario 进一步精确为“该加载态文案”；第三次按 `requirements-changed` 回到 Spec，重登记设计、delta、计划、任务并取得 exact-event review |
+| Spec | Medium | `SolutionView` 两个 `min-[720px]` 在精确 720px 启用桌面网格 | 新增共享 `desktop` variant，替换两个 class 并增加 SolutionView/CSS 契约测试；真实浏览器证明 720px 时 `max-width:720px=true`、`min-width:720.02px=false` 且两个网格均为单列，721px 时条件反转 |
 
-两项修订均只澄清本 Change 的真实实现范围，没有覆盖旧 SHA、改变公共契约或绕过 review gate。
+上述修订均只澄清本 Change 的真实实现范围或兑现既有断点契约，没有覆盖旧 SHA、改变公共契约或绕过 review gate。
 最终合并前审查以修订后的完整 diff 为准。
+
+浏览器复验还发现 Chromium 会把 `720.01px` 量化到与 720px 相同的 media query 槽；实现因此使用
+`720.02px` 的桌面下界，并由源码测试、生产 CSS 和真实 720px / 721px 浏览器结果共同约束。
 
 ## 剩余非阻塞观察
 
