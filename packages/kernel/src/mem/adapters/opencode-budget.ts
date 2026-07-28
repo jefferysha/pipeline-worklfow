@@ -103,6 +103,35 @@ function sessionFieldTruncated(
   return typeof fullBytes === 'number' && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field]
 }
 
+function accountSessionRow(
+  row: Json,
+  f: MemFilter,
+  source: SqliteSourceBudget,
+  budget: MemContentReadBudget,
+): Json | null {
+  const returnedBytes = SQLITE_SESSION_FIXED_BYTES
+    + sessionFieldBytes(row, 'id')
+    + sessionFieldBytes(row, 'directory')
+    + sessionFieldBytes(row, 'title')
+    + sessionFieldBytes(row, 'parent_id')
+  budget.consume(returnedBytes)
+  source.bytesRead += returnedBytes
+  const sessionFields = Object.keys(SQLITE_SESSION_FIELD_LIMITS) as Array<
+    keyof typeof SQLITE_SESSION_FIELD_LIMITS
+  >
+  const truncatedFields = sessionFields.filter((field) => sessionFieldTruncated(row, field))
+  if (truncatedFields.length > 0) {
+    budget.noteSourceTruncated()
+    source.truncated = true
+  }
+  if (truncatedFields.includes('id')) return null
+  if (truncatedFields.includes('parent_id')) row.parent_id = null
+  if (f.cwd && !sameProject(typeof row.directory === 'string' ? row.directory : null, f.cwd)) {
+    return null
+  }
+  return row
+}
+
 function boundedProjectRows(
   db: SqliteDb,
   table: 'project' | 'project_directory',
@@ -247,26 +276,19 @@ export function readBoundedSessionRows(
   }
   const safeRows: Json[] = []
   for (const row of rows) {
-    const returnedBytes = SQLITE_SESSION_FIXED_BYTES
-      + sessionFieldBytes(row, 'id')
-      + sessionFieldBytes(row, 'directory')
-      + sessionFieldBytes(row, 'title')
-      + sessionFieldBytes(row, 'parent_id')
-    budget.consume(returnedBytes)
-    source.bytesRead += returnedBytes
-    const sessionFields = Object.keys(SQLITE_SESSION_FIELD_LIMITS) as Array<
-      keyof typeof SQLITE_SESSION_FIELD_LIMITS
-    >
-    const truncatedFields = sessionFields.filter((field) => sessionFieldTruncated(row, field))
-    if (truncatedFields.length > 0) {
-      budget.noteSourceTruncated()
-      source.truncated = true
-    }
-    if (truncatedFields.includes('id')) continue
-    if (truncatedFields.includes('parent_id')) row.parent_id = null
-    if (!f.cwd || sameProject(typeof row.directory === 'string' ? row.directory : null, f.cwd)) {
-      safeRows.push(row)
-    }
+    const safe = accountSessionRow(row, f, source, budget)
+    if (safe) safeRows.push(safe)
+  }
+  // An index-order prefix cannot truthfully stand in for the most-recent candidate set. Once the
+  // byte-accounted scan cannot cover the whole selected project relation, fail closed with partial
+  // warnings instead of returning an arbitrary subset that merely gets sorted after truncation.
+  if (candidateRowsTruncated) {
+    if (budget.noteDiscoveryTruncated) budget.noteDiscoveryTruncated()
+    else budget.noteSourceTruncated()
+    if (scanCapacity === sourceCapacity && sourceCapacity <= rows.length) budget.noteSourceTruncated()
+    if (scanCapacity === aggregateCapacity && aggregateCapacity <= rows.length) budget.noteTotalExhausted()
+    source.truncated = true
+    return []
   }
   const capped = safeRows
     .sort((left, right) => {
@@ -275,7 +297,7 @@ export function readBoundedSessionRows(
       return String(left.id ?? '').localeCompare(String(right.id ?? ''))
     })
     .slice(0, requestedLimit)
-  if (candidateRowsTruncated || rows.length > requestedLimit) {
+  if (rows.length > requestedLimit) {
     if (budget.noteDiscoveryTruncated) budget.noteDiscoveryTruncated()
     else budget.noteSourceTruncated()
     if (scanCapacity === sourceCapacity && sourceCapacity <= rows.length) budget.noteSourceTruncated()
@@ -283,6 +305,57 @@ export function readBoundedSessionRows(
     source.truncated = true
   }
   return capped
+}
+
+export function readBoundedSessionRowById(
+  fs: MemFs,
+  db: SqliteDb,
+  f: MemFilter,
+  source: SqliteSourceBudget,
+  id: string,
+): Json | null {
+  const budget = fs.contentReadBudget
+  if (!budget) return null
+  const sourceRemaining = Math.max(0, budget.perSourceBytes - source.bytesRead)
+  const aggregateRemaining = Math.max(0, budget.remainingBytes())
+  if (sourceRemaining < SQLITE_SESSION_METADATA_MAX_BYTES) {
+    budget.noteSourceTruncated()
+    source.truncated = true
+    return null
+  }
+  if (aggregateRemaining < SQLITE_SESSION_METADATA_MAX_BYTES) {
+    budget.noteTotalExhausted()
+    source.truncated = true
+    return null
+  }
+  const sql = `
+    SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+           length(CAST(id AS blob)) AS id_full_bytes,
+           CAST(substr(CAST(directory AS blob), 1, ?) AS text) AS directory,
+           length(CAST(directory AS blob)) AS directory_full_bytes,
+           CAST(substr(CAST(title AS blob), 1, ?) AS text) AS title,
+           length(CAST(title AS blob)) AS title_full_bytes,
+           CAST(substr(CAST(parent_id AS blob), 1, ?) AS text) AS parent_id,
+           length(CAST(parent_id AS blob)) AS parent_id_full_bytes,
+           time_created, time_updated
+    FROM session
+    WHERE id = ?
+    LIMIT 1
+  `
+  const params: Array<string | number> = [
+    SQLITE_SESSION_ID_BYTES,
+    SQLITE_SESSION_DIRECTORY_BYTES,
+    SQLITE_SESSION_TITLE_BYTES,
+    SQLITE_SESSION_PARENT_ID_BYTES,
+    id,
+  ]
+  if (!hasBoundedQueryPlan(db, sql, params)) {
+    budget.noteSourceUnavailable('opencode')
+    source.truncated = true
+    return null
+  }
+  const row = db.prepare(sql).get(...params) as Json | undefined
+  return row ? accountSessionRow(row, f, source, budget) : null
 }
 
 const SQLITE_RELATION_ID_BYTES = 512

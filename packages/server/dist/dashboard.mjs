@@ -9807,6 +9807,25 @@ function sessionFieldTruncated(row, field) {
   const fullBytes = row[`${field}_full_bytes`];
   return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field];
 }
+function accountSessionRow(row, f, source, budget) {
+  const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
+  budget.consume(returnedBytes);
+  source.bytesRead += returnedBytes;
+  const sessionFields = Object.keys(SQLITE_SESSION_FIELD_LIMITS);
+  const truncatedFields = sessionFields.filter((field) => sessionFieldTruncated(row, field));
+  if (truncatedFields.length > 0) {
+    budget.noteSourceTruncated();
+    source.truncated = true;
+  }
+  if (truncatedFields.includes("id"))
+    return null;
+  if (truncatedFields.includes("parent_id"))
+    row.parent_id = null;
+  if (f.cwd && !sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
+    return null;
+  }
+  return row;
+}
 function boundedProjectRows(db, table, source, budget) {
   const maximumRowBytes = SQLITE_PROJECT_ID_BYTES + SQLITE_PROJECT_DIRECTORY_BYTES;
   const capacity = Math.min(SQLITE_PROJECT_ROWS, Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / maximumRowBytes), Math.floor(Math.max(0, budget.remainingBytes()) / maximumRowBytes));
@@ -9918,22 +9937,21 @@ function readBoundedSessionRows(fs, db, f, source) {
   }
   const safeRows = [];
   for (const row of rows) {
-    const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
-    budget.consume(returnedBytes);
-    source.bytesRead += returnedBytes;
-    const sessionFields = Object.keys(SQLITE_SESSION_FIELD_LIMITS);
-    const truncatedFields = sessionFields.filter((field) => sessionFieldTruncated(row, field));
-    if (truncatedFields.length > 0) {
+    const safe = accountSessionRow(row, f, source, budget);
+    if (safe)
+      safeRows.push(safe);
+  }
+  if (candidateRowsTruncated) {
+    if (budget.noteDiscoveryTruncated)
+      budget.noteDiscoveryTruncated();
+    else
       budget.noteSourceTruncated();
-      source.truncated = true;
-    }
-    if (truncatedFields.includes("id"))
-      continue;
-    if (truncatedFields.includes("parent_id"))
-      row.parent_id = null;
-    if (!f.cwd || sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
-      safeRows.push(row);
-    }
+    if (scanCapacity === sourceCapacity && sourceCapacity <= rows.length)
+      budget.noteSourceTruncated();
+    if (scanCapacity === aggregateCapacity && aggregateCapacity <= rows.length)
+      budget.noteTotalExhausted();
+    source.truncated = true;
+    return [];
   }
   const capped = safeRows.sort((left, right) => {
     const updated = Number(right.time_updated ?? 0) - Number(left.time_updated ?? 0);
@@ -9941,7 +9959,7 @@ function readBoundedSessionRows(fs, db, f, source) {
       return updated;
     return String(left.id ?? "").localeCompare(String(right.id ?? ""));
   }).slice(0, requestedLimit);
-  if (candidateRowsTruncated || rows.length > requestedLimit) {
+  if (rows.length > requestedLimit) {
     if (budget.noteDiscoveryTruncated)
       budget.noteDiscoveryTruncated();
     else
@@ -9953,6 +9971,51 @@ function readBoundedSessionRows(fs, db, f, source) {
     source.truncated = true;
   }
   return capped;
+}
+function readBoundedSessionRowById(fs, db, f, source, id) {
+  const budget = fs.contentReadBudget;
+  if (!budget)
+    return null;
+  const sourceRemaining = Math.max(0, budget.perSourceBytes - source.bytesRead);
+  const aggregateRemaining = Math.max(0, budget.remainingBytes());
+  if (sourceRemaining < SQLITE_SESSION_METADATA_MAX_BYTES) {
+    budget.noteSourceTruncated();
+    source.truncated = true;
+    return null;
+  }
+  if (aggregateRemaining < SQLITE_SESSION_METADATA_MAX_BYTES) {
+    budget.noteTotalExhausted();
+    source.truncated = true;
+    return null;
+  }
+  const sql = `
+    SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+           length(CAST(id AS blob)) AS id_full_bytes,
+           CAST(substr(CAST(directory AS blob), 1, ?) AS text) AS directory,
+           length(CAST(directory AS blob)) AS directory_full_bytes,
+           CAST(substr(CAST(title AS blob), 1, ?) AS text) AS title,
+           length(CAST(title AS blob)) AS title_full_bytes,
+           CAST(substr(CAST(parent_id AS blob), 1, ?) AS text) AS parent_id,
+           length(CAST(parent_id AS blob)) AS parent_id_full_bytes,
+           time_created, time_updated
+    FROM session
+    WHERE id = ?
+    LIMIT 1
+  `;
+  const params = [
+    SQLITE_SESSION_ID_BYTES,
+    SQLITE_SESSION_DIRECTORY_BYTES,
+    SQLITE_SESSION_TITLE_BYTES,
+    SQLITE_SESSION_PARENT_ID_BYTES,
+    id
+  ];
+  if (!hasBoundedQueryPlan(db, sql, params)) {
+    budget.noteSourceUnavailable("opencode");
+    source.truncated = true;
+    return null;
+  }
+  const row = db.prepare(sql).get(...params);
+  return row ? accountSessionRow(row, f, source, budget) : null;
 }
 var SQLITE_RELATION_ID_BYTES = 512;
 var SQLITE_ROW_DATA_BYTES = 4 * 1024;
@@ -10117,6 +10180,18 @@ function parseJson2(raw) {
 function msToIso(ms) {
   return typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
+function sessionFromRow(row, dbPath) {
+  return {
+    platform: "opencode",
+    id: String(row.id),
+    title: typeof row.title === "string" && row.title ? row.title : null,
+    cwd: typeof row.directory === "string" && row.directory ? row.directory : null,
+    created: msToIso(row.time_created),
+    updated: msToIso(row.time_updated),
+    filePath: dbPath,
+    parent_id: typeof row.parent_id === "string" && row.parent_id ? row.parent_id : null
+  };
+}
 function opencodeListSessions(fs, f) {
   const dbPath = opencodeDbPath(fs);
   return withOpenCodeDb(fs, [], (db) => {
@@ -10130,18 +10205,52 @@ function opencodeListSessions(fs, f) {
       const updated = msToIso(row.time_updated);
       if (!inRangeOverlap(created, updated, f))
         continue;
-      out.push({
-        platform: "opencode",
-        id: String(row.id),
-        title: typeof row.title === "string" && row.title ? row.title : null,
-        cwd,
-        created,
-        updated,
-        filePath: dbPath,
-        parent_id: typeof row.parent_id === "string" && row.parent_id ? row.parent_id : null
-      });
+      out.push(sessionFromRow(row, dbPath));
     }
     return out;
+  });
+}
+function opencodeResolveParentSessions(fs, candidates, f, maxAncestors) {
+  const budget = fs.contentReadBudget;
+  if (!budget || maxAncestors <= 0)
+    return [];
+  const dbPath = opencodeDbPath(fs);
+  return withOpenCodeDb(fs, [], (db) => {
+    const source = sqliteSourceBudget(fs, dbPath);
+    const seen = new Set(candidates.filter((session) => session.platform === "opencode").map((session) => session.id));
+    const queued = /* @__PURE__ */ new Set();
+    const queue = [];
+    const enqueue = (id) => {
+      if (!id || seen.has(id) || queued.has(id))
+        return;
+      queued.add(id);
+      queue.push(id);
+    };
+    for (const session of candidates) {
+      if (session.platform === "opencode")
+        enqueue(session.parent_id);
+    }
+    const ancestors = [];
+    while (queue.length > 0 && ancestors.length < maxAncestors) {
+      const id = queue.shift();
+      if (id === void 0)
+        break;
+      queued.delete(id);
+      if (seen.has(id))
+        continue;
+      seen.add(id);
+      const row = readBoundedSessionRowById(fs, db, f, source, id);
+      if (!row)
+        continue;
+      const ancestor = sessionFromRow(row, dbPath);
+      ancestors.push(ancestor);
+      enqueue(ancestor.parent_id);
+    }
+    if (queue.length > 0) {
+      budget.noteDiscoveryTruncated?.();
+      source.truncated = true;
+    }
+    return ancestors;
   });
 }
 function roleOf(data) {
@@ -11258,11 +11367,13 @@ function buildAbsorbedChildKeys(sessions) {
   }
   return absorbed;
 }
-function searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant) {
-  const children = childIndex.get(sessionKey(s.platform, s.id)) ?? [];
-  if (!children.length)
+function searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys) {
+  const rootKey = sessionKey(s.platform, s.id);
+  const children = (childIndex.get(rootKey) ?? []).filter((child) => searchableKeys?.has(sessionKey(child.platform, child.id)) ?? true);
+  if (!children.length && (searchableKeys?.has(rootKey) ?? true)) {
     return searchSession(fs, s, kw, hostSummariesAsAssistant);
-  const merged = [...extractDialogue(fs, s)];
+  }
+  const merged = searchableKeys?.has(rootKey) ?? true ? [...extractDialogue(fs, s)] : [];
   for (const c of children)
     merged.push(...extractDialogue(fs, c));
   return searchInDialogue(merged, kw, 3, 400, hostSummariesAsAssistant ? { hostSummariesAsAssistant: true } : {});
@@ -11281,20 +11392,31 @@ function searchMemSessions(fs, options) {
   const listedCandidates = listAll(fs, wide);
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit;
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit);
-  const childIndex = includeChildren ? buildChildIndex(candidates) : /* @__PURE__ */ new Map();
-  const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(candidates) : /* @__PURE__ */ new Set();
+  const searchableKeys = new Set(candidates.map((session) => sessionKey(session.platform, session.id)));
+  const supportSessions = includeChildren && candidateLimit !== null ? opencodeResolveParentSessions(fs, candidates, f, candidateLimit) : [];
+  const graphSessions = [...candidates, ...supportSessions];
+  const childIndex = includeChildren ? buildChildIndex(graphSessions) : /* @__PURE__ */ new Map();
+  const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(graphSessions) : /* @__PURE__ */ new Set();
+  const supportRoots = supportSessions.filter((session) => {
+    const key = sessionKey(session.platform, session.id);
+    if (absorbedChildKeys.has(key))
+      return false;
+    return (childIndex.get(key) ?? []).some((child) => searchableKeys.has(sessionKey(child.platform, child.id)));
+  });
+  const searchRoots = [...candidates, ...supportRoots];
   const matches = [];
-  for (const s of candidates) {
+  for (const s of searchRoots) {
     if (absorbedChildKeys.has(sessionKey(s.platform, s.id)))
       continue;
-    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant) : searchSession(fs, s, kw, hostSummariesAsAssistant);
+    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys) : searchSession(fs, s, kw, hostSummariesAsAssistant);
     if (hit.count === 0)
       continue;
+    const descendantsMerged = (childIndex.get(sessionKey(s.platform, s.id)) ?? []).filter((child) => searchableKeys.has(sessionKey(child.platform, child.id))).length;
     matches.push({
       session: s,
       hit,
       score: relevanceScore(hit),
-      descendantsMerged: (childIndex.get(sessionKey(s.platform, s.id)) ?? []).length
+      descendantsMerged
     });
   }
   matches.sort((a, b) => b.score - a.score || b.hit.count - a.hit.count || recencyDesc(a.session, b.session));

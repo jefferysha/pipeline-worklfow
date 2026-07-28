@@ -51,6 +51,7 @@ import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { searchInDialogue } from '../search.js'
 import {
+  readBoundedSessionRowById,
   readBoundedSessionRows,
   readBoundedSqliteRows,
   sqliteSourceBudget,
@@ -130,6 +131,19 @@ function msToIso(ms: unknown): string | null {
   return typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : null
 }
 
+function sessionFromRow(row: Json, dbPath: string): MemSession {
+  return {
+    platform: 'opencode',
+    id: String(row.id),
+    title: typeof row.title === 'string' && row.title ? row.title : null,
+    cwd: typeof row.directory === 'string' && row.directory ? row.directory : null,
+    created: msToIso(row.time_created),
+    updated: msToIso(row.time_updated),
+    filePath: dbPath,
+    parent_id: typeof row.parent_id === 'string' && row.parent_id ? row.parent_id : null,
+  }
+}
+
 export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const dbPath = opencodeDbPath(fs)
   return withOpenCodeDb(fs, [] as MemSession[], (db) => {
@@ -145,18 +159,62 @@ export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       const created = msToIso(row.time_created)
       const updated = msToIso(row.time_updated)
       if (!inRangeOverlap(created, updated, f)) continue
-      out.push({
-        platform: 'opencode',
-        id: String(row.id),
-        title: typeof row.title === 'string' && row.title ? row.title : null,
-        cwd,
-        created,
-        updated,
-        filePath: dbPath,
-        parent_id: typeof row.parent_id === 'string' && row.parent_id ? row.parent_id : null,
-      })
+      out.push(sessionFromRow(row, dbPath))
     }
     return out
+  })
+}
+
+/**
+ * Resolve only the parent metadata needed to build a correct graph around already-admitted recent
+ * candidates. Every lookup uses the session primary key, shares the request byte budget, stays in
+ * project scope, and never makes these older support nodes searchable on their own.
+ */
+export function opencodeResolveParentSessions(
+  fs: MemFs,
+  candidates: readonly MemSession[],
+  f: MemFilter,
+  maxAncestors: number,
+): MemSession[] {
+  const budget = fs.contentReadBudget
+  if (!budget || maxAncestors <= 0) return []
+  const dbPath = opencodeDbPath(fs)
+  return withOpenCodeDb(fs, [] as MemSession[], (db) => {
+    const source = sqliteSourceBudget(fs, dbPath)
+    const seen = new Set(
+      candidates
+        .filter((session) => session.platform === 'opencode')
+        .map((session) => session.id),
+    )
+    const queued = new Set<string>()
+    const queue: string[] = []
+    const enqueue = (id: string | null | undefined): void => {
+      if (!id || seen.has(id) || queued.has(id)) return
+      queued.add(id)
+      queue.push(id)
+    }
+    for (const session of candidates) {
+      if (session.platform === 'opencode') enqueue(session.parent_id)
+    }
+
+    const ancestors: MemSession[] = []
+    while (queue.length > 0 && ancestors.length < maxAncestors) {
+      const id = queue.shift()
+      if (id === undefined) break
+      queued.delete(id)
+      if (seen.has(id)) continue
+      seen.add(id)
+      const row = readBoundedSessionRowById(fs, db, f, source, id)
+      if (!row) continue
+      const ancestor = sessionFromRow(row, dbPath)
+      ancestors.push(ancestor)
+      enqueue(ancestor.parent_id)
+    }
+    if (queue.length > 0) {
+      budget.noteDiscoveryTruncated?.()
+      source.truncated = true
+    }
+    return ancestors
   })
 }
 

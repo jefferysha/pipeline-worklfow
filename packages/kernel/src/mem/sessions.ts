@@ -32,7 +32,12 @@ import {
   codexSearch,
   collectCodexTurnsAndEvents,
 } from './adapters/codex.js'
-import { opencodeExtractDialogue, opencodeListSessions, opencodeSearch } from './adapters/opencode.js'
+import {
+  opencodeExtractDialogue,
+  opencodeListSessions,
+  opencodeResolveParentSessions,
+  opencodeSearch,
+} from './adapters/opencode.js'
 import { collectPiTurnsAndEvents, piExtractDialogue, piListSessions, piSearch } from './adapters/pi.js'
 
 // 内部 wide limit——limit 只 cap 显示；search 召回 + 会话查找须全量扫。
@@ -226,10 +231,15 @@ function searchSessionWithChildren(
   kw: string,
   childIndex: Map<string, MemSession[]>,
   hostSummariesAsAssistant: boolean,
+  searchableKeys?: ReadonlySet<string>,
 ): SearchHit {
-  const children = childIndex.get(sessionKey(s.platform, s.id)) ?? []
-  if (!children.length) return searchSession(fs, s, kw, hostSummariesAsAssistant)
-  const merged = [...extractDialogue(fs, s)]
+  const rootKey = sessionKey(s.platform, s.id)
+  const children = (childIndex.get(rootKey) ?? [])
+    .filter((child) => searchableKeys?.has(sessionKey(child.platform, child.id)) ?? true)
+  if (!children.length && (searchableKeys?.has(rootKey) ?? true)) {
+    return searchSession(fs, s, kw, hostSummariesAsAssistant)
+  }
+  const merged = (searchableKeys?.has(rootKey) ?? true) ? [...extractDialogue(fs, s)] : []
   for (const c of children) merged.push(...extractDialogue(fs, c))
   return searchInDialogue(
     merged,
@@ -348,21 +358,46 @@ export function searchMemSessions(
   const listedCandidates = listAll(fs, wide)
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit)
-  const childIndex = includeChildren ? buildChildIndex(candidates) : new Map<string, MemSession[]>()
-  const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(candidates) : new Set<string>()
+  const searchableKeys = new Set(
+    candidates.map((session) => sessionKey(session.platform, session.id)),
+  )
+  const supportSessions = includeChildren && candidateLimit !== null
+    ? opencodeResolveParentSessions(fs, candidates, f, candidateLimit)
+    : []
+  const graphSessions = [...candidates, ...supportSessions]
+  const childIndex = includeChildren ? buildChildIndex(graphSessions) : new Map<string, MemSession[]>()
+  const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(graphSessions) : new Set<string>()
+  const supportRoots = supportSessions.filter((session) => {
+    const key = sessionKey(session.platform, session.id)
+    if (absorbedChildKeys.has(key)) return false
+    return (childIndex.get(key) ?? []).some((child) => (
+      searchableKeys.has(sessionKey(child.platform, child.id))
+    ))
+  })
+  const searchRoots = [...candidates, ...supportRoots]
 
   const matches: SearchMatch[] = []
-  for (const s of candidates) {
+  for (const s of searchRoots) {
     if (absorbedChildKeys.has(sessionKey(s.platform, s.id))) continue
     const hit = includeChildren
-      ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant)
+      ? searchSessionWithChildren(
+        fs,
+        s,
+        kw,
+        childIndex,
+        hostSummariesAsAssistant,
+        searchableKeys,
+      )
       : searchSession(fs, s, kw, hostSummariesAsAssistant)
     if (hit.count === 0) continue
+    const descendantsMerged = (childIndex.get(sessionKey(s.platform, s.id)) ?? [])
+      .filter((child) => searchableKeys.has(sessionKey(child.platform, child.id)))
+      .length
     matches.push({
       session: s,
       hit,
       score: relevanceScore(hit),
-      descendantsMerged: (childIndex.get(sessionKey(s.platform, s.id)) ?? []).length,
+      descendantsMerged,
     })
   }
   // score 降 > hit.count 降 > recency 降

@@ -443,6 +443,15 @@ describe('OpenCode related search —— SQLite 内容预算 + descendants merge
 
   test('候选按更新时间而非插入 rowid 选取最近 100 个会话', async () => {
     const db = await openFixtureDb(root)
+    for (let index = 0; index < 102; index += 1) {
+      insertSession(db, {
+        id: `ses_inserted_later_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Inserted later ${index}`,
+        created: '2026-07-02T10:00:00Z',
+        updated: '2026-07-02T10:00:00Z',
+      })
+    }
     insertSession(db, {
       id: 'ses_updated_target',
       directory: '/home/u/work/proj',
@@ -463,15 +472,6 @@ describe('OpenCode related search —— SQLite 内容预算 + descendants merge
       created: '2026-07-28T12:00:01Z',
       data: { type: 'text', text: 'recently updated memory needle' },
     })
-    for (let index = 0; index < 102; index += 1) {
-      insertSession(db, {
-        id: `ses_inserted_later_${index}`,
-        directory: '/home/u/work/proj',
-        title: `Inserted later ${index}`,
-        created: '2026-07-02T10:00:00Z',
-        updated: '2026-07-02T10:00:00Z',
-      })
-    }
     db.close()
 
     const result = searchRelatedSessions(fs, {
@@ -483,6 +483,121 @@ describe('OpenCode related search —— SQLite 内容预算 + descendants merge
     expect(result.matches).toEqual([
       expect.objectContaining({ sessionId: 'ses_updated_target' }),
     ])
+  })
+
+  test('候选 relation 超出可核算扫描容量时 fail closed，不返回任意索引前缀', async () => {
+    const db = await openFixtureDb(root)
+    for (let index = 0; index < 200; index += 1) {
+      insertSession(db, {
+        id: `ses_old_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Old ${index}`,
+        created: '2026-07-01T10:00:00Z',
+        updated: '2026-07-01T10:00:00Z',
+      })
+    }
+    insertSession(db, {
+      id: 'ses_newest_outside_prefix',
+      directory: '/home/u/work/proj',
+      title: 'Newest outside prefix',
+      created: '2026-07-01T10:00:00Z',
+      updated: '2026-07-28T12:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_newest_outside_prefix',
+      sessionId: 'ses_newest_outside_prefix',
+      created: '2026-07-28T12:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_newest_outside_prefix',
+      messageId: 'msg_newest_outside_prefix',
+      sessionId: 'ses_newest_outside_prefix',
+      created: '2026-07-28T12:00:01Z',
+      data: { type: 'text', text: 'newest memory needle' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory needle',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code))
+      .toContain('candidate-discovery-truncated')
+  })
+
+  test('最近 child 的较老 parent 作为有界图支撑节点返回，旧 parent 内容不额外入选', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_old_parent',
+      directory: '/home/u/work/proj',
+      title: 'Old parent',
+      created: '2026-06-01T10:00:00Z',
+      updated: '2026-06-01T10:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_old_parent',
+      sessionId: 'ses_old_parent',
+      created: '2026-06-01T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_old_parent',
+      messageId: 'msg_old_parent',
+      sessionId: 'ses_old_parent',
+      created: '2026-06-01T10:00:01Z',
+      data: { type: 'text', text: 'old parent private phrase' },
+    })
+    for (let index = 0; index < 100; index += 1) {
+      insertSession(db, {
+        id: `ses_recent_filler_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Recent filler ${index}`,
+        created: '2026-07-20T10:00:00Z',
+        updated: `2026-07-20T10:${String(index % 60).padStart(2, '0')}:00Z`,
+      })
+    }
+    insertSession(db, {
+      id: 'ses_recent_child',
+      directory: '/home/u/work/proj',
+      title: 'Recent child',
+      parentId: 'ses_old_parent',
+      created: '2026-07-28T12:00:00Z',
+      updated: '2026-07-28T12:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_recent_child',
+      sessionId: 'ses_recent_child',
+      created: '2026-07-28T12:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_recent_child',
+      messageId: 'msg_recent_child',
+      sessionId: 'ses_recent_child',
+      created: '2026-07-28T12:00:01Z',
+      data: { type: 'text', text: 'recent child memory needle' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory needle',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        sessionId: 'ses_old_parent',
+        excerpt: 'recent child memory needle',
+        descendantsMerged: 1,
+      }),
+    ])
+    expect(result.matches[0]?.excerpt).not.toContain('old parent private phrase')
   })
 
   test('child user 命中合并到 parent，安全 DTO 只返回一个 parent 结果', async () => {
