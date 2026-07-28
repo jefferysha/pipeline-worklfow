@@ -210,6 +210,9 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
     ? [
         ...operationSteps,
         { id: 'managed-runtime' },
+        ...(host.id === 'codex'
+          ? [{ id: 'codex-auth-status', executable: 'codex', args: ['login', 'status'] }]
+          : []),
         ...(operation === 'setup' ? SETUP_ONLY_PRODUCT_STEP_IDS.map((id) => ({ id })) : []),
       ]
     : operationSteps
@@ -259,8 +262,10 @@ export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {
     }
   }
 
-  const expectedNotices = host.kind === 'native'
-    ? BASE_NOTICES
+  const expectedNotices = host.id === 'codex'
+    ? [...BASE_NOTICES, 'host-plan.notice.codex-auth-guidance']
+    : host.kind === 'native'
+      ? BASE_NOTICES
     : [...BASE_NOTICES, 'host-plan.notice.project-placeholder']
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {

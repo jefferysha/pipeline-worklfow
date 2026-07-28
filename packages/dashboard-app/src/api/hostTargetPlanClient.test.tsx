@@ -74,6 +74,13 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
         command: nativeCommands[index],
       })),
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      ...(host === 'codex'
+        ? [{
+            id: 'codex-auth-status',
+            label: 'host-plan.step.codex-auth-status',
+            command: command('codex', ['login', 'status']),
+          }]
+        : []),
       ...(operation === 'setup'
         ? [
             { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
@@ -84,6 +91,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
     ],
   }
 }
@@ -175,10 +183,17 @@ describe('host target plan read-only client', () => {
           'plugin-install',
           'plugin-inventory',
           'managed-runtime',
+          ...(host === 'codex' ? ['codex-auth-status'] : []),
           'bundled-skills',
           'runtime-readiness',
         ]
-      : ['marketplace-refresh', 'plugin-update', 'plugin-inventory', 'managed-runtime'])
+      : [
+          'marketplace-refresh',
+          'plugin-update',
+          'plugin-inventory',
+          'managed-runtime',
+          ...(host === 'codex' ? ['codex-auth-status'] : []),
+        ])
   })
 
   it.each(['setup', 'update'] as const)(

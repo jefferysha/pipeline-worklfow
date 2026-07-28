@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FIELD_ORDER, PREREQ_HINTS, REVIEW_GATE_FIELDS } from './types.js'
+import {
+  CODEX_AUTH_GUIDANCE,
+  codexHomeCredentialLight,
+  FIELD_ORDER,
+  PREREQ_HINTS,
+  REVIEW_GATE_FIELDS,
+} from './types.js'
 import { emptyFields } from './state/parse.js'
 
 describe('workflow 字段', () => {
@@ -58,10 +64,52 @@ describe('PREREQ_HINTS —— 前置条件「怎么获取」单一真相源（fu
     expect(PREREQ_HINTS.openaiKey).toContain('platform.openai.com/api-keys')
     expect(PREREQ_HINTS.openaiKey).toContain('OPENAI_API_KEY')
   })
+  it('Codex 认证引导覆盖订阅、无头、API key stdin、计费与状态验证且不包含秘密示例', () => {
+    expect(CODEX_AUTH_GUIDANCE.chatgpt).toContain('codex login')
+    expect(CODEX_AUTH_GUIDANCE.chatgpt).toContain('方案包含 Codex')
+    expect(CODEX_AUTH_GUIDANCE.device).toContain('codex login --device-auth')
+    expect(CODEX_AUTH_GUIDANCE.apiKey).toContain('https://platform.openai.com/api-keys')
+    expect(CODEX_AUTH_GUIDANCE.apiKey).toContain('printenv OPENAI_API_KEY | codex login --with-api-key')
+    expect(CODEX_AUTH_GUIDANCE.apiKey).toContain('按用量计费')
+    expect(CODEX_AUTH_GUIDANCE.verify).toContain('codex login status')
+    expect(JSON.stringify(CODEX_AUTH_GUIDANCE)).not.toMatch(/sk-[A-Za-z0-9]/)
+  })
   it('docker 引导装 OrbStack / Docker Desktop 且明示不自动装', () => {
     expect(PREREQ_HINTS.docker).toContain('OrbStack')
     expect(PREREQ_HINTS.docker).toContain('orbstack.dev')
     expect(PREREQ_HINTS.docker).toContain('Docker Desktop')
     expect(PREREQ_HINTS.docker).toContain('不自动装')
+  })
+})
+
+describe('codexHomeCredentialLight —— CODEX_HOME 认证存在性单一判定', () => {
+  it('显式 CODEX_HOME 可读时标记 host-env', () => {
+    expect(codexHomeCredentialLight('/explicit', '/default', (home) => home === '/explicit')).toEqual({
+      set: true,
+      source: 'host-env',
+    })
+  })
+
+  it('显式 CODEX_HOME 不可读时不回退默认目录', () => {
+    const visited: string[] = []
+    expect(codexHomeCredentialLight('/broken', '/default', (home) => {
+      visited.push(home)
+      return home === '/default'
+    })).toEqual({ set: false })
+    expect(visited).toEqual(['/broken'])
+  })
+
+  it('未显式配置时使用可读的默认 CODEX_HOME', () => {
+    expect(codexHomeCredentialLight(undefined, '/default', (home) => home === '/default')).toEqual({
+      set: true,
+      source: 'default-home',
+    })
+  })
+
+  it('空串显式配置视同缺席并允许默认目录', () => {
+    expect(codexHomeCredentialLight('', '/default', (home) => home === '/default')).toEqual({
+      set: true,
+      source: 'default-home',
+    })
   })
 })

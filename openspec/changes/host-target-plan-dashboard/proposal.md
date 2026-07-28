@@ -10,6 +10,7 @@ Explore 已确认：当前 `TENON_HOSTS` 是 setup/update 共用白名单，nati
 
 - 新增“宿主目标计划中心”，把现有宿主 setup/update 选项投影为稳定、可校验的只读计划。
 - 新增 `host-target-plan/v1` CLI JSON 契约及严格只读 Dashboard API。
+- Codex 的 setup/update 计划包含真实流程中的只读登录状态检查与认证引导；Claude 和 adapter 保持各自现有编排。
 - Dashboard 支持选择宿主与操作，并展示加载、空态、错误态、命令和步骤预览。
 - 用户可见文本提供中英文。
 - P1 只接受已注册 `TENON_HOSTS`，不接受 custom target、任意路径或 `.foo`。

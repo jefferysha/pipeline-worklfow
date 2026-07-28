@@ -489,6 +489,30 @@ var PHASES = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
 var DOCUMENT_LOCALES = ["zh-CN", "en"];
 var GATE_FRESH_MS = 15 * 60 * 1e3;
 var SANDCASTLE_BUILD_HINT = "bash tools/sandcastle/build.sh";
+function codexHomeCredentialLight(explicitCodexHome, defaultCodexHome, hasReadableAuth) {
+  if (explicitCodexHome !== void 0 && explicitCodexHome !== "") {
+    return hasReadableAuth(explicitCodexHome) ? { set: true, source: "host-env" } : { set: false };
+  }
+  if (defaultCodexHome && hasReadableAuth(defaultCodexHome)) {
+    return { set: true, source: "default-home" };
+  }
+  return { set: false };
+}
+var CODEX_AUTH_GUIDANCE = {
+  cli: "\u5B89\u88C5\u6216\u66F4\u65B0\u5B98\u65B9 Codex CLI\uFF1A`npm install -g @openai/codex`\uFF1B\u9A8C\u8BC1\uFF1A`codex --version`",
+  chatgpt: "ChatGPT \u8BA2\u9605\uFF1A\u5982\u679C\u4F60\u7684\u65B9\u6848\u5305\u542B Codex\uFF0C\u8FD0\u884C `codex login`\uFF08\u65E0\u9700\u53E6\u8BBE API Key\uFF09",
+  device: "\u8FDC\u7A0B\u6216\u65E0\u6D4F\u89C8\u5668\u73AF\u5883\uFF1A\u8FD0\u884C `codex login --device-auth`",
+  apiKey: "Platform API Key\uFF1A\u5728 https://platform.openai.com/api-keys \u521B\u5EFA\u540E\uFF0C\u8FD0\u884C `printenv OPENAI_API_KEY | codex login --with-api-key`\uFF08Platform \u6309\u7528\u91CF\u8BA1\u8D39\uFF09",
+  verify: "\u9A8C\u8BC1\u8BA4\u8BC1\u72B6\u6001\uFF1A`codex login status`"
+};
+var PREREQ_HINTS = {
+  /** claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 缺 —— 生成长期 OAuth token。 */
+  claudeToken: "\u8FD0\u884C `claude setup-token` \u751F\u6210\u957F\u671F OAuth token",
+  /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
+  openaiKey: `${CODEX_AUTH_GUIDANCE.chatgpt}\uFF1B${CODEX_AUTH_GUIDANCE.apiKey}\uFF1B${CODEX_AUTH_GUIDANCE.verify}`,
+  /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
+  docker: "\u88C5 OrbStack\uFF08orbstack.dev\uFF0C\u8F7B\u91CF\uFF0C\u63A8\u8350 macOS\uFF09\u6216 Docker Desktop\uFF08docker.com\uFF09\u2014\u2014\u4E0D\u81EA\u52A8\u88C5\uFF0C\u9700\u4F60\u81EA\u884C\u5B89\u88C5"
+};
 var IllegalTransitionError = class extends Error {
   from;
   to;
@@ -13468,17 +13492,17 @@ function isRejection(x) {
 function fieldStr4(v) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
-async function planDefaultTransition(state, command2, flow, clock, effectivePlan) {
-  const edge = eventEdge(command2.event);
+async function planDefaultTransition(state, command, flow, clock, effectivePlan) {
+  const edge = eventEdge(command.event);
   if (!edge)
-    return { kind: "unknown-event", event: command2.event };
+    return { kind: "unknown-event", event: command.event };
   const current = fieldStr4(state.fields.phase);
   if (current !== edge.from) {
-    return { kind: "event-source-mismatch", event: command2.event, current, expected: edge.from, to: edge.to };
+    return { kind: "event-source-mismatch", event: command.event, current, expected: edge.from, to: edge.to };
   }
-  const event = command2.event;
+  const event = command.event;
   const policy = DEFAULT_EVENT_POLICY[event];
-  const violations = await checkDefaultEventPreconditions(event, state, command2.context);
+  const violations = await checkDefaultEventPreconditions(event, state, command.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
   let result;
@@ -13495,8 +13519,8 @@ async function planDefaultTransition(state, command2, flow, clock, effectivePlan
     const outcome = await applyActions(policy.actions, {
       fields: result.state.fields,
       clock,
-      gitHeadSha: command2.context.gitHeadSha,
-      workspaceFingerprint: command2.context.workspaceFingerprint
+      gitHeadSha: command.context.gitHeadSha,
+      workspaceFingerprint: command.context.workspaceFingerprint
     });
     nextFields = { ...result.state.fields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -13512,11 +13536,11 @@ async function planDefaultTransition(state, command2, flow, clock, effectivePlan
     warnings
   };
 }
-async function planCustomTransition(state, effectivePlan, command2, clock) {
+async function planCustomTransition(state, effectivePlan, command, clock) {
   const ir = effectivePlan.workflow;
   const workflowName = effectivePlan.id;
   const currentBeforePlan = resolveStep(ir, fieldStr4(state.fields.phase));
-  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command2.event === "archived";
+  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command.event === "archived";
   const planningIr = terminalArchive ? {
     ...ir,
     steps: ir.steps.map((step) => step.id === "archive" ? {
@@ -13529,16 +13553,16 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
       }]
     } : step)
   } : ir;
-  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command2.event);
+  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
   const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
-  const plan = await planStepTransition(planningIr, state, command2.event, {
-    changeDirAbs: command2.changeDir,
-    fileExists: command2.context.fileExists,
-    gitHeadSha: command2.context.gitHeadSha,
-    workspaceFingerprint: command2.context.workspaceFingerprint,
-    specMigrationStatus: command2.context.specMigrationStatus
+  const plan = await planStepTransition(planningIr, state, command.event, {
+    changeDirAbs: command.changeDir,
+    fileExists: command.context.fileExists,
+    gitHeadSha: command.context.gitHeadSha,
+    workspaceFingerprint: command.context.workspaceFingerprint,
+    specMigrationStatus: command.context.specMigrationStatus
   }, lifecycle?.guards);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
@@ -13548,7 +13572,7 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
         kind: "event-unsupported",
         workflowName,
         stepId: plan.stepId,
-        event: command2.event,
+        event: command.event,
         available: plan.available
       };
     }
@@ -13566,8 +13590,8 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
       clock,
-      gitHeadSha: command2.context.gitHeadSha,
-      workspaceFingerprint: command2.context.workspaceFingerprint
+      gitHeadSha: command.context.gitHeadSha,
+      workspaceFingerprint: command.context.workspaceFingerprint
     });
     nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -13585,8 +13609,8 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
 }
 function createTransitionApplication(deps) {
   return {
-    async execute(command2) {
-      return deps.runRepository.transact(command2.changeDir, async (tx) => {
+    async execute(command) {
+      return deps.runRepository.transact(command.changeDir, async (tx) => {
         const workflowName = tx.run.workflowId;
         let effectivePlan;
         try {
@@ -13596,7 +13620,7 @@ function createTransitionApplication(deps) {
             documentProfile: tx.run.documentProfile,
             documentGovernanceFingerprint: tx.run.documentGovernanceFingerprint,
             workflowPlanFingerprint: tx.run.workflowPlanFingerprint
-          }, command2.loadWorkflow, track, tx.run.workflowPlanSnapshot);
+          }, command.loadWorkflow, track, tx.run.workflowPlanSnapshot);
         } catch (error) {
           if (error instanceof DocumentGovernanceBindingError) {
             return { kind: "document-governance-invalid", workflowName, reason: error.message };
@@ -13607,15 +13631,15 @@ function createTransitionApplication(deps) {
           return { kind: "workflow-not-found", workflowName };
         let prepared;
         if (effectivePlan.capabilities.execution.model === "phase-manifest") {
-          prepared = await planDefaultTransition(tx.state, command2, deps.flow, deps.clock, effectivePlan);
+          prepared = await planDefaultTransition(tx.state, command, deps.flow, deps.clock, effectivePlan);
         } else {
-          prepared = await planCustomTransition(tx.state, effectivePlan, command2, deps.clock);
+          prepared = await planCustomTransition(tx.state, effectivePlan, command, deps.clock);
         }
         if (isRejection(prepared))
           return prepared;
         if (deps.missingStepSkills !== void 0) {
           const missing3 = await deps.missingStepSkills({
-            changeDir: command2.changeDir,
+            changeDir: command.changeDir,
             stepId: prepared.from,
             capability: effectivePlan.capabilities.skills
           });
@@ -13630,7 +13654,7 @@ function createTransitionApplication(deps) {
         }
         const policy = tx.run.automationPolicy;
         if (policy !== void 0) {
-          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command: command2, target: prepared.to });
+          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command, target: prepared.to });
           const decision = evaluateConstraintPolicy(policy.constraints, {
             operation: "transition",
             active: facts.active,
@@ -13658,19 +13682,19 @@ function createTransitionApplication(deps) {
                 blockers: [`legacy document contract \u4F7F\u7528\u4E86\u975E\u6CD5 phase '${prepared.from}'`]
               };
             }
-            evidence = await deps.documentEvidence(command2.root, command2.changeDir, prepared.from);
+            evidence = await deps.documentEvidence(command.root, command.changeDir, prepared.from);
           } else {
-            evidence = await evaluateDocumentEvidence(command2.root, command2.changeDir, prepared.from, {}, prepared.documentPolicy);
+            evidence = await evaluateDocumentEvidence(command.root, command.changeDir, prepared.from, {}, prepared.documentPolicy);
           }
           if (!evidence.pass) {
             return { kind: "document-evidence-failed", phase: prepared.from, blockers: evidence.blockers };
           }
         }
-        if (prepared.requiresReviewApproval && command2.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command2.event)) {
-          return { kind: "review-approval-required", phase: prepared.from, event: command2.event };
+        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
+          return { kind: "review-approval-required", phase: prepared.from, event: command.event };
         }
         const { record: record2, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
-          event: command2.event,
+          event: command.event,
           from: prepared.from,
           to: prepared.to
         });
@@ -13683,14 +13707,14 @@ function createTransitionApplication(deps) {
           });
         }
         if (prepared.governedDocumentContract) {
-          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command2.changeDir, name: command2.changeName, to: prepared.to });
+          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: prepared.to });
           if (!breadcrumbTail.ok) {
             warnings.push({ kind: "projection-write-failed", projection: "breadcrumb", cause: breadcrumbTail.error });
           }
         }
         if (deps.history) {
           try {
-            await deps.history.append(command2.changeDir, transitionRecordToHistoryEntry(record2));
+            await deps.history.append(command.changeDir, transitionRecordToHistoryEntry(record2));
           } catch (e) {
             warnings.push({ kind: "projection-write-failed", projection: "history", cause: e });
           }
@@ -15898,7 +15922,7 @@ import { dirname as dirname9, join as join42 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
-import { accessSync, constants as fsConstants } from "node:fs";
+import { accessSync, constants as fsConstants, statSync as statSync2 } from "node:fs";
 import { join as join31 } from "node:path";
 
 // packages/server/src/dockerImages.ts
@@ -15947,17 +15971,12 @@ function credLight(key, hostEnv, fileKeys) {
 }
 function canReadFile(path7) {
   try {
+    if (!statSync2(path7).isFile()) return false;
     accessSync(path7, fsConstants.R_OK);
     return true;
   } catch {
     return false;
   }
-}
-function codexHomeLight(hostEnv, defaultCodexHome, canRead = canReadFile) {
-  const v = hostEnv.CODEX_HOME;
-  if (v !== void 0 && v !== "") return { set: true, source: "host-env" };
-  if (defaultCodexHome && canRead(join31(defaultCodexHome, "auth.json"))) return { set: true, source: "default-home" };
-  return { set: false };
 }
 async function buildAfkReadiness(opts) {
   const hostEnv = opts.hostEnv ?? process.env;
@@ -15977,7 +15996,11 @@ async function buildAfkReadiness(opts) {
       "claude-code": { CLAUDE_CODE_OAUTH_TOKEN: credLight("CLAUDE_CODE_OAUTH_TOKEN", hostEnv, fileKeys) },
       codex: {
         OPENAI_API_KEY: credLight("OPENAI_API_KEY", hostEnv, fileKeys),
-        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile)
+        CODEX_HOME: codexHomeCredentialLight(
+          hostEnv.CODEX_HOME,
+          opts.defaultCodexHome,
+          (home) => (opts.canReadFile ?? canReadFile)(join31(home, "auth.json"))
+        )
       }
     }
   };
@@ -16587,7 +16610,7 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync2 } from "node:fs";
+import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync3 } from "node:fs";
 import { delimiter, dirname as dirname8, join as join35 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
@@ -16657,7 +16680,7 @@ function skillDirsIn(dir) {
     return readdirSync8(dir).filter((name) => {
       const p = join35(dir, name);
       try {
-        return statSync2(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
+        return statSync3(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
       } catch {
         return false;
       }
@@ -16671,7 +16694,7 @@ function childDirsIn(dir) {
   try {
     return readdirSync8(dir).filter((name) => {
       try {
-        return statSync2(join35(dir, name)).isDirectory();
+        return statSync3(join35(dir, name)).isDirectory();
       } catch {
         return false;
       }
@@ -16831,11 +16854,11 @@ import { lstat as lstat14, readFile as readFile18, readdir as readdir4, stat as 
 import { join as join37, resolve as resolve11 } from "node:path";
 
 // packages/server/src/projectCapabilities.ts
-import { statSync as statSync3 } from "node:fs";
+import { statSync as statSync4 } from "node:fs";
 import { join as join36 } from "node:path";
 function projectFileExists(root, repoRelativePath) {
   try {
-    return statSync3(join36(root, repoRelativePath)).isFile();
+    return statSync4(join36(root, repoRelativePath)).isFile();
   } catch {
     return false;
   }
@@ -17981,12 +18004,14 @@ var STEP_IDS = [
   "package-assets",
   "adapter-deploy",
   "managed-runtime",
+  "codex-auth-status",
   "bundled-skills",
   "runtime-readiness"
 ];
 var NOTICE_IDS = [
   "host-plan.notice.read-only-generation",
   "host-plan.notice.manual-command-has-effects",
+  "host-plan.notice.codex-auth-guidance",
   "host-plan.notice.project-placeholder"
 ];
 function isRecord5(value) {
@@ -18014,29 +18039,29 @@ function decodeCommand(value) {
   if (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string") || value.display !== [value.executable, ...value.args].join(" ")) return null;
   return { executable: value.executable, args: value.args, display: value.display };
 }
-function command(executable, args) {
+function planCommand(executable, args) {
   return { executable, args, display: [executable, ...args].join(" ") };
 }
 function nativeCommandTruth(host, operation) {
   if (host === "codex") {
     return operation === "setup" ? [
-      command("codex", ["plugin", "marketplace", "add", "jefferysha/tenon", "--ref", "main"]),
-      command("codex", ["plugin", "add", "tenon@tenon", "--json"]),
-      command("codex", ["plugin", "list", "--json"])
+      planCommand("codex", ["plugin", "marketplace", "add", "jefferysha/tenon", "--ref", "main"]),
+      planCommand("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      planCommand("codex", ["plugin", "list", "--json"])
     ] : [
-      command("codex", ["plugin", "marketplace", "upgrade", "tenon", "--json"]),
-      command("codex", ["plugin", "add", "tenon@tenon", "--json"]),
-      command("codex", ["plugin", "list", "--json"])
+      planCommand("codex", ["plugin", "marketplace", "upgrade", "tenon", "--json"]),
+      planCommand("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      planCommand("codex", ["plugin", "list", "--json"])
     ];
   }
   return operation === "setup" ? [
-    command("claude", ["plugin", "marketplace", "add", "jefferysha/tenon"]),
-    command("claude", ["plugin", "install", "tenon@tenon"]),
-    command("claude", ["plugin", "list", "--json"])
+    planCommand("claude", ["plugin", "marketplace", "add", "jefferysha/tenon"]),
+    planCommand("claude", ["plugin", "install", "tenon@tenon"]),
+    planCommand("claude", ["plugin", "list", "--json"])
   ] : [
-    command("claude", ["plugin", "marketplace", "update", "tenon"]),
-    command("claude", ["plugin", "update", "tenon@tenon"]),
-    command("claude", ["plugin", "list", "--json"])
+    planCommand("claude", ["plugin", "marketplace", "update", "tenon"]),
+    planCommand("claude", ["plugin", "update", "tenon@tenon"]),
+    planCommand("claude", ["plugin", "list", "--json"])
   ];
 }
 function commandsEqual(actual, expected) {
@@ -18083,9 +18108,9 @@ function decodeHostTargetCatalog(value) {
 function decodePlanStep(value) {
   if (!isRecord5(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
   if (typeof value.id !== "string" || !STEP_IDS.includes(value.id) || value.label !== `host-plan.step.${value.id}`) return null;
-  const command2 = value.command === null ? null : decodeCommand(value.command);
-  if (value.command !== null && command2 === null) return null;
-  return { id: value.id, label: value.label, command: command2 };
+  const command = value.command === null ? null : decodeCommand(value.command);
+  if (value.command !== null && command === null) return null;
+  return { id: value.id, label: value.label, command };
 }
 function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
   if (!isRecord5(value) || !hasExactKeys(value, [
@@ -18098,11 +18123,11 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     "notices"
   ]) || value.schema_version !== "host-target-plan/v1" || value.side_effects !== "none" || value.operation !== expectedOperation || !Array.isArray(value.steps) || !Array.isArray(value.notices) || !value.notices.every(isNonemptyString)) return null;
   const host = decodeTarget(value.host);
-  const command2 = decodeCommand(value.command);
-  if (host === null || host.id !== expectedHost || command2 === null) return null;
+  const command = decodeCommand(value.command);
+  if (host === null || host.id !== expectedHost || command === null) return null;
   const native = host.kind === "native";
   const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "<project>"];
-  if (command2.executable !== "tenon" || !arraysEqual(command2.args, expectedCommandArgs) || command2.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
+  if (command.executable !== "tenon" || !arraysEqual(command.args, expectedCommandArgs) || command.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
   const steps = [];
   for (const item2 of value.steps) {
     const step = decodePlanStep(item2);
@@ -18112,6 +18137,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
   const expectedStepIds = native ? [
     ...expectedOperation === "setup" ? ["marketplace-register", "plugin-install", "plugin-inventory"] : ["marketplace-refresh", "plugin-update", "plugin-inventory"],
     "managed-runtime",
+    ...expectedHost === "codex" ? ["codex-auth-status"] : [],
     ...expectedOperation === "setup" ? ["bundled-skills", "runtime-readiness"] : []
   ] : expectedOperation === "setup" ? ["package-assets", "managed-runtime", "adapter-deploy", "bundled-skills", "runtime-readiness"] : ["package-assets", "managed-runtime", "adapter-deploy"];
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
@@ -18121,22 +18147,23 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     expectedStepCommands = [
       ...nativeCommandTruth(expectedHost, expectedOperation),
       null,
+      ...expectedHost === "codex" ? [planCommand("codex", ["login", "status"])] : [],
       ...expectedOperation === "setup" ? [null, null] : []
     ];
   } else {
-    expectedStepCommands = expectedOperation === "setup" ? [null, null, command2, null, null] : [null, null, command2];
+    expectedStepCommands = expectedOperation === "setup" ? [null, null, command, null, null] : [null, null, command];
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null;
   }
-  const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS;
+  const expectedNotices = expectedHost === "codex" ? NOTICE_IDS.slice(0, 3) : native ? NOTICE_IDS.slice(0, 2) : [...NOTICE_IDS.slice(0, 2), NOTICE_IDS[3]];
   if (!arraysEqual(value.notices, expectedNotices)) return null;
   return {
     schema_version: "host-target-plan/v1",
     side_effects: "none",
     host,
     operation: expectedOperation,
-    command: command2,
+    command,
     steps,
     notices: value.notices
   };
@@ -18523,7 +18550,7 @@ async function handleGet(req, res, path7, deps) {
 import { resolve as resolvePath7 } from "node:path";
 
 // packages/server/src/projects.ts
-import { statSync as statSync4 } from "node:fs";
+import { statSync as statSync5 } from "node:fs";
 import { resolve as resolvePath6 } from "node:path";
 async function addProjectToRegistry(registryPath, rawRoot) {
   if (typeof rawRoot !== "string" || !rawRoot) {
@@ -18531,7 +18558,7 @@ async function addProjectToRegistry(registryPath, rawRoot) {
   }
   let isDir;
   try {
-    isDir = statSync4(rawRoot).isDirectory();
+    isDir = statSync5(rawRoot).isDirectory();
   } catch {
     return { ok: false, code: 404, error: `\u8DEF\u5F84\u4E0D\u5B58\u5728\uFF1A${rawRoot}` };
   }

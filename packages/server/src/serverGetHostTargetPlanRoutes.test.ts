@@ -83,10 +83,19 @@ const PLAN = {
     id: 'managed-runtime',
     label: 'host-plan.step.managed-runtime',
     command: null,
+  }, {
+    id: 'codex-auth-status',
+    label: 'host-plan.step.codex-auth-status',
+    command: {
+      executable: 'codex',
+      args: ['login', 'status'],
+      display: 'codex login status',
+    },
   }],
   notices: [
     'host-plan.notice.read-only-generation',
     'host-plan.notice.manual-command-has-effects',
+    'host-plan.notice.codex-auth-guidance',
   ],
 } as const
 
@@ -148,6 +157,13 @@ function planFor(host: HostId, operation: Operation) {
       ]
   if (native) {
     steps.push({ id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null })
+    if (host === 'codex') {
+      steps.push({
+        id: 'codex-auth-status',
+        label: 'host-plan.step.codex-auth-status',
+        command: planCommand('codex', ['login', 'status']),
+      })
+    }
   }
   if (operation === 'setup') {
     steps.push(
@@ -165,6 +181,7 @@ function planFor(host: HostId, operation: Operation) {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
       ...(native ? [] : ['host-plan.notice.project-placeholder']),
     ],
   }

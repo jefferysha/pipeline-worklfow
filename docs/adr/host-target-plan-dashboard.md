@@ -17,8 +17,9 @@ Tenon 已在 `packages/cli/src/commands/plugin-host.ts` 维护 `TENON_HOSTS`、n
 4. Dashboard 只消费 catalog/plan，展示 native/adapter、能力、命令和步骤；只允许复制命令，没有执行按钮。
 5. Adapter 计划按真实控制流区分操作：setup 在 `adapter-deploy` 后继续 `bundled-skills` 与 `runtime-readiness`，update 在 `adapter-deploy` 后结束；用真实命令集成测试而非三端同源 fixture 证明该差异。
 6. Native setup 在 host plan 后继续 managed runtime/skills/readiness；native update 只追加 managed runtime，不声明 setup-only 尾步。
-7. Host Plan route 以局部单文档 parser 严格解析完整 stdout；不改变其他既有 server 操作对通用末行 JSON parser 的兼容需求。
-8. Trellis 只作 clean-room 设计启发。不得复制 AGPL-3.0 或未发布 beta 的源码、测试、文案、状态机或文件结构。
+7. Codex 的手工 setup/update 在 managed runtime 后追加 `codex-auth-status`，其命令为只读的 `codex login status`；setup 随后继续 skills/readiness。Claude 不包含 Codex 认证步骤，计划生成也不实际探测认证状态。
+8. Host Plan route 以局部单文档 parser 严格解析完整 stdout；不改变其他既有 server 操作对通用末行 JSON parser 的兼容需求。
+9. Trellis 只作 clean-room 设计启发。不得复制 AGPL-3.0 或未发布 beta 的源码、测试、文案、状态机或文件结构。
 
 ## 选择理由
 
@@ -49,6 +50,7 @@ Tenon 已在 `packages/cli/src/commands/plugin-host.ts` 维护 `TENON_HOSTS`、n
   canonical 成功结果；失败不缓存且可重试。
 - adapter 内部步骤只展示稳定外层计划，不承诺脚本内部每个文件动作。
 - setup/update 的外层步骤必须分别对齐 `cmdSetup`/`cmdUpdate`；三端 fixture 一致但与真实命令不一致时视为契约失败。
+- Codex auth 是主线 setup/update 的可见观察与恢复引导；Host Plan 必须显式展示该步骤和 notice，不能因它不写入文件而从真实编排中省略。
 - Host Plan 的机器契约不接受人类前置输出、后置杂讯或多个 JSON 文档；这比其他历史 CLI bridge 的容错边界更窄。
 - CLI/server/frontend 各有 decoder，需要用契约测试保持同步。
 

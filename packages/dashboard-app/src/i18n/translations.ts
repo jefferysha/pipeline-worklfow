@@ -232,12 +232,14 @@ export const zh: Dict = {
       'package-assets': '准备 Tenon 适配器资产',
       'adapter-deploy': '部署项目适配器',
       'managed-runtime': '准备托管运行时',
+      'codex-auth-status': '检查 Codex 登录状态',
       'bundled-skills': '同步内置 Skills',
       'runtime-readiness': '核对宿主就绪度',
     },
     notices: {
       'read-only-generation': '生成计划是只读操作，不会修改宿主或项目。',
       'manual-command-has-effects': '只有在终端手动运行预览命令时才会产生安装或更新副作用。',
+      'codex-auth-guidance': 'Codex 流程会在托管运行时就绪后检查登录状态，并在需要时显示认证引导。',
       'project-placeholder': '命令中的 <project> 需要替换为目标项目路径。',
     },
     errors: {
@@ -1550,12 +1552,14 @@ export const en: Dict = {
       'package-assets': 'Prepare Tenon adapter assets',
       'adapter-deploy': 'Deploy the project adapter',
       'managed-runtime': 'Prepare the managed runtime',
+      'codex-auth-status': 'Check Codex login status',
       'bundled-skills': 'Sync bundled Skills',
       'runtime-readiness': 'Check host readiness',
     },
     notices: {
       'read-only-generation': 'Generating this plan is read-only and changes neither the host nor the project.',
       'manual-command-has-effects': 'Setup or update side effects begin only if you manually run the previewed command in a terminal.',
+      'codex-auth-guidance': 'The Codex flow checks login status after the managed runtime is ready and shows authentication guidance when needed.',
       'project-placeholder': 'Replace <project> in the command with the target project path.',
     },
     errors: {

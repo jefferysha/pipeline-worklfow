@@ -158,7 +158,8 @@ stateDiagram-v2
 5. API 只把通过严格 decoder 的 CLI DTO返回给前端。
 6. UI 不根据 host ID 重建计划；只翻译稳定 token 并展示服务端事实。
 7. Setup 与 update 不共享 setup-only 尾步：adapter setup 为五步、update 为前三步；native setup 追加 managed runtime/skills/readiness，native update 只追加 managed runtime。三端 decoder、fixture 和真实命令测试必须锁定差异。
-8. Host Plan server 只接受 trim 后恰好一个完整 JSON 文档；前置/后置杂讯或多个 JSON 文档一律失败关闭。
+8. Codex 的手工 setup/update 在 managed runtime 后包含 `codex-auth-status`，命令为只读的 `codex login status`，并附稳定认证引导 notice；setup 随后才进入 skills/readiness。Claude 不包含该步骤，计划生成不读取真实登录态。
+9. Host Plan server 只接受 trim 后恰好一个完整 JSON 文档；前置/后置杂讯或多个 JSON 文档一律失败关闭。
 
 ## 术语
 
@@ -178,7 +179,7 @@ stateDiagram-v2
 ## 风险与缓解
 
 - **CLI/server/frontend DTO 漂移**：三层都做严格版本与字段 decoder，契约测试覆盖畸形响应。
-- **计划与真实写路径漂移**：native/adapter 的 setup/update 分别对齐真实外层控制流，并用真实命令集成测试锁定 setup-only 尾步差异，不复制脚本内部。
+- **计划与真实写路径漂移**：native/adapter 的 setup/update 分别对齐真实外层控制流，并用真实命令集成测试锁定 setup-only 尾步与 Codex auth 观察顺序，不复制脚本内部。
 - **CLI 杂讯被误当成有效 DTO**：Host Plan route 使用局部单文档 parser，禁止通用末行 JSON 容错掩盖协议污染。
 - **误认为已执行**：固定 `side_effects: none`、只读文案、无执行按钮、只提供复制。
 - **参数注入**：server 在 runner 前白名单校验，固定 argv 数组，拒绝所有额外查询参数。
@@ -186,7 +187,7 @@ stateDiagram-v2
 
 ## 验证矩阵
 
-- CLI：catalog、每个注册 host、setup/update、adapter setup 五步/update 三步、native update 无 setup-only 尾步、真实 `cmdSetup`/`cmdUpdate` 输出编排、未知 host/operation、JSON 稳定性、零 runner/环境访问。
+- CLI：catalog、每个注册 host、setup/update、adapter setup 五步/update 三步、native update 无 setup-only 尾步、Codex setup/update 的 auth-status 顺序与 Claude 差异、真实 `cmdSetup`/`cmdUpdate` 输出编排、未知 host/operation、JSON 稳定性、零 runner/环境访问。
 - Server：Host guard、无参数 catalog、合法 plan、缺失/重复/额外/未知查询、CLI unavailable/nonzero、前置/后置杂讯、多文档和 DTO malformed。
 - Dashboard client：catalog/plan decoder、非 2xx、畸形 JSON、网络错误。
 - Component：catalog loading/empty/error/retry、选择/切换、plan loading/error/retry/ready、复制成功/失败、中英文、键盘。
@@ -199,7 +200,7 @@ L2_data:     waived -> 只生成瞬时 DTO，不持久化、不迁移数据
 L3_rules:    filled -> #关键业务规则
 L4_state:    filled -> #状态机
 L5_errors:   filled -> #API-边界与错误
-L6_security: filled -> #API-边界与错误
+L6_security: filled -> #关键业务规则
 L7_perf:     waived -> TENON_HOSTS 为固定有界目录，计划为常数规模且无外部 I/O
 L8_deps:     waived -> 不新增运行时依赖，复用 PipelineCliRunner 与现有 Dashboard 栈
 L10_terms:   filled -> #术语

@@ -5,6 +5,8 @@
  * ④program 装配 flag 解析(--dry-run/--yes 透传);⑤技能安装段 S2 七钉(命令生成/官方第三方标注/幂等/
  * dry-run 零执行/失败容错/engine 附加/禁整装)。候选根仅经 managed-runtime 发布边界进入稳定启动器。
  */
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
@@ -12,15 +14,19 @@ import { buildProgram, CliExit } from '../program.js'
 import { readSkillSources, type SkillSource, type SkillSourcesResult } from '../skillSources.js'
 import {
   buildSkillsPlan,
+  commandExistsOnPath,
   cmdSetup,
   cmdSetupHost,
   cmdSetupRuntime,
   cmdSetupSkills,
+  REAL_RUNTIME_ENV,
   scrubLegacyCodexAdapterHooks,
   type PlannedCommand,
   type RuntimeEnv,
   type SetupEnv,
 } from './setup.js'
+import { resolveCommandOnPath } from './commandExists.js'
+import { nativeHostCommandBinding } from './native-host-command-binding.js'
 import type { ExecDockerFn } from '../afkReadiness.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
@@ -52,8 +58,12 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
     return over.pathExists?.(path) === true
       ? { state: 'error', detail: 'injected unreadable path' }
       : { state: 'missing' }
-  },
-  commandExists: () => false,
+    },
+    commandExists: () => true,
+    resolveHostCommand: (host) => over.commandExists?.(host) === false
+      ? undefined
+      : nativeHostCommandBinding(host, 'darwin', {}),
+    codexAuthStatus: async () => ({ state: 'authenticated' }),
     listDir: () => [],
     writeText: (p, text) => { calls.writeText.push([p, text]) },
     writeTextAtomic: (p, text) => { calls.writeText.push([p, text]) },
@@ -87,6 +97,77 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   }
   return { env, calls }
 }
+
+describe('Codex CLI PATH availability preflight', () => {
+  test('rejects a directory named codex and accepts an executable file or symlink to one', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-command-path-'))
+    const fakeBin = join(root, 'bin')
+    const realBin = join(root, 'real-bin')
+    mkdirSync(fakeBin)
+    mkdirSync(realBin)
+    try {
+      mkdirSync(join(fakeBin, 'codex'))
+      expect(commandExistsOnPath('codex', { pathValue: fakeBin, platform: 'darwin' })).toBe(false)
+
+      rmSync(join(fakeBin, 'codex'), { recursive: true })
+      const target = join(realBin, 'codex-real')
+      writeFileSync(target, '#!/bin/sh\nexit 0\n')
+      chmodSync(target, 0o755)
+      symlinkSync(target, join(fakeBin, 'codex'))
+      expect(commandExistsOnPath('codex', { pathValue: fakeBin, platform: 'darwin' })).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('ordinary tool discovery keeps relative PATH compatibility while trusted host discovery excludes it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-command-relative-path-'))
+    const relativeBin = join(root, 'node_modules', '.bin')
+    mkdirSync(relativeBin, { recursive: true })
+    const tool = join(relativeBin, 'openspec')
+    writeFileSync(tool, '#!/bin/sh\nexit 0\n')
+    chmodSync(tool, 0o755)
+    const previousCwd = process.cwd()
+    try {
+      process.chdir(root)
+      expect(commandExistsOnPath('openspec', {
+        pathValue: './node_modules/.bin',
+        platform: 'darwin',
+      })).toBe(true)
+      expect(resolveCommandOnPath('openspec', {
+        pathValue: './node_modules/.bin',
+        platform: 'darwin',
+        requireAbsolutePathEntries: true,
+      })).toBeUndefined()
+    } finally {
+      process.chdir(previousCwd)
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('Windows npm batch shims use a bounded cmd.exe plan and reject expansion characters', () => {
+    const executable = 'C:\\Users\\Alice\\AppData\\Roaming\\npm\\codex.cmd'
+    const binding = nativeHostCommandBinding(executable, 'win32', {
+      SystemRoot: 'C:\\Windows',
+    })
+    expect(binding?.invocation(['plugin', 'list', '--json'])).toEqual({
+      file: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '""C:\\Users\\Alice\\AppData\\Roaming\\npm\\codex.cmd" plugin list --json"',
+      ],
+      cwd: 'C:\\Users\\Alice\\AppData\\Roaming\\npm',
+    })
+    expect(binding?.invocation(['plugin', 'add', 'bad&plugin'])).toBeUndefined()
+    expect(nativeHostCommandBinding(
+      'C:\\Users\\100%\\AppData\\Roaming\\npm\\codex.cmd',
+      'win32',
+      { SystemRoot: 'C:\\Windows' },
+    )).toBeUndefined()
+  })
+})
 
 function setupPathExists(path: string): boolean {
   return !path.includes('/host-plugin-convergence/')
@@ -926,6 +1007,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
       'plugin-update',
       'plugin-inventory',
       'managed-runtime',
+      'codex-auth-status',
     ])
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin marketplace upgrade tenon --json'],
@@ -934,8 +1016,176 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
       ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
     ])
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+    const runtimeIndex = deps.outLines.findIndex((line) => line.includes('已原子切换至已验证 runtime'))
+    const authIndex = deps.outLines.findIndex((line) => line.includes('[Codex 认证] 已登录'))
+    expect(runtimeIndex).toBeGreaterThanOrEqual(0)
+    expect(authIndex).toBeGreaterThan(runtimeIndex)
     expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
     expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
+  })
+
+  test('Codex CLI 缺失时在 host/journal mutation 前失败并给出安装与版本检查命令', async () => {
+    const deps = makeDeps()
+    let authCalls = 0
+    const { env, calls } = spyEnv({
+      commandExists: () => false,
+      codexAuthStatus: async () => {
+        authCalls += 1
+        return { state: 'unavailable', reason: 'cli-missing' }
+      },
+    }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdSetup(
+      deps,
+      undefined,
+      { codex: true, yes: true },
+      env,
+      fakeRt(),
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(1)
+    const output = [...deps.outLines, ...deps.errLines].join('\n')
+    expect(output).toContain('npm install -g @openai/codex')
+    expect(output).toContain('codex --version')
+    expect(calls.exec).toHaveLength(0)
+    expect(calls.mkdirp).toHaveLength(0)
+    expect(calls.writeText).toHaveLength(0)
+    expect(runtime.calls.activations).toHaveLength(0)
+    expect(dashboard.calls.starts).toHaveLength(0)
+    expect(authCalls).toBe(0)
+  })
+
+  test('Codex preflight, inventory, mutation, observation, and auth reuse one trusted absolute executable', async () => {
+    const deps = makeDeps()
+    const trustedCodex = '/trusted/bin/codex'
+    const authExecutables: Array<string | undefined> = []
+    const { env, calls } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      resolveHostCommand: () => nativeHostCommandBinding(trustedCodex, 'darwin', {}),
+      codexAuthStatus: async (executable) => {
+        authExecutables.push(executable)
+        return { state: 'authenticated' }
+      },
+    }, (_cmd, args) => codexInstallExec('codex', args))
+
+    expect(await cmdSetup(
+      deps,
+      undefined,
+      { codex: true, yes: true },
+      env,
+      fakeRt(),
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+
+    const hostCalls = calls.exec.filter(([, args]) => args[0] === 'plugin')
+    expect(hostCalls.length).toBeGreaterThan(0)
+    expect(hostCalls.every(([command]) => command === trustedCodex)).toBe(true)
+    expect(calls.exec.some(([command]) => command === 'codex')).toBe(false)
+    expect(authExecutables).toEqual([trustedCodex])
+  })
+
+  test('Windows Codex setup reuses one batch binding for the complete host lifecycle', async () => {
+    const deps = makeDeps()
+    const executable = 'C:\\Users\\Alice\\AppData\\Roaming\\npm\\codex.cmd'
+    const binding = nativeHostCommandBinding(executable, 'win32', {
+      SystemRoot: 'C:\\Windows',
+    })
+    expect(binding).toBeDefined()
+    const authExecutables: Array<string | undefined> = []
+    const { env, calls } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      resolveHostCommand: () => binding,
+      codexAuthStatus: async (candidate) => {
+        authExecutables.push(candidate)
+        return { state: 'authenticated' }
+      },
+    }, (_cmd, args) => {
+      if (args.at(-1)?.includes('plugin list --json') === true) {
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            installed: [{ name: 'tenon', marketplaceName: 'tenon', source: { path: '/installed/tenon' } }],
+          }),
+          stderr: '',
+        }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+
+    expect(await cmdSetup(
+      deps,
+      undefined,
+      { codex: true, yes: true },
+      env,
+      fakeRt(),
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+
+    const hostCalls = calls.exec.filter(([command]) => command.endsWith('\\cmd.exe'))
+    expect(hostCalls.length).toBeGreaterThan(0)
+    expect(hostCalls.every(([, args]) =>
+      args.slice(0, 3).join(' ') === '/d /s /c'
+      && args.at(-1)?.startsWith(`""${executable}" plugin `) === true)).toBe(true)
+    expect(authExecutables).toEqual([executable])
+  })
+
+  test('Codex 登录状态只在 host/runtime 成功后读取，并用成功后的新快照渲染', async () => {
+    const deps = makeDeps()
+    const order: string[] = []
+    const { env } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      codexAuthStatus: async () => {
+        order.push('auth')
+        return { state: 'unauthenticated' }
+      },
+    }, (cmd, args) => {
+      order.push(`host:${cmd} ${args.join(' ')}`)
+      return codexInstallExec(cmd, args)
+    })
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetup(
+      deps,
+      undefined,
+      { codex: true, yes: true },
+      env,
+      fakeRt(),
+      runtime.installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+
+    expect(order).toContain('auth')
+    expect(order.some((entry) => entry.startsWith('host:'))).toBe(true)
+    expect(order.indexOf('auth')).toBeGreaterThan(
+      Math.max(...order.map((entry, index) => entry.startsWith('host:') ? index : -1)),
+    )
+    expect(createHostTargetPlan('codex', 'setup').steps.map((step) => step.id)).toEqual([
+      'marketplace-register',
+      'plugin-install',
+      'plugin-inventory',
+      'managed-runtime',
+      'codex-auth-status',
+      'bundled-skills',
+      'runtime-readiness',
+    ])
+    const outputOrder = [
+      deps.outLines.findIndex((line) => line.includes('已发布已验证 runtime')),
+      deps.outLines.findIndex((line) => line.includes('[Codex 认证] 尚未登录')),
+      deps.outLines.findIndex((line) => line.includes('[setup skills] 技能安装计划')),
+      deps.outLines.findIndex((line) => line.includes('[setup runtime] AFK 运行时就绪清单')),
+    ]
+    expect(outputOrder.every((index) => index >= 0)).toBe(true)
+    expect(outputOrder).toEqual([...outputOrder].sort((left, right) => left - right))
+    expect(deps.outLines.join('\n')).toContain('[Codex 认证] 尚未登录')
   })
 
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
@@ -951,6 +1201,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(out).toContain('技能安装计划') // 技能段跑了
     expect(out).toContain('就绪清单') // 运行时段也跑了（一屏）
     expect(out).toContain('docker daemon 可用')
+    expect(out).toContain('[Codex 认证] 已登录')
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
@@ -958,9 +1209,40 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     ]])
   })
 
+  test('Codex 未登录时一次给全 ChatGPT 订阅、设备登录、API Key 与复核命令', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      codexAuthStatus: async () => ({ state: 'unauthenticated' }),
+    }, codexInstallExec)
+    const code = await cmdSetup(
+      deps,
+      undefined,
+      { codex: true, yes: true },
+      env,
+      fakeRt(),
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )
+    expect(code).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('codex login')
+    expect(out).toContain('codex login --device-auth')
+    expect(out).toContain('platform.openai.com/api-keys')
+    expect(out).toContain('codex login --with-api-key')
+    expect(out).toContain('codex login status')
+  })
+
   test('--dry-run:运行时段只提示见 tenon setup runtime,绝不真探测 docker（同步返 number,不碰 rt）', () => {
     const deps = makeDeps()
-    const { env, calls } = spyEnv()
+    let authCalls = 0
+    const { env, calls } = spyEnv({
+      codexAuthStatus: async () => {
+        authCalls += 1
+        return { state: 'unauthenticated' }
+      },
+    })
     // 关键:不传 rt（用真实 REAL_RUNTIME_ENV 缺省）——dry-run 仍绝不起真 docker;同步返 number 即证未 await 探测。
     const code = cmdSetup(deps, undefined, { codex: true, dryRun: true }, env)
     expect(code).toBe(0) // 同步 number（非 Promise）——dry-run 不进异步运行时探测
@@ -969,24 +1251,65 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(out).toContain('tenon setup runtime') // 指引去独立子命令看真清单
     expect(out).toContain('--dry-run')
     expect(calls.exec).toHaveLength(0) // 零 exec（技能段 dry-run 零执行 + 运行时段未探测）
+    expect(authCalls).toBe(0)
+  })
+
+  test('Claude setup 不探测 Codex 登录态', async () => {
+    const deps = makeDeps()
+    let authCalls = 0
+    const { env } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      codexAuthStatus: async () => {
+        authCalls += 1
+        return { state: 'unauthenticated' }
+      },
+    }, (cmd, args) => {
+      if (cmd === 'claude' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: '[{"id":"tenon@tenon","installPath":"/installed/tenon"}]', stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    expect(await cmdSetup(
+      deps,
+      undefined,
+      { claude: true, yes: true },
+      env,
+      fakeRt(),
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+    expect(authCalls).toBe(0)
+    expect(deps.outLines.join('\n')).not.toContain('Codex 认证')
+    expect(deps.outLines.join('\n')).not.toContain('Codex 安装会检查')
   })
 
   test('宿主 marketplace 安装失败时立即退出，不会把未验证的插件伪装成可运行环境', async () => {
     const deps = makeDeps()
+    let authCalls = 0
     // 无已装 + 全 exec 失败 → 真 registry 的 mandatory 命令全败 → 技能段 exit 1。
     const exec: ExecStub = () => ({ code: 1, stdout: '', stderr: 'boom' })
-    const { env } = spyEnv({}, exec)
+    const { env } = spyEnv({
+      codexAuthStatus: async () => {
+        authCalls += 1
+        return { state: 'unauthenticated' }
+      },
+    }, exec)
     const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, fakeRt())
     expect(code).toBe(1)
     expect(deps.errLines.join('\n')).toContain('失败')
     expect(deps.outLines.join('\n')).not.toContain('就绪清单')
+    expect(authCalls).toBe(0)
   })
 })
 
 describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 runner 凭证对称;缺镜像 build_hint;缺凭证去配 X）', () => {
   test('全就绪:docker 可用 + 镜像在位 + 两 runner 凭证已配（宿主 env）→ 清单全就绪 + exit 0', async () => {
     const deps = makeDeps()
-    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b', CODEX_HOME: '/c' } })
+    const rt = fakeRt({
+      hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b', CODEX_HOME: '/c' },
+      canReadFile: (path) => path === '/c/auth.json',
+    })
     expect(await cmdSetupRuntime(deps, {}, rt)).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('就绪清单')
@@ -995,6 +1318,27 @@ describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 r
     expect(out).toContain('CLAUDE_CODE_OAUTH_TOKEN 已配（宿主 env）')
     expect(out).toContain('OPENAI_API_KEY 已配（宿主 env）')
     expect(out).not.toContain('[缺失]')
+  })
+
+  test('真实 runtime 探针拒绝把 auth.json 同名目录报告为 Codex 凭证就绪', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-setup-runtime-codex-directory-'))
+    try {
+      mkdirSync(join(root, 'auth.json'))
+      const deps = makeDeps()
+      expect(await cmdSetupRuntime(deps, {}, {
+        ...REAL_RUNTIME_ENV,
+        exec: fakeRt().exec,
+        hostEnv: { CODEX_HOME: root },
+        defaultCodexHome: undefined,
+        resolveImage: () => 'sandcastle:local',
+      })).toBe(0)
+      const output = deps.outLines.join('\n')
+      expect(output).toContain('[缺失] codex 凭证 OPENAI_API_KEY 未配')
+      expect(output).toContain('[缺失] codex CODEX_HOME 未配')
+      expect(output).not.toContain('[就绪] codex 凭证 已配')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   test('docker 不可用 → 降级标缺失（不抛不阻断,exit 0）;镜像未能核给 build_hint;附「怎么拿」docker 安装引导', async () => {

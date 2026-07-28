@@ -40,8 +40,9 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     })
   })
 
-  test('native setup/update 逐项复用现有 host command plan，并按真实外层流程追加只读产品步骤', () => {
+  test('native setup/update 逐项复用现有 host command plan，并按真实外层流程追加产品与 Codex 认证步骤', () => {
     const setup = createHostTargetPlan('codex', 'setup')
+    const codexUpdate = createHostTargetPlan('codex', 'update')
     const update = createHostTargetPlan('claude', 'update')
 
     expect(setup.side_effects).toBe('none')
@@ -64,14 +65,37 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
         display: [cmd, ...args].join(' '),
       })),
     )
-    expect(setup.steps.slice(-3)).toEqual([
+    expect(setup.steps.slice(-4)).toEqual([
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      {
+        id: 'codex-auth-status',
+        label: 'host-plan.step.codex-auth-status',
+        command: {
+          executable: 'codex',
+          args: ['login', 'status'],
+          display: 'codex login status',
+        },
+      },
       { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
       { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
     ])
+    expect(codexUpdate.steps.slice(-2)).toEqual([
+      { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      {
+        id: 'codex-auth-status',
+        label: 'host-plan.step.codex-auth-status',
+        command: {
+          executable: 'codex',
+          args: ['login', 'status'],
+          display: 'codex login status',
+        },
+      },
+    ])
+    expect(codexUpdate.notices).toContain('host-plan.notice.codex-auth-guidance')
     expect(update.steps.slice(nativeUpdatePlan('claude').length)).toEqual([
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
     ])
+    expect(update.notices).not.toContain('host-plan.notice.codex-auth-guidance')
   })
 
   test('adapter setup/update 分别对齐真实外层流程并固定使用 <project> 占位', () => {

@@ -309,6 +309,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
       env: (name) => process.env[name],
       statuslineConfigured: () => false,
       nativeRuntimeHost: async () => 'claude',
+      codexAuthStatus: async () => ({ state: 'authenticated' }),
       runVerifySkills: async () => {
         try {
           const output = execFileSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh')], { encoding: 'utf8' })

@@ -17,6 +17,7 @@ capability: host-target-plan
 - Trellis 只 clean-room 借鉴按目标、有界、版本化上下文原则；不复制 AGPL-3.0 代码。
 - 持续自主模式下不插入一次性 prototype：现有 CLI plan、`PipelineCliRunner` 和 Dashboard view 都有稳定接缝，风险可由首个 tracer bullet 和契约测试更直接地暴露。
 - Adapter 计划按真实命令控制流区分：setup 为五步，update 为前三步；不能用三端一致的 fixture 替代对 `cmdSetup`/`cmdUpdate` 的独立集成证明。
+- Codex 计划显式包含主线真实流程的只读认证状态检查与引导；不能把“无文件写入”误解成可从计划省略。
 
 ## 子阶段 1：Tracer bullet，贯通 Codex setup 计划
 
@@ -85,7 +86,20 @@ capability: host-target-plan
 
 **此处建议 /clear**
 
-## 子阶段 6：验证、浏览器与交付证据
+## 子阶段 6：Codex 认证编排回归修复
+
+1. 在 CLI 计划与真实 `cmdSetup(codex)` / `cmdUpdate(codex)` 集成测试中先加入交叉顺序断言：`codex-auth-status` 位于 managed runtime 之后，setup 的 skills/readiness 之前；Claude 不含该步骤。立即运行确认 RED。
+2. 在 `packages/cli/src/commands/host-target-plan.ts` 只为 Codex 手工 setup/update 插入 `codex-auth-status`，命令固定为 `codex login status`，并加入稳定认证引导 notice；计划生成不得调用真实 auth probe。
+3. 同步 server/frontend strict decoder、DTO fixtures、`translations.ts` 中英文步骤/notice，并验证 Dashboard 预览既显示检查/引导又不新增执行入口。
+4. 重建 CLI/server/Dashboard bundle，复跑聚焦测试和 12 hosts × setup/update smoke，确认 Claude/adapter 无语义漂移。
+
+验收：Codex setup/update 计划与最新 main 的真实可见编排一致；计划生成仍为零副作用，认证检查只作为将来手工命令的预览步骤。
+
+回滚：仅回退 Codex-only auth step/notice 与三端严格映射，不影响 catalog、其他宿主或 API 状态机。
+
+**此处建议 /clear**
+
+## 子阶段 7：验证、浏览器与交付证据
 
 1. 运行定向 CLI/server/Dashboard 测试、`npm run typecheck:web`、`npm run test:web`、`npm run build`、`npm test`、bundle 与受影响门禁；修复全部可修复失败。
 2. 启动真实 Tenon Dashboard，先用标题、导航和 API health 确认页面身份；验证真实成功路径。

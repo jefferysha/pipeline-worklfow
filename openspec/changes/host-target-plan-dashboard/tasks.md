@@ -17,6 +17,7 @@
 - [x] 编写可执行实现计划与验证矩阵。 (spec)
 - [x] 修订 adapter 真实控制流契约：setup 五步、update 三步并排除 setup-only 步骤。 (spec)
 - [x] 修订 native update 与 Host Plan stdout 契约：排除 setup-only 尾步并要求单一完整 JSON 文档。 (spec)
+- [x] 修订最新 main 的 Codex 认证契约：setup/update 在 managed runtime 后预览只读 auth-status 与引导。 (spec)
 
 ## 实现
 
@@ -30,6 +31,8 @@
 - [x] 修复第三轮 Verify 的真实 adapter 编排顺序、空 catalog、测试索引与 ADR 漂移，并以真实 setup 契约测试锁定顺序。 (build)
 - [x] 以真实 `cmdSetup`/`cmdUpdate` 集成测试修复 adapter setup 五步与 update 三步差异，并同步三端严格 fixture。 (build)
 - [x] 以真实 native `cmdUpdate` 与混合 stdout RED 测试修复 native update 尾步和 server 单文档解析。 (build)
+- [x] 合并最新 `origin/main` 的 Codex 认证引导，保留两侧测试并重建 CLI/server/Dashboard 生成物。 (build)
+- [x] 以交叉 RED 测试同步 Codex auth-status 步骤、notice、三端 decoder、i18n 与生成物。 (build)
 
 ## 验证
 

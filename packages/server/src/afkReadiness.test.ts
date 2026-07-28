@@ -35,6 +35,7 @@ describe('buildAfkReadiness', () => {
       exec: dockerOk(['sandcastle:local']),
       secretsPath,
       hostEnv: { CODEX_HOME: '/home/u/.codex' },
+      canReadFile: (path) => path === '/home/u/.codex/auth.json',
     })
     expect(r).toEqual({
       ok: true,
@@ -102,5 +103,29 @@ describe('buildAfkReadiness', () => {
     expect(r.credentials.codex.CODEX_HOME).toEqual({ set: true, source: 'default-home' })
     expect(JSON.stringify(r)).not.toContain(codexHome)
     expect(JSON.stringify(r)).not.toContain('secret-must-not-leak')
+  })
+
+  it('显式 CODEX_HOME 没有可读 auth.json 时不得误判为凭证就绪', async () => {
+    const r = await buildAfkReadiness({
+      image: 'x:y',
+      exec: dockerOk(['x:y']),
+      secretsPath,
+      hostEnv: { CODEX_HOME: join(base, 'empty-codex-home') },
+      defaultCodexHome: join(base, 'valid-default-codex-home'),
+      canReadFile: (path) => path === join(base, 'valid-default-codex-home', 'auth.json'),
+    })
+    expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
+  })
+
+  it('auth.json 同名目录即使可访问也不得误判为普通凭证文件', async () => {
+    const codexHome = join(base, 'directory-auth-home')
+    mkdirSync(join(codexHome, 'auth.json'), { recursive: true })
+    const r = await buildAfkReadiness({
+      image: 'x:y',
+      exec: dockerOk(['x:y']),
+      secretsPath,
+      hostEnv: { CODEX_HOME: codexHome },
+    })
+    expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
   })
 })

@@ -20,6 +20,7 @@ const STEP_IDS = [
   'package-assets',
   'adapter-deploy',
   'managed-runtime',
+  'codex-auth-status',
   'bundled-skills',
   'runtime-readiness',
 ] as const
@@ -27,6 +28,7 @@ const STEP_IDS = [
 const NOTICE_IDS = [
   'host-plan.notice.read-only-generation',
   'host-plan.notice.manual-command-has-effects',
+  'host-plan.notice.codex-auth-guidance',
   'host-plan.notice.project-placeholder',
 ] as const
 
@@ -107,7 +109,7 @@ function decodeCommand(value: unknown): HostPlanCommandDto | null {
   return { executable: value.executable, args: value.args, display: value.display }
 }
 
-function command(executable: string, args: readonly string[]): HostPlanCommandDto {
+function planCommand(executable: string, args: readonly string[]): HostPlanCommandDto {
   return { executable, args, display: [executable, ...args].join(' ') }
 }
 
@@ -118,26 +120,26 @@ function nativeCommandTruth(
   if (host === 'codex') {
     return operation === 'setup'
       ? [
-          command('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
-          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
-          command('codex', ['plugin', 'list', '--json']),
+          planCommand('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+          planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          planCommand('codex', ['plugin', 'list', '--json']),
         ]
       : [
-          command('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
-          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
-          command('codex', ['plugin', 'list', '--json']),
+          planCommand('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+          planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          planCommand('codex', ['plugin', 'list', '--json']),
         ]
   }
   return operation === 'setup'
     ? [
-        command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
-        command('claude', ['plugin', 'install', 'tenon@tenon']),
-        command('claude', ['plugin', 'list', '--json']),
+        planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+        planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
+        planCommand('claude', ['plugin', 'list', '--json']),
       ]
     : [
-        command('claude', ['plugin', 'marketplace', 'update', 'tenon']),
-        command('claude', ['plugin', 'update', 'tenon@tenon']),
-        command('claude', ['plugin', 'list', '--json']),
+        planCommand('claude', ['plugin', 'marketplace', 'update', 'tenon']),
+        planCommand('claude', ['plugin', 'update', 'tenon@tenon']),
+        planCommand('claude', ['plugin', 'list', '--json']),
       ]
 }
 
@@ -270,6 +272,7 @@ export function decodeHostTargetPlan(
           ? ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
           : ['marketplace-refresh', 'plugin-update', 'plugin-inventory'] as const),
         'managed-runtime',
+        ...(expectedHost === 'codex' ? ['codex-auth-status'] as const : []),
         ...(expectedOperation === 'setup'
           ? ['bundled-skills', 'runtime-readiness'] as const
           : []),
@@ -284,6 +287,7 @@ export function decodeHostTargetPlan(
     expectedStepCommands = [
       ...nativeCommandTruth(expectedHost, expectedOperation),
       null,
+      ...(expectedHost === 'codex' ? [planCommand('codex', ['login', 'status'])] : []),
       ...(expectedOperation === 'setup' ? [null, null] : []),
     ]
   } else {
@@ -294,7 +298,11 @@ export function decodeHostTargetPlan(
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null
   }
-  const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS
+  const expectedNotices = expectedHost === 'codex'
+    ? NOTICE_IDS.slice(0, 3)
+    : native
+      ? NOTICE_IDS.slice(0, 2)
+      : [...NOTICE_IDS.slice(0, 2), NOTICE_IDS[3]]
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {
     schema_version: 'host-target-plan/v1',

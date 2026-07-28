@@ -48,8 +48,21 @@ const setupPlan: HostTargetPlan = {
         display: 'codex plugin install tenon',
       },
     },
+    {
+      id: 'codex-auth-status',
+      label: 'host-plan.step.codex-auth-status',
+      command: {
+        executable: 'codex',
+        args: ['login', 'status'],
+        display: 'codex login status',
+      },
+    },
   ],
-  notices: ['host-plan.notice.read-only-generation', 'host-plan.notice.manual-command-has-effects'],
+  notices: [
+    'host-plan.notice.read-only-generation',
+    'host-plan.notice.manual-command-has-effects',
+    'host-plan.notice.codex-auth-guidance',
+  ],
 }
 
 function renderView(over: Partial<Parameters<typeof HostTargetPlanView>[0]> = {}) {
@@ -133,6 +146,9 @@ describe('HostTargetPlanView', () => {
     )
     expect(preview).toHaveTextContent('登记宿主 marketplace')
     expect(preview).toHaveTextContent('安装 Tenon 插件')
+    expect(preview).toHaveTextContent('检查 Codex 登录状态')
+    expect(preview).toHaveTextContent('codex login status')
+    expect(preview).toHaveTextContent('认证引导')
     expect(preview).toHaveTextContent('生成计划是只读操作')
     expect(screen.queryByRole('button', { name: /执行|Run command/i })).toBeNull()
 

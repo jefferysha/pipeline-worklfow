@@ -4,6 +4,7 @@
  */
 import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@tenon/kernel'
 import type { AfkReadiness } from './afkReadiness.js'
+import type { CodexAuthStatus } from './codexAuth.js'
 
 /** fs/env 探针半成品；cmdCheck 必须再注入 effective policy 才能组成 kernel GuardContext。 */
 export type GuardFileContext = Omit<GuardContext, 'coverageProfile'>
@@ -56,6 +57,8 @@ export interface DoctorProbes {
    * 的缺省配置误报给纯 Codex 安装。
    */
   nativeRuntimeHost: () => Promise<'codex' | 'claude' | null>
+  /** 本机 Codex CLI 登录态，与 AFK 容器凭证灯分离；不读取或返回凭证内容。 */
+  codexAuthStatus: () => Promise<CodexAuthStatus>
   /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
   runVerifySkills: () => Promise<{ code: number; output: string }>
   /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @tenon/tap tapStatus */

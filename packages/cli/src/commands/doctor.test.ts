@@ -26,6 +26,7 @@ const EXPECTED_IDS = [
   'skills:mandatory',
   'skills:recommended',
   'integration:codex-project-skills',
+  'auth:codex',
   'afk:docker',
   'afk:image',
   'afk:credential-claude-code',
@@ -44,13 +45,13 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
 }
 
 describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > tenon doctor）', () => {
-  test('全绿基线：18 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
+  test('全绿基线：19 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(0)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[DOCTOR]')
-    expect(text).toContain('绿 18')
+    expect(text).toContain('绿 19')
     expect(text).not.toContain('[WARN]')
     expect(text).not.toContain('[FAIL]')
     expect(text).not.toContain('fix:')
@@ -67,7 +68,78 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
       expect(typeof c.detail).toBe('string')
       expect(typeof c.hint).toBe('string')
     }
-    expect(payload.summary).toEqual({ green: 18, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 19, yellow: 0, red: 0 })
+  })
+
+  test('Codex runtime 未登录 → auth:codex yellow 且一次给全两类账号登录路径', async () => {
+    const deps = makeDeps({ doctor: {
+      nativeRuntimeHost: async () => 'codex',
+      codexAuthStatus: async () => ({ state: 'unauthenticated' }),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const auth = byId(payload, 'auth:codex')
+    expect(auth.status).toBe('yellow')
+    expect(auth.hint).toContain('codex login')
+    expect(auth.hint).toContain('codex login --device-auth')
+    expect(auth.hint).toContain('platform.openai.com/api-keys')
+    expect(auth.hint).toContain('codex login --with-api-key')
+    expect(auth.hint).toContain('codex login status')
+  })
+
+  test('Codex 认证探针异常使用固定 detail，不把异常或 secret-like 内容写入 JSON', async () => {
+    const deps = makeDeps({ doctor: {
+      nativeRuntimeHost: async () => 'codex',
+      codexAuthStatus: async () => {
+        throw new Error('OPENAI_API_KEY=sk-must-not-leak')
+      },
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const serialized = JSON.stringify(payload)
+    expect(serialized).not.toContain('must-not-leak')
+    expect(byId(payload, 'auth:codex').detail).toBe('Codex 登录检查自身异常')
+  })
+
+  test('宿主已登录但 AFK 无凭证时，两类状态独立呈现', async () => {
+    const deps = makeDeps({ doctor: {
+      nativeRuntimeHost: async () => 'codex',
+      codexAuthStatus: async () => ({ state: 'authenticated' }),
+      afkReadiness: async () => ({
+        ok: true,
+        docker: { available: true },
+        image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+        credentials: {
+          'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+          codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: false } },
+        },
+      }),
+    } })
+    const { payload } = await runJson(deps)
+    expect(byId(payload, 'auth:codex').status).toBe('green')
+    expect(byId(payload, 'afk:credential-codex').status).toBe('yellow')
+  })
+
+  test('AFK 有 API Key 但宿主未登录时，两类状态独立呈现', async () => {
+    const deps = makeDeps({ doctor: {
+      nativeRuntimeHost: async () => 'codex',
+      codexAuthStatus: async () => ({ state: 'unauthenticated' }),
+      afkReadiness: async () => ({
+        ok: true,
+        docker: { available: true },
+        image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+        credentials: {
+          'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+          codex: {
+            OPENAI_API_KEY: { set: true, source: 'secrets-file' },
+            CODEX_HOME: { set: false },
+          },
+        },
+      }),
+    } })
+    const { payload } = await runJson(deps)
+    expect(byId(payload, 'auth:codex').status).toBe('yellow')
+    expect(byId(payload, 'afk:credential-codex').status).toBe('green')
   })
 
   test('env:node 红灯：node < 22 → red + 升级指引，exit 1', async () => {
@@ -423,7 +495,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     }
     expect(code).toBe(0)
     const payload = JSON.parse(deps.outLines.join('\n')) as DoctorJson
-    expect(payload.summary).toEqual({ green: 18, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 19, yellow: 0, red: 0 })
   })
 })
 

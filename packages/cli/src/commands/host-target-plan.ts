@@ -6,6 +6,7 @@ import {
   nativeInstallPlan,
   nativeUpdatePlan,
   type HostCommandPlanItem,
+  type NativePipelineHost,
   type PipelineHost,
 } from './plugin-host.js'
 
@@ -67,6 +68,16 @@ const PRODUCT_STEPS = [
   { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
 ] as const satisfies readonly HostTargetPlanStep[]
 
+const CODEX_AUTH_STATUS_STEP = {
+  id: 'codex-auth-status',
+  label: 'host-plan.step.codex-auth-status',
+  command: {
+    executable: 'codex',
+    args: ['login', 'status'],
+    display: 'codex login status',
+  },
+} as const satisfies HostTargetPlanStep
+
 const NATIVE_STEP_IDS: Readonly<Record<HostTargetOperation, readonly string[]>> = {
   setup: ['marketplace-register', 'plugin-install', 'plugin-inventory'],
   update: ['marketplace-refresh', 'plugin-update', 'plugin-inventory'],
@@ -114,11 +125,11 @@ export function createHostTargetCatalog(): HostTargetCatalog {
 }
 
 function nativeSteps(
+  host: NativePipelineHost,
   operation: HostTargetOperation,
   plan: readonly HostCommandPlanItem[],
 ): readonly HostTargetPlanStep[] {
   const ids = NATIVE_STEP_IDS[operation]
-  const productSteps = operation === 'setup' ? PRODUCT_STEPS : PRODUCT_STEPS.slice(0, 1)
   return [
     ...plan.map((item, index) => {
       const id = ids[index] ?? `host-command-${index + 1}`
@@ -128,7 +139,9 @@ function nativeSteps(
         command: command(item.cmd, item.args),
       }
     }),
-    ...productSteps,
+    PRODUCT_STEPS[0],
+    ...(host === 'codex' ? [CODEX_AUTH_STATUS_STEP] : []),
+    ...(operation === 'setup' ? PRODUCT_STEPS.slice(1) : []),
   ]
 }
 
@@ -157,6 +170,7 @@ export function createHostTargetPlan(
   const manualCommand = command('tenon', args)
   const steps = isNativePipelineHost(host)
     ? nativeSteps(
+        host,
         operation,
         operation === 'setup' ? nativeInstallPlan(host) : nativeUpdatePlan(host),
       )
@@ -171,6 +185,7 @@ export function createHostTargetPlan(
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
       ...(isNativePipelineHost(host) ? [] : ['host-plan.notice.project-placeholder']),
     ],
   }

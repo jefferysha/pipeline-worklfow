@@ -36,6 +36,14 @@
 - **THEN** 返回现有 `nativeUpdatePlan` 命令步骤并追加 `managed-runtime`
 - **AND** 不包含仅由完整 setup 调用的 `bundled-skills` 或 `runtime-readiness`
 
+#### Scenario: Codex 认证状态与引导
+
+- **WHEN** 为 Codex 请求 setup 或手工 update 计划
+- **THEN** 在 `managed-runtime` 后返回 `codex-auth-status` 步骤，命令为 `codex login status`
+- **AND** setup 的 `bundled-skills` 与 `runtime-readiness` 位于该步骤之后
+- **AND** 返回稳定的认证引导 notice，但计划生成不读取真实登录状态
+- **AND** Claude 和 adapter 计划不包含 Codex 认证步骤或 notice
+
 #### Scenario: adapter update 计划
 
 - **WHEN** 为已注册 adapter 请求 update 计划

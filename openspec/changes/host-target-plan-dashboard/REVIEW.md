@@ -276,3 +276,78 @@ strict decoder 与 fixtures 统一为 native setup 的完整产品尾步和 nati
 Git index 中的 JS/CSS 与 Build6 语义一致，`git diff --cached --check` 通过。最终结论
 PASS：CRITICAL / HIGH / MEDIUM / LOW 均为 0；可以写入 Build 出口的
 `pre_verify_review_result=pass`。
+
+## 第六轮 Verify 主线冲突与第七轮 Build 集成
+
+冻结提交 `b1a21eecfd66283139e9388c5da33b2004e25808` 的第六轮 Verify 中，产品、运行时、
+浏览器与完整 reviewer 均通过；唯一 MEDIUM 是任务期间 `origin/main` 从
+`2d103e330f847e003ff5909097d892f5722cca04` 前进到
+`15fe619b2885b928dd27be9668cca6b0ee903c57`，新增 Codex 认证安装引导，并与本 Change 在
+`packages/cli/src/commands/setup.test.ts` 和生成的 `packages/cli/dist/tenon.mjs` 产生真实冲突。
+
+本轮在当前独立 worktree 内执行正常 merge，不使用 `requirements-changed` 绕过会话或实现问题：
+
+- `setup.test.ts` 保留主线四组 Codex CLI 缺失、可信绝对 executable、Windows batch binding、
+  登录状态顺序测试，同时保留本 Change 三组 adapter setup/update 与 native update 真实编排测试。
+- 生成 bundle 不手工拼接；先重建 kernel workspace 输出，再由 `npm run build` 原子重建
+  Dashboard、server 和 CLI tracked 产物。
+- 聚焦 CLI 4 files / 117 tests 通过。
+- `npm run typecheck:web` 与 `npm run test:web` 通过，Dashboard 为 52 files / 999 tests。
+- `npm test` 通过，318 files / 5539 passed / 5 honest skips（5544 total）。
+- `bash tools/test-bundle.sh` 31/31；`npm run check:npx-package` 39/39；
+  docs 10/10、repository hygiene 6/6、architecture 627 files、comments 和 OpenSpec strict
+  validation 全部通过。
+- 重新 fetch 后 `origin/main` 仍为 `15fe619b2885b928dd27be9668cca6b0ee903c57`。
+
+合并提交完成后必须再次确认 `origin/main` 是新 HEAD 的祖先，且 `git merge-tree --write-tree
+origin/main HEAD` 零冲突；在此之前不冻结 Build barrier，也不复用第六轮 Verify 结论。
+
+### 第七轮 pre-Verify 审查发现
+
+独立 reviewer 覆盖合并后的 210/210 paths，结论为 C0/H0/M1/L0。唯一 MEDIUM 是主线新增的
+Codex 认证语义尚未进入 Host Plan：真实 Codex setup 和手工 update 均在 managed runtime
+成功后探测 `codex login status` 并输出认证引导，但 v1 计划仍结束在旧步骤，server/frontend
+strict decoder 也会拒绝新增步骤。现有两组测试只分别验证 Host Plan 与真实 auth 流程，没有交叉
+断言，因而全绿未捕获这项漂移。
+
+该 finding 改变了“计划与当前真实 setup/update 编排一致”的已批准语义，必须用
+`requirements-changed` 返回 Spec，明确 Codex-only 的稳定认证状态/引导步骤与 notice，再更新
+三端契约、i18n、真实顺序测试和生成 bundle。不得把它当成会话绑定问题绕过，也不得在 Build
+直接覆盖已登记的 proposal/design SHA。
+
+## 第八轮 Build：Codex 认证计划纵向同步
+
+本轮严格经过 `requirements-changed` 的 Spec 修订与 exact `spec-complete` delegated review
+回到 Build。交叉 TDD 先让 CLI、server 与 Dashboard fixture 因缺少新契约而按预期失败，再以
+最小实现同步：
+
+- Codex setup 在 `managed-runtime` 后加入只读 `codex-auth-status`，随后保留
+  `bundled-skills`、`runtime-readiness`，共 7 步；Codex update 在 `managed-runtime` 后加入同一
+  步骤，共 5 步。
+- `codex-auth-status` 只预览 `codex login status`，计划生成不会执行该命令；Codex 计划增加
+  `host-plan.notice.codex-auth-guidance`。
+- Claude setup/update 仍分别为 6/4 步，十个 adapter 仍分别为 5/3 步，均不接受 Codex-only
+  step 或 notice。
+- CLI、server、Dashboard 三端严格 decoder、zh/en i18n、组件/API fixture 与真实
+  `cmdSetup`/`cmdUpdate` 顺序测试已同步；CLI/server/Dashboard 生成物由 `npm run build` 重建。
+
+Build8 收敛证据：
+
+- CLI/server 聚焦测试 168/168；Dashboard 聚焦测试 32/32。
+- `npm run typecheck:web` 通过；`npm run test:web` 为 52 files / 999 tests。
+- `npm test` 为 318 files / 5539 passed / 5 honest skips（5544 total）。
+- `npm run build` 通过，Dashboard 新 asset 为 `index-BVcnLJH_.js`。
+- `bash tools/test-bundle.sh` 31/31；`npm run check:npx-package` 39/39；docs 10/10；
+  repository hygiene 6/6；architecture 627 files；comments 与 OpenSpec strict validation
+  全部通过。
+- built CLI catalog 为 12 个注册目标；12×setup/update 共 24 个计划均为
+  `host-target-plan/v1`、`side_effects=none`，并拒绝 `.foo`、重复 `--host`、重复
+  `--operation`。
+
+生成物原子暂存后的完整 Standards / Spec 复审覆盖
+`origin/main...merge working tree` 有效路径 220/220（untracked 0、unmerged 0），结论为
+PASS：CRITICAL / HIGH / MEDIUM / LOW 均为 0。复审确认 Codex-only auth step/notice 与真实
+setup/update 顺序一致，Claude/adapter 无泄漏，计划生成仍为零副作用，server/frontend 严格
+decoder fail-closed，UI 不提供执行入口，三份 dist 属于同代构建且 `index.html` 指向已暂存
+`index-BVcnLJH_.js`。合并提交后仍须确认 `origin/main` 为祖先且 merge-tree 零冲突，再冻结
+Build barrier。

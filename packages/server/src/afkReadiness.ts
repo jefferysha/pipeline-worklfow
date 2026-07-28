@@ -8,19 +8,21 @@
  *     同 T2 hostEnv 合并语义)。
  * 「没装 docker/没建镜像/没配凭证」都是常态不是错误:本模块不抛,HTTP 层恒 200。
  */
-import { accessSync, constants as fsConstants } from 'node:fs'
+import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { readSecrets, SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
+import {
+  codexHomeCredentialLight,
+  readSecrets,
+  SANDCASTLE_BUILD_HINT,
+  type CredentialLight,
+} from '@tenon/kernel'
 import { execDocker, type ExecDockerFn } from './dockerImages.js'
 
 // P1-X1 防漂移：build_hint 单一真相源迁至 kernel（见 kernel types.ts SANDCASTLE_BUILD_HINT）。
 // 本地不再重复定义字面串；仍 re-export 保持本模块既有导出面不破。
 export { SANDCASTLE_BUILD_HINT }
 
-export interface CredLight {
-  set: boolean
-  source?: 'host-env' | 'secrets-file' | 'default-home'
-}
+export type CredLight = CredentialLight
 
 export interface AfkReadiness {
   ok: true
@@ -45,23 +47,12 @@ function credLight(
 
 function canReadFile(path: string): boolean {
   try {
+    if (!statSync(path).isFile()) return false
     accessSync(path, fsConstants.R_OK)
     return true
   } catch {
     return false
   }
-}
-
-/** CODEX_HOME 不进 secrets store；显式 env 优先，否则只认默认 home 下可读的 auth.json。 */
-function codexHomeLight(
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  defaultCodexHome?: string,
-  canRead: (path: string) => boolean = canReadFile,
-): CredLight {
-  const v = hostEnv.CODEX_HOME
-  if (v !== undefined && v !== '') return { set: true, source: 'host-env' }
-  if (defaultCodexHome && canRead(join(defaultCodexHome, 'auth.json'))) return { set: true, source: 'default-home' }
-  return { set: false }
 }
 
 export async function buildAfkReadiness(opts: {
@@ -92,7 +83,11 @@ export async function buildAfkReadiness(opts: {
       'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: credLight('CLAUDE_CODE_OAUTH_TOKEN', hostEnv, fileKeys) },
       codex: {
         OPENAI_API_KEY: credLight('OPENAI_API_KEY', hostEnv, fileKeys),
-        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile),
+        CODEX_HOME: codexHomeCredentialLight(
+          hostEnv.CODEX_HOME,
+          opts.defaultCodexHome,
+          (home) => (opts.canReadFile ?? canReadFile)(join(home, 'auth.json')),
+        ),
       },
     },
   }
