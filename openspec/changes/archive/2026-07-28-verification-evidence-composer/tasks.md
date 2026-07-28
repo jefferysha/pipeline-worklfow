@@ -28,8 +28,8 @@
 
 ## 交付
 
-- [ ] 应用 OpenSpec delta，提交、推送并创建包含来源映射与验证证据的 PR。 (ship)
+- [x] 应用 OpenSpec delta，提交、推送并创建包含来源映射与验证证据的 PR。 (ship)
 
 ## 归档
 
-- [ ] 回读全部治理文档并归档 Change，记录最终状态。 (archive)
+- [x] 回读全部治理文档并归档 Change，记录最终状态。 (archive)
