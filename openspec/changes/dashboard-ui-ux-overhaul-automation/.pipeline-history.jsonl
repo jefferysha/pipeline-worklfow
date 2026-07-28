@@ -63,3 +63,18 @@
 {"ts":"2026-07-28T08:51:50Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
 {"ts":"2026-07-28T08:51:50Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T07:57:23Z authority_host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
 {"ts":"2026-07-28T08:51:50Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"74aca30f-b811-46b6-86fc-e28bdf714224"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T08:56:19Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-28T08:56:19Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"2ec8df8b-0cb4-48a4-b917-dd8da25c20b9"}
+{"ts":"2026-07-28T08:59:54Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T08:59:55Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T08:59:55Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T09:00:12Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T09:00:12Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T07:57:23Z authority_host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
+{"ts":"2026-07-28T09:00:12Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"13be3209-f8f2-41de-b440-00ad65403236"}
+{"ts":"2026-07-28T09:11:06Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T09:14:03Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

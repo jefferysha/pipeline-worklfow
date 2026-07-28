@@ -63,11 +63,10 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     expect(nav.textContent).not.toContain('收件箱')
   })
 
-  it('移动 rail 的品牌、五个主入口与设置入口都声明 44px 目标和可见焦点', () => {
+  it('电脑端 rail 的品牌、五个主入口与设置入口都有可见焦点和可访问名称', () => {
     renderNav()
     for (const id of ['nav-overview', ...PRIMARY_VIEWS.map((view) => `nav-${view}`), 'nav-settings']) {
       const control = screen.getByTestId(id)
-      expect(control).toHaveClass('max-[720px]:size-11')
       expect(control).toHaveClass('focus-visible:ring-[3px]', 'motion-reduce:transition-none')
       expect(control).toHaveAccessibleName()
     }

@@ -14,162 +14,144 @@
     {
       "kind": "proposal",
       "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/proposal.md",
-      "sha256": "0d62122d484c1170f909df19fb1a10e6992e59131471acc66435c323d9244ed7",
+      "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:51:31Z",
+      "recordedAt": "2026-07-28T08:59:54Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "0d62122d484c1170f909df19fb1a10e6992e59131471acc66435c323d9244ed7",
-          "readAt": "2026-07-28T08:51:32Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",8]"
+          "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
+          "readAt": "2026-07-28T08:59:56Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",10]"
         },
         {
           "phase": "build",
-          "sha256": "0d62122d484c1170f909df19fb1a10e6992e59131471acc66435c323d9244ed7",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "openspec-design",
       "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/design.md",
-      "sha256": "a1d0109df17ef3dced9a8001b58a4d97093ca5e59f05302a8dffb7f18c4d4323",
+      "sha256": "416047988abb8c5ee6219aeb01ba5610031e58fdfca791197958b7b3e71135e3",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:51:31Z",
+      "recordedAt": "2026-07-28T08:59:55Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "a1d0109df17ef3dced9a8001b58a4d97093ca5e59f05302a8dffb7f18c4d4323",
-          "readAt": "2026-07-28T08:51:32Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",8]"
+          "sha256": "416047988abb8c5ee6219aeb01ba5610031e58fdfca791197958b7b3e71135e3",
+          "readAt": "2026-07-28T08:59:56Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",10]"
         },
         {
           "phase": "build",
-          "sha256": "a1d0109df17ef3dced9a8001b58a4d97093ca5e59f05302a8dffb7f18c4d4323",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/tasks.md",
-      "sha256": "fbf5bdacc78a08773500d2f047591aca026d08f289f9a014b9b07409ce638e32",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:51:31Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "fbf5bdacc78a08773500d2f047591aca026d08f289f9a014b9b07409ce638e32",
-          "readAt": "2026-07-28T08:51:32Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",8]"
-        },
-        {
-          "phase": "build",
-          "sha256": "fbf5bdacc78a08773500d2f047591aca026d08f289f9a014b9b07409ce638e32",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "416047988abb8c5ee6219aeb01ba5610031e58fdfca791197958b7b3e71135e3",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "delta-spec",
       "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/specs/dashboard-ui-ux-system/spec.md",
-      "sha256": "95e1aeebf32519941a9abe7725112ba27d1e078860a071ed70932c33dd9e2d6e",
+      "sha256": "494dffeebea746b80d2f1d44612e9aa518050acef76f774954c89a422e42599b",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-28T08:51:31Z",
+      "recordedAt": "2026-07-28T08:59:55Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "95e1aeebf32519941a9abe7725112ba27d1e078860a071ed70932c33dd9e2d6e",
-          "readAt": "2026-07-28T07:57:55Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",5]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "95e1aeebf32519941a9abe7725112ba27d1e078860a071ed70932c33dd9e2d6e",
-          "readAt": "2026-07-28T08:20:20Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",6]"
-        },
-        {
-          "phase": "build",
-          "sha256": "95e1aeebf32519941a9abe7725112ba27d1e078860a071ed70932c33dd9e2d6e",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "494dffeebea746b80d2f1d44612e9aa518050acef76f774954c89a422e42599b",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "superpower-plan",
       "path": "docs/superpowers/plans/2026-07-28-dashboard-ui-ux-overhaul-automation.md",
-      "sha256": "dc08fe775c5440218f6dca756867bfcf1bf6c0822ff2822f141cc7ad3e95ff75",
+      "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-28T08:51:32Z",
+      "recordedAt": "2026-07-28T08:59:55Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "dc08fe775c5440218f6dca756867bfcf1bf6c0822ff2822f141cc7ad3e95ff75",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "plan",
       "path": "docs/superpowers/plans/2026-07-28-dashboard-ui-ux-overhaul-automation.md",
-      "sha256": "dc08fe775c5440218f6dca756867bfcf1bf6c0822ff2822f141cc7ad3e95ff75",
+      "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-28T08:51:32Z",
+      "recordedAt": "2026-07-28T08:59:56Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "dc08fe775c5440218f6dca756867bfcf1bf6c0822ff2822f141cc7ad3e95ff75",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automation-design.md",
-      "sha256": "a6d11e0d831e478462b4bbdee5e08cd7fb28c76b42476a30ef3d1b66f1e94e09",
+      "sha256": "a3db295463bd2c103c2cd12a5be423230fc9ed69c68b34567cd3466f6f9f8ea1",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:51:32Z",
+      "recordedAt": "2026-07-28T08:59:56Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "a6d11e0d831e478462b4bbdee5e08cd7fb28c76b42476a30ef3d1b66f1e94e09",
-          "readAt": "2026-07-28T08:51:32Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",8]"
+          "sha256": "a3db295463bd2c103c2cd12a5be423230fc9ed69c68b34567cd3466f6f9f8ea1",
+          "readAt": "2026-07-28T08:59:56Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",10]"
         },
         {
           "phase": "build",
-          "sha256": "a6d11e0d831e478462b4bbdee5e08cd7fb28c76b42476a30ef3d1b66f1e94e09",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "a3db295463bd2c103c2cd12a5be423230fc9ed69c68b34567cd3466f6f9f8ea1",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     },
     {
       "kind": "adr",
       "path": "docs/adr/2026-07-28-dashboard-ui-ux-overhaul-automation-explore.md",
-      "sha256": "05c3facf7a24a95787fc38cefc30d740aca404c01ebdd975439229acd487e33d",
+      "sha256": "49ecfa5c91356c8fc11ddb3930e2d544843f99b3fbd82ae515d748f016f3ce6b",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:51:32Z",
+      "recordedAt": "2026-07-28T08:59:56Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "05c3facf7a24a95787fc38cefc30d740aca404c01ebdd975439229acd487e33d",
-          "readAt": "2026-07-28T08:51:32Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",8]"
+          "sha256": "49ecfa5c91356c8fc11ddb3930e2d544843f99b3fbd82ae515d748f016f3ce6b",
+          "readAt": "2026-07-28T08:59:56Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",10]"
         },
         {
           "phase": "build",
-          "sha256": "05c3facf7a24a95787fc38cefc30d740aca404c01ebdd975439229acd487e33d",
-          "readAt": "2026-07-28T08:52:57Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",9]"
+          "sha256": "49ecfa5c91356c8fc11ddb3930e2d544843f99b3fbd82ae515d748f016f3ce6b",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/tasks.md",
+      "sha256": "a837461c3609c76277a5ec17d2669acc9eb0123e669baac6a708b0531b1a0ec4",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T09:11:06Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "a837461c3609c76277a5ec17d2669acc9eb0123e669baac6a708b0531b1a0ec4",
+          "readAt": "2026-07-28T09:11:06Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
         }
       ]
     }

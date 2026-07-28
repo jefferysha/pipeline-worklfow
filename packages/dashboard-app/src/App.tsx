@@ -188,7 +188,7 @@ function AppShell(): JSX.Element {
           <span className="flex-1">{t('common.offline')}</span>
           <button
             type="button"
-            className="touch-manipulation cursor-pointer rounded-[7px] border border-red-b px-[11px] py-1 text-xs font-bold text-red-d transition-colors hover:bg-red-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
+            className="cursor-pointer rounded-[7px] border border-red-b px-[11px] py-1 text-xs font-bold text-red-d transition-colors hover:bg-red-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none"
             data-testid="offline-reconnect"
             onClick={reconnect}
           >
@@ -228,7 +228,7 @@ function AppShell(): JSX.Element {
             <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
             <button
               type="button"
-              className="mt-4 touch-manipulation cursor-pointer rounded-lg border border-red-b bg-card px-3.5 py-2 text-[13px] font-bold text-red-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
+              className="mt-4 cursor-pointer rounded-lg border border-red-b bg-card px-3.5 py-2 text-[13px] font-bold text-red-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none"
               onClick={refresh}
             >
               {t('common.snapshot_retry')}

@@ -27,8 +27,8 @@ describe('Dashboard 设计系统契约', () => {
     'components/ui/select.tsx',
     'components/ui/tabs.tsx',
     'shell/Onboarding.tsx',
-  ])('%s 的高频移动交互遵守 44px 触控基线', (relativePath) => {
-    expect(readSource(relativePath)).toMatch(/max-\[720px\]:(?:min-h|size)-11/)
+  ])('%s 不注入手机端触控尺寸规则', (relativePath) => {
+    expect(readSource(relativePath)).not.toMatch(/max-\[720px\]:(?:min-h|size)-11/)
   })
 
   it.each([

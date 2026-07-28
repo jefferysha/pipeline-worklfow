@@ -134,3 +134,53 @@ Dashboard-wide 规格覆盖不足、设计文档与 hash listener 漂移、Butto
 
 本轮 Build 复评：已知 Critical / High / Medium = 0 / 0 / 0；进入第二次 pre-Verify 前仍需完成
 全量测试、生产构建、截图与 Standards + Spec 审查。
+
+## 产品定位校正：仅电脑端
+
+用户明确说明 Dashboard 不存在手机端使用场景，原自动任务中的移动布局/移动验收要求不再适用。
+因此上文关于 390px、44px 触控目标和手机截图的内容仅保留为历史 Verify 记录，不构成最终
+验收标准。最终范围为 1024–1920px 电脑端，并继续要求键盘、屏幕阅读器、浅/深/system 主题、
+空/错/恢复状态和 reduced-motion。Build 必须撤销专门的移动尺寸规则和手机截图后重新全量审查。
+
+## 电脑端范围收敛后的 Build 复评
+
+最终候选实现撤销本 Change 新增的 `touch-manipulation`、`max-[720px]:min-h-11` /
+`size-11` 移动触控强化，以及 6 张手机截图；项目原有窄窗口布局降级不属于本轮投资，未做无关
+重写。SolutionView 章节索引改为 40px 的电脑端紧凑密度，同时保留原生链接、可见焦点、
+`aria-current` 和 reduced-motion。
+
+### TDD 与自动验证
+
+- 红：电脑端 Button/设计系统/SolutionView 新契约先产生 7 个预期失败。
+- 绿：定向 4 文件 / 54 测试通过。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 文件 / 988 测试通过；仅保留既有 `act(...)`、GSAP target 警告。
+- `npm run build`：通过；Dashboard、server、CLI 产物均由当前源码重建。
+- `git diff --check`：通过；Vite 仍有既有的大 chunk 提示。
+
+### 真实电脑端浏览器验收
+
+目标为当前 worktree 的生产构建 `http://127.0.0.1:18836`，页面标题为 `Tenon Dashboard`，
+H1 为“让 coding agents 按可验证流程交付”，避免把其他端口应用误认为验收对象。
+
+- 1024×768 浅色：根宽 `1024/1024`，7 个链接映射 7 个 section；键盘激活后 URL 为
+  `#solution-evidence` 且 `aria-current=location`；设置弹层首焦点、Shift+Tab 圈定、Escape
+  关闭与触发器焦点返回全部通过。
+- 1200×870 system 深色 + reduced-motion：根宽 `1200/1200`；抽样可交互元素的非零 CSS
+  transition/animation 数为 0；系统配色从 dark 切至 light 后界面实时同步。
+- 1440×900 浅色：根宽 `1440/1440`，七章节索引完整，无 console error。
+- 真实 `/api/snapshot` 返回 `project_count=0`；项目页展示双步骤零项目引导。
+- 受控 fault injection 将首次 snapshot 置为 500、stream 置为 abort：`role=alert`、
+  `aria-live=assertive` 与“重试加载”可达；第二次 snapshot 成功后 alert 消失并恢复零项目空态。
+  控制台仅出现两条与注入失败一致的网络错误。
+
+桌面证据：
+
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-desktop-1024-light.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-desktop-1200-dark-reduced.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-desktop-1440-light.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-empty-desktop-1440-light.png`
+- `docs/ux/shots/dashboard-ui-ux-overhaul-automation/system-error-desktop-1200-light-reduced.png`
+
+复评结果：视觉层级保持“安静的操作台”，电脑端密度、键盘语义、状态反馈与动效降级一致；
+Critical / High / Medium = 0 / 0 / 0。

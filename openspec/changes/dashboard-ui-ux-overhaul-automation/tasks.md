@@ -9,7 +9,7 @@
 ## 调研
 
 - [x] 审计页面、功能域、共享组件、主题 token、图标、状态和动效实现。
-- [x] 采集目标 Dashboard 的桌面/移动、明暗主题、键盘与 reduced-motion 浏览器基线。
+- [x] 采集目标 Dashboard 的电脑端、明暗主题、键盘与 reduced-motion 浏览器基线。
 - [x] 对照并行 worktree 的改动清单，选择无冲突首个切片。
 - [x] 形成设计方向、ADR 与可访问性/动效决策。
 
@@ -22,19 +22,20 @@
 ## 实现
 
 - [x] SolutionView：先补失败测试，约束七章节页内导航、锚点目标与语义。
-- [x] SolutionView：实现域内章节导航、44px 移动目标、可见焦点、横向滚动与 reduced-motion 兼容。
-- [x] SolutionView：完成桌面/移动、明暗主题、键盘与 reduced-motion 浏览器验收。
-- [x] 复核 PR #5–#8 overlap，并为多消费者 Button 原语补齐移动触控、disabled 与 reduced-motion 状态。
+- [x] SolutionView：实现域内章节导航、可见焦点、锚点状态与 reduced-motion 兼容。
+- [x] SolutionView：完成电脑端、明暗主题、键盘与 reduced-motion 浏览器验收。
+- [x] 复核 PR #5–#8 overlap，并为多消费者 Button 原语补齐 disabled、focus 与 reduced-motion 状态。
 - [x] 为 SolutionView 页内导航增加 URL hash 驱动的当前章节反馈与 `aria-current`。
-- [x] 修复第一次 Verify：移动 rail/设置 44×44、双语 accessible name、设置焦点圈定/Escape/返回。
+- [x] 修复第一次 Verify：Nav/设置双语 accessible name、设置焦点圈定/Escape/返回。
 - [x] 将主动作与 success 语义分离，并支持 system/light/dark 三态主题及系统偏好实时变化。
-- [x] 统一高频共享原语、空态与恢复操作的 focus、disabled、touch target 和 reduced-motion 基线。
-- [x] 补齐 Button 尺寸矩阵、主题/导航生命周期与设计系统契约测试。
+- [x] 统一高频共享原语、空态与恢复操作的 focus、disabled 和 reduced-motion 基线。
+- [x] 补齐 Button 桌面尺寸、主题/导航生命周期与设计系统契约测试。
+- [x] 按最终电脑端定位撤销移动触控专项规则、手机截图与对应测试声明。
 
 ## 验证
 
 - [ ] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 与 `npm run build:web`。
-- [ ] 在真实 Dashboard 完成桌面/移动、明暗主题、键盘、状态与 reduced-motion 验收。
+- [ ] 在真实 Dashboard 完成 1024/1200/1440px、明暗主题、键盘、状态与 reduced-motion 验收。
 - [ ] 生成验证报告并处理所有可修复偏差。
 
 ## 交付

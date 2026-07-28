@@ -19,7 +19,7 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 2. 新增 `packages/dashboard-app/src/solution/SolutionSectionNav.tsx` 并修改 `SolutionView.tsx`
    - 复用既有七个 `solution.sections.*_eyebrow` 文案，不触碰共享 i18n。
    - 为七个 section 建立稳定 id 和 `scroll-margin`，导航使用原生锚点。
-   - 桌面使用紧凑层级；移动允许横向滚动，每个链接至少 44px 高并提供明确 `focus-visible`。
+   - 桌面使用紧凑层级并提供明确 `focus-visible`。
    - 根容器只裁剪横向溢出，不能用纵向 `overflow-hidden` 破坏 sticky。
    - 不添加平滑滚动或非必要动画，reduced-motion 直接保持终态。
 3. 绿与重构
@@ -28,7 +28,7 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 4. 验证
    - `npx vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/solution/SolutionView.test.tsx`
    - `npm run typecheck:web`
-   - 真实 Playwright：1200×870 / 390×844、浅/深色、键盘、锚点与 reduced-motion。
+   - 真实 Playwright：1024×768 / 1200×870 / 1440×900、浅/深色、键盘、锚点与 reduced-motion。
 5. 回滚
    - 单独回退 SolutionView、章节导航与相邻测试；不需要数据迁移、i18n 或 API 回滚。
 
@@ -39,9 +39,9 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 1. 已重新检查 PR #5–#9；PR #5 与 App/Nav/i18n/Solution 有文件重叠，其余开放 PR 无本批核心
    UI 实现重叠。重叠作为合并风险记录，不复用其 Change 或提交。
 2. 已审计 `components/ui` 的 Button、Input、Select、Dialog、DropdownMenu、Tabs、Badge、Table
-   与 Tooltip，并统一移动触控和 reduced-motion 基线。
+   与 Tooltip，并统一 focus、disabled 和 reduced-motion 基线。
 3. 已补 Button 全尺寸矩阵和设计系统源码契约测试；明确 `xs` 是紧凑例外。
-4. 已用 390×844 reduced-motion 真实浏览器验证 Nav、设置弹层、Onboarding 与错误恢复目标。
+4. 用户最终明确只支持电脑端；Build 将撤销专门的移动触控规则，不把旧 390×844 结果计入交付。
 
 **此处建议 /clear**
 
@@ -50,7 +50,7 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 1. 已将主动作从 success green 分离为 accent blue，并以 CSS 契约测试锁定浅/深主题语义。
 2. 已增加显式 system 主题偏好和系统主题实时响应；新增文案同步中英文。
 3. 已补 Nav 设置弹层的初始焦点、Tab/Shift+Tab 圈定、Escape 关闭与焦点返回。
-4. 已补移动 rail、离线恢复、快照错误重试和 Onboarding 的 44px、焦点与 reduced-motion 状态。
+4. 已补 Nav、离线恢复、快照错误重试和 Onboarding 的焦点与 reduced-motion 状态。
 5. 已通过真实零项目 API 验收 empty 状态，并通过受控中断 snapshot/stream 验收 error 与恢复路径；
    UI fault injection 明确标注，不伪装为生产故障。
 
@@ -62,7 +62,7 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 2. 运行 `npm run typecheck:web`、`npm run test:web`、`npm run build:web`。
 3. 涉及共享契约时补 `npm run build`；纯前端切片不虚构跨端影响。
 4. 启动当前 worktree 的真实 Dashboard，确认标题、URL、release/source 与目标一致。
-5. 覆盖桌面/移动、浅/深主题、键盘、主要状态与 reduced-motion；保存截图和 accessibility snapshot。
+5. 覆盖 1024/1200/1440px 桌面、浅/深主题、键盘、主要状态与 reduced-motion；保存截图和 accessibility snapshot。
 6. 任何失败默认回 Build 修复，不接受无证据偏差。
 
 ## 原型决策

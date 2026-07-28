@@ -5,7 +5,7 @@
 Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。用户结果不是“更花哨”，而是：
 
 - 一眼分辨项目语境、状态层级和下一步操作；
-- 桌面与移动端都能可靠触达高频控制；
+- 电脑端常见笔记本与桌面宽度都能可靠完成高频控制；
 - 键盘、屏幕阅读器、深浅主题和 reduced-motion 都获得同等完成度；
 - 每组改动可独立评审、验证和回滚。
 
@@ -16,6 +16,7 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
 - 新可见文案必须中英文同步；首切片不新增文案。
 - 不复用其他 automation 的 Change、分支、worktree 或 canonical state；发现重叠时记录并保持提交可独立回滚。
 - 不升级依赖、不改业务规则，也不以一次性组件重写替换现有 Dashboard。
+- 产品定位只覆盖电脑端本地开发工作流；手机布局、移动触控尺寸和手机截图不是交付目标。
 
 ## 方案比较
 
@@ -46,15 +47,15 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
 ### 信息架构
 
 - `SolutionView` 已由 `App.tsx` 在 `view='overview'` 时真实渲染，且 Nav 品牌入口可达。
-- 页面包含七个按 `01` 至 `07` 编号的主要章节；390×844 浏览器基线完整高度为 8,981px。
+- 页面包含七个按 `01` 至 `07` 编号的主要章节，电脑端仍需要稳定的快速定位结构。
 - 在 hero 之后提供域内页内导航，复用七个既有 eyebrow 翻译，不新增或修改共享 i18n。
 - 导航链接和 section id 由同一个 solution 域配置表达，避免锚点与章节顺序漂移。
 
 ### 交互与可访问性
 
 - 使用语义 `nav` 与原生 `<a href="#...">`，不以按钮或 JavaScript 模拟章节跳转。
-- 每个链接具有可理解的既有双语名称、至少 44px 高的移动目标与明确 focus-visible。
-- 窄屏导航横向滚动，不换成七行卡片，不制造根级水平溢出。
+- 每个链接具有可理解的既有双语名称与明确 focus-visible。
+- 章节索引在 1024–1920px 桌面视口保持紧凑且不制造根级水平溢出。
 - 每个目标 section 使用稳定 id 与 scroll margin，目标标题继续保持既有 h2 层级。
 
 ### 动效与 reduced motion
@@ -71,11 +72,11 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
   和 system 主题保持同一语义映射。
 - App 将主题偏好明确建模为 `system | light | dark`。system 使用
   `matchMedia('(prefers-color-scheme: dark)')` 解析，并在系统主题变化时更新；离开 system 或卸载时清理 listener。
-- Nav 的品牌、五个主入口与设置入口在移动端均为 44×44px，并具有双语 accessible name；
+- Nav 的品牌、五个主入口与设置入口均具有双语 accessible name；
   设置弹层在打开时聚焦首控件，Tab/Shift+Tab 圈定焦点，Escape 关闭并把焦点返回触发器。
-- Button、Input、Select、Tabs、Dialog、DropdownMenu 等共享交互原语统一可见焦点、禁用辨识、
-  移动触控基线和 reduced-motion 终态；明确紧凑的 `xs` Button 仍作为例外变体保留。
-- App 的离线恢复、快照错误重试和 Onboarding 复制/创建操作使用相同触控与焦点基线。
+- Button、Input、Select、Tabs、Dialog、DropdownMenu 等共享交互原语统一可见焦点、禁用辨识
+  和 reduced-motion 终态；尺寸继续服从现有桌面密度。
+- App 的离线恢复、快照错误重试和 Onboarding 复制/创建操作使用相同焦点基线。
 - 全局 reduced-motion 媒体查询把 CSS animation/transition 和平滑滚动直接置于终态；
   已有 GSAP 继续由各组件的 context/revert 生命周期负责清理。
 
@@ -117,7 +118,7 @@ stateDiagram-v2
 ## Assumptions
 
 - PR #5–#8 仍可能变化；本 Change 每轮重新检查 overlap。
-- 44px 是产品增强目标，不声称等同于所有 WCAG 合规结论。
+- 1024–1920px 为本 Change 的桌面验收范围；不对手机端作支持承诺。
 - SolutionView 是无 API 的纯展示域，浏览器验收直接覆盖生产页面而非 fixture。
 
 ## Decision Log
@@ -130,13 +131,14 @@ stateDiagram-v2
    system 主题、Nav/设置键盘语义、共享交互原语和可恢复状态。
 6. 与 PR #5 的文件重叠被记录为集成风险；本分支不复用其 Change/state、不强推覆盖，所有修复保持
    独立提交并在 PR 中声明可按提交回滚。
+7. 用户最终明确只支持电脑端；撤销 44px 移动触控专项投入和手机验收，保留桌面键盘与辅助技术要求。
 
 ## 红队自检
 
 - 如果并行 PR 未交付：本 Change 仍可独立改善 SolutionView，不依赖它们的 token 变化。
 - 如果并行 PR 先合并：solution 域源码无重叠；rebase 后重测主题与外壳组合。
 - 如果导航配置与 section id 漂移：测试必须因失效 href 或缺失目标失败。
-- 如果 sticky/横向滚动造成布局问题：在 390px/1200px 验证根级 overflow、目标尺寸与焦点可见性。
+- 如果 sticky/横向滚动造成布局问题：在 1024px/1200px/1440px 验证根级 overflow 与焦点可见性。
 
 ## 术语
 

@@ -48,7 +48,7 @@ interface NavProps {
 // ── tailwind 类串（状态经 aria-current / data-* 属性挂 aria-*/data-* 变体，测试不断言视觉类名）──
 /** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏收为纯图标。 */
 const RAIL_BTN_CLS =
-  'group relative flex w-[72px] cursor-pointer flex-col items-center gap-[3px] rounded-[10px] border border-transparent px-0.5 pb-1.5 pt-2 text-text-3 outline-none transition-colors motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:size-11 max-[720px]:justify-center max-[720px]:p-0'
+  'group relative flex w-[72px] cursor-pointer flex-col items-center gap-[3px] rounded-[10px] border border-transparent px-0.5 pb-1.5 pt-2 text-text-3 outline-none transition-colors motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:w-10 max-[720px]:px-0'
 /** rail 按钮小字标签（demo .railbtn .lb 对位）；窄屏隐藏（textContent 仍在，仅视觉收起）。 */
 const RAIL_LB_CLS = 'max-w-full truncate text-[11px] leading-[1.2] max-[720px]:hidden'
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
@@ -100,7 +100,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
         data-testid="nav-overview"
         aria-label={t('solution.nav_label')}
         aria-current={view === 'overview' ? 'page' : undefined}
-        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-[11px] border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) max-[720px]:size-11"
+        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-[11px] border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent)"
         title={t('solution.nav_label')}
         onClick={() => {
           setSettingsOpen(false)
@@ -194,7 +194,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:min-h-11"
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue)"
                 data-testid="theme-toggle"
                 aria-label={t('common.theme_toggle')}
                 onClick={() => onTheme(nextTheme)}
@@ -204,7 +204,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
               </button>
               <button
                 type="button"
-                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:min-h-11"
+                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue)"
                 data-testid="lang-toggle"
                 onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
               >

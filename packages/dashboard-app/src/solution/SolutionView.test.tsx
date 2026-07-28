@@ -42,7 +42,7 @@ describe('SolutionView 开源产品概览', () => {
       '#solution-community',
     ])
     for (const link of links) {
-      expect(link).toHaveClass('min-h-11', 'motion-reduce:transition-none')
+      expect(link).toHaveClass('min-h-10', 'motion-reduce:transition-none')
       const href = link.getAttribute('href')
       expect(href).not.toBeNull()
       const target = document.querySelector(href ?? '')

@@ -31,7 +31,7 @@ export function SolutionSectionNav(): JSX.Element {
               href={`#${solutionSectionId(section)}`}
               aria-current={currentSection === section ? 'location' : undefined}
               className={cn(
-                'flex min-h-11 items-center whitespace-nowrap rounded-xl border border-transparent px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:border-border hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)',
+                'flex min-h-10 items-center whitespace-nowrap rounded-xl border border-transparent px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:border-border hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)',
                 currentSection === section && 'border-border bg-fill text-text shadow-xs',
               )}
             >
