@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-design.md
 plan: docs/superpowers/plans/2026-07-28-dashboard-ui-ux-overhaul.md
 verification_report: docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/5
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T01:19:45Z
-updated_at: 2026-07-28T03:56:12Z
+updated_at: 2026-07-28T04:07:00Z
 verified_at: 2026-07-28T03:56:12Z
-archived_at: null
-archived: false
+archived_at: 2026-07-28T04:07:00Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 0f8d7889-a636-4bec-bd5c-81d9c18d6d30
-pipeline_transition_sequence: 7
-pipeline_transition_head: e89f9fb6-4bdb-4a63-8c08-6f9434aade4b
-pipeline_state_revision: 28
-pipeline_state_revision_id: ed38adbd-772a-45fa-a7c6-63293375558b
-pipeline_state_digest: 38bcd1c38451a46fb01b8fd74e693633cc1cb0dc92ed436d07bd516b87736613
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjgsInJldmlzaW9uSWQiOiJlZDM4YWRiZC03NzJhLTQ1ZmEtYTdjNi02MzI5MzM3NTU1OGIiLCJwYXlsb2FkRGlnZXN0IjoiNzc3ZWZjMTk3ZTg4MGE4Nzc5NmU1OTI5YmZiMjY4ZGU0NGY0YThhMTcyZjVkYWQzYzRmMTk0ZTU5MzhmNjYzYSJ9
+pipeline_transition_sequence: 9
+pipeline_transition_head: 0312ba47-0e59-4b54-8cfc-e69bd4155999
+pipeline_state_revision: 31
+pipeline_state_revision_id: 84e8cf01-fb83-40f1-b6a6-a235cd97bce6
+pipeline_state_digest: 417a180eb271c879460a647005e4797846d96652de193af954c69251846ac298
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzEsInJldmlzaW9uSWQiOiI4NGU4Y2YwMS1mYjgzLTQwZjEtYjZhNi1hMjM1Y2Q5N2JjZTYiLCJwYXlsb2FkRGlnZXN0IjoiYjZhN2ZjMWU3Zjk3ZDE3YjA4MmVhMjczNTNlZTBmMjFkMjg2NzExZTc2ZWZhNTc5MjI3OWRmYzUyM2NiZDI0ZiJ9
