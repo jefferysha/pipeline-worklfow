@@ -8,9 +8,13 @@
 
 pipeline_hooks_config_identity() { # $1=path；stdout=inode:size
   # Darwin 的 /dev/fd 位于 devfs，stat 会报告 devfs 的 dev 而非底层文件 dev；inode 与 size
-  # 仍来自同一 open file description。两侧另有普通文件与 symlink 判定，故比较这两个稳定字段。
-  stat -f '%i:%z' "$1" 2>/dev/null \
-    || stat -c '%i:%s' "$1" 2>/dev/null
+  # 仍来自同一 open file description。GNU stat 默认不跟随 /dev/fd/N 符号链接，必须显式 -L，
+  # 否则会把链接自身的 inode/size 与 pathname 比较并让所有只读配置在 Linux 上失效。
+  # 两侧另有普通文件与 symlink 判定，故比较这两个稳定字段。
+  # 先试 GNU 形式：GNU `stat -f FORMAT path` 会把 FORMAT 当成另一个 pathname，
+  # 即使最终失败也会先把 path 的文件系统报告写到 stdout，不能安全地放在 fallback 前面。
+  stat -Lc '%i:%s' "$1" 2>/dev/null \
+    || stat -f '%i:%z' "$1" 2>/dev/null
 }
 
 pipeline_hooks_config_snapshot_from_fd() { # $1=path，fd 9 已打开
