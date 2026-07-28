@@ -56,6 +56,11 @@
      `request body` / `请求体` labels instead of falling back to the English word `request`.
    - The regression now passes in both locales.
 
+8. **Low — the implementation plan named a nonexistent CLI build script.**
+   - Independent Spec review found `npm run build:cli`, which is not declared in the root package.
+   - Corrected the executable plan to use the repository's actual `npm run bundle` command; this
+     is a command-name correction and does not change requirement semantics.
+
 ### Open findings
 
 - Critical: 0

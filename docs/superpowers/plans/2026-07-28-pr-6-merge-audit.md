@@ -47,7 +47,7 @@ bundle，尽早暴露共享层集成问题。
      内外层、焦点归还、双向 Tab 和字段保留。
    - `packages/dashboard-app/src/progress/ProgressView.test.tsx`：nested modal 让渡与 ease-out。
    - 执行定向 Vitest；再运行 `npm run build:web`、`npm run build:server` 和
-     `npm run build:cli`，由构建解决 `dist/index.html` 与 bundles。
+     `npm run bundle`，由构建解决 `dist/index.html` 与 bundles。
 6. 运行最小端到端回归。
    - kernel composer 测试。
    - server compose route 测试。
