@@ -1152,7 +1152,7 @@ function serializePipeline(state, options = {}) {
 }
 
 // packages/kernel/dist/state/run-revision-store.js
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import { lstatSync, readFileSync as readFileSync2 } from "node:fs";
 import { lstat as lstat3, mkdir as mkdir4, readFile as readFile5 } from "node:fs/promises";
 import { join as join7 } from "node:path";
@@ -1844,6 +1844,12 @@ function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canoni
 }
 
 // packages/kernel/dist/state/run-revision-continuity.js
+import { createHash as createHash3 } from "node:crypto";
+function ownRecord2(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  return Object.fromEntries(Object.entries(value));
+}
 function assertRunMetadataContinuity(current, previous) {
   const before = previous.state.runMetadata;
   const after = current.state.runMetadata;
@@ -1862,6 +1868,39 @@ function assertRunMetadataContinuity(current, previous) {
   if (after === void 0 || after.runId !== before.runId || after.transitionSequence !== before.transitionSequence || after.transitionHead !== before.transitionHead) {
     throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u6539\u5199 runMetadata head/sequence");
   }
+}
+function assertMutationEffects(current, previous) {
+  const expected = diffWireFieldsToEffects(previous.state.fields, current.state.fields);
+  if (JSON.stringify(current.mutation.effects) !== JSON.stringify(expected)) {
+    throw new RunStateCorruptError("canonical mutation.effects \u4E0E previous\u2192current \u771F\u5B9E diff \u4E0D\u4E00\u81F4");
+  }
+  assertRunMetadataContinuity(current, previous);
+}
+function assertTransitionRevisionLink(current, transition, raw, previous) {
+  const observedDigest = createHash3("sha256").update(raw).digest("hex");
+  if (observedDigest !== current.mutation.transitionRecordDigest) {
+    throw new RunStateCorruptError("TransitionRecord digest \u4E0E canonical revision \u5BA1\u8BA1\u7ED1\u5B9A\u4E0D\u4E00\u81F4");
+  }
+  const metadata = current.state.runMetadata;
+  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  const record2 = ownRecord2(transition);
+  if (record2 === void 0)
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+  if (record2.id !== current.mutation.transitionRecordId || record2.sequence !== metadata.transitionSequence || record2.runId !== metadata.runId || previous !== void 0 && record2.previousRecordId !== previous.state.runMetadata?.transitionHead || JSON.stringify(record2.effects) !== JSON.stringify(current.mutation.effects)) {
+    throw new RunStateCorruptError("transition revision \u4E0E TransitionRecord \u4E0D\u4E00\u81F4");
+  }
+}
+function assertDirectPredecessor(revision, previous) {
+  if (revision.revision < 1 || previous === void 0) {
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
+  }
+  if (previous.revisionId !== revision.previousRevisionId || previous.revision !== revision.revision - 1) {
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
+  }
+  assertMutationEffects(revision, previous);
+  return previous;
 }
 
 // packages/kernel/dist/state/run-revision-store.js
@@ -1897,11 +1936,6 @@ function stateStorageSourcePathSync(changeDir) {
 function stateStorageExistsSync(changeDir) {
   return stateStorageSourcePathSync(changeDir) !== void 0;
 }
-function ownRecord2(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    return void 0;
-  return Object.fromEntries(Object.entries(value));
-}
 function previousRevisionIdFor(revision) {
   if (revision.previousRevisionId === void 0) {
     throw new RunStateCorruptError("\u975E\u521D\u59CB revision \u7F3A previousRevisionId");
@@ -1910,29 +1944,6 @@ function previousRevisionIdFor(revision) {
 }
 function revisionFileName(revision, revisionId) {
   return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
-}
-function assertTransitionRevisionLink(current, transition, raw, previous) {
-  const observedDigest = createHash3("sha256").update(raw).digest("hex");
-  if (observedDigest !== current.mutation.transitionRecordDigest) {
-    throw new RunStateCorruptError("TransitionRecord digest \u4E0E canonical revision \u5BA1\u8BA1\u7ED1\u5B9A\u4E0D\u4E00\u81F4");
-  }
-  const metadata = current.state.runMetadata;
-  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
-    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
-  }
-  const record2 = ownRecord2(transition);
-  if (record2 === void 0)
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-  if (record2.id !== current.mutation.transitionRecordId || record2.sequence !== metadata.transitionSequence || record2.runId !== metadata.runId || previous !== void 0 && record2.previousRecordId !== previous.state.runMetadata?.transitionHead || JSON.stringify(record2.effects) !== JSON.stringify(current.mutation.effects)) {
-    throw new RunStateCorruptError("transition revision \u4E0E TransitionRecord \u4E0D\u4E00\u81F4");
-  }
-}
-function assertMutationEffects(current, previous) {
-  const expected = diffWireFieldsToEffects(previous.state.fields, current.state.fields);
-  if (JSON.stringify(current.mutation.effects) !== JSON.stringify(expected)) {
-    throw new RunStateCorruptError("canonical mutation.effects \u4E0E previous\u2192current \u771F\u5B9E diff \u4E0D\u4E00\u81F4");
-  }
-  assertRunMetadataContinuity(current, previous);
 }
 async function assertTransitionRecordFile(changeDir, revision, previous) {
   if (revision.mutation.kind !== "transition")
@@ -2020,7 +2031,7 @@ async function publishRunRevision(changeDir, current, state, mutation) {
     }
     mutationWithDigest = {
       ...mutation,
-      transitionRecordDigest: createHash3("sha256").update(transitionRaw).digest("hex")
+      transitionRecordDigest: createHash4("sha256").update(transitionRaw).digest("hex")
     };
   }
   const revision = createRunRevision({
@@ -2069,8 +2080,10 @@ async function readCurrentRunRevision(changeDir) {
     assertMutationEffects(current, previous);
   }
   await assertTransitionRecordFile(changeDir, current, previous);
-  if (previous?.mutation.kind === "transition")
-    await assertTransitionRecordFile(changeDir, previous);
+  if (previous?.mutation.kind === "transition") {
+    const predecessor = assertDirectPredecessor(previous, await readImmutableRunRevision(changeDir, previous.revision - 1, previousRevisionIdFor(previous)));
+    await assertTransitionRecordFile(changeDir, previous, predecessor);
+  }
   return current;
 }
 async function validateCanonicalRevisionHistory(changeDir) {
@@ -2142,8 +2155,13 @@ function readCurrentRunRevisionFromSync(readText, sourceRoot = "canonical state"
     assertMutationEffects(current, previous);
   }
   assertTransitionRecordFromSync(readText, current, sourceRoot, previous);
-  if (previous?.mutation.kind === "transition")
-    assertTransitionRecordFromSync(readText, previous, sourceRoot);
+  if (previous?.mutation.kind === "transition") {
+    const predecessorId = previousRevisionIdFor(previous);
+    const predecessorRel = join7(revisionsRel, revisionFileName(previous.revision - 1, predecessorId));
+    const predecessorRaw = readText(predecessorRel);
+    const predecessor = assertDirectPredecessor(previous, predecessorRaw === void 0 ? void 0 : hydratePreVerifyReviewFromSync(readText, parseRunRevision(predecessorRaw, join7(sourceRoot, predecessorRel)), sourceRoot));
+    assertTransitionRecordFromSync(readText, previous, sourceRoot, predecessor);
+  }
   return current;
 }
 async function readImmutableRunRevision(changeDir, revision, revisionId) {
@@ -5676,7 +5694,7 @@ import { lstat as lstat9, readFile as readFile11 } from "node:fs/promises";
 import { join as join12 } from "node:path";
 
 // packages/kernel/dist/state/document-path.js
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile10, realpath as realpath2 } from "node:fs/promises";
 import { basename, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve3, sep as sep2 } from "node:path";
 var DocumentLedgerError = class extends Error {
@@ -5728,7 +5746,7 @@ async function resolveDocument(repoRoot, path7) {
   }
   if (content.byteLength === 0)
     throw new DocumentLedgerError(`document \u4E0D\u5F97\u4E3A\u7A7A: ${relativePath}`);
-  return { relativePath, digest: createHash4("sha256").update(content).digest("hex") };
+  return { relativePath, digest: createHash5("sha256").update(content).digest("hex") };
 }
 
 // packages/kernel/dist/state/history.js
@@ -5984,11 +6002,11 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
 }
 
 // packages/kernel/dist/state/spec-migration-evidence.js
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat10, readFile as readFile12, realpath as realpath3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute3, relative as relative3, resolve as resolve4, sep as sep3 } from "node:path";
 function digest(content) {
-  return createHash5("sha256").update(content).digest("hex");
+  return createHash6("sha256").update(content).digest("hex");
 }
 function escaped2(root, target) {
   const rel = relative3(root, target);
@@ -6638,7 +6656,7 @@ function evaluateGuard(state, ctx) {
 }
 
 // packages/kernel/dist/workspace/fingerprint.js
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 import { lstat as lstat11, readdir as readdir2, readFile as readFile13, readlink } from "node:fs/promises";
 import { join as join14 } from "node:path";
 var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
@@ -6733,7 +6751,7 @@ async function fingerprintWorkspace(root) {
   const rootStat = await lstat11(root);
   if (!rootStat.isDirectory())
     throw new Error(`workspace root is not a directory: ${root}`);
-  const hash = createHash6("sha256");
+  const hash = createHash7("sha256");
   writeRecord(hash, "D", ".", modeOf(rootStat));
   const names = sortNames(await readdir2(root));
   for (const name of names)
@@ -8022,14 +8040,14 @@ function eventEdge(event) {
 }
 
 // packages/kernel/dist/machine-state-scope.js
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 import { resolve as resolve5 } from "node:path";
 var STATE_SCOPE_NAMESPACE = "tenon:machine-state-scope:v1\0";
 function canonicalMachineStateRoot(stateRoot) {
   return resolve5(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest2 = createHash7("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  const digest2 = createHash8("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
   return `sha256-v1-${digest2}`;
 }
 
@@ -9051,7 +9069,7 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 import { readFileSync as readFileSync8 } from "node:fs";
 import { mkdir as mkdir9, readFile as readFile14 } from "node:fs/promises";
 import path6 from "node:path";
@@ -9062,7 +9080,7 @@ function trackRegistryPath(repoRoot) {
   return path6.join(repoRoot, TENON_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash8("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash9("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 var RegistryRevisionConflictError = class extends Error {
   expected;
@@ -12348,7 +12366,7 @@ function isValidatedLedgerRecord(value, errors) {
 
 // packages/kernel/dist/loops/ledger-store.js
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 import { mkdir as mkdir11, open, readFile as readFile15 } from "node:fs/promises";
 import { join as join21, resolve as resolve9 } from "node:path";
 var LEDGER_DIR = [".pipeline", "loops"];
@@ -12396,7 +12414,7 @@ var ReservationAppendError = class extends Error {
 };
 var heldLedgerDirs = new AsyncLocalStorage();
 function shortHash(raw) {
-  return createHash9("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  return createHash10("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
 }
 function createLoopLedgerStore() {
   function withLedgerLock(repoRoot, fn) {
@@ -12555,7 +12573,7 @@ function createLoopLedgerStore() {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash10, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash11, randomBytes as randomBytes2 } from "node:crypto";
 import { mkdir as mkdir12, open as open2, readFile as readFile16, rename as rename6 } from "node:fs/promises";
 import { join as join22, resolve as resolve10 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
@@ -12582,7 +12600,7 @@ async function readRegistrySnapshot(repoRoot) {
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash10("sha256").update(text2, "utf8").digest("hex");
+  const epoch = createHash11("sha256").update(text2, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text2 });
   return { text: text2, epoch, registry: data, errors };
 }
@@ -13119,7 +13137,7 @@ function renderHandoffSummary(doc, label, locale = "zh-CN") {
 }
 
 // packages/kernel/dist/compress/context-bundle.js
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 import { isAbsolute as isAbsolute4 } from "node:path";
 var ContextBundleError = class extends Error {
   constructor(message) {
@@ -13142,7 +13160,7 @@ function unsignedPayload(input) {
   return input;
 }
 function contextBundleAggregateDigest(bundle) {
-  return `sha256:${createHash11("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
+  return `sha256:${createHash12("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
 }
 function compileContextBundle(input) {
   if (!SAFE_ID.test(input.change))
@@ -13450,12 +13468,12 @@ async function compileLedgerContextBundleWithPorts(input) {
 }
 
 // packages/kernel/dist/compress/ledger-context-bundle-node-adapter.js
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 import { isAbsolute as isAbsolute5, join as join23, posix as posix2 } from "node:path";
 var nodeLedgerContextBundlePrimitives = {
   isAbsoluteRoot: isAbsolute5,
   ledgerPath: (change) => posix2.join("openspec", "changes", change, ".pipeline-documents.json"),
-  sha256: (text2) => createHash12("sha256").update(text2, "utf8").digest("hex"),
+  sha256: (text2) => createHash13("sha256").update(text2, "utf8").digest("hex"),
   utf8ByteLength: (text2) => Buffer.byteLength(text2, "utf8")
 };
 
@@ -14418,7 +14436,7 @@ var DEFAULT_VERIFIER_ISSUER_KIND = DEFAULT_VERIFIER_ISSUER_IDENTITY.kind;
 var DEFAULT_TTL_MS = 10 * 60 * 1e3;
 
 // packages/automation/dist/skills/snapshot-manifest.js
-import { createHash as createHash13 } from "node:crypto";
+import { createHash as createHash14 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat12, mkdir as mkdir13, open as open3, readdir as readdir3, realpath as realpath4, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname5, join as join24, relative as relative4, sep as sep5 } from "node:path";
@@ -14435,7 +14453,7 @@ var SkillContentInvalidError = class extends Error {
 };
 var EXEC_BITS = 73;
 function sha256Hex2(data) {
-  return createHash13("sha256").update(data).digest("hex");
+  return createHash14("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex2(Buffer.alloc(0));
 function byRelativePath(a, b) {

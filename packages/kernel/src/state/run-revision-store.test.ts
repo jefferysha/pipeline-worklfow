@@ -427,6 +427,79 @@ describe('G1 canonical revision 对抗校验', () => {
     expect(() => readCurrentRunRevisionSync(dir)).toThrow(/TransitionRecord|record.*缺失/i)
   })
 
+  test('current 是 set 时拒绝一致篡改 previous transition 与 record 的 predecessor 链', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-forged' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+
+    const transitionPath = join(dir, '.pipeline-transitions', '000001-record-forged.json')
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.previousRecordId = 'forged-predecessor'
+    const transitionRaw = JSON.stringify(transition)
+    await writeFile(transitionPath, transitionRaw, 'utf8')
+
+    const revisionPath = join(dir, '.pipeline-run', 'revisions')
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as { previousRevisionId: string }
+    const previousPath = join(revisionPath, `000001-${current.previousRevisionId}.json`)
+    const previous = JSON.parse(await readFile(previousPath, 'utf8')) as Record<string, unknown>
+    const mutation = previous.mutation as Record<string, unknown>
+    mutation.transitionRecordDigest = createHash('sha256').update(transitionRaw).digest('hex')
+    rehash(previous)
+    await rebindCompanion(dir, previous)
+    await writeFile(previousPath, JSON.stringify(previous), 'utf8')
+
+    await expect(readCurrentRunRevision(dir)).rejects.toThrow(/TransitionRecord|previous|连续|不一致/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/TransitionRecord|previous|连续|不一致/i)
+  })
+
+  test('current 是 set 时拒绝同步清空 previous transition 与 record 的 effects', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-effects' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+
+    const transitionPath = join(dir, '.pipeline-transitions', '000001-record-effects.json')
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.effects = []
+    const transitionRaw = JSON.stringify(transition)
+    await writeFile(transitionPath, transitionRaw, 'utf8')
+
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as { previousRevisionId: string }
+    const previousPath = join(
+      dir,
+      '.pipeline-run',
+      'revisions',
+      `000001-${current.previousRevisionId}.json`,
+    )
+    const previous = JSON.parse(await readFile(previousPath, 'utf8')) as Record<string, unknown>
+    const mutation = previous.mutation as Record<string, unknown>
+    mutation.effects = []
+    mutation.transitionRecordDigest = createHash('sha256').update(transitionRaw).digest('hex')
+    rehash(previous)
+    await rebindCompanion(dir, previous)
+    await writeFile(previousPath, JSON.stringify(previous), 'utf8')
+
+    await expect(readCurrentRunRevision(dir)).rejects.toThrow(/effects.*diff|真实.*diff/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/effects.*diff|真实.*diff/i)
+  })
+
   test('transition revision 必须绑定 TransitionRecord 精确字节；只篡改 event 也 fail-loud', async () => {
     const { dir } = await fresh()
     const store = createStateStore()

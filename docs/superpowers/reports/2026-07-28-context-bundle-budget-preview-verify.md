@@ -1,7 +1,7 @@
 # Context Bundle 预算预览 Verify 报告（失败）
 
 - Change：`context-bundle-budget-preview`
-- 冻结靶：`fb1b798b7cc1f2df23b858764c9f44bbad17a035`
+- 最新冻结靶：`49b3f3a6d4770f5073d03a179536b24b0eb17d42`
 - 基线：`origin/main@2d103e330f847e003ff5909097d892f5722cca04`
 - 验证时间：2026-07-28
 - 最终门禁：**FAIL — 必须以 `verify-fail` 回 Build 修复，禁止接受偏差。**
@@ -200,3 +200,33 @@ E2E 在两个 `git clone --no-local` detached 副本和一个 Linux `rsync` 副�
 ## 结论
 
 行为 E2E 主链与 OpenSpec 应用演练成立，但完整性、错误契约与可访问性仍有中等级问题。当前不能设置 `agent_review_result=pass`、`codex_review_result=pass` 或 `verify_result=pass`，必须走确切 `verify-fail`。
+
+## 第二次冻结 Verify（`49b3f3a6d4770f5073d03a179536b24b0eb17d42`）
+
+第二次冻结已关闭首轮全部中等级问题，但 Codex CLI 独立轨发现新的 P2，因此本次仍为
+**FAIL（C0 / H0 / M1）**，必须再次以 exact `verify-fail` 回 Build。
+
+| 轨道 | 结果 | 证据与发现 |
+| --- | --- | --- |
+| 独立 reviewer | PASS · C0/H0/M0/L1 | 冻结差异与治理链通过；L：本报告的 ledger digest 因报告更新而 stale，须在 Verify 用真实 producer 重新登记。 |
+| E2E | PASS | detached build；Web 52 files / 1000 tests；Linux 200/422/409→Retry 200/empty；macOS 501；loading、键盘、720px；OpenSpec archive 隔离试演通过。证据：`/tmp/tenon-verify-e2e-49b3.BzxzOY/REPORT.md`。 |
+| Codex CLI | FAIL · C0/H0/M1 | current 是非 transition 且 N-1 是 transition 时，校验 N-1 record 未加载 N-2，因而跳过 `previousRecordId` 连续性及 N-1 effects→真实 predecessor 校验；同步路径同样受影响。 |
+| 视觉 | PASS · C0/H0/M0/L0 | 冻结 blob 与最新浏览器证据完全匹配；隔离组件测试 37/37，交互、对比度、焦点、语义、窄屏和安全文案均通过。 |
+
+### 第二次冻结零写入与覆盖
+
+- 审查目标固定为 `origin/main@2d103e330f847e003ff5909097d892f5722cca04...49b3f3a6d4770f5073d03a179536b24b0eb17d42`。
+- 三个只读 reviewer 与隔离 E2E 均确认 HEAD、实现、配置和生成物未漂移；真实 worktree 只有
+  Tenon Verify 治理状态变更。
+- 新浏览器证据位于 `/tmp/tenon-verify-e2e-49b3.BzxzOY/`；Linux 固定
+  `node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3`。
+- 未覆盖 Safari、Firefox、Windows、原生 Linux 桌面浏览器、安装后的 marketplace artifact
+  与仓库 CI；这些限制不掩盖当前已确认的 canonical-state 中等级缺陷。
+
+### 必须再次回 Build 修复
+
+1. current=N、N-1=transition 时加载 N-2，并在 async/sync 两条读取路径同时校验 N-1 mutation
+   effects、TransitionRecord `previousRecordId` 与真实 predecessor 的连续性。
+2. 增加“一致篡改 N-1 revision + record 并重算摘要仍 fail-loud”的 async/sync 回归测试。
+3. 新冻结后完整重跑四轨 Verify；最终报告重新生成 Step 1.5 全文件映射并以
+   `verification-before-completion` 重新登记。

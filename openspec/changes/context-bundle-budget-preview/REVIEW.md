@@ -144,3 +144,25 @@ Build 最终门禁：
 verification report 的 ledger digest 已因记录本轮修复而陈旧。该文档不是 Build 的可变文档，
 因此不在 Build 伪装重登记；进入新的 Verify 后将由 `tenon-verify` 更新最终报告、登记当前 digest
 并刷新 read receipts。该处置不影响代码冻结，且会在声称最终证据完整前闭合。
+
+## 第十二轮：第二次 Verify 失败与 N-2 链修复
+
+冻结提交 `49b3f3a6d4770f5073d03a179536b24b0eb17d42` 的 E2E、独立 reviewer 与视觉轨通过；
+Codex CLI 轨发现 current=N 为普通 set、N-1 为 transition 时只校验 N-1 record，未加载 N-2
+验证 `previousRecordId` 与 N-1 effects 的真实连续性。已按 exact `verify-fail` 留下 delegated
+receipt 并回 Build，没有接受偏差。
+
+TDD 修复先以一致改写 N-1 revision + TransitionRecord 并重算摘要复现红灯，再完成：
+
+- async/sync 两条 current reader 均加载 N-2，并验证 N-1 revision 身份、effects→真实 state diff、
+  run metadata 连续性以及 record `previousRecordId`；
+- 两个双路径回归分别覆盖伪造 predecessor id 与同步清空 revision/record effects；
+- 共用断言下沉到 `run-revision-continuity.ts`，`run-revision-store.ts` 保持 489 行并通过架构门禁；
+- 重建 CLI/server 产物；全仓 317 files / 5,440 passed / 12 skipped，Web 52 files / 1,000 passed，
+  docs/architecture/comments/hygiene/identity、hooks、adapters、bundle、skills、双轮 oracle 与
+  OpenSpec strict validate 全部通过。
+
+完整 pre-Verify reviewer 对 N-2 修复给出正确性 PASS，但发现运行期间
+`origin/main` 已推进至 `15fe619…`，当前 branch merge-base 仍为 `2d103e3…`，且两份生成 bundle
+存在 merge conflict，因此本轮结论为 `FAIL — C0/H0/M1/L0`。处置：先保存当前治理修复，再 rebase
+最新主线、从合并后源码重建 bundle 并完整重跑门禁与全量审查；不得在旧基线上冻结。
