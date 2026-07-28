@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbStepDef } from './WorkbenchView'
 
@@ -187,7 +188,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
                   aria-label={t('workbench.ed_output_remove', { field: o.field })}
                   onClick={() => removeOutput(o.field)}
                 >
-                  ×
+                  <X className="size-3" aria-hidden="true" />
                 </button>
               )}
             </span>

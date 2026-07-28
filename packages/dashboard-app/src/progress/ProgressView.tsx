@@ -218,8 +218,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     if (!root) return
     const cardEl = root.querySelector(`[data-testid="prg-cv-chg-${name}"]`)
     const bdg = root.querySelector('[data-testid="prg9-dw-badge"]')
-    if (cardEl) gsap.fromTo(cardEl, { scale: 0.985 }, { scale: 1, duration: 0.3, ease: 'back.out(2)', clearProps: 'transform' })
-    if (bdg) gsap.fromTo(bdg, { scale: 1.25 }, { scale: 1, duration: 0.35, ease: 'back.out(2)', clearProps: 'transform' })
+    if (cardEl) gsap.fromTo(cardEl, { scale: 0.985 }, { scale: 1, duration: 0.2, ease: 'power3.out', clearProps: 'transform' })
+    if (bdg) gsap.fromTo(bdg, { scale: 1.12 }, { scale: 1, duration: 0.2, ease: 'power3.out', clearProps: 'transform' })
   }
 
   /**
@@ -339,13 +339,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             return
           }
           if (chrome.length > 0) {
-            gsap.fromTo(chrome, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: 'power2.out', stagger: 0.07, clearProps: 'all' })
+            gsap.fromTo(chrome, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out', stagger: 0.05, clearProps: 'all' })
           }
           if (nodes.length > 0) {
             gsap.fromTo(
               nodes,
-              { autoAlpha: 0, scale: 0.9 },
-              { autoAlpha: 1, scale: 1, duration: 0.32, ease: 'back.out(1.8)', stagger: 0.04, delay: 0.08, clearProps: 'all' },
+              { autoAlpha: 0, y: 6 },
+              { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger: 0.035, delay: 0.04, clearProps: 'all' },
             )
           }
         },
@@ -489,7 +489,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
 
   return (
-    <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" ref={rootRef}>
+    <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
       <ProgressToolbar
         t={t}
         rowCount={flatRows.length}

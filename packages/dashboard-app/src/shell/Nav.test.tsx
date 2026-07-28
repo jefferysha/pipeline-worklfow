@@ -31,11 +31,29 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
 // 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（四枚 lucide 图标 + 小字）。
 // 项目页承担自动发现与选择；rail 不重复展示当前项目名或项目切换器。
 describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 / 机器）', () => {
+  it('声明桌面 rail → 移动底栏的自适应外壳，并始终保留可见短标签', () => {
+    renderNav()
+    const shell = screen.getByTestId('app-navigation')
+    expect(shell).toHaveAttribute('data-responsive', 'rail-to-bottom')
+    expect(shell.className).toContain('max-[720px]:bottom-0')
+    expect(shell.className).toContain('max-[720px]:w-full')
+
+    const primary = screen.getByTestId('primary-nav')
+    expect(primary.className).toContain('max-[720px]:flex-row')
+    expect(primary.className).toContain('max-[720px]:overflow-x-auto')
+    for (const operational of PRIMARY_VIEWS) {
+      const label = screen.getByTestId(`nav-label-${operational}`)
+      expect(label.className).not.toContain('max-[720px]:hidden')
+      expect(screen.getByTestId(`nav-${operational}`).className).toContain('max-[720px]:min-w-11')
+    }
+  })
+
   it('品牌是独立的可访问 Overview 入口，不计入五个运营导航项', () => {
     const props = renderNav()
     const brand = screen.getByRole('button', { name: 'Tenon 概览' })
     expect(brand).toHaveAttribute('data-testid', 'nav-overview')
     expect(brand).toHaveClass('motion-reduce:transition-none')
+    expect(brand).toHaveClass('max-[360px]:hidden')
     expect(brand).not.toHaveAttribute('aria-current')
     fireEvent.click(brand)
     expect(props.onView).toHaveBeenCalledWith('overview')
@@ -231,5 +249,13 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
 
     fireEvent.click(screen.getByTestId('nav-projects'))
     expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+  })
+
+  it('移动端设置浮层锚定在底栏上方并限制为视口宽度', () => {
+    renderNav()
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    const panel = screen.getByTestId('nav-settings-panel')
+    expect(panel.className).toContain('max-[720px]:bottom-[calc(100%+12px)]')
+    expect(panel.className).toContain('max-[720px]:max-w-[calc(100vw-24px)]')
   })
 })

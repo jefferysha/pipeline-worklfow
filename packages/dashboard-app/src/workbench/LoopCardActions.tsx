@@ -1,4 +1,4 @@
-import { CircleAlert } from 'lucide-react'
+import { Check, CircleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WbLoopRow } from '../api/client'
@@ -32,10 +32,10 @@ export function LoopCardActions({
     {pendingReview && (
       <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-border pt-3.5" data-testid="lp-draft-actions">
         <Button size="sm" className="border border-green-b bg-green-t px-4 text-[12.5px] font-bold text-green-d" data-testid="lp-draft-approve" disabled={reviewBusy} onClick={() => onReview('active')}>
-          ✓ {t('workbench.lp_draft_approve')}
+          <Check className="size-3.5" aria-hidden="true" /> {t('workbench.lp_draft_approve')}
         </Button>
         <Button size="sm" className="border border-red-b bg-red-t px-4 text-[12.5px] font-bold text-red-d" data-testid="lp-draft-reject" disabled={reviewBusy} onClick={() => onReview('paused')}>
-          ✕ {t('workbench.lp_draft_reject')}
+          <X className="size-3.5" aria-hidden="true" /> {t('workbench.lp_draft_reject')}
         </Button>
         {reviewError && <p className={cn(ERR_BLOCK_TW, 'mt-0.5 basis-full')} data-tone="error" data-testid="lp-draft-error"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{reviewError}</p>}
       </div>

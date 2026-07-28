@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
@@ -360,8 +361,9 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
                 其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。警示色
                 color-mix 从既有 --red/--text-2 派生（决议#9，禁新原色）。 */}
             {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-              <p className="mt-[5px] text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
-                ⚠ {t('workbench.lp_runner_warn', { runner: draft.runner })}
+              <p className="mt-[5px] flex items-start gap-1.5 text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
+                <TriangleAlert className="mt-0.5 size-3.5 flex-none" aria-hidden="true" />
+                {t('workbench.lp_runner_warn', { runner: draft.runner })}
               </p>
             )}
           </div>

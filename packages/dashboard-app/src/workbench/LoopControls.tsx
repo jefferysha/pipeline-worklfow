@@ -1,4 +1,5 @@
-import { useState, type CSSProperties } from 'react'
+import { useState } from 'react'
+import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '../i18n'
 import { CHIP_TW, WB_TW } from './loopCardModel'
@@ -63,28 +64,18 @@ interface SliderProps {
 /**
  * 滑杆样式（旧 .lp-range）——保持原生 input[type=range]（测试契约 fireEvent.change/toHaveValue/
  * step 属性 + 原生键盘语义都钉在原生控件上，shadcn/radix Slider 换不动），轨道 fill-2/填充
- * accent 经 --p 渐变、16px 白 thumb、focus 环 --ring-blue——全部 token，无新硬编码色值。
+ * 使用原生 range 的 accent-color；保留平台键盘与高对比度行为，不绘制渐变轨道。
  */
 const RANGE_TW = [
-  'mt-2 block h-4 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none',
-  '[&::-webkit-slider-runnable-track]:h-[5px] [&::-webkit-slider-runnable-track]:rounded-full',
-  '[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--accent)_var(--p,0%),var(--fill-2)_var(--p,0%))]',
-  '[&::-webkit-slider-thumb]:-mt-[5.5px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none',
-  '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border-2',
-  '[&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-md',
-  '[&:focus-visible::-webkit-slider-thumb]:border-(--accent) [&:focus-visible::-webkit-slider-thumb]:shadow-[0_0_0_3px_var(--ring-blue)]',
-  '[&::-moz-range-track]:h-[5px] [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-fill-2',
-  '[&::-moz-range-progress]:h-[5px] [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-(--accent)',
-  '[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-border-2',
-  '[&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-md',
+  'mt-2 block h-5 w-full cursor-pointer accent-(--accent)',
+  'focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-accent-t',
 ].join(' ')
 
 /**
- * 单条滑杆（轨道 fill-2 / 填充 accent 经 --p 渐变，推荐 ▽ 刻度）——demo .lp-sld 对位。
+ * 单条滑杆（原生 accent 轨道 + 推荐 ▽ 刻度）。
  * T21 起导出：「AFK 执行」卡（AutomationCard）复用同一滑杆组件与滑杆样式纪律。
  */
 export function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue, prov, step }: SliderProps): JSX.Element {
-  const pct = ((value - min) / (max - min)) * 100
   return (
     <div>
       <div className="flex items-baseline gap-2">
@@ -102,7 +93,6 @@ export function LpSlider({ id, label, value, min, max, display, recoLabel, recoF
         step={step ?? 1}
         value={value}
         aria-label={label}
-        style={{ '--p': `${pct}%` } as CSSProperties}
         onChange={(e) => onValue(Number(e.target.value))}
       />
       <div className="relative mt-0.5 h-4" aria-hidden="true">
@@ -173,7 +163,7 @@ export function LpChipRow({ label, values, addAria, descKeys, prov, note, onChan
                 aria-label={t('workbench.lp_chip_remove', { v })}
                 onClick={() => onChange(values.filter((x) => x !== v))}
               >
-                ×
+                <X className="size-3" aria-hidden="true" />
               </button>
             </span>
           ))}

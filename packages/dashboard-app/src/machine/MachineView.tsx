@@ -13,6 +13,7 @@ import {
   type WbSkillEntry,
 } from '../api/client'
 import { useT } from '../i18n'
+import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 
 type ReadinessState = 'ready' | 'blocked' | 'unknown'
@@ -33,7 +34,7 @@ interface ReadinessCardProps {
 
 function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCardProps): JSX.Element {
   const { t } = useT()
-  const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amber-d bg-amber-t border-amber-b'
+  const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amb-d bg-amb-t border-amb-b'
   return (
     <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
       <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
@@ -176,16 +177,16 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
 
   return (
     <section className="mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="machine-view" data-page-frame="standard">
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
-        <div>
-          <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-text-3">{t('machine.eyebrow')}</p>
-          <h1 className="text-2xl font-black tracking-tight text-text">{t('machine.title')}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-text-3">{t('machine.subtitle')}</p>
-        </div>
-        <button type="button" className="inline-flex items-center rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-text hover:bg-fill" onClick={load}>
-          <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />{t('machine.refresh')}
-        </button>
-      </header>
+      <PageHeader
+        eyebrow={t('machine.eyebrow')}
+        title={t('machine.title')}
+        description={t('machine.subtitle')}
+        actions={(
+          <button type="button" className="inline-flex min-h-11 items-center rounded-xl border border-border bg-card px-3.5 text-xs font-bold text-text outline-none transition-colors hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-3 focus-visible:ring-accent-t" onClick={load}>
+            <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />{t('machine.refresh')}
+          </button>
+        )}
+      />
 
       <section data-testid="machine-readiness">
         <h2 className="mb-3 text-sm font-black text-text">{t('machine.readiness')}</h2>

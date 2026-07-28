@@ -23,17 +23,17 @@
   }
 }
 
-/* #5 门节点：轨道上会呼吸的 amber 菱形关卡——克制的辉光呼吸（颜色走 amber token，禁硬编码色）。 */
+/* 门节点：用透明度呼吸提示关卡状态，不使用辉光。 */
 [data-gate-pulse='true'] {
   animation: prg-gate-breathe 2.6s ease-in-out infinite;
 }
 @keyframes prg-gate-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 1px var(--amb-b), 0 0 3px 0 var(--amb-d);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 3px transparent, 0 0 8px 2px var(--amb-d);
+    opacity: 0.58;
   }
 }
 

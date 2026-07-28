@@ -105,6 +105,18 @@ describe('WorkflowCanvas 组与站点（单项目）', () => {
     expect(projectName.className).not.toContain('truncate')
   })
 
+  it('移动布局把项目名提升为组头独立行，阶段轨只在自身视口横向滚动', () => {
+    renderCanvas([makeGroup()])
+    const group = screen.getByTestId('prg-cv-group-proj-a-flow-x')
+    expect(group).toHaveAttribute('data-responsive', 'summary-track-cards')
+    expect(group.className).toContain('max-[720px]:min-h-0')
+    const projectName = screen.getByTestId('prg-cv-project-proj-a-flow-x')
+    expect(projectName.className).toContain('max-[720px]:basis-full')
+    const viewport = screen.getByTestId('prg-cv-scroll-proj-a-flow-x')
+    expect(viewport).toHaveAttribute('data-canvas-scroll')
+    expect(viewport.className).toContain('overflow-x-auto')
+  })
+
   it('有在制步骤保留阶段、件数和 gate 语义，但按终稿统一使用 done/current/pending 圆形时间线节点', () => {
     renderCanvas([makeGroup()])
     const review = screen.getByTestId('prg-cv-node-proj-a-flow-x-review')
@@ -311,7 +323,7 @@ describe('WorkflowCanvas change 小卡', () => {
         ],
       }),
     ])
-    expect(screen.getByTestId('prg-cv-track-proj-a-flow-x')).toHaveStyle({ minWidth: '780px' })
+    expect(screen.getByTestId('prg-cv-track-proj-a-flow-x')).toHaveStyle({ minWidth: '696px' })
     expect(screen.getByTestId('prg-cv-group-proj-a-flow-x')).toContainElement(
       screen.getByTestId('prg-cv-scroll-proj-a-flow-x'),
     )

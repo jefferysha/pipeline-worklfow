@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, Circle, CircleDot, Clock3, X, type LucideIcon } from 'lucide-react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
@@ -126,21 +127,21 @@ export function TaskDetail({
   const failCause = fieldStr(change, 'automation_cause')
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
-  function verdict(): { text: string; bad: boolean; glyph: string } {
-    if (state === 'failed') return { text: lastError || t('detail.fail_generic'), bad: true, glyph: '×' }
-    if (state === 'running') return { text: t('detail.verdict_running'), bad: false, glyph: '●' }
-    if (state === 'queued') return { text: t('detail.verdict_queued'), bad: false, glyph: '○' }
-    if (state === 'agent') return { text: t('detail.verdict_agent'), bad: false, glyph: '○' }
+  function verdict(): { text: string; bad: boolean; icon: LucideIcon } {
+    if (state === 'failed') return { text: lastError || t('detail.fail_generic'), bad: true, icon: X }
+    if (state === 'running') return { text: t('detail.verdict_running'), bad: false, icon: CircleDot }
+    if (state === 'queued') return { text: t('detail.verdict_queued'), bad: false, icon: Clock3 }
+    if (state === 'agent') return { text: t('detail.verdict_agent'), bad: false, icon: Circle }
     const kind = decisionKind(change)
     if (kind === 'verify' && rules) {
       const failed = gateEvidence(change, rules).filter(
         (c) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(c.key) && c.tone !== 'pass',
       )
       return failed.length === 0
-        ? { text: t('detail.why_gate_allpass'), bad: false, glyph: '✓' }
-        : { text: t('detail.why_gate', { names: failed.map((c) => c.key.replace(/_result$/, '')).join('、') }), bad: false, glyph: '○' }
+        ? { text: t('detail.why_gate_allpass'), bad: false, icon: Check }
+        : { text: t('detail.why_gate', { names: failed.map((c) => c.key.replace(/_result$/, '')).join('、') }), bad: false, icon: Circle }
     }
-    return { text: t(`inbox.awaiting.${kind}`), bad: false, glyph: '○' }
+    return { text: t(`inbox.awaiting.${kind}`), bad: false, icon: Circle }
   }
   function stageLabel(id: string): string {
     return isPhase(id) ? t(`phases.${id}`) : id
@@ -236,6 +237,7 @@ export function TaskDetail({
       )
     }
     const v = verdict()
+    const VerdictIcon = v.icon
     return (
       <>
         <div
@@ -243,9 +245,7 @@ export function TaskDetail({
           data-tone={v.bad ? 'bad' : 'ok'}
           data-testid="dt-verdict"
         >
-          <span className={`flex-none ${v.glyph === '✓' ? 'text-green' : ''}`} aria-hidden="true">
-            {v.glyph}
-          </span>
+          <VerdictIcon className={`size-3.5 flex-none ${v.icon === Check ? 'text-green' : ''}`} strokeWidth={1.75} aria-hidden="true" />
           {v.text}
         </div>
         {chips.length > 0 ? (
@@ -302,7 +302,7 @@ export function TaskDetail({
                   key={st.step}
                 >
                   <span className={`${nodeBaseCls} ${nodeToneCls[status]}`} aria-hidden="true">
-                    {status === 'done' ? '✓' : status === 'fail' ? '×' : ''}
+                    {status === 'done' ? <Check className="size-2.5" strokeWidth={2} /> : status === 'fail' ? <X className="size-2.5" strokeWidth={2} /> : null}
                   </span>
                   <div className={chipRowCls}>
                     <span className={`text-[13px] ${stageNameCls[status]}`}>{stageLabel(st.step)}</span>
@@ -335,7 +335,7 @@ export function TaskDetail({
                           data-testid={`dtl-todo-${st.step}-${taskIndex}`}
                           key={`${taskIndex}-${task.text}`}
                         >
-                          <span aria-hidden="true">{task.completed ? '✓' : '○'}</span>
+                          {task.completed ? <Check className="mt-0.5 size-3 flex-none" aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" aria-hidden="true" />}
                           <span>{task.text}</span>
                         </li>
                       ))}

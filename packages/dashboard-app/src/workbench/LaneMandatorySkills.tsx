@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Layers3 } from 'lucide-react'
+import { Layers3, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '../i18n'
 import { resolvedSkillId, skillPresentation } from './skillPresentation'
@@ -147,7 +147,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
                         removeSkill(id)
                       }}
                     >
-                      ×
+                      <X className="size-3" aria-hidden="true" />
                     </button>
                   )}
                 </span>

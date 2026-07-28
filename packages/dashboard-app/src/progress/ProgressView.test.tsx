@@ -251,6 +251,7 @@ describe('ProgressView 单项目 · 下方在制列表退役（负向钉死不�
   it('页面按压缩包终稿拆成实时进度页头与独立筛选栏，创建入口仍在主视觉右侧', async () => {
     renderView()
     expect(screen.getByRole('heading', { name: '进度' })).toBeInTheDocument()
+    expect(screen.getByTestId('progress-view')).toHaveAttribute('data-page-frame', 'standard')
     expect(screen.getByTestId('prg-hero')).toHaveTextContent('实时同步')
     expect(screen.getByTestId('prg-hero')).toHaveTextContent('创建')
     expect(screen.getByTestId('prg-hero')).not.toHaveTextContent('创建并锁定')
@@ -950,7 +951,7 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
         expect(el.style.visibility === '' || el.style.visibility === 'inherit').toBe(true)
       }
     }, { timeout: 40000 })
-    expect(screen.getByTestId('prg-cv-track-proj-a-default')).toHaveStyle({ minWidth: '1820px' })
+    expect(screen.getByTestId('prg-cv-track-proj-a-default')).toHaveStyle({ minWidth: '1624px' })
   }, 50000)
 })
 

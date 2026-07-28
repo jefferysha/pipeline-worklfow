@@ -62,7 +62,7 @@ export function OrchestrationOutputZone({ lane, readonly, canEdit, canGuard, out
                                   removeOutput(lane, o)
                                 }}
                               >
-                                ×
+                                <Icon name="x" size={12} />
                               </button>
                             )}
                           </span>

@@ -324,8 +324,8 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
             <span
               data-testid="afk-rd-cred-codex"
               title={t('workbench.afk_rd_codex_hint', {
-                o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
-                c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
+                o: readiness.credentials.codex.OPENAI_API_KEY.set ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_unset'),
+                c: readiness.credentials.codex.CODEX_HOME.set ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_unset'),
               })}
             >
               {t('workbench.afk_rd_cred_codex')}:

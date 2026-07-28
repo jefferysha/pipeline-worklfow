@@ -258,7 +258,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
         </div>
         <div className="mt-2.5 h-2.5 overflow-hidden rounded-md bg-fill-2" aria-hidden="true">
           <div
-            className={cn('h-full rounded-md transition-[width] duration-500 motion-reduce:transition-none', band !== null && BAR_TW[band] ? BAR_TW[band] : 'bg-border-2')}
+            className={cn('h-full rounded-md transition-[width] duration-200 ease-out motion-reduce:transition-none', band !== null && BAR_TW[band] ? BAR_TW[band] : 'bg-border-2')}
             style={{ width: `${clamp(score ?? 0, 0, 100)}%` }}
           />
         </div>
