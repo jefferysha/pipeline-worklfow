@@ -49,7 +49,7 @@
         {
           "phase": "ship",
           "sha256": "3bbcdafcca8748e923f102f3891364fb4e8d76c3f712f1cf7270a1ac616d759a",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -100,7 +100,7 @@
         {
           "phase": "ship",
           "sha256": "1019dd21219161231b6ab957009c29eb8764b0a6941dabc7a284e52192418e1a",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -151,7 +151,7 @@
         {
           "phase": "ship",
           "sha256": "1019dd21219161231b6ab957009c29eb8764b0a6941dabc7a284e52192418e1a",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -208,7 +208,7 @@
         {
           "phase": "ship",
           "sha256": "5a331f4521c96f4545c89ff07ce17c37dfdbd051a7e2c0e38bc59c7c50d06506",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -265,7 +265,7 @@
         {
           "phase": "ship",
           "sha256": "5163ca83dccb7219090e1c1b27346e27b6aca24030734f6f38dbd81978203cd1",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -322,7 +322,7 @@
         {
           "phase": "ship",
           "sha256": "ae9ad71e093410498ac4963d6bcdd93600af8d9e012fd6e2408f2d89a8f096c1",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -379,7 +379,7 @@
         {
           "phase": "ship",
           "sha256": "567bb4f691357d98a4d85a9cb4ce0c6bcb37fa148b4aa50be7c6d1ad9a30ee71",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -394,28 +394,7 @@
         {
           "phase": "ship",
           "sha256": "1f041c8917a129ae111359b5b467094df99308fb623de1328284cb3a0b27b790",
-          "readAt": "2026-07-28T11:13:48Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/tasks.md",
-      "sha256": "cbfc456dbea4c24b1a22acfb63182b1b5c4f93fd5b14152b483ace8a6698e976",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-07-28T11:12:07Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "cbfc456dbea4c24b1a22acfb63182b1b5c4f93fd5b14152b483ace8a6698e976",
-          "readAt": "2026-07-28T11:12:07Z",
-          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",20]"
-        },
-        {
-          "phase": "ship",
-          "sha256": "cbfc456dbea4c24b1a22acfb63182b1b5c4f93fd5b14152b483ace8a6698e976",
-          "readAt": "2026-07-28T11:13:48Z",
+          "readAt": "2026-07-28T11:18:42Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
         }
       ]
@@ -427,6 +406,21 @@
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-28T11:15:46Z",
       "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/tasks.md",
+      "sha256": "bb053c61b05c9e9685bca9b0ee544e17f282ea9aa748a24c9774ebd8e590372c",
+      "producer": "tenon-ship",
+      "recordedAt": "2026-07-28T11:18:42Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "bb053c61b05c9e9685bca9b0ee544e17f282ea9aa748a24c9774ebd8e590372c",
+          "readAt": "2026-07-28T11:18:42Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",21]"
+        }
+      ]
     }
   ]
 }
