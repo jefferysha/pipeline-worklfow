@@ -30,6 +30,7 @@ export function useProgressDrawer({
   const drawerRef = useRef<HTMLElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
+  const returnKeyRef = useRef<string | null>(null)
   const closingRef = useRef(false)
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
   const rowByKey = useMemo(() => new Map(rows.map((row) => [row.key, row])), [rows])
@@ -81,6 +82,10 @@ export function useProgressDrawer({
   }, [onSelectedChange])
 
   useEffect(() => {
+    if (drawerOpen) returnKeyRef.current = drawerKey
+  }, [drawerKey, drawerOpen])
+
+  useEffect(() => {
     if (!drawerOpen) return
     document.documentElement.classList.add('prg9-lock')
     function onKey(event: KeyboardEvent): void {
@@ -119,7 +124,17 @@ export function useProgressDrawer({
       document.documentElement.classList.remove('prg9-lock')
       document.removeEventListener('keydown', onKey)
       const trigger = triggerRef.current
-      if (trigger?.isConnected) trigger.focus()
+      const returnKey = returnKeyRef.current ?? trigger?.dataset.drawerTriggerKey ?? null
+      const connectedTrigger = trigger?.isConnected
+        && trigger.dataset.drawerTriggerKey === returnKey
+        ? trigger
+        : null
+      const replacement = returnKey === null || rootRef.current === null
+        ? null
+        : [...rootRef.current.querySelectorAll<HTMLElement>('[data-drawer-trigger-key]')]
+            .find((candidate) => candidate.dataset.drawerTriggerKey === returnKey)
+      const returnTarget = connectedTrigger ?? replacement
+      returnTarget?.focus()
     }
   }, [closeDrawer, drawerOpen])
 

@@ -282,6 +282,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     key={change.key}
                                     type="button"
                                     data-testid={`prg-cv-chg-${change.name}`}
+                                    data-drawer-trigger-key={change.key}
                                     data-state={change.state}
                                     data-sbx={change.sandbox || undefined}
                                     data-dim={change.dimmed || undefined}

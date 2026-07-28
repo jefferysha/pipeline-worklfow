@@ -237,3 +237,127 @@ Verify SHA。
 `30395329457` 在 7m38s 后成功。源码与正式生成物新鲜度、clean install、文档、sandcastle
 attestation、root/Web tests、hooks、adapters、skills、迁移 CAS、N-1 bundle 与 golden oracle
 全部通过；仓库未提供真实 Codex secret，H14 使用工作流明确的 honest-skip 分支。
+
+## 第二轮 Verify-fail 后的 Build 修复
+
+### TDD 与最小实现
+
+第二轮真实 production Chromium 两次关闭父抽屉时，焦点恢复结果为 `[false, true]`。随后用
+production URL 逐步隔离出主根因：首次抽屉由 URL 中已经选中的 Change 自动打开，没有 click
+事件，因此 `triggerRef` 从一开始就是空；第二次由用户点击卡片打开，才有可恢复的 trigger。
+此外，快照刷新也可能替换打开时保存的卡片 DOM，因此实现还必须覆盖原 trigger 已断开、同一
+逻辑卡片已有新连接节点的退化场景。
+
+TDD 严格执行：
+
+1. 新增
+   `reduce：原触发卡被同 key 新节点替换后，Esc 把焦点归还当前连接的卡片`，首次运行按预期
+   失败，`document.activeElement` 为 `body`；
+2. production 浏览器仍暴露首次 URL auto-open 失败后，再新增
+   `路由直接选中 Change 自动打开抽屉，关闭后把焦点归还对应卡片`，该红测同样按预期失败且
+   active element 为 `body`；
+3. 每张 `WorkflowCanvas` 卡片增加完整 `data-drawer-trigger-key`，值为
+   `change@root`；
+4. 抽屉打开时保存当前完整 key；cleanup 仍优先原连接节点，否则从当前 DOM 的显式 trigger
+   集合中按完整 key 精确匹配 auto-open 目标或 replacement 并聚焦，不按文本、Change 名或
+   模糊 selector 猜测；
+5. 两条红测均由最小实现转绿；`ProgressView`、`WorkflowCanvas`、`useProgressDrawer` 三文件
+   80/80 通过。
+
+### `frontend-design` / `web-design-guidelines` / `design-taste-frontend` 评修复
+
+本轮改动没有改变布局、配色或视觉层级，只补强现有卡片与抽屉的焦点所有权。第一次评估发现的
+唯一 Low 就是已由第二轮 Verify 报告记录的偶发焦点丢失；没有 Critical/High/Medium。
+修复后对当前 production build 重新复评：
+
+- URL：`http://127.0.0.1:19917/`，health 返回 `scope=global`、`version=1.0.1`；
+- 真实当前 root 与 `pr-7-merge-audit`，`prefers-reduced-motion: reduce`；
+- 普通打开/关闭连续 5 次，焦点恢复 `[true, true, true, true, true]`；
+- 原 trigger 被同 key 新节点替换后，replacement 焦点恢复 `true`；
+- 390×844 下 document/body 均为 `390/390`，无横向溢出；
+- 非预期 console error 为 0；
+- 桌面与移动端 fresh 截图、JSON 结果位于
+  `/private/tmp/tenon-pr7-build3-browser/`。
+
+复评结论：`0 Critical / 0 High / 0 Medium / 0 Low`。新增 data attribute 不改变可见 UI，
+完整 key 只承担内部焦点恢复身份，不引入新视觉噪声、布局漂移或不明确交互。
+
+### 强制隔离 OpenSpec 演练
+
+本轮使用 `mktemp -d`、`git clone --no-local --no-hardlinks`，并在可写命令前断言
+`pwd -P` 精确等于隔离目录：
+
+`/private/tmp/tenon-pr7-build3-openspec.i71oBK/repo`
+
+隔离 `show/strict/archive/apply/applied strict` 全部通过，结果仍为
+`1 ADDED + 5 MODIFIED`、6 个唯一 Requirement。共享 status 指纹在命令前后均为
+`b7765500c2157b7dece54c1ac0bd67d0514912b2aeca0e26f609ad60579bd4df`，
+没有再次发生共享写入。完整日志：
+`/private/tmp/tenon-pr7-build3-openspec.i71oBK/isolated-run.log`。
+
+### 修复后机器门禁
+
+| Gate | 结果 |
+| --- | --- |
+| focused TDD | replacement 与 URL auto-open 两条红测均按预期失败；最小实现后 3 files / 80 tests 全绿。 |
+| root tests | 320 files / 5520 passed / 14 honest conditional skips。 |
+| Web 默认与串行 | 各 59 files / 1055 passed。 |
+| `npm run build` / `typecheck:web` | PASS；该轮 Dashboard 正式资产为 `index-Jcubgc0D.js`。 |
+| architecture / comments / docs / hygiene / identity / templates / workflow freshness | 全部 PASS；architecture 为 639 production files、5 个既有 size-only exception。 |
+| hooks / adapters / skills / bundle | 482 / 272 / 62 skill dirs / 31 全绿。 |
+| migration CAS | 13/13 PASS。 |
+| oracle | 五组 legacy/new fixture 0 inconsistencies；harness 16/16 PASS。 |
+| OpenSpec | 显式隔离目录断言，Change strict、archive/apply 与 applied spec strict 全部 PASS。 |
+| production Chromium | 连续 5 次原生焦点恢复及 1 次 replacement fallback 全绿；390px 无溢出、无非预期 console error。 |
+| `git diff --check` | PASS。 |
+
+下一步必须对完整待冻结 diff 执行独立 Standards、Spec、Rules/Architecture/Security 与 Dashboard
+视觉复审；所有 C/H/M/L 清零、提交普通推送并取得新 exact-head CI 后，才可登记
+`pre_verify_review_result=pass` 并重新冻结。
+
+### 独立预审 Low 与最终修复
+
+第三轮独立预审没有接受上述局部结论为最终 PASS。Spec 与 Rules/Architecture/Security 两轨分别
+独立复现同一生命周期缺口，并由规则轨补充 owner scope 缺口：
+
+1. 点击 A 打开抽屉后，route/popstate 在抽屉仍打开时切到 B；旧 A trigger 仍连接，cleanup 会把
+   焦点错误还给 A；
+2. replacement fallback 从全 document 查找，若另一个 ProgressView 或过渡期旧 root 有相同完整
+   key，可能跨 owner 聚焦。
+
+TDD 新增两条红测并在旧实现上同时稳定失败：
+
+- `点击打开 A 后路由切到 B，Esc 把焦点归还 B 而不是仍连接的 A 卡片`；
+- `原触发卡被同 key 新节点替换后，只在当前 ProgressView 内归还焦点`，在当前 owner 前放置
+  相同完整 key 的外部节点。
+
+最小修复以当前 `returnKeyRef` 为真相：只有仍连接且
+`trigger.dataset.drawerTriggerKey === returnKey` 的旧 trigger 才可优先；fallback 只在
+`rootRef.current` 内按完整 key 精确匹配。没有把用户输入拼进 selector，也不跨已卸载 owner
+恢复焦点。
+
+修复后的最终证据：
+
+| Gate | 结果 |
+| --- | --- |
+| focused TDD | 3 files / 81 tests PASS。 |
+| root tests | 320 files / 5520 passed / 14 honest conditional skips。 |
+| Web 默认与串行 | 各 59 files / 1056 passed。 |
+| build / typecheck / architecture | PASS；正式资产为 `index-C8TGqQ2X.js`，architecture 639 files / 5 个既有 size-only exception。 |
+| production Chromium | 首次 route auto-open 关闭聚焦 PR #7；点击 PR #7 后 popstate 切 PR #6，关闭精确聚焦 PR #6；owner 外相同 key 节点不获焦点，当前 ProgressView replacement 获焦点。 |
+| production identity | `http://127.0.0.1:19918/` 真实引用 `./assets/index-C8TGqQ2X.js`；console 仅有 Darwin Context Bundle 受控 501 资源记录。 |
+| screenshot | `/private/tmp/tenon-pr7-build4-browser.lBNsle/final-focus.png`。 |
+
+新 hash JS、`index.html` 与旧 hash 删除必须作为一个原子提交；在最终预审前全部 staged，禁止出现
+只提交 HTML 而漏掉内容寻址资产的状态。
+
+### 最终独立增量复审
+
+| Track | 结论 | 关闭证据 |
+| --- | --- | --- |
+| Spec / correctness | `0 Critical / 0 High / 0 Medium / 0 Low` | 当前 return key 优先、旧 trigger key 等值约束、owner-scoped fallback 与两条新回归均独立复核；focused 81/81，dist 重建零漂移。 |
+| Rules / Architecture / Security | `0 Critical / 0 High / 0 Medium / 0 Low` | 生命周期、owner scope、完整 `change@root` identity、静态 selector、Context Bundle 既有信任边界和 staged 原子集合均通过；cached diff check PASS。 |
+| Dashboard `frontend-design` + `web-design-guidelines` + `design-taste-frontend` | `0 Critical / 0 High / 0 Medium / 0 Low` | production A→B route、首次 auto-open、owner 外 duplicate、当前 replacement、嵌套 modal、键盘、reduced motion、响应式和正式 asset 均通过；没有布局、主题、语言或视觉层级回归。 |
+
+完整 Build diff 至此没有未关闭的 C/H/M/L。下一门禁是提交、普通推送并等待该精确 product/review
+head 的 GitHub CI；在 CI 成功前，最后 Build task 和 `pre_verify_review_result` 必须继续保持 pending。

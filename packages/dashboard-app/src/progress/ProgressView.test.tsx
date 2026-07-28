@@ -1084,6 +1084,87 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
+  it('reduce：路由直接选中并打开抽屉时，Esc 仍把焦点归还对应卡片', async () => {
+    stubMatchMedia(true)
+    function RoutedHarness(): JSX.Element {
+      const [selectedChange, setSelectedChange] = useState<string | null>('gate-demo')
+      return (
+        <I18nProvider>
+          <ProgressView
+            snapshot={makeFixture()}
+            loading={false}
+            error={null}
+            currentRoot={ROOT_A}
+            rulesByKey={makeRules()}
+            selectedChange={selectedChange}
+            onSelectedChange={setSelectedChange}
+          />
+        </I18nProvider>
+      )
+    }
+    render(<RoutedHarness />)
+    const trigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    await waitFor(() => expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('reduce：点击打开 A 后路由切到 B，Esc 把焦点归还 B 而不是仍连接的 A 卡片', async () => {
+    stubMatchMedia(true)
+    function RoutedHarness(): JSX.Element {
+      const [selectedChange, setSelectedChange] = useState<string | null>(null)
+      return (
+        <I18nProvider>
+          <button type="button" data-testid="route-to-afk" onClick={() => setSelectedChange('afk-demo')}>
+            route to afk
+          </button>
+          <ProgressView
+            snapshot={makeFixture()}
+            loading={false}
+            error={null}
+            currentRoot={ROOT_A}
+            rulesByKey={makeRules()}
+            selectedChange={selectedChange}
+            onSelectedChange={setSelectedChange}
+          />
+        </I18nProvider>
+      )
+    }
+    render(<RoutedHarness />)
+    const staleTrigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    const currentTrigger = screen.getByTestId('prg-cv-chg-afk-demo')
+    fireEvent.click(staleTrigger)
+    await waitFor(() => expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('route-to-afk'))
+    await waitFor(() => expect(currentTrigger).toHaveAttribute('data-on', 'true'))
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(currentTrigger)
+  })
+
+  it('reduce：原触发卡被同 key 新节点替换后，只在当前 ProgressView 内归还焦点', async () => {
+    stubMatchMedia(true)
+    renderView()
+    const staleTrigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    await openDrawer('gate-demo')
+    const currentTrigger = staleTrigger.cloneNode(true) as HTMLElement
+    const outsideOwner = staleTrigger.cloneNode(true) as HTMLElement
+    screen.getByTestId('progress-view').before(outsideOwner)
+    staleTrigger.replaceWith(currentTrigger)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(staleTrigger.isConnected).toBe(false)
+    expect(document.activeElement).toBe(currentTrigger)
+    outsideOwner.remove()
+  })
+
   // flaky 余量（#8）：GSAP 退场补间走真实挂钟，系统满载时播放变慢，waitFor 与外层 it() 超时都要
   // 放宽（详见历史注释，勿把数字改小）。
   it('no-preference：关闭抽屉（GSAP 退场补间完成后卸载）归还焦点', async () => {
