@@ -251,6 +251,7 @@ describe('ProgressView 单项目 · 下方在制列表退役（负向钉死不�
   it('页面按压缩包终稿拆成实时进度页头与独立筛选栏，创建入口仍在主视觉右侧', async () => {
     renderView()
     expect(screen.getByRole('heading', { name: '进度' })).toBeInTheDocument()
+    expect(screen.getByTestId('progress-view')).toHaveAttribute('data-page-frame', 'standard')
     expect(screen.getByTestId('prg-hero')).toHaveTextContent('实时同步')
     expect(screen.getByTestId('prg-hero')).toHaveTextContent('创建')
     expect(screen.getByTestId('prg-hero')).not.toHaveTextContent('创建并锁定')
@@ -333,8 +334,23 @@ describe('ProgressView 状态页签（默认全部/计数=分类总数/等待中
     expect(screen.queryByTestId('prg9t-tabs')).toBeNull()
     expect(screen.queryByTestId('prg-wfpills')).toBeNull()
     expect(screen.queryByTestId('prg-canvas')).toBeNull()
-    expect(screen.getByTestId('prg-empty')).toBeInTheDocument()
+    expect(screen.getByTestId('prg-empty')).toHaveAttribute('role', 'status')
     await act(async () => {})
+  })
+
+  it('加载、错误与空态都公开给辅助技术', () => {
+    const { rerender } = render(
+      <I18nProvider>
+        <ProgressView snapshot={null} loading error={null} currentRoot={ROOT_A} rulesByKey={makeRules()} />
+      </I18nProvider>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('加载中')
+    rerender(
+      <I18nProvider>
+        <ProgressView snapshot={null} loading={false} error="连接失败" currentRoot={ROOT_A} rulesByKey={makeRules()} />
+      </I18nProvider>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('连接失败')
   })
 })
 
@@ -507,11 +523,13 @@ describe('ProgressView workflow 筛选下拉', () => {
 })
 
 describe('ProgressView 判定徽章（抽屉 dw-badge；rowSemantics 同源不漂移）', () => {
-  it('gate 证据齐 → 绿「✓ 可以放行」（data-tone）', async () => {
+  it('gate 证据齐 → 绿「可以放行」且用结构化图标表达（data-tone）', async () => {
     renderView()
     await openDrawer('gate-demo')
     const badge = screen.getByTestId('prg9-dw-badge')
-    expect(badge.textContent).toContain('✓ 可以放行')
+    expect(badge.textContent).toContain('可以放行')
+    expect(badge.textContent).not.toContain('✓')
+    expect(badge.querySelector('svg')).not.toBeNull()
     expect(badge).toHaveAttribute('data-tone', 'green')
   })
 
@@ -623,7 +641,7 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
     await waitFor(() => {
       expect(onToast).toHaveBeenCalledWith(expect.stringContaining('guard 拒绝'))
     })
-    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('✓ 可以放行')
+    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('可以放行')
     expect(onRefresh).not.toHaveBeenCalled()
   })
 })
@@ -793,7 +811,7 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
     expect(screen.getByTestId('prg9-scrim')).toBeInTheDocument()
     expect(screen.getByTestId('task-detail')).toBeInTheDocument()
-    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('✓ 可以放行')
+    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('可以放行')
     expect(screen.getByTestId('prg9-dw-pass-gate-demo').textContent).toContain('放行进入 交付')
     expect(screen.getByTestId('prg9-dw-reject-gate-demo')).toBeInTheDocument()
     expect(screen.getByTestId('detail-technical')).not.toHaveAttribute('open')
@@ -816,6 +834,131 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     fireEvent.click(screen.getByTestId('detail-close'))
     expect(screen.queryByTestId('prg9-drawer')).toBeNull()
     expect(document.documentElement.classList.contains('prg9-lock')).toBe(false)
+  })
+
+  it('嵌套证据 composer 的 Escape 只关闭内层并把焦点归还入口', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    const opener = screen.getByTestId('evidence-compose-open')
+    fireEvent.click(opener)
+    expect(screen.getByTestId('evidence-compose-dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).toBeNull()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  })
+
+  it('嵌套证据 composer 通过 body portal 覆盖抽屉外区域且关闭后保留草稿', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+
+    expect(dialog.parentElement).toBe(document.body)
+
+    fireEvent.click(screen.getByTestId('evidence-add-entry'))
+    fireEvent.change(screen.getByTestId('evidence-title-1'), {
+      target: { value: 'DRAFT_MUST_SURVIVE' },
+    })
+    fireEvent.click(dialog)
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('DRAFT_MUST_SURVIVE')
+  })
+
+  it.each([
+    ['build', false],
+    ['verify', true],
+  ] as const)('证据 composer phase gate：%s 阶段可见=%s', async (phase, visible) => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = phase
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    if (visible) {
+      expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    } else {
+      expect(screen.queryByTestId('evidence-compose-open')).not.toBeInTheDocument()
+    }
+  })
+
+  it('非文档治理 workflow 的真实 Verify 阶段仍显示证据 composer', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = 'verify'
+    change.documents = {
+      governed: false,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    expect(screen.queryByTestId('dt-documents')).not.toBeInTheDocument()
+  })
+
+  it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    expect(first).toBeDefined()
+    expect(last).toBeDefined()
+    last!.focus()
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(document.activeElement).toBe(first)
+    expect(screen.getByTestId('detail-close')).not.toHaveFocus()
   })
 
   it('running 行抽屉：TaskDetail 之下挂日志区，2.5s 轮询；抽屉关闭即停（组件卸载）', async () => {
@@ -950,7 +1093,7 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
         expect(el.style.visibility === '' || el.style.visibility === 'inherit').toBe(true)
       }
     }, { timeout: 40000 })
-    expect(screen.getByTestId('prg-cv-track-proj-a-default')).toHaveStyle({ minWidth: '1820px' })
+    expect(screen.getByTestId('prg-cv-track-proj-a-default')).toHaveStyle({ minWidth: '1624px' })
   }, 50000)
 })
 

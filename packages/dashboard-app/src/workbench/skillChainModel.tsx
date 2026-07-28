@@ -20,7 +20,7 @@ export const skConn = (
   <span
     aria-hidden="true"
     data-anim="skconn"
-    className="relative mx-0.5 inline-block h-3.5 w-[26px] flex-none before:absolute before:left-0.5 before:right-[7px] before:top-1.5 before:h-0.5 before:animate-[wb-flowsk_1.6s_linear_infinite] before:bg-[repeating-linear-gradient(90deg,var(--purple)_0_5px,transparent_5px_10px)] before:content-[''] after:absolute after:right-px after:top-[3px] after:h-2 after:w-[5px] after:bg-purple after:content-[''] after:[clip-path:polygon(0_0,100%_50%,0_100%)] motion-reduce:before:animate-none"
+    className="relative mx-0.5 inline-block h-3.5 w-[26px] flex-none before:absolute before:left-0.5 before:right-[7px] before:top-1.5 before:h-px before:bg-purple before:content-[''] after:absolute after:right-px after:top-[3px] after:h-2 after:w-[5px] after:bg-purple after:content-[''] after:[clip-path:polygon(0_0,100%_50%,0_100%)]"
   />
 )
 

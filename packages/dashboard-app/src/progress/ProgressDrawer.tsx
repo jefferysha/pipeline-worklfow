@@ -1,5 +1,7 @@
 import type { ReactNode, RefObject } from 'react'
+import { useT } from '../i18n'
 import { TaskDetail } from '../shared/TaskDetail'
+import { VerificationEvidenceComposer } from '../verification/VerificationEvidenceComposer'
 import { fieldStr, type FlatRow } from './progressViewModel'
 import { ContextBundlePreview } from './ContextBundlePreview'
 import { RunLogPane } from './RunLogPane'
@@ -23,6 +25,7 @@ export function ProgressDrawer({
   onClose,
   onToast,
 }: ProgressDrawerProps): JSX.Element {
+  const { lang } = useT()
   return (
     <>
       <div className="fixed inset-0 z-40 bg-scrim" data-testid="prg9-scrim" ref={scrimRef} onClick={onClose} />
@@ -50,6 +53,15 @@ export function ProgressDrawer({
               />
             )}
             collapseTechnical
+            documentsExtra={row.row.change.phase === 'verify'
+              ? (
+                  <VerificationEvidenceComposer
+                    locale={lang === 'zh' ? 'zh-CN' : 'en'}
+                    onToast={onToast}
+                    root={row.row.root}
+                  />
+                )
+              : undefined}
             onClose={onClose}
             onToast={onToast}
           />

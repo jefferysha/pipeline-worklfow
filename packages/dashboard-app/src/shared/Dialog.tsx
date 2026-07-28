@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 
 /**
  * 中立共享 Dialog 组件（评审 P0-5/P1-9 的地基，Task 3）。
  *
  * 真机评审证实现有 7 处手写 backdrop 对话框键盘礼仪全缺：Esc 不关、焦点不进入、
  * 无困笼、卸载不归位，注册对话框更是「无路可退陷阱」。本组件收拢这四件事，
- * Task 4 起逐个迁移调用方。样式已迁 tailwind 原子类（v10b 全量迁移）；外部 GSAP
- * （WorkbenchView 的 revealDialog）以 `[data-testid="…"] [role="dialog"]` 寻址内容
- * 节点——ARIA 契约即锚点，原 `.dialog` 骨架类已无消费方，Phase 3 收尾删除。
+ * Task 4 起逐个迁移调用方。样式已迁 tailwind 原子类（v10b 全量迁移）；组件通过
+ * document.body portal 脱离父级 transform/overflow 的 containing block。外部 GSAP
+ * （WorkbenchView 的 revealDialog）必须显式传入 portal 节点，不能依赖视图 root scope
+ * 内的字符串选择器。ARIA 契约仍是内容锚点，原 `.dialog` 骨架类已无消费方。
  *
  * 多层 Dialog 叠加时 Esc/Tab 的归属（评审修复轮）：初版用
  * `containerRef.current.contains(document.activeElement)` 判断"是不是我"，看似够用，
@@ -24,7 +27,8 @@ import { useEffect, useRef } from 'react'
  * 依赖"挂载顺序"这个前提，而挂载顺序在一种结构下会反过来——同一 React commit 内父子
  * Dialog 同时首次挂载时，子组件的 effect 先于父组件跑（React 18 提交阶段的既定顺序是
  * 子先父后），子 Dialog 反而比父 Dialog 更早 push 进 dialogStack，栈序与视觉层序（父在
- * 下、子在上）就对不上了。当前 7 个调用方彼此都不嵌套，这个前提天然不触发；因此迁移/
+ * 下、子在上）就对不上了。当前共享 Dialog 调用方不会在同一 commit 首次挂载父子两层，
+ * 这个前提天然不触发；因此迁移/
  * 新增调用方时禁止出现"同一 commit 内父子 Dialog 同时首次挂载"的结构（即：不要让一个
  * Dialog 的 children 在它自己首次挂载的那一刻就已经渲染出另一个 Dialog——先挂载外层、
  * 等外层已挂载后再由用户交互触发内层挂载，这种分两个 commit 的时序不受影响）。
@@ -35,6 +39,8 @@ export interface DialogProps {
   children: React.ReactNode
   actions?: React.ReactNode      // 底部动作条（调用方放确认/取消按钮）
   testid?: string
+  /** Localized accessible label for the workspace close icon. */
+  closeLabel?: string
   /** 少数编排型对话框需要更宽的工作面；缺省仍保持既有 420px。 */
   panelClassName?: string
   /** 大型编辑器使用沉浸式工作区骨架；普通确认框保持 default。 */
@@ -69,7 +75,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, closeLabel = '关闭', panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
@@ -113,6 +119,10 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
       if (dialogStack[dialogStack.length - 1] !== id) return
 
       if (e.key === 'Escape') {
+        // onClose synchronously unmounts this Dialog. Without consuming the same native event,
+        // a later document listener can observe the now-exposed outer surface and close it too.
+        e.preventDefault()
+        e.stopImmediatePropagation()
         onClose()
         return
       }
@@ -123,10 +133,16 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
         const focusable = getFocusableElements(container)
         if (focusable.length === 0) {
           e.preventDefault()
+          container.focus()
           return
         }
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
+        if (!container.contains(document.activeElement)) {
+          e.preventDefault()
+          ;(e.shiftKey ? last : first).focus()
+          return
+        }
         if (e.shiftKey) {
           if (document.activeElement === first) {
             e.preventDefault()
@@ -142,7 +158,7 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-scrim ${variant === 'workspace' ? 'p-4 backdrop-blur-[3px]' : ''}`}
       data-testid={testid}
@@ -164,7 +180,7 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6">
               <h2 className="min-w-0 flex-1 truncate text-[18px] font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-xl text-text-3 transition hover:bg-fill hover:text-text" aria-label="关闭" onClick={onClose}>×</button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" aria-label={closeLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}
@@ -177,6 +193,7 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

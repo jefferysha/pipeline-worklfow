@@ -66,6 +66,11 @@ export {
   fetchTraceSessions,
 } from './auditClient'
 
+export {
+  postVerificationEvidenceCompose,
+  VerificationEvidenceApiError,
+} from './verificationEvidenceClient'
+
 export type {
   ChangeHistoryEntry,
   ChangeSessionLaunch,
@@ -124,3 +129,13 @@ export type {
   ContextBundleReasonCode,
   ContextBundleTier,
 } from './contextBundleTypes'
+
+export type {
+  VerificationEvidenceComposeInput,
+  VerificationEvidenceComposeResponse,
+  VerificationEvidenceDraftEntry,
+  VerificationEvidenceFieldError,
+  VerificationEvidenceKind,
+  VerificationEvidenceLocale,
+  VerificationEvidenceStatus,
+} from './verificationEvidenceTypes'

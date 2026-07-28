@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Layers3 } from 'lucide-react'
+import { Layers3, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '../i18n'
 import { resolvedSkillId, skillPresentation } from './skillPresentation'
@@ -95,9 +95,9 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
       </div>
 
       {table === null ? (
-        <span className={cn(NOTE_CLS, 'mx-0.5')}>{t('common.loading')}</span>
+        <span className={cn(NOTE_CLS, 'mx-0.5')} role="status" aria-live="polite">{t('common.loading')}</span>
       ) : selectedTrack === null || cell === null ? (
-        <span className={cn(NOTE_CLS, 'mx-0.5')} data-testid={`wb-mand-unavailable-${phase}`}>
+        <span className={cn(NOTE_CLS, 'mx-0.5')} data-testid={`wb-mand-unavailable-${phase}`} role="status" aria-live="polite">
           {t('workbench.mand_tracks_unavailable')}
         </span>
       ) : (
@@ -118,7 +118,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
               {skills.length > 0 && <span className="h-px w-7 bg-purple-b" aria-hidden="true" />}
             </div>
             <div className="relative flex flex-col items-start gap-2 border-l border-purple-b pl-4">
-            {skills.length === 0 && <span className="mx-0.5 text-[13px] text-text-3">{t('workbench.mand_empty')}</span>}
+            {skills.length === 0 && <span className="mx-0.5 text-[13px] text-text-3" role="status" aria-live="polite">{t('workbench.mand_empty')}</span>}
             {skills.map((id) => {
               const presentation = skillPresentation(id, registry)
               const resolvedId = resolvedSkillId(id, registry)
@@ -147,7 +147,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
                         removeSkill(id)
                       }}
                     >
-                      ×
+                      <X className="size-3" aria-hidden="true" />
                     </button>
                   )}
                 </span>
@@ -178,7 +178,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
                     aria-label={t('workbench.mand_pop_title', { key: cell.key })}
                   >
                     <p className="px-1.5 py-1 text-[11.5px] font-bold text-text-3">{t('workbench.mand_pop_title', { key: cell.key })}</p>
-                    {candidates.length === 0 && <p className="px-1.5 py-1 text-[12.5px] text-text-3">{t('workbench.mand_pop_empty')}</p>}
+                    {candidates.length === 0 && <p className="px-1.5 py-1 text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.mand_pop_empty')}</p>}
                     {candidates.map((id) => {
                       const presentation = skillPresentation(id, registry)
                       return (
@@ -206,7 +206,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
           {/* saveError 是矩阵级单值：只挂在真出错的那一列（saveErrorKey 缺省时退回全列显示，
               见 MandatoryState.saveErrorKey 注释）。 */}
           {saveError !== null && (saveErrorKey == null || saveErrorKey === writeKey) && (
-            <p className="mx-0.5 mt-2 text-[12.5px] text-red" data-testid={`wb-mand-err-${phase}`}>
+            <p className="mx-0.5 mt-2 text-[12.5px] text-red" data-testid={`wb-mand-err-${phase}`} role="alert">
               {saveError}
             </p>
           )}

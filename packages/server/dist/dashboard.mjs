@@ -13477,6 +13477,308 @@ var nodeLedgerContextBundlePrimitives = {
   utf8ByteLength: (text2) => Buffer.byteLength(text2, "utf8")
 };
 
+// packages/kernel/dist/verification/evidence-composer.js
+var VERIFICATION_EVIDENCE_LIMITS = Object.freeze({
+  maxEntries: 12,
+  maxErrors: 20,
+  titleBytes: 240,
+  commandBytes: 2e3,
+  resultBytes: 4e3,
+  skipReasonBytes: 2e3,
+  outputBytes: 32 * 1024
+});
+var INPUT_FIELDS = /* @__PURE__ */ new Set(["locale", "entries"]);
+var ENTRY_FIELDS = /* @__PURE__ */ new Set(["kind", "title", "status", "command", "result", "skipReason"]);
+var KINDS = /* @__PURE__ */ new Set(["command", "browser", "review", "other"]);
+var STATUSES = /* @__PURE__ */ new Set(["passed", "failed", "skipped"]);
+var encoder2 = new TextEncoder();
+function addError(collector, code, path7) {
+  if (collector.errors.length < VERIFICATION_EVIDENCE_LIMITS.maxErrors) {
+    collector.errors.push(Object.freeze({ code, path: path7 }));
+  } else {
+    collector.overflow = true;
+  }
+}
+function snapshotRecord2(value) {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null)
+      return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some((key) => typeof key !== "string"))
+      return null;
+    const copy = /* @__PURE__ */ Object.create(null);
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === void 0 || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value"))
+        return null;
+      copy[key] = descriptor.value;
+    }
+    return copy;
+  } catch {
+    return null;
+  }
+}
+function snapshotArray2(value, maxLength) {
+  try {
+    if (!Array.isArray(value))
+      return { kind: "not_array" };
+    if (Object.getPrototypeOf(value) !== Array.prototype)
+      return { kind: "invalid" };
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (lengthDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(lengthDescriptor, "value") || typeof lengthDescriptor.value !== "number" || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0)
+      return { kind: "invalid" };
+    const length = lengthDescriptor.value;
+    if (length > maxLength)
+      return { kind: "too_many" };
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== length + 1 || keys.some((key) => typeof key !== "string")) {
+      return { kind: "invalid" };
+    }
+    const copy = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === void 0 || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value"))
+        return { kind: "invalid" };
+      copy.push(descriptor.value);
+    }
+    return { kind: "ok", value: Object.freeze(copy) };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+function hasInvalidSurrogate(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value.charCodeAt(index);
+    if (current >= 55296 && current <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 56320 || next > 57343)
+        return true;
+      index += 1;
+    } else if (current >= 56320 && current <= 57343) {
+      return true;
+    }
+  }
+  return false;
+}
+function hasUnsafeControl(value) {
+  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value);
+}
+function normalizeText(value, path7, maxBytes, collector, required2, preserveWhitespace = false) {
+  if (value === void 0) {
+    if (required2)
+      addError(collector, "field_required", path7);
+    return void 0;
+  }
+  if (typeof value !== "string") {
+    addError(collector, "field_type", path7);
+    return void 0;
+  }
+  if (hasInvalidSurrogate(value)) {
+    addError(collector, "unicode_invalid", path7);
+    return void 0;
+  }
+  if (hasUnsafeControl(value)) {
+    addError(collector, "control_character", path7);
+    return void 0;
+  }
+  const normalized2 = value.replace(/\r\n?/gu, "\n");
+  const canonical = preserveWhitespace ? normalized2 : normalized2.trim();
+  if (canonical.trim() === "") {
+    if (required2)
+      addError(collector, "field_required", path7);
+    return void 0;
+  }
+  if (encoder2.encode(canonical).byteLength > maxBytes) {
+    addError(collector, "field_too_large", path7);
+    return void 0;
+  }
+  return canonical;
+}
+function enumValue(value, values, path7, collector) {
+  if (value === void 0) {
+    addError(collector, "field_required", path7);
+    return void 0;
+  }
+  if (typeof value !== "string") {
+    addError(collector, "field_type", path7);
+    return void 0;
+  }
+  if (!values.has(value)) {
+    addError(collector, "enum_invalid", path7);
+    return void 0;
+  }
+  return value;
+}
+function entryFromUnknown(value, index, collector) {
+  const path7 = `entries[${index}]`;
+  const record2 = snapshotRecord2(value);
+  if (record2 === null) {
+    addError(collector, "object_invalid", path7);
+    return void 0;
+  }
+  for (const key of Object.keys(record2)) {
+    if (!ENTRY_FIELDS.has(key))
+      addError(collector, "unknown_field", `${path7}.${key}`);
+  }
+  const kind = enumValue(record2.kind, KINDS, `${path7}.kind`, collector);
+  const title = normalizeText(record2.title, `${path7}.title`, VERIFICATION_EVIDENCE_LIMITS.titleBytes, collector, true, true);
+  const status = enumValue(record2.status, STATUSES, `${path7}.status`, collector);
+  let command;
+  if (record2.command !== void 0) {
+    if (kind !== void 0 && kind !== "command") {
+      addError(collector, "field_forbidden", `${path7}.command`);
+    } else {
+      command = normalizeText(record2.command, `${path7}.command`, VERIFICATION_EVIDENCE_LIMITS.commandBytes, collector, false, true);
+    }
+  }
+  let result;
+  let skipReason;
+  if (status === "skipped") {
+    if (record2.result !== void 0)
+      addError(collector, "field_forbidden", `${path7}.result`);
+    skipReason = normalizeText(record2.skipReason, `${path7}.skipReason`, VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes, collector, true, true);
+  } else if (status === "passed" || status === "failed") {
+    result = normalizeText(record2.result, `${path7}.result`, VERIFICATION_EVIDENCE_LIMITS.resultBytes, collector, true, true);
+    if (record2.skipReason !== void 0) {
+      addError(collector, "field_forbidden", `${path7}.skipReason`);
+    }
+  }
+  if (kind === void 0 || title === void 0 || status === void 0)
+    return void 0;
+  if (status === "skipped" && skipReason === void 0)
+    return void 0;
+  if (status !== "skipped" && result === void 0)
+    return void 0;
+  return Object.freeze({
+    kind,
+    title,
+    status,
+    ...command === void 0 ? {} : { command },
+    ...result === void 0 ? {} : { result },
+    ...skipReason === void 0 ? {} : { skipReason }
+  });
+}
+var COPY = {
+  en: {
+    heading: "Verification evidence draft",
+    notice: "Draft only: Tenon did not run these checks, save a verification report, or change the Verify gate.",
+    check: "Check",
+    title: "Title",
+    type: "Type",
+    status: "Status",
+    command: "Command",
+    result: "Result",
+    skipReason: "Skip reason",
+    kinds: { command: "Command", browser: "Browser", review: "Review", other: "Other" },
+    statuses: { passed: "Passed", failed: "Failed", skipped: "Skipped" }
+  },
+  "zh-CN": {
+    heading: "\u9A8C\u8BC1\u8BC1\u636E\u8349\u7A3F",
+    notice: "\u4EC5\u4E3A\u8349\u7A3F\uFF1ATenon \u672A\u6267\u884C\u8FD9\u4E9B\u68C0\u67E5\u3001\u672A\u4FDD\u5B58\u9A8C\u8BC1\u62A5\u544A\uFF0C\u4E5F\u672A\u6539\u53D8 Verify gate\u3002",
+    check: "\u68C0\u67E5",
+    title: "\u6807\u9898",
+    type: "\u7C7B\u578B",
+    status: "\u72B6\u6001",
+    command: "\u547D\u4EE4",
+    result: "\u7ED3\u679C",
+    skipReason: "\u8DF3\u8FC7\u539F\u56E0",
+    kinds: { command: "\u547D\u4EE4", browser: "\u6D4F\u89C8\u5668", review: "\u8BC4\u5BA1", other: "\u5176\u4ED6" },
+    statuses: { passed: "\u901A\u8FC7", failed: "\u5931\u8D25", skipped: "\u8DF3\u8FC7" }
+  }
+};
+function textBlock(value) {
+  let longest = 0;
+  for (const match of value.matchAll(/`+/gu))
+    longest = Math.max(longest, match[0].length);
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}text
+${value}
+${fence}`;
+}
+function renderDraft(draft) {
+  const copy = COPY[draft.locale];
+  const separator = draft.locale === "zh-CN" ? "\uFF1A" : ": ";
+  const lines = [
+    `## ${copy.heading}`,
+    "",
+    `> ${copy.notice}`,
+    ""
+  ];
+  draft.entries.forEach((entry, index) => {
+    lines.push(`### ${copy.check} ${index + 1}`, "", `**${copy.title}**`, "", textBlock(entry.title), "", `- ${copy.type}${separator}${copy.kinds[entry.kind]}`, `- ${copy.status}${separator}${copy.statuses[entry.status]}`, "");
+    if (entry.command !== void 0) {
+      lines.push(`**${copy.command}**`, "", textBlock(entry.command), "");
+    }
+    if (entry.result !== void 0) {
+      lines.push(`**${copy.result}**`, "", textBlock(entry.result), "");
+    } else if (entry.skipReason !== void 0) {
+      lines.push(`**${copy.skipReason}**`, "", textBlock(entry.skipReason), "");
+    }
+  });
+  return lines.join("\n");
+}
+function composeVerificationEvidence(input) {
+  const collector = { errors: [], overflow: false };
+  const record2 = snapshotRecord2(input);
+  if (record2 === null) {
+    addError(collector, "object_invalid", "");
+    return Object.freeze({ ok: false, errors: Object.freeze(collector.errors), overflow: false });
+  }
+  for (const key of Object.keys(record2)) {
+    if (!INPUT_FIELDS.has(key))
+      addError(collector, "unknown_field", key);
+  }
+  const locale = enumValue(record2.locale, /* @__PURE__ */ new Set(["zh-CN", "en"]), "locale", collector);
+  const entriesSnapshot = snapshotArray2(record2.entries, VERIFICATION_EVIDENCE_LIMITS.maxEntries);
+  if (entriesSnapshot.kind !== "ok") {
+    addError(collector, entriesSnapshot.kind === "not_array" ? "field_type" : entriesSnapshot.kind === "too_many" ? "entries_too_many" : "object_invalid", "entries");
+    return Object.freeze({
+      ok: false,
+      errors: Object.freeze(collector.errors),
+      overflow: collector.overflow
+    });
+  }
+  const sourceEntries = entriesSnapshot.value;
+  if (sourceEntries.length === 0) {
+    addError(collector, "entries_empty", "entries");
+    return Object.freeze({
+      ok: false,
+      errors: Object.freeze(collector.errors),
+      overflow: collector.overflow
+    });
+  }
+  const entries = [];
+  for (let index = 0; index < sourceEntries.length; index += 1) {
+    const normalized2 = entryFromUnknown(sourceEntries[index], index, collector);
+    if (normalized2 !== void 0)
+      entries.push(normalized2);
+  }
+  if (collector.errors.length > 0 || collector.overflow || locale === void 0) {
+    return Object.freeze({
+      ok: false,
+      errors: Object.freeze(collector.errors),
+      overflow: collector.overflow
+    });
+  }
+  const draft = Object.freeze({
+    locale,
+    entries: Object.freeze(entries)
+  });
+  const markdown = renderDraft(draft);
+  if (encoder2.encode(markdown).byteLength > VERIFICATION_EVIDENCE_LIMITS.outputBytes) {
+    addError(collector, "output_too_large", "");
+    return Object.freeze({
+      ok: false,
+      errors: Object.freeze(collector.errors),
+      overflow: collector.overflow
+    });
+  }
+  return Object.freeze({ ok: true, markdown, entryCount: entries.length });
+}
+
 // packages/kernel/dist/triage/types.js
 var OBSERVE_ACTION_KINDS = ["git-commits", "loop-run-terminals"];
 
@@ -18007,9 +18309,163 @@ async function readAfkRunLog(changeDir) {
   }
 }
 
-// packages/server/src/contextBundlePreview.ts
+// packages/server/src/contextBundlePreviewSupport.ts
 import { lstatSync as lstatSync5, realpathSync as realpathSync3 } from "node:fs";
 import { isAbsolute as isAbsolute8, join as join39, relative as relative6, sep as sep8 } from "node:path";
+var SCHEMA_VERSION = "context-bundle-preview/v1";
+var SIDE_EFFECTS = "none";
+var ContextBundlePathError = class extends Error {
+  constructor(status, message, cause) {
+    super(message, cause === void 0 ? void 0 : { cause });
+    this.status = status;
+    this.name = "ContextBundlePathError";
+  }
+  status;
+};
+function missingCode(error) {
+  return typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
+}
+function inside2(base, candidate) {
+  const fromBase = relative6(base, candidate);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute8(fromBase);
+}
+function captureChangePathAnchor(root, change) {
+  const chainPaths = [
+    join39(root.path, "openspec"),
+    join39(root.path, "openspec", "changes"),
+    join39(root.path, "openspec", "changes", change)
+  ];
+  const chain = [];
+  for (const path7 of chainPaths) {
+    let info;
+    try {
+      info = lstatSync5(path7);
+    } catch (error) {
+      if (missingCode(error)) {
+        throw new ContextBundlePathError(400, "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state");
+      }
+      throw error;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
+    }
+    chain.push({ path: path7, dev: info.dev, ino: info.ino });
+  }
+  const changeDir = chainPaths.at(2);
+  if (changeDir === void 0) {
+    throw new ContextBundlePathError(403, "Context Bundle Change path capture failed");
+  }
+  let realPath;
+  try {
+    realPath = realpathSync3(changeDir);
+  } catch (cause) {
+    throw new ContextBundlePathError(
+      403,
+      `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`,
+      cause
+    );
+  }
+  if (!inside2(root.realPath, realPath)) {
+    throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u9003\u9038 registered root: ${realPath}`);
+  }
+  return { changeDir, realPath, chain };
+}
+function assertChangePathAnchor(anchor) {
+  for (const expected of anchor.chain) {
+    let actual;
+    try {
+      actual = lstatSync5(expected.path);
+    } catch {
+      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u6D88\u5931: ${expected.path}`);
+    }
+    if (actual.isSymbolicLink() || !actual.isDirectory() || actual.dev !== expected.dev || actual.ino !== expected.ino) {
+      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u88AB\u66FF\u6362: ${expected.path}`);
+    }
+  }
+  if (realpathSync3(anchor.changeDir) !== anchor.realPath) {
+    throw new ContextBundlePathError(403, `Context Bundle Change realpath \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${anchor.changeDir}`);
+  }
+}
+function safeContextBundlePreview(preview, fits, aggregateDigest) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    sideEffects: SIDE_EFFECTS,
+    change: preview.change,
+    from: preview.from,
+    to: preview.to,
+    tier: preview.tier,
+    documentCount: preview.documentCount,
+    budget: {
+      maxBytes: preview.budget.maxBytes,
+      usedBytes: preview.budget.usedBytes,
+      fits
+    },
+    inputs: preview.inputs.map((input) => ({
+      kind: input.kind,
+      path: input.path,
+      digest: input.digest,
+      reason: input.reason,
+      reasonCode: input.reasonCode,
+      mode: input.mode,
+      sourceBytes: input.sourceBytes,
+      materializedBytes: input.materializedBytes
+    })),
+    ...aggregateDigest === void 0 ? {} : { aggregateDigest }
+  };
+}
+function contextBundleErrorStatus(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return 400;
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return 409;
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return 413;
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return 422;
+  }
+  const unreachable = error.code;
+  return unreachable;
+}
+function safeContextBundleErrorText(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return "Context Bundle request is invalid";
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+      return "Context Bundle canonical state is corrupt";
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+      return "Context Bundle document ledger is unavailable";
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+      return "A required Context Bundle document is unavailable";
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return "A required Context Bundle document has changed";
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return "Context Bundle source resource limit exceeded";
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return "Context Bundle materialized budget exceeded";
+  }
+}
+function safeContextBundleRepairAction(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return "Use a registered root, safe identifiers, canonical target, and positive budget.";
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+      return "Restore a valid canonical Change state, then retry.";
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+      return "Initialize and record the document ledger, then retry.";
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+      return "Restore or record the required project document, then retry.";
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return "Record and read the changed project document again, then retry.";
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return "Reduce the number or source size of recorded documents, then retry.";
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return "Increase budgetBytes to the required materialized size, then retry.";
+  }
+}
 
 // packages/server/src/contextBundleTrustedReader.ts
 import { constants as constants7, fstatSync as fstatSync5, openSync as openSync5, readSync } from "node:fs";
@@ -18241,80 +18697,6 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
 }
 
 // packages/server/src/contextBundlePreview.ts
-var SCHEMA_VERSION = "context-bundle-preview/v1";
-var SIDE_EFFECTS = "none";
-var ContextBundlePathError = class extends Error {
-  constructor(status, message, cause) {
-    super(message, cause === void 0 ? void 0 : { cause });
-    this.status = status;
-    this.name = "ContextBundlePathError";
-  }
-  status;
-};
-function missingCode(error) {
-  return typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
-}
-function inside2(base, candidate) {
-  const fromBase = relative6(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute8(fromBase);
-}
-function captureChangePathAnchor(root, change) {
-  const chainPaths = [
-    join39(root.path, "openspec"),
-    join39(root.path, "openspec", "changes"),
-    join39(root.path, "openspec", "changes", change)
-  ];
-  const chain = [];
-  for (const path7 of chainPaths) {
-    let info;
-    try {
-      info = lstatSync5(path7);
-    } catch (error) {
-      if (missingCode(error)) {
-        throw new ContextBundlePathError(400, "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state");
-      }
-      throw error;
-    }
-    if (info.isSymbolicLink() || !info.isDirectory()) {
-      throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
-    }
-    chain.push({ path: path7, dev: info.dev, ino: info.ino });
-  }
-  const changeDir = chainPaths.at(2);
-  if (changeDir === void 0) {
-    throw new ContextBundlePathError(403, "Context Bundle Change path capture failed");
-  }
-  let realPath;
-  try {
-    realPath = realpathSync3(changeDir);
-  } catch (cause) {
-    throw new ContextBundlePathError(
-      403,
-      `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`,
-      cause
-    );
-  }
-  if (!inside2(root.realPath, realPath)) {
-    throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u9003\u9038 registered root: ${realPath}`);
-  }
-  return { changeDir, realPath, chain };
-}
-function assertChangePathAnchor(anchor) {
-  for (const expected of anchor.chain) {
-    let actual;
-    try {
-      actual = lstatSync5(expected.path);
-    } catch {
-      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u6D88\u5931: ${expected.path}`);
-    }
-    if (actual.isSymbolicLink() || !actual.isDirectory() || actual.dev !== expected.dev || actual.ino !== expected.ino) {
-      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u88AB\u66FF\u6362: ${expected.path}`);
-    }
-  }
-  if (realpathSync3(anchor.changeDir) !== anchor.realPath) {
-    throw new ContextBundlePathError(403, `Context Bundle Change realpath \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${anchor.changeDir}`);
-  }
-}
 function invalidRequest2(res, sendJson, error) {
   sendJson(res, 400, {
     ok: false,
@@ -18326,86 +18708,6 @@ function invalidRequest2(res, sendJson, error) {
 function reportInternalFailure(deps, context, error) {
   process.stderr.write(`[context-bundle-preview] ${context}: ${deps.errMsg(error)}
 `);
-}
-function safePreview(preview, fits, aggregateDigest) {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    sideEffects: SIDE_EFFECTS,
-    change: preview.change,
-    from: preview.from,
-    to: preview.to,
-    tier: preview.tier,
-    documentCount: preview.documentCount,
-    budget: {
-      maxBytes: preview.budget.maxBytes,
-      usedBytes: preview.budget.usedBytes,
-      fits
-    },
-    inputs: preview.inputs.map((input) => ({
-      kind: input.kind,
-      path: input.path,
-      digest: input.digest,
-      reason: input.reason,
-      reasonCode: input.reasonCode,
-      mode: input.mode,
-      sourceBytes: input.sourceBytes,
-      materializedBytes: input.materializedBytes
-    })),
-    ...aggregateDigest === void 0 ? {} : { aggregateDigest }
-  };
-}
-function statusFor(error) {
-  switch (error.code) {
-    case "CONTEXT_BUNDLE_INVALID_REQUEST":
-      return 400;
-    case "CONTEXT_BUNDLE_STATE_CORRUPT":
-    case "CONTEXT_BUNDLE_LEDGER_MISSING":
-    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
-    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
-      return 409;
-    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
-      return 413;
-    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
-      return 422;
-  }
-  const unreachable = error.code;
-  return unreachable;
-}
-function safeErrorText3(error) {
-  switch (error.code) {
-    case "CONTEXT_BUNDLE_INVALID_REQUEST":
-      return "Context Bundle request is invalid";
-    case "CONTEXT_BUNDLE_STATE_CORRUPT":
-      return "Context Bundle canonical state is corrupt";
-    case "CONTEXT_BUNDLE_LEDGER_MISSING":
-      return "Context Bundle document ledger is unavailable";
-    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
-      return "A required Context Bundle document is unavailable";
-    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
-      return "A required Context Bundle document has changed";
-    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
-      return "Context Bundle source resource limit exceeded";
-    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
-      return "Context Bundle materialized budget exceeded";
-  }
-}
-function safeRepairAction(error) {
-  switch (error.code) {
-    case "CONTEXT_BUNDLE_INVALID_REQUEST":
-      return "Use a registered root, safe identifiers, canonical target, and positive budget.";
-    case "CONTEXT_BUNDLE_STATE_CORRUPT":
-      return "Restore a valid canonical Change state, then retry.";
-    case "CONTEXT_BUNDLE_LEDGER_MISSING":
-      return "Initialize and record the document ledger, then retry.";
-    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
-      return "Restore or record the required project document, then retry.";
-    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
-      return "Record and read the changed project document again, then retry.";
-    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
-      return "Reduce the number or source size of recorded documents, then retry.";
-    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
-      return "Increase budgetBytes to the required materialized size, then retry.";
-  }
 }
 async function handleContextBundlePreview(req, res, deps) {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -18490,7 +18792,7 @@ async function handleContextBundlePreview(req, res, deps) {
     assertWorkflowRootAnchor(anchor);
     return deps.sendJson(res, 200, {
       ok: true,
-      preview: safePreview(result.preview, true, result.bundle.aggregateDigest)
+      preview: safeContextBundlePreview(result.preview, true, result.bundle.aggregateDigest)
     });
   } catch (error) {
     try {
@@ -18519,11 +18821,11 @@ async function handleContextBundlePreview(req, res, deps) {
       if (error.cause !== void 0) {
         reportInternalFailure(deps, `${error.code} cause`, error.cause);
       }
-      return deps.sendJson(res, statusFor(error), {
+      return deps.sendJson(res, contextBundleErrorStatus(error), {
         ok: false,
         code: error.code,
-        error: safeErrorText3(error),
-        repairAction: safeRepairAction(error),
+        error: safeContextBundleErrorText(error),
+        repairAction: safeContextBundleRepairAction(error),
         detail: {
           ...error.kind === void 0 ? {} : { kind: error.kind },
           ...error.path === void 0 ? {} : { path: error.path },
@@ -18533,7 +18835,7 @@ async function handleContextBundlePreview(req, res, deps) {
           ...error.limit === void 0 ? {} : { limit: error.limit },
           ...error.actual === void 0 ? {} : { actual: error.actual }
         },
-        ...error.code === "CONTEXT_BUNDLE_BUDGET_EXCEEDED" && error.preview !== void 0 ? { preview: safePreview(error.preview, false) } : {}
+        ...error.code === "CONTEXT_BUNDLE_BUDGET_EXCEEDED" && error.preview !== void 0 ? { preview: safeContextBundlePreview(error.preview, false) } : {}
       });
     }
     reportInternalFailure(deps, "unexpected preview failure", error);
@@ -20610,6 +20912,65 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
   }
 }
 
+// packages/server/src/serverPostVerificationRoutes.ts
+var ROUTE = "/api/verification-evidence/compose";
+async function handlePostVerificationRoutes(req, res, path7, deps) {
+  if (path7 !== ROUTE) return;
+  const raw = await deps.readJsonBody(req);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return deps.sendJson(res, 400, {
+      ok: false,
+      code: "verification_evidence_invalid",
+      error: "Verification evidence request must be a JSON object",
+      details: [{ code: "object_invalid", path: "" }],
+      overflow: false
+    });
+  }
+  const body = raw;
+  if (typeof body.root !== "string" || body.root.trim() === "") {
+    return deps.sendJson(res, 400, {
+      ok: false,
+      code: "verification_evidence_invalid",
+      error: "Verification evidence root must be a non-empty string",
+      details: [{
+        code: typeof body.root === "string" || body.root === void 0 ? "field_required" : "field_type",
+        path: "root"
+      }],
+      overflow: false
+    });
+  }
+  const root = body.root;
+  const rootCheck = deps.workflowRootForRequest(root);
+  if (!rootCheck.ok) {
+    return deps.sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+  }
+  try {
+    assertWorkflowRootAnchor(rootCheck.anchor);
+  } catch (error) {
+    return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error) });
+  }
+  const composerInput = /* @__PURE__ */ Object.create(null);
+  for (const [key, value] of Object.entries(body)) {
+    if (key !== "root") composerInput[key] = value;
+  }
+  const result = composeVerificationEvidence(composerInput);
+  try {
+    assertWorkflowRootAnchor(rootCheck.anchor);
+  } catch (error) {
+    return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error) });
+  }
+  if (!result.ok) {
+    return deps.sendJson(res, 400, {
+      ok: false,
+      code: "verification_evidence_invalid",
+      error: "Verification evidence is invalid",
+      details: result.errors,
+      overflow: result.overflow
+    });
+  }
+  return deps.sendJson(res, 200, result);
+}
+
 // packages/server/src/serverPostRoutes.ts
 async function handlePostRoute(req, res, path7, deps) {
   const {
@@ -20661,6 +21022,8 @@ async function handlePostRoute(req, res, path7, deps) {
     return sendJson(res, 400, { ok: false, error: "\u5199\u56DE\u7AEF\u70B9\u8981\u6C42 Content-Type: application/json" });
   }
   await handlePostOperationsRoutes(req, res, path7, deps);
+  if (res.writableEnded) return;
+  await handlePostVerificationRoutes(req, res, path7, deps);
   if (res.writableEnded) return;
   await handlePostChangesRoutes(req, res, path7, deps);
   if (res.writableEnded) return;

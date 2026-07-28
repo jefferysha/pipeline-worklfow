@@ -1,37 +1,6 @@
-/*
- * W3（tailwind 迁移）：workbench 专用 keyframes——仅 SkillChain 连接件的流动虚线。
- * 对齐 spec §4.6 先例（index.css 归 scaffold，视图自有 keyframes 进视图自己的 css）：
- * 本文件只放 @keyframes，颜色/布局全部在组件 tailwind 原子类里（渐变色走 var(--purple) token）；
- * reduced-motion 停帧由类侧 motion-reduce:before:animate-none 承担，此处不写媒体查询。
- */
-@keyframes wb-flowsk {
-  to { background-position: -10px 0; }
-}
-
-/*
- * W1（tailwind 迁移，append-only）：StepperRail 阶段卡间连接件的流动虚线
- * （原 styles.ts @keyframes wb8-flow 等值搬运；渐变色在组件类里走 var(--green)/var(--red) token）。
- * reduced-motion 停用由类侧 motion-safe: 变体承担，此处不写媒体查询。
- */
-@keyframes wb8-flow {
-  to { background-position: -12px 0; }
-}
-
-/*
- * W1：添加阶段 Dialog 的字段标签配色（原 styles.ts .field__label 三段式等值搬运）：
- * 亮=--ink、暗=--green。dark: 变体只认 [data-theme=dark]，覆不住「系统暗色跟随」分支，
- * 故保留复杂选择器（显式亮色胜系统暗色的两向皆胜口径同 index.css token 三段式）。
- */
+/* 添加阶段 Dialog 的字段标签使用普通正文角色，不借用 success/green。 */
 [data-wb-field-label] {
-  color: var(--ink);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) [data-wb-field-label] {
-    color: var(--green);
-  }
-}
-:root[data-theme='dark'] [data-wb-field-label] {
-  color: var(--green);
+  color: var(--text-2);
 }
 
 /*
@@ -65,7 +34,7 @@
   right: -32px;
   width: 32px;
   height: 1px;
-  background: linear-gradient(90deg, var(--border-2), color-mix(in srgb, var(--accent) 38%, var(--border-2)));
+  background: color-mix(in srgb, var(--accent) 50%, var(--border-2));
 }
 [data-forward]::before {
   content: '';
@@ -81,13 +50,13 @@
   transform: rotate(45deg);
 }
 [data-forward][data-gated]::after {
-  background: linear-gradient(90deg, var(--border-2), color-mix(in srgb, var(--red) 55%, var(--border-2)));
+  background: color-mix(in srgb, var(--red) 65%, var(--border-2));
 }
 [data-forward][data-gated]::before {
   border-color: var(--red);
 }
 [data-forward][data-locked]::after {
-  background: linear-gradient(90deg, var(--border), var(--border-2));
+  background: var(--border-2);
 }
 [data-forward][data-locked]::before {
   border-color: var(--border-2);

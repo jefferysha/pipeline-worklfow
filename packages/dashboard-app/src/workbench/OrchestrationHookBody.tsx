@@ -39,7 +39,7 @@ export function OrchestrationHookBody({ lane, open, hooks }: {
                 {event === 'UserPromptSubmit' && <span className={HK_LOOP}>{t('workbench.board_hk_loop')}</span>}
               </div>
               <div className="flex flex-col gap-2">
-                {eventHooks.length === 0 ? <span className="text-[12.5px] text-text-3">{t('workbench.board_hk_empty')}</span> : eventHooks.map((hook) => {
+                {eventHooks.length === 0 ? <span className="text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.board_hk_empty')}</span> : eventHooks.map((hook) => {
                   const key = `${hook.id}.${lane.id}`
                   const enabled = !(key in hooks.matrix)
                   const locked = !hook.configurable && LOCKED_IDS.has(hook.id)

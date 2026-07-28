@@ -41,6 +41,12 @@ function renderRail(overrides: Partial<Parameters<typeof StepperRail>[0]> = {}) 
 }
 
 describe('StepperRail 基础渲染（节点数/名称/ID/选中态）', () => {
+  it('选中态使用 accent 交互色而不是成功绿', () => {
+    renderRail()
+    const selected = screen.getByTestId('wb-step-draft')
+    expect(selected.className).toContain('aria-[current=step]:border-(--accent)')
+    expect(selected.className).not.toContain('aria-[current=step]:border-green')
+  })
   it('节点数 = steps 数，aria-label 透传，序号/名称/ID 齐全', () => {
     renderRail()
     expect(screen.getByLabelText('release-train 阶段')).toBeInTheDocument()
