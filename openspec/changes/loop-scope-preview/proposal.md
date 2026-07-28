@@ -2,7 +2,7 @@
 
 ## Why
 
-Tenon 已能在无人值守 Loop 结算时执行路径白名单与黑名单，但用户在运行前无法从 Dashboard 验证一组计划路径会被允许还是拒绝。错误策略通常要到保留冲突 worktree 时才暴露，反馈过晚且难以解释。Trellis 的路径作用域规则可见性与 Comet 的 include/exclude baseline 政策进一步证明，用户需要在具体路径进入执行链之前获得可行动、可解释的边界反馈。
+Tenon 已能在无人值守 Loop 结算时执行路径白名单与黑名单，但用户在运行前无法从 Dashboard 验证一组计划路径会被允许还是拒绝。错误策略通常要到保留冲突 worktree 时才暴露，反馈过晚且难以解释。固定的一手上游证据表明，路径规则只有在用户触碰具体路径前可见并可解释时，才能形成可行动的配置反馈。
 
 ## What Changes
 
@@ -24,4 +24,4 @@ Tenon 已能在无人值守 Loop 结算时执行路径白名单与黑名单，�
 
 ## Impact
 
-影响 Loop 约束的共享解释投影、Dashboard server 的受保护无副作用 POST、Workbench API client/组件与 i18n。保持 Node 22/npm workspace、既有 Loop YAML、allowlist/denylist 语义和自动化执行路径兼容，不新增运行时依赖或持久化格式。Trellis 为 AGPL-3.0、Comet 为 MIT；本 Change 只提炼设计依据，不复制上游实现。
+影响 Loop 约束的共享解释投影、Dashboard server 的受保护无副作用 POST、Workbench API client/组件与 i18n。保持 Node 22/npm workspace、既有 Loop YAML、allowlist/denylist 语义和自动化执行路径兼容，不新增运行时依赖或持久化格式。上游只作为设计证据，本 Change 不复制其源码、测试、文案或文件结构；完整来源与许可证固定信息留在 PR 和 automation memory。

@@ -41,19 +41,34 @@ export interface LoopScopePreviewResponse {
   items: LoopScopePreviewItem[]
 }
 
-export function parseLoopScopePreviewPaths(raw: string): string[] | null {
-  const paths = raw.split(/\r?\n/).filter((path) => path !== '')
+function hasLoneSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1)
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true
+      index += 1
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true
+    }
+  }
+  return false
+}
+
+function normalizeLoopScopePreviewPaths(paths: readonly string[]): string[] | null {
   if (paths.length === 0 || paths.length > MAX_PATHS) return null
   let total = 0
   const seen = new Set<string>()
   const result: string[] = []
   for (const path of paths) {
     const segments = path.split('/')
-    const invalid = path.includes('\0')
+    const invalid = /[\u0000-\u001f]/.test(path)
+      || hasLoneSurrogate(path)
+      || path.includes('"')
       || path.includes('\\')
       || path.startsWith('/')
       || path.endsWith('/')
-      || /^[A-Za-z]:/.test(path)
+      || /^[A-Za-z]:\//.test(path)
       || segments.some((segment) => segment === '' || segment === '.' || segment === '..')
     const bytes = new TextEncoder().encode(path).length
     total += bytes
@@ -64,6 +79,10 @@ export function parseLoopScopePreviewPaths(raw: string): string[] | null {
     }
   }
   return result
+}
+
+export function parseLoopScopePreviewPaths(raw: string): string[] | null {
+  return normalizeLoopScopePreviewPaths(raw.split(/\r?\n/).filter((path) => path !== ''))
 }
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -138,7 +157,8 @@ export async function postLoopScopePreview(input: {
   signal?: AbortSignal
 }): Promise<LoopScopePreviewResponse> {
   const requestLoopId = input.loopId
-  const requestPaths = [...input.paths]
+  const requestPaths = normalizeLoopScopePreviewPaths([...input.paths])
+  if (requestPaths === null) throw new LoopScopePreviewError('invalid')
   let response: Response
   try {
     response = await fetch('/api/loops/scope-preview', {

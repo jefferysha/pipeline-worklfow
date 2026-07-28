@@ -98,11 +98,11 @@ describe('Loop scope preview request', () => {
     expect(parseLoopScopePreviewRequest({
       root: '/repo',
       loop_id: 'release-loop',
-      paths: ['src/app.ts', 'docs/guide.md', 'src/app.ts'],
+      paths: ['src/app.ts', 'a:b', 'C:notes.txt', 'src/emoji-😀.ts', 'src/app.ts'],
     })).toEqual({
       root: '/repo',
       loopId: 'release-loop',
-      paths: ['src/app.ts', 'docs/guide.md'],
+      paths: ['src/app.ts', 'a:b', 'C:notes.txt', 'src/emoji-😀.ts'],
     })
 
     for (const input of [
@@ -111,6 +111,11 @@ describe('Loop scope preview request', () => {
       { root: '/repo', loop_id: 'release-loop', paths: ['C:/Windows/system32'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['C:\\Windows\\system32'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src\\app.ts'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['src/\"quoted\".ts'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['src/control\u0001.ts'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['src/lone-\ud800.ts'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['src/trailing-\ud800'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['src/lone-low-\udc00.ts'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src//app.ts'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src/app.ts/'] },
       { root: '/repo', loop_id: 'release-loop', paths: [] },

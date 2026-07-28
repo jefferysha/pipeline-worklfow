@@ -85,3 +85,37 @@ Date: 2026-07-28
 PASS. No critical, high, or medium UI findings remain.
 
 The final two-axis Standards/Spec re-review reported no remaining actionable findings.
+
+### Loop 7 — frozen Verify contract and hygiene返工
+
+- Frozen Verify found one repository-hygiene CI blocker in tracked research prose and three bounded API/client
+  contract issues. The exact `verify-fail` returned the Change to Build, then `requirements-changed` returned
+  it to Spec; no deviation was accepted.
+- Tracked documents now retain only generic upstream difference conclusions. Exact external identities,
+  URLs, SHAs, release/tag fallback and licenses remain in the PR body and automation memory, as required by
+  the repository hygiene boundary.
+- The revised contract rejects C0 controls and double quotes so every valid 32768-byte path set fits beneath
+  the shared JSON transport ceiling, accepts POSIX colon paths while still rejecting `X:/` drive absolutes,
+  and requires the public client to validate, deduplicate and freeze its own request sequence.
+- TDD red reproduced all three contract findings; green now covers server 286/286 and Dashboard 82/82,
+  including a real 32 × 1024-byte HTTP request and a direct duplicate-path typed-client call. Rebuilt Web
+  passes 52 files / 974 tests; build, typecheck, architecture, comments, repository hygiene and diff checks pass.
+- The root suite completed 316/317 files with one unrelated 5-second internal-skill-gate timeout; its exact
+  9-test file immediately passed in 2.9 seconds on targeted rerun. This is retained as flaky evidence rather
+  than misreported as an all-green root run.
+- Final-spec isolation `/tmp/tenon-loop-scope-openspec-final2.qKU8it` reports five requirements / twenty-one
+  scenarios (3, 9, 2, 6, 1); archive/apply and generated main-spec strict validation pass, while the real main
+  spec remains absent before and after.
+
+### Loop 8 — JSON transport surrogate 返工
+
+- Final Build Standards review found that an unpaired UTF-16 surrogate counts as three replacement UTF-8
+  bytes to `TextEncoder`/`Buffer.byteLength` but expands to a six-byte escape under `JSON.stringify`. A
+  32768-byte path set could therefore reach the shared body reader before the business parser.
+- TDD red reproduced the defect in the authoritative parser and real HTTP route. Client and server now reject
+  only unpaired surrogates while preserving valid Unicode pairs such as emoji.
+- A second adversarial pass found JavaScript's `NaN` comparison trap for a trailing high surrogate. Dedicated
+  trailing-high and lone-low tests now guard both parsers and the real HTTP route; the pair check uses an
+  affirmative bounded-range predicate so end-of-string cannot pass accidentally.
+- Green evidence covers the server parser/HTTP files at 286/286 and the typed client at 6/6. The real HTTP
+  regression now receives stable 400 `LOOP_SCOPE_REQUEST_INVALID` rather than a transport-level response.

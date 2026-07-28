@@ -19356,6 +19356,19 @@ function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd,
 function invalid(message) {
   throw new LoopScopePreviewInputError(message);
 }
+function hasLoneSurrogate(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 55296 && code <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 56320 && next <= 57343)) return true;
+      index += 1;
+    } else if (code >= 56320 && code <= 57343) {
+      return true;
+    }
+  }
+  return false;
+}
 function readWithLoopScopeRootTrust(assertTrusted, read) {
   try {
     assertTrusted();
@@ -19371,7 +19384,7 @@ function readWithLoopScopeRootTrust(assertTrusted, read) {
   return result;
 }
 function isCanonicalRelativePath(path7) {
-  if (path7 === "" || path7.includes("\0") || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/") || /^[A-Za-z]:/.test(path7)) return false;
+  if (path7 === "" || /[\u0000-\u001f]/.test(path7) || hasLoneSurrogate(path7) || path7.includes('"') || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/") || /^[A-Za-z]:\//.test(path7)) return false;
   const segments = path7.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return false;
   return posix2.normalize(path7) === path7;

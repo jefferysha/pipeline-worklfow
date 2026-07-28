@@ -1748,6 +1748,25 @@ describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', 
     }, auth)
     expect(windowsAbsolute.status).toBe(400)
     expect(windowsAbsolute.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const transportUnsafe = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/\"quoted\".ts'],
+    }, auth)
+    expect(transportUnsafe.status).toBe(400)
+    expect(transportUnsafe.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const surrogateExpansionPaths = Array.from({ length: 32 }, (_, index) => {
+      const prefix = `src/${index}-`
+      return `${prefix}${'\ud800'.repeat(Math.floor((1024 - Buffer.byteLength(prefix)) / 3))}`
+    })
+    const surrogateExpansion = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: surrogateExpansionPaths,
+    }, auth)
+    expect(surrogateExpansion.status).toBe(400)
+    expect(surrogateExpansion.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const trailingSurrogate = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/trailing-\ud800'],
+    }, auth)
+    expect(trailingSurrogate.status).toBe(400)
+    expect(trailingSurrogate.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
 
     const unknownRoot = await reqPost(h.port, '/api/loops/scope-preview', {
       root: '/tmp/not-registered', loop_id: 'build-loop', paths: ['src/app.ts'],
@@ -1757,6 +1776,19 @@ describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', 
 
     await mkdir(join(h.root, '.pipeline'), { recursive: true })
     await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    const posixColon = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['a:b', 'C:notes.txt'],
+    }, auth)
+    expect(posixColon.status).toBe(200)
+    const maxBudgetPaths = Array.from({ length: 32 }, (_, index) => {
+      const prefix = `src/${index}-`
+      return `${prefix}${'a'.repeat(1024 - Buffer.byteLength(prefix))}`
+    })
+    const maxBudget = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: maxBudgetPaths,
+    }, auth)
+    expect(maxBudget.status).toBe(200)
+    expect(maxBudget.json()).toMatchObject({ summary: { total: 32 } })
     const unknownLoop = await reqPost(h.port, '/api/loops/scope-preview', {
       root: h.root, loop_id: 'missing-loop', paths: ['src/app.ts'],
     }, auth)

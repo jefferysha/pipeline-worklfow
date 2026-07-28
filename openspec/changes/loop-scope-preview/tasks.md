@@ -8,7 +8,7 @@
 
 ## 调研
 
-- [x] 固定 Trellis、Comet 与 Tenon 当前实现的一手证据。
+- [x] 固定两项上游与 Tenon 当前实现的一手证据，完整身份记录仅保留在 PR 与 automation memory。
 - [x] 确认路径匹配、API、安全与 Workbench 交互方案，形成 ADR。
 
 ## 规格
@@ -24,11 +24,14 @@
 - [x] B2c 集成收束：补齐 API/组件回归测试、文档注释与生成 bundle，保持包边界和文件长度门禁。
 - [x] B2d Verify 返工：以 TDD 修复 registry 子路径可信读取、稳定 403/500 契约和客户端请求/响应绑定。
 - [x] B2e 返工收束：重建 bundle，重新执行全量 Standards/Spec 审查并清零 critical/high/medium。
+- [x] B2f 契约返工：以 TDD 对齐 transport-safe 路径字符、POSIX 冒号路径和 typed client 去重边界，并移除 tracked 文档中的受限参考身份。
+- [x] B2g transport 返工：以 TDD 拒绝未成对 Unicode surrogate，保证路径预算不会因 JSON 转义膨胀越过公共 body 上限。
 
 ## 验证
 
 - [x] 重新运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
 - [x] 重新完成真实浏览器验收与隔离 OpenSpec show/strict validate/archive/apply 演练。
+- [ ] 重新运行 repository hygiene、边界 HTTP/client 测试、全量门禁与冻结四轨验证。
 
 ## 交付
 

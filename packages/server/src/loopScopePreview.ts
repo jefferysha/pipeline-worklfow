@@ -138,6 +138,20 @@ function invalid(message: string): never {
   throw new LoopScopePreviewInputError(message)
 }
 
+function hasLoneSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1)
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true
+      index += 1
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true
+    }
+  }
+  return false
+}
+
 export function readWithLoopScopeRootTrust<T>(
   assertTrusted: () => void,
   read: () => T,
@@ -158,11 +172,13 @@ export function readWithLoopScopeRootTrust<T>(
 
 function isCanonicalRelativePath(path: string): boolean {
   if (path === ''
-    || path.includes('\0')
+    || /[\u0000-\u001f]/.test(path)
+    || hasLoneSurrogate(path)
+    || path.includes('"')
     || path.includes('\\')
     || path.startsWith('/')
     || path.endsWith('/')
-    || /^[A-Za-z]:/.test(path)) return false
+    || /^[A-Za-z]:\//.test(path)) return false
   const segments = path.split('/')
   if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) return false
   return posix.normalize(path) === path

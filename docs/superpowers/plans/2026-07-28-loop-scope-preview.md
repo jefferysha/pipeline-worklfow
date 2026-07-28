@@ -45,7 +45,8 @@ Spec，而不是继续堆实现。
 1. 扩展 kernel 测试覆盖同批 deny/outside、顺序、write/merge 选择、aggregate 回归；
    保证 frozen policy 输入不被修改。
 2. 完成 server 闭集解析：1–100 条、去重保序、1024/32768 UTF-8 bytes、canonical
-   Git 相对路径、未知 key、稳定错误码；请求只做字符串匹配。
+   Git 相对路径、transport-safe 字符（含未成对 surrogate 拒绝）、合法 POSIX 冒号、未知 key、
+   稳定错误码；请求只做字符串匹配。
 3. 增加真 HTTP 覆盖：Host/token/content-type 继续由公共 POST 入口保护，测试未知 root、
    未知 Loop、损坏 registry、active L3 与 paused/L1/L2 提示，以及响应无绝对路径。
 4. 通过既有可信 `.pipeline` 目录链校验与 `O_NOFOLLOW` 文件描述符读取 `loops.yaml`，读取前后
@@ -66,7 +67,8 @@ Spec，而不是继续堆实现。
 ## Build 子阶段 3：B2b Dashboard 状态与可访问性闭环
 
 1. 完整 decoder 拒绝未知/缺失枚举、错误汇总、items 长度/上限不一致；client 在解码后绑定
-   原请求 Loop id、路径逐项顺序与 `active && L3` 派生值，并统一映射 network、HTTP 与 decode error。
+   原请求 Loop id、路径逐项顺序与 `active && L3` 派生值；client 自行校验、去重保序并冻结请求，
+   以同一序列发送与绑定响应，并统一映射 network、HTTP 与 decode error。
 2. 完成 Dialog 的 closed/open-empty/invalid/loading/ready/error 状态；错误保留输入，
    Retry 使用同一请求，关闭后清除路径且不写 localStorage。
 3. 在 `packages/dashboard-app/src/i18n/translations.ts` 对称加入 zh/en 文案，协议 reason
@@ -116,5 +118,6 @@ Spec，而不是继续堆实现。
 - API 是新增端点；Loop registry/YAML、既有响应与执行 gate 均不变，无数据库或配置迁移。
 - 回滚可按相反顺序删除 UI 挂载、client/decoder、server route/module、kernel explanation；
   既有 aggregate evaluator 测试保证运行时路径策略不受影响。
-- PR 记录 Trellis/Comet 固定 SHA、许可证边界、Tenon Change/phase、测试与浏览器证据，
+- PR 记录完整上游固定 SHA、URL、release/tag 回退与许可证边界，以及 Tenon Change/phase、
+  测试与浏览器证据，
   检查远端 CI；仅外部 secret 缜密标为阻塞。

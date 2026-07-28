@@ -30,6 +30,13 @@ describe('loop scope preview API', () => {
     ])
     expect(parseLoopScopePreviewPaths('C:/Windows/system32')).toBeNull()
     expect(parseLoopScopePreviewPaths('C:\\Windows\\system32')).toBeNull()
+    expect(parseLoopScopePreviewPaths('a:b\nC:notes.txt')).toEqual(['a:b', 'C:notes.txt'])
+    expect(parseLoopScopePreviewPaths('src/emoji-😀.ts')).toEqual(['src/emoji-😀.ts'])
+    expect(parseLoopScopePreviewPaths('src/\"quoted\".ts')).toBeNull()
+    expect(parseLoopScopePreviewPaths('src/control\u0001.ts')).toBeNull()
+    expect(parseLoopScopePreviewPaths('src/lone-\ud800.ts')).toBeNull()
+    expect(parseLoopScopePreviewPaths('src/trailing-\ud800')).toBeNull()
+    expect(parseLoopScopePreviewPaths('src/lone-low-\udc00.ts')).toBeNull()
   })
 
   it('decodes only a complete, internally consistent closed response', () => {
@@ -62,6 +69,12 @@ describe('loop scope preview API', () => {
 
   it('posts the protected request and rejects malformed success payloads', async () => {
     window.__TENON_DASHBOARD_TOKEN__ = 'scope-token'
+    global.fetch = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 }))
+    await expect(postLoopScopePreview({
+      root: '/repo', loopId: 'release-loop', paths: ['src/lone-\ud800.ts'],
+    })).rejects.toMatchObject({ kind: 'invalid' })
+    expect(global.fetch).not.toHaveBeenCalled()
+
     global.fetch = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 }))
     await expect(postLoopScopePreview({
       root: '/repo',
@@ -111,6 +124,23 @@ describe('loop scope preview API', () => {
       loopId: 'release-loop',
       paths,
     })).resolves.toEqual(response)
+  })
+
+  it('deduplicates the public client request before sending and binding the response', async () => {
+    const deduplicated = {
+      ...response,
+      summary: { total: 1, allowed: 1, blocked: 0 },
+      items: [response.items[0]],
+    }
+    global.fetch = vi.fn(async () => new Response(JSON.stringify(deduplicated), { status: 200 }))
+    await expect(postLoopScopePreview({
+      root: '/repo',
+      loopId: 'release-loop',
+      paths: ['src/app.ts', 'src/app.ts'],
+    })).resolves.toEqual(deduplicated)
+    expect(JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body))).toMatchObject({
+      paths: ['src/app.ts'],
+    })
   })
 
   it('maps stable server codes without exposing server-localized text', async () => {

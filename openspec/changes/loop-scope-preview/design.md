@@ -23,7 +23,9 @@
 - denylist-first 与空 allowlist fail-closed 是已有执行不变量；新增解释 API 必须保持 aggregate evaluator 的旧行为。
 - DTO 只回传提交的相对路径、稳定枚举、首个命中 pattern、Loop 状态与摘要；不返回绝对路径或文件正文。
 - 使用独立 `LoopScopePreviewDialog` 与 API decoder，挂入 `LoopAdvancedFields`，避免让接近长度上限的 `LoopCard` 继续承载新状态机。
-- API 输入限制为 1–100 条、单条 1024 UTF-8 bytes、总计 32768 bytes；拒绝非 canonical Git 风格相对路径和未知字段。
+- API 输入限制为 1–100 条、单条 1024 UTF-8 bytes、总计 32768 bytes；拒绝非 canonical Git
+  风格相对路径、C0 控制字符、未成对 Unicode surrogate、双引号和未知字段。冒号本身合法，仅拒绝
+  `X:/` drive absolute。
 - 客户端在闭集解码后还必须把 `loop_id`、路径原顺序、最多 100 项和 L3 生效派生值绑定到原请求，
   防止成功形状正确但内容属于另一个请求或互相矛盾。
 - 详细方案与覆盖见 `docs/superpowers/specs/2026-07-28-loop-scope-preview-design.md`，架构决策见 `docs/adr/2026-07-28-loop-scope-preview-explore.md`。

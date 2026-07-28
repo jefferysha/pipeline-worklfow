@@ -16,12 +16,14 @@
 
 读取日期：2026-07-28。
 
-- Trellis 默认分支 `main` 固定为 `621435d143d352ac1db4ab077d682716fd6d5afd`。GitHub latest Release API 返回 404，因此稳定版本回退到语义 tag `v0.6.9`，SHA `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`。
-- Trellis beta PR [#468](https://github.com/mindfold-ai/Trellis/pull/468) 合并提交 `5f543960683906969952f853390039c6024c48b8`，证明路径作用域规则只有在用户触碰具体路径时可见才有操作价值。
-- Comet 默认分支 `master` 固定为 `2945693e4061c369be0d400ed2999a66fa87c680`；最新发布版 `0.4.0-beta.9` 固定为 `84038b0d6b7c185b233f0f36b294ae74dd9121d0`。其 baseline include/exclude policy 强调显式边界、预算和可行动的配置错误。
+- 两项一手上游的默认分支、稳定 release/tag、相关合并变更、URL、SHA 与许可证均已按本轮日期
+  固定；仓库 hygiene 禁止把外部参考身份写入 tracked 文档，因此完整记录只保留在 PR body 与
+  automation memory。
+- 差异结论一：路径作用域只有在用户触碰具体路径前可见，才能形成有操作价值的反馈。
+- 差异结论二：include/exclude policy 需要显式边界、预算和可行动的配置错误。
 - Tenon 当前已有更强的执行约束：`compileConstraintPolicy`、`evaluateConstraintPolicy` 与 automation `matchesPathGlob` 在 L3 结算时 fail closed，但 Dashboard 只显示原始 chips，不能对计划路径解释结果。
 
-上游项目只作为需求与设计证据。Trellis 当前仓库许可证为 AGPL-3.0，Comet 为 MIT；本实现不复制其源码、测试、文案或文件结构。
+上游只作为需求与设计证据；本实现不复制其源码、测试、文案或文件结构。
 
 ## 方案比较
 
@@ -79,8 +81,10 @@ flowchart LR
 
 - 1–100 条，去重后保持首次出现顺序；
 - 单条 UTF-8 最大 1024 bytes，总计最大 32768 bytes；
-- 必须是非空、NUL-free、使用 `/` 的 canonical 项目相对路径；
+- 必须是非空、C0-control-free、无未成对 Unicode surrogate、double-quote-free、使用 `/` 的
+  canonical 项目相对路径；
 - 拒绝绝对路径、反斜杠、`.`、`..`、空 segment、尾 `/` 和规范化后变化的路径；
+- 冒号本身合法，仅 `X:/...` drive absolute 形式按绝对路径拒绝；
 - 不允许未知 request key。
 
 成功响应：
@@ -151,7 +155,8 @@ closed
 - 用户已授权持续自主执行，因此采用最保守的“只读、无缓存、无许可持久化”默认，而不为低风险 UI 位置再次询问。
 - 预检只针对 merge 路径政策；write 与 merge 当前共享同一声明，但 UI 不承诺它们永远相同。
 - paused/L1/L2 Loop 仍可模拟策略以便配置，但会显示当前并非 L3 unattended merge 的生效许可。
-- 路径 byte 语义不做 Unicode normalization，避免把两个不同 Git 路径误合并；仅验证 JSON 字符串的 canonical 分隔与相对性。
+- 路径 byte 语义不做 Unicode normalization，避免把两个不同 Git 路径误合并；仅拒绝会在
+  JSON transport 中产生额外转义膨胀的未成对 surrogate，并验证 canonical 分隔与相对性。
 
 ## 红队自检
 
@@ -166,10 +171,12 @@ closed
 ## Verification strategy
 
 1. kernel 定向测试：deny 优先、空 allowlist、首个 pattern、顺序与 aggregate 行为保持。
-2. server 单元/真 HTTP：Host/token/content-type、闭集 DTO、路径/字节/数量、未知 root/Loop、
+2. server 单元/真 HTTP：Host/token/content-type、闭集 DTO、路径/字符/字节/数量、合法 POSIX
+   冒号路径、transport 最大合法 body、未知 root/Loop、
    损坏 registry、`.pipeline` symlink、`loops.yaml` symlink、子项换位、稳定 403/500、成功与无写盘证明。
 3. Dashboard decoder/client/component：空、加载、允许、拒绝、服务端/网络/decoder error、
-   请求/响应 Loop 与路径绑定、items 上限、L3 派生一致性、retry、zh/en、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape。
+   client 自行去重并冻结请求、请求/响应 Loop 与路径绑定、items 上限、L3 派生一致性、retry、
+   zh/en、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape。
 4. `typecheck:web`、`test:web`、`build:web`、`build`、`npm test` 与相关 architecture/comments/bundle 门禁。
 5. 真实 Tenon Dashboard 在桌面与移动视口、明暗主题完成成功/拒绝/错误恢复和键盘验收；同时核对 title、API health 与目标项目身份。
 

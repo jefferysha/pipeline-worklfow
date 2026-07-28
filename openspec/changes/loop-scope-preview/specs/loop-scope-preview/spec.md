@@ -31,8 +31,9 @@ kernel `ConstraintPolicy` 与自动化执行面相同的 glob matcher 逐条解�
 JSON content-type 与 registered-root 信任锚。请求 SHALL 只允许 `root`、`loop_id`、
 `paths`，并接受 1–100 条去重后保持首次出现顺序的路径。单路径 SHALL 不超过 1024
 UTF-8 bytes，全部路径 SHALL 不超过 32768 UTF-8 bytes。服务端 SHALL 拒绝绝对路径、
-反斜杠、NUL、`.`、`..`、空 segment、尾 `/` 或规范化会改变的路径，并且不得打开、
-统计、执行或持久化用户提交的路径。
+反斜杠、C0 控制字符、未成对 Unicode surrogate、双引号、`.`、`..`、空 segment、尾 `/` 或规范化会改变的路径，并且不得
+打开、统计、执行或持久化用户提交的路径。冒号 SHALL 作为合法 POSIX/Git 路径字符保留；
+仅 `X:/...` drive absolute 形式 SHALL 因绝对路径被拒绝。
 
 #### Scenario: 有效请求
 
@@ -46,6 +47,17 @@ UTF-8 bytes，全部路径 SHALL 不超过 32768 UTF-8 bytes。服务端 SHALL �
 - **WHEN** 请求包含未知字段、非 canonical 路径、超过数量或字节上限
 - **THEN** 服务端返回 HTTP 400 与 `LOOP_SCOPE_REQUEST_INVALID`
 - **AND** 不读取 Loop 路径指向的文件
+
+#### Scenario: transport-safe 路径字符
+
+- **WHEN** 路径含 C0 控制字符、未成对 Unicode surrogate、双引号或 `X:/...` drive absolute 形式
+- **THEN** 服务端返回 HTTP 400 与 `LOOP_SCOPE_REQUEST_INVALID`
+- **AND** 任一满足 32768 UTF-8 bytes 总预算的合法请求不会先被公共 JSON body 上限拒绝
+
+#### Scenario: 合法 POSIX 冒号路径
+
+- **WHEN** 用户提交 `a:b` 或 `C:notes.txt` 这类 canonical 项目相对路径
+- **THEN** 服务端接受该路径进入策略匹配
 
 #### Scenario: root 或 Loop 不存在
 
@@ -102,7 +114,8 @@ Workbench SHALL 在 Loop 的“自主与安全”高级区提供路径预检 Dia
 全部允许、部分/全部拒绝、服务端或解码失败以及保留输入的重试状态，并提供中文与英文文案。
 成功响应 SHALL 绑定到原请求：Loop id 与路径序列 SHALL 逐项一致、items SHALL 不超过 100，
 且 `enforced_for_unattended_merge` SHALL 与 `active && L3` 派生事实一致；任一不一致 SHALL
-作为解码失败处理。
+作为解码失败处理。公开 typed client SHALL 自行校验、去重保序并冻结路径快照，以同一规范序列
+发送请求和校验响应，不得依赖某个调用组件先完成去重。
 
 #### Scenario: 空输入与本地错误
 
@@ -127,6 +140,12 @@ Workbench SHALL 在 Loop 的“自主与安全”高级区提供路径预检 Dia
 - **WHEN** 服务端成功形状包含其他 Loop、不同路径顺序或集合、超过 100 项，或矛盾的 L3 生效值
 - **THEN** Dashboard 拒绝渲染该结果并进入可重试错误状态
 - **AND** 不把不一致响应解释为当前请求的许可
+
+#### Scenario: typed client 接收重复路径
+
+- **WHEN** 调用方直接向公开 typed client 传入重复路径
+- **THEN** client 去重保序后发送请求，并按同一不可变序列绑定服务端结果
+- **AND** 不把服务端合法的去重响应误判成串线
 
 #### Scenario: 键盘与焦点返回
 
