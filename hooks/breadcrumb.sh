@@ -34,6 +34,12 @@ PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 [ -n "$PROOT" ] || exit 0
 CHANGES="$PROOT/openspec/changes"
 
+INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
+[ -r "$INTENT_HELPER" ] || exit 0
+# shellcheck source=prompt-intent.sh
+. "$INTENT_HELPER"
+pipeline_prompt_should_skip_routing "$PROOT" "$PROMPT" && exit 0
+
 STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
 if [ -r "$STATE_HELPER" ]; then
   . "$STATE_HELPER"
@@ -76,11 +82,6 @@ if [ -f "$ACTIVE_POINTER" ] && [ ! -L "$ACTIVE_POINTER" ] && [ -r "$ACTIVE_POINT
 fi
 
 # 只有明确恢复才读取候选。helper 缺失时 fail-closed，避免旧上下文泄漏。
-INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
-[ -r "$INTENT_HELPER" ] || exit 0
-# shellcheck source=prompt-intent.sh
-. "$INTENT_HELPER"
-
 # A response choosing the pair offered by router belongs to that pending conversation turn.  It
 # must never turn a generic “继续” in the reply into a repository-wide old-Change breadcrumb.
 pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0

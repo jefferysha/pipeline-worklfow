@@ -16300,31 +16300,39 @@ var HOOK_METAS = [
 var HOOK_BY_ID = new Map(HOOK_METAS.map((h) => [h.id, h]));
 var CONFIGURABLE_IDS = HOOK_METAS.filter((h) => h.configurable).map((h) => h.id);
 var PHASE_RE = /^[a-zA-Z0-9_-]+$/;
+var PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+var DEFAULT_PROMPT_SKIP_KEYWORD = "no-tenon";
 function hooksConfigPath(root) {
   return join33(root, ".pipeline", "hooks.json");
 }
-function readHooksMatrix(root) {
+function readHooksConfig(root) {
   let parsed;
   try {
     parsed = JSON.parse(readFileSync19(hooksConfigPath(root), "utf8"));
   } catch {
-    return {};
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
   }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const rawMatrix = parsed.matrix;
-  if (typeof rawMatrix !== "object" || rawMatrix === null || Array.isArray(rawMatrix)) return {};
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
+  }
+  const record2 = parsed;
+  const rawKeyword = record2.prompt_skip_keyword;
+  const promptSkipKeyword = typeof rawKeyword === "string" && (rawKeyword === "" || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword)) ? rawKeyword : DEFAULT_PROMPT_SKIP_KEYWORD;
+  const rawMatrix = record2.matrix;
   const matrix = {};
-  for (const [key, value] of Object.entries(rawMatrix)) {
-    if (value !== false) continue;
-    const dot = key.indexOf(".");
-    if (dot <= 0) continue;
-    const hook = key.slice(0, dot);
-    const phase = key.slice(dot + 1);
-    if (!HOOK_BY_ID.get(hook)?.configurable) continue;
-    if (!PHASE_RE.test(phase)) continue;
-    matrix[key] = false;
+  if (typeof rawMatrix === "object" && rawMatrix !== null && !Array.isArray(rawMatrix)) {
+    for (const [key, value] of Object.entries(rawMatrix)) {
+      if (value !== false) continue;
+      const dot = key.indexOf(".");
+      if (dot <= 0) continue;
+      const hook = key.slice(0, dot);
+      const phase = key.slice(dot + 1);
+      if (!HOOK_BY_ID.get(hook)?.configurable) continue;
+      if (!PHASE_RE.test(phase)) continue;
+      matrix[key] = false;
+    }
   }
-  return matrix;
+  return { promptSkipKeyword, matrix };
 }
 function validateHookToggleBody(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -16349,21 +16357,43 @@ function validateHookToggleBody(body) {
   }
   return { ok: true, value: { hook, phase, enabled } };
 }
-function writeHookToggle(root, toggle) {
-  const matrix = readHooksMatrix(root);
-  const key = `${toggle.hook}.${toggle.phase}`;
-  if (toggle.enabled) {
-    delete matrix[key];
-  } else {
-    matrix[key] = false;
+function validatePromptRoutingBypassBody(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" };
   }
+  const keyword = body.prompt_skip_keyword;
+  if (typeof keyword !== "string" || keyword !== "" && !PROMPT_SKIP_KEYWORD_RE.test(keyword)) {
+    return { ok: false, error: "prompt_skip_keyword \u987B\u4E3A\u7A7A\u6216 1-32 \u5B57\u7B26 ASCII token\uFF08\u5B57\u6BCD/\u6570\u5B57\u5F00\u5934\uFF0C\u53EF\u542B - _\uFF09" };
+  }
+  return { ok: true, value: { promptSkipKeyword: keyword } };
+}
+function writeHooksConfig(root, config) {
   const dir = join33(root, ".pipeline");
   mkdirSync5(dir, { recursive: true });
   const file = hooksConfigPath(root);
   const tmp = `${file}.tmp.${process.pid}`;
-  writeFileSync5(tmp, `${JSON.stringify({ version: 1, matrix }, null, 2)}
+  writeFileSync5(tmp, `${JSON.stringify({
+    version: 1,
+    prompt_skip_keyword: config.promptSkipKeyword,
+    matrix: config.matrix
+  }, null, 2)}
 `, "utf8");
   renameSync5(tmp, file);
+}
+function writeHookToggle(root, toggle) {
+  const config = readHooksConfig(root);
+  const key = `${toggle.hook}.${toggle.phase}`;
+  if (toggle.enabled) {
+    delete config.matrix[key];
+  } else {
+    config.matrix[key] = false;
+  }
+  writeHooksConfig(root, config);
+}
+function writePromptRoutingBypass(root, value) {
+  const config = readHooksConfig(root);
+  config.promptSkipKeyword = value.promptSkipKeyword;
+  writeHooksConfig(root, config);
 }
 
 // packages/server/src/loops.ts
@@ -18104,7 +18134,8 @@ async function handleGet(req, res, path7, deps) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
     try {
-      return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix: readHooksMatrix(root) });
+      const { matrix, promptSkipKeyword } = readHooksConfig(root);
+      return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -19124,6 +19155,25 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     return sendJson(res, 200, { ok: true, ...validated.value });
+  }
+  if (path7 === "/api/hooks/prompt-routing-bypass") {
+    const rawBody = await readJsonBody(req);
+    const validated = validatePromptRoutingBypassBody(rawBody);
+    if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
+    const root = typeof rawBody.root === "string" ? rawBody.root : "";
+    if (!root) return sendJson(res, 400, { ok: false, error: "root \u5FC5\u586B" });
+    if (!isRegisteredRoot(root)) {
+      return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
+    }
+    try {
+      writePromptRoutingBypass(root, validated.value);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: errMsg2(e) });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      prompt_skip_keyword: validated.value.promptSkipKeyword
+    });
   }
   if (path7 === "/api/automation") {
     const rawBody = await readJsonBody(req);

@@ -3690,6 +3690,43 @@ describe('POST /api/hooks —— 阶段×hook 开关写回（v5 T5 / 决议#2）
   })
 })
 
+describe('POST /api/hooks/prompt-routing-bypass —— 单轮路由旁路词', () => {
+  it('默认值由 GET 暴露，合法值可保存并 round-trip', async () => {
+    const h = await start()
+    const first = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(first.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('no-tenon')
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    const saved = await reqPost(
+      h.port,
+      '/api/hooks/prompt-routing-bypass',
+      { root: h.root, prompt_skip_keyword: 'skip-tenon' },
+      auth,
+    )
+    expect(saved.status).toBe(200)
+    expect(saved.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('skip-tenon')
+    const after = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(after.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('skip-tenon')
+  })
+
+  it('无 token 401；非法 DTO 400；未注册 root 404，均不污染已有配置', async () => {
+    const h = await start()
+    expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+      root: h.root, prompt_skip_keyword: 'skip-tenon',
+    })).status).toBe(401)
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    for (const prompt_skip_keyword of ['has space', 'a'.repeat(33), 42]) {
+      expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+        root: h.root, prompt_skip_keyword,
+      }, auth)).status).toBe(400)
+    }
+    expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+      root: '/tmp/not-registered-root', prompt_skip_keyword: '',
+    }, auth)).status).toBe(404)
+    const current = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(current.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('no-tenon')
+  })
+})
+
 // ═══════════ T21：AFK 执行参数端点（.pipeline/automation.json）═══════════
 
 describe('GET /api/automation —— AFK 执行参数（T21）', () => {

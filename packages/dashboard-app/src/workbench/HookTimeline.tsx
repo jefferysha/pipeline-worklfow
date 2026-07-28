@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { fetchHooksConfig, postHookToggle, type WbHookEvent, type WbHookMeta } from '../api/client'
+import {
+  fetchHooksConfig,
+  postHookToggle,
+  postPromptRoutingBypass,
+  type WbHookEvent,
+  type WbHookMeta,
+} from '../api/client'
 import { useT } from '../i18n'
 
 /**
@@ -45,9 +51,13 @@ export interface HooksConfigState {
   matrix: Record<string, false>
   loadError: string | null
   toggleError: string | null
+  promptSkipKeyword: string | null
+  promptSkipBusy: boolean
+  promptSkipError: string | null
   /** 在途写回的 `<hook>.<阶段>` 键：对应开关禁用，防同键乱序竞态。 */
   busyKeys: ReadonlySet<string>
   toggle: (hook: string, phase: string, enabled: boolean) => void
+  savePromptSkipKeyword: (keyword: string) => Promise<boolean>
   /** 某阶段的启用 hook 数（含强制常开——它们真的在跑）；数据未就绪 → undefined。 */
   enabledCount: (phase: string) => number | undefined
 }
@@ -65,6 +75,9 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
   const [matrix, setMatrix] = useState<Record<string, false>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
   const [toggleError, setToggleError] = useState<string | null>(null)
+  const [promptSkipKeyword, setPromptSkipKeyword] = useState<string | null>(null)
+  const [promptSkipBusy, setPromptSkipBusy] = useState(false)
+  const [promptSkipError, setPromptSkipError] = useState<string | null>(null)
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
@@ -73,11 +86,14 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
     setMatrix({})
     setLoadError(null)
     setToggleError(null)
+    setPromptSkipKeyword(null)
+    setPromptSkipError(null)
     fetchHooksConfig(root)
       .then((body) => {
         if (cancelled) return
         setHooks(body.hooks)
         setMatrix(body.matrix)
+        setPromptSkipKeyword(body.promptSkipKeyword)
       })
       .catch((err: unknown) => {
         // 加载失败不挡工作台其余区块：计数回落 '—' 占位、时序线区行内报错。
@@ -125,12 +141,42 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       })
   }
 
+  async function savePromptSkipKeyword(keyword: string): Promise<boolean> {
+    if (promptSkipBusy) return false
+    setPromptSkipBusy(true)
+    setPromptSkipError(null)
+    try {
+      const saved = await postPromptRoutingBypass(root, keyword)
+      setPromptSkipKeyword(saved)
+      return true
+    } catch (err: unknown) {
+      setPromptSkipError(t('workbench.hk_bypass_save_error', {
+        msg: err instanceof Error ? err.message : t('workbench.network_error'),
+      }))
+      return false
+    } finally {
+      setPromptSkipBusy(false)
+    }
+  }
+
   function enabledCount(phase: string): number | undefined {
     if (hooks === null) return undefined
     return hooks.filter((h) => !(`${h.id}.${phase}` in matrix)).length
   }
 
-  return { hooks, matrix, loadError, toggleError, busyKeys, toggle, enabledCount }
+  return {
+    hooks,
+    matrix,
+    loadError,
+    toggleError,
+    promptSkipKeyword,
+    promptSkipBusy,
+    promptSkipError,
+    busyKeys,
+    toggle,
+    savePromptSkipKeyword,
+    enabledCount,
+  }
 }
 
 export interface HookTimelineProps {

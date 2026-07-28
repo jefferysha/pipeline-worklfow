@@ -89,6 +89,9 @@ ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 . "$ROOT_HELPER"
 PROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$PROOT" ] || exit 0
+if [ -r "$INTENT_HELPER" ] && pipeline_prompt_should_skip_routing "$PROOT" "$PROMPT"; then
+  exit 0
+fi
 
 CHANGE_NAME="" CHANGE_PHASE="" CHANGE_TRACK="" CHANGE_WORKFLOW=""
 SESSION_CHANGE_NAME="" SESSION_CHANGE_PHASE="" SESSION_CHANGE_TRACK="" SESSION_CHANGE_WORKFLOW=""

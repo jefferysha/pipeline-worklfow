@@ -1780,8 +1780,12 @@ function renderHk(
     matrix: {},
     loadError: null,
     toggleError: null,
+    promptSkipKeyword: 'no-tenon',
+    promptSkipBusy: false,
+    promptSkipError: null,
     busyKeys: new Set<string>(),
     toggle,
+    savePromptSkipKeyword: vi.fn(async () => true),
     enabledCount: () => 8,
     ...hooksOver,
   }

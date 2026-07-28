@@ -5,6 +5,65 @@
 # 继续（或点名 change）时，调用方才可把该候选注入为当前任务。这里仅做 shell
 # pattern 判定；用户文本始终保持数据，绝不 eval/source。
 
+pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
+  local root="${1:-}" file line trimmed raw value
+  file="$root/.pipeline/hooks.json"
+  [ -r "$file" ] || {
+    printf 'no-tenon'
+    return 0
+  }
+  while IFS= read -r line || [ -n "$line" ]; do
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    case "$trimmed" in
+      '"prompt_skip_keyword": '*)
+        raw="${trimmed#'"prompt_skip_keyword": '}"
+        raw="${raw%,}"
+        case "$raw" in
+          '""') return 0 ;;
+          \"*\")
+            value="${raw#\"}"
+            value="${value%\"}"
+            case "$value" in
+              ''|*[!A-Za-z0-9_-]*)
+                printf 'no-tenon'
+                return 0
+                ;;
+            esac
+            [ "${#value}" -le 32 ] || {
+              printf 'no-tenon'
+              return 0
+            }
+            case "$value" in
+              [A-Za-z0-9]*) printf '%s' "$value"; return 0 ;;
+              *) printf 'no-tenon'; return 0 ;;
+            esac
+            ;;
+          *)
+            printf 'no-tenon'
+            return 0
+            ;;
+        esac
+        ;;
+    esac
+  done < "$file"
+  printf 'no-tenon'
+}
+
+pipeline_prompt_should_skip_routing() { # $1=项目根 $2=prompt；0=只抑制本轮 router/breadcrumb
+  local root="${1:-}" prompt="${2:-}" keyword regex matched=1 restore_nocasematch=0
+  keyword="$(pipeline_prompt_skip_keyword "$root")"
+  [ -n "$keyword" ] || return 1
+  local LC_ALL=C
+  regex="(^|[^A-Za-z0-9_-])${keyword}($|[^A-Za-z0-9_-])"
+  if ! shopt -q nocasematch; then
+    shopt -s nocasematch
+    restore_nocasematch=1
+  fi
+  [[ "$prompt" =~ $regex ]] && matched=0
+  [ "$restore_nocasematch" -eq 0 ] || shopt -u nocasematch
+  return "$matched"
+}
+
 pipeline_prompt_rejects_resume() { # $1=prompt；0=明确要求新主题，不得恢复任何旧 change
   local prompt="${1:-}"
   [ -n "$prompt" ] || return 1

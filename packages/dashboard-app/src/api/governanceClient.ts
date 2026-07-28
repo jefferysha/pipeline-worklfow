@@ -98,6 +98,29 @@ export async function postHookToggle(input: {
   if (!response.ok) await throwApiError(response, '钩子开关写回失败')
 }
 
+export async function postPromptRoutingBypass(
+  root: string,
+  promptSkipKeyword: string,
+): Promise<string> {
+  let response: Response
+  try {
+    response = await fetch('/api/hooks/prompt-routing-bypass', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root, prompt_skip_keyword: promptSkipKeyword }),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '单轮旁路词写回失败')
+  const body = await readJson(response)
+  if (typeof body !== 'object' || body === null
+    || typeof (body as Record<string, unknown>).prompt_skip_keyword !== 'string') {
+    throw new ApiError('单轮旁路词响应形状无效', response.status)
+  }
+  return (body as { prompt_skip_keyword: string }).prompt_skip_keyword
+}
+
 export async function getHistory(name: string, root: string): Promise<ChangeHistoryEntry[]> {
   let response: Response
   try {

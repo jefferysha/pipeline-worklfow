@@ -37,6 +37,8 @@ const RELEASE_TRAIN = {
 
 let hooksMatrix: Record<string, false>
 let postHooksResponse: () => Response
+let promptSkipKeyword: string
+let postPromptBypassResponse: () => Response
 
 function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
   render(
@@ -57,7 +59,12 @@ beforeEach(() => {
   invalidateWorkflowRules()
   invalidateMandatoryConfig()
   hooksMatrix = {}
+  promptSkipKeyword = 'no-tenon'
   postHooksResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+  postPromptBypassResponse = () => new Response(JSON.stringify({
+    ok: true,
+    prompt_skip_keyword: promptSkipKeyword,
+  }), { status: 200 })
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
@@ -66,9 +73,20 @@ beforeEach(() => {
       return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
     }
     if (url === `/api/hooks?root=${encodeURIComponent(ROOT)}`) {
-      return new Response(JSON.stringify({ ok: true, hooks: HOOKS, matrix: hooksMatrix }), { status: 200 })
+      return new Response(JSON.stringify({
+        ok: true,
+        hooks: HOOKS,
+        matrix: hooksMatrix,
+        prompt_skip_keyword: promptSkipKeyword,
+      }), { status: 200 })
     }
     if (url === '/api/hooks' && opts?.method === 'POST') return postHooksResponse()
+    if (url === '/api/hooks/prompt-routing-bypass' && opts?.method === 'POST') {
+      const body = JSON.parse(String(opts.body)) as { prompt_skip_keyword: string }
+      const response = postPromptBypassResponse()
+      if (response.ok) promptSkipKeyword = body.prompt_skip_keyword
+      return response
+    }
     if (url.startsWith('/api/config?root=')) {
       return new Response(JSON.stringify({
         ok: true,
@@ -208,5 +226,58 @@ describe('纵向阶段编辑器 Hook 写回', () => {
     fireEvent.click(within(zone).getByTestId('wb-lane-hk-sw-draft-router'))
     await waitFor(() => expect(onToggleError).toHaveBeenCalledTimes(1))
     expect(String(onToggleError.mock.calls[0]![0])).toContain('磁盘只读')
+  })
+})
+
+describe('UserPromptSubmit 单轮旁路词', () => {
+  it('加载真实值并可用 Enter 保存，成功状态以 server 返回值为准', async () => {
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
+    expect(input).toHaveValue('no-tenon')
+    fireEvent.change(input, { target: { value: 'skip-tenon' } })
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+    await waitFor(() => {
+      const post = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([url]) => url === '/api/hooks/prompt-routing-bypass',
+      )
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({
+        root: ROOT,
+        prompt_skip_keyword: 'skip-tenon',
+      })
+    })
+    expect(await within(editor).findByRole('status')).toHaveTextContent('skip-tenon')
+  })
+
+  it('非法草稿显示 alert 且不发送请求', async () => {
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
+    fireEvent.change(input, { target: { value: 'has space' } })
+    fireEvent.click(within(editor).getByRole('button', { name: '保存旁路词' }))
+    expect(within(editor).getByRole('alert')).toHaveTextContent('1–32')
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+      ([url]) => url === '/api/hooks/prompt-routing-bypass',
+    )).toBe(false)
+  })
+
+  it('关闭后保存空字符串；保存失败保留草稿并可重试', async () => {
+    postPromptBypassResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    fireEvent.click(within(editor).getByRole('switch', { name: '启用单轮旁路' }))
+    fireEvent.click(within(editor).getByRole('button', { name: '保存旁路词' }))
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('磁盘只读')
+    expect(within(editor).getByRole('textbox', { name: '单轮旁路词' })).toHaveValue('')
+
+    postPromptBypassResponse = () => new Response(JSON.stringify({
+      ok: true,
+      prompt_skip_keyword: '',
+    }), { status: 200 })
+    fireEvent.click(within(editor).getByRole('button', { name: '重试保存' }))
+    expect(await within(editor).findByRole('status')).toHaveTextContent('已禁用')
   })
 })

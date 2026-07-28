@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, LockKeyhole, LogIn, Wrench } from 'lucide-react'
 import type { WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
@@ -41,7 +42,7 @@ export function HookRows({
   if (config.hooks === null) return <span className="text-xs text-text-3">Hook 配置读取中…</span>
   if (hooks.length === 0) return <span className="text-xs text-text-3">此时点没有已注册 Hook</span>
   return (
-    <div className="flex min-w-0 flex-1 flex-col divide-y divide-border">
+    <div className="flex min-w-0 flex-1 flex-col divide-y divide-border max-[720px]:w-full">
       {hooks.map((hook) => {
         const key = `${hook.id}.${stageId}`
         const enabled = !(key in config.matrix)
@@ -81,7 +82,117 @@ export function HookRows({
           </div>
         )
       })}
+      {event === 'UserPromptSubmit' && <PromptRoutingBypassEditor config={config} />}
     </div>
+  )
+}
+
+function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JSX.Element {
+  const { t } = useT()
+  const [draft, setDraft] = useState(config.promptSkipKeyword ?? '')
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const lastEnabledKeyword = useRef('no-tenon')
+
+  useEffect(() => {
+    if (config.promptSkipKeyword === null) return
+    setDraft(config.promptSkipKeyword)
+    if (config.promptSkipKeyword !== '') lastEnabledKeyword.current = config.promptSkipKeyword
+  }, [config.promptSkipKeyword])
+
+  const enabled = draft !== ''
+  const valid = draft === '' || /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(draft)
+
+  async function save(): Promise<void> {
+    setSaved(false)
+    if (!valid) {
+      setValidationError(t('workbench.hk_bypass_invalid'))
+      return
+    }
+    setValidationError(null)
+    if (await config.savePromptSkipKeyword(draft)) setSaved(true)
+  }
+
+  return (
+    <form
+      className="mt-2 rounded-xl border border-border bg-fill/60 p-3"
+      data-testid="wb-prompt-routing-bypass"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+    >
+      <div className="flex items-start gap-3 max-[720px]:flex-col max-[720px]:gap-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={t('workbench.hk_bypass_enable')}
+          disabled={config.promptSkipBusy}
+          className="relative mt-0.5 h-[22px] w-9 flex-none rounded-full bg-fill-2 transition-colors duration-150 aria-checked:bg-(--accent) disabled:opacity-50 motion-reduce:transition-none after:absolute after:top-[3px] after:left-[3px] after:h-4 after:w-4 after:rounded-full after:bg-card after:shadow-sm after:transition-transform after:duration-150 after:content-[''] aria-checked:after:translate-x-[14px] motion-reduce:after:transition-none"
+          onClick={() => {
+            setSaved(false)
+            setValidationError(null)
+            if (enabled) {
+              lastEnabledKeyword.current = draft
+              setDraft('')
+            } else {
+              setDraft(lastEnabledKeyword.current)
+            }
+          }}
+        />
+        <div className="min-w-0 flex-1 max-[720px]:w-full">
+          <label htmlFor="wb-prompt-skip-keyword" className="block text-[12px] font-semibold text-text">
+            {t('workbench.hk_bypass_label')}
+          </label>
+          <p className="mt-0.5 text-[11px] leading-4 text-text-3">{t('workbench.hk_bypass_hint')}</p>
+        </div>
+      </div>
+      <div className="mt-2 flex gap-2 max-[720px]:flex-col">
+        <input
+          id="wb-prompt-skip-keyword"
+          value={draft}
+          disabled={!enabled || config.promptSkipBusy}
+          maxLength={33}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => {
+            setDraft(event.target.value)
+            setSaved(false)
+            setValidationError(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            void save()
+          }}
+          className="min-w-0 flex-1 rounded-lg border border-border-2 bg-card px-2.5 py-1.5 font-mono text-xs text-text outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-(--accent) disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={config.promptSkipBusy}
+          className="rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 disabled:opacity-50"
+        >
+          {config.promptSkipBusy
+            ? t('workbench.hk_bypass_saving')
+            : config.promptSkipError
+              ? t('workbench.hk_bypass_retry')
+              : t('workbench.hk_bypass_save')}
+        </button>
+      </div>
+      {(validationError || config.promptSkipError) && (
+        <p className="mt-2 text-[11px] leading-4 text-red" role="alert">
+          {validationError ?? config.promptSkipError}
+        </p>
+      )}
+      {saved && (
+        <p className="mt-2 text-[11px] leading-4 text-green" role="status">
+          {draft === ''
+            ? t('workbench.hk_bypass_disabled')
+            : t('workbench.hk_bypass_saved', { keyword: draft })}
+        </p>
+      )}
+    </form>
   )
 }
 

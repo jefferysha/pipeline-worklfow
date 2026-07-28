@@ -20,7 +20,7 @@ import { readAutomationSettings } from './automationConfig.js'
 import type { CadenceScheduler } from './cadence.js'
 import { readConfigSnapshot } from './config.js'
 import { listDockerImages } from './dockerImages.js'
-import { HOOK_METAS, readHooksMatrix } from './hooksConfig.js'
+import { HOOK_METAS, readHooksConfig } from './hooksConfig.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { buildRunDetail } from './runDetail.js'
 import { buildSecretsResponse } from './secrets.js'
@@ -200,7 +200,8 @@ export async function handleGet(
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
-        return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix: readHooksMatrix(root) })
+        const { matrix, promptSkipKeyword } = readHooksConfig(root)
+        return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

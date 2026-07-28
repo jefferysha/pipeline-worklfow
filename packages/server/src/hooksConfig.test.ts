@@ -9,7 +9,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  HOOK_METAS, hooksConfigPath, readHooksMatrix, validateHookToggleBody, writeHookToggle,
+  DEFAULT_PROMPT_SKIP_KEYWORD,
+  HOOK_METAS,
+  hooksConfigPath,
+  readHooksConfig,
+  readHooksMatrix,
+  validateHookToggleBody,
+  validatePromptRoutingBypassBody,
+  writeHookToggle,
+  writePromptRoutingBypass,
 } from './hooksConfig.js'
 
 async function tempRoot(): Promise<string> {
@@ -184,5 +192,46 @@ describe('writeHookToggle —— 真落盘 .pipeline/hooks.json（canonical 一�
     expect(readHooksMatrix(root)).toEqual({ 'skill-tracker.build': false })
     // 重建后是合法 JSON
     expect(() => JSON.parse(readFileSync(hooksConfigPath(root), 'utf8'))).not.toThrow()
+  })
+})
+
+describe('prompt routing bypass —— 读取、校验与字段互保', () => {
+  it('缺文件、旧文件缺字段或非法字段回退默认 no-tenon；显式空字符串保留', async () => {
+    const root = await tempRoot()
+    expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
+    await seedConfig(root, JSON.stringify({ version: 1, matrix: { 'router.build': false } }))
+    expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
+    await seedConfig(root, JSON.stringify({ version: 1, prompt_skip_keyword: 'bad value', matrix: {} }))
+    expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
+    await seedConfig(root, JSON.stringify({ version: 1, prompt_skip_keyword: '', matrix: {} }))
+    expect(readHooksConfig(root).promptSkipKeyword).toBe('')
+  })
+
+  it('只接受空字符串或 1-32 字符 ASCII token，不 trim', () => {
+    expect(validatePromptRoutingBypassBody({ prompt_skip_keyword: '' }))
+      .toEqual({ ok: true, value: { promptSkipKeyword: '' } })
+    expect(validatePromptRoutingBypassBody({ prompt_skip_keyword: 'skip_Tenon-2' }))
+      .toEqual({ ok: true, value: { promptSkipKeyword: 'skip_Tenon-2' } })
+    for (const bad of [null, [], {}, { prompt_skip_keyword: 3 }, { prompt_skip_keyword: ' bad' }, { prompt_skip_keyword: 'a'.repeat(33) }]) {
+      expect(validatePromptRoutingBypassBody(bad).ok).toBe(false)
+    }
+  })
+
+  it('切 Hook 保留 keyword；改 keyword 保留 matrix，并以 snake_case canonical 落盘', async () => {
+    const root = await tempRoot()
+    writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' })
+    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
+    expect(readHooksConfig(root)).toEqual({
+      promptSkipKeyword: 'skip-tenon',
+      matrix: { 'router.build': false },
+    })
+    writePromptRoutingBypass(root, { promptSkipKeyword: '' })
+    expect(readHooksConfig(root)).toEqual({
+      promptSkipKeyword: '',
+      matrix: { 'router.build': false },
+    })
+    const text = await readFile(hooksConfigPath(root), 'utf8')
+    expect(text).toContain('"prompt_skip_keyword": ""')
+    expect(text).not.toContain('promptSkipKeyword')
   })
 })

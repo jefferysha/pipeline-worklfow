@@ -49,7 +49,11 @@ export function decodeHooksConfig(value: unknown): WbHooksConfig | null {
     if (state !== false) return null
     matrix[key] = false
   }
-  return { hooks, matrix }
+  const promptSkipKeyword = value.prompt_skip_keyword === undefined
+    ? 'no-tenon'
+    : value.prompt_skip_keyword
+  if (typeof promptSkipKeyword !== 'string') return null
+  return { hooks, matrix, promptSkipKeyword }
 }
 
 export function decodeHistory(value: unknown): ChangeHistoryEntry[] | null {

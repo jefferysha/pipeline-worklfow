@@ -1,7 +1,8 @@
 /**
  * hooksConfig —— 阶段×hook 开关矩阵存储 + 校验（v5 T5 / 决议#2，工作台 Hook 时序线数据面）。
  *
- * 存储：`<root>/.pipeline/hooks.json`（per-root），形状 `{ version: 1, matrix: { "<hook>.<阶段>": false } }`。
+ * 存储：`<root>/.pipeline/hooks.json`（per-root），形状
+ * `{ version: 1, prompt_skip_keyword: "no-tenon", matrix: { "<hook>.<阶段>": false } }`。
  *   · 矩阵**只存禁用项**（值恒为 false）：缺文件 / 缺键 = 启用（缺省全启用，fail-open）——
  *     enable 操作是删键而非写 true，保证 sh 侧判定只需要找一种键形。
  *   · **canonical 落盘契约（sh 侧 grep -F 依赖，勿改）**：JSON.stringify(…, null, 2) 输出
@@ -46,35 +47,57 @@ const CONFIGURABLE_IDS: readonly string[] = HOOK_METAS.filter((h) => h.configura
 
 /** 阶段名字符集：同 workflow step id / change 名的既有白名单（自定义 step id 放行，拒 . / 空白等）。 */
 const PHASE_RE = /^[a-zA-Z0-9_-]+$/
+const PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
+
+export const DEFAULT_PROMPT_SKIP_KEYWORD = 'no-tenon'
+
+export interface HooksRuntimeConfig {
+  promptSkipKeyword: string
+  matrix: Record<string, false>
+}
 
 export function hooksConfigPath(root: string): string {
   return join(root, '.pipeline', 'hooks.json')
 }
 
-/** 禁用矩阵（只含 false 项）。缺文件/损坏/形状不对 → 空矩阵（缺省全启用，fail-open）。 */
-export function readHooksMatrix(root: string): Record<string, false> {
+/** 完整运行时配置。损坏字段各自回退，不让一项手改错误污染另一项。 */
+export function readHooksConfig(root: string): HooksRuntimeConfig {
   let parsed: unknown
   try {
     parsed = JSON.parse(readFileSync(hooksConfigPath(root), 'utf8'))
   } catch {
-    return {}
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
   }
-  if (typeof parsed !== 'object' || parsed === null) return {}
-  const rawMatrix = (parsed as Record<string, unknown>).matrix
-  if (typeof rawMatrix !== 'object' || rawMatrix === null || Array.isArray(rawMatrix)) return {}
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
+  }
+  const record = parsed as Record<string, unknown>
+  const rawKeyword = record.prompt_skip_keyword
+  const promptSkipKeyword = typeof rawKeyword === 'string'
+    && (rawKeyword === '' || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword))
+    ? rawKeyword
+    : DEFAULT_PROMPT_SKIP_KEYWORD
+  const rawMatrix = record.matrix
   const matrix: Record<string, false> = {}
-  for (const [key, value] of Object.entries(rawMatrix as Record<string, unknown>)) {
-    if (value !== false) continue // 只存禁用项：true/杂值一律不是本矩阵的合法条目
-    const dot = key.indexOf('.')
-    if (dot <= 0) continue
-    const hook = key.slice(0, dot)
-    const phase = key.slice(dot + 1)
-    // 强制常开 hook 的手改键在读侧就过滤（纵深：sh 侧本来就不读，UI 也不应看到假开关）。
-    if (!HOOK_BY_ID.get(hook)?.configurable) continue
-    if (!PHASE_RE.test(phase)) continue
-    matrix[key] = false
+  if (typeof rawMatrix === 'object' && rawMatrix !== null && !Array.isArray(rawMatrix)) {
+    for (const [key, value] of Object.entries(rawMatrix as Record<string, unknown>)) {
+      if (value !== false) continue // 只存禁用项：true/杂值一律不是本矩阵的合法条目
+      const dot = key.indexOf('.')
+      if (dot <= 0) continue
+      const hook = key.slice(0, dot)
+      const phase = key.slice(dot + 1)
+      // 强制常开 hook 的手改键在读侧就过滤（纵深：sh 侧本来就不读，UI 也不应看到假开关）。
+      if (!HOOK_BY_ID.get(hook)?.configurable) continue
+      if (!PHASE_RE.test(phase)) continue
+      matrix[key] = false
+    }
   }
-  return matrix
+  return { promptSkipKeyword, matrix }
+}
+
+/** 禁用矩阵（只含 false 项）。缺文件/损坏/形状不对 → 空矩阵（缺省全启用，fail-open）。 */
+export function readHooksMatrix(root: string): Record<string, false> {
+  return readHooksConfig(root).matrix
 }
 
 export interface HookToggle {
@@ -112,24 +135,57 @@ export function validateHookToggleBody(body: unknown): HookToggleValidation {
   return { ok: true, value: { hook, phase, enabled } }
 }
 
+export interface PromptRoutingBypass {
+  promptSkipKeyword: string
+}
+
+export type PromptRoutingBypassValidation =
+  | { ok: true; value: PromptRoutingBypass }
+  | { ok: false; error: string }
+
+export function validatePromptRoutingBypassBody(body: unknown): PromptRoutingBypassValidation {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return { ok: false, error: '请求体须为 JSON 对象' }
+  }
+  const keyword = (body as Record<string, unknown>).prompt_skip_keyword
+  if (typeof keyword !== 'string' || (keyword !== '' && !PROMPT_SKIP_KEYWORD_RE.test(keyword))) {
+    return { ok: false, error: 'prompt_skip_keyword 须为空或 1-32 字符 ASCII token（字母/数字开头，可含 - _）' }
+  }
+  return { ok: true, value: { promptSkipKeyword: keyword } }
+}
+
+function writeHooksConfig(root: string, config: HooksRuntimeConfig): void {
+  const dir = join(root, '.pipeline')
+  mkdirSync(dir, { recursive: true })
+  const file = hooksConfigPath(root)
+  const tmp = `${file}.tmp.${process.pid}`
+  writeFileSync(tmp, `${JSON.stringify({
+    version: 1,
+    prompt_skip_keyword: config.promptSkipKeyword,
+    matrix: config.matrix,
+  }, null, 2)}\n`, 'utf8')
+  renameSync(tmp, file)
+}
+
 /**
  * 真改盘：enabled=false 写入禁用键、enabled=true 删除该键（幂等）。
  * 同目录 tmp+rename 原子写（对齐 workflows.ts::writeWorkflowForApi）；既有文件损坏 →
  * readHooksMatrix 已 fail-open 成空矩阵，等价于重建。
  */
 export function writeHookToggle(root: string, toggle: HookToggle): void {
-  const matrix = readHooksMatrix(root)
+  const config = readHooksConfig(root)
   const key = `${toggle.hook}.${toggle.phase}`
   if (toggle.enabled) {
-    delete matrix[key]
+    delete config.matrix[key]
   } else {
-    matrix[key] = false
+    config.matrix[key] = false
   }
-  const dir = join(root, '.pipeline')
-  mkdirSync(dir, { recursive: true })
-  const file = hooksConfigPath(root)
-  const tmp = `${file}.tmp.${process.pid}`
   // canonical 契约：null,2 缩进让矩阵一键一行 `"<hook>.<阶段>": false`——sh 侧 grep -F 的唯一判据。
-  writeFileSync(tmp, `${JSON.stringify({ version: 1, matrix }, null, 2)}\n`, 'utf8')
-  renameSync(tmp, file)
+  writeHooksConfig(root, config)
+}
+
+export function writePromptRoutingBypass(root: string, value: PromptRoutingBypass): void {
+  const config = readHooksConfig(root)
+  config.promptSkipKeyword = value.promptSkipKeyword
+  writeHooksConfig(root, config)
 }
