@@ -163,10 +163,6 @@ export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     }
     const out: MemSession[] = []
     for (const row of rows) {
-      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-        fs.contentReadBudget.noteCandidateLimitReached()
-        break
-      }
       const cwd: string | null = typeof row.directory === 'string' && row.directory ? row.directory : null
       if (f.cwd && !sameProject(cwd, f.cwd)) continue
       const created = msToIso(row.time_created)

@@ -3,6 +3,7 @@
  * 对位老仓 skills/pipeline/scripts/mem/search.py。
  */
 import type { DialogueTurn, SearchExcerpt, SearchHit } from './types.js'
+import { isHostSummaryTurn } from './dialogue.js'
 
 /**
  * 加权密度相关性：(3*userCount + asstCount) / totalTurns。
@@ -61,6 +62,7 @@ export function searchInDialogue(
   const asstExcerpts: SearchExcerpt[] = []
 
   for (const t of turns) {
+    const effectiveRole = isHostSummaryTurn(t) ? 'assistant' : t.role
     const hay = t.text.toLowerCase()
     if (!tokens.every((tok) => hay.includes(tok))) continue
 
@@ -80,7 +82,7 @@ export function searchInDialogue(
       }
       tokenFreq.set(tok, n)
     }
-    if (t.role === 'user') userCount += turnHits
+    if (effectiveRole === 'user') userCount += turnHits
     else asstCount += turnHits
     hitPositions.sort((a, b) => a.idx - b.idx)
 
@@ -103,8 +105,8 @@ export function searchInDialogue(
         if (c.start > 0) snippet = '…' + snippet
         if (c.end < t.text.length) snippet = snippet + '…'
       }
-      const target = t.role === 'user' ? userExcerpts : asstExcerpts
-      target.push({ role: t.role, snippet })
+      const target = effectiveRole === 'user' ? userExcerpts : asstExcerpts
+      target.push({ role: effectiveRole, snippet })
     }
   }
 

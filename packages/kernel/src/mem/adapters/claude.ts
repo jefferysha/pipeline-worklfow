@@ -8,8 +8,8 @@
 import { join } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso } from '../fs.js'
-import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
+import { mtimeIso, readMemSessionMetadata } from '../fs.js'
+import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
@@ -35,11 +35,13 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     projectDirs = allDirs()
   }
 
-  for (const d of projectDirs) {
-    const entries = fs.readDir(d)
-
-    const indexRaw = fs.readText(join(d, 'sessions-index.json'))
+  const indexes = new Map<string, Map<string, Json>>()
+  const indexFor = (directory: string): Map<string, Json> => {
+    const cached = indexes.get(directory)
+    if (cached) return cached
     const indexById = new Map<string, Json>()
+    const indexPath = join(directory, 'sessions-index.json')
+    const indexRaw = fs.exists(indexPath) ? fs.readText(indexPath) : undefined
     if (indexRaw) {
       try {
         const index = JSON.parse(indexRaw)
@@ -49,43 +51,49 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
         /* 坏 index 忽略，退到 per-session 兜底 */
       }
     }
+    indexes.set(directory, indexById)
+    return indexById
+  }
 
-    const sessionEntries = entries
+  const sessionEntries = projectDirs
+    .flatMap((directory) => fs.readDir(directory)
       .filter((entry) => entry.isFile && entry.name.endsWith('.jsonl'))
-      .sort((left, right) => {
-        const leftPath = join(d, left.name)
-        const rightPath = join(d, right.name)
-        return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
-      })
-    for (const e of sessionEntries) {
-      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-        fs.contentReadBudget.noteCandidateLimitReached()
-        break
-      }
-      const filePath = join(d, e.name)
-      const sid = e.name.slice(0, -'.jsonl'.length)
-      const idx = indexById.get(sid)
-      let cwd: string | null = idx?.cwd ?? null
-      let created: string | null = idx?.created ?? null
-      const title: string | null = idx?.title ?? null
+      .map((entry) => ({ directory, entry })))
+    .sort((left, right) => {
+      const leftPath = join(left.directory, left.entry.name)
+      const rightPath = join(right.directory, right.entry.name)
+      return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
+    })
 
-      if (!cwd || !created) {
-        const text = fs.readText(filePath)
-        const evt = findInJsonl(text, (o) => typeof (o as Json)?.cwd === 'string', 100) as Json
-        cwd = cwd || (evt?.cwd ?? null)
-        if (!created) {
-          const first = readJsonlFirst(text) as Json
-          created = (evt?.timestamp ?? null) || (first?.timestamp ?? null)
-        }
-      }
-
-      const updated = mtimeIso(fs, filePath)
-      if (updated === undefined) continue
-      if (!inRangeOverlap(created, updated, f)) continue
-      if (f.cwd && !sameProject(cwd, f.cwd)) continue
-
-      out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
+  for (const { directory, entry } of sessionEntries) {
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted()
+      break
     }
+    const filePath = join(directory, entry.name)
+    const sid = entry.name.slice(0, -'.jsonl'.length)
+    const idx = indexFor(directory).get(sid)
+    let cwd: string | null = idx?.cwd ?? null
+    let created: string | null = idx?.created ?? null
+    const title: string | null = idx?.title ?? null
+
+    if (!cwd || !created) {
+      const text = readMemSessionMetadata(fs, filePath)
+      const evt = findInJsonl(text, (o) => typeof (o as Json)?.cwd === 'string', 100) as Json
+      cwd = cwd || (evt?.cwd ?? null)
+      if (!created) {
+        const first = readJsonlFirst(text) as Json
+        created = (evt?.timestamp ?? null) || (first?.timestamp ?? null)
+      }
+    }
+
+    const updated = mtimeIso(fs, filePath)
+    if (updated === undefined) continue
+    if (!inRangeOverlap(created, updated, f)) continue
+    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+
+    out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
+    if (fs.contentReadBudget && out.length >= f.limit) break
   }
   return out
 }
@@ -117,7 +125,7 @@ export function claudeExtractFromLines(lines: readonly Json[]): DialogueTurn[] {
     const msg = obj?.message
     if (t === 'user' && obj?.isCompactSummary === true) {
       const summary = summaryText(msg?.content)
-      turns = summary ? [{ role: 'user', text: `[compact summary]\n${summary}` }] : []
+      turns = summary ? [hostSummaryTurn(`[compact summary]\n${summary}`)] : []
       continue
     }
     if (!msg) continue
@@ -161,7 +169,7 @@ export function collectClaudeTurnsAndEvents(fs: MemFs, s: MemSession): { turns: 
     const msg = o?.message
     if (t === 'user' && o?.isCompactSummary === true) {
       const summary = summaryText(msg?.content)
-      state.turns = summary ? [{ role: 'user', text: `[compact summary]\n${summary}` }] : []
+      state.turns = summary ? [hostSummaryTurn(`[compact summary]\n${summary}`)] : []
       state.events = []
       continue
     }

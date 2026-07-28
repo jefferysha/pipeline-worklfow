@@ -130,24 +130,29 @@ function collectTurnsAndEvents(fs: MemFs, s: MemSession): { turns: DialogueTurn[
 export function buildChildIndex(sessions: readonly MemSession[]): Map<string, MemSession[]> {
   const directChildren = new Map<string, MemSession[]>()
   for (const s of sessions) {
-    const pid = s.parent_id
-    if (!pid) continue
-    const arr = directChildren.get(pid) ?? []
+    if (s.platform !== 'opencode' || !s.parent_id) continue
+    const parentKey = sessionKey('opencode', s.parent_id)
+    const arr = directChildren.get(parentKey) ?? []
     arr.push(s)
-    directChildren.set(pid, arr)
+    directChildren.set(parentKey, arr)
   }
   const out = new Map<string, MemSession[]>()
-  for (const pid of directChildren.keys()) {
-    const stack = [...(directChildren.get(pid) ?? [])]
+  for (const parentKey of directChildren.keys()) {
+    const stack = [...(directChildren.get(parentKey) ?? [])]
     const flat: MemSession[] = []
     while (stack.length) {
       const cur = stack.pop()!
       flat.push(cur)
-      for (const c of directChildren.get(cur.id) ?? []) stack.push(c)
+      for (const c of directChildren.get(sessionKey(cur.platform, cur.id)) ?? []) stack.push(c)
     }
-    out.set(pid, flat)
+    out.set(parentKey, flat)
   }
   return out
+}
+
+/** Host session ids are opaque only within their platform namespace. */
+export function sessionKey(platform: MemSession['platform'], id: string): string {
+  return `${platform}:${id}`
 }
 
 function searchSessionWithChildren(
@@ -156,7 +161,7 @@ function searchSessionWithChildren(
   kw: string,
   childIndex: Map<string, MemSession[]>,
 ): SearchHit {
-  const children = childIndex.get(s.id) ?? []
+  const children = childIndex.get(sessionKey(s.platform, s.id)) ?? []
   if (!children.length) return searchSession(fs, s, kw)
   const merged = [...extractDialogue(fs, s)]
   for (const c of children) merged.push(...extractDialogue(fs, c))
@@ -269,17 +274,25 @@ export function searchMemSessions(
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit)
   const childIndex = includeChildren ? buildChildIndex(candidates) : new Map<string, MemSession[]>()
-  const candidateIds = new Set(candidates.map((s) => s.id))
+  const candidateIds = new Set(candidates.map((s) => sessionKey(s.platform, s.id)))
 
   const isAbsorbedChild = (s: MemSession): boolean =>
-    includeChildren && s.parent_id != null && candidateIds.has(s.parent_id)
+    includeChildren
+    && s.platform === 'opencode'
+    && s.parent_id != null
+    && candidateIds.has(sessionKey('opencode', s.parent_id))
 
   const matches: SearchMatch[] = []
   for (const s of candidates) {
     if (isAbsorbedChild(s)) continue
     const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex) : searchSession(fs, s, kw)
     if (hit.count === 0) continue
-    matches.push({ session: s, hit, score: relevanceScore(hit), descendantsMerged: (childIndex.get(s.id) ?? []).length })
+    matches.push({
+      session: s,
+      hit,
+      score: relevanceScore(hit),
+      descendantsMerged: (childIndex.get(sessionKey(s.platform, s.id)) ?? []).length,
+    })
   }
   // score 降 > hit.count 降 > recency 降
   matches.sort((a, b) => b.score - a.score || b.hit.count - a.hit.count || recencyDesc(a.session, b.session))

@@ -97,6 +97,47 @@ describe('RelatedSessionsSection', () => {
     expect(searchMock).not.toHaveBeenCalled()
   })
 
+  it('shows accessible code-point-aware errors for default short and overlong queries', async () => {
+    const user = userEvent.setup()
+    renderSection('/repo', 'x')
+    const input = screen.getByRole('textbox', { name: '检索词' })
+
+    expect(input).toHaveValue('x')
+    await user.click(screen.getByRole('button', { name: '检索' }))
+
+    let alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('至少输入 2 个字符')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAttribute('aria-describedby', alert.id)
+    expect(input).toHaveFocus()
+    expect(searchMock).not.toHaveBeenCalled()
+
+    await user.clear(input)
+    await user.type(input, '🙂'.repeat(129))
+    expect(input).toHaveValue('🙂'.repeat(129))
+    await user.click(screen.getByRole('button', { name: '检索' }))
+    alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('不能超过 128 个字符')
+    expect(searchMock).not.toHaveBeenCalled()
+  })
+
+  it('gives both non-auth controls stable names and disables autocomplete', () => {
+    renderSection()
+
+    expect(screen.getByRole('textbox', { name: '检索词' })).toHaveAttribute('name', 'related-session-query')
+    expect(screen.getByRole('textbox', { name: '检索词' })).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByRole('combobox', { name: '宿主' })).toHaveAttribute('name', 'related-session-platform')
+    expect(screen.getByRole('combobox', { name: '宿主' })).toHaveAttribute('autocomplete', 'off')
+  })
+
+  it('keeps the primary search action on an opaque semantic background when hovered', () => {
+    renderSection()
+
+    const search = screen.getByRole('button', { name: '检索' })
+    expect(search).toHaveClass('bg-btn-hover', 'hover:bg-btn-hover')
+    expect(search).not.toHaveClass('hover:bg-btn-hover/90')
+  })
+
   it('distinguishes empty and typed error states, with a safe retry action', async () => {
     const user = userEvent.setup()
     searchMock.mockResolvedValueOnce(response({ matches: [] }))
@@ -122,17 +163,52 @@ describe('RelatedSessionsSection', () => {
     const user = userEvent.setup()
     searchMock.mockResolvedValueOnce(response({
       partial: true,
-      warnings: [{ code: 'total-read-budget-reached', message: 'private protocol detail' }],
+      warnings: [{ code: 'total-read-budget-exhausted', message: 'private protocol detail' }],
     }))
     renderSection()
 
     await user.click(screen.getByRole('button', { name: '检索' }))
     const warning = await screen.findByRole('status')
     expect(warning).toHaveTextContent('仅展示可确认的部分结果')
-    expect(warning).toHaveTextContent('1 条预算提示')
-    expect(warning).not.toHaveTextContent('total-read-budget-reached')
+    expect(warning).toHaveTextContent('1 条读取限制提示')
+    expect(warning).not.toHaveTextContent('total-read-budget-exhausted')
     expect(warning).not.toHaveTextContent('private protocol detail')
     expect(screen.getByRole('list', { name: '相关会话结果' })).toBeVisible()
+  })
+
+  it.each([
+    'file-read-unavailable',
+    'opencode-reader-unavailable',
+  ])('describes %s partial results without falsely claiming a budget limit', async (warningCode) => {
+    const user = userEvent.setup()
+    searchMock.mockResolvedValueOnce(response({
+      partial: true,
+      warnings: [{ code: warningCode, message: '/private/session/path' }],
+    }))
+    renderSection()
+
+    await user.click(screen.getByRole('button', { name: '检索' }))
+    const warning = await screen.findByRole('status')
+    expect(warning).toHaveTextContent('部分会话来源暂不可用')
+    expect(warning).toHaveTextContent('1 条来源提示')
+    expect(warning).not.toHaveTextContent('读取预算')
+    expect(warning).not.toHaveTextContent('/private/session/path')
+  })
+
+  it('uses safe generic partial copy for an unknown warning code', async () => {
+    const user = userEvent.setup()
+    searchMock.mockResolvedValueOnce(response({
+      partial: true,
+      warnings: [{ code: 'future-partial-reason', message: 'private future detail' }],
+    }))
+    renderSection()
+
+    await user.click(screen.getByRole('button', { name: '检索' }))
+    const warning = await screen.findByRole('status')
+    expect(warning).toHaveTextContent('本次检索未覆盖全部会话')
+    expect(warning).not.toHaveTextContent('来源暂不可用')
+    expect(warning).not.toHaveTextContent('读取上限')
+    expect(warning).not.toHaveTextContent('private future detail')
   })
 
   it('does not describe a partial empty response as a complete no-match result', async () => {
@@ -147,7 +223,7 @@ describe('RelatedSessionsSection', () => {
     await user.click(screen.getByRole('button', { name: '检索' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('仅展示可确认的部分结果')
-    expect(screen.getByText(/读取预算内没有找到相关会话/)).toBeVisible()
+    expect(screen.getByText(/读取限制内没有找到相关会话/)).toBeVisible()
     expect(screen.queryByText(/^没有找到相关会话/)).not.toBeInTheDocument()
   })
 

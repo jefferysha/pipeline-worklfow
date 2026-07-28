@@ -27,8 +27,6 @@ export interface MemContentReadBudget {
   readonly perSourceBytes: number
   remainingBytes(): number
   consume(bytes: number): void
-  claimCandidate(): boolean
-  noteCandidateLimitReached(): void
   noteSourceUnavailable(source: string): void
   noteSourceTruncated(): void
   noteTotalExhausted(): void
@@ -54,6 +52,20 @@ export interface MemFs {
   mtimeMs(path: string): number | undefined
   /** 进程环境变量（Pi 自定义会话目录用；fake 可省 → undefined） */
   env?(name: string): string | undefined
+}
+
+/** Enough for the first JSONL event while keeping foreign-project discovery inside the aggregate budget. */
+export const MEM_SESSION_METADATA_BYTES = 8 * 1024
+
+/**
+ * Related search discovers project identity from a bounded first-event prefix before admitting a
+ * session for full dialogue reads. Ordinary CLI callers retain the existing full-read behavior.
+ */
+export function readMemSessionMetadata(fs: MemFs, path: string): string | undefined {
+  if (fs.contentReadBudget && fs.readTextBounded) {
+    return fs.readTextBounded(path, MEM_SESSION_METADATA_BYTES)?.text
+  }
+  return fs.readText(path)
 }
 
 /** 真 node fs 实现（缺省）。homeOverride 供集成测试指向 fixture home 根。 */

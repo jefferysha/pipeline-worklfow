@@ -205,7 +205,7 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
     expect(child?.parent_id).toBe('ses_parent')
 
     const idx = buildChildIndex(rows)
-    expect(idx.get('ses_parent')?.map((s) => s.id)).toEqual(['ses_child'])
+    expect(idx.get('opencode:ses_parent')?.map((s) => s.id)).toEqual(['ses_child'])
   })
 
   test('--cwd 过滤：精确匹配与子目录都保留，非同源目录剔除', async () => {

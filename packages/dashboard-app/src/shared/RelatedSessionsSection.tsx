@@ -21,6 +21,11 @@ type SearchState =
   | { kind: 'results'; response: RelatedSessionSearchResponse }
   | { kind: 'empty'; response: RelatedSessionSearchResponse }
   | { kind: 'error' }
+type QueryError = 'too-short' | 'too-long' | null
+const queryErrorLabels: Readonly<Record<Exclude<QueryError, null>, string>> = {
+  'too-short': 'detail.related_sessions.query_error_too_short',
+  'too-long': 'detail.related_sessions.query_error_too_long',
+}
 
 const sectionClass = 'border-b border-border py-[13px] last:border-b-0'
 const platformLabels: Readonly<Record<RelatedSessionPlatform, string>> = {
@@ -30,6 +35,16 @@ const platformLabels: Readonly<Record<RelatedSessionPlatform, string>> = {
   opencode: 'detail.related_sessions.platform_opencode',
   pi: 'detail.related_sessions.platform_pi',
 }
+const budgetWarningCodes = new Set([
+  'candidate-limit-reached',
+  'file-read-truncated',
+  'total-read-budget-exhausted',
+])
+const sourceWarningCodes = new Set([
+  'bounded-read-unavailable',
+  'file-read-unavailable',
+  'opencode-reader-unavailable',
+])
 
 function readableChangeName(name: string): string {
   return name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -43,11 +58,28 @@ function platformFromValue(value: string): RelatedSessionPlatform | null {
   return RELATED_SESSION_PLATFORMS.find((platform) => platform === value) ?? null
 }
 
+function partialReason(response: RelatedSessionSearchResponse): 'budget' | 'source' | 'generic' {
+  if (
+    response.warnings.length > 0
+    && response.warnings.every((warning) => budgetWarningCodes.has(warning.code))
+  ) return 'budget'
+  if (response.warnings.some((warning) => sourceWarningCodes.has(warning.code))) return 'source'
+  return 'generic'
+}
+
+function queryErrorFor(value: string): QueryError {
+  const length = Array.from(value.trim()).length
+  if (length < 2) return 'too-short'
+  if (length > 128) return 'too-long'
+  return null
+}
+
 export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionProps): JSX.Element {
   const { lang, t } = useT()
   const [query, setQuery] = useState(() => readableChangeName(name))
   const [platform, setPlatform] = useState<RelatedSessionPlatform>('all')
   const [state, setState] = useState<SearchState>({ kind: 'idle' })
+  const [queryError, setQueryError] = useState<QueryError>(null)
   const abortRef = useRef<AbortController | null>(null)
   const generationRef = useRef(0)
 
@@ -56,6 +88,7 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
     abortRef.current?.abort()
     abortRef.current = null
     setQuery(readableChangeName(name))
+    setQueryError(null)
     setPlatform('all')
     setState({ kind: 'idle' })
     return () => {
@@ -64,10 +97,14 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
     }
   }, [name, root])
 
-  async function runSearch(): Promise<void> {
+  async function runSearch(invalidTarget?: HTMLInputElement): Promise<void> {
     const normalizedQuery = query.trim()
-    const queryLength = Array.from(normalizedQuery).length
-    if (queryLength < 2 || queryLength > 128) return
+    const nextQueryError = queryErrorFor(normalizedQuery)
+    setQueryError(nextQueryError)
+    if (nextQueryError !== null) {
+      invalidTarget?.focus()
+      return
+    }
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -91,7 +128,8 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    void runSearch()
+    const queryControl = event.currentTarget.querySelector<HTMLInputElement>('#related-session-query')
+    void runSearch(queryControl ?? undefined)
   }
 
   const busy = state.kind === 'loading'
@@ -103,13 +141,21 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
         </h2>
         <p className="mt-0.5 text-xs leading-5 text-text-3">{t('detail.related_sessions.hint')}</p>
       </div>
-      <form className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]" onSubmit={submit}>
+      <form className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]" noValidate onSubmit={submit}>
         <div className="grid gap-1.5">
           <Label htmlFor="related-session-query">{t('detail.related_sessions.query_label')}</Label>
           <Input
+            aria-describedby={queryError === null ? undefined : 'related-session-query-error'}
+            aria-invalid={queryError !== null}
+            autoComplete="off"
             disabled={busy}
             id="related-session-query"
-            onChange={(event) => setQuery(event.target.value)}
+            name="related-session-query"
+            onChange={(event) => {
+              const nextQuery = event.target.value
+              setQuery(nextQuery)
+              if (queryError !== null) setQueryError(queryErrorFor(nextQuery))
+            }}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return
               if (event.nativeEvent.isComposing || event.keyCode === 229) return
@@ -120,13 +166,20 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
             required
             value={query}
           />
+          {queryError !== null && (
+            <p className="text-xs leading-5 text-red-d" id="related-session-query-error" role="alert">
+              {t(queryErrorLabels[queryError])}
+            </p>
+          )}
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="related-session-platform">{t('detail.related_sessions.platform_label')}</Label>
           <select
+            autoComplete="off"
             className="h-9 rounded-md border border-input bg-card px-3 text-sm text-text outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={busy}
             id="related-session-platform"
+            name="related-session-platform"
             onChange={(event) => {
               const next = platformFromValue(event.target.value)
               if (next !== null) setPlatform(next)
@@ -138,7 +191,7 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
             ))}
           </select>
         </div>
-        <Button className="self-end bg-btn-hover text-btn-fg hover:bg-btn-hover/90" disabled={busy} type="submit">
+        <Button className="self-end bg-btn-hover text-btn-fg hover:bg-btn-hover" disabled={busy} type="submit">
           {busy ? t('detail.related_sessions.searching_short') : t('detail.related_sessions.search')}
         </Button>
       </form>
@@ -157,14 +210,27 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
         <>
           {state.response.partial && (
             <p className="mt-3 rounded-lg border border-amb-b bg-amb-t px-3 py-2 text-xs text-amb-d" role="status">
-              {t('detail.related_sessions.partial', { n: state.response.warnings.length })}
+              {t(
+                partialReason(state.response) === 'budget'
+                  ? 'detail.related_sessions.partial_budget'
+                  : partialReason(state.response) === 'source'
+                    ? 'detail.related_sessions.partial_source'
+                    : 'detail.related_sessions.partial_generic',
+                { n: state.response.warnings.length },
+              )}
             </p>
           )}
           <div className="mt-3 rounded-lg border border-border bg-fill/40 px-3 py-3 text-xs text-text-3">
             <p>
-              {t(state.response.partial
-                ? 'detail.related_sessions.empty_partial'
-                : 'detail.related_sessions.empty')}
+              {t(
+                !state.response.partial
+                  ? 'detail.related_sessions.empty'
+                  : partialReason(state.response) === 'budget'
+                    ? 'detail.related_sessions.empty_partial_budget'
+                    : partialReason(state.response) === 'source'
+                      ? 'detail.related_sessions.empty_partial_source'
+                      : 'detail.related_sessions.empty_partial_generic',
+              )}
             </p>
             <Button className="mt-2" onClick={() => { void runSearch() }} size="sm" type="button" variant="outline">
               {t('detail.related_sessions.retry')}
@@ -184,7 +250,14 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
         <div className="mt-3">
           {state.response.partial && (
             <p className="mb-2 rounded-lg border border-amb-b bg-amb-t px-3 py-2 text-xs text-amb-d" role="status">
-              {t('detail.related_sessions.partial', { n: state.response.warnings.length })}
+              {t(
+                partialReason(state.response) === 'budget'
+                  ? 'detail.related_sessions.partial_budget'
+                  : partialReason(state.response) === 'source'
+                    ? 'detail.related_sessions.partial_source'
+                    : 'detail.related_sessions.partial_generic',
+                { n: state.response.warnings.length },
+              )}
             </p>
           )}
           <ul

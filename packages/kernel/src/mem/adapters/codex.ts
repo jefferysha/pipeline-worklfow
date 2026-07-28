@@ -7,7 +7,7 @@
 import { basename } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso } from '../fs.js'
+import { mtimeIso, readMemSessionMetadata } from '../fs.js'
 import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
@@ -67,8 +67,8 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     .filter((file) => file.endsWith('.jsonl'))
     .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
   for (const file of files) {
-    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-      fs.contentReadBudget.noteCandidateLimitReached()
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted()
       break
     }
     const base = basename(file).slice(0, -'.jsonl'.length)
@@ -79,7 +79,7 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       tsFromName = normalizeIso(fixed)
     }
 
-    const first = readJsonlFirst(fs.readText(file)) as Json
+    const first = readJsonlFirst(readMemSessionMetadata(fs, file)) as Json
     const meta = first?.payload ?? null
     const sid: string = (meta?.id ?? null) || (m ? m[2]! : null) || base
     const cwd: string | null = meta?.cwd ?? null
@@ -91,6 +91,7 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     if (!inRangeOverlap(created, updated, f)) continue
 
     out.push({ platform: 'codex', id: sid, cwd, created, updated, filePath: file })
+    if (fs.contentReadBudget && out.length >= f.limit) break
   }
   return out
 }

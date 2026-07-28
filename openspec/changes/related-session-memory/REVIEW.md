@@ -58,11 +58,44 @@ The rebuilt production Dashboard was then re-opened at `http://127.0.0.1:62419/`
 `5.02:1`), a composing Enter emitted zero requests, and an explicit click submitted all 128 emoji through
 the real POST endpoint. At `390 × 844`, document `scrollWidth` remained exactly `390`.
 
+### Iteration 4 — second Verify-fail and delegated review remediation
+
+1. **High — candidate admission was adapter-ordered instead of globally recent within the project.**
+   File-backed adapters now perform bounded metadata discovery before body reads, exclude foreign-project
+   sources, and return project-eligible metadata for one global recency sort and 100-session cut. TDD covers
+   100 older Claude sessions versus one newer Codex session and 100 newer foreign Codex/Pi sessions.
+2. **High — Claude/Pi host summaries could satisfy the user-only contract.**
+   Host compaction and branch summaries retain internal non-enumerable provenance and are treated as
+   assistant content by matching/excerpt selection without changing the public CLI dialogue JSON shape.
+3. **High — bare session ids could merge an OpenCode child into another host.**
+   Child indexes, candidate membership, DFS traversal, context lookup, and descendant counts now use
+   `platform:id`; parent edges are accepted only from OpenCode to OpenCode. A cross-host same-id regression
+   proves Codex is not absorbed.
+4. **Medium — a synchronous production scan made the HTTP busy gate unobservable.**
+   A real production-kernel HTTP regression queues a second socket request while the event loop is blocked.
+   The executor keeps `inFlight` through one post-scan poll turn, so the queued request receives
+   `429 memory-search-busy` and a later request succeeds.
+5. **Medium — partial and input error states were not truthful or actionable enough.**
+   The Dashboard maps stable warning codes to read-limit, unavailable-source, or safe generic copy; warning
+   messages and paths remain hidden. Queries outside 2–128 Unicode code points now render localized,
+   focusable `role=alert` validation with `aria-invalid`/`aria-describedby`. Inputs also have stable names
+   and disable autocomplete.
+6. **Medium — the light hover state fell below normal-text contrast.**
+   Removed the `/90` hover blend and retained the opaque semantic background. Production Chrome settled
+   computed styles measured light normal/hover at `5.016:1` and dark normal/hover at `10.994:1`.
+
+The final Build review found no remaining Critical, High, or Medium defect. Combined focused verification
+passed 68 kernel, 10 server, and 55 Dashboard tests plus kernel/server/Dashboard type checks and the root
+production build. Browser evidence is recorded at
+`/tmp/tenon-rsm-browser.jq3NWC/browser-qa-summary.md`.
+
 ## Frontend design and browser review
 
 - Reused existing semantic tokens and detail-section rhythm; no new visual system or raw palette was introduced.
 - The search form keeps one primary action, visible labels, disabled loading controls, native focus treatment, structured result cards, and distinct warning/error surfaces.
 - Verified the served page title is `Tenon Dashboard` and `/api/health` is the Tenon server before acceptance.
-- Verified real success, complete empty, partial empty, stopped-server error/retry, and Enter-key submission.
+- Verified a real backend complete-empty response and Enter-key submission, plus built-page loading, result,
+  source-partial, validation, error, and retry paths using valid/invalid HTTP envelopes.
+- Verified settled light/dark normal/hover computed colors and contrast; all four states exceed 4.5:1.
 - At `390 × 844`, the dialog and result region stayed within the viewport and the document had no horizontal overflow.
 - Browser console review found no application errors.

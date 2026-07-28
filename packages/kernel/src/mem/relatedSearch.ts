@@ -41,7 +41,6 @@ export interface RelatedSessionSearchOptions {
 
 interface BudgetState {
   bytesRead: number
-  candidatesClaimed: number
   warnings: MemWarning[]
   warningCodes: Set<string>
 }
@@ -60,6 +59,7 @@ function addWarning(state: BudgetState, warning: MemWarning): void {
  */
 function budgetedFs(source: MemFs, state: BudgetState): MemFs {
   const cache = new Map<string, string | undefined>()
+  const completeMetadata = new Map<string, string>()
   const sourceEnv = source.env
 
   const boundedRead = (path: string, maxBytes: number): BoundedTextRead | undefined => {
@@ -80,55 +80,95 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
     }
   }
 
+  const readWithinBudget = (
+    path: string,
+    requestedMaxBytes: number,
+    reportPerFileTruncation: boolean,
+  ): BoundedTextRead | undefined => {
+    const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
+    if (remaining <= 0) {
+      addWarning(state, {
+        code: 'total-read-budget-exhausted',
+        message: 'The total session-read budget was exhausted.',
+      })
+      return undefined
+    }
+
+    const maxBytes = Math.min(
+      requestedMaxBytes,
+      RELATED_SESSION_SEARCH_BUDGETS.perFileBytes,
+      remaining,
+    )
+    const read = boundedRead(path, maxBytes)
+    if (!read) {
+      if (source.exists(path)) {
+        addWarning(state, {
+          code: 'file-read-unavailable',
+          message: 'A session source could not be read.',
+        })
+      }
+      return undefined
+    }
+
+    const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)))
+    state.bytesRead += bytesRead
+    const textBytes = Buffer.from(read.text)
+    const text = textBytes.subarray(0, maxBytes).toString('utf8')
+    const truncated = read.truncated || textBytes.byteLength > maxBytes || read.bytesRead > maxBytes
+
+    if (truncated && maxBytes < requestedMaxBytes) {
+      addWarning(state, {
+        code: 'total-read-budget-exhausted',
+        message: 'The total session-read budget was exhausted.',
+      })
+    } else if (truncated && reportPerFileTruncation) {
+      addWarning(state, {
+        code: 'file-read-truncated',
+        message: 'At least one session exceeded the per-file read budget.',
+      })
+    }
+
+    return { text, bytesRead, truncated }
+  }
+
+  const fromCached = (text: string, maxBytes: number): BoundedTextRead => {
+    const bytes = Buffer.from(text)
+    const selected = bytes.subarray(0, maxBytes)
+    return {
+      text: selected.toString('utf8'),
+      bytesRead: 0,
+      truncated: selected.byteLength < bytes.byteLength,
+    }
+  }
+
   return {
     home: source.home,
     exists: (path) => source.exists(path),
     readDir: (path) => source.readDir(path),
     readText: (path) => {
       if (cache.has(path)) return cache.get(path)
-      const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
-      if (remaining <= 0) {
-        addWarning(state, {
-          code: 'total-read-budget-exhausted',
-          message: 'The total session-read budget was exhausted.',
-        })
-        cache.set(path, undefined)
-        return undefined
+      const complete = completeMetadata.get(path)
+      if (complete !== undefined) {
+        cache.set(path, complete)
+        return complete
       }
 
-      const maxBytes = Math.min(RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, remaining)
-      const read = boundedRead(path, maxBytes)
-      if (!read) {
-        if (source.exists(path)) {
-          addWarning(state, {
-            code: 'file-read-unavailable',
-            message: 'A session source could not be read.',
-          })
-        }
-        cache.set(path, undefined)
-        return undefined
+      const read = readWithinBudget(path, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, true)
+      cache.set(path, read?.text)
+      return read?.text
+    },
+    readTextBounded: (path, maxBytes) => {
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return undefined
+      if (cache.has(path)) {
+        const text = cache.get(path)
+        return text === undefined ? undefined : fromCached(text, maxBytes)
       }
+      const complete = completeMetadata.get(path)
+      if (complete !== undefined) return fromCached(complete, maxBytes)
 
-      const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)))
-      state.bytesRead += bytesRead
-      const textBytes = Buffer.from(read.text)
-      const text = textBytes.subarray(0, maxBytes).toString('utf8')
-
-      if (read.truncated) {
-        if (maxBytes < RELATED_SESSION_SEARCH_BUDGETS.perFileBytes) {
-          addWarning(state, {
-            code: 'total-read-budget-exhausted',
-            message: 'The total session-read budget was exhausted.',
-          })
-        } else {
-          addWarning(state, {
-            code: 'file-read-truncated',
-            message: 'At least one session exceeded the per-file read budget.',
-          })
-        }
-      }
-      cache.set(path, text)
-      return text
+      const read = readWithinBudget(path, maxBytes, false)
+      if (read && !read.truncated) completeMetadata.set(path, read.text)
+      return read
     },
     mtimeMs: (path) => source.mtimeMs(path),
     env: sourceEnv ? (name) => sourceEnv(name) : undefined,
@@ -139,15 +179,6 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
         const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
         state.bytesRead += Math.min(remaining, Math.max(0, Math.trunc(bytes)))
       },
-      claimCandidate: () => {
-        if (state.candidatesClaimed >= RELATED_SESSION_SEARCH_BUDGETS.candidates) return false
-        state.candidatesClaimed += 1
-        return true
-      },
-      noteCandidateLimitReached: () => addWarning(state, {
-        code: 'candidate-limit-reached',
-        message: `Only the ${RELATED_SESSION_SEARCH_BUDGETS.candidates} most recent session sources were inspected.`,
-      }),
       noteSourceUnavailable: (source) => addWarning(state, {
         code: `${source}-reader-unavailable`,
         message: `The ${source} session source could not be read.`,
@@ -204,7 +235,6 @@ export function searchRelatedSessions(
   const { query, platform } = validateOptions(options)
   const state: BudgetState = {
     bytesRead: 0,
-    candidatesClaimed: 0,
     warnings: [],
     warningCodes: new Set(),
   }

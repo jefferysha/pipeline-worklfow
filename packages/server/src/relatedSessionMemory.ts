@@ -69,6 +69,11 @@ export function createRelatedSessionSearchExecutor(
     } catch {
       return { ok: false, reason: 'unavailable' }
     } finally {
+      // A synchronous filesystem scan blocks node:http from dispatching requests that arrived
+      // during the scan. Keep the gate held through one poll opportunity so those queued requests
+      // observe `busy`; the first response also waits for this release, so later requests do not
+      // receive a false 429 after the completed response is visible.
+      await new Promise<void>((resolve) => setImmediate(resolve))
       inFlight = false
     }
   }

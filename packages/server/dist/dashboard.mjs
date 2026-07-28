@@ -9372,6 +9372,13 @@ async function assertUpdatePreservesReferences(next, id, scan) {
 // packages/kernel/dist/mem/fs.js
 import { closeSync, existsSync as existsSync4, fstatSync, openSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
+var MEM_SESSION_METADATA_BYTES = 8 * 1024;
+function readMemSessionMetadata(fs, path7) {
+  if (fs.contentReadBudget && fs.readTextBounded) {
+    return fs.readTextBounded(path7, MEM_SESSION_METADATA_BYTES)?.text;
+  }
+  return fs.readText(path7);
+}
 function nodeMemFs(homeOverride) {
   const home = homeOverride ?? homedir3();
   return {
@@ -9447,6 +9454,7 @@ import { createRequire } from "node:module";
 import { join as join15, resolve as resolve7, sep as sep5 } from "node:path";
 
 // packages/kernel/dist/mem/dialogue.js
+var HOST_SUMMARY_TURN = /* @__PURE__ */ Symbol("tenon.mem.host-summary");
 var INJECTION_TAGS = [
   "system-reminder",
   "task-status",
@@ -9489,6 +9497,14 @@ function stripInjectionTags(text2) {
   out = out.replace(AGENTS_RE, "");
   out = out.replace(COLLAPSE_RE, "\n\n");
   return out.trim();
+}
+function hostSummaryTurn(text2) {
+  const turn = { role: "user", text: text2 };
+  Object.defineProperty(turn, HOST_SUMMARY_TURN, { value: true });
+  return turn;
+}
+function isHostSummaryTurn(turn) {
+  return Reflect.get(turn, HOST_SUMMARY_TURN) === true;
 }
 
 // packages/kernel/dist/mem/filter.js
@@ -9556,6 +9572,7 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
   const userExcerpts = [];
   const asstExcerpts = [];
   for (const t of turns) {
+    const effectiveRole = isHostSummaryTurn(t) ? "assistant" : t.role;
     const hay = t.text.toLowerCase();
     if (!tokens.every((tok) => hay.includes(tok)))
       continue;
@@ -9576,7 +9593,7 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
       }
       tokenFreq.set(tok, n);
     }
-    if (t.role === "user")
+    if (effectiveRole === "user")
       userCount += turnHits;
     else
       asstCount += turnHits;
@@ -9602,8 +9619,8 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
         if (c.end < t.text.length)
           snippet = snippet + "\u2026";
       }
-      const target = t.role === "user" ? userExcerpts : asstExcerpts;
-      target.push({ role: t.role, snippet });
+      const target = effectiveRole === "user" ? userExcerpts : asstExcerpts;
+      target.push({ role: effectiveRole, snippet });
     }
   }
   const excerpts = [...userExcerpts, ...asstExcerpts].slice(0, maxExcerpts);
@@ -9699,10 +9716,6 @@ function opencodeListSessions(fs, f) {
     }
     const out = [];
     for (const row of rows) {
-      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-        fs.contentReadBudget.noteCandidateLimitReached();
-        break;
-      }
       const cwd = typeof row.directory === "string" && row.directory ? row.directory : null;
       if (f.cwd && !sameProject(cwd, f.cwd))
         continue;
@@ -10098,10 +10111,14 @@ function claudeListSessions(fs, f) {
   } else {
     projectDirs = allDirs();
   }
-  for (const d of projectDirs) {
-    const entries = fs.readDir(d);
-    const indexRaw = fs.readText(join17(d, "sessions-index.json"));
+  const indexes = /* @__PURE__ */ new Map();
+  const indexFor = (directory) => {
+    const cached = indexes.get(directory);
+    if (cached)
+      return cached;
     const indexById = /* @__PURE__ */ new Map();
+    const indexPath = join17(directory, "sessions-index.json");
+    const indexRaw = fs.exists(indexPath) ? fs.readText(indexPath) : void 0;
     if (indexRaw) {
       try {
         const index = JSON.parse(indexRaw);
@@ -10112,40 +10129,44 @@ function claudeListSessions(fs, f) {
       } catch {
       }
     }
-    const sessionEntries = entries.filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).sort((left, right) => {
-      const leftPath = join17(d, left.name);
-      const rightPath = join17(d, right.name);
-      return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
-    });
-    for (const e of sessionEntries) {
-      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-        fs.contentReadBudget.noteCandidateLimitReached();
-        break;
-      }
-      const filePath = join17(d, e.name);
-      const sid = e.name.slice(0, -".jsonl".length);
-      const idx = indexById.get(sid);
-      let cwd = idx?.cwd ?? null;
-      let created = idx?.created ?? null;
-      const title = idx?.title ?? null;
-      if (!cwd || !created) {
-        const text2 = fs.readText(filePath);
-        const evt = findInJsonl(text2, (o) => typeof o?.cwd === "string", 100);
-        cwd = cwd || (evt?.cwd ?? null);
-        if (!created) {
-          const first = readJsonlFirst(text2);
-          created = (evt?.timestamp ?? null) || (first?.timestamp ?? null);
-        }
-      }
-      const updated = mtimeIso(fs, filePath);
-      if (updated === void 0)
-        continue;
-      if (!inRangeOverlap(created, updated, f))
-        continue;
-      if (f.cwd && !sameProject(cwd, f.cwd))
-        continue;
-      out.push({ platform: "claude", id: sid, title, cwd, created, updated, filePath });
+    indexes.set(directory, indexById);
+    return indexById;
+  };
+  const sessionEntries = projectDirs.flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
+    const leftPath = join17(left.directory, left.entry.name);
+    const rightPath = join17(right.directory, right.entry.name);
+    return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
+  });
+  for (const { directory, entry } of sessionEntries) {
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted();
+      break;
     }
+    const filePath = join17(directory, entry.name);
+    const sid = entry.name.slice(0, -".jsonl".length);
+    const idx = indexFor(directory).get(sid);
+    let cwd = idx?.cwd ?? null;
+    let created = idx?.created ?? null;
+    const title = idx?.title ?? null;
+    if (!cwd || !created) {
+      const text2 = readMemSessionMetadata(fs, filePath);
+      const evt = findInJsonl(text2, (o) => typeof o?.cwd === "string", 100);
+      cwd = cwd || (evt?.cwd ?? null);
+      if (!created) {
+        const first = readJsonlFirst(text2);
+        created = (evt?.timestamp ?? null) || (first?.timestamp ?? null);
+      }
+    }
+    const updated = mtimeIso(fs, filePath);
+    if (updated === void 0)
+      continue;
+    if (!inRangeOverlap(created, updated, f))
+      continue;
+    if (f.cwd && !sameProject(cwd, f.cwd))
+      continue;
+    out.push({ platform: "claude", id: sid, title, cwd, created, updated, filePath });
+    if (fs.contentReadBudget && out.length >= f.limit)
+      break;
   }
   return out;
 }
@@ -10172,8 +10193,8 @@ function claudeExtractFromLines(lines) {
     const msg = obj?.message;
     if (t === "user" && obj?.isCompactSummary === true) {
       const summary = summaryText(msg?.content);
-      turns = summary ? [{ role: "user", text: `[compact summary]
-${summary}` }] : [];
+      turns = summary ? [hostSummaryTurn(`[compact summary]
+${summary}`)] : [];
       continue;
     }
     if (!msg)
@@ -10225,8 +10246,8 @@ function codexListSessions(fs, f) {
   const out = [];
   const files = walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
   for (const file of files) {
-    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-      fs.contentReadBudget.noteCandidateLimitReached();
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted();
       break;
     }
     const base = basename2(file).slice(0, -".jsonl".length);
@@ -10236,7 +10257,7 @@ function codexListSessions(fs, f) {
       const fixed = required(m[1]).replace(TS_FIX_RE, "T$1:$2:$3") + "Z";
       tsFromName = normalizeIso(fixed);
     }
-    const first = readJsonlFirst(fs.readText(file));
+    const first = readJsonlFirst(readMemSessionMetadata(fs, file));
     const meta = first?.payload ?? null;
     const sid = (meta?.id ?? null) || (m ? m[2] : null) || base;
     const cwd = meta?.cwd ?? null;
@@ -10249,6 +10270,8 @@ function codexListSessions(fs, f) {
     if (!inRangeOverlap(created, updated, f))
       continue;
     out.push({ platform: "codex", id: sid, cwd, created, updated, filePath: file });
+    if (fs.contentReadBudget && out.length >= f.limit)
+      break;
   }
   return out;
 }
@@ -10317,11 +10340,11 @@ function piListSessions(fs, f) {
   const out = [];
   const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
   for (const filePath of files) {
-    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-      fs.contentReadBudget.noteCandidateLimitReached();
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted();
       break;
     }
-    const header = readJsonlFirst(fs.readText(filePath));
+    const header = readJsonlFirst(readMemSessionMetadata(fs, filePath));
     if (!header || header.type !== "session")
       continue;
     const sid = typeof header.id === "string" ? header.id : idFromFile(filePath);
@@ -10330,24 +10353,26 @@ function piListSessions(fs, f) {
       continue;
     let title = null;
     let lastMs = null;
-    for (const entry of parseJsonlLines(fs.readText(filePath))) {
-      const e = entry;
-      if (e?.type === "session_info") {
-        const name = e.name;
-        title = typeof name === "string" && name.trim() ? name.trim() : null;
-        continue;
+    if (!fs.contentReadBudget) {
+      for (const entry of parseJsonlLines(fs.readText(filePath))) {
+        const e = entry;
+        if (e?.type === "session_info") {
+          const name = e.name;
+          title = typeof name === "string" && name.trim() ? name.trim() : null;
+          continue;
+        }
+        if (e?.type !== "message")
+          continue;
+        const msg = e.message ?? {};
+        const role = msg.role;
+        if (role !== "user" && role !== "assistant")
+          continue;
+        let activity = timestampMs(msg.timestamp);
+        if (activity === null)
+          activity = timestampMs(e.timestamp);
+        if (activity !== null)
+          lastMs = Math.max(lastMs ?? 0, activity);
       }
-      if (e?.type !== "message")
-        continue;
-      const msg = e.message ?? {};
-      const role = msg.role;
-      if (role !== "user" && role !== "assistant")
-        continue;
-      let activity = timestampMs(msg.timestamp);
-      if (activity === null)
-        activity = timestampMs(e.timestamp);
-      if (activity !== null)
-        lastMs = Math.max(lastMs ?? 0, activity);
     }
     let updated;
     if (lastMs !== null)
@@ -10358,6 +10383,8 @@ function piListSessions(fs, f) {
     if (!inRangeOverlap(created, updated, f))
       continue;
     out.push({ platform: "pi", id: sid, title, cwd, created, updated: updated ?? null, filePath });
+    if (fs.contentReadBudget && out.length >= f.limit)
+      break;
   }
   return out;
 }
@@ -10498,8 +10525,8 @@ function syntheticTurn(prefix, raw) {
   const text2 = stripInjectionTags(raw);
   if (!text2)
     return null;
-  return { role: "user", text: `${prefix}
-${text2}` };
+  return hostSummaryTurn(`${prefix}
+${text2}`);
 }
 function buildTurn(role, content) {
   const parts = [];
@@ -10635,29 +10662,32 @@ function searchSession(fs, s, kw) {
 function buildChildIndex(sessions) {
   const directChildren2 = /* @__PURE__ */ new Map();
   for (const s of sessions) {
-    const pid = s.parent_id;
-    if (!pid)
+    if (s.platform !== "opencode" || !s.parent_id)
       continue;
-    const arr = directChildren2.get(pid) ?? [];
+    const parentKey = sessionKey("opencode", s.parent_id);
+    const arr = directChildren2.get(parentKey) ?? [];
     arr.push(s);
-    directChildren2.set(pid, arr);
+    directChildren2.set(parentKey, arr);
   }
   const out = /* @__PURE__ */ new Map();
-  for (const pid of directChildren2.keys()) {
-    const stack = [...directChildren2.get(pid) ?? []];
+  for (const parentKey of directChildren2.keys()) {
+    const stack = [...directChildren2.get(parentKey) ?? []];
     const flat = [];
     while (stack.length) {
       const cur = stack.pop();
       flat.push(cur);
-      for (const c of directChildren2.get(cur.id) ?? [])
+      for (const c of directChildren2.get(sessionKey(cur.platform, cur.id)) ?? [])
         stack.push(c);
     }
-    out.set(pid, flat);
+    out.set(parentKey, flat);
   }
   return out;
 }
+function sessionKey(platform, id) {
+  return `${platform}:${id}`;
+}
 function searchSessionWithChildren(fs, s, kw, childIndex) {
-  const children = childIndex.get(s.id) ?? [];
+  const children = childIndex.get(sessionKey(s.platform, s.id)) ?? [];
   if (!children.length)
     return searchSession(fs, s, kw);
   const merged = [...extractDialogue(fs, s)];
@@ -10679,8 +10709,8 @@ function searchMemSessions(fs, options) {
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit;
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit);
   const childIndex = includeChildren ? buildChildIndex(candidates) : /* @__PURE__ */ new Map();
-  const candidateIds = new Set(candidates.map((s) => s.id));
-  const isAbsorbedChild = (s) => includeChildren && s.parent_id != null && candidateIds.has(s.parent_id);
+  const candidateIds = new Set(candidates.map((s) => sessionKey(s.platform, s.id)));
+  const isAbsorbedChild = (s) => includeChildren && s.platform === "opencode" && s.parent_id != null && candidateIds.has(sessionKey("opencode", s.parent_id));
   const matches = [];
   for (const s of candidates) {
     if (isAbsorbedChild(s))
@@ -10688,7 +10718,12 @@ function searchMemSessions(fs, options) {
     const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex) : searchSession(fs, s, kw);
     if (hit.count === 0)
       continue;
-    matches.push({ session: s, hit, score: relevanceScore(hit), descendantsMerged: (childIndex.get(s.id) ?? []).length });
+    matches.push({
+      session: s,
+      hit,
+      score: relevanceScore(hit),
+      descendantsMerged: (childIndex.get(sessionKey(s.platform, s.id)) ?? []).length
+    });
   }
   matches.sort((a, b) => b.score - a.score || b.hit.count - a.hit.count || recencyDesc(a.session, b.session));
   const warnings = [];
@@ -10730,6 +10765,7 @@ function addWarning(state, warning) {
 }
 function budgetedFs(source, state) {
   const cache = /* @__PURE__ */ new Map();
+  const completeMetadata = /* @__PURE__ */ new Map();
   const sourceEnv = source.env;
   const boundedRead = (path7, maxBytes) => {
     if (source.readTextBounded)
@@ -10749,6 +10785,53 @@ function budgetedFs(source, state) {
       truncated: selected.byteLength < bytes.byteLength
     };
   };
+  const readWithinBudget = (path7, requestedMaxBytes, reportPerFileTruncation) => {
+    const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
+    if (remaining <= 0) {
+      addWarning(state, {
+        code: "total-read-budget-exhausted",
+        message: "The total session-read budget was exhausted."
+      });
+      return void 0;
+    }
+    const maxBytes = Math.min(requestedMaxBytes, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, remaining);
+    const read = boundedRead(path7, maxBytes);
+    if (!read) {
+      if (source.exists(path7)) {
+        addWarning(state, {
+          code: "file-read-unavailable",
+          message: "A session source could not be read."
+        });
+      }
+      return void 0;
+    }
+    const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)));
+    state.bytesRead += bytesRead;
+    const textBytes = Buffer.from(read.text);
+    const text2 = textBytes.subarray(0, maxBytes).toString("utf8");
+    const truncated = read.truncated || textBytes.byteLength > maxBytes || read.bytesRead > maxBytes;
+    if (truncated && maxBytes < requestedMaxBytes) {
+      addWarning(state, {
+        code: "total-read-budget-exhausted",
+        message: "The total session-read budget was exhausted."
+      });
+    } else if (truncated && reportPerFileTruncation) {
+      addWarning(state, {
+        code: "file-read-truncated",
+        message: "At least one session exceeded the per-file read budget."
+      });
+    }
+    return { text: text2, bytesRead, truncated };
+  };
+  const fromCached = (text2, maxBytes) => {
+    const bytes = Buffer.from(text2);
+    const selected = bytes.subarray(0, maxBytes);
+    return {
+      text: selected.toString("utf8"),
+      bytesRead: 0,
+      truncated: selected.byteLength < bytes.byteLength
+    };
+  };
   return {
     home: source.home,
     exists: (path7) => source.exists(path7),
@@ -10756,46 +10839,29 @@ function budgetedFs(source, state) {
     readText: (path7) => {
       if (cache.has(path7))
         return cache.get(path7);
-      const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
-      if (remaining <= 0) {
-        addWarning(state, {
-          code: "total-read-budget-exhausted",
-          message: "The total session-read budget was exhausted."
-        });
-        cache.set(path7, void 0);
+      const complete = completeMetadata.get(path7);
+      if (complete !== void 0) {
+        cache.set(path7, complete);
+        return complete;
+      }
+      const read = readWithinBudget(path7, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, true);
+      cache.set(path7, read?.text);
+      return read?.text;
+    },
+    readTextBounded: (path7, maxBytes) => {
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
         return void 0;
+      if (cache.has(path7)) {
+        const text2 = cache.get(path7);
+        return text2 === void 0 ? void 0 : fromCached(text2, maxBytes);
       }
-      const maxBytes = Math.min(RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, remaining);
-      const read = boundedRead(path7, maxBytes);
-      if (!read) {
-        if (source.exists(path7)) {
-          addWarning(state, {
-            code: "file-read-unavailable",
-            message: "A session source could not be read."
-          });
-        }
-        cache.set(path7, void 0);
-        return void 0;
-      }
-      const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)));
-      state.bytesRead += bytesRead;
-      const textBytes = Buffer.from(read.text);
-      const text2 = textBytes.subarray(0, maxBytes).toString("utf8");
-      if (read.truncated) {
-        if (maxBytes < RELATED_SESSION_SEARCH_BUDGETS.perFileBytes) {
-          addWarning(state, {
-            code: "total-read-budget-exhausted",
-            message: "The total session-read budget was exhausted."
-          });
-        } else {
-          addWarning(state, {
-            code: "file-read-truncated",
-            message: "At least one session exceeded the per-file read budget."
-          });
-        }
-      }
-      cache.set(path7, text2);
-      return text2;
+      const complete = completeMetadata.get(path7);
+      if (complete !== void 0)
+        return fromCached(complete, maxBytes);
+      const read = readWithinBudget(path7, maxBytes, false);
+      if (read && !read.truncated)
+        completeMetadata.set(path7, read.text);
+      return read;
     },
     mtimeMs: (path7) => source.mtimeMs(path7),
     env: sourceEnv ? (name) => sourceEnv(name) : void 0,
@@ -10806,16 +10872,6 @@ function budgetedFs(source, state) {
         const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
         state.bytesRead += Math.min(remaining, Math.max(0, Math.trunc(bytes)));
       },
-      claimCandidate: () => {
-        if (state.candidatesClaimed >= RELATED_SESSION_SEARCH_BUDGETS.candidates)
-          return false;
-        state.candidatesClaimed += 1;
-        return true;
-      },
-      noteCandidateLimitReached: () => addWarning(state, {
-        code: "candidate-limit-reached",
-        message: `Only the ${RELATED_SESSION_SEARCH_BUDGETS.candidates} most recent session sources were inspected.`
-      }),
       noteSourceUnavailable: (source2) => addWarning(state, {
         code: `${source2}-reader-unavailable`,
         message: `The ${source2} session source could not be read.`
@@ -10860,7 +10916,6 @@ function searchRelatedSessions(fs, options) {
   const { query, platform } = validateOptions(options);
   const state = {
     bytesRead: 0,
-    candidatesClaimed: 0,
     warnings: [],
     warningCodes: /* @__PURE__ */ new Set()
   };
@@ -21075,6 +21130,7 @@ function createRelatedSessionSearchExecutor(runner) {
     } catch {
       return { ok: false, reason: "unavailable" };
     } finally {
+      await new Promise((resolve13) => setImmediate(resolve13));
       inFlight = false;
     }
   };

@@ -7,6 +7,7 @@ import { basename, dirname } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { MemDirent, MemFs } from './fs.js'
 import {
+  buildChildIndex,
   extractMemDialogue,
   findSessionById,
   listMemSessions,
@@ -114,6 +115,32 @@ describe('searchMemSessions —— 跨 runtime 检索 + 评分排序（老仓 se
     const res = searchMemSessions(fs2(), { keyword: 'zzznomatch', filter: { cwd: null } })
     expect(res.matches).toEqual([])
     expect(res.totalMatches).toBe(0)
+  })
+})
+
+describe('buildChildIndex —— platform-scoped OpenCode parent identity', () => {
+  test('does not attach an OpenCode child to a Codex session with the same bare id', () => {
+    const codex = {
+      platform: 'codex' as const,
+      id: 'shared',
+      filePath: '/codex/shared.jsonl',
+    }
+    const opencodeParent = {
+      platform: 'opencode' as const,
+      id: 'shared',
+      filePath: '/opencode.db',
+    }
+    const opencodeChild = {
+      platform: 'opencode' as const,
+      id: 'child',
+      parent_id: 'shared',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([codex, opencodeParent, opencodeChild])
+
+    expect(index.get('codex:shared')).toBeUndefined()
+    expect(index.get('opencode:shared')).toEqual([opencodeChild])
   })
 })
 

@@ -8,8 +8,8 @@
 import { basename, join, resolve } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso } from '../fs.js'
-import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
+import { mtimeIso, readMemSessionMetadata } from '../fs.js'
+import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
@@ -24,11 +24,11 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const files = candidateFiles(fs, f)
     .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
   for (const filePath of files) {
-    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
-      fs.contentReadBudget.noteCandidateLimitReached()
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted()
       break
     }
-    const header = readJsonlFirst(fs.readText(filePath)) as Json
+    const header = readJsonlFirst(readMemSessionMetadata(fs, filePath)) as Json
     if (!header || header.type !== 'session') continue
 
     const sid: string = typeof header.id === 'string' ? header.id : idFromFile(filePath)
@@ -37,20 +37,22 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
 
     let title: string | null = null
     let lastMs: number | null = null
-    for (const entry of parseJsonlLines(fs.readText(filePath))) {
-      const e = entry as Json
-      if (e?.type === 'session_info') {
-        const name = e.name
-        title = typeof name === 'string' && name.trim() ? name.trim() : null
-        continue
+    if (!fs.contentReadBudget) {
+      for (const entry of parseJsonlLines(fs.readText(filePath))) {
+        const e = entry as Json
+        if (e?.type === 'session_info') {
+          const name = e.name
+          title = typeof name === 'string' && name.trim() ? name.trim() : null
+          continue
+        }
+        if (e?.type !== 'message') continue
+        const msg = e.message ?? {}
+        const role = msg.role
+        if (role !== 'user' && role !== 'assistant') continue
+        let activity = timestampMs(msg.timestamp)
+        if (activity === null) activity = timestampMs(e.timestamp)
+        if (activity !== null) lastMs = Math.max(lastMs ?? 0, activity)
       }
-      if (e?.type !== 'message') continue
-      const msg = e.message ?? {}
-      const role = msg.role
-      if (role !== 'user' && role !== 'assistant') continue
-      let activity = timestampMs(msg.timestamp)
-      if (activity === null) activity = timestampMs(e.timestamp)
-      if (activity !== null) lastMs = Math.max(lastMs ?? 0, activity)
     }
 
     let updated: string | undefined
@@ -60,6 +62,7 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     if (!inRangeOverlap(created, updated, f)) continue
 
     out.push({ platform: 'pi', id: sid, title, cwd, created, updated: updated ?? null, filePath })
+    if (fs.contentReadBudget && out.length >= f.limit) break
   }
   return out
 }
@@ -191,7 +194,7 @@ function syntheticTurn(prefix: string, raw: unknown): DialogueTurn | null {
   if (typeof raw !== 'string') return null
   const text = stripInjectionTags(raw)
   if (!text) return null
-  return { role: 'user', text: `${prefix}\n${text}` }
+  return hostSummaryTurn(`${prefix}\n${text}`)
 }
 
 function buildTurn(role: 'user' | 'assistant', content: Json): DialogueTurn | null {

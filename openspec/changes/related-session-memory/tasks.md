@@ -26,6 +26,12 @@
 - [x] 将 OpenCode reader/schema 失败映射为 partial warning，而非完整空结果。 (build)
 - [x] 统一 Unicode code-point 查询长度、IME Enter 与主按钮对比度。 (build)
 - [x] 更正 POST 调研措辞，并让 bounded read 检测并发 append。 (build)
+- [x] 将最近 100 个候选改为项目内跨宿主全局按时间选择，并阻止异项目来源抢占候选。 (build)
+- [x] 保留宿主压缩摘要 provenance，确保只有原始 user turn 能形成 Dashboard 命中。 (build)
+- [x] 以 `platform:id` 隔离父子索引，并只允许 OpenCode 会话合并 OpenCode 后代。 (build)
+- [x] 用真实同步 kernel/HTTP 事件循环回归兑现 single-flight `429` 契约。 (build)
+- [x] 区分读取限制、来源不可用和未知 partial，补齐可访问长度错误与稳定表单元数据。 (build)
+- [x] 移除主按钮 hover 透明混色，并以真实浏览器 computed style 验收四种主题/交互对比度。 (build)
 
 ## 验证
 

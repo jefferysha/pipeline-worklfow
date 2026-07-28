@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Worker } from 'node:worker_threads'
+import { nodeMemFs, type MemFs } from '@tenon/kernel'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import type {
@@ -54,7 +56,7 @@ async function start(
   const store = newStore()
   await initChange(store, root, 'memory-change')
   const calls: RelatedSessionSearchRequest[] = []
-  const wrapped: RelatedSessionSearchRunner = async (request) => {
+  const wrapped: RelatedSessionSearchRunner = (request) => {
     calls.push(request)
     return runner(request)
   }
@@ -83,6 +85,86 @@ function requestBody(root: string): Record<string, string> {
 
 function auth(token: string): { headers: Record<string, string> } {
   return { headers: { Authorization: `Bearer ${token}` } }
+}
+
+async function prepareQueuedPost(options: {
+  port: number
+  token: string
+  body: Record<string, string>
+  scanSignal: SharedArrayBuffer
+}): Promise<{ result: Promise<{ status: number; body: string }>; worker: Worker }> {
+  const worker = new Worker(`
+    const net = require('node:net')
+    const { parentPort, workerData } = require('node:worker_threads')
+    const signal = new Int32Array(workerData.scanSignal)
+    const body = JSON.stringify(workerData.body)
+    const request = [
+      'POST /api/mem/related-sessions/search HTTP/1.1',
+      'Host: 127.0.0.1:' + workerData.port,
+      'Authorization: Bearer ' + workerData.token,
+      'Content-Type: application/json',
+      'Content-Length: ' + Buffer.byteLength(body),
+      'Connection: close',
+      '',
+      body,
+    ].join('\\r\\n')
+    const socket = net.createConnection({ host: '127.0.0.1', port: workerData.port })
+    let response = ''
+    socket.setEncoding('utf8')
+    socket.on('connect', () => {
+      parentPort.postMessage({ type: 'ready' })
+      Atomics.wait(signal, 0, 0)
+      socket.write(request, () => {
+        Atomics.store(signal, 1, 1)
+        Atomics.notify(signal, 1)
+      })
+    })
+    socket.on('data', (chunk) => { response += chunk })
+    socket.on('end', () => {
+      const status = Number.parseInt(response.match(/^HTTP\\/1\\.1 (\\d{3})/)?.[1] ?? '0', 10)
+      const separator = response.indexOf('\\r\\n\\r\\n')
+      parentPort.postMessage({
+        type: 'result',
+        status,
+        body: separator === -1 ? '' : response.slice(separator + 4),
+      })
+    })
+    socket.on('error', (error) => {
+      parentPort.postMessage({ type: 'error', message: error.message })
+    })
+  `, {
+    eval: true,
+    workerData: options,
+  })
+
+  let ready: (() => void) | undefined
+  let rejectReady: ((error: Error) => void) | undefined
+  const readyPromise = new Promise<void>((resolve, reject) => {
+    ready = resolve
+    rejectReady = reject
+  })
+  const result = new Promise<{ status: number; body: string }>((resolve, reject) => {
+    worker.on('message', (message: unknown) => {
+      if (typeof message !== 'object' || message === null) return
+      const record = message as Record<string, unknown>
+      if (record.type === 'ready') {
+        ready?.()
+      } else if (record.type === 'result') {
+        resolve({
+          status: typeof record.status === 'number' ? record.status : 0,
+          body: typeof record.body === 'string' ? record.body : '',
+        })
+      } else if (record.type === 'error') {
+        reject(new Error(typeof record.message === 'string' ? record.message : 'worker request failed'))
+      }
+    })
+    worker.on('error', (error) => {
+      rejectReady?.(error)
+      reject(error)
+    })
+  })
+  await readyPromise
+  return { result, worker }
 }
 
 describe('POST /api/mem/related-sessions/search', () => {
@@ -328,6 +410,93 @@ describe('POST /api/mem/related-sessions/search', () => {
 
     release?.()
     expect((await first).status).toBe(200)
+  })
+
+  it('keeps the gate observable while a synchronous scan blocks the server event loop', async () => {
+    const scanSignal = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2)
+    const signal = new Int32Array(scanSignal)
+    const home = await makeTempHome()
+    const root = await makeProject()
+    const store = newStore()
+    await initChange(store, root, 'memory-change')
+    const sessionsDir = join(home, '.codex', 'sessions', '2026', '07')
+    await mkdir(sessionsDir, { recursive: true })
+    await writeFile(join(sessionsDir, 'rollout-2026-07-28T12-00-00-sync-block.jsonl'), [
+      JSON.stringify({
+        timestamp: '2026-07-28T12:00:00Z',
+        payload: { id: 'sync-block-session', cwd: root },
+      }),
+      JSON.stringify({
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'bounded memory from the production kernel runner' }],
+        },
+      }),
+    ].join('\n'))
+    const sourceFs = nodeMemFs(home)
+    const sourceReadTextBounded = sourceFs.readTextBounded
+    expect(sourceReadTextBounded).toBeDefined()
+    let boundedReads = 0
+    const blockingFs: MemFs = {
+      ...sourceFs,
+      readTextBounded: (path, maxBytes) => {
+        boundedReads += 1
+        if (boundedReads === 1) {
+          Atomics.store(signal, 0, 1)
+          Atomics.notify(signal, 0)
+          expect(Atomics.wait(signal, 1, 0, 2_000)).toBe('ok')
+        }
+        return sourceReadTextBounded?.(path, maxBytes)
+      },
+    }
+    const server = createDashboardServer({
+      paths: resolveServerPaths({ home, env: {} }),
+      hostHome: home,
+      registry: () => [root],
+      store,
+      flow: testFlow(),
+      token: 'related-memory-token',
+      memFs: blockingFs,
+    })
+    openServers.push(server)
+    const { port } = await server.listen(0, '127.0.0.1')
+    const queued = await prepareQueuedPost({
+      port,
+      token: server.token,
+      body: requestBody(root),
+      scanSignal,
+    })
+
+    try {
+      const first = reqPost(
+        port,
+        '/api/mem/related-sessions/search',
+        requestBody(root),
+        auth(server.token),
+      )
+      const [firstResponse, secondResponse] = await Promise.all([first, queued.result])
+
+      expect(firstResponse.status).toBe(200)
+      expect(secondResponse.status).toBe(429)
+      expect(JSON.parse(secondResponse.body)).toEqual({
+        ok: false,
+        code: 'memory-search-busy',
+        error: 'Related session search is already running',
+      })
+      expect(boundedReads).toBe(1)
+
+      const afterRelease = await reqPost(
+        port,
+        '/api/mem/related-sessions/search',
+        requestBody(root),
+        auth(server.token),
+      )
+      expect(afterRelease.status).toBe(200)
+      expect(boundedReads).toBe(2)
+    } finally {
+      await queued.worker.terminate()
+    }
   })
 
   it('maps runner failures to a stable, path-free memory-search-unavailable response', async () => {

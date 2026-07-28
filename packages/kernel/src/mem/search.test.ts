@@ -3,6 +3,7 @@
  * 对位老仓 skills/pipeline/scripts/mem/search.py。
  */
 import { describe, expect, test } from 'vitest'
+import { hostSummaryTurn } from './dialogue.js'
 import { chunkAround, relevanceScore, searchInDialogue } from './search.js'
 
 describe('relevanceScore —— (3*user + asst)/total（老仓 relevance_score:15）', () => {
@@ -64,5 +65,18 @@ describe('searchInDialogue —— 多 token AND grep（老仓 search_in_dialogue
 
   test('无命中 → count 0', () => {
     expect(searchInDialogue(turns, 'nonexistent').count).toBe(0)
+  })
+
+  test('host summaries retain text but cannot count as original user matches or excerpts', () => {
+    const hit = searchInDialogue([
+      hostSummaryTurn('[compact summary]\nsynthetic summary needle'),
+    ], 'summary needle')
+
+    expect(hit.userCount).toBe(0)
+    expect(hit.asstCount).toBe(3)
+    expect(hit.excerpts).toEqual([{
+      role: 'assistant',
+      snippet: '[compact summary]\nsynthetic summary needle',
+    }])
   })
 })
