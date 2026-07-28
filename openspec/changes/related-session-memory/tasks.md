@@ -67,9 +67,9 @@
 
 ## 验证
 
-- [ ] 重新运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。 (verify)
-- [ ] 对新冻结基线重新执行四轨审查与真实 Tenon Dashboard 浏览器验收。 (verify)
-- [ ] 更新验证报告并完成 verify-pass review gate。 (verify)
+- [x] 重新运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。 (verify)
+- [x] 对新冻结基线重新执行四轨审查与真实 Tenon Dashboard 浏览器验收。 (verify)
+- [x] 更新验证报告并完成 verify-pass review gate。 (verify)
 
 ## 交付
 

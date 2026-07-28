@@ -138,3 +138,28 @@
 {"ts":"2026-07-28T13:47:42Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"874bc1bd-2e32-4b56-8ff8-f30b3f472412"}
 {"ts":"2026-07-28T14:06:28Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T14:15:29Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T14:15:47Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T14:17:13Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T14:17:20Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T14:17:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T14:17:28Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"5e9926e2-a836-4225-bbff-031eeca68910"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T14:21:15Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-28T14:41:05Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-related-session-memory-verify-final.md"}
+{"ts":"2026-07-28T14:41:07Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T14:41:07Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T14:41:07Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T14:41:28Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T14:41:37Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-28T14:41:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T06:34:08Z authority_host_session=019fa722-b72d-72f1-9cef-a0086ac7e580"}
+{"ts":"2026-07-28T14:41:37Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"f2dc7974-ef4f-4b95-a6c7-997b2e7f10ea"}
+{"ts":"2026-07-28T14:42:03Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-28T14:42:03Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-28T14:42:04Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-28T14:42:04Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-28T14:42:04Z","kind":"tool","raw":"CodexSkillRead: github-ops"}
