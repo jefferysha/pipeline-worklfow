@@ -176,13 +176,20 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
       ? readBoundedSqliteRows(
         fs,
         db,
-        `SELECT id,
+        {
+          sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created, id`,
-        s.id,
+         ORDER BY time_created
+         LIMIT ?`,
+          hasMoreSql: 'SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?',
+          scopeId: s.id,
+          relationField: 'id',
+        },
         sourceBudget,
       )
       : db
@@ -191,18 +198,25 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
     if (!messageRows.length) return []
 
     const partRows = fs.contentReadBudget
-      ? readBoundedSqliteRows(
+      ? messageRows.flatMap((message) => readBoundedSqliteRows(
         fs,
         db,
-        `SELECT id, message_id,
+        {
+          sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
+                length(CAST(message_id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM part
-         WHERE session_id = ?
-         ORDER BY time_created, id`,
-        s.id,
+         WHERE message_id = ?
+         ORDER BY id
+         LIMIT ?`,
+          hasMoreSql: 'SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?',
+          scopeId: String(message.id),
+          relationField: 'message_id',
+        },
         sourceBudget,
-      )
+      ))
       : db
         .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
         .all(s.id) as Json[]

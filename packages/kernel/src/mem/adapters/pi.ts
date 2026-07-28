@@ -14,7 +14,13 @@ import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
-import { piAgentDir, piProjectDirFromCwd, piSessionRoots, walkDir } from '../paths.js'
+import {
+  piAgentDir,
+  piProjectDirFromCwd,
+  piSessionRoots,
+  walkDir,
+  walkDirForRelatedSearch,
+} from '../paths.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -78,9 +84,18 @@ function candidateFiles(fs: MemFs, f: MemFilter): string[] {
   const defaultRoot = join(piAgentDir(fs), 'sessions')
   const seen = new Set<string>()
   const out: string[] = []
-  const pushJsonl = (root: string): void => {
+  const pushJsonl = (root: string, fileLimit: number): void => {
     if (!fs.exists(root)) return
-    for (const file of walkDir(fs, root)) {
+    const discovered = fs.contentReadBudget
+      ? walkDirForRelatedSearch(
+        fs,
+        root,
+        (file) => file.endsWith('.jsonl'),
+        fileLimit,
+        'pi',
+      )
+      : walkDir(fs, root)
+    for (const file of discovered) {
       if (!file.endsWith('.jsonl')) continue
       const normalized = resolve(file)
       if (seen.has(normalized)) continue
@@ -88,9 +103,21 @@ function candidateFiles(fs: MemFs, f: MemFilter): string[] {
       out.push(file)
     }
   }
-  for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve(root) === resolve(defaultRoot)) pushJsonl(piProjectDirFromCwd(fs, f.cwd))
-    else pushJsonl(root)
+  const roots = piSessionRoots(fs)
+  const normalLimit = Math.max(f.limit * 4, f.limit + 1)
+  for (let index = 0; index < roots.length; index += 1) {
+    const root = roots[index]
+    if (root === undefined) continue
+    const remainingRoots = roots.length - index
+    const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.('pi')
+    const fairLimit = remainingFiles === undefined
+      ? normalLimit
+      : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots))
+    if (f.cwd && resolve(root) === resolve(defaultRoot)) {
+      pushJsonl(piProjectDirFromCwd(fs, f.cwd), fairLimit)
+    } else {
+      pushJsonl(root, fairLimit)
+    }
   }
   return out
 }

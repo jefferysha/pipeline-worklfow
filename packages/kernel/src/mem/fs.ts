@@ -3,7 +3,17 @@
  * 纯逻辑通过此面读磁盘字节；真 fs 缺省（nodeMemFs），mock/测试注入 fake 树。
  * 对位老仓 skills/pipeline/scripts/mem/adapters/internal/{jsonl,paths}.py 的 os 调用面。
  */
-import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  opendirSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 
 export interface MemDirent {
@@ -27,6 +37,13 @@ export interface CheckedDirectoryRead {
   unavailable: boolean
 }
 
+/** Directory read capped before entries are materialized in memory. */
+export interface BoundedDirectoryRead extends CheckedDirectoryRead {
+  truncated: boolean
+}
+
+export type DiscoveryFileSource = 'claude' | 'codex' | 'pi'
+
 /**
  * Request-local content budget for storage adapters that do not read text files (currently OpenCode
  * SQLite). It keeps their row reads inside the same aggregate budget as readTextBounded.
@@ -38,6 +55,15 @@ export interface MemContentReadBudget {
   noteSourceUnavailable(source: string): void
   noteSourceTruncated(): void
   noteTotalExhausted(): void
+  /** Related Sessions filesystem-discovery guard; absent on legacy injected budgets. */
+  remainingDiscoveryEntries?(source: DiscoveryFileSource): number
+  consumeDiscoveryEntries?(source: DiscoveryFileSource, entries: number): void
+  remainingDiscoveryFiles?(source: DiscoveryFileSource): number
+  consumeDiscoveryFiles?(source: DiscoveryFileSource, files: number): void
+  shouldContinueDiscovery?(source: DiscoveryFileSource): boolean
+  readonly maxDiscoveryDepth?: number
+  readonly maxDiscoveryFiles?: number
+  noteDiscoveryTruncated?(): void
 }
 
 export interface MemFs {
@@ -49,6 +75,12 @@ export interface MemFs {
   readDir(path: string): MemDirent[]
   /** 可选的诚实目录读取状态；Related Sessions 用它区分空目录与读取失败。 */
   readDirChecked?(path: string): CheckedDirectoryRead
+  /** 可选的生产级有界目录读取；maxEntries 之外只探测一个条目以报告截断。 */
+  readDirBounded?(
+    path: string,
+    maxEntries: number,
+    shouldContinue?: () => boolean,
+  ): BoundedDirectoryRead
   /** 整文件文本（缺失/不可读 → undefined）；JSONL 逐行解析在纯逻辑层 */
   readText(path: string): string | undefined
   /**
@@ -107,6 +139,47 @@ export function nodeMemFs(homeOverride?: string): MemFs {
       return { entries: [], unavailable: true }
     }
   }
+  const readDirectoryBounded = (
+    p: string,
+    maxEntries: number,
+    shouldContinue?: () => boolean,
+  ): BoundedDirectoryRead => {
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+      return { entries: [], unavailable: true, truncated: false }
+    }
+    let directory: ReturnType<typeof opendirSync> | undefined
+    try {
+      directory = opendirSync(p)
+      const entries: MemDirent[] = []
+      let truncated = false
+      for (;;) {
+        if (shouldContinue && !shouldContinue()) {
+          truncated = true
+          break
+        }
+        const entry = directory.readSync()
+        if (entry === null) break
+        if (entries.length >= maxEntries) {
+          truncated = true
+          break
+        }
+        entries.push({
+          name: entry.name,
+          isFile: entry.isFile(),
+          isDirectory: entry.isDirectory(),
+        })
+      }
+      return { entries, unavailable: false, truncated }
+    } catch {
+      return { entries: [], unavailable: true, truncated: false }
+    } finally {
+      try {
+        directory?.closeSync()
+      } catch {
+        /* best-effort close after a failed directory read */
+      }
+    }
+  }
   const readTextRange = (p: string, offset: number, maxBytes: number): BoundedTextRead | undefined => {
     if (
       !Number.isSafeInteger(offset)
@@ -151,6 +224,7 @@ export function nodeMemFs(homeOverride?: string): MemFs {
     exists: (p) => existsSync(p),
     readDir: (p) => readDirectory(p).entries,
     readDirChecked: readDirectory,
+    readDirBounded: readDirectoryBounded,
     readText: (p) => {
       try {
         return readFileSync(p, 'utf8')

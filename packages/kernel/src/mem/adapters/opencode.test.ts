@@ -84,6 +84,12 @@ function createOpencodeSchema(db: DatabaseSyncInstance): void {
       time_updated integer NOT NULL,
       data text NOT NULL
     );
+    CREATE INDEX message_session_time_created_id_idx
+      ON message (session_id, time_created, id);
+    CREATE INDEX part_message_id_id_idx
+      ON part (message_id, id);
+    CREATE INDEX part_session_idx
+      ON part (session_id);
   `)
 }
 
@@ -292,6 +298,44 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
 })
 
 describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
+  test('缺少有界 query plan 时复用稳定 source-unavailable warning code', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/home/u/work/proj',
+      title: 'Unindexed',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'project memory' },
+    })
+    db.exec('DROP INDEX message_session_time_created_id_idx')
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+    expect(result.warnings.map((warning) => warning.code))
+      .not.toContain('opencode-query-plan-reader-unavailable')
+  })
+
   test('数据库存在但不可读时返回 partial warning，而不是完整空结果', async () => {
     await mkdir(dirname(dbFile(root)), { recursive: true })
     await writeFile(dbFile(root), 'not a sqlite database', 'utf8')
@@ -511,6 +555,177 @@ describe('opencodeExtractDialogue —— message+part 联表，只收 text part'
 
     expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
     expect(truncatedSources).toBeGreaterThan(0)
+  })
+
+  test('有界 SQLite 读取拒绝超长关系 id，并把所有投影字段计入预算', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    const oversizedMessageId = 'm'.repeat(2 * 1024 * 1024)
+    insertMessage(db, {
+      id: oversizedMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: oversizedMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.close()
+
+    let bytesRead = 0
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+    const turns = opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toEqual([])
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncated).toBeGreaterThan(0)
+  })
+
+  test('多字节关系 id 在 byte cap 中间截断时拒绝 replacement key 并报告 partial', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    const splitMessageId = `${'m'.repeat(511)}é`
+    insertMessage(db, {
+      id: splitMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: splitMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.close()
+
+    let bytesRead = 0
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(truncated).toBeGreaterThan(0)
+  })
+
+  test('缺少有界复合索引时 fail closed，不执行潜在全库同步扫描', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.exec(`
+      DROP INDEX message_session_time_created_id_idx;
+      DROP INDEX part_message_id_id_idx;
+    `)
+    db.close()
+
+    let unavailable = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024,
+      consume: () => undefined,
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(unavailable).toBeGreaterThan(0)
+  })
+
+  test('剩余预算不足关系 id 预留时诚实报告截断', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    db.close()
+
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 256,
+      remainingBytes: () => 256,
+      consume: () => undefined,
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(truncated).toBeGreaterThan(0)
   })
 
   test('compaction part（无 text 字段，边界折叠本轮诚实不做——见文件头注释）不产出 turn、不崩，兄弟消息仍正常出', async () => {

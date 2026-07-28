@@ -21,10 +21,11 @@ type SearchState =
   | { kind: 'results'; response: RelatedSessionSearchResponse }
   | { kind: 'empty'; response: RelatedSessionSearchResponse }
   | { kind: 'error' }
-type QueryError = 'too-short' | 'too-long' | null
+type QueryError = 'too-short' | 'too-long' | 'too-many-tokens' | null
 const queryErrorLabels: Readonly<Record<Exclude<QueryError, null>, string>> = {
   'too-short': 'detail.related_sessions.query_error_too_short',
   'too-long': 'detail.related_sessions.query_error_too_long',
+  'too-many-tokens': 'detail.related_sessions.query_error_too_many_tokens',
 }
 
 const sectionClass = 'border-b border-border py-[13px] last:border-b-0'
@@ -37,6 +38,7 @@ const platformLabels: Readonly<Record<RelatedSessionPlatform, string>> = {
 }
 const budgetWarningCodes = new Set([
   'candidate-limit-reached',
+  'candidate-discovery-truncated',
   'file-read-truncated',
   'total-read-budget-exhausted',
 ])
@@ -72,6 +74,7 @@ function queryErrorFor(value: string): QueryError {
   const length = Array.from(value.trim()).length
   if (length < 2) return 'too-short'
   if (length > 128) return 'too-long'
+  if (value.trim().split(/\s+/).filter(Boolean).length > 8) return 'too-many-tokens'
   return null
 }
 
@@ -83,6 +86,9 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
   const [queryError, setQueryError] = useState<QueryError>(null)
   const abortRef = useRef<AbortController | null>(null)
   const generationRef = useRef(0)
+  const scope = `${root}\u0000${name}`
+  const renderedScopeRef = useRef(scope)
+  renderedScopeRef.current = scope
 
   useEffect(() => {
     generationRef.current += 1
@@ -119,7 +125,11 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
         query: normalizedQuery,
         platform,
       }, controller.signal)
-      if (controller.signal.aborted || generation !== generationRef.current) return
+      if (
+        controller.signal.aborted
+        || generation !== generationRef.current
+        || renderedScopeRef.current !== scope
+      ) return
       setState(response.matches.length === 0 ? { kind: 'empty', response } : { kind: 'results', response })
     } catch {
       if (controller.signal.aborted || generation !== generationRef.current) return

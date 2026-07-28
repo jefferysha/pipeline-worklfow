@@ -170,8 +170,51 @@ export function readBoundedSessionRows(
   return safeRows
 }
 
-const SQLITE_ROW_CHUNK_BYTES = 4 * 1024
+const SQLITE_RELATION_ID_BYTES = 512
+const SQLITE_ROW_DATA_BYTES = 4 * 1024
 const SQLITE_MAX_ROWS_PER_QUERY = 512
+
+export interface BoundedSqliteRowsQuery {
+  sql: string
+  hasMoreSql: string
+  scopeId: string
+  relationField: 'id' | 'message_id'
+}
+
+const boundedPlanCache = new WeakMap<object, Map<string, boolean>>()
+
+function hasBoundedQueryPlan(
+  db: SqliteDb,
+  sql: string,
+  params: readonly (string | number)[],
+): boolean {
+  let cache = boundedPlanCache.get(db)
+  if (!cache) {
+    cache = new Map()
+    boundedPlanCache.set(db, cache)
+  }
+  const cached = cache.get(sql)
+  if (cached !== undefined) return cached
+  let bounded = false
+  try {
+    const rows = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as Json[]
+    const details = rows.map((row) => String(row.detail ?? '').toUpperCase())
+    bounded = details.some((detail) => detail.includes('SEARCH '))
+      && details.every((detail) => !detail.includes('SCAN ') && !detail.includes('USE TEMP B-TREE'))
+  } catch {
+    bounded = false
+  }
+  cache.set(sql, bounded)
+  return bounded
+}
+
+function hasMoreRows(
+  db: SqliteDb,
+  query: BoundedSqliteRowsQuery,
+  offset: number,
+): boolean {
+  return db.prepare(query.hasMoreSql).get(query.scopeId, offset) !== undefined
+}
 
 /**
  * SQLite is not a text-file adapter, so related search supplies contentReadBudget instead. Each row
@@ -181,49 +224,101 @@ const SQLITE_MAX_ROWS_PER_QUERY = 512
 export function readBoundedSqliteRows(
   fs: MemFs,
   db: SqliteDb,
-  sql: string,
-  sessionId: string,
+  query: BoundedSqliteRowsQuery,
   source: SqliteSourceBudget,
 ): Json[] {
   const budget = fs.contentReadBudget
   if (!budget) return []
   const sourceRemaining = budget.perSourceBytes - source.bytesRead
   const aggregateRemaining = budget.remainingBytes()
-  const chunkBytes = Math.min(SQLITE_ROW_CHUNK_BYTES, sourceRemaining, aggregateRemaining)
-  if (chunkBytes <= 0) {
-    if (sourceRemaining <= 0) budget.noteSourceTruncated()
-    if (aggregateRemaining <= 0) budget.noteTotalExhausted()
+  const rowBytes = Math.min(
+    SQLITE_ROW_DATA_BYTES,
+    Math.max(0, sourceRemaining - SQLITE_RELATION_ID_BYTES),
+    Math.max(0, aggregateRemaining - SQLITE_RELATION_ID_BYTES),
+  )
+  if (rowBytes <= 0) {
+    if (sourceRemaining <= SQLITE_RELATION_ID_BYTES) budget.noteSourceTruncated()
+    if (aggregateRemaining <= SQLITE_RELATION_ID_BYTES) budget.noteTotalExhausted()
     source.truncated = true
     return []
   }
 
-  const iterator = db.prepare(sql).iterate(chunkBytes, sessionId) as IterableIterator<Json>
+  const queryParams = [
+    SQLITE_RELATION_ID_BYTES,
+    rowBytes,
+    query.scopeId,
+    SQLITE_MAX_ROWS_PER_QUERY,
+  ] as const
+  if (
+    !hasBoundedQueryPlan(db, query.sql, queryParams)
+    || !hasBoundedQueryPlan(db, query.hasMoreSql, [query.scopeId, 0])
+  ) {
+    budget.noteSourceUnavailable('opencode')
+    source.truncated = true
+    return []
+  }
+
+  const iterator = db.prepare(query.sql).iterate(...queryParams) as IterableIterator<Json>
   const rows: Json[] = []
-  while (rows.length < SQLITE_MAX_ROWS_PER_QUERY) {
+  for (;;) {
+    if (rows.length >= SQLITE_MAX_ROWS_PER_QUERY) {
+      if (hasMoreRows(db, query, rows.length)) {
+        budget.noteSourceTruncated()
+        source.truncated = true
+      }
+      break
+    }
+    const maximumProjectedBytes = SQLITE_RELATION_ID_BYTES + rowBytes
     if (
-      budget.perSourceBytes - source.bytesRead < chunkBytes
-      || budget.remainingBytes() < chunkBytes
+      budget.perSourceBytes - source.bytesRead < maximumProjectedBytes
+      || budget.remainingBytes() < maximumProjectedBytes
     ) {
-      if (budget.perSourceBytes - source.bytesRead < chunkBytes) budget.noteSourceTruncated()
-      if (budget.remainingBytes() < chunkBytes) budget.noteTotalExhausted()
-      source.truncated = true
+      if (hasMoreRows(db, query, rows.length)) {
+        if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes) {
+          budget.noteSourceTruncated()
+        }
+        if (budget.remainingBytes() < maximumProjectedBytes) budget.noteTotalExhausted()
+        source.truncated = true
+      }
       break
     }
     const next = iterator.next()
     if (next.done) break
     const row = next.value
-    const returnedBytes = typeof row.data === 'string' ? Buffer.byteLength(row.data) : 0
+    const relationValue = row[query.relationField]
+    const relationBytes = typeof relationValue === 'string'
+      ? Buffer.byteLength(relationValue)
+      : 0
+    const returnedDataBytes = typeof row.data === 'string' ? Buffer.byteLength(row.data) : 0
+    const returnedBytes = relationBytes + returnedDataBytes
+    if (
+      budget.perSourceBytes - source.bytesRead < returnedBytes
+      || budget.remainingBytes() < returnedBytes
+    ) {
+      if (budget.perSourceBytes - source.bytesRead < returnedBytes) budget.noteSourceTruncated()
+      if (budget.remainingBytes() < returnedBytes) budget.noteTotalExhausted()
+      source.truncated = true
+      break
+    }
     budget.consume(returnedBytes)
     source.bytesRead += returnedBytes
-    if (typeof row.full_bytes === 'number' && row.full_bytes > returnedBytes) {
+    const relationTruncated = typeof row.relation_full_bytes === 'number'
+      && row.relation_full_bytes > SQLITE_RELATION_ID_BYTES
+    const dataTruncated = typeof row.full_bytes === 'number'
+      && row.full_bytes > rowBytes
+    if (relationTruncated || dataTruncated) {
       budget.noteSourceTruncated()
       source.truncated = true
     }
+    if (relationTruncated) continue
     rows.push(row)
   }
-  if (rows.length === SQLITE_MAX_ROWS_PER_QUERY) {
-    budget.noteSourceTruncated()
-    source.truncated = true
-  }
+  rows.sort((left, right) => {
+    const time = Number(left.time_created ?? 0) - Number(right.time_created ?? 0)
+    if (time !== 0) return time
+    return String(left[query.relationField] ?? '').localeCompare(
+      String(right[query.relationField] ?? ''),
+    )
+  })
   return rows
 }

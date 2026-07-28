@@ -5,7 +5,7 @@
  * 布局：~/.claude/projects/<sanitized-cwd>/<sessionId>.jsonl，可选 <projectDir>/sessions-index.json
  * 提供 cwd/created/title。extract 只收 user/assistant text，丢 thinking/tool_use。
  */
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
 import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
@@ -14,7 +14,11 @@ import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { findInJsonl, parseJsonlLines, readJsonlFirst } from '../jsonl.js'
-import { claudeProjectDirFromCwd, claudeProjectsRoot } from '../paths.js'
+import {
+  claudeProjectDirFromCwd,
+  claudeProjectsRoot,
+  walkDirForRelatedSearch,
+} from '../paths.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -24,15 +28,15 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   if (!fs.exists(root)) return []
   const out: MemSession[] = []
 
-  const allDirs = (): string[] => fs.readDir(root).filter((e) => e.isDirectory).map((e) => join(root, e.name))
-
-  // --cwd fast path：派生名不存在则全扫——per-session sameProject 仍兜底，永不静默返 0。
-  let projectDirs: string[]
-  if (f.cwd) {
+  // Only the legacy, unbudgeted CLI path materializes this full-recall directory list. Related
+  // Sessions starts with the bounded walker below, including when the derived project path is absent.
+  const projectDirs = (): string[] => {
+    const allDirs = (): string[] => fs.readDir(root)
+      .filter((entry) => entry.isDirectory)
+      .map((entry) => join(root, entry.name))
+    if (!f.cwd) return allDirs()
     const derived = claudeProjectDirFromCwd(fs, f.cwd)
-    projectDirs = fs.exists(derived) ? [derived] : allDirs()
-  } else {
-    projectDirs = allDirs()
+    return fs.exists(derived) ? [derived] : allDirs()
   }
 
   const indexes = new Map<string, Map<string, Json>>()
@@ -55,15 +59,30 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     return indexById
   }
 
-  const sessionEntries = projectDirs
-    .flatMap((directory) => fs.readDir(directory)
-      .filter((entry) => entry.isFile && entry.name.endsWith('.jsonl'))
-      .map((entry) => ({ directory, entry })))
-    .sort((left, right) => {
-      const leftPath = join(left.directory, left.entry.name)
-      const rightPath = join(right.directory, right.entry.name)
-      return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
-    })
+  const relatedRoot = f.cwd && fs.exists(claudeProjectDirFromCwd(fs, f.cwd))
+    ? claudeProjectDirFromCwd(fs, f.cwd)
+    : root
+  const sessionEntries = fs.contentReadBudget
+    ? walkDirForRelatedSearch(
+      fs,
+      relatedRoot,
+      (file) => file.endsWith('.jsonl'),
+      Math.max(f.limit * 4, f.limit + 1),
+      'claude',
+      (directory) => relatedRoot === root && dirname(directory) === root,
+    ).map((file) => ({
+      directory: dirname(file),
+      entry: { name: basename(file), isFile: true, isDirectory: false },
+    }))
+    : projectDirs()
+      .flatMap((directory) => fs.readDir(directory)
+        .filter((entry) => entry.isFile && entry.name.endsWith('.jsonl'))
+        .map((entry) => ({ directory, entry })))
+      .sort((left, right) => {
+        const leftPath = join(left.directory, left.entry.name)
+        const rightPath = join(right.directory, right.entry.name)
+        return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
+      })
 
   for (const { directory, entry } of sessionEntries) {
     if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {

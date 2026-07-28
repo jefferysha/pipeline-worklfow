@@ -120,6 +120,27 @@ function boundedFakeFs(
         unavailable: options.unreadableDirs?.has(p) ?? false,
       }
     },
+    readDirBounded: (p, maxEntries) => {
+      const checked = options.unreadableDirs?.has(p)
+        ? { entries: [] as MemDirent[], unavailable: true }
+        : (() => {
+            const entries: MemDirent[] = []
+            for (const file of fileSet) {
+              if (dirname(file) === p) entries.push({ name: basename(file), isFile: true, isDirectory: false })
+            }
+            for (const directory of dirs) {
+              if (dirname(directory) === p && directory !== p) {
+                entries.push({ name: basename(directory), isFile: false, isDirectory: true })
+              }
+            }
+            return { entries, unavailable: false }
+          })()
+      return {
+        entries: checked.entries.slice(0, maxEntries),
+        unavailable: checked.unavailable,
+        truncated: checked.entries.length > maxEntries,
+      }
+    },
     readText: () => {
       throw new Error('related search must not call the unbounded read primitive')
     },
@@ -181,6 +202,78 @@ describe('searchRelatedSessions input contract', () => {
 })
 
 describe('searchRelatedSessions bounded privacy contract', () => {
+  test('uses bounded Claude fallback discovery when the derived project directory is absent', () => {
+    const fallback = '/home/u/.claude/projects/-legacy-alias/fallback.jsonl'
+    const base = boundedFakeFs({
+      [fallback]: claudeSession('fallback', 'memory needle from the matching project'),
+    })
+    const fs: MemFs = {
+      ...base,
+      readDir: (path) => {
+        if (path === '/home/u/.claude/projects') {
+          throw new Error('bounded related search must not eagerly enumerate every Claude project')
+        }
+        return base.readDir(path)
+      },
+    }
+
+    const result = searchRelatedSessions(fs, {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'claude',
+    })
+
+    expect(result.matches.map((match) => match.sessionId)).toEqual(['fallback'])
+  })
+
+  test('excludes nested Claude subagent logs from top-level related sessions', () => {
+    const parent = claudeFile('parent')
+    const subagent = `${dirname(parent)}/parent/subagents/agent-sensitive.jsonl`
+    const result = searchRelatedSessions(boundedFakeFs({
+      [parent]: claudeSession('parent', 'memory needle in the real session'),
+      [subagent]: claudeSession('agent-sensitive', 'memory needle in a delegated prompt'),
+    }, {
+      mtimes: {
+        [parent]: Date.parse('2026-07-28T11:00:00Z'),
+        [subagent]: Date.parse('2026-07-28T12:00:00Z'),
+      },
+    }), {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'claude',
+    })
+
+    expect(result.partial).toBe(false)
+    expect(result.matches.map((match) => match.sessionId)).toEqual(['parent'])
+  })
+
+  test('reserves all-host discovery capacity so an earlier host cannot starve a newer Codex match', () => {
+    const files: Record<string, string> = {}
+    const mtimes: Record<string, number> = {}
+    for (let index = 0; index < RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles; index += 1) {
+      const path = claudeFile(`claude-${index}`)
+      files[path] = claudeSession(`claude-${index}`, 'unrelated request')
+      mtimes[path] = Date.parse('2026-07-27T12:00:00Z')
+    }
+    const target = codexFile('newer-cross-host-target')
+    files[target] = codexSession(
+      'newer-cross-host-target',
+      [{ role: 'user', text: 'memory needle' }],
+    )
+    mtimes[target] = Date.parse('2026-07-28T12:00:00Z')
+
+    const result = searchRelatedSessions(boundedFakeFs(files, { mtimes }), {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'all',
+    })
+
+    expect(result.matches.map((match) => `${match.platform}:${match.sessionId}`))
+      .toContain('codex:newer-cross-host-target')
+    expect(result.warnings.map((warning) => warning.code))
+      .toContain('candidate-discovery-truncated')
+  })
+
   test('uses bounded reads and returns only a bounded user excerpt without cwd or file path', () => {
     const path = codexFile('safe')
     const reads: Array<{ path: string; maxBytes: number }> = []
@@ -437,6 +530,33 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     expect(result.warnings.map((warning) => warning.code)).toContain('candidate-limit-reached')
   })
 
+  test('bounds Codex filesystem discovery before sorting a large history tree', () => {
+    const files: Record<string, string> = {}
+    const mtimes: Record<string, number> = {}
+    for (let i = 0; i < RELATED_SESSION_SEARCH_BUDGETS.discoveryEntries * 2; i += 1) {
+      const path = codexFile(`discovery-${i}`)
+      files[path] = codexSession(`discovery-${i}`, [{ role: 'user', text: 'unrelated words' }])
+      mtimes[path] = Date.parse('2026-07-28T00:00:00Z') + i
+    }
+    let mtimeReads = 0
+    const base = boundedFakeFs(files, { mtimes })
+    const result = searchRelatedSessions({
+      ...base,
+      mtimeMs: (path) => {
+        mtimeReads += 1
+        return base.mtimeMs(path)
+      },
+    }, {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(mtimeReads).toBeLessThanOrEqual(RELATED_SESSION_SEARCH_BUDGETS.discoveryEntries * 2)
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('candidate-discovery-truncated')
+  })
+
   test('chooses the global newest project candidates before adapter order in all mode', () => {
     const files: Record<string, string> = {}
     const mtimes: Record<string, number> = {}
@@ -489,6 +609,30 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     ])
   })
 
+  test('reports partial when the bounded discovery top-K cannot reach an older project session', () => {
+    const files: Record<string, string> = {}
+    const mtimes: Record<string, number> = {}
+    for (let i = 0; i < RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles; i += 1) {
+      const id = `newer-foreign-${i}`
+      const path = codexFile(id)
+      files[path] = codexSession(id, [{ role: 'user', text: 'foreign words' }], '/home/u/work/other')
+      mtimes[path] = Date.parse('2026-07-29T00:00:00Z') + i
+    }
+    const target = codexFile('older-target')
+    files[target] = codexSession('older-target', [{ role: 'user', text: 'target project needle' }])
+    mtimes[target] = Date.parse('2026-07-28T00:00:00Z')
+
+    const result = searchRelatedSessions(boundedFakeFs(files, { mtimes }), {
+      root: PROJECT,
+      query: 'project needle',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('candidate-discovery-truncated')
+  })
+
   test('foreign Pi sessions in a custom root do not consume project candidate admission', () => {
     const files: Record<string, string> = {}
     const mtimes: Record<string, number> = {}
@@ -533,6 +677,89 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     })
 
     expect(result.matches).toEqual([])
+  })
+
+  test('does not expose a Codex compaction summary but still admits preserved user history', () => {
+    const path = codexFile('codex-summary')
+    const source = [
+      JSON.stringify({
+        timestamp: '2026-07-28T12:00:00Z',
+        payload: { id: 'codex-summary', cwd: PROJECT },
+      }),
+      JSON.stringify({
+        type: 'compacted',
+        payload: {
+          replacement_history: [
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'preserved original request' }],
+            },
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'synthetic summary needle' }],
+            },
+          ],
+        },
+      }),
+    ].join('\n')
+
+    const summaryOnly = searchRelatedSessions(boundedFakeFs({ [path]: source }), {
+      root: PROJECT,
+      query: 'summary needle',
+      platform: 'codex',
+    })
+    const preserved = searchRelatedSessions(boundedFakeFs({ [path]: source }), {
+      root: PROJECT,
+      query: 'original request',
+      platform: 'codex',
+    })
+
+    expect(summaryOnly.matches).toEqual([])
+    expect(preserved.matches).toEqual([
+      expect.objectContaining({ sessionId: 'codex-summary', excerpt: expect.stringContaining('original request') }),
+    ])
+  })
+
+  test('keeps the last real Codex user message when remote compaction ends in an encrypted item', () => {
+    const path = codexFile('codex-remote-compaction')
+    const source = [
+      JSON.stringify({
+        timestamp: '2026-07-28T12:00:00Z',
+        payload: { id: 'codex-remote-compaction', cwd: PROJECT },
+      }),
+      JSON.stringify({
+        type: 'compacted',
+        payload: {
+          replacement_history: [
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'preserved remote request' }],
+            },
+            {
+              type: 'compaction',
+              id: 'encrypted-summary',
+              encrypted_content: 'opaque',
+            },
+          ],
+        },
+      }),
+    ].join('\n')
+
+    const result = searchRelatedSessions(boundedFakeFs({ [path]: source }), {
+      root: PROJECT,
+      query: 'remote request',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        sessionId: 'codex-remote-compaction',
+        excerpt: expect.stringContaining('remote request'),
+      }),
+    ])
   })
 
   test.each(['compaction', 'branch_summary'] as const)(

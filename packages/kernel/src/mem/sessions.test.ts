@@ -242,6 +242,26 @@ describe('buildChildIndex —— platform-scoped OpenCode parent identity', () =
     expect(index.get('opencode:shared')).toEqual([opencodeChild])
   })
 
+  test('does not let a legacy bare alias overwrite a canonical OpenCode parent key', () => {
+    const canonicalChild = {
+      platform: 'opencode' as const,
+      id: 'canonical-child',
+      parent_id: 'x',
+      filePath: '/opencode.db',
+    }
+    const collidingAliasChild = {
+      platform: 'opencode' as const,
+      id: 'alias-child',
+      parent_id: 'opencode:x',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([canonicalChild, collidingAliasChild])
+
+    expect(index.get('opencode:x')).toEqual([canonicalChild])
+    expect(index.get('opencode:opencode:x')).toEqual([collidingAliasChild])
+  })
+
   test('preserves an ordinary OpenCode parent-child-grandchild chain', () => {
     const parent = {
       platform: 'opencode' as const,
@@ -265,6 +285,8 @@ describe('buildChildIndex —— platform-scoped OpenCode parent identity', () =
 
     expect(index.get('opencode:parent')?.map((session) => session.id)).toEqual(['child', 'grandchild'])
     expect(index.get('opencode:child')?.map((session) => session.id)).toEqual(['grandchild'])
+    expect(index.get('parent')?.map((session) => session.id)).toEqual(['child', 'grandchild'])
+    expect(index.get('child')?.map((session) => session.id)).toEqual(['grandchild'])
   })
 
   test('terminates a two-node cycle without including the root or duplicate descendants', () => {

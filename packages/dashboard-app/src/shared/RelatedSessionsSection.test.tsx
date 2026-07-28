@@ -121,6 +121,18 @@ describe('RelatedSessionsSection', () => {
     expect(searchMock).not.toHaveBeenCalled()
   })
 
+  it('rejects more than eight search tokens locally with bilingual contract copy', async () => {
+    const user = userEvent.setup()
+    renderSection('/repo', 'one-two-three-four-five-six-seven-eight-nine')
+    const input = screen.getByRole('textbox', { name: '检索词' })
+
+    await user.click(screen.getByRole('button', { name: '检索' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('最多包含 8 个检索词')
+    expect(input).toHaveFocus()
+    expect(searchMock).not.toHaveBeenCalled()
+  })
+
   it('gives both non-auth controls stable names and disables autocomplete', () => {
     renderSection()
 

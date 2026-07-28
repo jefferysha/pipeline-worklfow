@@ -44,6 +44,19 @@
 - [x] 在 metadata 截断且项目身份仍未知时返回 partial，而非静默排除合法会话。 (build)
 - [x] 以 raw byte 累计跨 range 拼接，避免 UTF-8 code point 在 8 KiB 边界损坏。 (build)
 - [x] 将 OpenCode session metadata 投影纳入同一数据库的 per-source/aggregate 硬预算。 (build)
+- [x] 标记 Codex `replacement_history` 的 synthetic summary，保留真实 user 历史与旧 CLI 语义。 (build)
+- [x] 以生产级有界目录读取、entry/depth/time/top-K 预算约束 Claude/Codex/Pi 候选发现。 (build)
+- [x] 对 OpenCode dialogue SQL 的关系 id 与 data 共同截断、计费并在 SQL 内施加行上限。 (build)
+- [x] 保留 `buildChildIndex` 裸 OpenCode parent lookup 兼容别名，内部继续使用 `platform:id`。 (build)
+- [x] 在 Dashboard 同步重挂 root/name scope，并在本地校验最多 8 个 token 的中英文错误。 (build)
+- [x] 区分 Codex local plaintext summary 与 remote opaque compaction，保留 remote 最后一条真实 user。 (build)
+- [x] 在 bounded directory 不可读、discovery top-K/截止触发时诚实返回 partial warning。 (build)
+- [x] 在 OpenCode 剩余预算不足关系 id 预留时标记截断，并重建最终 server/CLI bundle。 (build)
+- [x] 将 discovery file cap 提升为请求级共享预算，修复 exact-boundary 误报与裸 alias 键覆盖。 (build)
+- [x] 为 all-host 预留公平 discovery 配额，并在 SQLite/目录读取边界前执行硬预算检查。 (build)
+- [x] 排除 Claude 嵌套 subagent 日志，并按原始 SQL byte cap 识别多字节 SQLite 截断。 (build)
+- [x] 惰性执行 Claude fallback，并在缺少有界 SQLite query plan 时 fail closed。 (build)
+- [x] 复用稳定 OpenCode source warning，使 query-plan 失败进入正确 Dashboard partial 状态。 (build)
 
 ## 验证
 

@@ -2,16 +2,48 @@
 
 ## 结论
 
-**FAIL — 第三轮 Verify 返回 Build 修复。**
+**FAIL — 第四轮 Verify 返回 Build 修复。**
 
-- 冻结构建：`19e74b274fa66ab2a13348656dfe460690d509bd`
+- 冻结构建：`51e52374ac3faed7b82e9a8b2a461dba45c6c814`
 - 基线：`origin/main@15fe619b2885b928dd27be9668cca6b0ee903c57`
 - Change：`related-session-memory`
 - Track：`frontend`（实际交付覆盖 kernel、server、Dashboard）
-- 聚合结果：代码 Reviewer `FAIL`；E2E `PASS`；Codex CLI `FAIL`；视觉轨仍在收束且不能覆盖已确认阻断。
+- 聚合结果：代码 Reviewer `FAIL`（Critical 0 / High 2 / Medium 1）；E2E `PASS`；Codex CLI `FAIL`；视觉 `PASS`。
 - Verify 前后实现、配置、生成物与冻结 SHA 一致；仅 Tenon 治理状态和本报告发生允许的 Verify 写入。
 
 ## 阻断发现
+
+### 第四轮冻结新增
+
+1. **HIGH — Codex compaction summary 丢失 synthetic provenance**
+   - 位置：`packages/kernel/src/mem/adapters/codex.ts`
+   - Codex 官方 `compacted.replacement_history` 会把压缩摘要编码为 user message；当前解码只加 `[compact]` 文本前缀，未保留 host-summary marker，Related Sessions 因而可能把宿主生成摘要误作原始 user hit 并输出。
+   - 修复要求：在 Related Sessions 隐私路径保留 durable synthetic provenance，同时不改变旧 CLI 搜索语义；补“仅摘要命中必须排除、保留的真实用户消息仍可命中”回归。
+2. **HIGH — Codex/Pi 候选发现先于预算全量同步遍历**
+   - 位置：`packages/kernel/src/mem/paths.ts`、`packages/kernel/src/mem/adapters/codex.ts`、`packages/kernel/src/mem/adapters/pi.ts`
+   - 当前会先递归收集、stat、排序全部候选，随后 recent-100 与 16 MiB 内容预算才开始生效；大型历史树仍可阻塞事件循环并无界占用内存。
+   - 修复要求：使用布局感知、newest-first 的有界发现，加入 request-wide 目录条目/时间/深度预算；截断时返回稳定 warning 和 `partial=true`，并以生产 fs 大树回归证明工作量有界及 HTTP 事件循环可响应。
+3. **MEDIUM — scope 切换可提交上一项目结果**
+   - 位置：`packages/dashboard-app/src/shared/RelatedSessionsSection.tsx`、`packages/dashboard-app/src/shared/TaskDetail.tsx`
+   - root/name 改变后旧 state 只在 passive effect 清除，可能先把旧项目 excerpt 提交一帧。
+   - 修复要求：以稳定 scope key 重挂载或同步隔离 state，并补首个新 scope render 不含旧 excerpt 的回归。
+4. **HIGH — OpenCode SQLite dialogue 查询未完整约束字节与行工作量**
+   - 位置：`packages/kernel/src/mem/adapters/opencode.ts`、`packages/kernel/src/mem/adapters/opencode-budget.ts`
+   - `id`/`message_id` 可无界返回且未计费，行上限只在 JS iterator 之后生效；独立复现以 2 MiB id 绕过预算。
+   - 修复要求：截断并计费全部投影文本、拒绝截断关系 id、在 SQL 内施加稳定行上限并补回归。
+5. **MEDIUM — `buildChildIndex` 的公开裸 id lookup 发生未版本化变化**
+   - 内部复合键修复正确，但包根仍导出该函数，旧调用方 `index.get(parentId)` 会静默失效。
+   - 修复要求：保留只针对 OpenCode parent edge 的裸 id 兼容别名，内部调用继续只查 `platform:id`。
+6. **MEDIUM — Dashboard 未镜像 server 的最多 8-token 校验**
+   - 位置：`packages/dashboard-app/src/shared/RelatedSessionsSection.tsx`
+   - 9-token 查询会发到 server，再退化为可重试通用错误；自动建议的长 Change name 同样受影响。
+   - 修复要求：本地提供可访问的中英文 token-count 错误，保留 server-side enforcement。
+
+第四轮代码审查完整证据：`/tmp/tenon-rsm-final-code-review/report.md`；独立 Codex CLI：
+`/tmp/tenon-rsm-codex-review.ZTxR2o/codex-review.txt`。E2E 证据：`/tmp/tenon-rsm-final-e2e/`；
+视觉证据：`/tmp/tenon-rsm-final-visual/`。两条 PASS 仅适用于冻结 SHA `51e5237`，回 Build 后不得复用。
+
+### 第三轮冻结（均已在第四轮冻结前回归）
 
 1. **MEDIUM — host summary 隔离修改了旧 CLI 的公开计数与排序**
    - 位置：`packages/kernel/src/mem/search.ts:64-65`

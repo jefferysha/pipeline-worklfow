@@ -151,6 +151,7 @@ export function buildChildIndex(sessions: readonly MemSession[]): Map<string, Me
     directChildren.set(parentKey, arr)
   }
   const out = new Map<string, MemSession[]>()
+  const legacyAliases: Array<{ key: string; children: MemSession[] }> = []
   for (const parentKey of directChildren.keys()) {
     const stack = [...(directChildren.get(parentKey) ?? [])]
     const flat: MemSession[] = []
@@ -164,6 +165,12 @@ export function buildChildIndex(sessions: readonly MemSession[]): Map<string, Me
       for (const c of directChildren.get(curKey) ?? []) stack.push(c)
     }
     out.set(parentKey, flat)
+    legacyAliases.push({ key: parentKey.slice('opencode:'.length), children: flat })
+  }
+  // Preserve unambiguous historical bare OpenCode lookups without letting an opaque id such as
+  // "opencode:x" overwrite the canonical key for parent "x".
+  for (const alias of legacyAliases) {
+    if (!out.has(alias.key)) out.set(alias.key, alias.children)
   }
   return out
 }

@@ -3035,7 +3035,7 @@ import { createHash as createHash31 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync10 } from "node:fs";
 import { readFile as readFile38, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
-import { dirname as dirname24, join as join84 } from "node:path";
+import { dirname as dirname25, join as join84 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -13506,7 +13506,7 @@ function encodeRouterDataCache(input) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { closeSync, existsSync as existsSync3, fstatSync, openSync, readFileSync as readFileSync8, readSync, readdirSync, statSync } from "node:fs";
+import { closeSync, existsSync as existsSync3, fstatSync, openSync, opendirSync, readFileSync as readFileSync8, readSync, readdirSync, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
 function readMemSessionMetadataChecked(fs, path9) {
@@ -13530,6 +13530,43 @@ function nodeMemFs(homeOverride) {
       };
     } catch {
       return { entries: [], unavailable: true };
+    }
+  };
+  const readDirectoryBounded = (p, maxEntries, shouldContinue) => {
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+      return { entries: [], unavailable: true, truncated: false };
+    }
+    let directory;
+    try {
+      directory = opendirSync(p);
+      const entries = [];
+      let truncated = false;
+      for (; ; ) {
+        if (shouldContinue && !shouldContinue()) {
+          truncated = true;
+          break;
+        }
+        const entry = directory.readSync();
+        if (entry === null)
+          break;
+        if (entries.length >= maxEntries) {
+          truncated = true;
+          break;
+        }
+        entries.push({
+          name: entry.name,
+          isFile: entry.isFile(),
+          isDirectory: entry.isDirectory()
+        });
+      }
+      return { entries, unavailable: false, truncated };
+    } catch {
+      return { entries: [], unavailable: true, truncated: false };
+    } finally {
+      try {
+        directory?.closeSync();
+      } catch {
+      }
     }
   };
   const readTextRange = (p, offset, maxBytes) => {
@@ -13572,6 +13609,7 @@ function nodeMemFs(homeOverride) {
     exists: (p) => existsSync3(p),
     readDir: (p) => readDirectory(p).entries,
     readDirChecked: readDirectory,
+    readDirBounded: readDirectoryBounded,
     readText: (p) => {
       try {
         return readFileSync8(p, "utf8");
@@ -13963,51 +14001,115 @@ function readBoundedSessionRows(fs, db, f, source) {
   }
   return safeRows;
 }
-var SQLITE_ROW_CHUNK_BYTES = 4 * 1024;
+var SQLITE_RELATION_ID_BYTES = 512;
+var SQLITE_ROW_DATA_BYTES = 4 * 1024;
 var SQLITE_MAX_ROWS_PER_QUERY = 512;
-function readBoundedSqliteRows(fs, db, sql, sessionId, source) {
+var boundedPlanCache = /* @__PURE__ */ new WeakMap();
+function hasBoundedQueryPlan(db, sql, params) {
+  let cache2 = boundedPlanCache.get(db);
+  if (!cache2) {
+    cache2 = /* @__PURE__ */ new Map();
+    boundedPlanCache.set(db, cache2);
+  }
+  const cached = cache2.get(sql);
+  if (cached !== void 0)
+    return cached;
+  let bounded = false;
+  try {
+    const rows = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params);
+    const details = rows.map((row) => String(row.detail ?? "").toUpperCase());
+    bounded = details.some((detail) => detail.includes("SEARCH ")) && details.every((detail) => !detail.includes("SCAN ") && !detail.includes("USE TEMP B-TREE"));
+  } catch {
+    bounded = false;
+  }
+  cache2.set(sql, bounded);
+  return bounded;
+}
+function hasMoreRows(db, query, offset) {
+  return db.prepare(query.hasMoreSql).get(query.scopeId, offset) !== void 0;
+}
+function readBoundedSqliteRows(fs, db, query, source) {
   const budget = fs.contentReadBudget;
   if (!budget)
     return [];
   const sourceRemaining = budget.perSourceBytes - source.bytesRead;
   const aggregateRemaining = budget.remainingBytes();
-  const chunkBytes = Math.min(SQLITE_ROW_CHUNK_BYTES, sourceRemaining, aggregateRemaining);
-  if (chunkBytes <= 0) {
-    if (sourceRemaining <= 0)
+  const rowBytes = Math.min(SQLITE_ROW_DATA_BYTES, Math.max(0, sourceRemaining - SQLITE_RELATION_ID_BYTES), Math.max(0, aggregateRemaining - SQLITE_RELATION_ID_BYTES));
+  if (rowBytes <= 0) {
+    if (sourceRemaining <= SQLITE_RELATION_ID_BYTES)
       budget.noteSourceTruncated();
-    if (aggregateRemaining <= 0)
+    if (aggregateRemaining <= SQLITE_RELATION_ID_BYTES)
       budget.noteTotalExhausted();
     source.truncated = true;
     return [];
   }
-  const iterator = db.prepare(sql).iterate(chunkBytes, sessionId);
+  const queryParams = [
+    SQLITE_RELATION_ID_BYTES,
+    rowBytes,
+    query.scopeId,
+    SQLITE_MAX_ROWS_PER_QUERY
+  ];
+  if (!hasBoundedQueryPlan(db, query.sql, queryParams) || !hasBoundedQueryPlan(db, query.hasMoreSql, [query.scopeId, 0])) {
+    budget.noteSourceUnavailable("opencode");
+    source.truncated = true;
+    return [];
+  }
+  const iterator = db.prepare(query.sql).iterate(...queryParams);
   const rows = [];
-  while (rows.length < SQLITE_MAX_ROWS_PER_QUERY) {
-    if (budget.perSourceBytes - source.bytesRead < chunkBytes || budget.remainingBytes() < chunkBytes) {
-      if (budget.perSourceBytes - source.bytesRead < chunkBytes)
+  for (; ; ) {
+    if (rows.length >= SQLITE_MAX_ROWS_PER_QUERY) {
+      if (hasMoreRows(db, query, rows.length)) {
         budget.noteSourceTruncated();
-      if (budget.remainingBytes() < chunkBytes)
-        budget.noteTotalExhausted();
-      source.truncated = true;
+        source.truncated = true;
+      }
+      break;
+    }
+    const maximumProjectedBytes = SQLITE_RELATION_ID_BYTES + rowBytes;
+    if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes || budget.remainingBytes() < maximumProjectedBytes) {
+      if (hasMoreRows(db, query, rows.length)) {
+        if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes) {
+          budget.noteSourceTruncated();
+        }
+        if (budget.remainingBytes() < maximumProjectedBytes)
+          budget.noteTotalExhausted();
+        source.truncated = true;
+      }
       break;
     }
     const next = iterator.next();
     if (next.done)
       break;
     const row = next.value;
-    const returnedBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
+    const relationValue = row[query.relationField];
+    const relationBytes = typeof relationValue === "string" ? Buffer.byteLength(relationValue) : 0;
+    const returnedDataBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
+    const returnedBytes = relationBytes + returnedDataBytes;
+    if (budget.perSourceBytes - source.bytesRead < returnedBytes || budget.remainingBytes() < returnedBytes) {
+      if (budget.perSourceBytes - source.bytesRead < returnedBytes)
+        budget.noteSourceTruncated();
+      if (budget.remainingBytes() < returnedBytes)
+        budget.noteTotalExhausted();
+      source.truncated = true;
+      break;
+    }
     budget.consume(returnedBytes);
     source.bytesRead += returnedBytes;
-    if (typeof row.full_bytes === "number" && row.full_bytes > returnedBytes) {
+    const relationTruncated = typeof row.relation_full_bytes === "number" && row.relation_full_bytes > SQLITE_RELATION_ID_BYTES;
+    const dataTruncated = typeof row.full_bytes === "number" && row.full_bytes > rowBytes;
+    if (relationTruncated || dataTruncated) {
       budget.noteSourceTruncated();
       source.truncated = true;
     }
+    if (relationTruncated)
+      continue;
     rows.push(row);
   }
-  if (rows.length === SQLITE_MAX_ROWS_PER_QUERY) {
-    budget.noteSourceTruncated();
-    source.truncated = true;
-  }
+  rows.sort((left, right) => {
+    const time = Number(left.time_created ?? 0) - Number(right.time_created ?? 0);
+    if (time !== 0)
+      return time;
+    return String(left[query.relationField] ?? "").localeCompare(String(right[query.relationField] ?? ""));
+  });
   return rows;
 }
 
@@ -14098,20 +14200,36 @@ function roleOf(data) {
 function opencodeExtractDialogue(fs, s) {
   return withOpenCodeDb(fs, [], (db) => {
     const sourceBudget = sqliteSourceBudget(fs, opencodeDbPath(fs));
-    const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id,
+    const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
+      sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+         ORDER BY time_created
+         LIMIT ?`,
+      hasMoreSql: "SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?",
+      scopeId: s.id,
+      relationField: "id"
+    }, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     if (!messageRows.length)
       return [];
-    const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id, message_id,
+    const partRows = fs.contentReadBudget ? messageRows.flatMap((message2) => readBoundedSqliteRows(fs, db, {
+      sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
+                length(CAST(message_id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM part
-         WHERE session_id = ?
-         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+         WHERE message_id = ?
+         ORDER BY id
+         LIMIT ?`,
+      hasMoreSql: "SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?",
+      scopeId: String(message2.id),
+      relationField: "message_id"
+    }, sourceBudget)) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     const partsByMessage = /* @__PURE__ */ new Map();
     for (const p of partRows) {
       const mid = String(p.message_id);
@@ -14337,7 +14455,7 @@ function buildBrainstormWindows(events, totalTurns) {
 }
 
 // packages/kernel/dist/mem/adapters/claude.js
-import { join as join15 } from "node:path";
+import { basename as basename2, dirname as dirname3, join as join15 } from "node:path";
 
 // packages/kernel/dist/mem/jsonl.js
 var OPEN_BRACE = 123;
@@ -14466,6 +14584,8 @@ function walkDir(fs, root) {
   const stack = [root];
   while (stack.length) {
     const cur = stack.pop();
+    if (cur === void 0)
+      break;
     for (const e of fs.readDir(cur)) {
       const full = join14(cur, e.name);
       if (e.isDirectory)
@@ -14476,6 +14596,102 @@ function walkDir(fs, root) {
   }
   return out;
 }
+function insertRecentFile(files, candidate, limit) {
+  let low = 0;
+  let high = files.length;
+  while (low < high) {
+    const mid = low + high >>> 1;
+    const current = files[mid];
+    if (current === void 0)
+      break;
+    if (candidate.mtime > current.mtime || candidate.mtime === current.mtime && candidate.path > current.path)
+      high = mid;
+    else
+      low = mid + 1;
+  }
+  files.splice(low, 0, candidate);
+  if (files.length > limit)
+    files.pop();
+}
+function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDescend = () => true) {
+  const budget = fs.contentReadBudget;
+  if (!budget?.remainingDiscoveryEntries || !budget.consumeDiscoveryEntries || !budget.remainingDiscoveryFiles || !budget.consumeDiscoveryFiles || !budget.shouldContinueDiscovery || !budget.noteDiscoveryTruncated) {
+    return walkDir(fs, root).filter(accept).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0)).slice(0, fileLimit);
+  }
+  if (!fs.exists(root) || fileLimit <= 0)
+    return [];
+  const files = [];
+  const remainingFiles = budget.remainingDiscoveryFiles(source);
+  const effectiveFileLimit = Math.min(fileLimit, budget.maxDiscoveryFiles ?? fileLimit, remainingFiles);
+  if (effectiveFileLimit <= 0) {
+    budget.noteDiscoveryTruncated();
+    return [];
+  }
+  const stack = [{ path: root, depth: 0 }];
+  while (stack.length > 0) {
+    if (!budget.shouldContinueDiscovery(source)) {
+      budget.noteDiscoveryTruncated();
+      break;
+    }
+    const current = stack.pop();
+    if (current === void 0)
+      break;
+    const remaining = budget.remainingDiscoveryEntries(source);
+    if (remaining <= 0) {
+      budget.noteDiscoveryTruncated();
+      break;
+    }
+    const bounded = fs.readDirBounded?.(current.path, remaining, () => budget.shouldContinueDiscovery?.(source) === true);
+    const checked = bounded ?? fs.readDirChecked?.(current.path);
+    const sourceEntries = checked?.entries ?? fs.readDir(current.path);
+    const entries = sourceEntries.slice(0, remaining);
+    budget.consumeDiscoveryEntries(source, entries.length);
+    if (bounded?.truncated || !bounded && sourceEntries.length > remaining) {
+      budget.noteDiscoveryTruncated();
+    }
+    const ranked = [];
+    for (const entry of entries) {
+      if (!budget.shouldContinueDiscovery(source)) {
+        budget.noteDiscoveryTruncated();
+        break;
+      }
+      const path9 = join14(current.path, entry.name);
+      ranked.push({ entry, path: path9, mtime: entry.isFile ? fs.mtimeMs(path9) ?? 0 : 0 });
+    }
+    ranked.sort((left, right) => {
+      if (left.entry.isDirectory !== right.entry.isDirectory) {
+        return left.entry.isDirectory ? -1 : 1;
+      }
+      if (left.entry.isDirectory)
+        return right.entry.name.localeCompare(left.entry.name);
+      return right.mtime - left.mtime || right.entry.name.localeCompare(left.entry.name);
+    });
+    const directories = [];
+    for (const item2 of ranked) {
+      if (item2.entry.isFile && accept(item2.path)) {
+        if (files.length >= effectiveFileLimit)
+          budget.noteDiscoveryTruncated();
+        insertRecentFile(files, { path: item2.path, mtime: item2.mtime }, effectiveFileLimit);
+      } else if (item2.entry.isDirectory) {
+        const childDepth = current.depth + 1;
+        if (!shouldDescend(item2.path, childDepth))
+          continue;
+        if (current.depth >= (budget.maxDiscoveryDepth ?? 0)) {
+          budget.noteDiscoveryTruncated();
+        } else {
+          directories.push({ path: item2.path, depth: childDepth });
+        }
+      }
+    }
+    for (let index = directories.length - 1; index >= 0; index -= 1) {
+      const directory = directories[index];
+      if (directory !== void 0)
+        stack.push(directory);
+    }
+  }
+  budget.consumeDiscoveryFiles(source, files.length);
+  return files.map((file) => file.path);
+}
 
 // packages/kernel/dist/mem/adapters/claude.js
 function claudeListSessions(fs, f) {
@@ -14483,14 +14699,13 @@ function claudeListSessions(fs, f) {
   if (!fs.exists(root))
     return [];
   const out = [];
-  const allDirs = () => fs.readDir(root).filter((e) => e.isDirectory).map((e) => join15(root, e.name));
-  let projectDirs;
-  if (f.cwd) {
+  const projectDirs = () => {
+    const allDirs = () => fs.readDir(root).filter((entry) => entry.isDirectory).map((entry) => join15(root, entry.name));
+    if (!f.cwd)
+      return allDirs();
     const derived = claudeProjectDirFromCwd(fs, f.cwd);
-    projectDirs = fs.exists(derived) ? [derived] : allDirs();
-  } else {
-    projectDirs = allDirs();
-  }
+    return fs.exists(derived) ? [derived] : allDirs();
+  };
   const indexes = /* @__PURE__ */ new Map();
   const indexFor = (directory) => {
     const cached = indexes.get(directory);
@@ -14512,7 +14727,11 @@ function claudeListSessions(fs, f) {
     indexes.set(directory, indexById);
     return indexById;
   };
-  const sessionEntries = projectDirs.flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
+  const relatedRoot = f.cwd && fs.exists(claudeProjectDirFromCwd(fs, f.cwd)) ? claudeProjectDirFromCwd(fs, f.cwd) : root;
+  const sessionEntries = fs.contentReadBudget ? walkDirForRelatedSearch(fs, relatedRoot, (file) => file.endsWith(".jsonl"), Math.max(f.limit * 4, f.limit + 1), "claude", (directory) => relatedRoot === root && dirname3(directory) === root).map((file) => ({
+    directory: dirname3(file),
+    entry: { name: basename2(file), isFile: true, isDirectory: false }
+  })) : projectDirs().flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
     const leftPath = join15(left.directory, left.entry.name);
     const rightPath = join15(right.directory, right.entry.name);
     return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
@@ -14669,7 +14888,7 @@ ${summary}`)] : [];
 }
 
 // packages/kernel/dist/mem/adapters/codex.js
-import { basename as basename2 } from "node:path";
+import { basename as basename3 } from "node:path";
 var ROLLOUT_RE = /^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/;
 var TS_FIX_RE = /T(\d{2})-(\d{2})-(\d{2})/;
 function parseDialogueRole(v) {
@@ -14712,13 +14931,13 @@ function codexListSessions(fs, f) {
   if (!fs.exists(root))
     return [];
   const out = [];
-  const files = walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
+  const files = fs.contentReadBudget ? walkDirForRelatedSearch(fs, root, (file) => file.endsWith(".jsonl"), Math.max(f.limit * 4, f.limit + 1), "codex") : walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
   for (const file of files) {
     if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
       fs.contentReadBudget.noteTotalExhausted();
       break;
     }
-    const base = basename2(file).slice(0, -".jsonl".length);
+    const base = basename3(file).slice(0, -".jsonl".length);
     const m = ROLLOUT_RE.exec(base);
     let tsFromName = null;
     if (m) {
@@ -14768,6 +14987,33 @@ function buildTurnFromMessage(role, parts) {
     return null;
   return { role, text: merged };
 }
+function compactedReplacementTurns(replacementHistory) {
+  let summaryIndex = -1;
+  for (let index = replacementHistory.length - 1; index >= 0; index -= 1) {
+    const item2 = replacementHistory[index];
+    if (!item2 || typeof item2 !== "object")
+      continue;
+    if (item2.type === "message" && item2.role === "user")
+      summaryIndex = index;
+    break;
+  }
+  const turns = [];
+  for (let index = 0; index < replacementHistory.length; index += 1) {
+    const item2 = replacementHistory[index];
+    if (item2?.type !== "message")
+      continue;
+    const role = parseDialogueRole(item2?.role);
+    if (!role)
+      continue;
+    const turn = buildTurnFromMessage(role, item2?.content);
+    if (!turn)
+      continue;
+    const text2 = `[compact]
+${turn.text}`;
+    turns.push(index === summaryIndex ? hostSummaryTurn(text2) : { role: turn.role, text: text2 });
+  }
+  return turns;
+}
 function codexExtractDialogue(fs, s) {
   let turns = [];
   for (const obj of parseJsonlLines(fs.readText(s.filePath))) {
@@ -14777,17 +15023,7 @@ function codexExtractDialogue(fs, s) {
       turns = [];
       if (!Array.isArray(rh))
         continue;
-      for (const item2 of rh) {
-        if (item2?.type !== "message")
-          continue;
-        const role2 = parseDialogueRole(item2?.role);
-        if (!role2)
-          continue;
-        const turn2 = buildTurnFromMessage(role2, item2?.content);
-        if (turn2)
-          turns.push({ role: turn2.role, text: `[compact]
-${turn2.text}` });
-      }
+      turns = compactedReplacementTurns(rh);
       continue;
     }
     const p = o?.payload;
@@ -14815,17 +15051,7 @@ function collectCodexTurnsAndEvents(fs, s) {
       state.events = [];
       if (!Array.isArray(rh))
         continue;
-      for (const item2 of rh) {
-        if (item2?.type !== "message")
-          continue;
-        const role2 = parseDialogueRole(item2?.role);
-        if (!role2)
-          continue;
-        const turn2 = buildTurnFromMessage(role2, item2?.content);
-        if (turn2)
-          state.turns.push({ role: turn2.role, text: `[compact]
-${turn2.text}` });
-      }
+      state.turns = compactedReplacementTurns(rh);
       continue;
     }
     const p = o?.payload;
@@ -14860,7 +15086,7 @@ ${turn2.text}` });
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename3, join as join16, resolve as resolve8 } from "node:path";
+import { basename as basename4, join as join16, resolve as resolve8 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
@@ -14924,10 +15150,11 @@ function candidateFiles(fs, f) {
   const defaultRoot = join16(piAgentDir(fs), "sessions");
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  const pushJsonl = (root) => {
+  const pushJsonl = (root, fileLimit) => {
     if (!fs.exists(root))
       return;
-    for (const file of walkDir(fs, root)) {
+    const discovered = fs.contentReadBudget ? walkDirForRelatedSearch(fs, root, (file) => file.endsWith(".jsonl"), fileLimit, "pi") : walkDir(fs, root);
+    for (const file of discovered) {
       if (!file.endsWith(".jsonl"))
         continue;
       const normalized2 = resolve8(file);
@@ -14937,16 +15164,25 @@ function candidateFiles(fs, f) {
       out.push(file);
     }
   };
-  for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve8(root) === resolve8(defaultRoot))
-      pushJsonl(piProjectDirFromCwd(fs, f.cwd));
-    else
-      pushJsonl(root);
+  const roots = piSessionRoots(fs);
+  const normalLimit = Math.max(f.limit * 4, f.limit + 1);
+  for (let index = 0; index < roots.length; index += 1) {
+    const root = roots[index];
+    if (root === void 0)
+      continue;
+    const remainingRoots = roots.length - index;
+    const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.("pi");
+    const fairLimit = remainingFiles === void 0 ? normalLimit : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots));
+    if (f.cwd && resolve8(root) === resolve8(defaultRoot)) {
+      pushJsonl(piProjectDirFromCwd(fs, f.cwd), fairLimit);
+    } else {
+      pushJsonl(root, fairLimit);
+    }
   }
   return out;
 }
 function idFromFile(filePath) {
-  const base = basename3(filePath).slice(0, -".jsonl".length);
+  const base = basename4(filePath).slice(0, -".jsonl".length);
   const underscore = base.indexOf("_");
   return underscore === -1 ? base : base.slice(underscore + 1);
 }
@@ -15230,6 +15466,7 @@ function buildChildIndex(sessions) {
     directChildren2.set(parentKey, arr);
   }
   const out = /* @__PURE__ */ new Map();
+  const legacyAliases = [];
   for (const parentKey of directChildren2.keys()) {
     const stack = [...directChildren2.get(parentKey) ?? []];
     const flat = [];
@@ -15245,6 +15482,11 @@ function buildChildIndex(sessions) {
         stack.push(c);
     }
     out.set(parentKey, flat);
+    legacyAliases.push({ key: parentKey.slice("opencode:".length), children: flat });
+  }
+  for (const alias of legacyAliases) {
+    if (!out.has(alias.key))
+      out.set(alias.key, alias.children);
   }
   return out;
 }
@@ -15550,6 +15792,10 @@ var RELATED_SESSION_SEARCH_BUDGETS = Object.freeze({
   queryMaxChars: 128,
   queryMaxTokens: 8,
   candidates: 100,
+  discoveryEntries: 4096,
+  discoveryFiles: 400,
+  discoveryDepth: 8,
+  discoveryMs: 75,
   results: 8,
   perFileBytes: 2 * 1024 * 1024,
   totalBytes: 16 * 1024 * 1024,
@@ -16885,7 +17131,7 @@ async function applyLevelChange(repoRoot, loopId, target, opts, fs) {
 // packages/kernel/dist/loops/drafts.js
 import { readFileSync as readFileSync10 } from "node:fs";
 import { mkdir as mkdir10, rename as rename4, writeFile as writeFile6 } from "node:fs/promises";
-import { dirname as dirname3, join as join18 } from "node:path";
+import { dirname as dirname4, join as join18 } from "node:path";
 var DRAFT_MARKS_FILE = "loops.drafts.json";
 function draftMarksPath(repoRoot) {
   return join18(repoRoot, ".pipeline", DRAFT_MARKS_FILE);
@@ -16903,7 +17149,7 @@ function readDraftMarks(path9) {
 }
 var tmpSeq2 = 0;
 async function writeDraftMarks(path9, ids) {
-  await mkdir10(dirname3(path9), { recursive: true });
+  await mkdir10(dirname4(path9), { recursive: true });
   const tmp = `${path9}.tmp.${process.pid}.${tmpSeq2++}`;
   await writeFile6(tmp, `${JSON.stringify({ version: 1, ids }, null, 2)}
 `, "utf8");
@@ -23160,7 +23406,7 @@ function createWorkflowRunCreateIfAbsentRepository(deps) {
 // packages/automation/dist/triage/checkpoint-store.js
 import { createHash as createHash19 } from "node:crypto";
 import { mkdir as mkdir13, readFile as readFile20 } from "node:fs/promises";
-import { dirname as dirname4, join as join25, resolve as resolve12 } from "node:path";
+import { dirname as dirname5, join as join25, resolve as resolve12 } from "node:path";
 var TriageCheckpointStoreError = class extends Error {
   reason;
   _tag = "TriageCheckpointStoreError";
@@ -23324,7 +23570,7 @@ function createTriageCheckpointStore(options) {
       }
       const checkpoint = checkpointForKey(inputCheckpoint, key);
       const file = triageCheckpointFilePath(repoRoot, key);
-      const slot = dirname4(file);
+      const slot = dirname5(file);
       await mkdir13(slot, { recursive: true });
       return withLock(slot, async () => {
         const current = await readPath(file, key);
@@ -25899,7 +26145,7 @@ function createLoopAdmission(deps) {
 import { createHash as createHash22 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod, lstat as lstat13, mkdir as mkdir14, open as open4, readdir as readdir7, realpath as realpath4, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname5, join as join27, relative as relative4, sep as sep6 } from "node:path";
+import { dirname as dirname6, join as join27, relative as relative4, sep as sep6 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -25960,7 +26206,7 @@ async function assertDirectoryIdentities(identities, onFailure) {
   }
 }
 async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFailure) {
-  const parent = dirname5(absFile);
+  const parent = dirname6(absFile);
   const fromRoot = relative4(realRoot, parent);
   if (fromRoot === ".." || fromRoot.startsWith(`..${sep6}`)) {
     throw onFailure(`\u6587\u4EF6\u7236\u76EE\u5F55\u5DF2\u9003\u9038\u5185\u5BB9\u6839\uFF1A${parent}`);
@@ -26131,7 +26377,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
 }
 async function copyFileInto(destRoot, relativePath, content, executable) {
   const dest = join27(destRoot, relativePath);
-  await mkdir14(dirname5(dest), { recursive: true });
+  await mkdir14(dirname6(dest), { recursive: true });
   await writeFile8(dest, content);
   await chmod(dest, executable ? 493 : 420);
 }
@@ -26139,7 +26385,7 @@ async function copyFileInto(destRoot, relativePath, content, executable) {
 // packages/automation/dist/skills/snapshot-publisher.js
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { lstat as lstat14, mkdir as mkdir15, readdir as readdir8, rm as rm5, rmdir as rmdir3, writeFile as writeFile9 } from "node:fs/promises";
-import { dirname as dirname6, join as join28 } from "node:path";
+import { dirname as dirname7, join as join28 } from "node:path";
 var MAX_COPY_ATTEMPTS = 2;
 async function materializeOneSkillWithStabilityCheck(skillId, sourceDir, destDir, onAfterBeforeDigest) {
   let lastBefore = "";
@@ -26235,7 +26481,7 @@ async function publishSnapshotWithoutRename(stagingDir, finalDir, digest2) {
     const source = await readRegularFileStrict(join28(stagingDir, rel), (msg) => new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u53D1\u5E03\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest2}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${msg}`), { noFollow: true });
     const dest = join28(finalDir, rel);
     try {
-      await mkdir15(dirname6(dest), { recursive: true });
+      await mkdir15(dirname7(dest), { recursive: true });
       await writeFile9(dest, source.content, { flag: "wx", mode: (source.mode & EXEC_BITS) !== 0 ? 493 : 420 });
     } catch (e) {
       throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u72EC\u5360\u53D1\u5E03\u5931\u8D25\uFF08digest ${digest2}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${e.message}`);
@@ -29398,7 +29644,7 @@ async function enforceActiveLoopExecutionWiring(loopIds, deps) {
 // packages/tap/dist/paths.js
 import { homedir as homedir4, tmpdir as tmpdir2 } from "node:os";
 import { mkdirSync } from "node:fs";
-import { join as join38, dirname as dirname7, resolve as resolve15 } from "node:path";
+import { join as join38, dirname as dirname8, resolve as resolve15 } from "node:path";
 function safeHome() {
   const h = homedir4();
   if (h && h.length > 0)
@@ -29420,7 +29666,7 @@ function resolveTapDir(opts = {}) {
     return resolve15(explicit);
   const db = (env.TENON_TAP_DB ?? "").trim();
   if (db)
-    return resolve15(dirname7(resolve15(db)));
+    return resolve15(dirname8(resolve15(db)));
   const xdg = (env.XDG_DATA_HOME ?? "").trim();
   if (xdg)
     return resolve15(join38(xdg, "tenon-tap"));
@@ -32383,10 +32629,10 @@ var TENON_PLUGIN_IDENTITY = "tenon@tenon";
 
 // packages/cli/src/skillSources.ts
 import { readFileSync as readFileSync18 } from "node:fs";
-import { dirname as dirname8, join as join45 } from "node:path";
+import { dirname as dirname9, join as join45 } from "node:path";
 import { fileURLToPath } from "node:url";
 function defaultRegistryPath() {
-  return join45(dirname8(fileURLToPath(import.meta.url)), "..", "..", "..", "templates", "skill-sources.yaml");
+  return join45(dirname9(fileURLToPath(import.meta.url)), "..", "..", "..", "templates", "skill-sources.yaml");
 }
 function readSkillSources(path9) {
   try {
@@ -33579,7 +33825,7 @@ import { relative as relative9, resolve as resolve22 } from "node:path";
 // packages/cli/src/codexSkillReceipt.ts
 import { appendFile as appendFile2, lstat as lstat20, mkdir as mkdir19, readdir as readdir11, readFile as readFile24 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
-import { basename as basename4, isAbsolute as isAbsolute10, join as join51, relative as relative7, resolve as resolve19, sep as sep9 } from "node:path";
+import { basename as basename5, isAbsolute as isAbsolute10, join as join51, relative as relative7, resolve as resolve19, sep as sep9 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { createReadStream } from "node:fs";
@@ -33591,7 +33837,7 @@ import { createInterface as createInterface2 } from "node:readline";
 // packages/cli/src/codexSkillTrust.ts
 import { lstat as lstat17, readFile as readFile22, realpath as realpath6 } from "node:fs/promises";
 import { homedir as homedir7 } from "node:os";
-import { dirname as dirname9, isAbsolute as isAbsolute7, join as join48, relative as relative5, resolve as resolve16, sep as sep7 } from "node:path";
+import { dirname as dirname10, isAbsolute as isAbsolute7, join as join48, relative as relative5, resolve as resolve16, sep as sep7 } from "node:path";
 function isInside(base, candidate) {
   const fromBase = relative5(base, candidate);
   return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep7}`) && !isAbsolute7(fromBase);
@@ -33605,7 +33851,7 @@ function codexHomeRoot(homeDir = homedir7(), configured) {
 function executingPluginRoot(argvEntry = process.argv[1]) {
   const entry = safeAbsolute(argvEntry);
   if (!entry || !entry.endsWith(join48("packages", "cli", "dist", "tenon.mjs"))) return void 0;
-  return resolve16(dirname9(entry), "..", "..", "..");
+  return resolve16(dirname10(entry), "..", "..", "..");
 }
 function productionCodexSkillTrustRoots() {
   const executing = executingPluginRoot();
@@ -33707,7 +33953,7 @@ async function trustedCodexSkillPath(roots, skillId, homeDir = homedir7(), confi
   for (const root of candidates) {
     if (!root) continue;
     const logical = join48(root.logical, "skills", skillId, "SKILL.md");
-    if (!await ordinaryDirectoryChain(root.logical, dirname9(logical))) continue;
+    if (!await ordinaryDirectoryChain(root.logical, dirname10(logical))) continue;
     try {
       const info = await lstat17(logical);
       if (!info.isFile() || info.isSymbolicLink()) continue;
@@ -34461,7 +34707,7 @@ async function reconcileCodexSkillEvidence(input) {
   const visitEvidence = currentVisitEvidence(await readHistory(input.changeDir), input.evidenceScope);
   if (!visitEvidence.valid) return { confirmedSkillIds: [] };
   const existing = visitEvidence.completedSkillIds;
-  const changeName = basename4(resolve19(input.changeDir));
+  const changeName = basename5(resolve19(input.changeDir));
   if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] };
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName);
   const receipts = await loadReceipts(input.repoRoot);
@@ -34597,7 +34843,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
 import { lstat as lstat21, realpath as realpath9 } from "node:fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute11, relative as relative8, resolve as resolve21, sep as sep10 } from "node:path";
+import { dirname as dirname11, isAbsolute as isAbsolute11, relative as relative8, resolve as resolve21, sep as sep10 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
 }
@@ -34638,7 +34884,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
   }
 }
 async function ensureSafeDocumentParent(repoRoot, target) {
-  return ensureTrustedProjectDirectory(repoRoot, dirname10(target));
+  return ensureTrustedProjectDirectory(repoRoot, dirname11(target));
 }
 
 // packages/cli/src/commands/document.ts
@@ -41448,12 +41694,12 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 
 // packages/cli/src/commands/scaffold.ts
 import { lstat as lstat27, mkdir as mkdir22, readFile as readFile29, rm as rm8, stat as stat11, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
-import { dirname as dirname13, isAbsolute as isAbsolute17, join as join60, relative as relative13, resolve as resolve28, sep as sep13 } from "node:path";
+import { dirname as dirname14, isAbsolute as isAbsolute17, join as join60, relative as relative13, resolve as resolve28, sep as sep13 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 import { lstat as lstat26, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname12, isAbsolute as isAbsolute16, relative as relative12, resolve as resolve27, sep as sep12 } from "node:path";
+import { dirname as dirname13, isAbsolute as isAbsolute16, relative as relative12, resolve as resolve27, sep as sep12 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash28 } from "node:crypto";
@@ -41536,7 +41782,7 @@ function ordinaryPathKey(target) {
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
 import { lstat as lstat25, readFile as readFile28, rename as rename7, rm as rm6 } from "node:fs/promises";
-import { basename as basename5, dirname as dirname11, isAbsolute as isAbsolute15, relative as relative11, resolve as resolve26, sep as sep11 } from "node:path";
+import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute15, relative as relative11, resolve as resolve26, sep as sep11 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
   const code = Reflect.get(error, "code");
@@ -41571,7 +41817,7 @@ async function existingOrdinaryDirectory(target) {
   }
 }
 function transactionReceipt(specDirectory, suffix, state = "preparing") {
-  const targetName = basename5(specDirectory);
+  const targetName = basename6(specDirectory);
   return {
     version: 1,
     pid: process.pid,
@@ -41597,8 +41843,8 @@ function parseTransactionReceipt(raw, specDirectory) {
     "original-moved",
     "promoted"
   ]);
-  const prefix = basename5(specDirectory);
-  if (Object.keys(record2).some((key) => !["version", "pid", "state", "stageName", "backupName"].includes(key)) || record2.version !== 1 || typeof record2.pid !== "number" || !Number.isSafeInteger(record2.pid) || record2.pid < 1 || typeof record2.state !== "string" || !allowedStates.has(record2.state) || typeof record2.stageName !== "string" || typeof record2.backupName !== "string" || !record2.stageName.startsWith(`${prefix}.pipeline-stage-`) || !record2.backupName.startsWith(`${prefix}.pipeline-backup-`) || basename5(record2.stageName) !== record2.stageName || basename5(record2.backupName) !== record2.backupName) {
+  const prefix = basename6(specDirectory);
+  if (Object.keys(record2).some((key) => !["version", "pid", "state", "stageName", "backupName"].includes(key)) || record2.version !== 1 || typeof record2.pid !== "number" || !Number.isSafeInteger(record2.pid) || record2.pid < 1 || typeof record2.state !== "string" || !allowedStates.has(record2.state) || typeof record2.stageName !== "string" || typeof record2.backupName !== "string" || !record2.stageName.startsWith(`${prefix}.pipeline-stage-`) || !record2.backupName.startsWith(`${prefix}.pipeline-backup-`) || basename6(record2.stageName) !== record2.stageName || basename6(record2.backupName) !== record2.backupName) {
     throw new Error("spec scaffold \u4E8B\u52A1\u63CF\u8FF0\u5F62\u72B6\u975E\u6CD5");
   }
   return {
@@ -41621,7 +41867,7 @@ function processIsAlive(pid) {
     return errorCode7(error) !== "ESRCH";
   }
 }
-function receiptPaths(specDirectory, receipt, anchor = dirname11(specDirectory)) {
+function receiptPaths(specDirectory, receipt, anchor = dirname12(specDirectory)) {
   const stage = resolve26(anchor, receipt.stageName);
   const backup = resolve26(anchor, receipt.backupName);
   if (!contained2(anchor, stage) || !contained2(anchor, backup)) {
@@ -41745,7 +41991,7 @@ async function publishSpecScaffoldTransaction(options) {
     throw new Error("spec scaffold \u4E8B\u52A1\u76EE\u6807\u4E0D\u80FD\u662F\u9879\u76EE\u6839");
   }
   await ensureTrustedProjectDirectory(repoRoot, repoRoot);
-  const targetParent = dirname12(specDirectory);
+  const targetParent = dirname13(specDirectory);
   await ensureTrustedProjectDirectory(repoRoot, targetParent);
   const parentIdentity = await ordinaryDirectoryIdentity(targetParent);
   const suffix = `${process.pid}-${randomUUID9()}`;
@@ -41778,7 +42024,7 @@ async function publishSpecScaffoldTransaction(options) {
       if (!contained3(candidateSpecDirectory, target)) {
         throw new Error(`spec scaffold \u4E8B\u52A1\u6587\u4EF6\u8D8A\u8FC7\u6682\u5B58\u6839: ${file.relativePath}`);
       }
-      await ensureTrustedProjectDirectory(candidateSpecDirectory, dirname12(target));
+      await ensureTrustedProjectDirectory(candidateSpecDirectory, dirname13(target));
       try {
         const info = await lstat26(target);
         if (!info.isFile() || info.isSymbolicLink()) {
@@ -41878,7 +42124,7 @@ var REAL_FS = {
     }
   },
   writeText: async (abs, content) => {
-    await mkdir22(dirname13(abs), { recursive: true });
+    await mkdir22(dirname14(abs), { recursive: true });
     await writeFile13(abs, content, "utf8");
   },
   rmrf: async (abs) => {
@@ -41895,7 +42141,7 @@ function safeSpecDir(cwd, specDir) {
 }
 async function assertExistingParentsSafe(cwd, target) {
   const root = resolve28(cwd);
-  const parent = dirname13(target);
+  const parent = dirname14(target);
   const rel = relative13(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep13}`) || isAbsolute17(rel)) {
     throw new Error(`scaffold \u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${target}`);
@@ -43940,7 +44186,7 @@ var stripNl = (value) => value.replace(/\n$/, "");
 import { spawn as spawn7 } from "node:child_process";
 import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync2 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
-import { basename as basename6, dirname as dirname14, join as join65, resolve as resolve30 } from "node:path";
+import { basename as basename7, dirname as dirname15, join as join65, resolve as resolve30 } from "node:path";
 
 // packages/cli/src/runtime/paths.ts
 function resolveRuntimePaths(input = {}) {
@@ -44242,9 +44488,9 @@ function resolveDashboardRoot() {
   if (declared !== void 0 && declared.trim() !== "") return declared;
   const candidate = resolve30(process.argv[1] ?? "");
   try {
-    return resolve30(dirname14(realpathSync2(candidate)), "..", "..", "..");
+    return resolve30(dirname15(realpathSync2(candidate)), "..", "..", "..");
   } catch {
-    return resolve30(dirname14(candidate), "..", "..", "..");
+    return resolve30(dirname15(candidate), "..", "..", "..");
   }
 }
 var REAL_DASHBOARD_RUNTIME = {
@@ -44385,7 +44631,7 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
   };
 }
 async function startReleasedDashboard(deps, payloadRoot, opts, runtime = REAL_DASHBOARD_RUNTIME) {
-  const expectedReleaseId = basename6(payloadRoot) === "payload" ? basename6(dirname14(payloadRoot)) : "";
+  const expectedReleaseId = basename7(payloadRoot) === "payload" ? basename7(dirname15(payloadRoot)) : "";
   if (!/^sha256-[a-f0-9]{64}$/.test(expectedReleaseId)) {
     deps.io.err("[dashboard] \u53D7\u7BA1 payload \u7F3A\u5C11\u5408\u6CD5 content-addressed release identity\uFF1B\u62D2\u7EDD\u542F\u52A8\u3002");
     return { state: "failed", detail: "managed payload has no content-addressed release identity" };
@@ -44438,7 +44684,7 @@ import { join as join71 } from "node:path";
 // packages/cli/src/runtime/launchers.ts
 import { chmod as chmod2, lstat as lstat31, mkdir as mkdir24, readFile as readFile33, rm as rm10 } from "node:fs/promises";
 import { homedir as homedir16 } from "node:os";
-import { dirname as dirname15, join as join66 } from "node:path";
+import { dirname as dirname16, join as join66 } from "node:path";
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
@@ -44514,7 +44760,7 @@ async function restoreLauncher(snapshot) {
     await rm10(snapshot.path, { force: true });
     return;
   }
-  await mkdir24(dirname15(snapshot.path), { recursive: true });
+  await mkdir24(dirname16(snapshot.path), { recursive: true });
   await atomicWriteFile(snapshot.path, snapshot.state.content);
   await chmod2(snapshot.path, snapshot.state.mode);
 }
@@ -44565,7 +44811,7 @@ import {
   rm as rm12,
   stat as stat12
 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname16, join as join69, relative as relative14, resolve as resolve31, sep as sep14 } from "node:path";
+import { basename as basename8, dirname as dirname17, join as join69, relative as relative14, resolve as resolve31, sep as sep14 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -44781,7 +45027,7 @@ async function copyEntry(source, target) {
     return;
   }
   if (!sourceStat.isFile()) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u5305\u542B\u975E\u666E\u901A\u6587\u4EF6: ${source}`);
-  await mkdir25(dirname16(target), { recursive: true });
+  await mkdir25(dirname17(target), { recursive: true });
   await copyFile2(source, target);
   await chmod3(target, sourceStat.mode & 511);
 }
@@ -44902,13 +45148,13 @@ async function verifyPayload(payloadRoot, runner) {
   await verifyHookAbi(payloadRoot);
   await runChecked(runner, "bash", [verifier, "--quiet", "--root", payloadRoot], payloadRoot, "\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C");
   for (const file of await shellFiles(join69(payloadRoot, "hooks"))) {
-    await runChecked(runner, "bash", ["-n", file], payloadRoot, `hook \u8BED\u6CD5 ${basename7(file)}`);
+    await runChecked(runner, "bash", ["-n", file], payloadRoot, `hook \u8BED\u6CD5 ${basename8(file)}`);
   }
   for (const file of await shellFiles(join69(payloadRoot, "adapters"))) {
-    await runChecked(runner, "bash", ["-n", file], payloadRoot, `adapter \u8BED\u6CD5 ${basename7(file)}`);
+    await runChecked(runner, "bash", ["-n", file], payloadRoot, `adapter \u8BED\u6CD5 ${basename8(file)}`);
   }
   for (const file of [cli, server, bootstrap]) {
-    await runChecked(runner, process.execPath, ["--check", file], payloadRoot, `Node \u8BED\u6CD5 ${basename7(file)}`);
+    await runChecked(runner, process.execPath, ["--check", file], payloadRoot, `Node \u8BED\u6CD5 ${basename8(file)}`);
   }
   await runChecked(runner, process.execPath, [cli, "--help"], payloadRoot, "CLI smoke");
 }
@@ -45169,7 +45415,7 @@ var RuntimeReleaseStore = class {
 // packages/cli/src/runtime/managed-release-journal.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
 import { lstat as lstat33, mkdir as mkdir26, readFile as readFile36, unlink as unlink6 } from "node:fs/promises";
-import { dirname as dirname17, isAbsolute as isAbsolute19, join as join70, normalize } from "node:path";
+import { dirname as dirname18, isAbsolute as isAbsolute19, join as join70, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
 function isRecord14(value) {
@@ -45433,7 +45679,7 @@ function createManagedReleaseJournal(paths) {
       if (decodeJournal(JSON.stringify(record2), paths) === null) {
         throw new Error(`managed release journal \u683C\u5F0F\u975E\u6CD5\uFF1A${path9}`);
       }
-      await mkdir26(dirname17(path9), { recursive: true });
+      await mkdir26(dirname18(path9), { recursive: true });
       await atomicWriteFile(path9, `${JSON.stringify(record2, null, 2)}
 `);
     },
@@ -45852,7 +46098,7 @@ function nativeInstallPlan(host) {
 }
 
 // packages/cli/src/commands/setupEnvironment.ts
-import { dirname as dirname18, join as join72, resolve as resolve32 } from "node:path";
+import { dirname as dirname19, join as join72, resolve as resolve32 } from "node:path";
 import { randomUUID as randomUUID12 } from "node:crypto";
 
 // packages/cli/src/commands/native-host-command-binding.ts
@@ -46049,7 +46295,7 @@ var REAL_SETUP_ENV = {
 function resolvePipelineRoot(env) {
   const root = env.pluginRoot();
   if (root !== null) return root;
-  return resolve32(dirname18(env.selfPath()), "..", "..", "..");
+  return resolve32(dirname19(env.selfPath()), "..", "..", "..");
 }
 function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
@@ -46078,7 +46324,7 @@ function configureAutoUpdate(deps, env, host, enabled) {
   }
   try {
     const config = autoUpdateConfigPath(env);
-    env.mkdirp(dirname18(config));
+    env.mkdirp(dirname19(config));
     env.writeText(config, `host=${host}
 enabled=true
 `);
@@ -46513,11 +46759,11 @@ function assertDashboardPort(identity, expectedPort, label) {
 }
 
 // packages/cli/src/commands/dashboard-restore.ts
-import { dirname as dirname19, join as join74 } from "node:path";
+import { dirname as dirname20, join as join74 } from "node:path";
 async function restorePreviousReleasedDashboard(deps, activation, starter, dashboardPort, restoreTransactionId) {
   const previousRelease = activation.selection.previousRelease;
   if (previousRelease === null) return { state: "not-required" };
-  const payloadRoot = join74(dirname19(activation.releaseRoot), previousRelease, "payload");
+  const payloadRoot = join74(dirname20(activation.releaseRoot), previousRelease, "payload");
   const outcome = await starter.start(deps, payloadRoot, {
     openBrowser: false,
     port: dashboardPort,
@@ -47427,7 +47673,7 @@ async function migrateLegacyProjectRegistry(input) {
 }
 
 // packages/cli/src/commands/host-plugin-convergence.ts
-import { dirname as dirname20, isAbsolute as isAbsolute23, join as join77, normalize as normalize4 } from "node:path";
+import { dirname as dirname21, isAbsolute as isAbsolute23, join as join77, normalize as normalize4 } from "node:path";
 function hostPluginConvergencePaths(env, host) {
   const paths = resolveRuntimePaths({ homeDir: env.homeDir(), env: env.runtimeEnv() });
   return {
@@ -47488,7 +47734,7 @@ function parseSessionProof(raw) {
 function writeReceipt(deps, env, receipt) {
   const { receiptPath } = hostPluginConvergencePaths(env, receipt.host);
   try {
-    env.mkdirp(dirname20(receiptPath));
+    env.mkdirp(dirname21(receiptPath));
     env.writeTextAtomic(receiptPath, `${JSON.stringify(receipt, null, 2)}
 `);
     return true;
@@ -49347,7 +49593,7 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function pluginRoot() {
-  return join84(dirname24(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join84(dirname25(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
   return join84(pluginRoot(), "templates", "manifest.yaml");

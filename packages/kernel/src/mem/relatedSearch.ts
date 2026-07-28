@@ -12,6 +12,10 @@ export const RELATED_SESSION_SEARCH_BUDGETS = Object.freeze({
   queryMaxChars: 128,
   queryMaxTokens: 8,
   candidates: 100,
+  discoveryEntries: 4_096,
+  discoveryFiles: 400,
+  discoveryDepth: 8,
+  discoveryMs: 75,
   results: 8,
   perFileBytes: 2 * 1024 * 1024,
   totalBytes: 16 * 1024 * 1024,
@@ -57,12 +61,41 @@ function addWarning(state: BudgetState, warning: MemWarning): void {
  * nodeMemFs always supplies the primitive; the fallback exists only for older injected fakes and is
  * explicitly reported as partial because it cannot prove a read-layer ceiling.
  */
-function budgetedFs(source: MemFs, state: BudgetState): MemFs {
+function budgetedFs(
+  source: MemFs,
+  state: BudgetState,
+  platform: MemPlatformFilter,
+): MemFs {
   const cache = new Map<string, string | undefined>()
   const prefixBytes = new Map<string, Buffer>()
   const sourceBytes = new Map<string, number>()
   const completeSources = new Set<string>()
   const sourceEnv = source.env
+  const sourceReadDirBounded = source.readDirBounded
+  const discoveryEntryLimits = platform === 'all'
+    ? new Map([['claude', 1_366], ['codex', 1_365], ['pi', 1_365]] as const)
+    : new Map(
+      platform === 'opencode'
+        ? []
+        : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryEntries]] as const,
+    )
+  const discoveryEntries = new Map<string, number>()
+  const discoveryFileLimits = platform === 'all'
+    ? new Map([['claude', 134], ['codex', 133], ['pi', 133]] as const)
+    : new Map(
+      platform === 'opencode'
+        ? []
+        : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles]] as const,
+    )
+  const discoveryFiles = new Map<string, number>()
+  const discoveryTimeLimits = platform === 'all'
+    ? new Map([['claude', 25], ['codex', 25], ['pi', 25]] as const)
+    : new Map(
+      platform === 'opencode'
+        ? []
+        : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryMs]] as const,
+    )
+  const discoveryDeadlines = new Map<string, number>()
 
   const boundedRead = (path: string, offset: number, maxBytes: number): BoundedTextRead | undefined => {
     if (offset > 0 && source.readTextRangeBounded) {
@@ -196,6 +229,18 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
       }
       return checked.entries
     },
+    readDirBounded: sourceReadDirBounded
+      ? (path, maxEntries, shouldContinue) => {
+          const checked = sourceReadDirBounded(path, maxEntries, shouldContinue)
+          if (checked.unavailable && source.exists(path)) {
+            addWarning(state, {
+              code: 'directory-read-unavailable',
+              message: 'A session directory could not be read.',
+            })
+          }
+          return checked
+        }
+      : undefined,
     readText: (path) => {
       if (cache.has(path)) return cache.get(path)
 
@@ -232,6 +277,43 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
       noteTotalExhausted: () => addWarning(state, {
         code: 'total-read-budget-exhausted',
         message: 'The total session-read budget was exhausted.',
+      }),
+      remainingDiscoveryEntries: (source) => (
+        (discoveryEntryLimits.get(source) ?? 0) - (discoveryEntries.get(source) ?? 0)
+      ),
+      consumeDiscoveryEntries: (source, entries) => {
+        const used = discoveryEntries.get(source) ?? 0
+        const limit = discoveryEntryLimits.get(source) ?? 0
+        discoveryEntries.set(source, used + Math.min(
+          limit - used,
+          Math.max(0, Math.trunc(entries)),
+        ))
+      },
+      remainingDiscoveryFiles: (source) => (
+        (discoveryFileLimits.get(source) ?? 0) - (discoveryFiles.get(source) ?? 0)
+      ),
+      consumeDiscoveryFiles: (source, files) => {
+        const used = discoveryFiles.get(source) ?? 0
+        const limit = discoveryFileLimits.get(source) ?? 0
+        discoveryFiles.set(source, used + Math.min(
+          limit - used,
+          Math.max(0, Math.trunc(files)),
+        ))
+      },
+      shouldContinueDiscovery: (source) => {
+        let deadline = discoveryDeadlines.get(source)
+        if (deadline === undefined) {
+          deadline = Date.now() + (discoveryTimeLimits.get(source) ?? 0)
+          discoveryDeadlines.set(source, deadline)
+        }
+        return (discoveryEntries.get(source) ?? 0) < (discoveryEntryLimits.get(source) ?? 0)
+          && Date.now() <= deadline
+      },
+      maxDiscoveryDepth: RELATED_SESSION_SEARCH_BUDGETS.discoveryDepth,
+      maxDiscoveryFiles: RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles,
+      noteDiscoveryTruncated: () => addWarning(state, {
+        code: 'candidate-discovery-truncated',
+        message: 'Session candidate discovery reached its bounded work limit.',
       }),
     },
   }
@@ -280,7 +362,7 @@ export function searchRelatedSessions(
     warnings: [],
     warningCodes: new Set(),
   }
-  const scopedFs = budgetedFs(fs, state)
+  const scopedFs = budgetedFs(fs, state, platform)
 
   const search = searchMemSessions(scopedFs, {
     keyword: query,

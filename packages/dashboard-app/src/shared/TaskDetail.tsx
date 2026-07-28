@@ -364,7 +364,7 @@ export function TaskDetail({
       {change.documents?.governed && (
         <TaskDocumentsSection documents={change.documents} />
       )}
-      <RelatedSessionsSection root={root} name={change.name} />
+      <RelatedSessionsSection key={`${root}\u0000${change.name}`} root={root} name={change.name} />
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
           <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>

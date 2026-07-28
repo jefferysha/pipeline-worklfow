@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
 import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname13, join as join53 } from "node:path";
+import { dirname as dirname14, join as join53 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -9370,7 +9370,7 @@ async function assertUpdatePreservesReferences(next, id, scan) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { closeSync, existsSync as existsSync4, fstatSync, openSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, statSync } from "node:fs";
+import { closeSync, existsSync as existsSync4, fstatSync, openSync, opendirSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
 function readMemSessionMetadataChecked(fs, path7) {
@@ -9394,6 +9394,43 @@ function nodeMemFs(homeOverride) {
       };
     } catch {
       return { entries: [], unavailable: true };
+    }
+  };
+  const readDirectoryBounded = (p, maxEntries, shouldContinue) => {
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+      return { entries: [], unavailable: true, truncated: false };
+    }
+    let directory;
+    try {
+      directory = opendirSync(p);
+      const entries = [];
+      let truncated = false;
+      for (; ; ) {
+        if (shouldContinue && !shouldContinue()) {
+          truncated = true;
+          break;
+        }
+        const entry = directory.readSync();
+        if (entry === null)
+          break;
+        if (entries.length >= maxEntries) {
+          truncated = true;
+          break;
+        }
+        entries.push({
+          name: entry.name,
+          isFile: entry.isFile(),
+          isDirectory: entry.isDirectory()
+        });
+      }
+      return { entries, unavailable: false, truncated };
+    } catch {
+      return { entries: [], unavailable: true, truncated: false };
+    } finally {
+      try {
+        directory?.closeSync();
+      } catch {
+      }
     }
   };
   const readTextRange = (p, offset, maxBytes) => {
@@ -9436,6 +9473,7 @@ function nodeMemFs(homeOverride) {
     exists: (p) => existsSync4(p),
     readDir: (p) => readDirectory(p).entries,
     readDirChecked: readDirectory,
+    readDirBounded: readDirectoryBounded,
     readText: (p) => {
       try {
         return readFileSync9(p, "utf8");
@@ -9827,51 +9865,115 @@ function readBoundedSessionRows(fs, db, f, source) {
   }
   return safeRows;
 }
-var SQLITE_ROW_CHUNK_BYTES = 4 * 1024;
+var SQLITE_RELATION_ID_BYTES = 512;
+var SQLITE_ROW_DATA_BYTES = 4 * 1024;
 var SQLITE_MAX_ROWS_PER_QUERY = 512;
-function readBoundedSqliteRows(fs, db, sql, sessionId, source) {
+var boundedPlanCache = /* @__PURE__ */ new WeakMap();
+function hasBoundedQueryPlan(db, sql, params) {
+  let cache = boundedPlanCache.get(db);
+  if (!cache) {
+    cache = /* @__PURE__ */ new Map();
+    boundedPlanCache.set(db, cache);
+  }
+  const cached = cache.get(sql);
+  if (cached !== void 0)
+    return cached;
+  let bounded = false;
+  try {
+    const rows = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params);
+    const details = rows.map((row) => String(row.detail ?? "").toUpperCase());
+    bounded = details.some((detail) => detail.includes("SEARCH ")) && details.every((detail) => !detail.includes("SCAN ") && !detail.includes("USE TEMP B-TREE"));
+  } catch {
+    bounded = false;
+  }
+  cache.set(sql, bounded);
+  return bounded;
+}
+function hasMoreRows(db, query, offset) {
+  return db.prepare(query.hasMoreSql).get(query.scopeId, offset) !== void 0;
+}
+function readBoundedSqliteRows(fs, db, query, source) {
   const budget = fs.contentReadBudget;
   if (!budget)
     return [];
   const sourceRemaining = budget.perSourceBytes - source.bytesRead;
   const aggregateRemaining = budget.remainingBytes();
-  const chunkBytes = Math.min(SQLITE_ROW_CHUNK_BYTES, sourceRemaining, aggregateRemaining);
-  if (chunkBytes <= 0) {
-    if (sourceRemaining <= 0)
+  const rowBytes = Math.min(SQLITE_ROW_DATA_BYTES, Math.max(0, sourceRemaining - SQLITE_RELATION_ID_BYTES), Math.max(0, aggregateRemaining - SQLITE_RELATION_ID_BYTES));
+  if (rowBytes <= 0) {
+    if (sourceRemaining <= SQLITE_RELATION_ID_BYTES)
       budget.noteSourceTruncated();
-    if (aggregateRemaining <= 0)
+    if (aggregateRemaining <= SQLITE_RELATION_ID_BYTES)
       budget.noteTotalExhausted();
     source.truncated = true;
     return [];
   }
-  const iterator = db.prepare(sql).iterate(chunkBytes, sessionId);
+  const queryParams = [
+    SQLITE_RELATION_ID_BYTES,
+    rowBytes,
+    query.scopeId,
+    SQLITE_MAX_ROWS_PER_QUERY
+  ];
+  if (!hasBoundedQueryPlan(db, query.sql, queryParams) || !hasBoundedQueryPlan(db, query.hasMoreSql, [query.scopeId, 0])) {
+    budget.noteSourceUnavailable("opencode");
+    source.truncated = true;
+    return [];
+  }
+  const iterator = db.prepare(query.sql).iterate(...queryParams);
   const rows = [];
-  while (rows.length < SQLITE_MAX_ROWS_PER_QUERY) {
-    if (budget.perSourceBytes - source.bytesRead < chunkBytes || budget.remainingBytes() < chunkBytes) {
-      if (budget.perSourceBytes - source.bytesRead < chunkBytes)
+  for (; ; ) {
+    if (rows.length >= SQLITE_MAX_ROWS_PER_QUERY) {
+      if (hasMoreRows(db, query, rows.length)) {
         budget.noteSourceTruncated();
-      if (budget.remainingBytes() < chunkBytes)
-        budget.noteTotalExhausted();
-      source.truncated = true;
+        source.truncated = true;
+      }
+      break;
+    }
+    const maximumProjectedBytes = SQLITE_RELATION_ID_BYTES + rowBytes;
+    if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes || budget.remainingBytes() < maximumProjectedBytes) {
+      if (hasMoreRows(db, query, rows.length)) {
+        if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes) {
+          budget.noteSourceTruncated();
+        }
+        if (budget.remainingBytes() < maximumProjectedBytes)
+          budget.noteTotalExhausted();
+        source.truncated = true;
+      }
       break;
     }
     const next = iterator.next();
     if (next.done)
       break;
     const row = next.value;
-    const returnedBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
+    const relationValue = row[query.relationField];
+    const relationBytes = typeof relationValue === "string" ? Buffer.byteLength(relationValue) : 0;
+    const returnedDataBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
+    const returnedBytes = relationBytes + returnedDataBytes;
+    if (budget.perSourceBytes - source.bytesRead < returnedBytes || budget.remainingBytes() < returnedBytes) {
+      if (budget.perSourceBytes - source.bytesRead < returnedBytes)
+        budget.noteSourceTruncated();
+      if (budget.remainingBytes() < returnedBytes)
+        budget.noteTotalExhausted();
+      source.truncated = true;
+      break;
+    }
     budget.consume(returnedBytes);
     source.bytesRead += returnedBytes;
-    if (typeof row.full_bytes === "number" && row.full_bytes > returnedBytes) {
+    const relationTruncated = typeof row.relation_full_bytes === "number" && row.relation_full_bytes > SQLITE_RELATION_ID_BYTES;
+    const dataTruncated = typeof row.full_bytes === "number" && row.full_bytes > rowBytes;
+    if (relationTruncated || dataTruncated) {
       budget.noteSourceTruncated();
       source.truncated = true;
     }
+    if (relationTruncated)
+      continue;
     rows.push(row);
   }
-  if (rows.length === SQLITE_MAX_ROWS_PER_QUERY) {
-    budget.noteSourceTruncated();
-    source.truncated = true;
-  }
+  rows.sort((left, right) => {
+    const time = Number(left.time_created ?? 0) - Number(right.time_created ?? 0);
+    if (time !== 0)
+      return time;
+    return String(left[query.relationField] ?? "").localeCompare(String(right[query.relationField] ?? ""));
+  });
   return rows;
 }
 
@@ -9959,20 +10061,36 @@ function roleOf(data) {
 function opencodeExtractDialogue(fs, s) {
   return withOpenCodeDb(fs, [], (db) => {
     const sourceBudget = sqliteSourceBudget(fs, opencodeDbPath(fs));
-    const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id,
+    const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
+      sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+         ORDER BY time_created
+         LIMIT ?`,
+      hasMoreSql: "SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?",
+      scopeId: s.id,
+      relationField: "id"
+    }, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     if (!messageRows.length)
       return [];
-    const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id, message_id,
+    const partRows = fs.contentReadBudget ? messageRows.flatMap((message) => readBoundedSqliteRows(fs, db, {
+      sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
+                length(CAST(message_id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
-                length(CAST(data AS blob)) AS full_bytes
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
          FROM part
-         WHERE session_id = ?
-         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+         WHERE message_id = ?
+         ORDER BY id
+         LIMIT ?`,
+      hasMoreSql: "SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?",
+      scopeId: String(message.id),
+      relationField: "message_id"
+    }, sourceBudget)) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     const partsByMessage = /* @__PURE__ */ new Map();
     for (const p of partRows) {
       const mid = String(p.message_id);
@@ -10126,7 +10244,7 @@ function splitShellArgs(s) {
 }
 
 // packages/kernel/dist/mem/adapters/claude.js
-import { join as join17 } from "node:path";
+import { basename as basename2, dirname as dirname4, join as join17 } from "node:path";
 
 // packages/kernel/dist/mem/jsonl.js
 var OPEN_BRACE = 123;
@@ -10255,6 +10373,8 @@ function walkDir(fs, root) {
   const stack = [root];
   while (stack.length) {
     const cur = stack.pop();
+    if (cur === void 0)
+      break;
     for (const e of fs.readDir(cur)) {
       const full = join16(cur, e.name);
       if (e.isDirectory)
@@ -10265,6 +10385,102 @@ function walkDir(fs, root) {
   }
   return out;
 }
+function insertRecentFile(files, candidate, limit) {
+  let low = 0;
+  let high = files.length;
+  while (low < high) {
+    const mid = low + high >>> 1;
+    const current = files[mid];
+    if (current === void 0)
+      break;
+    if (candidate.mtime > current.mtime || candidate.mtime === current.mtime && candidate.path > current.path)
+      high = mid;
+    else
+      low = mid + 1;
+  }
+  files.splice(low, 0, candidate);
+  if (files.length > limit)
+    files.pop();
+}
+function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDescend = () => true) {
+  const budget = fs.contentReadBudget;
+  if (!budget?.remainingDiscoveryEntries || !budget.consumeDiscoveryEntries || !budget.remainingDiscoveryFiles || !budget.consumeDiscoveryFiles || !budget.shouldContinueDiscovery || !budget.noteDiscoveryTruncated) {
+    return walkDir(fs, root).filter(accept).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0)).slice(0, fileLimit);
+  }
+  if (!fs.exists(root) || fileLimit <= 0)
+    return [];
+  const files = [];
+  const remainingFiles = budget.remainingDiscoveryFiles(source);
+  const effectiveFileLimit = Math.min(fileLimit, budget.maxDiscoveryFiles ?? fileLimit, remainingFiles);
+  if (effectiveFileLimit <= 0) {
+    budget.noteDiscoveryTruncated();
+    return [];
+  }
+  const stack = [{ path: root, depth: 0 }];
+  while (stack.length > 0) {
+    if (!budget.shouldContinueDiscovery(source)) {
+      budget.noteDiscoveryTruncated();
+      break;
+    }
+    const current = stack.pop();
+    if (current === void 0)
+      break;
+    const remaining = budget.remainingDiscoveryEntries(source);
+    if (remaining <= 0) {
+      budget.noteDiscoveryTruncated();
+      break;
+    }
+    const bounded = fs.readDirBounded?.(current.path, remaining, () => budget.shouldContinueDiscovery?.(source) === true);
+    const checked = bounded ?? fs.readDirChecked?.(current.path);
+    const sourceEntries = checked?.entries ?? fs.readDir(current.path);
+    const entries = sourceEntries.slice(0, remaining);
+    budget.consumeDiscoveryEntries(source, entries.length);
+    if (bounded?.truncated || !bounded && sourceEntries.length > remaining) {
+      budget.noteDiscoveryTruncated();
+    }
+    const ranked = [];
+    for (const entry of entries) {
+      if (!budget.shouldContinueDiscovery(source)) {
+        budget.noteDiscoveryTruncated();
+        break;
+      }
+      const path7 = join16(current.path, entry.name);
+      ranked.push({ entry, path: path7, mtime: entry.isFile ? fs.mtimeMs(path7) ?? 0 : 0 });
+    }
+    ranked.sort((left, right) => {
+      if (left.entry.isDirectory !== right.entry.isDirectory) {
+        return left.entry.isDirectory ? -1 : 1;
+      }
+      if (left.entry.isDirectory)
+        return right.entry.name.localeCompare(left.entry.name);
+      return right.mtime - left.mtime || right.entry.name.localeCompare(left.entry.name);
+    });
+    const directories = [];
+    for (const item2 of ranked) {
+      if (item2.entry.isFile && accept(item2.path)) {
+        if (files.length >= effectiveFileLimit)
+          budget.noteDiscoveryTruncated();
+        insertRecentFile(files, { path: item2.path, mtime: item2.mtime }, effectiveFileLimit);
+      } else if (item2.entry.isDirectory) {
+        const childDepth = current.depth + 1;
+        if (!shouldDescend(item2.path, childDepth))
+          continue;
+        if (current.depth >= (budget.maxDiscoveryDepth ?? 0)) {
+          budget.noteDiscoveryTruncated();
+        } else {
+          directories.push({ path: item2.path, depth: childDepth });
+        }
+      }
+    }
+    for (let index = directories.length - 1; index >= 0; index -= 1) {
+      const directory = directories[index];
+      if (directory !== void 0)
+        stack.push(directory);
+    }
+  }
+  budget.consumeDiscoveryFiles(source, files.length);
+  return files.map((file) => file.path);
+}
 
 // packages/kernel/dist/mem/adapters/claude.js
 function claudeListSessions(fs, f) {
@@ -10272,14 +10488,13 @@ function claudeListSessions(fs, f) {
   if (!fs.exists(root))
     return [];
   const out = [];
-  const allDirs = () => fs.readDir(root).filter((e) => e.isDirectory).map((e) => join17(root, e.name));
-  let projectDirs;
-  if (f.cwd) {
+  const projectDirs = () => {
+    const allDirs = () => fs.readDir(root).filter((entry) => entry.isDirectory).map((entry) => join17(root, entry.name));
+    if (!f.cwd)
+      return allDirs();
     const derived = claudeProjectDirFromCwd(fs, f.cwd);
-    projectDirs = fs.exists(derived) ? [derived] : allDirs();
-  } else {
-    projectDirs = allDirs();
-  }
+    return fs.exists(derived) ? [derived] : allDirs();
+  };
   const indexes = /* @__PURE__ */ new Map();
   const indexFor = (directory) => {
     const cached = indexes.get(directory);
@@ -10301,7 +10516,11 @@ function claudeListSessions(fs, f) {
     indexes.set(directory, indexById);
     return indexById;
   };
-  const sessionEntries = projectDirs.flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
+  const relatedRoot = f.cwd && fs.exists(claudeProjectDirFromCwd(fs, f.cwd)) ? claudeProjectDirFromCwd(fs, f.cwd) : root;
+  const sessionEntries = fs.contentReadBudget ? walkDirForRelatedSearch(fs, relatedRoot, (file) => file.endsWith(".jsonl"), Math.max(f.limit * 4, f.limit + 1), "claude", (directory) => relatedRoot === root && dirname4(directory) === root).map((file) => ({
+    directory: dirname4(file),
+    entry: { name: basename2(file), isFile: true, isDirectory: false }
+  })) : projectDirs().flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
     const leftPath = join17(left.directory, left.entry.name);
     const rightPath = join17(right.directory, right.entry.name);
     return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
@@ -10401,7 +10620,7 @@ function claudeSearch(fs, s, kw) {
 }
 
 // packages/kernel/dist/mem/adapters/codex.js
-import { basename as basename2 } from "node:path";
+import { basename as basename3 } from "node:path";
 var ROLLOUT_RE = /^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/;
 var TS_FIX_RE = /T(\d{2})-(\d{2})-(\d{2})/;
 function parseDialogueRole(v) {
@@ -10416,13 +10635,13 @@ function codexListSessions(fs, f) {
   if (!fs.exists(root))
     return [];
   const out = [];
-  const files = walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
+  const files = fs.contentReadBudget ? walkDirForRelatedSearch(fs, root, (file) => file.endsWith(".jsonl"), Math.max(f.limit * 4, f.limit + 1), "codex") : walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
   for (const file of files) {
     if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
       fs.contentReadBudget.noteTotalExhausted();
       break;
     }
-    const base = basename2(file).slice(0, -".jsonl".length);
+    const base = basename3(file).slice(0, -".jsonl".length);
     const m = ROLLOUT_RE.exec(base);
     let tsFromName = null;
     if (m) {
@@ -10472,6 +10691,33 @@ function buildTurnFromMessage(role, parts) {
     return null;
   return { role, text: merged };
 }
+function compactedReplacementTurns(replacementHistory) {
+  let summaryIndex = -1;
+  for (let index = replacementHistory.length - 1; index >= 0; index -= 1) {
+    const item2 = replacementHistory[index];
+    if (!item2 || typeof item2 !== "object")
+      continue;
+    if (item2.type === "message" && item2.role === "user")
+      summaryIndex = index;
+    break;
+  }
+  const turns = [];
+  for (let index = 0; index < replacementHistory.length; index += 1) {
+    const item2 = replacementHistory[index];
+    if (item2?.type !== "message")
+      continue;
+    const role = parseDialogueRole(item2?.role);
+    if (!role)
+      continue;
+    const turn = buildTurnFromMessage(role, item2?.content);
+    if (!turn)
+      continue;
+    const text2 = `[compact]
+${turn.text}`;
+    turns.push(index === summaryIndex ? hostSummaryTurn(text2) : { role: turn.role, text: text2 });
+  }
+  return turns;
+}
 function codexExtractDialogue(fs, s) {
   let turns = [];
   for (const obj of parseJsonlLines(fs.readText(s.filePath))) {
@@ -10481,17 +10727,7 @@ function codexExtractDialogue(fs, s) {
       turns = [];
       if (!Array.isArray(rh))
         continue;
-      for (const item2 of rh) {
-        if (item2?.type !== "message")
-          continue;
-        const role2 = parseDialogueRole(item2?.role);
-        if (!role2)
-          continue;
-        const turn2 = buildTurnFromMessage(role2, item2?.content);
-        if (turn2)
-          turns.push({ role: turn2.role, text: `[compact]
-${turn2.text}` });
-      }
+      turns = compactedReplacementTurns(rh);
       continue;
     }
     const p = o?.payload;
@@ -10511,7 +10747,7 @@ function codexSearch(fs, s, kw) {
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename3, join as join18, resolve as resolve9 } from "node:path";
+import { basename as basename4, join as join18, resolve as resolve9 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
@@ -10575,10 +10811,11 @@ function candidateFiles(fs, f) {
   const defaultRoot = join18(piAgentDir(fs), "sessions");
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  const pushJsonl = (root) => {
+  const pushJsonl = (root, fileLimit) => {
     if (!fs.exists(root))
       return;
-    for (const file of walkDir(fs, root)) {
+    const discovered = fs.contentReadBudget ? walkDirForRelatedSearch(fs, root, (file) => file.endsWith(".jsonl"), fileLimit, "pi") : walkDir(fs, root);
+    for (const file of discovered) {
       if (!file.endsWith(".jsonl"))
         continue;
       const normalized2 = resolve9(file);
@@ -10588,16 +10825,25 @@ function candidateFiles(fs, f) {
       out.push(file);
     }
   };
-  for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve9(root) === resolve9(defaultRoot))
-      pushJsonl(piProjectDirFromCwd(fs, f.cwd));
-    else
-      pushJsonl(root);
+  const roots = piSessionRoots(fs);
+  const normalLimit = Math.max(f.limit * 4, f.limit + 1);
+  for (let index = 0; index < roots.length; index += 1) {
+    const root = roots[index];
+    if (root === void 0)
+      continue;
+    const remainingRoots = roots.length - index;
+    const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.("pi");
+    const fairLimit = remainingFiles === void 0 ? normalLimit : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots));
+    if (f.cwd && resolve9(root) === resolve9(defaultRoot)) {
+      pushJsonl(piProjectDirFromCwd(fs, f.cwd), fairLimit);
+    } else {
+      pushJsonl(root, fairLimit);
+    }
   }
   return out;
 }
 function idFromFile(filePath) {
-  const base = basename3(filePath).slice(0, -".jsonl".length);
+  const base = basename4(filePath).slice(0, -".jsonl".length);
   const underscore = base.indexOf("_");
   return underscore === -1 ? base : base.slice(underscore + 1);
 }
@@ -10856,6 +11102,7 @@ function buildChildIndex(sessions) {
     directChildren2.set(parentKey, arr);
   }
   const out = /* @__PURE__ */ new Map();
+  const legacyAliases = [];
   for (const parentKey of directChildren2.keys()) {
     const stack = [...directChildren2.get(parentKey) ?? []];
     const flat = [];
@@ -10871,6 +11118,11 @@ function buildChildIndex(sessions) {
         stack.push(c);
     }
     out.set(parentKey, flat);
+    legacyAliases.push({ key: parentKey.slice("opencode:".length), children: flat });
+  }
+  for (const alias of legacyAliases) {
+    if (!out.has(alias.key))
+      out.set(alias.key, alias.children);
   }
   return out;
 }
@@ -10972,6 +11224,10 @@ var RELATED_SESSION_SEARCH_BUDGETS = Object.freeze({
   queryMaxChars: 128,
   queryMaxTokens: 8,
   candidates: 100,
+  discoveryEntries: 4096,
+  discoveryFiles: 400,
+  discoveryDepth: 8,
+  discoveryMs: 75,
   results: 8,
   perFileBytes: 2 * 1024 * 1024,
   totalBytes: 16 * 1024 * 1024,
@@ -10993,12 +11249,19 @@ function addWarning(state, warning) {
   state.warningCodes.add(warning.code);
   state.warnings.push(warning);
 }
-function budgetedFs(source, state) {
+function budgetedFs(source, state, platform) {
   const cache = /* @__PURE__ */ new Map();
   const prefixBytes = /* @__PURE__ */ new Map();
   const sourceBytes = /* @__PURE__ */ new Map();
   const completeSources = /* @__PURE__ */ new Set();
   const sourceEnv = source.env;
+  const sourceReadDirBounded = source.readDirBounded;
+  const discoveryEntryLimits = platform === "all" ? /* @__PURE__ */ new Map([["claude", 1366], ["codex", 1365], ["pi", 1365]]) : new Map(platform === "opencode" ? [] : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryEntries]]);
+  const discoveryEntries = /* @__PURE__ */ new Map();
+  const discoveryFileLimits = platform === "all" ? /* @__PURE__ */ new Map([["claude", 134], ["codex", 133], ["pi", 133]]) : new Map(platform === "opencode" ? [] : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles]]);
+  const discoveryFiles = /* @__PURE__ */ new Map();
+  const discoveryTimeLimits = platform === "all" ? /* @__PURE__ */ new Map([["claude", 25], ["codex", 25], ["pi", 25]]) : new Map(platform === "opencode" ? [] : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryMs]]);
+  const discoveryDeadlines = /* @__PURE__ */ new Map();
   const boundedRead = (path7, offset, maxBytes) => {
     if (offset > 0 && source.readTextRangeBounded) {
       return source.readTextRangeBounded(path7, offset, maxBytes);
@@ -11122,6 +11385,16 @@ function budgetedFs(source, state) {
       }
       return checked.entries;
     },
+    readDirBounded: sourceReadDirBounded ? (path7, maxEntries, shouldContinue) => {
+      const checked = sourceReadDirBounded(path7, maxEntries, shouldContinue);
+      if (checked.unavailable && source.exists(path7)) {
+        addWarning(state, {
+          code: "directory-read-unavailable",
+          message: "A session directory could not be read."
+        });
+      }
+      return checked;
+    } : void 0,
     readText: (path7) => {
       if (cache.has(path7))
         return cache.get(path7);
@@ -11158,6 +11431,32 @@ function budgetedFs(source, state) {
       noteTotalExhausted: () => addWarning(state, {
         code: "total-read-budget-exhausted",
         message: "The total session-read budget was exhausted."
+      }),
+      remainingDiscoveryEntries: (source2) => (discoveryEntryLimits.get(source2) ?? 0) - (discoveryEntries.get(source2) ?? 0),
+      consumeDiscoveryEntries: (source2, entries) => {
+        const used = discoveryEntries.get(source2) ?? 0;
+        const limit = discoveryEntryLimits.get(source2) ?? 0;
+        discoveryEntries.set(source2, used + Math.min(limit - used, Math.max(0, Math.trunc(entries))));
+      },
+      remainingDiscoveryFiles: (source2) => (discoveryFileLimits.get(source2) ?? 0) - (discoveryFiles.get(source2) ?? 0),
+      consumeDiscoveryFiles: (source2, files) => {
+        const used = discoveryFiles.get(source2) ?? 0;
+        const limit = discoveryFileLimits.get(source2) ?? 0;
+        discoveryFiles.set(source2, used + Math.min(limit - used, Math.max(0, Math.trunc(files))));
+      },
+      shouldContinueDiscovery: (source2) => {
+        let deadline = discoveryDeadlines.get(source2);
+        if (deadline === void 0) {
+          deadline = Date.now() + (discoveryTimeLimits.get(source2) ?? 0);
+          discoveryDeadlines.set(source2, deadline);
+        }
+        return (discoveryEntries.get(source2) ?? 0) < (discoveryEntryLimits.get(source2) ?? 0) && Date.now() <= deadline;
+      },
+      maxDiscoveryDepth: RELATED_SESSION_SEARCH_BUDGETS.discoveryDepth,
+      maxDiscoveryFiles: RELATED_SESSION_SEARCH_BUDGETS.discoveryFiles,
+      noteDiscoveryTruncated: () => addWarning(state, {
+        code: "candidate-discovery-truncated",
+        message: "Session candidate discovery reached its bounded work limit."
       })
     }
   };
@@ -11194,7 +11493,7 @@ function searchRelatedSessions(fs, options) {
     warnings: [],
     warningCodes: /* @__PURE__ */ new Set()
   };
-  const scopedFs = budgetedFs(fs, state);
+  const scopedFs = budgetedFs(fs, state, platform);
   const search = searchMemSessions(scopedFs, {
     keyword: query,
     filter: {
@@ -12217,7 +12516,7 @@ async function applyLevelChange(repoRoot, loopId, target, opts, fs) {
 // packages/kernel/dist/loops/drafts.js
 import { readFileSync as readFileSync11 } from "node:fs";
 import { mkdir as mkdir10, rename as rename5, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname4, join as join20 } from "node:path";
+import { dirname as dirname5, join as join20 } from "node:path";
 var DRAFT_MARKS_FILE = "loops.drafts.json";
 function draftMarksPath(repoRoot) {
   return join20(repoRoot, ".pipeline", DRAFT_MARKS_FILE);
@@ -12235,7 +12534,7 @@ function readDraftMarks(path7) {
 }
 var tmpSeq3 = 0;
 async function writeDraftMarks(path7, ids) {
-  await mkdir10(dirname4(path7), { recursive: true });
+  await mkdir10(dirname5(path7), { recursive: true });
   const tmp = `${path7}.tmp.${process.pid}.${tmpSeq3++}`;
   await writeFile7(tmp, `${JSON.stringify({ version: 1, ids }, null, 2)}
 `, "utf8");
@@ -15178,7 +15477,7 @@ var DEFAULT_TTL_MS = 10 * 60 * 1e3;
 import { createHash as createHash11 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat12, mkdir as mkdir13, open as open3, readdir as readdir3, realpath as realpath4, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname5, join as join23, relative as relative4, sep as sep6 } from "node:path";
+import { dirname as dirname6, join as join23, relative as relative4, sep as sep6 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -15224,7 +15523,7 @@ async function assertDirectoryIdentities(identities, onFailure) {
   }
 }
 async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFailure) {
-  const parent = dirname5(absFile);
+  const parent = dirname6(absFile);
   const fromRoot = relative4(realRoot, parent);
   if (fromRoot === ".." || fromRoot.startsWith(`..${sep6}`)) {
     throw onFailure(`\u6587\u4EF6\u7236\u76EE\u5F55\u5DF2\u9003\u9038\u5185\u5BB9\u6839\uFF1A${parent}`);
@@ -16858,10 +17157,10 @@ function tokensMatch(a, b) {
 // packages/server/src/operations.ts
 import { execFile } from "node:child_process";
 import { existsSync as existsSync5 } from "node:fs";
-import { dirname as dirname6, join as join30 } from "node:path";
+import { dirname as dirname7, join as join30 } from "node:path";
 import { fileURLToPath } from "node:url";
 function pipelineCliBundlePath() {
-  return join30(dirname6(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "tenon.mjs");
+  return join30(dirname7(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "tenon.mjs");
 }
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
@@ -17259,7 +17558,7 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync5 } from "node:fs";
-import { dirname as dirname9, join as join42 } from "node:path";
+import { dirname as dirname10, join as join42 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -17422,7 +17721,7 @@ function writeAutomationSettings(root, settings) {
 // packages/server/src/config.ts
 import { readFileSync as readFileSync18 } from "node:fs";
 import { readFile as readFile17, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
-import { dirname as dirname7 } from "node:path";
+import { dirname as dirname8 } from "node:path";
 var ConfigError = class extends Error {
   constructor(message) {
     super(message);
@@ -17553,7 +17852,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
     }
   }
   const key = `${phase}.${track}`;
-  await withLock(dirname7(manifestPath2), async () => {
+  await withLock(dirname8(manifestPath2), async () => {
     const original = await readFile17(manifestPath2, "utf8");
     const lines = original.split("\n");
     let sectionStart = -1;
@@ -17952,7 +18251,7 @@ async function removeSecret(path7, key) {
 
 // packages/server/src/skillsRegistry.ts
 import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync3 } from "node:fs";
-import { delimiter, dirname as dirname8, join as join35 } from "node:path";
+import { delimiter, dirname as dirname9, join as join35 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
   try {
@@ -17981,7 +18280,7 @@ function installedPluginRoots(claudeDir) {
   }
 }
 function descriptionForSkill(name, repoRoot, claudeDir, meta) {
-  const home = dirname8(claudeDir);
+  const home = dirname9(claudeDir);
   const candidates = [...new Set([
     meta?.contentSkill,
     meta?.skill,
@@ -18066,10 +18365,10 @@ function externalSkillSections(repoRoot) {
 }
 function detectInstalled(claudeDir) {
   const skills = new Set(skillDirsIn(join35(claudeDir, "skills")));
-  for (const name of skillDirsIn(join35(dirname8(claudeDir), ".agents", "skills"))) skills.add(name);
+  for (const name of skillDirsIn(join35(dirname9(claudeDir), ".agents", "skills"))) skills.add(name);
   const pluginBases = /* @__PURE__ */ new Set();
   const codexPluginBases = /* @__PURE__ */ new Set();
-  const codexCache = join35(dirname8(claudeDir), ".codex", "plugins", "cache");
+  const codexCache = join35(dirname9(claudeDir), ".codex", "plugins", "cache");
   for (const marketplace of childDirsIn(codexCache)) {
     for (const plugin of childDirsIn(join35(codexCache, marketplace))) codexPluginBases.add(plugin);
   }
@@ -19316,7 +19615,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join42(dirname9(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join42(dirname10(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
@@ -20933,7 +21232,7 @@ async function handlePostRoute(req, res, path7, deps) {
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync22 } from "node:fs";
-import { dirname as dirname10, join as join48 } from "node:path";
+import { dirname as dirname11, join as join48 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
@@ -20961,7 +21260,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join48(dirname10(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join48(dirname11(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -21414,7 +21713,7 @@ function createRelatedSessionSearchExecutor(runner) {
 
 // packages/server/src/version.ts
 import { readFileSync as readFileSync24 } from "node:fs";
-import { basename as basename4, dirname as dirname11, join as join51 } from "node:path";
+import { basename as basename5, dirname as dirname12, join as join51 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -21433,8 +21732,8 @@ function resolveReleaseVersion(pluginRoot2) {
   return SERVER_VERSION;
 }
 function resolvePayloadReleaseId(pluginRoot2) {
-  if (basename4(pluginRoot2) !== "payload") return void 0;
-  const releaseId = basename4(dirname11(pluginRoot2));
+  if (basename5(pluginRoot2) !== "payload") return void 0;
+  const releaseId = basename5(dirname12(pluginRoot2));
   return RELEASE_ID.test(releaseId) ? releaseId : void 0;
 }
 
@@ -21972,7 +22271,7 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join53(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join53(dirname14(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
   return join53(pluginRoot(), "templates", "manifest.yaml");
@@ -22038,7 +22337,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join53(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join53(dirname14(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

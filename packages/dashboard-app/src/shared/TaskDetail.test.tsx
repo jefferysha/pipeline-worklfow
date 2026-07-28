@@ -16,7 +16,7 @@
  *   · ✕ 关闭回调                                   → 本文件（onClose 可选，未传不渲染关闭钮）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
@@ -115,6 +115,29 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
     expect(screen.getByRole('heading', { name: '相关会话' })).toBeVisible()
     expect(screen.getByRole('textbox', { name: '检索词' })).toHaveValue('related session memory')
     expect(fetch).not.toHaveBeenCalledWith('/api/mem/related-sessions/search', expect.anything())
+  })
+
+  it('切换项目或 Change 时同步重挂相关会话 scope，不提交上一 scope 的节点', async () => {
+    const props = await renderDetail({
+      root: '/repo-a',
+      change: makeChange('first-change', 'open', { fields: {} }),
+    })
+    const previousSection = screen.getByTestId('related-sessions')
+
+    await act(async () => {
+      props.rerender(
+        <I18nProvider>
+          <TaskDetail
+            {...props}
+            root="/repo-b"
+            change={makeChange('second-change', 'open', { fields: {} })}
+          />
+        </I18nProvider>,
+      )
+    })
+
+    expect(screen.getByTestId('related-sessions')).not.toBe(previousSection)
+    expect(screen.getByRole('textbox', { name: '检索词' })).toHaveValue('second change')
   })
 
   it('按 stageArtifacts 渲染 7 个阶段行，行语义（data-state）：done ×4 / cur(verify) / todo ×2', async () => {
