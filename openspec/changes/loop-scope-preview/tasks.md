@@ -26,6 +26,7 @@
 - [x] B2e 返工收束：重建 bundle，重新执行全量 Standards/Spec 审查并清零 critical/high/medium。
 - [x] B2f 契约返工：以 TDD 对齐 transport-safe 路径字符、POSIX 冒号路径和 typed client 去重边界，并移除 tracked 文档中的受限参考身份。
 - [x] B2g transport 返工：以 TDD 拒绝未成对 Unicode surrogate，保证路径预算不会因 JSON 转义膨胀越过公共 body 上限。
+- [x] B2h client 返工：以 TDD 将 2xx 空体与 malformed JSON 归一化为稳定 `response` 错误、保留 body-read abort 身份并重建 Dashboard bundle。
 
 ## 验证
 

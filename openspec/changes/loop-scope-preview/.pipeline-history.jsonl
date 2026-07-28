@@ -104,3 +104,20 @@
 {"ts":"2026-07-28T10:44:25Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"2665c98d-2973-4b04-94af-bb9fa35b0341"}
 {"ts":"2026-07-28T10:45:08Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T10:54:13Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T10:54:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T10:54:38Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T10:54:38Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T10:54:38Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T10:54:39Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"27e50f78-fad8-4cd7-a80e-6b57bebf78f6"}
+{"ts":"2026-07-28T11:06:12Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T11:06:12Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T11:06:13Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T11:06:13Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T11:06:19Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T11:06:19Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T07:59:49Z authority_host_session=019fa7b7-f107-78d0-8daf-08bbdd0d9205"}
+{"ts":"2026-07-28T11:06:20Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T11:06:20Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T11:06:20Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T11:06:20Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T11:06:20Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"65b2a212-7616-4ba2-ad0f-d3d4970ea3bd"}
+{"ts":"2026-07-28T11:10:32Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

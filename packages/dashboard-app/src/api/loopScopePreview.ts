@@ -192,7 +192,14 @@ export async function postLoopScopePreview(input: {
             : 'response'
     throw new LoopScopePreviewError(kind, response.status)
   }
-  const decoded = decodeLoopScopePreview(await readJson(response))
+  let body: unknown
+  try {
+    body = await readJson(response)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new LoopScopePreviewError('response', response.status, error)
+  }
+  const decoded = decodeLoopScopePreview(body)
   if (decoded === null
     || decoded.loop_id !== requestLoopId
     || decoded.items.length !== requestPaths.length

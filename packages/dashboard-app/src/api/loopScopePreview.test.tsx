@@ -143,6 +143,32 @@ describe('loop scope preview API', () => {
     })
   })
 
+  it('maps malformed successful bodies to the stable response error', async () => {
+    for (const body of ['', 'not-json']) {
+      global.fetch = vi.fn(async () => new Response(body, { status: 200 }))
+      await expect(postLoopScopePreview({
+        root: '/repo',
+        loopId: 'release-loop',
+        paths: ['src/app.ts'],
+      })).rejects.toMatchObject({
+        kind: 'response',
+        status: 200,
+      })
+    }
+  })
+
+  it('preserves an abort raised while reading a successful response body', async () => {
+    const abort = new DOMException('Aborted', 'AbortError')
+    const abortedResponse = new Response(JSON.stringify(response), { status: 200 })
+    vi.spyOn(abortedResponse, 'json').mockRejectedValue(abort)
+    global.fetch = vi.fn(async () => abortedResponse)
+    await expect(postLoopScopePreview({
+      root: '/repo',
+      loopId: 'release-loop',
+      paths: ['src/app.ts', 'docs/guide.md'],
+    })).rejects.toBe(abort)
+  })
+
   it('maps stable server codes without exposing server-localized text', async () => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify({
       ok: false,
