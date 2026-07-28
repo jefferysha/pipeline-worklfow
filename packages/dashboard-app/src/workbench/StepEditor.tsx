@@ -122,7 +122,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
 
       <div className="pt-3.5 pb-1">
         <div className={SEC_H}>{t('workbench.ed_sec_basic')}</div>
-        <div className="grid grid-cols-[230px_170px_minmax(0,1fr)] gap-3.5 max-[720px]:grid-cols-1">
+        <div className="grid grid-cols-[230px_170px_minmax(0,1fr)] gap-3.5 mobile:grid-cols-1">
           <div>
             <label className={FLABEL} htmlFor={`wb-ed-label-${step.id}`}>{t('workbench.ed_label')}</label>
             <input

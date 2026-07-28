@@ -27,7 +27,7 @@ export function PageHeader({
 }: PageHeaderProps): JSX.Element {
   return (
     <header
-      className={`mb-7 flex flex-wrap items-start gap-x-5 gap-y-4 border-b border-border pb-5 max-[720px]:mb-5 max-[720px]:pb-4 ${className}`}
+      className={`mb-7 flex flex-wrap items-start gap-x-5 gap-y-4 border-b border-border pb-5 mobile:mb-5 mobile:pb-4 ${className}`}
       data-slot="page-header"
       data-testid={testId}
       data-anim={animation}
@@ -41,7 +41,7 @@ export function PageHeader({
             {eyebrow}
           </div>
         )}
-        <h1 className="text-[30px] font-bold leading-[1.08] tracking-[-0.03em] text-text max-[720px]:text-[28px]">
+        <h1 className="text-[30px] font-bold leading-[1.08] tracking-[-0.03em] text-text mobile:text-[28px]">
           {title}
         </h1>
         {description !== undefined && (
@@ -60,7 +60,7 @@ export function PageHeader({
       </div>
       {actions !== undefined && (
         <div
-          className="flex flex-wrap items-center justify-end gap-2.5 max-[720px]:w-full max-[720px]:justify-start"
+          className="flex flex-wrap items-center justify-end gap-2.5 mobile:w-full mobile:justify-start"
           data-slot="page-actions"
         >
           {actions}

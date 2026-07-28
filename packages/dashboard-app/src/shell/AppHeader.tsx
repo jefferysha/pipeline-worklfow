@@ -114,7 +114,7 @@ export function AppHeader({ view, onView, projects, currentRoot, onRoot, onUnreg
 
   return (
     <header
-      className="flex items-center gap-3 bg-bg px-5 pt-4 pb-1 max-[720px]:px-3.5"
+      className="flex items-center gap-3 bg-bg px-5 pt-4 pb-1 mobile:px-3.5"
       data-testid="app-header"
     >
       {onProjects ? (

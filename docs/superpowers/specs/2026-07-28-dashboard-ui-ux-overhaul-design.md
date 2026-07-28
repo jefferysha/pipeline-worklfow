@@ -1,7 +1,7 @@
 # Dashboard UI/UX 系统化优化设计
 
-日期：2026-07-28  
-状态：Explore 设计定稿  
+日期：2026-07-28
+状态：Explore 设计定稿
 Change：`dashboard-ui-ux-overhaul`
 
 ## 1. 问题陈述

@@ -105,7 +105,7 @@ export function TimelineHookNodes({
           <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3">
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
-          <div className="flex min-w-0 items-start gap-4 max-[720px]:flex-col">
+          <div className="flex min-w-0 items-start gap-4 mobile:flex-col">
             <div className="w-32 flex-none pt-1">
               <h3 className="text-sm font-semibold text-text">{meta.title}</h3>
               <p className="mt-0.5 font-mono text-[10px] text-text-3">{meta.hint}</p>

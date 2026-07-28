@@ -82,7 +82,7 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     render(<App />)
     await screen.findByTestId('progress-view')
     const main = screen.getByTestId('app-main')
-    expect(main.className).toContain('max-[720px]:pb-[calc(88px+env(safe-area-inset-bottom))]')
+    expect(main.className).toContain('mobile:pb-[calc(88px+env(safe-area-inset-bottom))]')
     expect(screen.getByTestId('app-navigation')).toHaveAttribute('data-responsive', 'rail-to-bottom')
   })
 

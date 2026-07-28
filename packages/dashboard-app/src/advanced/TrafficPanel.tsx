@@ -6,6 +6,7 @@ import {
   type TraceRecordsResponse,
   type TraceSessionRow,
 } from './trafficData'
+import { useT } from '../i18n'
 
 /**
  * TrafficPanel（#34d）—— tap 流量查看器：真消费 /api/traces/sessions + /api/traces/records。
@@ -14,6 +15,7 @@ import {
  * 会话状态徽标 data-state 承载（active=绿 tint），颜色全走 token 语义类。
  */
 export function TrafficPanel(): JSX.Element {
+  const { t } = useT()
   const [sessions, setSessions] = useState<TraceSessionRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -97,7 +99,7 @@ export function TrafficPanel(): JSX.Element {
       )}
       {selected && !records && !recError && (
         <p className="m-0 text-xs text-text-3" data-testid="traffic-records-loading" role="status" aria-live="polite">
-          加载捕获记录…
+          {t('advanced.traffic_records_loading')}
         </p>
       )}
       {selected && recError && (

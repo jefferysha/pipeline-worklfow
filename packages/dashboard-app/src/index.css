@@ -13,6 +13,8 @@
 /* dark: 变体挂到 [data-theme=dark]（App 显式切换）——系统跟随由下方 media 段的 CSS 变量层承担，
  * tailwind 类只需感知显式主题（与 shadcn dark mode 惯例一致）。 */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* 与产品规范一致：精确 720px 仍属于移动布局。 */
+@custom-variant mobile (@media (max-width: 720px));
 
 :root {
   color-scheme: light;

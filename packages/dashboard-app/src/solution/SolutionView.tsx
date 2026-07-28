@@ -35,7 +35,7 @@ function SectionHeading({ eyebrow, title, description }: SectionHeadingProps): J
   return (
     <div className="mb-8 max-w-3xl">
       <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-(--accent)">{eyebrow}</p>
-      <h2 className="text-3xl font-bold tracking-[-0.03em] text-text max-[720px]:text-2xl">{title}</h2>
+      <h2 className="text-3xl font-bold tracking-[-0.03em] text-text mobile:text-2xl">{title}</h2>
       <p className="mt-3 text-base leading-7 text-muted-foreground">{description}</p>
     </div>
   )
@@ -49,7 +49,7 @@ export function SolutionView(): JSX.Element {
 
   return (
     <div className="mx-auto min-w-0 w-full max-w-[1240px] space-y-20 overflow-hidden pb-16" data-testid="solution-view">
-      <section className="grid min-w-0 max-w-full grid-cols-1 gap-10 rounded-3xl border border-border bg-card px-10 py-14 shadow-sm min-[940px]:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] max-[720px]:px-5 max-[720px]:py-9">
+      <section className="grid min-w-0 max-w-full grid-cols-1 gap-10 rounded-3xl border border-border bg-card px-10 py-14 shadow-sm min-[940px]:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] mobile:px-5 mobile:py-9">
         <div className="min-w-0 w-full max-w-full">
           <Badge
             variant="outline"
@@ -57,10 +57,10 @@ export function SolutionView(): JSX.Element {
           >
             {t('solution.eyebrow')}
           </Badge>
-          <h1 className="max-w-3xl text-5xl font-bold leading-[1.08] tracking-[-0.045em] text-text max-[720px]:text-3xl">
+          <h1 className="max-w-3xl text-5xl font-bold leading-[1.08] tracking-[-0.045em] text-text mobile:text-3xl">
             {t('solution.hero_title')}
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground max-[720px]:text-base max-[720px]:leading-7">
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground mobile:text-base mobile:leading-7">
             {t('solution.hero_desc')}
           </p>
           <div className="mt-8 flex min-w-0 max-w-full flex-wrap gap-3">
@@ -142,7 +142,7 @@ export function SolutionView(): JSX.Element {
           description={t('solution.sections.workflow_desc')}
         />
         <div
-          className="rounded-3xl border border-border bg-card p-7 max-[720px]:p-5"
+          className="rounded-3xl border border-border bg-card p-7 mobile:p-5"
           data-testid="solution-workflow"
         >
           <ol className="grid gap-3 min-[620px]:grid-cols-4 min-[1050px]:grid-cols-7">
@@ -222,7 +222,7 @@ export function SolutionView(): JSX.Element {
           description={t('solution.sections.install_desc')}
         />
         <div className="grid min-w-0 grid-cols-1 gap-5 min-[900px]:grid-cols-[1fr_1fr]">
-          <div className="rounded-3xl border border-border bg-card p-7 max-[720px]:p-5">
+          <div className="rounded-3xl border border-border bg-card p-7 mobile:p-5">
             <p className="text-sm font-semibold text-(--accent)">{t('solution.install.requirement')}</p>
             <div className="mt-6 space-y-5">
               <div>

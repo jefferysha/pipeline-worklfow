@@ -130,7 +130,7 @@ interface ChipRowProps {
 
 /** 旧 .lp-saferow：150px 标签列 + 弹性内容列；相邻行虚线顶界经 [data-saferow] + & 对位旧 `+` 组合子。 */
 const SAFEROW_TW =
-  'grid grid-cols-[150px_minmax(0,1fr)] items-start gap-3 py-2.5 last:pb-0.5 max-[720px]:grid-cols-1 max-[720px]:gap-1.5 [[data-saferow]+&]:border-t [[data-saferow]+&]:border-dashed [[data-saferow]+&]:border-border'
+  'grid grid-cols-[150px_minmax(0,1fr)] items-start gap-3 py-2.5 last:pb-0.5 mobile:grid-cols-1 mobile:gap-1.5 [[data-saferow]+&]:border-t [[data-saferow]+&]:border-dashed [[data-saferow]+&]:border-border'
 
 export function LpChipRow({ label, values, addAria, descKeys, prov, note, onChange }: ChipRowProps): JSX.Element {
   const { t } = useT()

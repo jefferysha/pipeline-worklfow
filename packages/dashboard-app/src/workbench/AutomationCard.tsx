@@ -195,7 +195,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
           {t('workbench.afk_sec')}
           <span className={WB_TW.hint}>{t('workbench.afk_sec_hint')}</span>
         </div>
-        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 max-[720px]:grid-cols-1">
+        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 mobile:grid-cols-1">
           <div>
             <LpSlider
               id="afk-sld-parallel"

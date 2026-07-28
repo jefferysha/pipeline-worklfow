@@ -58,11 +58,11 @@ export function useProgressDrawer({
       return
     }
     closingRef.current = true
-    gsap.to(scrim, { autoAlpha: 0, duration: 0.2, ease: 'power1.in' })
+    gsap.to(scrim, { autoAlpha: 0, duration: 0.2, ease: 'power1.out' })
     gsap.to(drawer, {
       xPercent: 103,
       duration: 0.24,
-      ease: 'power3.in',
+      ease: 'power3.out',
       onComplete: () => {
         closingRef.current = false
         setDrawerKey(null)

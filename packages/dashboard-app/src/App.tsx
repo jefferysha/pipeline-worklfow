@@ -181,7 +181,7 @@ function AppShell(): JSX.Element {
         afkCount={afkCount}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col max-[720px]:pt-14">
+      <div className="flex min-w-0 flex-1 flex-col mobile:pt-14">
       {!connected && (
         <div
           className="flex items-center gap-2.5 border-b border-red-b bg-red-t px-5 py-2 text-[12.5px] font-semibold text-red-d"
@@ -203,7 +203,7 @@ function AppShell(): JSX.Element {
       {flash && (
         <div
           ref={flashRef}
-          className={`pointer-events-none fixed bottom-[26px] left-1/2 z-60 flex max-w-[70vw] -translate-x-1/2 items-center gap-[7px] rounded-full px-3.5 py-2 text-[12.5px] font-semibold shadow-md max-[720px]:bottom-[calc(84px+env(safe-area-inset-bottom))] max-[720px]:max-w-[calc(100vw-32px)] ${
+          className={`pointer-events-none fixed bottom-[26px] left-1/2 z-60 flex max-w-[70vw] -translate-x-1/2 items-center gap-[7px] rounded-full px-3.5 py-2 text-[12.5px] font-semibold shadow-md mobile:bottom-[calc(84px+env(safe-area-inset-bottom))] mobile:max-w-[calc(100vw-32px)] ${
             flash.kind === 'error' ? 'bg-red text-solid-fg' : 'bg-ink text-ink-fg'
           }`}
           role="status"
@@ -218,7 +218,7 @@ function AppShell(): JSX.Element {
       <main
         id="main-content"
         tabIndex={-1}
-        className="w-full flex-1 px-6 pb-6 pt-3 max-[720px]:px-4 max-[720px]:pb-[calc(88px+env(safe-area-inset-bottom))] max-[720px]:pt-2"
+        className="w-full flex-1 px-6 pb-6 pt-3 mobile:px-4 mobile:pb-[calc(88px+env(safe-area-inset-bottom))] mobile:pt-2"
         data-testid="app-main"
       >
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
@@ -226,7 +226,7 @@ function AppShell(): JSX.Element {
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
         {snapshot === null && !loading && error ? (
           <section
-            className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d max-[720px]:mt-4 max-[720px]:p-5"
+            className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d mobile:mt-4 mobile:p-5"
             role="alert"
             aria-live="assertive"
             data-testid="snapshot-error"

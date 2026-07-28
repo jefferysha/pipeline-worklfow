@@ -287,7 +287,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮
           }}
         />
-        <div className="mt-3 grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
+        <div className="mt-3 grid grid-cols-3 gap-3.5 mobile:grid-cols-1">
           <div>
             <div className="mb-[5px] flex items-center gap-2">
               <label className={WB_TW.flabel} htmlFor="lp-doc">{t('workbench.lp_doc')}</label>

@@ -29,7 +29,7 @@ const RECORDS_A = {
   ],
 }
 
-function stubFetch(opts: { sessionsOk?: boolean } = {}): void {
+function stubFetch(opts: { sessionsOk?: boolean; recordsPending?: boolean } = {}): void {
   const sessionsOk = opts.sessionsOk ?? true
   vi.stubGlobal(
     'fetch',
@@ -39,6 +39,7 @@ function stubFetch(opts: { sessionsOk?: boolean } = {}): void {
         return { ok: sessionsOk, status: sessionsOk ? 200 : 500, json: async () => SESSIONS } as unknown as Response
       }
       if (u.includes('/api/traces/records')) {
+        if (opts.recordsPending) return await new Promise<Response>(() => {})
         return { ok: true, status: 200, json: async () => RECORDS_A } as unknown as Response
       }
       throw new Error(`unexpected fetch ${u}`)
@@ -85,6 +86,15 @@ describe('TrafficPanel（#34d 真消费 /api/traces/*）', () => {
     expect(await screen.findByTestId('traffic-records')).toBeInTheDocument()
     expect(screen.getByTestId('traffic-record-0').textContent).toContain('/v1/messages')
     expect(screen.getByTestId('traffic-record-1').textContent).toContain('429')
+  })
+
+  it('英文环境下记录加载态使用翻译文案', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    stubFetch({ recordsPending: true })
+    renderTraffic()
+    const btn = await screen.findByTestId('traffic-session-sess-A')
+    await userEvent.click(within(btn).getByRole('button'))
+    expect(screen.getByTestId('traffic-records-loading')).toHaveTextContent('Loading capture records…')
   })
 
   it('数据端失败 → 呈现错误态而非崩溃', async () => {

@@ -47,7 +47,7 @@ export function LoopAdvancedFields({
     <WbAdvanced testid="lp-adv">
       <div className={WB_TW.sec} data-sec="">
         <div className={WB_TW.secH}>{t('workbench.lp_sec_budget')}<span className={WB_TW.hint}>{t('workbench.lp_sec_budget_hint')}</span></div>
-        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 max-[720px]:grid-cols-1">
+        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 mobile:grid-cols-1">
           <LpSlider id="lp-sld-cadence" label={t('workbench.lp_sld_cadence')} prov={<ProvBadge field="cadence" />} value={cadenceIndex(draft.cadence)} min={0} max={CADS.length - 1} display={draft.cadence} recoLabel={t('workbench.lp_reco', { v: CADS[RECO_CAD_IDX] ?? '' })} recoFrac={RECO_CAD_IDX / (CADS.length - 1)} onValue={(value) => {
             const cadence = CADS[value]
             if (cadence) onEdit({ cadence })
@@ -74,7 +74,7 @@ export function LoopAdvancedFields({
       <div className={WB_TW.sec} data-sec="">
         <div className={WB_TW.secH}>{t('workbench.lp_sec_auto')}<span className={WB_TW.hint}>{t('workbench.lp_sec_auto_hint')}</span></div>
         <span className={cn(WB_TW.flabel, 'mb-[5px]')}>{t('workbench.lp_level')}</span>
-        <div className="mt-0.5 mb-1 grid grid-cols-3 gap-2.5 max-[720px]:grid-cols-1" role="radiogroup" aria-label={t('workbench.lp_level')}>
+        <div className="mt-0.5 mb-1 grid grid-cols-3 gap-2.5 mobile:grid-cols-1" role="radiogroup" aria-label={t('workbench.lp_level')}>
           {LEVELS.map((level) => {
             const selected = row.autonomy_level === level
             return <button key={level} type="button" className={cn('flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2')} role="radio" aria-checked={selected} data-testid={`lp-lv-${level}`} disabled={levelBusy} onClick={() => onLevel(level)}>

@@ -47,9 +47,9 @@ interface NavProps {
 // ── tailwind 类串（状态经 aria-current / data-* 属性挂 aria-*/data-* 变体，测试不断言视觉类名）──
 /** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏收为纯图标。 */
 const RAIL_BTN_CLS =
-  'group relative flex min-h-11 w-[72px] cursor-pointer flex-col items-center justify-center gap-[3px] rounded-xl border border-transparent px-1 py-1.5 text-text-3 outline-none transition-[background-color,border-color,color,transform] duration-150 motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) active:scale-[.98] motion-reduce:active:scale-100 max-[720px]:h-14 max-[720px]:min-w-11 max-[720px]:flex-1 max-[720px]:rounded-lg max-[720px]:px-0.5 max-[720px]:py-1'
+  'group relative flex min-h-11 w-[72px] cursor-pointer flex-col items-center justify-center gap-[3px] rounded-xl border border-transparent px-1 py-1.5 text-text-3 outline-none transition-[background-color,border-color,color,transform] duration-150 motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) active:scale-[.98] motion-reduce:active:scale-100 mobile:h-14 mobile:min-w-11 mobile:flex-1 mobile:rounded-lg mobile:px-0.5 mobile:py-1'
 /** rail / bottom-nav 按钮短标签；移动端也可见，避免纯图标入口依赖记忆。 */
-const RAIL_LB_CLS = 'max-w-full truncate text-[11px] font-medium leading-[1.2] max-[720px]:text-[10px]'
+const RAIL_LB_CLS = 'max-w-full truncate text-[11px] font-medium leading-[1.2] mobile:text-[10px]'
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -58,13 +58,13 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
   return (
     <header
-      className="sticky top-0 z-40 flex h-screen w-[88px] flex-none flex-col items-center gap-1 border-r border-border bg-card/96 px-2 py-3 backdrop-blur-xl max-[720px]:fixed max-[720px]:bottom-0 max-[720px]:top-auto max-[720px]:h-[calc(72px+env(safe-area-inset-bottom))] max-[720px]:w-full max-[720px]:flex-row max-[720px]:items-start max-[720px]:gap-1 max-[720px]:border-r-0 max-[720px]:border-t max-[720px]:px-2 max-[720px]:pb-[env(safe-area-inset-bottom)] max-[720px]:pt-1.5 max-[720px]:backdrop-blur-none"
+      className="sticky top-0 z-40 flex h-screen w-[88px] flex-none flex-col items-center gap-1 border-r border-border bg-card/96 px-2 py-3 backdrop-blur-xl mobile:fixed mobile:bottom-0 mobile:top-auto mobile:h-[calc(72px+env(safe-area-inset-bottom))] mobile:w-full mobile:flex-row mobile:items-start mobile:gap-1 mobile:border-r-0 mobile:border-t mobile:px-2 mobile:pb-[env(safe-area-inset-bottom)] mobile:pt-1.5 mobile:backdrop-blur-none"
       role="banner"
       data-testid="app-navigation"
       data-responsive="rail-to-bottom"
     >
       <div
-        className="hidden max-[720px]:fixed max-[720px]:inset-x-0 max-[720px]:top-0 max-[720px]:z-0 max-[720px]:flex max-[720px]:h-14 max-[720px]:items-center max-[720px]:border-b max-[720px]:border-border max-[720px]:bg-card/96 max-[720px]:pl-16 max-[720px]:text-sm max-[720px]:font-bold max-[720px]:text-text max-[720px]:backdrop-blur-xl"
+        className="hidden mobile:fixed mobile:inset-x-0 mobile:top-0 mobile:z-0 mobile:flex mobile:h-14 mobile:items-center mobile:border-b mobile:border-border mobile:bg-card/96 mobile:pl-16 mobile:text-sm mobile:font-bold mobile:text-text mobile:backdrop-blur-xl"
         aria-hidden="true"
       >
         Tenon
@@ -75,7 +75,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
         data-testid="nav-overview"
         aria-label={t('solution.nav_label')}
         aria-current={view === 'overview' ? 'page' : undefined}
-        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-xl border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) max-[720px]:fixed max-[720px]:top-1.5 max-[720px]:left-3 max-[720px]:z-10 max-[720px]:mb-0 max-[720px]:h-11 max-[720px]:min-w-11 max-[720px]:w-11"
+        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-xl border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) mobile:fixed mobile:top-1.5 mobile:left-3 mobile:z-10 mobile:mb-0 mobile:h-11 mobile:min-w-11 mobile:w-11"
         title={t('solution.nav_label')}
         onClick={() => {
           setSettingsOpen(false)
@@ -85,9 +85,9 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
         <Icon name="flow" size={16} />
       </button>
 
-      <div className="my-1.5 w-14 flex-none border-t border-border max-[720px]:hidden" aria-hidden="true" />
+      <div className="my-1.5 w-14 flex-none border-t border-border mobile:hidden" aria-hidden="true" />
 
-      <nav className="flex flex-col gap-1 max-[720px]:min-w-0 max-[720px]:flex-1 max-[720px]:flex-row max-[720px]:justify-around max-[720px]:overflow-x-auto max-[720px]:overscroll-x-contain max-[720px]:[scrollbar-width:none]" aria-label="primary" data-testid="primary-nav">
+      <nav className="flex flex-col gap-1 mobile:min-w-0 mobile:flex-1 mobile:flex-row mobile:justify-around mobile:overflow-x-auto mobile:overscroll-x-contain mobile:[scrollbar-width:none]" aria-label="primary" data-testid="primary-nav">
         {PRIMARY_VIEWS.map((v) => {
           const IconCmp = VIEW_ICONS[v]
           return (
@@ -107,7 +107,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
               <span data-testid={`nav-label-${v}`} className={RAIL_LB_CLS}>{t(`nav.${v}`)}</span>
               {v === 'progress' && decisionCount > 0 && (
                 <span
-                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d max-[720px]:-right-1"
+                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="progress-badge"
                 >
                   {decisionCount}
@@ -115,7 +115,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
               )}
               {v === 'afk' && afkCount > 0 && (
                 <span
-                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d max-[720px]:-right-1"
+                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="afk-badge"
                 >
                   {afkCount}
@@ -126,16 +126,16 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
         })}
       </nav>
 
-      <div className="flex-1 max-[720px]:hidden" aria-hidden="true" />
-      <div className="my-1.5 w-14 flex-none border-t border-border max-[720px]:hidden" aria-hidden="true" />
+      <div className="flex-1 mobile:hidden" aria-hidden="true" />
+      <div className="my-1.5 w-14 flex-none border-t border-border mobile:hidden" aria-hidden="true" />
 
-      <div className="relative flex flex-none flex-col items-center max-[720px]:mt-1">
+      <div className="relative flex flex-none flex-col items-center mobile:mt-1">
         <button
           type="button"
           data-testid="nav-settings"
           aria-expanded={settingsOpen}
           aria-haspopup="dialog"
-          className={`${RAIL_BTN_CLS} aria-[expanded=true]:border-accent-b aria-[expanded=true]:bg-accent-t aria-[expanded=true]:font-bold aria-[expanded=true]:text-accent-d max-[720px]:w-11 max-[720px]:flex-none`}
+          className={`${RAIL_BTN_CLS} aria-[expanded=true]:border-accent-b aria-[expanded=true]:bg-accent-t aria-[expanded=true]:font-bold aria-[expanded=true]:text-accent-d mobile:w-11 mobile:flex-none`}
           onClick={() => setSettingsOpen((open) => !open)}
         >
           <Settings size={18} strokeWidth={1.75} aria-hidden="true" />
@@ -147,7 +147,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
             role="dialog"
             aria-label={t('common.settings')}
             data-testid="nav-settings-panel"
-            className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/96 p-3.5 text-left shadow-lg backdrop-blur-2xl max-[720px]:bottom-[calc(100%+12px)] max-[720px]:left-auto max-[720px]:right-0 max-[720px]:max-w-[calc(100vw-24px)]"
+            className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/96 p-3.5 text-left shadow-lg backdrop-blur-2xl mobile:bottom-[calc(100%+12px)] mobile:left-auto mobile:right-0 mobile:max-w-[calc(100vw-24px)]"
           >
             <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-3">
               <h2 className="text-sm font-bold text-text">{t('common.settings')}</h2>

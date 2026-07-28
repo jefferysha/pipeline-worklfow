@@ -1,8 +1,8 @@
 # Dashboard UI/UX 系统化优化最终验证报告
 
-> Change：`dashboard-ui-ux-overhaul`  
-> 对比基线：`2d103e330f847e003ff5909097d892f5722cca04`  
-> 冻结构建：`f08e5178f33b2372633c41a4eec5572d1deb05a2`  
+> Change：`dashboard-ui-ux-overhaul`
+> 对比基线：`2d103e330f847e003ff5909097d892f5722cca04`
+> 冻结构建：`f08e5178f33b2372633c41a4eec5572d1deb05a2`
 > 结论：PASS，可通过精确 `verify-pass` 进入 Ship
 
 ## 结论
@@ -301,4 +301,3 @@ show 与 archive JSON 的 SHA-256 分别为
 - 冻结身份与三轨前后指纹一致。
 - 只有本 canonical verification report 与 Verify tasks 会在聚合后写入。
 - 结论：允许登记真实 verification-report、完成精确 `verify-pass` review，并进入 Ship。
-
