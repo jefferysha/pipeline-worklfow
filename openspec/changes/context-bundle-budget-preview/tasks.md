@@ -34,7 +34,7 @@
 
 - [x] 运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。
 - [x] 在真实 Tenon Dashboard 覆盖成功、预算失败、缺文档/空态、重试和键盘路径。
-- [ ] 完成三轨 review、verification report 与 exact-event delegated receipt。
+- [x] 完成四轨 review、verification report 与 exact-event delegated receipt。
 
 ## 交付
 
