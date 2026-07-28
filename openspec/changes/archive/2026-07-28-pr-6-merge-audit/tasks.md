@@ -48,9 +48,9 @@
 ## 交付
 
 - [x] 应用审计 delta，确认 README/docs/回滚，登记 applied-spec。
-- [ ] 所有最终门禁成功后按仓库历史方法合并 PR #6 并记录 merge SHA。
+- [x] 所有最终门禁成功后按仓库历史方法合并 PR #6；merge SHA `8f9c5fa2b5712b5f0422f61d9ecea32b0f3d41b9`。
 
 ## 归档
 
-- [ ] 确认 merge SHA 与 main CI 后归档审计 Change。
-- [ ] 仅在 clean、无未推送提交且无人占用时安全清理原 PR worktree。
+- [x] 确认 merge SHA `8f9c5fa2...`、main CI `30380596631`、applied digest、文档 receipts 与无活跃子 Change，允许 canonical archived transition。
+- [x] 原 PR worktree clean、0 commits ahead、已合并且无人占用，已用普通 `git worktree remove` 安全清理；当前自动化 worktree 保留。

@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-28-pr-6-merge-audit-design.md
 plan: docs/superpowers/plans/2026-07-28-pr-6-merge-audit.md
 verification_report: docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify.md
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T11:06:58Z
-updated_at: 2026-07-28T16:44:06Z
+updated_at: 2026-07-28T17:06:45Z
 verified_at: 2026-07-28T16:44:06Z
-archived_at: null
-archived: false
+archived_at: 2026-07-28T17:06:45Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 77ed6eb7-0161-4b9f-a1e8-ea13fdad510f
-pipeline_transition_sequence: 15
-pipeline_transition_head: 463daf50-3462-4b79-81e8-76df73f5f205
-pipeline_state_revision: 52
-pipeline_state_revision_id: 1f4f41f0-7da0-4795-84ba-4783b9b9e542
-pipeline_state_digest: 07b64680a717e504567ec754d20a3f797bc497d3d36cc3d37f2ac78272190622
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTIsInJldmlzaW9uSWQiOiIxZjRmNDFmMC03ZGEwLTQ3OTUtODRiYS00NzgzYjliOWU1NDIiLCJwYXlsb2FkRGlnZXN0IjoiMGE1ODI5Yzc5NGI3MjFmMDU0ZGQ4OWMzN2Q2ZTU3Yjk0ZDQzZjkxNTQ4MjNjY2ZlMmU4MjZjZWI5MzczMzQ1ZSJ9
+pipeline_transition_sequence: 17
+pipeline_transition_head: 4800088a-bd61-4ff6-b607-a190e417cd23
+pipeline_state_revision: 54
+pipeline_state_revision_id: 55d28788-7937-4a4b-ae77-542fe753d844
+pipeline_state_digest: 0e4b6953d0bd71c45d1ca78eedfd59a101e6e19cd49da2d2c879bb953fc7b409
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTQsInJldmlzaW9uSWQiOiI1NWQyODc4OC03OTM3LTRhNGItYWU3Ny01NDJmZTc1M2Q4NDQiLCJwYXlsb2FkRGlnZXN0IjoiYTA5M2RjMGJjZjg4N2IwY2QyMDYyODBlYmRkMjM4Nzk5YWQ1OTQ2ZjY2YzEzNjY5ZTg4NDhjOGJjNDAxZjljNSJ9
