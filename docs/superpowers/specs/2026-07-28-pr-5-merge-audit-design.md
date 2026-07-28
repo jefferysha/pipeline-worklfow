@@ -25,6 +25,9 @@
 - 进度抽屉关闭动画是 ease-in，而规范要求 ease-out。
 - 官方进度页截图仍展示旧视觉语言。
 - 三个 Markdown 文件有 `diff --check` 可见的空白问题。
+- 首次冻结视觉轨在 1024px 发现 Workbench 第七阶段入口位于横向滚动区外，页面没有提示用户
+  还有视口外阶段。
+- 首次冻结 Reviewer 发现 ADR 仍写“单一 mobile variant”，与互补断点实现和已批准 Spec 不一致。
 
 ### 排除项
 
@@ -36,7 +39,10 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 2. 为 `TrafficPanel` 加成对的中英文 key，并保持空闲、加载、成功、失败四态可辨。
 3. 将进度抽屉关闭缓动改成 `power1.out` / `power3.out`，在单元测试中锁定。
 4. 修复 Markdown 空白；在真实 Dashboard 的验收状态下刷新进度页 WebP。
-5. 先构建内部 workspace，再执行 web typecheck、测试和构建；随后运行全仓验证与真实浏览器矩阵。
+5. 为 Workbench 阶段带增加中等宽度可见的横向滚动提示，并把提示作为滚动容器的
+   `aria-describedby`。
+6. 加固 system dark / explicit light / explicit dark 与 `--btn-bg` 的对比度测试。
+7. 先构建内部 workspace，再执行 web typecheck、测试和构建；随后运行全仓验证与真实浏览器矩阵。
 
 ## 验收矩阵
 
@@ -46,6 +52,7 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 | i18n | zh/en key 对称测试与 TrafficPanel 测试 | 切换语言时加载态无硬编码中文 |
 | motion | hook 测试断言 ease-out | 打开/关闭抽屉且 reduced-motion 可用 |
 | 视觉与可访问性 | 主题对比度、组件测试、类型检查 | 桌面/移动、亮/暗、键盘焦点 |
+| 1024px 阶段发现性 | StepperRail 提示与 `aria-describedby` 测试 | Workbench 可见滚动提示，滚动后 Ship/Archive 可操作 |
 | 文档 | docs、repository hygiene、diff check | 官方截图与真实页面一致 |
 
 ## 回滚与停止条件

@@ -15,6 +15,7 @@
 
 - [x] 将发现转为可验证需求、修复计划和验证矩阵。
 - [x] 登记 delta spec、实施计划与 exact-event review evidence。
+- [x] 将首次 Verify 的 ADR 漂移、1024px Workbench 阶段发现性与主题测试缺口写入规格和计划。
 
 ## 实现
 
@@ -22,6 +23,8 @@
 - [x] 补齐 TrafficPanel i18n，修正抽屉关闭 easing 并增加定向测试。
 - [x] 修复 Markdown 空白并从真实 Dashboard 刷新进度页截图。
 - [x] 提交修复与治理产物，以非强制 push 更新原 PR head。
+- [ ] 增加 1024px 阶段滚动提示与可访问关联，并加固主题解析路径测试。
+- [ ] 修正 ADR、实施命令、Nav 注释和 Lucide 线宽说明。
 
 ## 验证
 

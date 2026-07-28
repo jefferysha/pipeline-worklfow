@@ -18,14 +18,15 @@ design-doc: docs/superpowers/specs/2026-07-28-pr-5-merge-audit-design.md
 1. 在 `packages/dashboard-app/src/index.css` 定义包含 720px 的 `mobile` custom variant，以及只在大于 720px 生效的互补 `desktop` custom variant。
 2. 将 `packages/dashboard-app/src/**/*.tsx` 及对应测试中的 `max-[720px]:` 统一改为 `mobile:`，将 `min-[720px]:` 统一改为 `desktop:`，避免精确 720px 同时命中桌面与移动布局。
 3. 更新 `App.test.tsx`、`shell/Nav.test.tsx`、`progress/WorkflowCanvas.test.tsx`、`solution/SolutionView.test.tsx` 的 class 断言，并增加生产 CSS 临界查询验证。
-4. 运行 Dashboard 定向测试和 `npm run build:web`；确认产物包含 `max-width:720px` 的查询。
+4. 运行 Dashboard 定向测试和 `npm run build:web`；确认产物同时包含
+   `max-width:720px` 与 `min-width:720.02px` 的互补查询。
 
 验证：
 
 ```bash
-./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/App.test.tsx packages/dashboard-app/src/shell/Nav.test.tsx packages/dashboard-app/src/progress/WorkflowCanvas.test.tsx
+./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/App.test.tsx packages/dashboard-app/src/shell/Nav.test.tsx packages/dashboard-app/src/progress/WorkflowCanvas.test.tsx packages/dashboard-app/src/solution/SolutionView.test.tsx
 npm run build:web
-rg -n "max-width:\\s*720px" packages/dashboard-app/dist/assets
+rg -n "max-width:\\s*720px|min-width:\\s*720\\.02px" packages/dashboard-app/dist/assets
 ```
 
 回滚：恢复成对 custom variant、class 和断言的同一提交块。
@@ -52,11 +53,34 @@ git diff --check origin/main...
 
 **此处建议 /clear**
 
-## Build 子阶段 3：真实截图与生成产物
+## Build 子阶段 3：1024px 工作台发现性与主题测试
+
+1. 先在 `packages/dashboard-app/src/workbench/StepperRail.test.tsx` 增加失败断言，要求中等宽度提示
+   存在且通过 `aria-describedby` 关联阶段滚动容器。
+2. 在 `StepperRail.tsx` 添加只在中等/窄视口可见的简洁横向滚动提示，不改变阶段选择、gate 或
+   overflow 行为。
+3. 先扩展 `themeContrast.test.tsx`，让 system dark、explicit light 和 explicit dark 三条解析
+   路径以及 `--btn-bg` 在旧实现上按预期失败，再做最小测试解析修复。
+4. 更新 `Nav.tsx` 的移动底栏注释并同步 ADR 的 Lucide 线宽说明。
+5. 运行 StepperRail、主题、Workbench 定向测试和前端 typecheck。
+
+验证：
+
+```bash
+./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/workbench/StepperRail.test.tsx packages/dashboard-app/src/themeContrast.test.tsx packages/dashboard-app/src/workbench/WorkbenchView.test.tsx
+npm run typecheck:web
+```
+
+回滚：移除提示、可访问关联和新增断言；不涉及数据、API 或状态持久化。
+
+**此处建议 /clear**
+
+## Build 子阶段 4：真实截图与生成产物
 
 1. 先构建内部 workspace 和 Dashboard，启动唯一可识别的生产 Dashboard。
 2. 核对页面标题、目标 URL、注册项目 root 与 `pr-5-merge-audit`。
-3. 在 1440×900、720×900 和 390×844 验收导航、Progress、抽屉、语言、亮暗主题和无横向溢出。
+3. 在 1440×900、1024×768、721×900、720×900 和 390×844 验收导航、Progress、Workbench
+   阶段发现性、抽屉、语言、亮暗主题和无横向溢出。
 4. 从验收通过的 Progress 页面刷新 `docs-site/public/images/dashboard-progress.webp`。
 5. 重新运行 docs、repository hygiene 和生产构建，确认截图引用与生成产物同步。
 

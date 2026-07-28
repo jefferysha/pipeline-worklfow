@@ -27,6 +27,10 @@
 3. `useProgressDrawer` 关闭动画使用 `power1.in` / `power3.in`，须改为 ease-out，并增加测试断言。
 4. 官方进度页 WebP 仍展示旧的红绿左侧状态条，须在真实应用验收后刷新。
 5. 三个 Markdown 文件存在尾随空格或文件末空行，须修正以让 `git diff --check` 通过。
+6. 首次冻结视觉验证发现 1024px Workbench 阶段带的 Archive 入口位于视口外，容器虽可滚动但
+   没有发现性提示；须增加可见且可访问关联的横向滚动说明。
+7. 首次冻结审查发现 ADR 与已批准的互补断点实现漂移，计划的定向命令也未覆盖
+   `SolutionView.test.tsx` 与 desktop media query；须同步治理证据和测试矩阵。
 
 ## 已排除意见
 
@@ -35,6 +39,10 @@
 ## 修复决策
 
 - 在 Tailwind 入口声明互补的 `mobile` / `desktop` 变体，并机械替换 Dashboard 源码和相关测试中的 `max-[720px]` / `min-[720px]`。这让所有 720px 断点语义一致，避免新 shell 与 Overview 内容在精确边界同时使用两套布局。
+- 为 Workbench 阶段带增加 1024px 可见的横向滚动提示，并用 `aria-describedby` 让键盘和辅助技术
+  用户同样获得发现性，不改变阶段数据或选择行为。
+- 加固主题对比度测试，分别读取 system dark、explicit light、explicit dark，并用真实
+  `--btn-bg` 检查 primary 前景。
 - 只修正审计确认的问题，不新增依赖、不改公共契约、不借机重构。
 - 浏览器验收覆盖 1440px 与精确 720px、亮暗主题、键盘焦点、reduced-motion；截图只从确认属于 Tenon Dashboard 的真实页面生成。
 
