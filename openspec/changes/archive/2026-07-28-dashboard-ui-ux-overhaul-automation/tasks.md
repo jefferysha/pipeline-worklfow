@@ -58,5 +58,5 @@
 
 ## 归档
 
-- [ ] 应用 OpenSpec、完成归档并更新 automation memory。
-- [ ] 归档后仅跟踪同一 PR 的 review/CI；合并后停止代码改动。
+- [x] 应用 OpenSpec、完成归档并更新 automation memory。
+- [x] 归档后仅跟踪同一 PR 的 review/CI；合并后停止代码改动。
