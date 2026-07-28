@@ -76,7 +76,7 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
     return (
       <div className={`${EMPTY_CLS} max-w-[460px]`} data-testid="onboard-no-change">
         <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="flow" size={20} /></div>
-        <h2 className={EMPTY_TITLE_CLS}>{t('onboard.no_change_title')}</h2>
+        <h1 className={EMPTY_TITLE_CLS}>{t('onboard.no_change_title')}</h1>
         <p className={EMPTY_DESC_CLS}>{t('onboard.no_change_desc')}</p>
         <button
           type="button"

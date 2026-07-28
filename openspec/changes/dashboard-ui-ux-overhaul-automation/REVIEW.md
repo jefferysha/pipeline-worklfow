@@ -185,6 +185,44 @@ H1 为“让 coding agents 按可验证流程交付”，避免把其他端口�
 复评结果：视觉层级保持“安静的操作台”，电脑端密度、键盘语义、状态反馈与动效降级一致；
 Critical / High / Medium = 0 / 0 / 0。
 
+## 第四次 Verify 失败整改与桌面复评
+
+第四次 Verify 的真实桌面视觉轨在冻结 SHA `7179e7612ea44cb6504092b803c0dedc16a3991c`
+发现同 basename workspace 无法区分（High）、零 change 页面缺少 H1（Medium）和项目 loading
+缺少 live-region（Low）。本轮按 TDD 先增加三个失败场景，再做最小实现：
+
+- 项目行保留 basename 作为主标题，并增加紧凑的完整 root 次标题；同 basename 行使用 root
+  派生的唯一 test id，accessible name 同时包含 basename 与 root。不可达项目使用同一身份模式。
+- 零 change 的完整主内容页将既有标题从 H2 提升为唯一 H1，不新增文案或视觉装饰。
+- 项目列表 loading 增加 `role="status"` 与 `aria-live="polite"`。
+- 中英文 `projects.open_aria` 同步携带 root；未引入依赖、手机端专项规则或新动画。
+
+### 评—修—复评
+
+| Severity | 原问题 | 修复后证据 |
+| --- | --- | --- |
+| High | 真实项目页多个 `pipeline-worklfow` 行只有相同 basename，鼠标、键盘和读屏用户可能进入错误 worktree | 14 个真实项目中 10 个同名可达行均显示 root，且 10 个 accessible name / test id 全部唯一 |
+| Medium | 单项目零 change 页面没有 H1 | 1200×870 受控真实浏览器场景只有一个 H1：“这个项目还没有 change” |
+| Low | ProjectsView loading 不是 live region | 受控延迟 snapshot 场景可见 `role=status`、`aria-live=polite` |
+
+真实目标为当前 worktree 生产构建 `http://127.0.0.1:18837/?view=projects`，title 为
+`Tenon Dashboard`，资源为 `index-Cip5UuIH.js` / `index-DhRB40Bi.css`。项目注册表复制到隔离
+runtime 后只读加载，未修改用户注册表。
+
+- 1024×768 浅色、1200×870 深色 + reduced-motion、1440×900 浅色均有唯一“项目”H1，
+  根级 `scrollWidth === clientWidth`，无 console/page error。
+- 10 个同名项目在三档尺寸下均有唯一 accessible name、唯一 test id 和可见 root。
+- 设置浮层首焦点、Escape 关闭和触发器焦点返回继续通过；1200 档确认 reduced-motion 生效。
+- 截图在真实入场动画完成后采集，复评确认路径次标题没有破坏原有状态轨、健康摘要、明暗主题
+  或紧凑列表层级。
+
+自动验证：6 个定向文件 / 121 tests 通过；`npm run typecheck:web`、`npm run test:web`
+（52 files / 997 tests）、`npm run build` 与 `git diff --check` 均通过。既有 React `act(...)`、
+GSAP target 与 Vite >500kB chunk 提示仍为非失败噪声。
+
+复评结论：Critical / High / Medium = 0 / 0 / 0；第四次 Verify 的三个 finding 全部闭环，
+没有新增手机端范围或非必要视觉投资。
+
 ## Verify 第 2 轮失败与桌面语义闭环
 
 第二次 Verify 对冻结 SHA `eabfb33f7e07de7f09b562c144941e115d1789b7` 的隔离 E2E 全部通过，

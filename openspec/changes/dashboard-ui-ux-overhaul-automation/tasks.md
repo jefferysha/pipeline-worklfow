@@ -40,6 +40,9 @@
 - [x] 修复第三次 Verify：真实共享模态 Dialog 的 Escape 不再穿透关闭非模态设置浮层。
 - [x] 修复第三次 Verify：toast 在运行中切换 reduced-motion 时清理旧 tween 并直达终态。
 - [x] 修复全量 pre-Verify：列表与 Dialog 入场动画在运行中切换 reduced-motion 时同步清理。
+- [x] 修复第四次 Verify：同 basename 的项目行显示并朗读可区分的 workspace 身份。
+- [x] 修复第四次 Verify：单项目零 change 页面提供唯一 H1。
+- [x] 修复第四次 Verify：项目列表 loading 使用 polite status 语义。
 
 ## 验证
 

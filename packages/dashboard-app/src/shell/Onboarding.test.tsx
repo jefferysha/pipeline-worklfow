@@ -81,7 +81,7 @@ describe('Onboarding no-change（有项目零 change：Route Lock 主入口 + CL
       throw new Error(`unexpected fetch ${url}`)
     }))
     renderOb({ kind: 'no-change', root: '/Users/me/code/proj' })
-    expect(screen.getByText('这个项目还没有 change')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: '这个项目还没有 change' })).toBeInTheDocument()
     expect(screen.getByTestId('onboard-no-change')).not.toHaveTextContent('⧉')
     expect(screen.getByTestId('onboard-cli').textContent).toContain('tenon init')
     expect(screen.getByTestId('onboard-cli').textContent).toContain('/Users/me/code/proj')
