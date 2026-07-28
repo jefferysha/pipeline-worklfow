@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
 import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname13, join as join52 } from "node:path";
+import { dirname as dirname13, join as join53 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -9370,7 +9370,7 @@ async function assertUpdatePreservesReferences(next, id, scan) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { existsSync as existsSync4, readdirSync as readdirSync2, readFileSync as readFileSync9, statSync } from "node:fs";
+import { closeSync, existsSync as existsSync4, fstatSync, openSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 function nodeMemFs(homeOverride) {
   const home = homeOverride ?? homedir3();
@@ -9395,6 +9395,37 @@ function nodeMemFs(homeOverride) {
         return void 0;
       }
     },
+    readTextBounded: (p, maxBytes) => {
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
+        return void 0;
+      let fd;
+      try {
+        fd = openSync(p, "r");
+        const size = fstatSync(fd).size;
+        const buffer = Buffer.allocUnsafe(Math.min(size, maxBytes));
+        let bytesRead = 0;
+        while (bytesRead < buffer.byteLength) {
+          const count = readSync(fd, buffer, bytesRead, buffer.byteLength - bytesRead, bytesRead);
+          if (count === 0)
+            break;
+          bytesRead += count;
+        }
+        return {
+          text: buffer.subarray(0, bytesRead).toString("utf8"),
+          bytesRead,
+          truncated: size > bytesRead
+        };
+      } catch {
+        return void 0;
+      } finally {
+        if (fd !== void 0) {
+          try {
+            closeSync(fd);
+          } catch {
+          }
+        }
+      }
+    },
     mtimeMs: (p) => {
       try {
         return statSync(p).mtimeMs;
@@ -9412,7 +9443,7 @@ function mtimeIso(fs, path7) {
 
 // packages/kernel/dist/mem/adapters/opencode.js
 import { createRequire } from "node:module";
-import { join as join15 } from "node:path";
+import { join as join15, resolve as resolve7, sep as sep5 } from "node:path";
 
 // packages/kernel/dist/mem/dialogue.js
 var INJECTION_TAGS = [
@@ -9440,6 +9471,24 @@ function escapeRe(s) {
   return s.replace(ESCAPE_RE, (m) => "\\" + m);
 }
 var TAG_RES = INJECTION_TAGS.map((t) => new RegExp("<" + escapeRe(t) + "[^>]*>[\\s\\S]*?</" + escapeRe(t) + ">", "gi"));
+var AGENTS_RE = /^# AGENTS\.md instructions for[\s\S]*?(?=\n\n[A-Z一-龥]|$)/gm;
+var COLLAPSE_RE = /\n{3,}/g;
+var INSTRUCTIONS_RE = /^<INSTRUCTIONS>/i;
+function isBootstrapTurn(cleaned, originalLength) {
+  if (cleaned.startsWith("# AGENTS.md instructions for"))
+    return true;
+  if (originalLength > 4e3 && INSTRUCTIONS_RE.test(cleaned))
+    return true;
+  return false;
+}
+function stripInjectionTags(text2) {
+  let out = text2;
+  for (const re of TAG_RES)
+    out = out.replace(re, "");
+  out = out.replace(AGENTS_RE, "");
+  out = out.replace(COLLAPSE_RE, "\n\n");
+  return out.trim();
+}
 
 // packages/kernel/dist/mem/filter.js
 import { resolve as resolve6, sep as sep4 } from "node:path";
@@ -9474,6 +9523,96 @@ function sameProject(sessionCwd, target) {
   const a = resolve6(sessionCwd);
   const b = resolve6(target);
   return a === b || a.startsWith(b + sep4);
+}
+
+// packages/kernel/dist/mem/search.js
+function relevanceScore(h) {
+  const total = h.totalTurns ?? 0;
+  if (total === 0)
+    return 0;
+  return (3 * (h.userCount ?? 0) + (h.asstCount ?? 0)) / total;
+}
+function chunkAround(text2, hitIdx, maxChars) {
+  const startPara = text2.slice(0, hitIdx).lastIndexOf("\n\n");
+  let start = startPara === -1 ? 0 : startPara + 2;
+  const endPara = text2.indexOf("\n\n", hitIdx);
+  let end = endPara === -1 ? text2.length : endPara;
+  let truncated = false;
+  if (end - start > maxChars) {
+    start = Math.max(0, hitIdx - Math.floor(maxChars / 2));
+    end = Math.min(text2.length, hitIdx + Math.ceil(maxChars / 2));
+    truncated = true;
+  }
+  return { start, end, truncated };
+}
+function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
+  const tokens = kw.toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return { count: 0, userCount: 0, asstCount: 0, totalTurns: turns.length, excerpts: [] };
+  }
+  let userCount = 0;
+  let asstCount = 0;
+  const userExcerpts = [];
+  const asstExcerpts = [];
+  for (const t of turns) {
+    const hay = t.text.toLowerCase();
+    if (!tokens.every((tok) => hay.includes(tok)))
+      continue;
+    const hitPositions = [];
+    const tokenFreq = /* @__PURE__ */ new Map();
+    let turnHits = 0;
+    for (const tok of tokens) {
+      let frm = 0;
+      let n = 0;
+      for (; ; ) {
+        const idx = hay.indexOf(tok, frm);
+        if (idx === -1)
+          break;
+        n += 1;
+        turnHits += 1;
+        hitPositions.push({ idx, tok });
+        frm = idx + tok.length;
+      }
+      tokenFreq.set(tok, n);
+    }
+    if (t.role === "user")
+      userCount += turnHits;
+    else
+      asstCount += turnHits;
+    hitPositions.sort((a, b) => a.idx - b.idx);
+    const candidates = [];
+    const seenStarts = /* @__PURE__ */ new Set();
+    for (const { idx, tok } of hitPositions) {
+      const ca = chunkAround(t.text, idx, chunkChars);
+      if (seenStarts.has(ca.start))
+        continue;
+      seenStarts.add(ca.start);
+      const sl = hay.slice(ca.start, ca.end);
+      const coverage = tokens.reduce((acc, tk) => acc + (sl.includes(tk) ? 1 : 0), 0);
+      const rarity = 1 / (tokenFreq.get(tok) || 1);
+      candidates.push({ start: ca.start, end: ca.end, truncated: ca.truncated, coverage, rarity });
+    }
+    candidates.sort((a, b) => b.coverage - a.coverage || b.rarity - a.rarity || a.start - b.start);
+    for (const c of candidates) {
+      let snippet = t.text.slice(c.start, c.end).trim();
+      if (c.truncated) {
+        if (c.start > 0)
+          snippet = "\u2026" + snippet;
+        if (c.end < t.text.length)
+          snippet = snippet + "\u2026";
+      }
+      const target = t.role === "user" ? userExcerpts : asstExcerpts;
+      target.push({ role: t.role, snippet });
+    }
+  }
+  const excerpts = [...userExcerpts, ...asstExcerpts].slice(0, maxExcerpts);
+  return {
+    count: userCount + asstCount,
+    userCount,
+    asstCount,
+    totalTurns: turns.length,
+    excerpts
+  };
 }
 
 // packages/kernel/dist/mem/adapters/opencode.js
@@ -9512,13 +9651,48 @@ function withOpenCodeDb(fs, fallback, fn) {
     }
   }
 }
+function parseJson2(raw) {
+  if (typeof raw !== "string")
+    return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 function msToIso(ms) {
   return typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 function opencodeListSessions(fs, f) {
   const dbPath = opencodeDbPath(fs);
   return withOpenCodeDb(fs, [], (db) => {
-    const rows = db.prepare("SELECT id, directory, title, parent_id, time_created, time_updated FROM session").all();
+    let rows;
+    if (fs.contentReadBudget && f.cwd) {
+      const projectRoot = resolve7(f.cwd);
+      const projectPrefix = projectRoot + sep5;
+      rows = db.prepare(`
+          SELECT id,
+                 CAST(substr(CAST(directory AS blob), 1, 4096) AS text) AS directory,
+                 CAST(substr(CAST(title AS blob), 1, 161) AS text) AS title,
+                 parent_id, time_created, time_updated
+          FROM session
+          WHERE directory = ? OR substr(directory, 1, length(?)) = ?
+          ORDER BY time_updated DESC, id
+          LIMIT ?
+        `).all(projectRoot, projectPrefix, projectPrefix, f.limit);
+    } else if (fs.contentReadBudget) {
+      rows = db.prepare(`
+          SELECT id,
+                 CAST(substr(CAST(directory AS blob), 1, 4096) AS text) AS directory,
+                 CAST(substr(CAST(title AS blob), 1, 161) AS text) AS title,
+                 parent_id, time_created, time_updated
+          FROM session
+          ORDER BY time_updated DESC, id
+          LIMIT ?
+        `).all(f.limit);
+    } else {
+      rows = db.prepare("SELECT id, directory, title, parent_id, time_created, time_updated FROM session").all();
+    }
     const out = [];
     for (const row of rows) {
       const cwd = typeof row.directory === "string" && row.directory ? row.directory : null;
@@ -9541,6 +9715,224 @@ function opencodeListSessions(fs, f) {
     }
     return out;
   });
+}
+function roleOf(data) {
+  return data?.role === "user" ? "user" : data?.role === "assistant" ? "assistant" : null;
+}
+var SQLITE_ROW_CHUNK_BYTES = 4 * 1024;
+var SQLITE_MAX_ROWS_PER_QUERY = 512;
+function readBoundedSqliteRows(fs, db, sql, sessionId, source) {
+  const budget = fs.contentReadBudget;
+  if (!budget)
+    return [];
+  const sourceRemaining = budget.perSourceBytes - source.bytesRead;
+  const aggregateRemaining = budget.remainingBytes();
+  const chunkBytes = Math.min(SQLITE_ROW_CHUNK_BYTES, sourceRemaining, aggregateRemaining);
+  if (chunkBytes <= 0) {
+    if (sourceRemaining <= 0)
+      budget.noteSourceTruncated();
+    if (aggregateRemaining <= 0)
+      budget.noteTotalExhausted();
+    source.truncated = true;
+    return [];
+  }
+  const iterator = db.prepare(sql).iterate(chunkBytes, sessionId);
+  const rows = [];
+  while (rows.length < SQLITE_MAX_ROWS_PER_QUERY) {
+    if (budget.perSourceBytes - source.bytesRead < chunkBytes || budget.remainingBytes() < chunkBytes) {
+      if (budget.perSourceBytes - source.bytesRead < chunkBytes)
+        budget.noteSourceTruncated();
+      if (budget.remainingBytes() < chunkBytes)
+        budget.noteTotalExhausted();
+      source.truncated = true;
+      break;
+    }
+    const next = iterator.next();
+    if (next.done)
+      break;
+    const row = next.value;
+    const returnedBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
+    budget.consume(returnedBytes);
+    source.bytesRead += returnedBytes;
+    if (typeof row.full_bytes === "number" && row.full_bytes > returnedBytes) {
+      budget.noteSourceTruncated();
+      source.truncated = true;
+    }
+    rows.push(row);
+  }
+  if (rows.length === SQLITE_MAX_ROWS_PER_QUERY) {
+    budget.noteSourceTruncated();
+    source.truncated = true;
+  }
+  return rows;
+}
+function opencodeExtractDialogue(fs, s) {
+  return withOpenCodeDb(fs, [], (db) => {
+    const sourceBudget = { bytesRead: 0, truncated: false };
+    const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes
+         FROM message
+         WHERE session_id = ?
+         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+    if (!messageRows.length)
+      return [];
+    const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, `SELECT id, message_id,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes
+         FROM part
+         WHERE session_id = ?
+         ORDER BY time_created, id`, s.id, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+    const partsByMessage = /* @__PURE__ */ new Map();
+    for (const p of partRows) {
+      const mid = String(p.message_id);
+      const list = partsByMessage.get(mid);
+      if (list)
+        list.push(p);
+      else
+        partsByMessage.set(mid, [p]);
+    }
+    const turns = [];
+    for (const row of messageRows) {
+      const role = roleOf(parseJson2(row.data));
+      if (!role)
+        continue;
+      const parts = partsByMessage.get(String(row.id)) ?? [];
+      const collected = [];
+      let totalRaw = 0;
+      for (const p of parts) {
+        const pdata = parseJson2(p.data);
+        if (!pdata || pdata.type !== "text" || typeof pdata.text !== "string")
+          continue;
+        totalRaw += pdata.text.length;
+        const cleaned = stripInjectionTags(pdata.text);
+        if (cleaned)
+          collected.push(cleaned);
+      }
+      if (!collected.length)
+        continue;
+      const merged = collected.join("\n\n");
+      if (isBootstrapTurn(merged, totalRaw))
+        continue;
+      turns.push({ role, text: merged });
+    }
+    return turns;
+  });
+}
+function opencodeSearch(fsOrKw, s, kw) {
+  if (typeof fsOrKw === "string")
+    return searchInDialogue([], fsOrKw);
+  return searchInDialogue(opencodeExtractDialogue(fsOrKw, s), kw);
+}
+
+// packages/kernel/dist/mem/phase.js
+var FIND_RE = /(^|[\s/\\])task\.py\s+(create|start)(?:\s+|$)/g;
+var PROSE_RE = /^[A-Za-z][A-Za-z0-9_-]*\s+[A-Za-z]{2,}\b/;
+var TRAIL_META_RE = /[)};&|>]+$/;
+function parseTaskPyCommandsAll(cmd) {
+  if (typeof cmd !== "string" || cmd.length === 0)
+    return [];
+  const matches = [];
+  FIND_RE.lastIndex = 0;
+  let m;
+  while ((m = FIND_RE.exec(cmd)) !== null) {
+    matches.push({ action: m[2], bodyStart: m.index + m[0].length });
+    if (m.index === FIND_RE.lastIndex)
+      FIND_RE.lastIndex += 1;
+  }
+  const out = [];
+  for (let i = 0; i < matches.length; i++) {
+    const cur = matches[i];
+    const nxt = matches[i + 1];
+    const bodyEnd = nxt ? nxt.bodyStart : cmd.length;
+    const sl = cmd.slice(cur.bodyStart, bodyEnd);
+    const restRaw = (sl.includes("\n") ? sl.split("\n")[0] : sl).trim();
+    if (PROSE_RE.test(restRaw))
+      continue;
+    const parsed = parseRest(cur.action, restRaw);
+    if (cur.action === "create" && !parsed.slug && !parsed.titleArg)
+      continue;
+    if (cur.action === "start" && !parsed.taskDir)
+      continue;
+    out.push(parsed);
+  }
+  return out;
+}
+function parseRest(action, restRaw) {
+  if (action === "create") {
+    const args2 = splitShellArgs(restRaw);
+    let slug = null;
+    let titleArg = null;
+    let i = 0;
+    while (i < args2.length) {
+      const a = args2[i];
+      if (a === "--slug" || a === "-s") {
+        slug = args2[i + 1] ?? null;
+        i += 2;
+        continue;
+      }
+      if (a.startsWith("--slug=")) {
+        slug = a.slice("--slug=".length);
+        i += 1;
+        continue;
+      }
+      if (a.startsWith("-")) {
+        i += 1;
+        continue;
+      }
+      if (titleArg === null)
+        titleArg = a;
+      i += 1;
+    }
+    return { action: "create", slug, titleArg };
+  }
+  const args = splitShellArgs(restRaw);
+  let taskDir = null;
+  for (const a of args) {
+    if (a.startsWith("-"))
+      continue;
+    taskDir = a;
+    break;
+  }
+  return { action: "start", taskDir };
+}
+function splitShellArgs(s) {
+  const out = [];
+  let cur = "";
+  let quote = null;
+  const flush = () => {
+    if (!cur)
+      return;
+    const cleaned = cur.replace(TRAIL_META_RE, "");
+    if (cleaned)
+      out.push(cleaned);
+    cur = "";
+  };
+  for (const ch of s) {
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+      cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      flush();
+      continue;
+    }
+    if (ch === ";" || ch === "|" || ch === "&" || ch === "(" || ch === ")") {
+      flush();
+      continue;
+    }
+    cur += ch;
+  }
+  flush();
+  return out;
 }
 
 // packages/kernel/dist/mem/adapters/claude.js
@@ -9601,7 +9993,7 @@ function findInJsonl(text2, predicate, maxLines = 200) {
 }
 
 // packages/kernel/dist/mem/paths.js
-import { join as join16, resolve as resolve7 } from "node:path";
+import { join as join16, resolve as resolve8 } from "node:path";
 var SEP_RE = /[/\\:_.]/g;
 var PI_SEP_RE = /[/\\:]/g;
 var PI_LEAD_RE = /^[/\\]/;
@@ -9626,7 +10018,7 @@ function piAgentDir(fs) {
   return expandHome(fs, env || join16(fs.home, ".pi", "agent"));
 }
 function piProjectDirFromCwd(fs, cwd) {
-  const resolved = resolve7(cwd);
+  const resolved = resolve8(cwd);
   const safe = "--" + resolved.replace(PI_LEAD_RE, "").replace(PI_SEP_RE, "-") + "--";
   return join16(piAgentDir(fs), "sessions", safe);
 }
@@ -9658,7 +10050,7 @@ function piSessionRoots(fs) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized2 = resolve7(root);
+    const normalized2 = resolve8(root);
     if (seen.has(normalized2))
       continue;
     seen.add(normalized2);
@@ -9742,11 +10134,71 @@ function claudeListSessions(fs, f) {
   }
   return out;
 }
+function summaryText(content) {
+  if (typeof content === "string")
+    return stripInjectionTags(content);
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const block of content) {
+      if (block?.type === "text" && typeof block.text === "string") {
+        const cleaned = stripInjectionTags(block.text);
+        if (cleaned)
+          parts.push(cleaned);
+      }
+    }
+    return parts.join("\n\n");
+  }
+  return "";
+}
+function claudeExtractFromLines(lines) {
+  let turns = [];
+  for (const obj of lines) {
+    const t = obj?.type;
+    const msg = obj?.message;
+    if (t === "user" && obj?.isCompactSummary === true) {
+      const summary = summaryText(msg?.content);
+      turns = summary ? [{ role: "user", text: `[compact summary]
+${summary}` }] : [];
+      continue;
+    }
+    if (!msg)
+      continue;
+    const content = msg.content;
+    if (t === "user" && msg.role === "user") {
+      if (typeof content === "string") {
+        const text2 = stripInjectionTags(content);
+        if (text2 && !isBootstrapTurn(text2, content.length))
+          turns.push({ role: "user", text: text2 });
+      }
+    } else if (t === "assistant" && msg.role === "assistant" && Array.isArray(content)) {
+      const parts = [];
+      for (const block of content) {
+        if (block?.type === "text" && typeof block.text === "string") {
+          const cleaned = stripInjectionTags(block.text);
+          if (cleaned)
+            parts.push(cleaned);
+        }
+      }
+      if (parts.length)
+        turns.push({ role: "assistant", text: parts.join("\n\n") });
+    }
+  }
+  return turns;
+}
+function claudeExtractDialogue(fs, s) {
+  return claudeExtractFromLines(parseJsonlLines(fs.readText(s.filePath)));
+}
+function claudeSearch(fs, s, kw) {
+  return searchInDialogue(claudeExtractDialogue(fs, s), kw);
+}
 
 // packages/kernel/dist/mem/adapters/codex.js
 import { basename as basename2 } from "node:path";
 var ROLLOUT_RE = /^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/;
 var TS_FIX_RE = /T(\d{2})-(\d{2})-(\d{2})/;
+function parseDialogueRole(v) {
+  return v === "user" || v === "assistant" ? v : null;
+}
 function normalizeIso(s) {
   const t = Date.parse(s);
   return Number.isNaN(t) ? "" : new Date(t).toISOString();
@@ -9782,9 +10234,67 @@ function codexListSessions(fs, f) {
   }
   return out;
 }
+function buildTurnFromMessage(role, parts) {
+  const collected = [];
+  let totalRaw = 0;
+  for (const c of parts ?? []) {
+    const txt = c?.text;
+    if (typeof txt !== "string")
+      continue;
+    if (c?.type !== "input_text" && c?.type !== "output_text")
+      continue;
+    totalRaw += txt.length;
+    const cleaned = stripInjectionTags(txt);
+    if (cleaned)
+      collected.push(cleaned);
+  }
+  if (!collected.length)
+    return null;
+  const merged = collected.join("\n\n");
+  if (isBootstrapTurn(merged, totalRaw))
+    return null;
+  return { role, text: merged };
+}
+function codexExtractDialogue(fs, s) {
+  let turns = [];
+  for (const obj of parseJsonlLines(fs.readText(s.filePath))) {
+    const o = obj;
+    if (o?.type === "compacted") {
+      const rh = o?.payload?.replacement_history;
+      turns = [];
+      if (!Array.isArray(rh))
+        continue;
+      for (const item2 of rh) {
+        if (item2?.type !== "message")
+          continue;
+        const role2 = parseDialogueRole(item2?.role);
+        if (!role2)
+          continue;
+        const turn2 = buildTurnFromMessage(role2, item2?.content);
+        if (turn2)
+          turns.push({ role: turn2.role, text: `[compact]
+${turn2.text}` });
+      }
+      continue;
+    }
+    const p = o?.payload;
+    if (!p || p.type !== "message")
+      continue;
+    const role = parseDialogueRole(p.role);
+    if (!role)
+      continue;
+    const turn = buildTurnFromMessage(role, p.content);
+    if (turn)
+      turns.push(turn);
+  }
+  return turns;
+}
+function codexSearch(fs, s, kw) {
+  return searchInDialogue(codexExtractDialogue(fs, s), kw);
+}
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename3, join as join18, resolve as resolve8 } from "node:path";
+import { basename as basename3, join as join18, resolve as resolve9 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   for (const filePath of candidateFiles(fs, f)) {
@@ -9838,7 +10348,7 @@ function candidateFiles(fs, f) {
     for (const file of walkDir(fs, root)) {
       if (!file.endsWith(".jsonl"))
         continue;
-      const normalized2 = resolve8(file);
+      const normalized2 = resolve9(file);
       if (seen.has(normalized2))
         continue;
       seen.add(normalized2);
@@ -9846,7 +10356,7 @@ function candidateFiles(fs, f) {
     }
   };
   for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve8(root) === resolve8(defaultRoot))
+    if (f.cwd && resolve9(root) === resolve9(defaultRoot))
       pushJsonl(piProjectDirFromCwd(fs, f.cwd));
     else
       pushJsonl(root);
@@ -9866,8 +10376,179 @@ function timestampMs(value) {
   const t = Date.parse(value);
   return Number.isNaN(t) ? null : t;
 }
+function piExtractDialogue(fs, s) {
+  return buildPiTurnsAndEvents(fs, s).turns;
+}
+function piSearch(fs, s, kw) {
+  return searchInDialogue(piExtractDialogue(fs, s), kw);
+}
+function buildPiTurnsAndEvents(fs, s) {
+  const effective = effectiveActivePath(fs, s.filePath);
+  const turns = [];
+  const events = [];
+  for (const entry of effective) {
+    collectTaskEvents(entry, turns.length, events);
+    const turn = turnFromEntry(entry);
+    if (turn)
+      turns.push(turn);
+  }
+  return { turns, events };
+}
+function effectiveActivePath(fs, filePath) {
+  const entries = [];
+  for (const entry of parseJsonlLines(fs.readText(filePath))) {
+    const e = entry;
+    if (e?.type === "session")
+      continue;
+    if (typeof e?.id !== "string")
+      continue;
+    entries.push(e);
+  }
+  if (!entries.length)
+    return [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const entry of entries)
+    if (typeof entry.id === "string")
+      byId.set(entry.id, entry);
+  const leaf = entries[entries.length - 1];
+  const activePath = [];
+  let current = leaf;
+  const seen = /* @__PURE__ */ new Set();
+  while (current) {
+    const cid = current.id;
+    if (typeof cid !== "string" || seen.has(cid))
+      break;
+    seen.add(cid);
+    activePath.unshift(current);
+    const parentId = current.parentId;
+    current = typeof parentId === "string" ? byId.get(parentId) : void 0;
+  }
+  const compactionIdx = findLastIndex(activePath, (e) => e?.type === "compaction");
+  if (compactionIdx === -1)
+    return activePath;
+  const compaction = activePath[compactionIdx];
+  let firstKeptIdx = -1;
+  for (let idx = 0; idx < activePath.length; idx++) {
+    if (idx < compactionIdx && activePath[idx]?.id === compaction?.firstKeptEntryId) {
+      firstKeptIdx = idx;
+      break;
+    }
+  }
+  const kept = firstKeptIdx === -1 ? [] : activePath.slice(firstKeptIdx, compactionIdx);
+  return [compaction, ...kept, ...activePath.slice(compactionIdx + 1)];
+}
+function findLastIndex(items, pred) {
+  for (let i = items.length - 1; i >= 0; i--)
+    if (pred(items[i]))
+      return i;
+  return -1;
+}
+function turnFromEntry(entry) {
+  const etype = entry?.type;
+  if (etype === "compaction")
+    return syntheticTurn("[compact summary]", entry?.summary);
+  if (etype === "branch_summary")
+    return syntheticTurn("[branch summary]", entry?.summary);
+  if (etype === "custom_message")
+    return buildTurn("user", entry?.content);
+  if (etype !== "message")
+    return null;
+  const msg = entry?.message;
+  if (!msg)
+    return null;
+  const role = msg.role;
+  if (role === "user")
+    return buildTurn("user", msg.content);
+  if (role === "assistant")
+    return buildTurn("assistant", msg.content);
+  if (role === "custom")
+    return buildTurn("user", msg.content);
+  if (role === "branchSummary")
+    return syntheticTurn("[branch summary]", msg.summary);
+  if (role === "compactionSummary")
+    return syntheticTurn("[compact summary]", msg.summary);
+  return null;
+}
+function syntheticTurn(prefix, raw) {
+  if (typeof raw !== "string")
+    return null;
+  const text2 = stripInjectionTags(raw);
+  if (!text2)
+    return null;
+  return { role: "user", text: `${prefix}
+${text2}` };
+}
+function buildTurn(role, content) {
+  const parts = [];
+  let totalRaw = 0;
+  if (typeof content === "string") {
+    totalRaw = content.length;
+    const cleaned = stripInjectionTags(content);
+    if (cleaned)
+      parts.push(cleaned);
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block?.type !== "text" || typeof block.text !== "string")
+        continue;
+      totalRaw += block.text.length;
+      const cleaned = stripInjectionTags(block.text);
+      if (cleaned)
+        parts.push(cleaned);
+    }
+  }
+  if (!parts.length)
+    return null;
+  const merged = parts.join("\n\n");
+  if (isBootstrapTurn(merged, totalRaw))
+    return null;
+  return { role, text: merged };
+}
+function collectTaskEvents(entry, turnIndex, events) {
+  if (entry?.type !== "message")
+    return;
+  const msg = entry?.message;
+  if (!msg)
+    return;
+  if (msg.role === "bashExecution" && typeof msg.command === "string") {
+    pushTaskEvents(msg.command, entry?.timestamp, turnIndex, events);
+    return;
+  }
+  if (msg.role !== "assistant" || !Array.isArray(msg.content))
+    return;
+  for (const block of msg.content) {
+    if (block?.type !== "toolCall")
+      continue;
+    if (typeof block.name !== "string")
+      continue;
+    const toolName = block.name.toLowerCase();
+    if (toolName !== "bash" && toolName !== "shell")
+      continue;
+    const args = block.arguments;
+    if (!args || typeof args !== "object")
+      continue;
+    const command = args.command;
+    if (typeof command !== "string")
+      continue;
+    pushTaskEvents(command, entry?.timestamp, turnIndex, events);
+  }
+}
+function pushTaskEvents(command, timestamp, turnIndex, events) {
+  for (const parsed of parseTaskPyCommandsAll(command)) {
+    const ev = {
+      action: parsed.action,
+      timestamp: (typeof timestamp === "string" ? timestamp : "") || "",
+      turnIndex
+    };
+    if (parsed.action === "create")
+      ev.slug = parsed.slug;
+    else
+      ev.taskDir = parsed.taskDir;
+    events.push(ev);
+  }
+}
 
 // packages/kernel/dist/mem/sessions.js
+var WIDE_LIMIT = 1e6;
 function resolveFilter(filt) {
   const f = filt ?? {};
   return {
@@ -9900,8 +10581,295 @@ function listAll(fs, f) {
   all.sort(recencyDesc);
   return all.slice(0, f.limit);
 }
+function extractDialogue(fs, s) {
+  switch (s.platform) {
+    case "claude":
+      return claudeExtractDialogue(fs, s);
+    case "codex":
+      return codexExtractDialogue(fs, s);
+    case "opencode":
+      return opencodeExtractDialogue(fs, s);
+    case "pi":
+      return piExtractDialogue(fs, s);
+    default:
+      return [];
+  }
+}
+function searchSession(fs, s, kw) {
+  switch (s.platform) {
+    case "claude":
+      return claudeSearch(fs, s, kw);
+    case "codex":
+      return codexSearch(fs, s, kw);
+    case "opencode":
+      return opencodeSearch(fs, s, kw);
+    case "pi":
+      return piSearch(fs, s, kw);
+    default:
+      return searchInDialogue([], kw);
+  }
+}
+function buildChildIndex(sessions) {
+  const directChildren2 = /* @__PURE__ */ new Map();
+  for (const s of sessions) {
+    const pid = s.parent_id;
+    if (!pid)
+      continue;
+    const arr = directChildren2.get(pid) ?? [];
+    arr.push(s);
+    directChildren2.set(pid, arr);
+  }
+  const out = /* @__PURE__ */ new Map();
+  for (const pid of directChildren2.keys()) {
+    const stack = [...directChildren2.get(pid) ?? []];
+    const flat = [];
+    while (stack.length) {
+      const cur = stack.pop();
+      flat.push(cur);
+      for (const c of directChildren2.get(cur.id) ?? [])
+        stack.push(c);
+    }
+    out.set(pid, flat);
+  }
+  return out;
+}
+function searchSessionWithChildren(fs, s, kw, childIndex) {
+  const children = childIndex.get(s.id) ?? [];
+  if (!children.length)
+    return searchSession(fs, s, kw);
+  const merged = [...extractDialogue(fs, s)];
+  for (const c of children)
+    merged.push(...extractDialogue(fs, c));
+  return searchInDialogue(merged, kw);
+}
 function listMemSessions(fs, options) {
   return listAll(fs, resolveFilter(options?.filter));
+}
+function searchMemSessions(fs, options) {
+  const f = resolveFilter(options.filter);
+  const kw = options.keyword;
+  const includeChildren = options.includeChildren === true;
+  const requestedCandidateLimit = options.candidateLimit;
+  const candidateLimit = typeof requestedCandidateLimit === "number" && Number.isSafeInteger(requestedCandidateLimit) && requestedCandidateLimit > 0 ? requestedCandidateLimit : null;
+  const wide = { ...f, limit: candidateLimit === null ? WIDE_LIMIT : candidateLimit + 1 };
+  const listedCandidates = listAll(fs, wide);
+  const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit;
+  const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit);
+  const childIndex = includeChildren ? buildChildIndex(candidates) : /* @__PURE__ */ new Map();
+  const candidateIds = new Set(candidates.map((s) => s.id));
+  const isAbsorbedChild = (s) => includeChildren && s.parent_id != null && candidateIds.has(s.parent_id);
+  const matches = [];
+  for (const s of candidates) {
+    if (isAbsorbedChild(s))
+      continue;
+    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex) : searchSession(fs, s, kw);
+    if (hit.count === 0)
+      continue;
+    matches.push({ session: s, hit, score: relevanceScore(hit), descendantsMerged: (childIndex.get(s.id) ?? []).length });
+  }
+  matches.sort((a, b) => b.score - a.score || b.hit.count - a.hit.count || recencyDesc(a.session, b.session));
+  const warnings = [];
+  if (candidatesTruncated) {
+    warnings.push({
+      code: "candidate-limit-reached",
+      message: `Only the ${candidateLimit} most recent sessions were searched.`
+    });
+  }
+  return { matches: matches.slice(0, f.limit), totalMatches: matches.length, warnings };
+}
+
+// packages/kernel/dist/mem/relatedSearch.js
+var RELATED_SESSION_SEARCH_BUDGETS = Object.freeze({
+  queryMinChars: 2,
+  queryMaxChars: 128,
+  queryMaxTokens: 8,
+  candidates: 100,
+  results: 8,
+  perFileBytes: 2 * 1024 * 1024,
+  totalBytes: 16 * 1024 * 1024,
+  excerptChars: 320,
+  titleChars: 160
+});
+var PLATFORMS = /* @__PURE__ */ new Set(["all", "claude", "codex", "opencode", "pi"]);
+var RelatedSessionSearchInputError = class extends Error {
+  reason;
+  constructor(reason) {
+    super(`invalid related-session search input: ${reason}`);
+    this.reason = reason;
+    this.name = "RelatedSessionSearchInputError";
+  }
+};
+function addWarning(state, warning) {
+  if (state.warningCodes.has(warning.code))
+    return;
+  state.warningCodes.add(warning.code);
+  state.warnings.push(warning);
+}
+function budgetedFs(source, state) {
+  const cache = /* @__PURE__ */ new Map();
+  const sourceEnv = source.env;
+  const boundedRead = (path7, maxBytes) => {
+    if (source.readTextBounded)
+      return source.readTextBounded(path7, maxBytes);
+    const raw = source.readText(path7);
+    if (raw === void 0)
+      return void 0;
+    addWarning(state, {
+      code: "bounded-read-unavailable",
+      message: "A session source could not prove a read-layer byte ceiling."
+    });
+    const bytes = Buffer.from(raw);
+    const selected = bytes.subarray(0, maxBytes);
+    return {
+      text: selected.toString("utf8"),
+      bytesRead: selected.byteLength,
+      truncated: selected.byteLength < bytes.byteLength
+    };
+  };
+  return {
+    home: source.home,
+    exists: (path7) => source.exists(path7),
+    readDir: (path7) => source.readDir(path7),
+    readText: (path7) => {
+      if (cache.has(path7))
+        return cache.get(path7);
+      const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
+      if (remaining <= 0) {
+        addWarning(state, {
+          code: "total-read-budget-exhausted",
+          message: "The total session-read budget was exhausted."
+        });
+        cache.set(path7, void 0);
+        return void 0;
+      }
+      const maxBytes = Math.min(RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, remaining);
+      const read = boundedRead(path7, maxBytes);
+      if (!read) {
+        if (source.exists(path7)) {
+          addWarning(state, {
+            code: "file-read-unavailable",
+            message: "A session source could not be read."
+          });
+        }
+        cache.set(path7, void 0);
+        return void 0;
+      }
+      const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)));
+      state.bytesRead += bytesRead;
+      const textBytes = Buffer.from(read.text);
+      const text2 = textBytes.subarray(0, maxBytes).toString("utf8");
+      if (read.truncated) {
+        if (maxBytes < RELATED_SESSION_SEARCH_BUDGETS.perFileBytes) {
+          addWarning(state, {
+            code: "total-read-budget-exhausted",
+            message: "The total session-read budget was exhausted."
+          });
+        } else {
+          addWarning(state, {
+            code: "file-read-truncated",
+            message: "At least one session exceeded the per-file read budget."
+          });
+        }
+      }
+      cache.set(path7, text2);
+      return text2;
+    },
+    mtimeMs: (path7) => source.mtimeMs(path7),
+    env: sourceEnv ? (name) => sourceEnv(name) : void 0,
+    contentReadBudget: {
+      perSourceBytes: RELATED_SESSION_SEARCH_BUDGETS.perFileBytes,
+      remainingBytes: () => RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead,
+      consume: (bytes) => {
+        const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
+        state.bytesRead += Math.min(remaining, Math.max(0, Math.trunc(bytes)));
+      },
+      noteSourceTruncated: () => addWarning(state, {
+        code: "file-read-truncated",
+        message: "At least one session exceeded the per-file read budget."
+      }),
+      noteTotalExhausted: () => addWarning(state, {
+        code: "total-read-budget-exhausted",
+        message: "The total session-read budget was exhausted."
+      })
+    }
+  };
+}
+function validateOptions(options) {
+  const query = typeof options.query === "string" ? options.query.trim() : "";
+  const queryLength = Array.from(query).length;
+  if (queryLength < RELATED_SESSION_SEARCH_BUDGETS.queryMinChars || queryLength > RELATED_SESSION_SEARCH_BUDGETS.queryMaxChars) {
+    throw new RelatedSessionSearchInputError("query-length");
+  }
+  if (query.split(/\s+/).filter(Boolean).length > RELATED_SESSION_SEARCH_BUDGETS.queryMaxTokens) {
+    throw new RelatedSessionSearchInputError("query-token-count");
+  }
+  if (!PLATFORMS.has(options.platform)) {
+    throw new RelatedSessionSearchInputError("invalid-platform");
+  }
+  return { query, platform: options.platform };
+}
+function boundedDisplayText(raw, maxChars) {
+  if (typeof raw !== "string")
+    return null;
+  const normalized2 = raw.replace(/\s+/g, " ").trim();
+  if (!normalized2)
+    return null;
+  const chars = Array.from(normalized2);
+  if (chars.length <= maxChars)
+    return normalized2;
+  return chars.slice(0, maxChars - 1).join("").trimEnd() + "\u2026";
+}
+function searchRelatedSessions(fs, options) {
+  const { query, platform } = validateOptions(options);
+  const state = { bytesRead: 0, warnings: [], warningCodes: /* @__PURE__ */ new Set() };
+  const scopedFs = budgetedFs(fs, state);
+  const search = searchMemSessions(scopedFs, {
+    keyword: query,
+    filter: {
+      cwd: options.root,
+      platform,
+      limit: RELATED_SESSION_SEARCH_BUDGETS.candidates
+    },
+    includeChildren: true,
+    candidateLimit: RELATED_SESSION_SEARCH_BUDGETS.candidates
+  });
+  for (const warning of search.warnings)
+    addWarning(state, warning);
+  const matches = [];
+  for (const match of search.matches) {
+    if (match.hit.userCount <= 0)
+      continue;
+    const userExcerpt = match.hit.excerpts.find((excerpt2) => excerpt2.role === "user");
+    const excerpt = boundedDisplayText(userExcerpt?.snippet, RELATED_SESSION_SEARCH_BUDGETS.excerptChars);
+    if (!excerpt)
+      continue;
+    const totalTurns = match.hit.totalTurns;
+    matches.push({
+      platform: match.session.platform,
+      sessionId: match.session.id,
+      title: boundedDisplayText(match.session.title, RELATED_SESSION_SEARCH_BUDGETS.titleChars),
+      updatedAt: match.session.updated ?? null,
+      score: totalTurns > 0 ? 3 * match.hit.userCount / totalTurns : 0,
+      hitCount: match.hit.userCount,
+      excerpt,
+      descendantsMerged: match.descendantsMerged
+    });
+  }
+  matches.sort((a, b) => {
+    const relevance = b.score - a.score || b.hitCount - a.hitCount;
+    if (relevance !== 0)
+      return relevance;
+    const aUpdated = a.updatedAt ?? "";
+    const bUpdated = b.updatedAt ?? "";
+    return aUpdated < bUpdated ? 1 : aUpdated > bUpdated ? -1 : 0;
+  });
+  return {
+    query,
+    platform,
+    partial: state.warnings.length > 0,
+    warnings: state.warnings,
+    matches: matches.slice(0, RELATED_SESSION_SEARCH_BUDGETS.results)
+  };
 }
 
 // packages/kernel/dist/loops/registry.js
@@ -12333,7 +13301,7 @@ function isValidatedLedgerRecord(value, errors) {
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash as createHash9 } from "node:crypto";
 import { mkdir as mkdir11, open, readFile as readFile15 } from "node:fs/promises";
-import { join as join21, resolve as resolve9 } from "node:path";
+import { join as join21, resolve as resolve10 } from "node:path";
 var LEDGER_DIR = [".pipeline", "loops"];
 var LEDGER_FILE = "ledger.jsonl";
 function ledgerDirPath(repoRoot) {
@@ -12383,7 +13351,7 @@ function shortHash(raw) {
 }
 function createLoopLedgerStore() {
   function withLedgerLock(repoRoot, fn) {
-    const key = resolve9(ledgerDirPath(repoRoot));
+    const key = resolve10(ledgerDirPath(repoRoot));
     const currentToken = heldLedgerDirs.getStore()?.get(key);
     if (currentToken?.active === true) {
       const p = fn();
@@ -12540,7 +13508,7 @@ function createLoopLedgerStore() {
 // packages/kernel/dist/loops/governance.js
 import { createHash as createHash10, randomBytes as randomBytes2 } from "node:crypto";
 import { mkdir as mkdir12, open as open2, readFile as readFile16, rename as rename6 } from "node:fs/promises";
-import { join as join22, resolve as resolve10 } from "node:path";
+import { join as join22, resolve as resolve11 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
 var GOVERNANCE_LOCK_BASE = [".pipeline", "loops", "governance"];
 var ABSENT_REGISTRY_EPOCH = "absent";
@@ -12551,7 +13519,7 @@ function governanceLockBase(repoRoot) {
   return join22(repoRoot, ...GOVERNANCE_LOCK_BASE);
 }
 async function withRegistryGovernanceLock(repoRoot, fn) {
-  const base = resolve10(governanceLockBase(repoRoot));
+  const base = resolve11(governanceLockBase(repoRoot));
   await mkdir12(base, { recursive: true });
   return withLock(base, fn);
 }
@@ -12908,7 +13876,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep7) {
+function splitTopLevel(s, sep8) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -12920,7 +13888,7 @@ function splitTopLevel(s, sep7) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep7) {
+    } else if (ch === sep8) {
       out.push(cur);
       cur = "";
     } else {
@@ -13727,7 +14695,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join51 } from "node:path";
+import { join as join52 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -13837,7 +14805,7 @@ var DEFAULT_TTL_MS = 10 * 60 * 1e3;
 import { createHash as createHash11 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat12, mkdir as mkdir13, open as open3, readdir as readdir3, realpath as realpath4, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname5, join as join23, relative as relative4, sep as sep5 } from "node:path";
+import { dirname as dirname5, join as join23, relative as relative4, sep as sep6 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -13885,13 +14853,13 @@ async function assertDirectoryIdentities(identities, onFailure) {
 async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFailure) {
   const parent = dirname5(absFile);
   const fromRoot = relative4(realRoot, parent);
-  if (fromRoot === ".." || fromRoot.startsWith(`..${sep5}`)) {
+  if (fromRoot === ".." || fromRoot.startsWith(`..${sep6}`)) {
     throw onFailure(`\u6587\u4EF6\u7236\u76EE\u5F55\u5DF2\u9003\u9038\u5185\u5BB9\u6839\uFF1A${parent}`);
   }
   const paths = [realRoot];
   let cursor = realRoot;
   if (fromRoot !== "") {
-    for (const segment of fromRoot.split(sep5)) {
+    for (const segment of fromRoot.split(sep6)) {
       cursor = join23(cursor, segment);
       paths.push(cursor);
     }
@@ -14731,10 +15699,10 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
 import { randomUUID as randomUUID6 } from "node:crypto";
 import {
   constants as constants5,
-  fstatSync as fstatSync4,
+  fstatSync as fstatSync5,
   fsyncSync as fsyncSync2,
   lstatSync as lstatSync4,
-  openSync as openSync4,
+  openSync as openSync5,
   readFileSync as readFileSync16,
   readdirSync as readdirSync6,
   renameSync as renameSync3,
@@ -14745,22 +15713,22 @@ import {
 // packages/server/src/workflowTrustedFs.ts
 import {
   constants as constants3,
-  fstatSync as fstatSync2,
+  fstatSync as fstatSync3,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync3,
-  openSync as openSync2,
+  openSync as openSync3,
   realpathSync as realpathSync2,
   unlinkSync
 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep6 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep7 } from "node:path";
 
 // packages/server/src/workflowRootAnchor.ts
 import {
-  closeSync,
+  closeSync as closeSync2,
   constants as constants2,
-  fstatSync,
+  fstatSync as fstatSync2,
   lstatSync as lstatSync2,
-  openSync,
+  openSync as openSync2,
   realpathSync
 } from "node:fs";
 import { join as join28, resolve as resolvePath2 } from "node:path";
@@ -14769,7 +15737,7 @@ function sameIdentity(current, expected) {
 }
 function safeClose(fd) {
   try {
-    closeSync(fd);
+    closeSync2(fd);
   } catch {
   }
 }
@@ -14798,9 +15766,9 @@ function captureWorkflowRootAnchor(root) {
   if (lexical.isSymbolicLink() || !lexical.isDirectory()) {
     throw new Error(`registered root \u5FC5\u987B\u662F\u975E symlink \u7684\u771F\u5B9E\u76EE\u5F55: ${path7}`);
   }
-  const fd = openSync(path7, constants2.O_RDONLY | constants2.O_DIRECTORY | constants2.O_NOFOLLOW);
+  const fd = openSync2(path7, constants2.O_RDONLY | constants2.O_DIRECTORY | constants2.O_NOFOLLOW);
   try {
-    const opened = fstatSync(fd);
+    const opened = fstatSync2(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, lexical)) {
       throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path7}`);
     }
@@ -14821,7 +15789,7 @@ function assertWorkflowRootAnchor(anchor) {
   if (lexical.isSymbolicLink() || !lexical.isDirectory() || !sameIdentity(lexical, anchor)) {
     throw new Error(`registered root \u8BCD\u6CD5\u8DEF\u5F84\u5DF2\u4E0D\u518D\u6307\u5411\u6CE8\u518C\u65F6\u76EE\u5F55: ${anchor.path}`);
   }
-  const opened = fstatSync(anchor.fd);
+  const opened = fstatSync2(anchor.fd);
   if (!opened.isDirectory() || !sameIdentity(opened, anchor)) {
     throw new Error(`registered root \u76EE\u5F55 fd \u8EAB\u4EFD\u5DF2\u5931\u6548: ${anchor.path}`);
   }
@@ -14847,7 +15815,7 @@ var WorkflowDeleteConflictError = class extends Error {
 // packages/server/src/workflowTrustedFs.ts
 function assertInsideRoot(realRoot, realPath, label) {
   const fromRoot = relative5(realRoot, realPath);
-  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep6}`) || isAbsolute5(fromRoot)) {
+  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep7}`) || isAbsolute5(fromRoot)) {
     throw new Error(`${label} \u5DF2\u9003\u9038 registered root: ${realPath}`);
   }
 }
@@ -14864,7 +15832,7 @@ function rootDirectory(anchor) {
 }
 function assertDirectoryStillTrusted(directory, root) {
   assertWorkflowRootAnchor(root);
-  const opened = fstatSync2(directory.fd);
+  const opened = fstatSync3(directory.fd);
   if (!opened.isDirectory() || !sameIdentity(opened, directory)) {
     throw new Error(`workflow \u76EE\u5F55 fd \u8EAB\u4EFD\u5DF2\u53D8\u5316\uFF08TOCTOU\uFF09: ${directory.lexicalPath}`);
   }
@@ -14901,9 +15869,9 @@ function openTrustedChildDirectory(root, parent, name, create) {
   if (before.isSymbolicLink() || !before.isDirectory()) {
     throw new Error(`workflow \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${lexicalPath}`);
   }
-  const fd = openSync2(operationPath, constants3.O_RDONLY | constants3.O_DIRECTORY | constants3.O_NOFOLLOW);
+  const fd = openSync3(operationPath, constants3.O_RDONLY | constants3.O_DIRECTORY | constants3.O_NOFOLLOW);
   try {
-    const opened = fstatSync2(fd);
+    const opened = fstatSync3(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, before)) {
       throw new Error(`workflow \u76EE\u5F55\u5728\u6253\u5F00\u671F\u95F4\u88AB\u66FF\u6362\uFF08TOCTOU\uFF09: ${lexicalPath}`);
     }
@@ -15058,7 +16026,7 @@ function errText3(error) {
 }
 
 // packages/server/src/workflowReferenceScan.ts
-import { constants as constants4, fstatSync as fstatSync3, openSync as openSync3, readFileSync as readFileSync15, readdirSync as readdirSync5 } from "node:fs";
+import { constants as constants4, fstatSync as fstatSync4, openSync as openSync4, readFileSync as readFileSync15, readdirSync as readdirSync5 } from "node:fs";
 function decodeUtf8Strict(bytes, label) {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -15071,14 +16039,14 @@ function readTrustedRegularFile(directory, root, name, label, missing3) {
   assertDirectoryStillTrusted(directory, root);
   let fd;
   try {
-    fd = openSync3(paths.operation, constants4.O_RDONLY | constants4.O_NOFOLLOW);
+    fd = openSync4(paths.operation, constants4.O_RDONLY | constants4.O_NOFOLLOW);
   } catch (error) {
     if (error.code === "ENOENT" && missing3 === "null") return null;
     if (error.code === "ENOENT") throw new Error(`${label} \u7F3A\u5931: ${paths.lexical}`);
     throw error;
   }
   try {
-    const opened = fstatSync3(fd);
+    const opened = fstatSync4(fd);
     if (!opened.isFile()) throw new Error(`${label} \u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u6587\u4EF6: ${paths.lexical}`);
     const identity = { dev: opened.dev, ino: opened.ino };
     assertEntryMatches(paths, identity, label);
@@ -15325,13 +16293,13 @@ function captureWorkflowDeletePermit(root, name) {
     assertWorkflowDirectoriesStillTrusted(directories);
     let fd;
     try {
-      fd = openSync4(target.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+      fd = openSync5(target.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
     } catch (error) {
       if (error.code === "ENOENT") return null;
       throw error;
     }
     try {
-      const opened = fstatSync4(fd);
+      const opened = fstatSync5(fd);
       if (!opened.isFile()) throw new Error(`workflow \u5220\u9664\u76EE\u6807\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u666E\u901A\u6587\u4EF6\uFF09: ${target.lexical}`);
       const identity = { dev: opened.dev, ino: opened.ino };
       assertEntryMatches(target, identity, "workflow \u5220\u9664\u76EE\u6807");
@@ -15370,7 +16338,7 @@ function readWorkflowForApi(root, name) {
       assertWorkflowDirectoriesStillTrusted(directories);
       let fd;
       try {
-        fd = openSync4(paths.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+        fd = openSync5(paths.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
       } catch (e) {
         if (e.code === "ENOENT") {
           throw new WorkflowNotFoundError(`workflow '${name}' \u672A\u627E\u5230`);
@@ -15378,7 +16346,7 @@ function readWorkflowForApi(root, name) {
         throw e;
       }
       try {
-        const opened = fstatSync4(fd);
+        const opened = fstatSync5(fd);
         if (!opened.isFile()) throw new Error(`workflow \u8BFB\u53D6\u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u6587\u4EF6: ${paths.lexical}`);
         assertEntryMatches(paths, opened, "workflow \u8BFB\u53D6\u76EE\u6807");
         assertWorkflowDirectoriesStillTrusted(directories);
@@ -15420,14 +16388,14 @@ function writeWorkflowForApi(root, name, wf) {
     let committed = false;
     try {
       assertWorkflowDirectoriesStillTrusted(directories);
-      tempFd = openSync4(
+      tempFd = openSync5(
         temp.operation,
         constants5.O_WRONLY | constants5.O_CREAT | constants5.O_EXCL | constants5.O_NOFOLLOW,
         384
       );
       writeFileSync3(tempFd, content, "utf8");
       fsyncSync2(tempFd);
-      const tempStat = fstatSync4(tempFd);
+      const tempStat = fstatSync5(tempFd);
       if (!tempStat.isFile()) throw new Error(`workflow \u4E34\u65F6\u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u6587\u4EF6: ${temp.lexical}`);
       tempIdentity = { dev: tempStat.dev, ino: tempStat.ino };
       assertEntryMatches(temp, tempIdentity, "workflow \u4E34\u65F6\u6587\u4EF6");
@@ -15460,7 +16428,7 @@ function deleteWorkflowForApi(root, name, permit) {
     assertWorkflowDirectoriesStillTrusted(directories);
     let fd;
     try {
-      fd = openSync4(target.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+      fd = openSync5(target.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
     } catch (e) {
       if (e.code === "ENOENT") {
         if (permit) throw new WorkflowDeleteConflictError(`workflow '${name}' \u5728\u5F15\u7528\u626B\u63CF\u671F\u95F4\u6D88\u5931`);
@@ -15469,7 +16437,7 @@ function deleteWorkflowForApi(root, name, permit) {
       throw e;
     }
     try {
-      const opened = fstatSync4(fd);
+      const opened = fstatSync5(fd);
       if (!opened.isFile()) throw new Error(`workflow \u5220\u9664\u76EE\u6807\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u666E\u901A\u6587\u4EF6\uFF09: ${target.lexical}`);
       const expectedIdentity = { dev: opened.dev, ino: opened.ino };
       if (permit && !sameIdentity(opened, permit)) {
@@ -15525,7 +16493,7 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
+var runPipelineCli = (repoRoot, args) => new Promise((resolve13, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
     reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
@@ -15543,12 +16511,12 @@ var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
     },
     (error, stdout, stderr) => {
       if (error === null) {
-        resolve12({ exitCode: 0, stdout, stderr });
+        resolve13({ exitCode: 0, stdout, stderr });
         return;
       }
       const code = typeof error.code === "number" ? error.code : 1;
       if (typeof error.code === "number") {
-        resolve12({ exitCode: code, stdout, stderr });
+        resolve13({ exitCode: code, stdout, stderr });
         return;
       }
       reject(error);
@@ -15677,7 +16645,7 @@ function routerSuppressionReason(prompt) {
   return null;
 }
 function scoreRouterPatternWithGrep(pattern, prompt) {
-  return new Promise((resolve12, reject) => {
+  return new Promise((resolve13, reject) => {
     const child = spawn("grep", ["-ciE", "--", pattern], {
       env: { ...process.env, LC_ALL: "C" },
       stdio: ["pipe", "pipe", "pipe"]
@@ -15710,12 +16678,12 @@ function scoreRouterPatternWithGrep(pattern, prompt) {
         if (signal !== null) return reject(new Error(`router grep \u88AB\u4FE1\u53F7 ${signal} \u7EC8\u6B62`));
         if (code !== 0 && code !== 1) return reject(new Error(`router grep exit ${String(code)}\uFF1A${stderr.trim() || "unknown error"}`));
         if (stdinError !== null) return reject(new Error(`router grep stdin \u5931\u8D25\uFF1A${stdinError.message}`));
-        if (code === 1) return resolve12(0);
+        if (code === 1) return resolve13(0);
         const score = Number(stdout.trim());
         if (!Number.isSafeInteger(score) || score < 0) {
           return reject(new Error(`router grep \u8FD4\u56DE\u975E\u6CD5\u8BA1\u5206\uFF1A${JSON.stringify(stdout.trim())}`));
         }
-        return resolve12(score);
+        return resolve13(score);
       });
     });
     child.stdin.on("error", (error) => {
@@ -15927,11 +16895,11 @@ import { join as join31 } from "node:path";
 
 // packages/server/src/dockerImages.ts
 import { execFile as execFile2 } from "node:child_process";
-var nodeExecDocker = (args) => new Promise((resolve12) => {
+var nodeExecDocker = (args) => new Promise((resolve13) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve12({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve13({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -15939,8 +16907,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve12) => {
-      timer = setTimeout(() => resolve12(null), timeoutMs);
+    const timeout = new Promise((resolve13) => {
+      timer = setTimeout(() => resolve13(null), timeoutMs);
     });
     const result = await Promise.race([exec(args).catch(() => null), timeout]);
     return result;
@@ -16851,7 +17819,7 @@ function listAllSkillsDetailed(repoRoot, claudeDir) {
 
 // packages/server/src/snapshot.ts
 import { lstat as lstat14, readFile as readFile18, readdir as readdir4, stat as stat5 } from "node:fs/promises";
-import { join as join37, resolve as resolve11 } from "node:path";
+import { join as join37, resolve as resolve12 } from "node:path";
 
 // packages/server/src/projectCapabilities.ts
 import { statSync as statSync4 } from "node:fs";
@@ -17010,7 +17978,7 @@ function dedupeRoots(roots) {
   const out = [];
   for (const r of roots) {
     if (!r) continue;
-    const rp = resolve11(r);
+    const rp = resolve12(r);
     if (seen.has(rp)) continue;
     seen.add(rp);
     out.push(rp);
@@ -17344,8 +18312,8 @@ async function cancelAfkRun(store, changeDir) {
       error: `\u65E0\u6CD5\u5728 automation_worktree \u76EE\u5F55\u843D\u53D6\u6D88\u6807\u8BB0\uFF08${code}\uFF09\uFF1Aworktree \u76EE\u5F55\u53EF\u80FD\u5DF2\u88AB\u6E05\u7406\uFF0C\u6216\u5B57\u6BB5\u503C\u66FE\u88AB\u65E7\u7248\u622A\u65AD\u635F\u574F\u2014\u2014\u82E5\u4EFB\u52A1\u5B9E\u9645\u5DF2\u4E0D\u5728\u8DD1\uFF0C\u53EF\u76F4\u63A5\u91CD\u8BD5/\u653E\u5F03\u8BE5\u4EFB\u52A1`
     };
   }
-  await new Promise((resolve12) => {
-    execFile3("docker", ["kill", sandbox], () => resolve12());
+  await new Promise((resolve13) => {
+    execFile3("docker", ["kill", sandbox], () => resolve13());
   });
   return { ok: true };
 }
@@ -19464,6 +20432,69 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
   }
 }
 
+// packages/server/src/serverPostMemoryRoutes.ts
+import { join as join47 } from "node:path";
+var RELATED_SEARCH_PATH = "/api/mem/related-sessions/search";
+var PLATFORM_VALUES = /* @__PURE__ */ new Set(["all", "claude", "codex", "opencode", "pi"]);
+var CHANGE_NAME_RE3 = /^[a-zA-Z0-9_-]+$/;
+function invalidRequest(deps, res) {
+  deps.sendJson(res, 400, {
+    ok: false,
+    code: "invalid-request",
+    error: "Related session search request is invalid"
+  });
+}
+function missingTarget(deps, res) {
+  deps.sendJson(res, 404, {
+    ok: false,
+    code: "project-or-change-not-found",
+    error: "Project or Change is unavailable"
+  });
+}
+async function handlePostMemoryRoutes(req, res, path7, deps) {
+  if (path7 !== RELATED_SEARCH_PATH) return;
+  const raw = await deps.readJsonBody(req);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return invalidRequest(deps, res);
+  }
+  const body = raw;
+  const root = typeof body.root === "string" ? body.root : "";
+  const name = typeof body.name === "string" ? body.name : "";
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  const platform = body.platform;
+  const queryLength = [...query].length;
+  const tokenCount = query === "" ? 0 : query.split(/\s+/u).length;
+  if (root === "" || !CHANGE_NAME_RE3.test(name) || name.includes("..") || queryLength < 2 || queryLength > 128 || tokenCount > 8 || typeof platform !== "string" || !PLATFORM_VALUES.has(platform)) {
+    return invalidRequest(deps, res);
+  }
+  const rootCheck = deps.workflowRootForRequest(root);
+  if (!rootCheck.ok) return missingTarget(deps, res);
+  const anchoredRoot = rootCheck.anchor.path;
+  if (!stateStorageExistsSync(join47(anchoredRoot, "openspec", "changes", name))) {
+    return missingTarget(deps, res);
+  }
+  const result = await deps.relatedSessionSearch({
+    root: anchoredRoot,
+    query,
+    platform
+  });
+  if (!result.ok) {
+    if (result.reason === "busy") {
+      return deps.sendJson(res, 429, {
+        ok: false,
+        code: "memory-search-busy",
+        error: "Related session search is already running"
+      });
+    }
+    return deps.sendJson(res, 500, {
+      ok: false,
+      code: "memory-search-unavailable",
+      error: "Related session search is unavailable"
+    });
+  }
+  return deps.sendJson(res, 200, result.response);
+}
+
 // packages/server/src/serverPostRoutes.ts
 async function handlePostRoute(req, res, path7, deps) {
   const {
@@ -19520,6 +20551,8 @@ async function handlePostRoute(req, res, path7, deps) {
   if (res.writableEnded) return;
   await handlePostGovernanceRoutes(req, res, path7, deps);
   if (res.writableEnded) return;
+  await handlePostMemoryRoutes(req, res, path7, deps);
+  if (res.writableEnded) return;
   await handlePostExecutionRoutes(req, res, path7, deps);
   if (res.writableEnded) return;
   return sendJson(res, 404, { ok: false, error: "\u672A\u77E5\u7AEF\u70B9" });
@@ -19527,20 +20560,20 @@ async function handlePostRoute(req, res, path7, deps) {
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync22 } from "node:fs";
-import { dirname as dirname10, join as join47 } from "node:path";
+import { dirname as dirname10, join as join48 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync22(join48(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync22(join48(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -19555,7 +20588,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join47(dirname10(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join48(dirname10(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -19595,7 +20628,7 @@ function indexHtml(token) {
 
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { join as join48 } from "node:path";
+import { join as join49 } from "node:path";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
   const { registry, snapshotDeps, heartbeatMs, pollIntervalMs, token } = options;
@@ -19676,12 +20709,12 @@ data: ${data}
     res.end(body);
   }
   function readJsonBody(req) {
-    return new Promise((resolve12) => {
+    return new Promise((resolve13) => {
       let done = false;
       const finish = (v) => {
         if (!done) {
           done = true;
-          resolve12(v);
+          resolve13(v);
         }
       };
       const len = Number.parseInt(String(req.headers["content-length"] ?? ""), 10);
@@ -19744,7 +20777,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join48(webRoot, "index.html"), "utf8");
+      let html = readFileSync23(join49(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -19758,8 +20791,8 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
-    const abs = join48(webRoot, rel);
-    if (!abs.startsWith(join48(webRoot, "assets"))) return false;
+    const abs = join49(webRoot, rel);
+    if (!abs.startsWith(join49(webRoot, "assets"))) return false;
     try {
       const body = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
@@ -19788,7 +20821,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
 
 // packages/server/src/serverGovernance.ts
 import { readdir as readdir5 } from "node:fs/promises";
-import { join as join49, resolve as resolvePath11 } from "node:path";
+import { join as join50, resolve as resolvePath11 } from "node:path";
 function createServerGovernance(options) {
   const { registry, store, sendJson, trackSkillProfiles, operationsAvailable, operationRunner } = options;
   function trackRegistryBody(trackRegistry) {
@@ -19800,7 +20833,7 @@ function createServerGovernance(options) {
     };
   }
   async function scanActiveTrackChanges(root) {
-    const changesRoot = join49(root, "openspec", "changes");
+    const changesRoot = join50(root, "openspec", "changes");
     let entries;
     try {
       entries = await readdir5(changesRoot, { withFileTypes: true });
@@ -19813,7 +20846,7 @@ function createServerGovernance(options) {
     const unreadable = [];
     for (const name of names) {
       try {
-        const state = await store.read(join49(changesRoot, name));
+        const state = await store.read(join50(changesRoot, name));
         const track = state.fields.track;
         const workflow = state.fields.workflow;
         refs.push({
@@ -19958,9 +20991,56 @@ function createServerGovernance(options) {
   };
 }
 
+// packages/server/src/relatedSessionMemory.ts
+function createKernelRelatedSessionSearchRunner(memFs) {
+  return (request) => {
+    const result = searchRelatedSessions(memFs, request);
+    return {
+      protocol: "tenon-related-session-memory/v1",
+      query: result.query,
+      platform: result.platform,
+      partial: result.partial,
+      warnings: result.warnings.map((warning) => ({
+        code: warning.code,
+        message: warning.message
+      })),
+      matches: result.matches.map((match) => ({
+        platform: match.platform,
+        session_id: match.sessionId,
+        ...match.title == null ? {} : { title: match.title },
+        ...match.updatedAt == null ? {} : { updated_at: match.updatedAt },
+        score: match.score,
+        hit_count: match.hitCount,
+        excerpt: match.excerpt,
+        descendants_merged: match.descendantsMerged
+      }))
+    };
+  };
+}
+function createRelatedSessionMemoryServices(options) {
+  const memFs = options.memFs ?? nodeMemFs(options.hostHome);
+  const runner = options.runner ?? createKernelRelatedSessionSearchRunner(memFs);
+  return { memFs, executor: createRelatedSessionSearchExecutor(runner) };
+}
+function createRelatedSessionSearchExecutor(runner) {
+  let inFlight = false;
+  return async (request) => {
+    if (inFlight) return { ok: false, reason: "busy" };
+    inFlight = true;
+    try {
+      await new Promise((resolve13) => setImmediate(resolve13));
+      return { ok: true, response: await runner(request) };
+    } catch {
+      return { ok: false, reason: "unavailable" };
+    } finally {
+      inFlight = false;
+    }
+  };
+}
+
 // packages/server/src/version.ts
 import { readFileSync as readFileSync24 } from "node:fs";
-import { basename as basename4, dirname as dirname11, join as join50 } from "node:path";
+import { basename as basename4, dirname as dirname11, join as join51 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -19969,7 +21049,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative6 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join50(pluginRoot2, relative6), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join51(pluginRoot2, relative6), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -20037,7 +21117,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join51(repoRootForSkills2(), "skills")
+        bundledRoot: join52(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -20053,7 +21133,7 @@ function createDashboardServer(options) {
   const gitHeadSha2 = options.gitHeadSha;
   const workspaceFingerprint = options.workspaceFingerprint;
   const traceStore = options.traceStore;
-  const memFs = options.memFs ?? nodeMemFs(hostHome);
+  const { memFs, executor: relatedSessionSearch } = createRelatedSessionMemoryServices({ hostHome, memFs: options.memFs, runner: options.relatedSessionSearch });
   const manifestPath2 = options.manifestPath;
   const operationRunner = options.runPipelineCli ?? runPipelineCli;
   const operationsAvailable = options.runPipelineCli !== void 0 || pipelineCliAvailable();
@@ -20121,7 +21201,7 @@ function createDashboardServer(options) {
   });
   let boundPort = 0;
   async function resolveSessionLink(root, name) {
-    const changeDir = join51(root, "openspec", "changes", name);
+    const changeDir = join52(root, "openspec", "changes", name);
     try {
       const wtRaw = await store.get(changeDir, "automation_worktree");
       const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
@@ -20210,7 +21290,8 @@ function createDashboardServer(options) {
     trackRegistryBody,
     sendTrackError,
     errMsg,
-    realGraduationFs: REAL_GRADUATION_FS
+    realGraduationFs: REAL_GRADUATION_FS,
+    relatedSessionSearch
   });
   const mutationRouteDeps = {
     isLocalHost,
@@ -20246,7 +21327,7 @@ function createDashboardServer(options) {
     version,
     httpServer,
     listen(port = 0, host = "127.0.0.1") {
-      return new Promise((resolve12, reject) => {
+      return new Promise((resolve13, reject) => {
         const onError = (e) => reject(e);
         httpServer.once("error", onError);
         httpServer.listen(port, host, () => {
@@ -20258,12 +21339,12 @@ function createDashboardServer(options) {
           }
           boundPort = address.port;
           cadenceScheduler?.start();
-          resolve12({ port: boundPort, host });
+          resolve13({ port: boundPort, host });
         });
       });
     },
     close() {
-      return new Promise((resolve12) => {
+      return new Promise((resolve13) => {
         stopPoll();
         cadenceScheduler?.stop();
         for (const anchor of workflowRootAnchors.values()) closeWorkflowRootAnchor(anchor);
@@ -20275,7 +21356,7 @@ function createDashboardServer(options) {
           }
         }
         clients.clear();
-        httpServer.close(() => resolve12());
+        httpServer.close(() => resolve13());
         const closeAllConnections = Reflect.get(httpServer, "closeAllConnections");
         if (typeof closeAllConnections === "function") closeAllConnections.call(httpServer);
       });
@@ -20356,14 +21437,14 @@ function readPidfile(pidfilePath) {
   }
 }
 function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
-  return new Promise((resolve12) => {
+  return new Promise((resolve13) => {
     let done = false;
     let wallClockTimer;
     const finish = (v) => {
       if (done) return;
       done = true;
       if (wallClockTimer !== void 0) clearTimeout(wallClockTimer);
-      resolve12(v);
+      resolve13(v);
     };
     const req = httpGet({ host, port, path: "/api/health", timeout: timeoutMs }, (res) => {
       let body = "";
@@ -20420,28 +21501,28 @@ function parseListenerPids(stdout) {
   return [...new Set(stdout.split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
 }
 function listenerPids(port) {
-  return new Promise((resolve12) => {
+  return new Promise((resolve13) => {
     execFile4("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error, stdout) => {
       if (error === null) {
-        resolve12(parseListenerPids(String(stdout ?? "")));
+        resolve13(parseListenerPids(String(stdout ?? "")));
         return;
       }
       const code = error.code;
       if (code === 1) {
-        resolve12([]);
+        resolve13([]);
         return;
       }
-      resolve12(null);
+      resolve13(null);
     });
   });
 }
 function probePortOpen(port, host = "127.0.0.1", timeoutMs = 250) {
-  return new Promise((resolve12) => {
+  return new Promise((resolve13) => {
     let done = false;
     const finish = (open4) => {
       if (done) return;
       done = true;
-      resolve12(open4);
+      resolve13(open4);
     };
     const socket = createConnection({ host, port });
     socket.setTimeout(timeoutMs);
@@ -20517,14 +21598,14 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join52(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join53(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join52(pluginRoot(), "templates", "manifest.yaml");
+  return join53(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve12) => {
-    execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve12((stdout ?? "").trim()));
+  return new Promise((resolve13) => {
+    execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve13((stdout ?? "").trim()));
   });
 }
 async function main() {
@@ -20583,7 +21664,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join52(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join53(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

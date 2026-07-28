@@ -72,6 +72,8 @@ import { handlePostChangesRoutes } from './serverPostChangesRoutes.js'
 import { handlePostExecutionRoutes } from './serverPostExecutionRoutes.js'
 import { handlePostGovernanceRoutes } from './serverPostGovernanceRoutes.js'
 import { handlePostOperationsRoutes } from './serverPostOperationsRoutes.js'
+import { handlePostMemoryRoutes } from './serverPostMemoryRoutes.js'
+import type { RelatedSessionSearchExecutor } from './relatedSessionMemory.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -117,6 +119,7 @@ export interface PostRouteDeps {
   sendTrackError: (res: ServerResponse, error: unknown) => void
   errMsg: (error: unknown) => string
   realGraduationFs: GraduationFs
+  relatedSessionSearch: RelatedSessionSearchExecutor
 }
 
 export async function handlePostRoute(
@@ -162,6 +165,8 @@ export async function handlePostRoute(
   await handlePostChangesRoutes(req, res, path, deps)
   if (res.writableEnded) return
   await handlePostGovernanceRoutes(req, res, path, deps)
+  if (res.writableEnded) return
+  await handlePostMemoryRoutes(req, res, path, deps)
   if (res.writableEnded) return
   await handlePostExecutionRoutes(req, res, path, deps)
   if (res.writableEnded) return

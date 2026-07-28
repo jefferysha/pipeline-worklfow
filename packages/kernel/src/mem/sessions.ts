@@ -245,14 +245,29 @@ export function listMemSessions(fs: MemFs, options?: { filter?: Partial<MemFilte
 
 export function searchMemSessions(
   fs: MemFs,
-  options: { keyword: string; filter?: Partial<MemFilter>; includeChildren?: boolean },
+  options: {
+    keyword: string
+    filter?: Partial<MemFilter>
+    includeChildren?: boolean
+    /** 新增调用方可显式约束扫描候选；省略时保留 CLI 的全量召回语义。 */
+    candidateLimit?: number
+  },
 ): SearchResult {
   const f = resolveFilter(options.filter)
   const kw = options.keyword
   const includeChildren = options.includeChildren === true
 
-  const wide = { ...f, limit: WIDE_LIMIT }
-  const candidates = listAll(fs, wide)
+  const requestedCandidateLimit = options.candidateLimit
+  const candidateLimit =
+    typeof requestedCandidateLimit === 'number'
+    && Number.isSafeInteger(requestedCandidateLimit)
+    && requestedCandidateLimit > 0
+      ? requestedCandidateLimit
+      : null
+  const wide = { ...f, limit: candidateLimit === null ? WIDE_LIMIT : candidateLimit + 1 }
+  const listedCandidates = listAll(fs, wide)
+  const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit
+  const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit)
   const childIndex = includeChildren ? buildChildIndex(candidates) : new Map<string, MemSession[]>()
   const candidateIds = new Set(candidates.map((s) => s.id))
 
@@ -269,7 +284,14 @@ export function searchMemSessions(
   // score 降 > hit.count 降 > recency 降
   matches.sort((a, b) => b.score - a.score || b.hit.count - a.hit.count || recencyDesc(a.session, b.session))
 
-  return { matches: matches.slice(0, f.limit), totalMatches: matches.length, warnings: [] }
+  const warnings: MemWarning[] = []
+  if (candidatesTruncated) {
+    warnings.push({
+      code: 'candidate-limit-reached',
+      message: `Only the ${candidateLimit} most recent sessions were searched.`,
+    })
+  }
+  return { matches: matches.slice(0, f.limit), totalMatches: matches.length, warnings }
 }
 
 export function extractMemDialogue(

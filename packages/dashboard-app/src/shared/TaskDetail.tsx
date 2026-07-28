@@ -20,6 +20,7 @@ import { TaskHistorySection } from './TaskHistorySection'
 import { TaskConnectionCard } from './TaskConnectionCard'
 import { TaskDetailIntro } from './TaskDetailIntro'
 import { TaskDocumentsSection } from './TaskDocumentsSection'
+import { RelatedSessionsSection } from './RelatedSessionsSection'
 gsap.registerPlugin(useGSAP)
 export interface TaskDetailProps {
   root: string
@@ -363,6 +364,7 @@ export function TaskDetail({
       {change.documents?.governed && (
         <TaskDocumentsSection documents={change.documents} />
       )}
+      <RelatedSessionsSection root={root} name={change.name} />
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
           <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>

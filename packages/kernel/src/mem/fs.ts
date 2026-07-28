@@ -3,13 +3,32 @@
  * 纯逻辑通过此面读磁盘字节；真 fs 缺省（nodeMemFs），mock/测试注入 fake 树。
  * 对位老仓 skills/pipeline/scripts/mem/adapters/internal/{jsonl,paths}.py 的 os 调用面。
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 
 export interface MemDirent {
   name: string
   isFile: boolean
   isDirectory: boolean
+}
+
+/** A text read whose byte ceiling was enforced before bytes entered memory. */
+export interface BoundedTextRead {
+  text: string
+  bytesRead: number
+  truncated: boolean
+}
+
+/**
+ * Request-local content budget for storage adapters that do not read text files (currently OpenCode
+ * SQLite). It keeps their row reads inside the same aggregate budget as readTextBounded.
+ */
+export interface MemContentReadBudget {
+  readonly perSourceBytes: number
+  remainingBytes(): number
+  consume(bytes: number): void
+  noteSourceTruncated(): void
+  noteTotalExhausted(): void
 }
 
 export interface MemFs {
@@ -21,6 +40,13 @@ export interface MemFs {
   readDir(path: string): MemDirent[]
   /** 整文件文本（缺失/不可读 → undefined）；JSONL 逐行解析在纯逻辑层 */
   readText(path: string): string | undefined
+  /**
+   * 最多读取 maxBytes 个原始字节（缺失/不可读 → undefined）。
+   * 可选以保持既有注入 fake 兼容；生产 nodeMemFs 始终提供真正的读取层上限。
+   */
+  readTextBounded?(path: string, maxBytes: number): BoundedTextRead | undefined
+  /** Optional request budget consumed by non-text storage adapters. */
+  contentReadBudget?: MemContentReadBudget
   /** 文件 mtime 毫秒（缺失 → undefined），作 updated 时间源 */
   mtimeMs(path: string): number | undefined
   /** 进程环境变量（Pi 自定义会话目录用；fake 可省 → undefined） */
@@ -49,6 +75,36 @@ export function nodeMemFs(homeOverride?: string): MemFs {
         return readFileSync(p, 'utf8')
       } catch {
         return undefined
+      }
+    },
+    readTextBounded: (p, maxBytes) => {
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return undefined
+      let fd: number | undefined
+      try {
+        fd = openSync(p, 'r')
+        const size = fstatSync(fd).size
+        const buffer = Buffer.allocUnsafe(Math.min(size, maxBytes))
+        let bytesRead = 0
+        while (bytesRead < buffer.byteLength) {
+          const count = readSync(fd, buffer, bytesRead, buffer.byteLength - bytesRead, bytesRead)
+          if (count === 0) break
+          bytesRead += count
+        }
+        return {
+          text: buffer.subarray(0, bytesRead).toString('utf8'),
+          bytesRead,
+          truncated: size > bytesRead,
+        }
+      } catch {
+        return undefined
+      } finally {
+        if (fd !== undefined) {
+          try {
+            closeSync(fd)
+          } catch {
+            /* best-effort close after a failed read */
+          }
+        }
       }
     },
     mtimeMs: (p) => {

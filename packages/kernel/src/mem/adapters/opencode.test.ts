@@ -19,6 +19,7 @@ import { nodeMemFs } from '../fs.js'
 import type { MemFs } from '../fs.js'
 import type { MemFilter, MemSession } from '../types.js'
 import { buildChildIndex } from '../sessions.js'
+import { searchRelatedSessions } from '../relatedSearch.js'
 import {
   opencodeExtractDialogue,
   opencodeListSessions,
@@ -238,6 +239,103 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
 
     const rows = opencodeListSessions(fs, filter())
     expect(rows[0]?.cwd).toBeNull()
+  })
+})
+
+describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
+  test('候选上限在项目过滤后生效，不被其他项目的更新会话挤出', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_target',
+      directory: '/home/u/work/proj',
+      title: 'Target project',
+      created: '2026-07-01T10:00:00Z',
+      updated: '2026-07-01T10:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_target',
+      sessionId: 'ses_target',
+      created: '2026-07-01T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_target',
+      messageId: 'msg_target',
+      sessionId: 'ses_target',
+      created: '2026-07-01T10:00:01Z',
+      data: { type: 'text', text: 'project scoped memory' },
+    })
+    for (let i = 0; i < 101; i += 1) {
+      insertSession(db, {
+        id: `ses_other_${i}`,
+        directory: '/home/u/work/other',
+        title: `Other ${i}`,
+        created: '2026-07-02T10:00:00Z',
+        updated: `2026-07-02T10:${String(i % 60).padStart(2, '0')}:00Z`,
+      })
+    }
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({ sessionId: 'ses_target' }),
+    ])
+  })
+
+  test('child user 命中合并到 parent，安全 DTO 只返回一个 parent 结果', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_parent',
+      directory: '/home/u/work/proj',
+      title: 'Parent task',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:00Z',
+    })
+    insertSession(db, {
+      id: 'ses_child',
+      directory: '/home/u/work/proj',
+      title: 'Child task',
+      parentId: 'ses_parent',
+      created: '2026-07-05T10:01:00Z',
+      updated: '2026-07-05T10:02:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_child',
+      sessionId: 'ses_child',
+      created: '2026-07-05T10:01:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_child',
+      messageId: 'msg_child',
+      sessionId: 'ses_child',
+      created: '2026-07-05T10:01:01Z',
+      data: { type: 'text', text: 'related memory clue' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory clue',
+      platform: 'opencode',
+    })
+
+    expect(result.partial).toBe(false)
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        platform: 'opencode',
+        sessionId: 'ses_parent',
+        excerpt: 'related memory clue',
+        descendantsMerged: 1,
+      }),
+    ])
+    expect(result.matches[0]).not.toHaveProperty('cwd')
+    expect(result.matches[0]).not.toHaveProperty('filePath')
   })
 })
 

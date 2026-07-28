@@ -61,6 +61,8 @@ export {
   fetchTraceSessions,
 } from './auditClient'
 
+export { searchRelatedSessions } from './memoryClient'
+
 export type {
   ChangeHistoryEntry,
   ChangeSessionLaunch,
@@ -107,3 +109,10 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  RelatedSessionMatch,
+  RelatedSessionPlatform,
+  RelatedSessionSearchInput,
+  RelatedSessionSearchResponse,
+} from './memoryTypes'

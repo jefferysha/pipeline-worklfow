@@ -7,6 +7,8 @@ import type {
   FieldName,
   FlowEngine,
   MemFs,
+  MemPlatform,
+  MemPlatformFilter,
   Phase,
   PipelineTodoProjection,
   ProductPaths,
@@ -189,6 +191,12 @@ export interface DashboardServerOptions {
    * 显式 hostHome 构造 nodeMemFs(hostHome)，不重新读取 OS home。测试可注入 fixture adapter。
    */
   memFs?: MemFs
+  /**
+   * Related-session search application seam. Production leaves this unset and the server
+   * adapts the bounded kernel use case; HTTP integration tests can inject a controllable
+   * runner to prove concurrency and error mapping without depending on host session formats.
+   */
+  relatedSessionSearch?: RelatedSessionSearchRunner
   /** H11：starter 激活候选的完整运行接线校验；缺省由 manifest + runner roots 生产装配。 */
   validateLoopActivation?: LoopActivationValidator
   /**
@@ -214,5 +222,35 @@ export interface DashboardServer {
   listen(port?: number, host?: string): Promise<{ port: number; host: string }>
   close(): Promise<void>
 }
+
+export interface RelatedSessionSearchRequest {
+  root: string
+  query: string
+  platform: MemPlatformFilter
+}
+
+export interface RelatedSessionSearchMatch {
+  platform: MemPlatform
+  session_id: string
+  title?: string
+  updated_at?: string
+  score: number
+  hit_count: number
+  excerpt: string
+  descendants_merged: number
+}
+
+export interface RelatedSessionSearchResponse {
+  protocol: 'tenon-related-session-memory/v1'
+  query: string
+  platform: MemPlatformFilter
+  partial: boolean
+  warnings: Array<{ code: string; message: string }>
+  matches: RelatedSessionSearchMatch[]
+}
+
+export type RelatedSessionSearchRunner = (
+  request: RelatedSessionSearchRequest,
+) => RelatedSessionSearchResponse | Promise<RelatedSessionSearchResponse>
 
 export type { FieldName, FlowEngine, Phase, StateStore }

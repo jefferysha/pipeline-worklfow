@@ -108,6 +108,15 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
 }
 
 describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
+  it('为所有 Change 挂载独立的相关会话检索入口，且初始不发起检索', async () => {
+    await renderDetail({
+      change: makeChange('related-session-memory', 'open', { fields: {} }),
+    })
+    expect(screen.getByRole('heading', { name: '相关会话' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: '检索词' })).toHaveValue('related session memory')
+    expect(fetch).not.toHaveBeenCalledWith('/api/mem/related-sessions/search', expect.anything())
+  })
+
   it('按 stageArtifacts 渲染 7 个阶段行，行语义（data-state）：done ×4 / cur(verify) / todo ×2', async () => {
     const { container } = await renderDetail()
     const items = container.querySelectorAll('[data-anim="stage"]')

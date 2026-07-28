@@ -44,7 +44,7 @@
  *   「折叠去重」这层优化）。
  */
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
 import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
@@ -124,9 +124,39 @@ function msToIso(ms: unknown): string | null {
 export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const dbPath = opencodeDbPath(fs)
   return withOpenCodeDb(fs, [] as MemSession[], (db) => {
-    const rows = db
-      .prepare('SELECT id, directory, title, parent_id, time_created, time_updated FROM session')
-      .all() as Json[]
+    let rows: Json[]
+    if (fs.contentReadBudget && f.cwd) {
+      const projectRoot = resolve(f.cwd)
+      const projectPrefix = projectRoot + sep
+      rows = db
+        .prepare(`
+          SELECT id,
+                 CAST(substr(CAST(directory AS blob), 1, 4096) AS text) AS directory,
+                 CAST(substr(CAST(title AS blob), 1, 161) AS text) AS title,
+                 parent_id, time_created, time_updated
+          FROM session
+          WHERE directory = ? OR substr(directory, 1, length(?)) = ?
+          ORDER BY time_updated DESC, id
+          LIMIT ?
+        `)
+        .all(projectRoot, projectPrefix, projectPrefix, f.limit) as Json[]
+    } else if (fs.contentReadBudget) {
+      rows = db
+        .prepare(`
+          SELECT id,
+                 CAST(substr(CAST(directory AS blob), 1, 4096) AS text) AS directory,
+                 CAST(substr(CAST(title AS blob), 1, 161) AS text) AS title,
+                 parent_id, time_created, time_updated
+          FROM session
+          ORDER BY time_updated DESC, id
+          LIMIT ?
+        `)
+        .all(f.limit) as Json[]
+    } else {
+      rows = db
+        .prepare('SELECT id, directory, title, parent_id, time_created, time_updated FROM session')
+        .all() as Json[]
+    }
     const out: MemSession[] = []
     for (const row of rows) {
       const cwd: string | null = typeof row.directory === 'string' && row.directory ? row.directory : null
@@ -153,6 +183,69 @@ function roleOf(data: Json): 'user' | 'assistant' | null {
   return data?.role === 'user' ? 'user' : data?.role === 'assistant' ? 'assistant' : null
 }
 
+interface SqliteSourceBudget {
+  bytesRead: number
+  truncated: boolean
+}
+
+const SQLITE_ROW_CHUNK_BYTES = 4 * 1024
+const SQLITE_MAX_ROWS_PER_QUERY = 512
+
+/**
+ * SQLite is not a text-file adapter, so related search supplies contentReadBudget instead. Each row
+ * returns at most 4 KiB from SQLite and iteration stops before either the per-session or aggregate
+ * allowance can be exceeded. Normal CLI callers have no budget and retain the original `.all()` path.
+ */
+function readBoundedSqliteRows(
+  fs: MemFs,
+  db: SqliteDb,
+  sql: string,
+  sessionId: string,
+  source: SqliteSourceBudget,
+): Json[] {
+  const budget = fs.contentReadBudget
+  if (!budget) return []
+  const sourceRemaining = budget.perSourceBytes - source.bytesRead
+  const aggregateRemaining = budget.remainingBytes()
+  const chunkBytes = Math.min(SQLITE_ROW_CHUNK_BYTES, sourceRemaining, aggregateRemaining)
+  if (chunkBytes <= 0) {
+    if (sourceRemaining <= 0) budget.noteSourceTruncated()
+    if (aggregateRemaining <= 0) budget.noteTotalExhausted()
+    source.truncated = true
+    return []
+  }
+
+  const iterator = db.prepare(sql).iterate(chunkBytes, sessionId) as IterableIterator<Json>
+  const rows: Json[] = []
+  while (rows.length < SQLITE_MAX_ROWS_PER_QUERY) {
+    if (
+      budget.perSourceBytes - source.bytesRead < chunkBytes
+      || budget.remainingBytes() < chunkBytes
+    ) {
+      if (budget.perSourceBytes - source.bytesRead < chunkBytes) budget.noteSourceTruncated()
+      if (budget.remainingBytes() < chunkBytes) budget.noteTotalExhausted()
+      source.truncated = true
+      break
+    }
+    const next = iterator.next()
+    if (next.done) break
+    const row = next.value
+    const returnedBytes = typeof row.data === 'string' ? Buffer.byteLength(row.data) : 0
+    budget.consume(returnedBytes)
+    source.bytesRead += returnedBytes
+    if (typeof row.full_bytes === 'number' && row.full_bytes > returnedBytes) {
+      budget.noteSourceTruncated()
+      source.truncated = true
+    }
+    rows.push(row)
+  }
+  if (rows.length === SQLITE_MAX_ROWS_PER_QUERY) {
+    budget.noteSourceTruncated()
+    source.truncated = true
+  }
+  return rows
+}
+
 /**
  * message + part 联表：message 定角色（data.role），part 出文本（type==='text' 的 data.text）。
  * 单条 message 可能有多个 text part（少见但 schema 允许）——依 part 主键序拼接，与 claude/pi
@@ -160,14 +253,41 @@ function roleOf(data: Json): 'user' | 'assistant' | null {
  */
 export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[] {
   return withOpenCodeDb(fs, [] as DialogueTurn[], (db) => {
-    const messageRows = db
-      .prepare('SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id')
-      .all(s.id) as Json[]
+    const sourceBudget: SqliteSourceBudget = { bytesRead: 0, truncated: false }
+    const messageRows = fs.contentReadBudget
+      ? readBoundedSqliteRows(
+        fs,
+        db,
+        `SELECT id,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes
+         FROM message
+         WHERE session_id = ?
+         ORDER BY time_created, id`,
+        s.id,
+        sourceBudget,
+      )
+      : db
+        .prepare('SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id')
+        .all(s.id) as Json[]
     if (!messageRows.length) return []
 
-    const partRows = db
-      .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
-      .all(s.id) as Json[]
+    const partRows = fs.contentReadBudget
+      ? readBoundedSqliteRows(
+        fs,
+        db,
+        `SELECT id, message_id,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes
+         FROM part
+         WHERE session_id = ?
+         ORDER BY time_created, id`,
+        s.id,
+        sourceBudget,
+      )
+      : db
+        .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
+        .all(s.id) as Json[]
     const partsByMessage = new Map<string, Json[]>()
     for (const p of partRows) {
       const mid = String(p.message_id)

@@ -1,0 +1,354 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { mkdir, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
+import type {
+  DashboardServer,
+  RelatedSessionSearchRequest,
+  RelatedSessionSearchResponse,
+  RelatedSessionSearchRunner,
+} from './types.js'
+import { initChange, makeProject, makeTempHome, newStore, reqPost, testFlow } from './test-support.js'
+
+const openServers: DashboardServer[] = []
+
+afterEach(async () => {
+  while (openServers.length) await openServers.pop()!.close()
+})
+
+const SUCCESS: RelatedSessionSearchResponse = {
+  protocol: 'tenon-related-session-memory/v1',
+  query: 'bounded memory',
+  platform: 'codex',
+  partial: false,
+  warnings: [],
+  matches: [{
+    platform: 'codex',
+    session_id: 'opaque-session-id',
+    title: 'Earlier design discussion',
+    updated_at: '2026-07-28T00:00:00.000Z',
+    score: 1.5,
+    hit_count: 2,
+    excerpt: 'We should keep the project scope explicit.',
+    descendants_merged: 0,
+  }],
+}
+
+interface Harness {
+  port: number
+  root: string
+  token: string
+  calls: RelatedSessionSearchRequest[]
+}
+
+async function start(
+  runner: RelatedSessionSearchRunner = async (request) => ({
+    ...SUCCESS,
+    query: request.query,
+    platform: request.platform,
+  }),
+): Promise<Harness> {
+  const home = await makeTempHome()
+  const root = await makeProject()
+  const store = newStore()
+  await initChange(store, root, 'memory-change')
+  const calls: RelatedSessionSearchRequest[] = []
+  const wrapped: RelatedSessionSearchRunner = async (request) => {
+    calls.push(request)
+    return runner(request)
+  }
+  const server = createDashboardServer({
+    paths: resolveServerPaths({ home, env: {} }),
+    hostHome: home,
+    registry: () => [root],
+    store,
+    flow: testFlow(),
+    token: 'related-memory-token',
+    relatedSessionSearch: wrapped,
+  })
+  openServers.push(server)
+  const { port } = await server.listen(0, '127.0.0.1')
+  return { port, root, token: server.token, calls }
+}
+
+function requestBody(root: string): Record<string, string> {
+  return {
+    root,
+    name: 'memory-change',
+    query: 'bounded memory',
+    platform: 'codex',
+  }
+}
+
+function auth(token: string): { headers: Record<string, string> } {
+  return { headers: { Authorization: `Bearer ${token}` } }
+}
+
+describe('POST /api/mem/related-sessions/search', () => {
+  it('runs the production kernel adapter against a bounded Codex file', async () => {
+    const home = await makeTempHome()
+    const root = await makeProject()
+    const store = newStore()
+    await initChange(store, root, 'memory-change')
+    const sessionsDir = join(home, '.codex', 'sessions', '2026', '07')
+    const sessionPath = join(
+      sessionsDir,
+      'rollout-2026-07-28T12-00-00-00000000-0000-0000-0000-000000000001.jsonl',
+    )
+    await mkdir(sessionsDir, { recursive: true })
+    await writeFile(sessionPath, [
+      JSON.stringify({
+        timestamp: '2026-07-28T12:00:00Z',
+        payload: { id: 'opaque-production-session', cwd: root },
+      }),
+      JSON.stringify({
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'bounded memory belongs to this project' }],
+        },
+      }),
+      JSON.stringify({
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'bounded memory private assistant detail' }],
+        },
+      }),
+    ].join('\n'))
+    const server = createDashboardServer({
+      paths: resolveServerPaths({ home, env: {} }),
+      hostHome: home,
+      registry: () => [root],
+      store,
+      flow: testFlow(),
+      token: 'related-memory-token',
+    })
+    openServers.push(server)
+    const { port } = await server.listen(0, '127.0.0.1')
+
+    const response = await reqPost(
+      port,
+      '/api/mem/related-sessions/search',
+      requestBody(root),
+      auth(server.token),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toMatchObject({
+      protocol: 'tenon-related-session-memory/v1',
+      matches: [{
+        platform: 'codex',
+        session_id: 'opaque-production-session',
+        excerpt: 'bounded memory belongs to this project',
+      }],
+    })
+    expect(response.body).not.toContain(sessionPath)
+    expect(response.body).not.toContain('private assistant detail')
+  })
+
+  it('returns the bounded v1 DTO and scopes the runner to the anchored project root', async () => {
+    const h = await start()
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toEqual(SUCCESS)
+    expect(h.calls).toEqual([{
+      root: h.root,
+      query: 'bounded memory',
+      platform: 'codex',
+    }])
+  })
+
+  it('keeps budget-limited results successful and preserves the stable partial warning', async () => {
+    const h = await start(async () => ({
+      ...SUCCESS,
+      partial: true,
+      warnings: [{
+        code: 'file-read-truncated',
+        message: 'At least one session exceeded the per-file read budget.',
+      }],
+    }))
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toMatchObject({
+      partial: true,
+      warnings: [{ code: 'file-read-truncated' }],
+    })
+  })
+
+  it('retains the shared Host, token, and application/json guards without starting a scan', async () => {
+    const h = await start()
+
+    const noToken = await reqPost(h.port, '/api/mem/related-sessions/search', requestBody(h.root))
+    expect(noToken.status).toBe(401)
+
+    const wrongHost = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      { headers: { Authorization: `Bearer ${h.token}`, Host: 'evil.example:9999' } },
+    )
+    expect(wrongHost.status).toBe(403)
+
+    const wrongType = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      {
+        headers: {
+          Authorization: `Bearer ${h.token}`,
+          'Content-Type': 'text/plain',
+        },
+      },
+    )
+    expect(wrongType.status).toBe(400)
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('returns stable invalid-request errors for malformed JSON, query bounds, and platform values', async () => {
+    const h = await start()
+    const badBodies: Array<{ payload: unknown; rawBody?: string }> = [
+      { payload: undefined, rawBody: '{not json' },
+      { payload: { ...requestBody(h.root), query: 'x' } },
+      { payload: { ...requestBody(h.root), query: 'one two three four five six seven eight nine' } },
+      { payload: { ...requestBody(h.root), platform: 'cursor' } },
+      { payload: { ...requestBody(h.root), name: '../escape' } },
+    ]
+
+    for (const candidate of badBodies) {
+      const response = await reqPost(
+        h.port,
+        '/api/mem/related-sessions/search',
+        candidate.payload,
+        { ...auth(h.token), ...(candidate.rawBody === undefined ? {} : { rawBody: candidate.rawBody }) },
+      )
+      expect(response.status).toBe(400)
+      expect(response.json()).toMatchObject({ ok: false, code: 'invalid-request' })
+    }
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('returns one project-or-change-not-found shape before scanning untrusted or missing targets', async () => {
+    const h = await start()
+    const missingRoot = await makeProject()
+
+    const unregistered = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(missingRoot),
+      auth(h.token),
+    )
+    expect(unregistered.status).toBe(404)
+    expect(unregistered.json()).toEqual({
+      ok: false,
+      code: 'project-or-change-not-found',
+      error: 'Project or Change is unavailable',
+    })
+
+    const missingChange = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      { ...requestBody(h.root), name: 'missing-change' },
+      auth(h.token),
+    )
+    expect(missingChange.status).toBe(404)
+    expect(missingChange.json()).toEqual(unregistered.json())
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('fails closed when the registered project inode drifts and does not expose its path', async () => {
+    const h = await start()
+    const movedRoot = `${h.root}-moved`
+    await rename(h.root, movedRoot)
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(404)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'project-or-change-not-found',
+      error: 'Project or Change is unavailable',
+    })
+    expect(response.body).not.toContain(h.root)
+    expect(h.calls).toHaveLength(0)
+  })
+
+  it('allows only one scan per server and maps overlap to memory-search-busy', async () => {
+    let release: (() => void) | undefined
+    let started: (() => void) | undefined
+    const startedPromise = new Promise<void>((resolve) => { started = resolve })
+    const releasePromise = new Promise<void>((resolve) => { release = resolve })
+    const h = await start(async () => {
+      started?.()
+      await releasePromise
+      return SUCCESS
+    })
+
+    const first = reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+    await startedPromise
+    const second = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(second.status).toBe(429)
+    expect(second.json()).toEqual({
+      ok: false,
+      code: 'memory-search-busy',
+      error: 'Related session search is already running',
+    })
+    expect(h.calls).toHaveLength(1)
+
+    release?.()
+    expect((await first).status).toBe(200)
+  })
+
+  it('maps runner failures to a stable, path-free memory-search-unavailable response', async () => {
+    const privatePath = join('/Users/private-person', '.codex', 'sessions', 'secret.jsonl')
+    const h = await start(async () => {
+      throw new Error(`EACCES reading ${privatePath}`)
+    })
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(500)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'memory-search-unavailable',
+      error: 'Related session search is unavailable',
+    })
+    expect(response.body).not.toContain(privatePath)
+  })
+})
