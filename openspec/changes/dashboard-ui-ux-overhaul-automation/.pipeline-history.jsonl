@@ -156,3 +156,24 @@
 {"ts":"2026-07-28T10:51:05Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
 {"ts":"2026-07-28T10:56:39Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T11:00:34Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T11:01:02Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-28T11:01:02Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T11:01:02Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T11:01:02Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T11:01:02Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T11:01:02Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"3400db71-9160-41e5-a7fc-ac45dcdfb301"}
+{"ts":"2026-07-28T11:10:47Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T11:10:47Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T11:10:48Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify.md"}
+{"ts":"2026-07-28T11:11:24Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify.md"}
+{"ts":"2026-07-28T11:11:24Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T11:12:07Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T11:12:07Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T11:12:21Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-28T11:12:27Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T10:51:05Z authority_host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
+{"ts":"2026-07-28T11:13:25Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T11:13:25Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T11:13:25Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T11:13:25Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T11:13:26Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"5b222e6b-7858-42b7-93c1-29892f7f27ee"}
+{"ts":"2026-07-28T11:15:46Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}

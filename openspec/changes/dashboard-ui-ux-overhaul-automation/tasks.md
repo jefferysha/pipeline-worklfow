@@ -46,9 +46,9 @@
 
 ## 验证
 
-- [ ] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 与 `npm run build:web`。
-- [ ] 在真实 Dashboard 完成 1024/1200/1440px、明暗主题、键盘、状态与 reduced-motion 验收。
-- [ ] 生成验证报告并处理所有可修复偏差。
+- [x] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 与 `npm run build:web`。
+- [x] 在真实 Dashboard 完成 1024/1200/1440px、明暗主题、键盘、状态与 reduced-motion 验收。
+- [x] 生成验证报告并处理所有可修复偏差。
 
 ## 交付
 
