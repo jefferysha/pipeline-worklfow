@@ -20,7 +20,7 @@
 
 - [x] 以 merge commit 纳入最新 `origin/main`，解决冲突并完成最小充分修复。
 - [x] 运行 TDD、定向/全量测试、构建、静态、分发与真实行为检查。
-- [ ] 完成独立 pre-Verify 复审，提交并非强制 push 到原 PR 分支。
+- [x] 完成独立 pre-Verify 复审，提交并非强制 push 到原 PR 分支。
 
 ## 验证
 

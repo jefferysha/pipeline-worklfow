@@ -32,3 +32,5 @@
 {"ts":"2026-07-28T12:03:14Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T11:06:58Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
 {"ts":"2026-07-28T12:03:15Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
 {"ts":"2026-07-28T12:03:15Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"8bbadfd0-9d04-47e2-a889-db9d922b3dbb"}
+{"ts":"2026-07-28T12:07:23Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T12:07:24Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
