@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/host-target-plan-dashboard-design.md
 plan: docs/superpowers/plans/2026-07-28-host-target-plan-dashboard.md
 verification_report: docs/superpowers/reports/2026-07-28-host-target-plan-dashboard-verify.md
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T01:21:01Z
-updated_at: 2026-07-28T06:59:24Z
+updated_at: 2026-07-28T07:05:08Z
 verified_at: 2026-07-28T06:59:24Z
-archived_at: null
-archived: false
+archived_at: 2026-07-28T07:05:08Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 3b11a539-5077-4ae9-a28e-607a93577261
-pipeline_transition_sequence: 25
-pipeline_transition_head: 26c63a3d-9fa4-4378-ae8e-d1c2732acc91
-pipeline_state_revision: 76
-pipeline_state_revision_id: 5617adb5-34cd-402e-892f-24be949eea1b
-pipeline_state_digest: 7140ce5166cca2d409e75a39eaff39601e7776d9d1470e0ffd0a89e8e0ceb7eb
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NzYsInJldmlzaW9uSWQiOiI1NjE3YWRiNS0zNGNkLTQwMmUtODkyZi0yNGJlOTQ5ZWVhMWIiLCJwYXlsb2FkRGlnZXN0IjoiZTIyNjkyNDdmN2ViNGE0ZmZlYjg0NTlkOWNlNDhjYzVjYWM5OTU1ZjJmZGM4NTM2ZWE2Njg0NjE0YTA4ZGZhOSJ9
+pipeline_transition_sequence: 27
+pipeline_transition_head: 58cf4182-630a-46ee-b9fa-15a0a1027212
+pipeline_state_revision: 78
+pipeline_state_revision_id: ec5eae5a-9a56-4b53-8d6d-c8e482aebb0e
+pipeline_state_digest: 7ec7122745e30fcda217d4168185d2e7ea6b74faf0d3b9555a0d6175c1ca75ea
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NzgsInJldmlzaW9uSWQiOiJlYzVlYWU1YS05YTU2LTRiNTMtOGQ2ZC1jOGU0ODJhZWJiMGUiLCJwYXlsb2FkRGlnZXN0IjoiMmNiNDdmNGUwNzBlYzY5NTBkYTM4ZGMzOTZmNzBjYTVmNDI2MTU4MWM4ZjFmNjUzMjBlZDE2ZTk4YjdlYTgxZSJ9

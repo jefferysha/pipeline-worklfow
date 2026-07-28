@@ -227,3 +227,8 @@
 {"ts":"2026-07-28T07:01:21Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-28T07:02:55Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/8"}
 {"ts":"2026-07-28T07:02:56Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-28T07:03:08Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-28T07:03:08Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-28T07:03:08Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"c8cd5ab1-594a-49bc-80c1-af5571dc1cae"}
+{"ts":"2026-07-28T07:05:03Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-28T07:05:08Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"58cf4182-630a-46ee-b9fa-15a0a1027212"}
