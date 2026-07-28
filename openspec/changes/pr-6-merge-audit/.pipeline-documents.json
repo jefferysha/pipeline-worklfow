@@ -79,7 +79,7 @@
         {
           "phase": "build",
           "sha256": "f8ccce221a2ec82f4a02ef31a9f2777a8074171bef8e43d8bdce1a3e2d1e1540",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -154,7 +154,7 @@
         {
           "phase": "build",
           "sha256": "b190e266f4c8d2bfa2ee92cfdcb3436bc533fd6c0358046fc122c1aa789adc2c",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -193,7 +193,7 @@
         {
           "phase": "build",
           "sha256": "f91f910d3c6b78a77de59349ab4d20aaa988b907a4f2318e568cec3974978c2f",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -232,7 +232,7 @@
         {
           "phase": "build",
           "sha256": "f328497203bbe4c9f78779fe39a8446b57aaf18d94f4582229c8b784ecab5e25",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -271,7 +271,7 @@
         {
           "phase": "build",
           "sha256": "f328497203bbe4c9f78779fe39a8446b57aaf18d94f4582229c8b784ecab5e25",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -316,7 +316,7 @@
         {
           "phase": "build",
           "sha256": "de2ffca497e58469306d5117e284524c5e3d900f8394f57a4a49408bb953a0be",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -361,7 +361,7 @@
         {
           "phase": "build",
           "sha256": "be2846ea8c744384dea5facadee7a53d912676d9168d17896d7b476268ab4296",
-          "readAt": "2026-07-28T15:55:42Z",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]
@@ -377,14 +377,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/pr-6-merge-audit/tasks.md",
-      "sha256": "1d913a653dc0dce229794579cdf02b4ea75410e39d583d9d81abb96dcf010f9d",
+      "sha256": "0a23a3171f7f571c11ba265abbc9f39a0ca118d3f5cb97037c30d5409228d007",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-28T15:55:30Z",
+      "recordedAt": "2026-07-28T16:08:30Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "1d913a653dc0dce229794579cdf02b4ea75410e39d583d9d81abb96dcf010f9d",
-          "readAt": "2026-07-28T15:55:42Z",
+          "sha256": "0a23a3171f7f571c11ba265abbc9f39a0ca118d3f5cb97037c30d5409228d007",
+          "readAt": "2026-07-28T16:08:31Z",
           "visitId": "[\"77ed6eb7-0161-4b9f-a1e8-ea13fdad510f\",13]"
         }
       ]

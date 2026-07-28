@@ -31,7 +31,7 @@
 - [x] 以 TDD 修复嵌套证据 composer 的 body portal、模态层所有权与草稿保留。
 - [x] 在真实生产 Dashboard 上验证桌面/移动端全屏遮罩、外部点击、Escape、焦点恢复与无横向溢出。
 - [x] 按 Dashboard 适用范围完成第四轮 Standards、Spec、前后端架构、安全与 design-taste-frontend 复审。
-- [ ] 重跑全部风险匹配门禁，提交并非强制 push 新 exact head，等待 GitHub CI 全绿。
+- [x] 重跑全部风险匹配门禁，提交并非强制 push 新 exact head，等待 GitHub CI 全绿。
 
 ## 验证
 
