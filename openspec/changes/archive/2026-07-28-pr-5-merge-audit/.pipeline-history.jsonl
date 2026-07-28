@@ -152,3 +152,5 @@
 {"ts":"2026-07-28T10:55:08Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
 {"ts":"2026-07-28T10:55:08Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-07-28T10:55:08Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"60e76a83-9a79-4923-afbf-6dd5c78d9f21"}
+{"ts":"2026-07-28T11:04:35Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-28T11:04:47Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"2255782c-5b33-4760-969f-1c20da83f875"}

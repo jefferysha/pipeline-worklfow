@@ -40,5 +40,5 @@
 
 ## 归档
 
-- [ ] 确认 merge SHA 可从 `origin/main` 到达后归档审计 Change。
-- [ ] 仅在无人占用、完全干净且无未推送提交时安全清理 PR worktree，否则保留并记录原因。
+- [x] 确认 merge SHA 可从 `origin/main` 到达后归档审计 Change。
+- [x] 仅在无人占用、完全干净且无未推送提交时安全清理 PR worktree，否则保留并记录原因。
