@@ -58,6 +58,25 @@ UTF-8 bytes，全部路径 SHALL 不超过 32768 UTF-8 bytes。服务端 SHALL �
 - **THEN** 服务端返回 HTTP 409 与 `LOOP_SCOPE_REGISTRY_INVALID`
 - **AND** 不返回部分结果
 
+#### Scenario: registry 子路径信任失效
+
+- **WHEN** registered root、`.pipeline` 或 `loops.yaml` 是预置 symlink，或读取前后观测到目录项/inode 身份不一致
+- **THEN** 服务端返回 HTTP 403 与 `LOOP_SCOPE_ROOT_UNTRUSTED`
+- **AND** 不返回任何 Loop 策略结果
+
+#### Scenario: 无 openat 平台的信任边界
+
+- **WHEN** 运行平台不能把最终 child lookup 锚定到可信目录描述符
+- **THEN** 系统仍使用 `O_NOFOLLOW` 文件描述符读取并在读取前后复核目录项与 inode 身份
+- **AND** 安全契约沿用 registered project 不与不可信同 principal writer 共享写权限的既有边界
+- **AND** 系统不得把预检描述成可替代真实执行 gate 的许可
+
+#### Scenario: registry 读取故障
+
+- **WHEN** 可信 `loops.yaml` 存在但发生非缺失 I/O 故障
+- **THEN** 服务端返回 HTTP 500 与 `LOOP_SCOPE_REGISTRY_READ_FAILED`
+- **AND** 不把 I/O 故障降级成 registry 不存在、损坏或部分结果
+
 ### Requirement: 预检不得成为执行许可
 
 系统 SHALL 每次请求 fresh 读取 Loop registry 且不得缓存或持久化预检结果。
@@ -81,6 +100,9 @@ UTF-8 bytes，全部路径 SHALL 不超过 32768 UTF-8 bytes。服务端 SHALL �
 Workbench SHALL 在 Loop 的“自主与安全”高级区提供路径预检 Dialog。用户 SHALL 能按每行
 一个路径粘贴输入并以按钮或 `Ctrl/Cmd+Enter` 提交。界面 SHALL 覆盖空、输入无效、加载、
 全部允许、部分/全部拒绝、服务端或解码失败以及保留输入的重试状态，并提供中文与英文文案。
+成功响应 SHALL 绑定到原请求：Loop id 与路径序列 SHALL 逐项一致、items SHALL 不超过 100，
+且 `enforced_for_unattended_merge` SHALL 与 `active && L3` 派生事实一致；任一不一致 SHALL
+作为解码失败处理。
 
 #### Scenario: 空输入与本地错误
 
@@ -99,6 +121,12 @@ Workbench SHALL 在 Loop 的“自主与安全”高级区提供路径预检 Dia
 - **WHEN** 网络、服务端或响应解码失败
 - **THEN** Dialog 显示可理解的错误与重试操作
 - **AND** 保留原始路径输入，重试重新发出完整请求
+
+#### Scenario: 成功响应与请求不一致
+
+- **WHEN** 服务端成功形状包含其他 Loop、不同路径顺序或集合、超过 100 项，或矛盾的 L3 生效值
+- **THEN** Dashboard 拒绝渲染该结果并进入可重试错误状态
+- **AND** 不把不一致响应解释为当前请求的许可
 
 #### Scenario: 键盘与焦点返回
 

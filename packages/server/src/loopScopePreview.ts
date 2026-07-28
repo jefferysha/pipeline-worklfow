@@ -1,9 +1,28 @@
+import {
+  constants,
+  fstatSync,
+  openSync,
+  readFileSync,
+} from 'node:fs'
 import { posix } from 'node:path'
 import {
   compileConstraintPolicy,
   explainConstraintPaths,
+  loadRegistry,
+  RegistryReadError,
   type LoopEntry,
 } from '@tenon/kernel'
+import {
+  assertDirectoryStillTrusted,
+  assertEntryMatches,
+  assertWorkflowRootAnchor,
+  childEntry,
+  lstatIfExists,
+  safeClose,
+  sameIdentity,
+  withTrustedDirectoryChain,
+  type WorkflowRootAnchor,
+} from './workflowTrustedFs.js'
 
 const REQUEST_KEYS = new Set(['root', 'loop_id', 'paths'])
 const MAX_PATHS = 100
@@ -18,11 +37,95 @@ export class LoopScopePreviewRootUntrustedError extends Error {
   override readonly name = 'LoopScopePreviewRootUntrustedError'
 
   constructor(
-    readonly stage: 'before-read' | 'after-read',
+    readonly stage: 'before-read' | 'during-read' | 'after-read',
     readonly cause: unknown,
   ) {
     super(`Loop scope root trust failed ${stage}`)
   }
+}
+
+type RegistryFileReader = (fd: number) => string
+
+function registryReadError(error: unknown): RegistryReadError {
+  const code = (error as NodeJS.ErrnoException).code ?? 'IO'
+  const detail = error instanceof Error ? error.message : String(error)
+  return new RegistryReadError(`loops.yaml 读失败（${code}）：${detail}`)
+}
+
+/**
+ * 从 registered-root anchor 逐层打开 `.pipeline/loops.yaml`。目录与文件都拒绝 symlink，
+ * 文件内容从已验证的 fd 读取，并在读取前后复核目录项/inode，避免 pathname 跟随与子项换位。
+ */
+export function readTrustedLoopRegistry(
+  anchor: WorkflowRootAnchor,
+  readFile: RegistryFileReader = (fd) => readFileSync(fd, 'utf8'),
+): ReturnType<typeof loadRegistry> {
+  return readWithLoopScopeRootTrust(
+    () => assertWorkflowRootAnchor(anchor),
+    () => {
+      try {
+        return withTrustedDirectoryChain(
+          anchor,
+          ['.pipeline'],
+          false,
+          () => loadRegistry(anchor.path, { readText: () => null }),
+          (pipeline) => {
+            assertDirectoryStillTrusted(pipeline, anchor)
+            const paths = childEntry(pipeline, 'loops.yaml')
+            const before = lstatIfExists(paths.operation)
+            if (before === undefined) {
+              assertDirectoryStillTrusted(pipeline, anchor)
+              return loadRegistry(anchor.path, { readText: () => null })
+            }
+            if (before.isSymbolicLink()) {
+              throw new LoopScopePreviewRootUntrustedError(
+                'during-read',
+                new Error(`loops registry 不得是 symlink: ${paths.lexical}`),
+              )
+            }
+            if (!before.isFile()) throw registryReadError(new Error(`loops registry 不是普通文件: ${paths.lexical}`))
+
+            let fd: number
+            try {
+              fd = openSync(paths.operation, constants.O_RDONLY | constants.O_NOFOLLOW)
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException).code
+              if (code === 'ELOOP' || code === 'ENOENT') {
+                throw new LoopScopePreviewRootUntrustedError('during-read', error)
+              }
+              throw registryReadError(error)
+            }
+            try {
+              const opened = fstatSync(fd)
+              if (!opened.isFile() || !sameIdentity(opened, before)) {
+                throw new LoopScopePreviewRootUntrustedError(
+                  'during-read',
+                  new Error(`loops registry 在打开期间被替换: ${paths.lexical}`),
+                )
+              }
+              const identity = { dev: opened.dev, ino: opened.ino }
+              assertEntryMatches(paths, identity, 'loops registry')
+              assertDirectoryStillTrusted(pipeline, anchor)
+              let text: string
+              try {
+                text = readFile(fd)
+              } catch (error) {
+                throw registryReadError(error)
+              }
+              assertEntryMatches(paths, identity, 'loops registry')
+              assertDirectoryStillTrusted(pipeline, anchor)
+              return loadRegistry(anchor.path, { readText: () => text })
+            } finally {
+              safeClose(fd)
+            }
+          },
+        )
+      } catch (error) {
+        if (error instanceof LoopScopePreviewRootUntrustedError || error instanceof RegistryReadError) throw error
+        throw new LoopScopePreviewRootUntrustedError('during-read', error)
+      }
+    },
+  )
 }
 
 export interface LoopScopePreviewRequest {

@@ -22,11 +22,13 @@
 - [x] B2a 内核与服务端加固：覆盖 deny 优先、首个 pattern、aggregate 兼容、闭集 DTO、输入限额、root/Loop/registry 错误与无副作用。
 - [x] B2b Dashboard 状态闭环：覆盖空态、加载、错误保留与重试、zh/en、未知响应拒绝、`Ctrl/Cmd+Enter` 与 Dialog 焦点路径。
 - [x] B2c 集成收束：补齐 API/组件回归测试、文档注释与生成 bundle，保持包边界和文件长度门禁。
+- [x] B2d Verify 返工：以 TDD 修复 registry 子路径可信读取、稳定 403/500 契约和客户端请求/响应绑定。
+- [x] B2e 返工收束：重建 bundle，重新执行全量 Standards/Spec 审查并清零 critical/high/medium。
 
 ## 验证
 
-- [x] 运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
-- [x] 在真实 Tenon Dashboard 对桌面/移动、明暗主题、空/加载/允许/拒绝/错误重试和键盘路径完成浏览器验收。
+- [x] 重新运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
+- [x] 重新完成真实浏览器验收与隔离 OpenSpec show/strict validate/archive/apply 演练。
 
 ## 交付
 

@@ -19257,6 +19257,12 @@ import { lstatSync as lstatSync7 } from "node:fs";
 import { join as join46 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
+import {
+  constants as constants7,
+  fstatSync as fstatSync5,
+  openSync as openSync5,
+  readFileSync as readFileSync22
+} from "node:fs";
 import { posix as posix2 } from "node:path";
 var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
 var MAX_PATHS = 100;
@@ -19275,6 +19281,78 @@ var LoopScopePreviewRootUntrustedError = class extends Error {
   cause;
   name = "LoopScopePreviewRootUntrustedError";
 };
+function registryReadError(error) {
+  const code = error.code ?? "IO";
+  const detail = error instanceof Error ? error.message : String(error);
+  return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
+}
+function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd, "utf8")) {
+  return readWithLoopScopeRootTrust(
+    () => assertWorkflowRootAnchor(anchor),
+    () => {
+      try {
+        return withTrustedDirectoryChain(
+          anchor,
+          [".pipeline"],
+          false,
+          () => loadRegistry(anchor.path, { readText: () => null }),
+          (pipeline) => {
+            assertDirectoryStillTrusted(pipeline, anchor);
+            const paths = childEntry(pipeline, "loops.yaml");
+            const before = lstatIfExists(paths.operation);
+            if (before === void 0) {
+              assertDirectoryStillTrusted(pipeline, anchor);
+              return loadRegistry(anchor.path, { readText: () => null });
+            }
+            if (before.isSymbolicLink()) {
+              throw new LoopScopePreviewRootUntrustedError(
+                "during-read",
+                new Error(`loops registry \u4E0D\u5F97\u662F symlink: ${paths.lexical}`)
+              );
+            }
+            if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
+            let fd;
+            try {
+              fd = openSync5(paths.operation, constants7.O_RDONLY | constants7.O_NOFOLLOW);
+            } catch (error) {
+              const code = error.code;
+              if (code === "ELOOP" || code === "ENOENT") {
+                throw new LoopScopePreviewRootUntrustedError("during-read", error);
+              }
+              throw registryReadError(error);
+            }
+            try {
+              const opened = fstatSync5(fd);
+              if (!opened.isFile() || !sameIdentity(opened, before)) {
+                throw new LoopScopePreviewRootUntrustedError(
+                  "during-read",
+                  new Error(`loops registry \u5728\u6253\u5F00\u671F\u95F4\u88AB\u66FF\u6362: ${paths.lexical}`)
+                );
+              }
+              const identity = { dev: opened.dev, ino: opened.ino };
+              assertEntryMatches(paths, identity, "loops registry");
+              assertDirectoryStillTrusted(pipeline, anchor);
+              let text2;
+              try {
+                text2 = readFile23(fd);
+              } catch (error) {
+                throw registryReadError(error);
+              }
+              assertEntryMatches(paths, identity, "loops registry");
+              assertDirectoryStillTrusted(pipeline, anchor);
+              return loadRegistry(anchor.path, { readText: () => text2 });
+            } finally {
+              safeClose(fd);
+            }
+          }
+        );
+      } catch (error) {
+        if (error instanceof LoopScopePreviewRootUntrustedError || error instanceof RegistryReadError) throw error;
+        throw new LoopScopePreviewRootUntrustedError("during-read", error);
+      }
+    }
+  );
+}
 function invalid(message) {
   throw new LoopScopePreviewInputError(message);
 }
@@ -19410,10 +19488,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     }
     let loaded;
     try {
-      loaded = readWithLoopScopeRootTrust(
-        () => assertWorkflowRootAnchor(rootCheck.anchor),
-        () => loadRegistry(rootCheck.anchor.path, nodeLoopIoStrict)
-      );
+      loaded = readTrustedLoopRegistry(rootCheck.anchor);
     } catch (error) {
       if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot();
       if (!(error instanceof RegistryReadError)) throw error;
@@ -19727,21 +19802,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync22 } from "node:fs";
+import { readFileSync as readFileSync23 } from "node:fs";
 import { dirname as dirname10, join as join47 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync23(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync23(join47(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -19795,7 +19870,7 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync23 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { join as join48 } from "node:path";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
@@ -19945,7 +20020,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join48(webRoot, "index.html"), "utf8");
+      let html = readFileSync24(join48(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -19962,7 +20037,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     const abs = join48(webRoot, rel);
     if (!abs.startsWith(join48(webRoot, "assets"))) return false;
     try {
-      const body = readFileSync23(abs);
+      const body = readFileSync24(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       res.writeHead(200, {
         "Content-Type": STATIC_TYPES[ext] ?? "application/octet-stream",
@@ -20160,7 +20235,7 @@ function createServerGovernance(options) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync25 } from "node:fs";
 import { basename as basename4, dirname as dirname11, join as join50 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
@@ -20170,7 +20245,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative6 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join50(pluginRoot2, relative6), "utf8"));
+      const parsed = JSON.parse(readFileSync25(join50(pluginRoot2, relative6), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -20501,7 +20576,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile4 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync25 } from "node:fs";
+import { readFileSync as readFileSync26 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -20538,7 +20613,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync26(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {

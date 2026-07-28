@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { LoopEntry } from '@tenon/kernel'
 import {
   buildLoopScopePreviewResponse,
   LoopScopePreviewInputError,
   LoopScopePreviewRootUntrustedError,
   parseLoopScopePreviewRequest,
+  readTrustedLoopRegistry,
   readWithLoopScopeRootTrust,
 } from './loopScopePreview.js'
+import {
+  captureWorkflowRootAnchor,
+  closeWorkflowRootAnchor,
+} from './workflowTrustedFs.js'
 
 const loop = (overrides: Partial<LoopEntry> = {}): LoopEntry => ({
   id: 'release-loop',
@@ -57,6 +72,26 @@ describe('Loop scope preview request', () => {
       stage: 'after-read',
     }))
     expect(reads).toBe(1)
+  })
+
+  it('fails closed when loops.yaml is replaced after its trusted fd is opened', () => {
+    const root = mkdtempSync(join(tmpdir(), 'loop-scope-swap-'))
+    const pipeline = join(root, '.pipeline')
+    const registry = join(pipeline, 'loops.yaml')
+    const parked = join(pipeline, 'loops.old.yaml')
+    mkdirSync(pipeline)
+    writeFileSync(registry, 'version: 1\nloops: []\n', 'utf8')
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      expect(() => readTrustedLoopRegistry(anchor, (fd) => {
+        renameSync(registry, parked)
+        writeFileSync(registry, 'version: 1\nloops: []\n', 'utf8')
+        return readFileSync(fd, 'utf8')
+      })).toThrow(LoopScopePreviewRootUntrustedError)
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('accepts only closed, canonical, bounded paths and deduplicates in first-seen order', () => {

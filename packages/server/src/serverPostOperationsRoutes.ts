@@ -10,10 +10,8 @@ import {
   decodeWorkflowDef,
   firstStep,
   listAutomationPolicyTemplates,
-  loadRegistry,
   loadTrackRegistry,
   loadWorkflow,
-  nodeLoopIoStrict,
   requireTrack,
   RegistryReadError,
   stateStorageExistsSync,
@@ -54,7 +52,7 @@ import {
   LoopScopePreviewInputError,
   LoopScopePreviewRootUntrustedError,
   parseLoopScopePreviewRequest,
-  readWithLoopScopeRootTrust,
+  readTrustedLoopRegistry,
 } from './loopScopePreview.js'
 import { applyLoopsUpdate, type LoopActivationValidator } from './loops.js'
 import { parsePipelineCliJson, type PipelineCliRunner } from './operations.js'
@@ -126,10 +124,7 @@ export async function handlePostOperationsRoutes(
       }
       let loaded
       try {
-        loaded = readWithLoopScopeRootTrust(
-          () => assertWorkflowRootAnchor(rootCheck.anchor),
-          () => loadRegistry(rootCheck.anchor.path, nodeLoopIoStrict),
-        )
+        loaded = readTrustedLoopRegistry(rootCheck.anchor)
       } catch (error) {
         if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot()
         if (!(error instanceof RegistryReadError)) throw error

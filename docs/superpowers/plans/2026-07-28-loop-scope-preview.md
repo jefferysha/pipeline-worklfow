@@ -30,7 +30,7 @@ Spec，而不是继续堆实现。
    在 `packages/server/src/serverPostOperationsRoutes.ts` 装配
    `POST /api/loops/scope-preview`，从 registered root 的真实 registry 读取 Loop，
    注入 `matchesPathGlob`。
-   - 验证：`npm test -w @tenon/server -- loopScopePreview server`
+   - 验证：`npx vitest run packages/server/src/loopScopePreview.test.ts packages/server/src/server.test.ts`
    - 回滚：删除纯函数模块和单一路由块，不影响既有 Loop update/level/run。
 3. 在 `packages/dashboard-app/src/api/loopsClient.ts` 与独立 decoder 中加入 typed client；
    新建 `packages/dashboard-app/src/workbench/LoopScopePreview.tsx`，挂到
@@ -48,12 +48,15 @@ Spec，而不是继续堆实现。
    Git 相对路径、未知 key、稳定错误码；请求只做字符串匹配。
 3. 增加真 HTTP 覆盖：Host/token/content-type 继续由公共 POST 入口保护，测试未知 root、
    未知 Loop、损坏 registry、active L3 与 paused/L1/L2 提示，以及响应无绝对路径。
-4. 对 registry 读取前后调用 `assertWorkflowRootAnchor`，不缓存、不写盘、不返回部分结果。
+4. 通过既有可信 `.pipeline` 目录链校验与 `O_NOFOLLOW` 文件描述符读取 `loops.yaml`，读取前后
+   复核子项与 inode；预置 symlink 或已观测到的换位统一 fail-closed。Node/Darwin 缺少
+   `openat` 时，明确沿用项目既有的同 principal writer 信任边界，不承诺消除最后 pathname lookup
+   的恶意微竞态。
 
 验证：
 
 - `npm test -w @tenon/kernel -- automation-policy`
-- `npm test -w @tenon/server -- loopScopePreview server`
+- `npx vitest run packages/server/src/loopScopePreview.test.ts packages/server/src/server.test.ts`
 - `npm run check:architecture`
 
 回滚边界：仅新解释投影和只读路由；不迁移、不改 registry schema。
@@ -62,8 +65,8 @@ Spec，而不是继续堆实现。
 
 ## Build 子阶段 3：B2b Dashboard 状态与可访问性闭环
 
-1. 完整 decoder 拒绝未知/缺失枚举、错误汇总与 items 长度不一致；client 统一映射
-   network、HTTP 与 decode error。
+1. 完整 decoder 拒绝未知/缺失枚举、错误汇总、items 长度/上限不一致；client 在解码后绑定
+   原请求 Loop id、路径逐项顺序与 `active && L3` 派生值，并统一映射 network、HTTP 与 decode error。
 2. 完成 Dialog 的 closed/open-empty/invalid/loading/ready/error 状态；错误保留输入，
    Retry 使用同一请求，关闭后清除路径且不写 localStorage。
 3. 在 `packages/dashboard-app/src/i18n/translations.ts` 对称加入 zh/en 文案，协议 reason
@@ -105,6 +108,8 @@ Spec，而不是继续堆实现。
 3. 浏览器覆盖桌面与移动视口、明暗主题、空输入、加载、允许、阻断、错误重试及
    Tab/Shift+Tab/Ctrl-or-Cmd+Enter/Escape。
 4. 复核 POST 无文件/队列/registry 写入；运行 full gates 后再请求 `verify-pass` exact event。
+5. 在保留 symlink/权限的隔离副本运行 `openspec show`、`openspec validate --strict` 与
+   archive/apply 演练，证明真实主规格 digest 前后不变。
 
 ## Ship、兼容与回滚
 

@@ -110,12 +110,15 @@ export function decodeLoopScopePreview(value: unknown): LoopScopePreviewResponse
   const total = summary.total as number
   const allowed = summary.allowed as number
   const blocked = summary.blocked as number
-  if (total < 0 || allowed < 0 || blocked < 0 || total !== allowed + blocked || total !== value.items.length) return null
+  if (total < 0 || total > MAX_PATHS || allowed < 0 || blocked < 0
+    || total !== allowed + blocked || total !== value.items.length) return null
   const items = value.items.map(decodeItem)
   if (items.some((item) => item === null)) return null
   const decoded = items as LoopScopePreviewItem[]
+  const activeL3 = value.loop_status === 'active' && value.autonomy_level === 'L3'
   if (new Set(decoded.map((item) => item.path)).size !== decoded.length
-    || decoded.filter((item) => item.verdict === 'allowed').length !== allowed) return null
+    || decoded.filter((item) => item.verdict === 'allowed').length !== allowed
+    || value.enforced_for_unattended_merge !== activeL3) return null
   return {
     ok: true,
     schema_version: 1,
@@ -134,12 +137,14 @@ export async function postLoopScopePreview(input: {
   paths: readonly string[]
   signal?: AbortSignal
 }): Promise<LoopScopePreviewResponse> {
+  const requestLoopId = input.loopId
+  const requestPaths = [...input.paths]
   let response: Response
   try {
     response = await fetch('/api/loops/scope-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ root: input.root, loop_id: input.loopId, paths: input.paths }),
+      body: JSON.stringify({ root: input.root, loop_id: requestLoopId, paths: requestPaths }),
       signal: input.signal,
     })
   } catch (error) {
@@ -168,6 +173,11 @@ export async function postLoopScopePreview(input: {
     throw new LoopScopePreviewError(kind, response.status)
   }
   const decoded = decodeLoopScopePreview(await readJson(response))
-  if (decoded === null) throw new LoopScopePreviewError('response', response.status)
+  if (decoded === null
+    || decoded.loop_id !== requestLoopId
+    || decoded.items.length !== requestPaths.length
+    || decoded.items.some((item, index) => item.path !== requestPaths[index])) {
+    throw new LoopScopePreviewError('response', response.status)
+  }
   return decoded
 }

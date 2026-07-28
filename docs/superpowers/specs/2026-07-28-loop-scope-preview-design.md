@@ -37,7 +37,7 @@
 flowchart LR
   UI["LoopScopePreviewDialog"] --> Client["loopsClient + decoder"]
   Client --> API["POST /api/loops/scope-preview"]
-  API --> Registry["kernel loadRegistry"]
+  API --> Registry["trusted chain + identity-checked fd read"]
   Registry --> Policy["compileConstraintPolicy"]
   Policy --> Explain["explainConstraintPaths"]
   Explain --> Matcher["automation matchesPathGlob"]
@@ -107,8 +107,10 @@ flowchart LR
 | --- | --- | --- |
 | 400 | `LOOP_SCOPE_REQUEST_INVALID` | 请求形状、数量、字节或路径不合法 |
 | 401/403 | 既有鉴权错误 | token 或 Host 不合法 |
+| 403 | `LOOP_SCOPE_ROOT_UNTRUSTED` | root、`.pipeline` 或 `loops.yaml` 信任身份失效 |
 | 404 | `LOOP_SCOPE_ROOT_NOT_FOUND` / `LOOP_SCOPE_LOOP_NOT_FOUND` | root 未登记或 Loop 不存在 |
 | 409 | `LOOP_SCOPE_REGISTRY_INVALID` | loops registry 无法形成可信策略 |
+| 500 | `LOOP_SCOPE_REGISTRY_READ_FAILED` | 可信 registry 文件发生非缺失 I/O 故障 |
 
 预检本身无副作用；`enforced_for_unattended_merge` 只在 Loop 当前为 `active` 且 `autonomy_level=L3` 时为 true。无论该值如何，UI 都明确说明真实运行会重新判定。
 
@@ -132,7 +134,15 @@ closed
 ## 安全与性能
 
 - 服务端只把路径当字符串匹配，不执行 `stat`、`readFile`、Git 或 shell。
-- registered-root 锚在读取 Loop 前后验证；响应只含客户端已提交的相对路径和 Loop 的路径 pattern。
+- registered-root 锚在读取 Loop 前后验证；`.pipeline` 通过既有可信目录链校验，`loops.yaml` 通过
+  `O_NOFOLLOW` 只读文件描述符读取，并在读取前后复核目录项与 inode 身份。预置目录/file symlink
+  或已观测到的身份换位统一返回 `LOOP_SCOPE_ROOT_UNTRUSTED`，且不返回任何策略结果。
+- `workflowTrustedFs` 的现有平台边界保持不变：Node/Darwin 没有可用的 `openat` 子项解析时，
+  最终 child open 仍需要 lexical pathname。同 principal 能恶意改写项目目录项的最后 syscall
+  微竞态不在本端点保证的隔离边界内；项目 root 不得与该攻击者共享写权限。实现不把预检当 permit，
+  并在读取后身份不一致时 fail closed，但不宣称绝对消除该平台竞态。
+- 响应只含客户端已提交的相对路径和 Loop 的路径 pattern。Dashboard 在闭集解码后继续校验
+  `loop_id` 与路径序列逐项等于原请求、items 不超过 100，以及 L3 生效布尔值与状态/自主级别一致。
 - 正则由已通过 Loop registry schema 的现有 pattern 编译；最多 `100 × (allowlist + denylist)` 次小型匹配，无网络、进程或持久化。
 - 不缓存结果，避免策略变更后继续展示旧许可。每次提交 fresh 读取 registry；真实执行仍 fresh gate。
 
@@ -150,13 +160,16 @@ closed
 - 空 allowlist 不会变成 allow-all。
 - 预检通过后修改 registry，不会绕过真实执行 gate。
 - 服务端返回未知枚举、漏字段或超额 items 时，前端 decoder 失败并进入 error，不用部分可信数据渲染。
+- 服务端返回其他 Loop、不同路径顺序/集合或矛盾的 L3 生效值时，前端同样拒绝，不把陈旧或串线响应渲染为当前结果。
 - Dialog 关闭/重开不持久化用户路径，避免本机敏感目录线索进入 localStorage。
 
 ## Verification strategy
 
 1. kernel 定向测试：deny 优先、空 allowlist、首个 pattern、顺序与 aggregate 行为保持。
-2. server 单元/真 HTTP：Host/token/content-type、闭集 DTO、路径/字节/数量、未知 root/Loop、损坏 registry、成功与无写盘证明。
-3. Dashboard decoder/client/component：空、加载、允许、拒绝、服务端/网络/decoder error、retry、zh/en、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape。
+2. server 单元/真 HTTP：Host/token/content-type、闭集 DTO、路径/字节/数量、未知 root/Loop、
+   损坏 registry、`.pipeline` symlink、`loops.yaml` symlink、子项换位、稳定 403/500、成功与无写盘证明。
+3. Dashboard decoder/client/component：空、加载、允许、拒绝、服务端/网络/decoder error、
+   请求/响应 Loop 与路径绑定、items 上限、L3 派生一致性、retry、zh/en、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape。
 4. `typecheck:web`、`test:web`、`build:web`、`build`、`npm test` 与相关 architecture/comments/bundle 门禁。
 5. 真实 Tenon Dashboard 在桌面与移动视口、明暗主题完成成功/拒绝/错误恢复和键盘验收；同时核对 title、API health 与目标项目身份。
 

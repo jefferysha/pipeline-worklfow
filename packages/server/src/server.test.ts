@@ -1788,6 +1788,37 @@ describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', 
     })
   })
 
+  it('拒绝 .pipeline 或 loops.yaml symlink，且不读取 root 外策略', async () => {
+    const { mkdtemp, rm, symlink } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const authFor = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } })
+
+    const pipelineLinked = await start()
+    const outsidePipeline = await mkdtemp(join(tmpdir(), 'loop-scope-pipeline-link-'))
+    await writeFile(join(outsidePipeline, 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await symlink(outsidePipeline, join(pipelineLinked.root, '.pipeline'), 'dir')
+    const pipelineResponse = await reqPost(pipelineLinked.port, '/api/loops/scope-preview', {
+      root: pipelineLinked.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, authFor(pipelineLinked.token))
+    expect(pipelineResponse.status).toBe(403)
+    expect(pipelineResponse.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_UNTRUSTED' })
+
+    const fileLinked = await start()
+    const outsideFileDir = await mkdtemp(join(tmpdir(), 'loop-scope-file-link-'))
+    const outsideFile = join(outsideFileDir, 'loops.yaml')
+    await writeFile(outsideFile, SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await mkdir(join(fileLinked.root, '.pipeline'))
+    await symlink(outsideFile, join(fileLinked.root, '.pipeline', 'loops.yaml'), 'file')
+    const fileResponse = await reqPost(fileLinked.port, '/api/loops/scope-preview', {
+      root: fileLinked.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, authFor(fileLinked.token))
+    expect(fileResponse.status).toBe(403)
+    expect(fileResponse.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_UNTRUSTED' })
+
+    await rm(outsidePipeline, { recursive: true, force: true })
+    await rm(outsideFileDir, { recursive: true, force: true })
+  })
+
   it('沿用公共 POST 的 token 与 JSON content-type 安全闸', async () => {
     const h = await start()
     const body = { root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'] }
