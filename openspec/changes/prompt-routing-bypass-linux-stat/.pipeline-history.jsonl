@@ -22,3 +22,15 @@
 {"ts":"2026-07-28T08:46:38Z","kind":"set","field":"build_mode","to":"direct"}
 {"ts":"2026-07-28T08:46:38Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-28T08:46:39Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T08:47:28Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T08:47:36Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T08:47:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T08:47:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"03ad9303-4a14-4e6f-a145-4c45c737c0cc"}
+{"ts":"2026-07-28T08:53:24Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-linux-stat-verify.md"}
+{"ts":"2026-07-28T08:53:24Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T08:53:26Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-28T08:53:27Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T08:53:27Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T08:53:27Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T08:53:27Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T08:41:10Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T08:53:27Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"586efd0a-784e-45cb-803c-1ec04660697c"}

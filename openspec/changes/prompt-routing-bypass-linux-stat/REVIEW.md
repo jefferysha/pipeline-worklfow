@@ -20,3 +20,20 @@
 
 实现与 delta spec 一致，可冻结进入 Verify。GitHub CI 必须在推送后重新运行，不能用本地结果
 替代远端终态。
+
+## Verify-fail 回退与二次收敛
+
+首次冻结 `1b7a36052eb356d73e623bc6c0c40fe3768b257a` 的 Codex 独立轨发现：若 GNU
+能力探针先写 stdout 再失败，直接 `stat ... || stat ...` 会把污染输出与 BSD fallback
+拼接。该行为违反“失败探针不得污染 identity stdout”的 delta spec，因此已通过确切
+`verify-fail` event 回退 Build，没有在 Verify 中修改产品代码。
+
+二次实现把每个探针的 stdout 隔离在独立 command substitution 中，只向调用方发出单一数字
+`inode:size`；新增 fake-stat 回归固定“首探针写污染内容后失败、fallback 成功”的路径。
+
+- `bash -n hooks/hooks-config.sh tools/test-hooks.sh`：通过。
+- `bash tools/test-hooks.sh`：512 passed，0 failed。
+- `git diff --check`：通过。
+- CRITICAL/HIGH/MEDIUM/LOW：0/0/0/0。
+
+二次实现修复了首次 Verify 的唯一发现，可重新冻结；远端 CI 与独立复核仍须绑定新的冻结 SHA。

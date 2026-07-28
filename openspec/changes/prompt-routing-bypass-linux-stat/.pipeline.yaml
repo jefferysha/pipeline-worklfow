@@ -3,16 +3,16 @@ preset: hotfix
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-28-prompt-routing-bypass-linux-stat-design.md
 plan: docs/superpowers/plans/2026-07-28-prompt-routing-bypass-linux-stat.md
-verification_report: null
+verification_report: docs/superpowers/reports/2026-07-28-prompt-routing-bypass-linux-stat-verify.md
 build_mode: direct
 isolation: worktree
 build_sha: null
-agent_review_result: pending
-codex_review_result: pending
-verify_result: pending
+agent_review_result: pass
+codex_review_result: fail
+verify_result: fail
 branch_status: pending
 direct_override: false
 prd_path: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T08:41:09Z
-updated_at: 2026-07-28T08:46:02Z
+updated_at: 2026-07-28T08:53:27Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: e273be89-232a-443d-8b8d-eb36757728c4
-pipeline_transition_sequence: 3
-pipeline_transition_head: 5828cb8c-cffe-4e13-9aea-ac48973d10bb
-pipeline_state_revision: 12
-pipeline_state_revision_id: b197db35-1a4b-43da-ad2f-10d1222bfc00
-pipeline_state_digest: 57545bb7f6fdf2221ca20196e3296de0433eef12f0663ee96c64e422f81d4e2d
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTIsInJldmlzaW9uSWQiOiJiMTk3ZGIzNS0xYTRiLTQzZGEtYWQyZi0xMGQxMjIyYmZjMDAiLCJwYXlsb2FkRGlnZXN0IjoiMTMyYzNjNzQzZjlmYTI0MWMxNzdiZTAwOWY2ZjI3OTNjOGRmYTBlNzhmNmFhOTRkZjRmMjM4ODhhNjM2Nzg1YiJ9
+pipeline_transition_sequence: 5
+pipeline_transition_head: 586efd0a-784e-45cb-803c-1ec04660697c
+pipeline_state_revision: 21
+pipeline_state_revision_id: 0a7c9205-562b-49bf-90ae-511baf997557
+pipeline_state_digest: 86e2612c24b4d787fcb368eb370315af8700411db443a95495421f990fac93f1
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjEsInJldmlzaW9uSWQiOiIwYTdjOTIwNS01NjJiLTQ5YmYtOTBhZS01MTFiYWY5OTc1NTciLCJwYXlsb2FkRGlnZXN0IjoiNjQzNTYxOWRjOTAwNjg4MGY0ODkwMjA0ZWI5NmZkZWYwZDQxMDhiNjQyN2ZiM2JjMTI1NDNkNGE3ZDYyNDEwNiJ9

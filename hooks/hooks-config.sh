@@ -7,14 +7,36 @@
 # 显式拒绝 NUL（Bash 变量不能保存 NUL）。不能安全取得同一份快照时统一 fail-open。
 
 pipeline_hooks_config_identity() { # $1=path；stdout=inode:size
+  local identity inode size
   # Darwin 的 /dev/fd 位于 devfs，stat 会报告 devfs 的 dev 而非底层文件 dev；inode 与 size
   # 仍来自同一 open file description。GNU stat 默认不跟随 /dev/fd/N 符号链接，必须显式 -L，
   # 否则会把链接自身的 inode/size 与 pathname 比较并让所有只读配置在 Linux 上失效。
   # 两侧另有普通文件与 symlink 判定，故比较这两个稳定字段。
   # 先试 GNU 形式：GNU `stat -f FORMAT path` 会把 FORMAT 当成另一个 pathname，
   # 即使最终失败也会先把 path 的文件系统报告写到 stdout，不能安全地放在 fallback 前面。
-  stat -Lc '%i:%s' "$1" 2>/dev/null \
-    || stat -f '%i:%z' "$1" 2>/dev/null
+  # 每个探针各自在 command substitution 中隔离 stdout；只有单一数字 inode:size 才向调用方输出。
+  # 这样即使能力探针“先写 stdout、再失败”，污染内容也不会和 fallback 的成功结果拼接。
+  identity="$(stat -Lc '%i:%s' "$1" 2>/dev/null)" || identity=''
+  if [ -n "$identity" ] && [ "${identity#*:}" != "$identity" ]; then
+    inode="${identity%%:*}"
+    size="${identity#*:}"
+    case "$inode" in ''|*[!0-9]*) ;; *)
+      case "$size" in ''|*[!0-9]*) ;; *)
+        printf '%s\n' "$identity"
+        return 0
+        ;;
+      esac
+    esac
+  fi
+
+  identity="$(stat -f '%i:%z' "$1" 2>/dev/null)" || return 1
+  [ -n "$identity" ] && [ "${identity#*:}" != "$identity" ] || return 1
+  inode="${identity%%:*}"
+  size="${identity#*:}"
+  case "$inode" in ''|*[!0-9]*) return 1 ;; esac
+  case "$size" in ''|*[!0-9]*) return 1 ;;
+  esac
+  printf '%s\n' "$identity"
 }
 
 pipeline_hooks_config_snapshot_from_fd() { # $1=path，fd 9 已打开

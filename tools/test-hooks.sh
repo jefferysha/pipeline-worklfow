@@ -712,6 +712,23 @@ if command -v node >/dev/null 2>&1; then
   [ "$READONLY_KEYWORD" = skip-tenon ] \
     && ok "router: 只读 hooks config 仍读取 custom keyword" \
     || bad "router: 只读 hooks config 仍读取 custom keyword" "实际 ${READONLY_KEYWORD:-<empty>}"
+  POLLUTED_STAT_RESULT="$(
+    bash -c '
+      . "$1"
+      stat() {
+        if [ "$1" = "-Lc" ]; then
+          printf "polluted-probe\n"
+          return 1
+        fi
+        printf "7:8\n"
+      }
+      identity="$(pipeline_hooks_config_identity ignored)"
+      printf "%s|%s" "$?" "$identity"
+    ' _ "$ROOT/hooks/prompt-intent.sh"
+  )"
+  [ "$POLLUTED_STAT_RESULT" = "0|7:8" ] \
+    && ok "router: 失败 identity 探针的 stdout 不污染 fallback" \
+    || bad "router: 失败 identity 探针的 stdout 不污染 fallback" "实际 $POLLUTED_STAT_RESULT"
   BLOCKING_STAT_DIR="$TMP/blocking-stat"
   BLOCKING_STAT_PID_FILE="$TMP/blocking-stat.pid"
   BLOCKING_READER_PID_FILE="$TMP/blocking-reader.pid"
