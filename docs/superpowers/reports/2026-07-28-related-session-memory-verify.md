@@ -2,33 +2,45 @@
 
 ## 结论
 
-**FAIL — 返回 Build 修复。**
+**FAIL — 第三轮 Verify 返回 Build 修复。**
 
-- 冻结构建：`475cee668d6b2de6ac01c0ea80ebd7284569c205`
+- 冻结构建：`19e74b274fa66ab2a13348656dfe460690d509bd`
 - 基线：`origin/main@15fe619b2885b928dd27be9668cca6b0ee903c57`
 - Change：`related-session-memory`
 - Track：`frontend`（实际交付覆盖 kernel、server、Dashboard）
-- 聚合结果：代码 Reviewer `FAIL`；E2E `PASS`；视觉 Reviewer `PASS`；Codex CLI `FAIL`。
+- 聚合结果：代码 Reviewer `FAIL`；E2E `PASS`；Codex CLI `FAIL`；视觉轨仍在收束且不能覆盖已确认阻断。
 - Verify 前后实现、配置、生成物与冻结 SHA 一致；仅 Tenon 治理状态和本报告发生允许的 Verify 写入。
 
 ## 阻断发现
 
-1. **HIGH — 100 个项目内候选未跨宿主全局按最近性选择**
-   - 位置：`packages/kernel/src/mem/sessions.ts:73-81`、`packages/kernel/src/mem/relatedSearch.ts:135-149`、`packages/kernel/src/mem/adapters/codex.ts:66-93`、`packages/kernel/src/mem/adapters/pi.ts:24-36`
-   - `all` 按 Claude → Codex → OpenCode → Pi 固定顺序调用 adapter，却共享一个在 adapter 内消耗的候选计数。100 个 Claude 来源可饿死更新的其他宿主来源；Codex/Pi 又在读取 cwd 和项目过滤前认领，100 个外项目文件可隐藏目标项目命中。
-   - 修复要求：两阶段发现轻量元数据，先排除非项目来源，再将选中宿主的项目内会话按更新时间全局合并，最后只读取最近 100 个；新增跨宿主饥饿和外项目饥饿回归。
-2. **HIGH — 宿主合成摘要可能伪装成 user-only excerpt**
-   - 位置：`packages/kernel/src/mem/relatedSearch.ts:225-229` 及 Claude/Pi compaction 适配路径。
-   - Claude compact summary 和 Pi 压缩/分支摘要被现有 adapter 标成 `role: user`，但内容可能是宿主综合生成并包含 assistant 信息。查询只命中这类摘要时仍会通过 user-only 门并返回。
-   - 修复要求：在 dialogue turn 保留原始用户/合成摘要 provenance，related search 只允许原始用户 turn 形成命中和 excerpt；补 Claude/Pi synthetic-only 回归。
-3. **MEDIUM — 非预算 partial 被文案误报为读取预算耗尽**
-   - 位置：`packages/dashboard-app/src/shared/RelatedSessionsSection.tsx:158-160,185-188`
-   - `opencode-reader-unavailable`、`file-read-unavailable`、`bounded-read-unavailable` 同样会得到 partial，但 UI 一律显示预算提示，掩盖数据源不可用。
-   - 修复要求：使用中英文通用 partial 文案或按稳定 warning code 映射原因，并覆盖预算/数据源两类测试。
-4. **MEDIUM — 非法查询长度静默忽略提交**
-   - 位置：`packages/dashboard-app/src/shared/RelatedSessionsSection.tsx:68-70`
-   - 空白、1 code point 或超过 128 code point 的查询直接 return，页面仍留在 idle；单字符 Change 默认查询也会看似无响应。
-   - 修复要求：提供按 code point 计算的可访问校验错误；不能用原生 UTF-16 `maxLength` 破坏 emoji 边界。
+1. **MEDIUM — host summary 隔离修改了旧 CLI 的公开计数与排序**
+   - 位置：`packages/kernel/src/mem/search.ts:64-65`
+   - 共享 `searchInDialogue` 把 Claude/Pi host summary 从 user 重新分类为 assistant；这会改变既有 `tenon mem search` 的 `user_count`、`asst_count`、excerpt 与 score，违反“旧 CLI 语义不变”。
+   - 修复要求：仅在 Related Sessions 隐私路径排除 host summary 的原始用户资格，保留旧 CLI 搜索输出。
+2. **MEDIUM — 元数据读取未计入同一 JSONL 的单文件预算**
+   - 位置：`packages/kernel/src/mem/relatedSearch.ts:97-101`
+   - 同一会话先读取 8 KiB metadata，随后仍可独立读取完整 2 MiB，对单文件累计超过声明的 2 MiB。
+   - 修复要求：按物理 path 累计单文件读取量，后续读取减去 metadata 已消费字节，并补边界回归。
+3. **MEDIUM — OpenCode 同一数据库的预算按会话重置**
+   - 位置：`packages/kernel/src/mem/adapters/opencode.ts:258-261`
+   - 多个会话均来自同一 `opencode.db`，但每次 extract 都重新获得 2 MiB，使单文件可一直读取到总预算 16 MiB。
+   - 修复要求：在 request-scoped content budget 内按数据库 path 共享累计量，补多会话同库回归。
+4. **MEDIUM — 不可读会话目录被误报为完整空结果**
+   - 位置：`packages/kernel/src/mem/relatedSearch.ts:144-148`、`packages/kernel/src/mem/fs.ts`
+   - 生产 `readDir` 将缺失与权限错误都折叠为空数组；现包装层无法知道已选择的宿主目录未成功扫描，因而可能返回 `partial=false`。
+   - 修复要求：提供兼容的可选目录读取状态，选中且存在但不可读时产生稳定 source warning 与 `partial=true`，补生产路径回归。
+5. **HIGH — 重复 token 的位置收集与 chunk 扫描可产生二次复杂度**
+   - 位置：`packages/kernel/src/mem/search.ts:69-101`、`packages/server/src/relatedSessionMemory.ts:65-68`
+   - 每个 token occurrence 都保存位置并调用含 `slice/lastIndexOf/indexOf` 的 `chunkAround`；合法 2 字符 query 在长、无段落、重复文本上可让同步 Dashboard server 明显冻结。Reviewer 实测 20k 字符约 60ms、100k 字符约 1331ms。
+   - 修复要求：对每 turn 采用有界、近线性的 occurrence/excerpt 算法，保持公开命中计数语义，并加入重复文本性能回归。
+6. **HIGH — OpenCode descendant 图缺少 cycle guard**
+   - 位置：`packages/kernel/src/mem/sessions.ts:130-149`
+   - 损坏或漂移数据库可形成 `a.parent_id=b`、`b.parent_id=a`；当前 DFS 无限 push，而 Related Sessions 固定 `includeChildren=true`，会永久占住同步 server。
+   - 修复要求：使用 platform-scoped visited 集，确保每个 descendant 最多合并一次，并补 cycle/self-cycle 回归。
+7. **MEDIUM — metadata prefix 截断会静默漏掉合法项目会话**
+   - 位置：`packages/kernel/src/mem/relatedSearch.ts:160-171`
+   - 8 KiB prefix 截断不产生 warning；首 JSONL 事件超过该大小时 adapter 可能无法解析 cwd 并跳过合法 session，却返回 `partial=false`。
+   - 修复要求：metadata 截断且无法完成项目身份判定时返回稳定 partial warning，并补 9 KiB 首事件回归。
 
 ## 低风险发现
 
@@ -36,37 +48,36 @@
 
 ## 首轮问题回归
 
-首轮全部 finding 已确认修复：Claude 缺失 cwd fail-closed、文件读取前候选上限、OpenCode reader unavailable partial、Unicode code-point 长度、IME Enter、按钮对比度、POST 文档措辞与并发 append 检测。
+前两轮全部 finding 已确认修复：Claude 缺失 cwd fail-closed、文件读取前候选上限、OpenCode reader unavailable partial、Unicode code-point 长度、IME Enter、按钮对比度、POST 文档措辞与并发 append 检测；以及跨宿主全局最近 100、synthetic summary 隔离、partial 文案、查询校验、跨宿主同 id child 合并、真实同步 runner single-flight 与 light hover 对比度。
 
 ## 四轨证据
 
 ### 代码 Reviewer
 
-- 全量审查 `origin/main...475cee668d6b2de6ac01c0ea80ebd7284569c205`。
-- 覆盖 117/117 个文件：文档 7、治理 75、kernel 12、server 6、Dashboard 11、生成物 6。
-- 前后实现指纹一致。
-- 结论：`FAIL`，发现候选全局 admission 的 1 High；无其他 severity finding。
+- 全量审查 `origin/main...19e74b274fa66ab2a13348656dfe460690d509bd`，覆盖 139/139 个文件：文档 7、治理 91、kernel 17、server 6、Dashboard 11、生成物 7。
+- 结论：`FAIL`，发现重复 token 二次复杂度与 OpenCode cycle 两个 High，以及 metadata prefix 静默截断一个 Medium。
+- 新鲜验证：kernel/server 7 files / 78 tests、Dashboard 4 files / 57 tests、三包 typecheck 与隔离 `npm run build` 通过。
+- 证据：`/tmp/tenon-verify-19e74b.xu4MkT/`。
 
 ### E2E
 
-- 生产 server：`127.0.0.1:62417`，隔离 HOME/runtime；health 为 `ok/global/v1.0.1`，HTML 与浏览器 title 精确为 `Tenon Dashboard`，精确打开本 worktree/Change。
-- 通过：Codex success/partial、Pi complete empty、user-only/privacy、Enter/focus、128 emoji code point（129 返回 400）、IME 零请求、Fetch 延迟下 loading 与关闭详情 abort/stale 清理、server-down error/Retry、390×844 零横向溢出、console warn/error 0。
-- 证据：`/tmp/tenon-related-verify2.r8SxrJ/evidence/verify-e2e-summary.md` 及同目录 JSON、截图、API/log。
+- 生产 server：`127.0.0.1:62523`，隔离 HOME/runtime；health 为 `ok/global/v1.0.1`，HTML 与浏览器 title 精确为 `Tenon Dashboard`，精确打开本 worktree/Change。
+- 通过：真实约 16 MiB 同步 kernel 双预连接请求得到 `200 + 429 memory-search-busy`；OpenCode SQLite parent/child；Codex success/partial、Pi complete empty、Unicode/IME、切换 abort/stale、停服 Retry、390px、隐私与旧 session-link/CLI 兼容路径。
+- 证据：`/tmp/tenon-related-verify3.Mjb0X2/evidence/verify-e2e-summary.md`、`browser-assertions.json` 与 `http-concurrency.json`。
 - 结论：`PASS`，无 severity finding。
 
 ### 视觉 Reviewer
 
-- light/dark、390/1440、idle/loading/results/partial/complete-empty/error/retry、键盘焦点与 reduced motion 均通过。
-- 主按钮对比度 light `5.02:1`、dark `10.99:1`；无 overflow、emoji 或装饰性 AI-slop。
-- 证据：`/tmp/tenon-related-verify-second-j4u7v2/`。
-- 结论：`PASS`；无 Critical/High/Medium，1 个上述 Low。
+- light/dark、375/1440、idle/loading/results、budget/source/generic partial、complete empty、validation、error/retry、键盘焦点与 reduced motion 均通过。
+- 主按钮 normal/hover 对比度：light `5.0156:1`，dark `10.9942:1`；窄屏无 overflow。
+- 证据：`/tmp/tenon-verify3.ewC3ME/visual-verify-report.md`。
+- 结论：`PASS`；无 Critical/High/Medium。1 个 Low：宽屏 validation 时按钮因 `self-end` 比 input 下移约 26px。
 
 ### Codex CLI
 
-- 首次把自定义 prompt 与 `--base` 组合被 CLI 参数契约拒绝（exit 2），未执行审查。
-- 受支持的 `codex exec review --ephemeral --base verify-base` 在 `/tmp/tenon-codex-review.Gl5ro9/repo` 隔离 clone 内完成；真实仓库零实现写入。
-- 结论：`FAIL`，确认全局候选 1 High，并新增 synthetic summary 1 High、partial copy 与非法长度 2 Medium。
-- Codex 在隔离 clone 内尝试定向 Vitest 时遇到仓库已知的 Vitest 保留句柄并 exit 130；主线 Node 22 测试结果如下，不把该子进程记为绿色。
+- 受支持的 `codex exec review --ephemeral --base origin/main` 在 `/tmp/tenon-rsm-codex3.HASDhY/repo` 隔离 clone 内完成；真实仓库零实现写入。
+- 结论：`FAIL`，发现旧 CLI host-summary 计数兼容、JSONL metadata 单文件累计、OpenCode 同库累计、不可读目录 partial 四个 Medium。
+- 隔离 clone 无 `node_modules`，定向 Vitest 未启动；不把该轨写成测试绿色，主线与代码 Reviewer 的新鲜结果单独记录。
 
 ## 构建与测试证据
 

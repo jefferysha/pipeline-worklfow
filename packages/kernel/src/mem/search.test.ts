@@ -67,10 +67,27 @@ describe('searchInDialogue —— 多 token AND grep（老仓 search_in_dialogue
     expect(searchInDialogue(turns, 'nonexistent').count).toBe(0)
   })
 
-  test('host summaries retain text but cannot count as original user matches or excerpts', () => {
+  test('host summaries retain their legacy user counts and excerpts by default', () => {
     const hit = searchInDialogue([
       hostSummaryTurn('[compact summary]\nsynthetic summary needle'),
     ], 'summary needle')
+
+    expect(hit.userCount).toBe(3)
+    expect(hit.asstCount).toBe(0)
+    expect(hit.excerpts).toEqual([{
+      role: 'user',
+      snippet: '[compact summary]\nsynthetic summary needle',
+    }])
+  })
+
+  test('callers can opt into treating host summaries as assistant provenance', () => {
+    const hit = searchInDialogue(
+      [hostSummaryTurn('[compact summary]\nsynthetic summary needle')],
+      'summary needle',
+      3,
+      400,
+      { hostSummariesAsAssistant: true },
+    )
 
     expect(hit.userCount).toBe(0)
     expect(hit.asstCount).toBe(3)
@@ -78,5 +95,46 @@ describe('searchInDialogue —— 多 token AND grep（老仓 search_in_dialogue
       role: 'assistant',
       snippet: '[compact summary]\nsynthetic summary needle',
     }])
+  })
+
+  test('long repetitive turns keep exact counts and deterministic bounded excerpts', () => {
+    const repetitions = 5_000
+    const raw = 'needle '.repeat(repetitions)
+    const instrumented = new String(raw)
+    const nativeSlice = String.prototype.slice
+    let chunkSlices = 0
+    Object.defineProperty(instrumented, 'slice', {
+      value: (start?: number, end?: number) => {
+        chunkSlices += 1
+        return nativeSlice.call(instrumented, start, end)
+      },
+    })
+    const text = instrumented as unknown as string
+
+    const first = searchInDialogue([{ role: 'user', text }], 'needle needle', 3, 80)
+    const second = searchInDialogue([{ role: 'user', text }], 'needle needle', 3, 80)
+
+    expect(first.count).toBe(repetitions * 2)
+    expect(first.userCount).toBe(repetitions * 2)
+    expect(first.asstCount).toBe(0)
+    expect(first.excerpts).toHaveLength(3)
+    expect(first.excerpts).toEqual(second.excerpts)
+    expect(chunkSlices).toBeLessThanOrEqual(6)
+  })
+
+  test('keeps a later full-coverage paragraph ahead of earlier partial candidates', () => {
+    const text = [
+      'alpha first',
+      'alpha second',
+      'alpha third',
+      'beta first',
+      'beta second',
+      'beta third',
+      'alpha beta together',
+    ].join('\n\n')
+
+    const hit = searchInDialogue([{ role: 'user', text }], 'alpha beta', 3, 80)
+
+    expect(hit.excerpts[0]).toEqual({ role: 'user', snippet: 'alpha beta together' })
   })
 })

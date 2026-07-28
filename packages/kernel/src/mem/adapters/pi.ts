@@ -8,7 +8,7 @@
 import { basename, join, resolve } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso, readMemSessionMetadata } from '../fs.js'
+import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
@@ -28,12 +28,19 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       fs.contentReadBudget.noteTotalExhausted()
       break
     }
-    const header = readJsonlFirst(readMemSessionMetadata(fs, filePath)) as Json
-    if (!header || header.type !== 'session') continue
+    const metadata = readMemSessionMetadataChecked(fs, filePath)
+    const header = readJsonlFirst(metadata.text) as Json
+    if (!header || header.type !== 'session') {
+      if (metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+      continue
+    }
 
     const sid: string = typeof header.id === 'string' ? header.id : idFromFile(filePath)
     const cwd: string | null = typeof header.cwd === 'string' ? header.cwd : null
-    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+    if (f.cwd && !sameProject(cwd, f.cwd)) {
+      if (!cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+      continue
+    }
 
     let title: string | null = null
     let lastMs: number | null = null

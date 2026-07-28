@@ -53,7 +53,13 @@ export type {
 } from './types.js'
 
 // fs 注入面
-export type { BoundedTextRead, MemContentReadBudget, MemDirent, MemFs } from './fs.js'
+export type {
+  BoundedTextRead,
+  CheckedDirectoryRead,
+  MemContentReadBudget,
+  MemDirent,
+  MemFs,
+} from './fs.js'
 export { mtimeIso, nodeMemFs } from './fs.js'
 
 // 平台可用性探测（CLI 降级提示据此判断是否要出警告，而非无条件印，见 mem.ts maybeWarnOpencode）

@@ -73,7 +73,9 @@ function boundedFakeFs(
   options: {
     mtimes?: Record<string, number>
     onRead?: (path: string, maxBytes: number) => void
+    onRangeRead?: (path: string, offset: number, maxBytes: number) => void
     env?: Record<string, string>
+    unreadableDirs?: ReadonlySet<string>
   } = {},
 ): MemFs {
   const fileSet = new Set(Object.keys(files))
@@ -91,6 +93,7 @@ function boundedFakeFs(
     home: '/home/u',
     exists: (p) => fileSet.has(p) || dirs.has(p),
     readDir: (p) => {
+      if (options.unreadableDirs?.has(p)) return []
       const out: MemDirent[] = []
       for (const f of fileSet) {
         if (dirname(f) === p) out.push({ name: basename(f), isFile: true, isDirectory: false })
@@ -99,6 +102,23 @@ function boundedFakeFs(
         if (dirname(d) === p && d !== p) out.push({ name: basename(d), isFile: false, isDirectory: true })
       }
       return out
+    },
+    readDirChecked: (p) => {
+      const entries: MemDirent[] = []
+      if (!options.unreadableDirs?.has(p)) {
+        for (const file of fileSet) {
+          if (dirname(file) === p) entries.push({ name: basename(file), isFile: true, isDirectory: false })
+        }
+        for (const directory of dirs) {
+          if (dirname(directory) === p && directory !== p) {
+            entries.push({ name: basename(directory), isFile: false, isDirectory: true })
+          }
+        }
+      }
+      return {
+        entries,
+        unavailable: options.unreadableDirs?.has(p) ?? false,
+      }
     },
     readText: () => {
       throw new Error('related search must not call the unbounded read primitive')
@@ -113,6 +133,20 @@ function boundedFakeFs(
         text: selected.toString('utf8'),
         bytesRead: selected.byteLength,
         truncated: bytes.byteLength > selected.byteLength,
+        rawBytes: selected,
+      }
+    },
+    readTextRangeBounded: (p, offset, maxBytes): BoundedTextRead | undefined => {
+      options.onRangeRead?.(p, offset, maxBytes)
+      const raw = files[p]
+      if (raw === undefined) return undefined
+      const bytes = Buffer.from(raw)
+      const selected = bytes.subarray(offset, offset + maxBytes)
+      return {
+        text: selected.toString('utf8'),
+        bytesRead: selected.byteLength,
+        truncated: bytes.byteLength > offset + selected.byteLength,
+        rawBytes: selected,
       }
     },
     mtimeMs: (p) => options.mtimes?.[p] ?? (fileSet.has(p) ? Date.parse('2026-07-28T12:00:00Z') : undefined),
@@ -210,6 +244,137 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     expect(result.warnings.map((warning) => warning.code)).toContain('file-read-truncated')
   })
 
+  test('counts metadata and dialogue reads against one cumulative per-file ceiling', () => {
+    const path = codexFile('cumulative-file-budget')
+    const ranges: Array<{ offset: number; maxBytes: number }> = []
+    const result = searchRelatedSessions(boundedFakeFs({
+      [path]: codexSession('cumulative-file-budget', [{
+        role: 'user',
+        text: `memory search ${'x'.repeat(RELATED_SESSION_SEARCH_BUDGETS.perFileBytes)}`,
+      }]),
+    }, {
+      onRead: (_path, maxBytes) => ranges.push({ offset: 0, maxBytes }),
+      onRangeRead: (_path, offset, maxBytes) => ranges.push({ offset, maxBytes }),
+    }), {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(ranges).toEqual([
+      { offset: 0, maxBytes: MEM_SESSION_METADATA_BYTES },
+      {
+        offset: MEM_SESSION_METADATA_BYTES,
+        maxBytes: RELATED_SESSION_SEARCH_BUDGETS.perFileBytes - MEM_SESSION_METADATA_BYTES,
+      },
+    ])
+    expect(ranges.reduce((total, read) => total + read.maxBytes, 0))
+      .toBe(RELATED_SESSION_SEARCH_BUDGETS.perFileBytes)
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('file-read-truncated')
+  })
+
+  test('marks an oversized first metadata event partial instead of claiming a complete empty search', () => {
+    const path = codexFile('oversized-metadata')
+    const firstEvent = JSON.stringify({
+      timestamp: '2026-07-28T12:00:00Z',
+      payload: {
+        id: 'oversized-metadata',
+        padding: 'x'.repeat(MEM_SESSION_METADATA_BYTES),
+        cwd: PROJECT,
+      },
+    })
+    const result = searchRelatedSessions(boundedFakeFs({
+      [path]: `${firstEvent}\n${JSON.stringify({
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'memory search' }],
+        },
+      })}`,
+    }), {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('file-read-truncated')
+  })
+
+  test('marks a truncated Claude metadata scan partial when cwd appears after complete earlier lines', () => {
+    const path = claudeFile('late-cwd')
+    const leadingEvents = Array.from({ length: 120 }, (_, index) => JSON.stringify({
+      type: 'progress',
+      index,
+      padding: 'x'.repeat(80),
+    }))
+    const source = [
+      ...leadingEvents,
+      claudeSession('late-cwd', 'memory search'),
+    ].join('\n')
+    expect(Buffer.byteLength(leadingEvents.slice(0, 80).join('\n'))).toBeGreaterThan(MEM_SESSION_METADATA_BYTES)
+
+    const result = searchRelatedSessions(boundedFakeFs({ [path]: source }), {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'claude',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('file-read-truncated')
+  })
+
+  test('preserves UTF-8 code points split across the metadata and dialogue byte ranges', () => {
+    const path = codexFile('utf8-boundary')
+    const metadata = `${JSON.stringify({
+      timestamp: '2026-07-28T12:00:00Z',
+      payload: { id: 'utf8-boundary', cwd: PROJECT },
+    })}\n`
+    const lineFor = (padding: number): string => JSON.stringify({
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: `${'x'.repeat(padding)}🙂 memory` }],
+      },
+    })
+    const emojiOffsetWithoutPadding = Buffer.from(`${metadata}${lineFor(0)}`).indexOf(Buffer.from('🙂'))
+    const padding = MEM_SESSION_METADATA_BYTES - 1 - emojiOffsetWithoutPadding
+    expect(padding).toBeGreaterThan(0)
+    const source = `${metadata}${lineFor(padding)}`
+    expect(Buffer.from(source).indexOf(Buffer.from('🙂'))).toBe(MEM_SESSION_METADATA_BYTES - 1)
+
+    const result = searchRelatedSessions(boundedFakeFs({ [path]: source }), {
+      root: PROJECT,
+      query: '🙂 memory',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]?.sessionId).toBe('utf8-boundary')
+    expect(result.matches[0]?.excerpt).toContain('🙂 memory')
+    expect(result.partial).toBe(false)
+  })
+
+  test('marks an existing but unreadable selected session directory as partial', () => {
+    const sessionsRoot = '/home/u/.codex/sessions'
+    const base = boundedFakeFs({}, { unreadableDirs: new Set([sessionsRoot]) })
+    const result = searchRelatedSessions({
+      ...base,
+      exists: (path) => path === sessionsRoot || base.exists(path),
+    }, {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('directory-read-unavailable')
+  })
+
   test('never exceeds the aggregate byte budget and stops subsequent file reads', () => {
     const files: Record<string, string> = {}
     for (let i = 0; i < 10; i += 1) {
@@ -221,6 +386,10 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     let readCalls = 0
     const result = searchRelatedSessions(boundedFakeFs(files, {
       onRead: (_path, maxBytes) => {
+        bytesRead += maxBytes
+        readCalls += 1
+      },
+      onRangeRead: (_path, _offset, maxBytes) => {
         bytesRead += maxBytes
         readCalls += 1
       },

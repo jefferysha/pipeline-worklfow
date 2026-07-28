@@ -42,6 +42,7 @@ const budgetWarningCodes = new Set([
 ])
 const sourceWarningCodes = new Set([
   'bounded-read-unavailable',
+  'directory-read-unavailable',
   'file-read-unavailable',
   'opencode-reader-unavailable',
 ])
@@ -191,7 +192,11 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
             ))}
           </select>
         </div>
-        <Button className="self-end bg-btn-hover text-btn-fg hover:bg-btn-hover" disabled={busy} type="submit">
+        <Button
+          className="bg-btn-hover text-btn-fg hover:bg-btn-hover sm:mt-5 sm:self-start"
+          disabled={busy}
+          type="submit"
+        >
           {busy ? t('detail.related_sessions.searching_short') : t('detail.related_sessions.search')}
         </Button>
       </form>

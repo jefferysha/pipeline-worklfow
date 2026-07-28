@@ -17,6 +17,14 @@ export interface BoundedTextRead {
   text: string
   bytesRead: number
   truncated: boolean
+  /** Exact source bytes when the provider can expose them, preserving UTF-8 across ranged reads. */
+  rawBytes?: Uint8Array
+}
+
+/** Directory read that distinguishes a successful empty directory from an unavailable source. */
+export interface CheckedDirectoryRead {
+  entries: MemDirent[]
+  unavailable: boolean
 }
 
 /**
@@ -39,6 +47,8 @@ export interface MemFs {
   exists(path: string): boolean
   /** 列目录项（缺失/不可读 → []，对齐老仓 os.scandir 静默跳过） */
   readDir(path: string): MemDirent[]
+  /** 可选的诚实目录读取状态；Related Sessions 用它区分空目录与读取失败。 */
+  readDirChecked?(path: string): CheckedDirectoryRead
   /** 整文件文本（缺失/不可读 → undefined）；JSONL 逐行解析在纯逻辑层 */
   readText(path: string): string | undefined
   /**
@@ -46,6 +56,8 @@ export interface MemFs {
    * 可选以保持既有注入 fake 兼容；生产 nodeMemFs 始终提供真正的读取层上限。
    */
   readTextBounded?(path: string, maxBytes: number): BoundedTextRead | undefined
+  /** 从 byte offset 开始的有界读取；生产 Related Sessions 用它避免 metadata 被重复计费。 */
+  readTextRangeBounded?(path: string, offset: number, maxBytes: number): BoundedTextRead | undefined
   /** Optional request budget consumed by non-text storage adapters. */
   contentReadBudget?: MemContentReadBudget
   /** 文件 mtime 毫秒（缺失 → undefined），作 updated 时间源 */
@@ -57,34 +69,88 @@ export interface MemFs {
 /** Enough for the first JSONL event while keeping foreign-project discovery inside the aggregate budget. */
 export const MEM_SESSION_METADATA_BYTES = 8 * 1024
 
+export interface MemSessionMetadataRead {
+  text: string | undefined
+  truncated: boolean
+}
+
 /**
  * Related search discovers project identity from a bounded first-event prefix before admitting a
  * session for full dialogue reads. Ordinary CLI callers retain the existing full-read behavior.
  */
-export function readMemSessionMetadata(fs: MemFs, path: string): string | undefined {
+export function readMemSessionMetadataChecked(fs: MemFs, path: string): MemSessionMetadataRead {
   if (fs.contentReadBudget && fs.readTextBounded) {
-    return fs.readTextBounded(path, MEM_SESSION_METADATA_BYTES)?.text
+    const read = fs.readTextBounded(path, MEM_SESSION_METADATA_BYTES)
+    return { text: read?.text, truncated: read?.truncated === true }
   }
-  return fs.readText(path)
+  return { text: fs.readText(path), truncated: false }
+}
+
+export function readMemSessionMetadata(fs: MemFs, path: string): string | undefined {
+  return readMemSessionMetadataChecked(fs, path).text
 }
 
 /** 真 node fs 实现（缺省）。homeOverride 供集成测试指向 fixture home 根。 */
 export function nodeMemFs(homeOverride?: string): MemFs {
   const home = homeOverride ?? homedir()
-  return {
-    home,
-    exists: (p) => existsSync(p),
-    readDir: (p) => {
-      try {
-        return readdirSync(p, { withFileTypes: true }).map((e) => ({
+  const readDirectory = (p: string): CheckedDirectoryRead => {
+    try {
+      return {
+        entries: readdirSync(p, { withFileTypes: true }).map((e) => ({
           name: e.name,
           isFile: e.isFile(),
           isDirectory: e.isDirectory(),
-        }))
-      } catch {
-        return []
+        })),
+        unavailable: false,
       }
-    },
+    } catch {
+      return { entries: [], unavailable: true }
+    }
+  }
+  const readTextRange = (p: string, offset: number, maxBytes: number): BoundedTextRead | undefined => {
+    if (
+      !Number.isSafeInteger(offset)
+      || offset < 0
+      || !Number.isSafeInteger(maxBytes)
+      || maxBytes < 0
+    ) return undefined
+    let fd: number | undefined
+    try {
+      fd = openSync(p, 'r')
+      const size = fstatSync(fd).size
+      const available = Math.max(0, size - offset)
+      const buffer = Buffer.allocUnsafe(Math.min(available, maxBytes))
+      let bytesRead = 0
+      while (bytesRead < buffer.byteLength) {
+        const count = readSync(fd, buffer, bytesRead, buffer.byteLength - bytesRead, offset + bytesRead)
+        if (count === 0) break
+        bytesRead += count
+      }
+      const finalSize = fstatSync(fd).size
+      const rawBytes = buffer.subarray(0, bytesRead)
+      return {
+        text: rawBytes.toString('utf8'),
+        bytesRead,
+        truncated: finalSize > offset + bytesRead,
+        rawBytes,
+      }
+    } catch {
+      return undefined
+    } finally {
+      if (fd !== undefined) {
+        try {
+          closeSync(fd)
+        } catch {
+          /* best-effort close after a failed read */
+        }
+      }
+    }
+  }
+  return {
+    home,
+    exists: (p) => existsSync(p),
+    readDir: (p) => readDirectory(p).entries,
+    readDirChecked: readDirectory,
     readText: (p) => {
       try {
         return readFileSync(p, 'utf8')
@@ -92,37 +158,8 @@ export function nodeMemFs(homeOverride?: string): MemFs {
         return undefined
       }
     },
-    readTextBounded: (p, maxBytes) => {
-      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return undefined
-      let fd: number | undefined
-      try {
-        fd = openSync(p, 'r')
-        const size = fstatSync(fd).size
-        const buffer = Buffer.allocUnsafe(Math.min(size, maxBytes))
-        let bytesRead = 0
-        while (bytesRead < buffer.byteLength) {
-          const count = readSync(fd, buffer, bytesRead, buffer.byteLength - bytesRead, bytesRead)
-          if (count === 0) break
-          bytesRead += count
-        }
-        const finalSize = fstatSync(fd).size
-        return {
-          text: buffer.subarray(0, bytesRead).toString('utf8'),
-          bytesRead,
-          truncated: finalSize > bytesRead,
-        }
-      } catch {
-        return undefined
-      } finally {
-        if (fd !== undefined) {
-          try {
-            closeSync(fd)
-          } catch {
-            /* best-effort close after a failed read */
-          }
-        }
-      }
-    },
+    readTextBounded: (p, maxBytes) => readTextRange(p, 0, maxBytes),
+    readTextRangeBounded: readTextRange,
     mtimeMs: (p) => {
       try {
         return statSync(p).mtimeMs

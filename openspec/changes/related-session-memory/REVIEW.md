@@ -89,6 +89,69 @@ passed 68 kernel, 10 server, and 55 Dashboard tests plus kernel/server/Dashboard
 production build. Browser evidence is recorded at
 `/tmp/tenon-rsm-browser.jq3NWC/browser-qa-summary.md`.
 
+### Iteration 5 — third Verify-fail remediation
+
+1. **High — repeated-token search could monopolize the synchronous server.**
+   Deduplicated query tokens for scanning, preserved multiplicity in exact public hit counts, bounded excerpt
+   candidates, and pre-indexed paragraph boundaries. A 5,000-occurrence regression proves deterministic
+   excerpts with at most six chunk slices while keeping the legacy repeated-token count.
+2. **High — malformed OpenCode parent graphs could loop forever.**
+   Added a `platform:id` visited set per root. Ordinary chains still flatten transitively, while two-node and
+   self cycles terminate without duplicates or including the root as its own descendant.
+3. **Medium — metadata and dialogue reads did not share one physical-file allowance.**
+   Added optional range-bounded reads and request-local per-path accounting, so the 8 KiB metadata prefix is
+   deducted from the same 2 MiB file ceiling. Oversized first events now produce an honest partial warning.
+4. **Medium — OpenCode reset its allowance for each session in one database.**
+   Request-local SQLite counters are now keyed by the shared budget identity and database path, so all selected
+   sessions from one `opencode.db` consume one cumulative per-source allowance.
+5. **Medium — unreadable selected source directories looked like complete empty results.**
+   Production `nodeMemFs` exposes an optional checked directory read. Existing-but-unreadable selected sources
+   now emit `directory-read-unavailable`; absent directories remain legitimate complete-empty sources.
+6. **Medium — Related Sessions privacy handling regressed legacy CLI ranking.**
+   Host-summary reclassification is now an explicit Related Sessions option. Existing CLI search retains its
+   user counts, excerpts, scores, and ordering; the Dashboard path still excludes synthetic summaries from
+   user-only matches.
+7. **Low — wide validation moved the primary action below the input row.**
+   Replaced `self-end` with the label-height-aligned wide breakpoint placement. Production Chrome measured a
+   `0 px` top-edge delta while the 390 px form remained stacked with zero horizontal overflow.
+
+The delegated review findings against earlier frozen commits were also rechecked rather than assumed current:
+OpenCode child identity already uses `platform:id` and only OpenCode parent edges; the production synchronous
+kernel/HTTP regression passes with one `200` and one queued `429`; and the opaque semantic hover background
+computes to `5.0156:1` in light mode. Current Build browser evidence is
+`/tmp/tenon-rsm-build4-browser.UeEuGi/browser-qa.json` with exact Tenon page/root/Change identity, all primary
+states, keyboard order, light/dark computed styles, and responsive measurements.
+
+### Iteration 6 — final bounded-search review
+
+1. **Medium — early per-token excerpt caps could miss a later full-coverage paragraph.**
+   Occurrences now merge as ordered token cursors. Every distinct chunk remains eligible while only the
+   remaining top-K excerpt candidates are retained, preserving `coverage → rarity → start` ordering and
+   repeated-token counts without restoring an unbounded occurrence array.
+2. **Medium — cycle guards terminated traversal but the search layer absorbed every cycle node.**
+   Absorption now removes the lexicographically smallest `platform:id` from each corrupt cycle as a stable
+   searchable root. Public SQLite regressions cover an ordinary chain, a two-node cycle, and a self-cycle
+   with unique result IDs and exact merged counts.
+3. **Medium — a complete early metadata line could hide a later required Claude cwd beyond 8 KiB.**
+   Adapters now receive checked metadata status and mark the response partial only when required project
+   identity is still unknown after a truncated prefix. Complete, sufficient metadata remains non-partial.
+4. **Medium — separately decoded ranges could corrupt a UTF-8 code point at the 8 KiB boundary.**
+   Bounded reads optionally expose exact source bytes; the request wrapper accumulates those bytes and decodes
+   the combined prefix once. A regression places an emoji across the exact boundary and still returns the
+   matching user excerpt without a false partial warning.
+5. **Medium — OpenCode session metadata bypassed the database content budget.**
+   The budgeted SQL projection caps every text column, consumes returned metadata bytes from the same
+   request/database counter as dialogue rows, and limits iteration from conservative per-source/aggregate
+   capacity. The unbudgeted CLI branch remains byte-for-byte semantic compatible and returns long fields.
+
+After this pass the strict read-only reviewer reported no remaining Critical or High and each confirmed Medium
+has a focused red/green regression. The final architecture pass extracted the SQLite budget implementation
+into `opencode-budget.ts`, keeping both production modules below the 450-line boundary without changing the
+adapter contract. After that mechanical split, focused kernel coverage passed 74/74, the full repository suite
+passed 5,495 with five honest external-environment skips, the standalone Dashboard suite passed 982/982, the
+root production build passed, and architecture, documentation, repository-hygiene, hooks (482/482), skills,
+and CLI oracle (two runs, zero differences) gates passed.
+
 ## Frontend design and browser review
 
 - Reused existing semantic tokens and detail-section rhythm; no new visual system or raw palette was introduced.

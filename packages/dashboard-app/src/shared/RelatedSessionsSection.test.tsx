@@ -135,6 +135,8 @@ describe('RelatedSessionsSection', () => {
 
     const search = screen.getByRole('button', { name: '检索' })
     expect(search).toHaveClass('bg-btn-hover', 'hover:bg-btn-hover')
+    expect(search).toHaveClass('sm:mt-5', 'sm:self-start')
+    expect(search).not.toHaveClass('self-end')
     expect(search).not.toHaveClass('hover:bg-btn-hover/90')
   })
 
@@ -177,6 +179,7 @@ describe('RelatedSessionsSection', () => {
   })
 
   it.each([
+    'directory-read-unavailable',
     'file-read-unavailable',
     'opencode-reader-unavailable',
   ])('describes %s partial results without falsely claiming a budget limit', async (warningCode) => {

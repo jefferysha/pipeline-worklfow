@@ -96,7 +96,21 @@ export function extractDialogue(fs: MemFs, s: MemSession): DialogueTurn[] {
   }
 }
 
-function searchSession(fs: MemFs, s: MemSession, kw: string): SearchHit {
+function searchSession(
+  fs: MemFs,
+  s: MemSession,
+  kw: string,
+  hostSummariesAsAssistant = false,
+): SearchHit {
+  if (hostSummariesAsAssistant) {
+    return searchInDialogue(
+      extractDialogue(fs, s),
+      kw,
+      3,
+      400,
+      { hostSummariesAsAssistant: true },
+    )
+  }
   switch (s.platform) {
     case 'claude':
       return claudeSearch(fs, s, kw)
@@ -140,10 +154,14 @@ export function buildChildIndex(sessions: readonly MemSession[]): Map<string, Me
   for (const parentKey of directChildren.keys()) {
     const stack = [...(directChildren.get(parentKey) ?? [])]
     const flat: MemSession[] = []
+    const visited = new Set<string>([parentKey])
     while (stack.length) {
       const cur = stack.pop()!
+      const curKey = sessionKey(cur.platform, cur.id)
+      if (visited.has(curKey)) continue
+      visited.add(curKey)
       flat.push(cur)
-      for (const c of directChildren.get(sessionKey(cur.platform, cur.id)) ?? []) stack.push(c)
+      for (const c of directChildren.get(curKey) ?? []) stack.push(c)
     }
     out.set(parentKey, flat)
   }
@@ -155,17 +173,63 @@ export function sessionKey(platform: MemSession['platform'], id: string): string
   return `${platform}:${id}`
 }
 
+/**
+ * 正常 OpenCode child 由 parent 合并；损坏的环必须保留一个稳定搜索根，否则环中所有节点都会被吸收。
+ * 每个环固定选择 platform:id 字典序最小者为根，确保候选顺序不影响结果。
+ */
+function buildAbsorbedChildKeys(sessions: readonly MemSession[]): Set<string> {
+  const candidateKeys = new Set(sessions.map((session) => sessionKey(session.platform, session.id)))
+  const parentByChild = new Map<string, string>()
+  for (const session of sessions) {
+    if (session.platform !== 'opencode' || !session.parent_id) continue
+    const parentKey = sessionKey('opencode', session.parent_id)
+    if (!candidateKeys.has(parentKey)) continue
+    parentByChild.set(sessionKey(session.platform, session.id), parentKey)
+  }
+
+  const absorbed = new Set(parentByChild.keys())
+  const completed = new Set<string>()
+  for (const startKey of parentByChild.keys()) {
+    if (completed.has(startKey)) continue
+    const path: string[] = []
+    const pathIndex = new Map<string, number>()
+    let currentKey: string | undefined = startKey
+    while (currentKey !== undefined && parentByChild.has(currentKey) && !completed.has(currentKey)) {
+      const cycleStart = pathIndex.get(currentKey)
+      if (cycleStart !== undefined) {
+        const cycleKeys = path.slice(cycleStart)
+        let cycleRoot = cycleKeys[0]!
+        for (const key of cycleKeys) if (key < cycleRoot) cycleRoot = key
+        absorbed.delete(cycleRoot)
+        break
+      }
+      pathIndex.set(currentKey, path.length)
+      path.push(currentKey)
+      currentKey = parentByChild.get(currentKey)
+    }
+    for (const key of path) completed.add(key)
+  }
+  return absorbed
+}
+
 function searchSessionWithChildren(
   fs: MemFs,
   s: MemSession,
   kw: string,
   childIndex: Map<string, MemSession[]>,
+  hostSummariesAsAssistant: boolean,
 ): SearchHit {
   const children = childIndex.get(sessionKey(s.platform, s.id)) ?? []
-  if (!children.length) return searchSession(fs, s, kw)
+  if (!children.length) return searchSession(fs, s, kw, hostSummariesAsAssistant)
   const merged = [...extractDialogue(fs, s)]
   for (const c of children) merged.push(...extractDialogue(fs, c))
-  return searchInDialogue(merged, kw)
+  return searchInDialogue(
+    merged,
+    kw,
+    3,
+    400,
+    hostSummariesAsAssistant ? { hostSummariesAsAssistant: true } : {},
+  )
 }
 
 /** 按精确 id 或 id 前缀解析会话，扫每个项目（强制全局全量）。精确优先，否则 startsWith 第一个。 */
@@ -256,11 +320,14 @@ export function searchMemSessions(
     includeChildren?: boolean
     /** 新增调用方可显式约束扫描候选；省略时保留 CLI 的全量召回语义。 */
     candidateLimit?: number
+    /** Related Sessions only: synthetic host summaries never qualify as original user content. */
+    hostSummariesAsAssistant?: boolean
   },
 ): SearchResult {
   const f = resolveFilter(options.filter)
   const kw = options.keyword
   const includeChildren = options.includeChildren === true
+  const hostSummariesAsAssistant = options.hostSummariesAsAssistant === true
 
   const requestedCandidateLimit = options.candidateLimit
   const candidateLimit =
@@ -274,18 +341,14 @@ export function searchMemSessions(
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit)
   const childIndex = includeChildren ? buildChildIndex(candidates) : new Map<string, MemSession[]>()
-  const candidateIds = new Set(candidates.map((s) => sessionKey(s.platform, s.id)))
-
-  const isAbsorbedChild = (s: MemSession): boolean =>
-    includeChildren
-    && s.platform === 'opencode'
-    && s.parent_id != null
-    && candidateIds.has(sessionKey('opencode', s.parent_id))
+  const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(candidates) : new Set<string>()
 
   const matches: SearchMatch[] = []
   for (const s of candidates) {
-    if (isAbsorbedChild(s)) continue
-    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex) : searchSession(fs, s, kw)
+    if (absorbedChildKeys.has(sessionKey(s.platform, s.id))) continue
+    const hit = includeChildren
+      ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant)
+      : searchSession(fs, s, kw, hostSummariesAsAssistant)
     if (hit.count === 0) continue
     matches.push({
       session: s,

@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { nodeMemFs } from '../fs.js'
-import type { MemFs } from '../fs.js'
+import type { MemContentReadBudget, MemFs } from '../fs.js'
 import type { MemFilter, MemSession } from '../types.js'
 import { buildChildIndex } from '../sessions.js'
 import { searchRelatedSessions } from '../relatedSearch.js'
@@ -240,6 +240,55 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
     const rows = opencodeListSessions(fs, filter())
     expect(rows[0]?.cwd).toBeNull()
   })
+
+  test('related-search 预算路径限制并计入 session metadata 字节，超长字段报告截断', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_normal',
+      directory: '/p/' + 'd'.repeat(20_000),
+      title: 't'.repeat(20_000),
+      parentId: 'p'.repeat(20_000),
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertSession(db, {
+      id: 'i'.repeat(20_000),
+      directory: '/p',
+      title: 'oversized id',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:09Z',
+    })
+    db.close()
+
+    const cliRows = opencodeListSessions(fs, filter())
+    expect(cliRows.some((row) => Buffer.byteLength(row.id) === 20_000)).toBe(true)
+    expect(cliRows.some((row) => Buffer.byteLength(row.parent_id ?? '') === 20_000)).toBe(true)
+
+    let bytesRead = 0
+    let truncatedSources = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 40_000,
+      remainingBytes: () => 120_000 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+      },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => {
+        truncatedSources += 1
+      },
+      noteTotalExhausted: () => undefined,
+    }
+    const rows = opencodeListSessions({ ...fs, contentReadBudget: budget }, filter({ cwd: '/p' }))
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.id).toBe('ses_normal')
+    expect(rows[0]?.parent_id).toBeNull()
+    expect(Buffer.byteLength(rows[0]?.cwd ?? '')).toBeLessThanOrEqual(4_096)
+    expect(Buffer.byteLength(rows[0]?.title ?? '')).toBeLessThanOrEqual(161)
+    expect(bytesRead).toBeGreaterThan(0)
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncatedSources).toBeGreaterThan(0)
+  })
 })
 
 describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
@@ -401,6 +450,67 @@ describe('opencodeExtractDialogue —— message+part 联表，只收 text part'
 
     const turns = opencodeExtractDialogue(fs, { platform: 'opencode', id: 'ses_1', filePath: dbFile(root) })
     expect(turns).toEqual([{ role: 'assistant', text: 'Part one.\n\nPart two.' }])
+  })
+
+  test('同一请求读取同一数据库的多个会话，共享累计 per-source 字节上限并报告截断', async () => {
+    const db = await openFixtureDb(root)
+    for (const sessionId of ['ses_1', 'ses_2']) {
+      insertSession(db, {
+        id: sessionId,
+        directory: '/p',
+        title: sessionId,
+        created: '2026-07-05T10:00:00Z',
+        updated: '2026-07-05T10:00:10Z',
+      })
+      insertMessage(db, {
+        id: `msg_${sessionId}`,
+        sessionId,
+        created: '2026-07-05T10:00:01Z',
+        data: { role: 'user' },
+      })
+      for (const suffix of ['a', 'b']) {
+        insertPart(db, {
+          id: `part_${sessionId}_${suffix}`,
+          messageId: `msg_${sessionId}`,
+          sessionId,
+          created: '2026-07-05T10:00:01Z',
+          data: { type: 'text', text: 'x'.repeat(2_700) },
+        })
+      }
+    }
+    db.close()
+
+    let bytesRead = 0
+    let truncatedSources = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 10_000,
+      remainingBytes: () => 30_000 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+      },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => {
+        truncatedSources += 1
+      },
+      noteTotalExhausted: () => undefined,
+    }
+    const budgetedFs: MemFs = { ...fs, contentReadBudget: budget }
+
+    expect(opencodeExtractDialogue(budgetedFs, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toHaveLength(1)
+    expect(truncatedSources).toBe(0)
+
+    opencodeExtractDialogue(budgetedFs, {
+      platform: 'opencode',
+      id: 'ses_2',
+      filePath: dbFile(root),
+    })
+
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncatedSources).toBeGreaterThan(0)
   })
 
   test('compaction part（无 text 字段，边界折叠本轮诚实不做——见文件头注释）不产出 turn、不崩，兄弟消息仍正常出', async () => {

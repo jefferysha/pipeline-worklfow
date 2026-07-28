@@ -7,7 +7,7 @@
 import { basename } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso, readMemSessionMetadata } from '../fs.js'
+import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
@@ -79,13 +79,17 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       tsFromName = normalizeIso(fixed)
     }
 
-    const first = readJsonlFirst(readMemSessionMetadata(fs, file)) as Json
+    const metadata = readMemSessionMetadataChecked(fs, file)
+    const first = readJsonlFirst(metadata.text) as Json
     const meta = first?.payload ?? null
     const sid: string = (meta?.id ?? null) || (m ? m[2]! : null) || base
     const cwd: string | null = meta?.cwd ?? null
     const created: string = (first?.timestamp ?? null) || tsFromName || ''
 
-    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+    if (f.cwd && !sameProject(cwd, f.cwd)) {
+      if (!cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+      continue
+    }
     const updated = mtimeIso(fs, file)
     if (updated === undefined) continue
     if (!inRangeOverlap(created, updated, f)) continue

@@ -8,7 +8,7 @@
 import { join } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso, readMemSessionMetadata } from '../fs.js'
+import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
 import { inRangeOverlap, sameProject } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
@@ -78,13 +78,15 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     const title: string | null = idx?.title ?? null
 
     if (!cwd || !created) {
-      const text = readMemSessionMetadata(fs, filePath)
+      const metadata = readMemSessionMetadataChecked(fs, filePath)
+      const text = metadata.text
       const evt = findInJsonl(text, (o) => typeof (o as Json)?.cwd === 'string', 100) as Json
       cwd = cwd || (evt?.cwd ?? null)
       if (!created) {
         const first = readJsonlFirst(text) as Json
         created = (evt?.timestamp ?? null) || (first?.timestamp ?? null)
       }
+      if (f.cwd && !cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
     }
 
     const updated = mtimeIso(fs, filePath)

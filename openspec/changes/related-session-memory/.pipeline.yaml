@@ -10,8 +10,8 @@ verification_report: docs/superpowers/reports/2026-07-28-related-session-memory-
 build_mode: subagent-driven-development
 isolation: worktree
 build_sha: null
-agent_review_result: pending
-codex_review_result: pending
+agent_review_result: fail
+codex_review_result: fail
 verify_result: fail
 branch_status: pending
 direct_override: false
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T05:14:43Z
-updated_at: 2026-07-28T07:21:08Z
+updated_at: 2026-07-28T08:07:07Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 6372f68a-cc7b-4bfa-a55f-9156d1e27327
-pipeline_transition_sequence: 9
-pipeline_transition_head: 69af5ccd-85cb-4206-9405-3bb6d767280c
-pipeline_state_revision: 34
-pipeline_state_revision_id: 4cfaf2d9-dced-4492-ae4b-f87184c9d4fc
-pipeline_state_digest: c855b66e4acc3fe7c0abb93d84de12465b3fd32a9ee655176d72396954ce40be
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzQsInJldmlzaW9uSWQiOiI0Y2ZhZjJkOS1kY2VkLTQ0OTItYWU0Yi1mODcxODRjOWQ0ZmMiLCJwYXlsb2FkRGlnZXN0IjoiNWVkNTQxZmMxYzdjYzBhYTRhYjE4YmFlMDZhZGIyYjBmY2QxZjFiNGU0MGFiNjdjMzk2OGNmZWVmNzc2ODhiZiJ9
+pipeline_transition_sequence: 11
+pipeline_transition_head: 78a8f4a2-a0e6-4b18-a592-ed95f0193b30
+pipeline_state_revision: 41
+pipeline_state_revision_id: 6da444c0-e114-4e51-92e5-ba89cf5fb619
+pipeline_state_digest: 9a8cb86f39bca70cc4fbdc1510fb7ef1f5d82e7ad25a6fe6ec7fec8397167acc
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDEsInJldmlzaW9uSWQiOiI2ZGE0NDRjMC1lMTE0LTRlNTEtOTJlNS1iYTg5Y2Y1ZmI2MTkiLCJwYXlsb2FkRGlnZXN0IjoiMmI2N2RmN2JkZGU1NzkxZGFiZmIwMDgxYzFkZTRiODgxYjg3ZjdkYTE3Mzc2ZmVkZDIyNTM2NDNhZjZkN2U2ZiJ9

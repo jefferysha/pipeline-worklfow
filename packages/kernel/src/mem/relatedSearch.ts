@@ -59,12 +59,23 @@ function addWarning(state: BudgetState, warning: MemWarning): void {
  */
 function budgetedFs(source: MemFs, state: BudgetState): MemFs {
   const cache = new Map<string, string | undefined>()
-  const completeMetadata = new Map<string, string>()
+  const prefixBytes = new Map<string, Buffer>()
+  const sourceBytes = new Map<string, number>()
+  const completeSources = new Set<string>()
   const sourceEnv = source.env
 
-  const boundedRead = (path: string, maxBytes: number): BoundedTextRead | undefined => {
-    if (source.readTextBounded) return source.readTextBounded(path, maxBytes)
-
+  const boundedRead = (path: string, offset: number, maxBytes: number): BoundedTextRead | undefined => {
+    if (offset > 0 && source.readTextRangeBounded) {
+      return source.readTextRangeBounded(path, offset, maxBytes)
+    }
+    if (offset === 0 && source.readTextBounded) return source.readTextBounded(path, maxBytes)
+    if (offset > 0) {
+      addWarning(state, {
+        code: 'bounded-read-unavailable',
+        message: 'A session source could not prove a read-layer byte ceiling.',
+      })
+      return undefined
+    }
     const raw = source.readText(path)
     if (raw === undefined) return undefined
     addWarning(state, {
@@ -85,8 +96,19 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
     requestedMaxBytes: number,
     reportPerFileTruncation: boolean,
   ): BoundedTextRead | undefined => {
-    const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
-    if (remaining <= 0) {
+    const existingBytes = prefixBytes.get(path) ?? Buffer.alloc(0)
+    const consumed = sourceBytes.get(path) ?? 0
+    if (completeSources.has(path) || consumed >= requestedMaxBytes) {
+      return {
+        text: existingBytes.toString('utf8'),
+        bytesRead: consumed,
+        truncated: !completeSources.has(path),
+        rawBytes: existingBytes,
+      }
+    }
+
+    const aggregateRemaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
+    if (aggregateRemaining <= 0) {
       addWarning(state, {
         code: 'total-read-budget-exhausted',
         message: 'The total session-read budget was exhausted.',
@@ -94,12 +116,25 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
       return undefined
     }
 
-    const maxBytes = Math.min(
-      requestedMaxBytes,
-      RELATED_SESSION_SEARCH_BUDGETS.perFileBytes,
-      remaining,
-    )
-    const read = boundedRead(path, maxBytes)
+    const sourceRemaining = RELATED_SESSION_SEARCH_BUDGETS.perFileBytes - consumed
+    if (sourceRemaining <= 0) {
+      if (reportPerFileTruncation) {
+        addWarning(state, {
+          code: 'file-read-truncated',
+          message: 'At least one session exceeded the per-file read budget.',
+        })
+      }
+      return {
+        text: existingBytes.toString('utf8'),
+        bytesRead: consumed,
+        truncated: true,
+        rawBytes: existingBytes,
+      }
+    }
+
+    const requestedRemaining = requestedMaxBytes - consumed
+    const maxBytes = Math.min(requestedRemaining, sourceRemaining, aggregateRemaining)
+    const read = boundedRead(path, consumed, maxBytes)
     if (!read) {
       if (source.exists(path)) {
         addWarning(state, {
@@ -112,11 +147,16 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
 
     const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)))
     state.bytesRead += bytesRead
-    const textBytes = Buffer.from(read.text)
-    const text = textBytes.subarray(0, maxBytes).toString('utf8')
-    const truncated = read.truncated || textBytes.byteLength > maxBytes || read.bytesRead > maxBytes
+    sourceBytes.set(path, consumed + bytesRead)
+    const returnedBytes = read.rawBytes === undefined ? Buffer.from(read.text) : Buffer.from(read.rawBytes)
+    const nextBytes = returnedBytes.subarray(0, bytesRead)
+    const combinedBytes = Buffer.concat([existingBytes, nextBytes])
+    const text = combinedBytes.toString('utf8')
+    prefixBytes.set(path, combinedBytes)
+    const truncated = read.truncated || returnedBytes.byteLength > maxBytes || read.bytesRead > maxBytes
+    if (!truncated) completeSources.add(path)
 
-    if (truncated && maxBytes < requestedMaxBytes) {
+    if (truncated && maxBytes < requestedRemaining && aggregateRemaining <= sourceRemaining) {
       addWarning(state, {
         code: 'total-read-budget-exhausted',
         message: 'The total session-read budget was exhausted.',
@@ -128,7 +168,7 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
       })
     }
 
-    return { text, bytesRead, truncated }
+    return { text, bytesRead: consumed + bytesRead, truncated, rawBytes: combinedBytes }
   }
 
   const fromCached = (text: string, maxBytes: number): BoundedTextRead => {
@@ -138,20 +178,26 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
       text: selected.toString('utf8'),
       bytesRead: 0,
       truncated: selected.byteLength < bytes.byteLength,
+      rawBytes: selected,
     }
   }
 
   return {
     home: source.home,
     exists: (path) => source.exists(path),
-    readDir: (path) => source.readDir(path),
+    readDir: (path) => {
+      const checked = source.readDirChecked?.(path)
+      if (!checked) return source.readDir(path)
+      if (checked.unavailable && source.exists(path)) {
+        addWarning(state, {
+          code: 'directory-read-unavailable',
+          message: 'A session directory could not be read.',
+        })
+      }
+      return checked.entries
+    },
     readText: (path) => {
       if (cache.has(path)) return cache.get(path)
-      const complete = completeMetadata.get(path)
-      if (complete !== undefined) {
-        cache.set(path, complete)
-        return complete
-      }
 
       const read = readWithinBudget(path, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, true)
       cache.set(path, read?.text)
@@ -163,12 +209,8 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
         const text = cache.get(path)
         return text === undefined ? undefined : fromCached(text, maxBytes)
       }
-      const complete = completeMetadata.get(path)
-      if (complete !== undefined) return fromCached(complete, maxBytes)
 
-      const read = readWithinBudget(path, maxBytes, false)
-      if (read && !read.truncated) completeMetadata.set(path, read.text)
-      return read
+      return readWithinBudget(path, maxBytes, false)
     },
     mtimeMs: (path) => source.mtimeMs(path),
     env: sourceEnv ? (name) => sourceEnv(name) : undefined,
@@ -249,6 +291,7 @@ export function searchRelatedSessions(
     },
     includeChildren: true,
     candidateLimit: RELATED_SESSION_SEARCH_BUDGETS.candidates,
+    hostSummariesAsAssistant: true,
   })
   for (const warning of search.warnings) addWarning(state, warning)
 

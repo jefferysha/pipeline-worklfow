@@ -32,6 +32,18 @@
 - [x] 用真实同步 kernel/HTTP 事件循环回归兑现 single-flight `429` 契约。 (build)
 - [x] 区分读取限制、来源不可用和未知 partial，补齐可访问长度错误与稳定表单元数据。 (build)
 - [x] 移除主按钮 hover 透明混色，并以真实浏览器 computed style 验收四种主题/交互对比度。 (build)
+- [x] 将 host-summary 隐私重分类限制在 Related Sessions 路径，保持旧 CLI 计数、excerpt 与排序。 (build)
+- [x] 将重复 token 的命中计数与 excerpt 选择改为有界近线性算法，并补长重复文本性能回归。 (build)
+- [x] 为 OpenCode descendant 图加入 platform-scoped cycle/self-cycle guard。 (build)
+- [x] 按物理来源累计 metadata 与正文的单文件 2 MiB 预算，并诚实报告 metadata 截断。 (build)
+- [x] 让同一 OpenCode SQLite 文件跨多个 session 共享单文件预算。 (build)
+- [x] 区分不存在与不可读的会话目录，并将已选来源读取失败返回为 partial warning。 (build)
+- [x] 修复宽屏 validation 时按钮下移的视觉 Low，并保持窄屏/键盘路径。 (build)
+- [x] 保留后置全 token coverage excerpt 的排序资格，同时维持候选内存有界与近线性扫描。 (build)
+- [x] 为 OpenCode child 环选择确定性可搜索根，避免环节点全部被吸收为空。 (build)
+- [x] 在 metadata 截断且项目身份仍未知时返回 partial，而非静默排除合法会话。 (build)
+- [x] 以 raw byte 累计跨 range 拼接，避免 UTF-8 code point 在 8 KiB 边界损坏。 (build)
+- [x] 将 OpenCode session metadata 投影纳入同一数据库的 per-source/aggregate 硬预算。 (build)
 
 ## 验证
 
