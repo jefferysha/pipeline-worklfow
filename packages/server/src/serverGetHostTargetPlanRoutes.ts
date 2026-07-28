@@ -1,7 +1,4 @@
-import {
-  parsePipelineCliJson,
-  type PipelineCliRunner,
-} from './operations.js'
+import type { PipelineCliRunner } from './operations.js'
 import {
   decodeHostTargetCatalog,
   decodeHostTargetPlan,
@@ -31,6 +28,16 @@ export interface HostTargetPlanRuntime {
 }
 
 const MAX_HOST_PLAN_KEYS = 25
+
+function parseHostTargetPlanJson(stdout: string): unknown | null {
+  const trimmed = stdout.trim()
+  if (trimmed === '') return null
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return null
+  }
+}
 
 export function createHostTargetPlanRuntime(): HostTargetPlanRuntime {
   const cache = new Map<string, HostTargetPlanRouteResult>()
@@ -108,7 +115,7 @@ async function runAndDecode(
   try {
     const result = await deps.operationRunner(deps.hostHome, args)
     if (result.exitCode !== 0) return PLAN_INVALID
-    const decoded = decode(parsePipelineCliJson(result.stdout))
+    const decoded = decode(parseHostTargetPlanJson(result.stdout))
     return decoded === null ? PLAN_INVALID : { status: 200, body: decoded }
   } catch {
     return PLAN_INVALID

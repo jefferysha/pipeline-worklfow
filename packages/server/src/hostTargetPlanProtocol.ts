@@ -270,8 +270,9 @@ export function decodeHostTargetPlan(
           ? ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
           : ['marketplace-refresh', 'plugin-update', 'plugin-inventory'] as const),
         'managed-runtime',
-        'bundled-skills',
-        'runtime-readiness',
+        ...(expectedOperation === 'setup'
+          ? ['bundled-skills', 'runtime-readiness'] as const
+          : []),
       ]
     : expectedOperation === 'setup'
       ? ['package-assets', 'managed-runtime', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
@@ -283,8 +284,7 @@ export function decodeHostTargetPlan(
     expectedStepCommands = [
       ...nativeCommandTruth(expectedHost, expectedOperation),
       null,
-      null,
-      null,
+      ...(expectedOperation === 'setup' ? [null, null] : []),
     ]
   } else {
     expectedStepCommands = expectedOperation === 'setup'

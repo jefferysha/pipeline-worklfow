@@ -29,8 +29,7 @@ const ADAPTER_CAPABILITIES = [
   'bundled-skills',
 ] as const satisfies readonly HostCapability[]
 
-const PRODUCT_STEP_IDS = [
-  'managed-runtime',
+const SETUP_ONLY_PRODUCT_STEP_IDS = [
   'bundled-skills',
   'runtime-readiness',
 ] as const
@@ -208,7 +207,11 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
           : []),
       ]
   return host.kind === 'native'
-    ? [...operationSteps, ...PRODUCT_STEP_IDS.map((id) => ({ id }))]
+    ? [
+        ...operationSteps,
+        { id: 'managed-runtime' },
+        ...(operation === 'setup' ? SETUP_ONLY_PRODUCT_STEP_IDS.map((id) => ({ id })) : []),
+      ]
     : operationSteps
 }
 

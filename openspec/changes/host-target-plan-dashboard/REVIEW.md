@@ -230,3 +230,49 @@ Git index 中的 JS/CSS 和第五轮 bundle 语义均一致，`git diff --cached
 列表编号重复、早期实施计划仍使用合并式 client 文件名）。两项均属于已在 Spec phase 登记并
 锁定 hash 的历史文案，不影响运行时、契约或交付完整性；本轮不通过伪造 producer 或滥用
 `requirements-changed` 在 Build phase 越权改写。
+
+## 第五轮 Verify 回环发现与第六轮 Build 修复
+
+冻结提交 `db167a9f112d7a14773e819d40bb8c33b2b12e3e` 的第五轮 Verify 中，Reviewer、
+真实浏览器/视觉和全部自动化门禁通过，但 Codex CLI 与隔离 E2E 独立复现两项 MEDIUM：
+
+| finding | RED | 最小修复 | GREEN |
+| --- | --- | --- | --- |
+| native update 无条件附加 setup-only `bundled-skills`/`runtime-readiness` | CLI/真实 `cmdUpdate(codex)` focused 2 failed / 61 passed | native setup 保留三个产品步骤；native update 只追加 managed runtime | CLI focused 63/63 |
+| Host Plan route 接受前置/后置杂讯或多个 JSON 文档 | 三个歧义 stdout 用例 3/3 失败并错误返回 200 | route-local `trim + 单次 JSON.parse`；不改变其他 route 的通用末行 JSON parser | 三个 focused 3/3，完整 route 75/75 |
+
+规格回环同时修正两个既有 LOW：ADR 决策编号现已连续；实施计划改为实际拆分的
+`hostTargetPlanClient.ts` / `hostTargetPlanDecoders.ts` / `hostTargetPlanTypes.ts`。
+
+跨层 decoder 同步先产生 Dashboard native update 2 failed / 16 passed，随后 server/frontend
+strict decoder 与 fixtures 统一为 native setup 的完整产品尾步和 native update 的单一
+`managed-runtime` 尾步；Dashboard GREEN 18/18，server typecheck 通过。主线整合后 focused
+为 CLI/server 4 files / 170 tests、Dashboard 2 files / 32 tests，`typecheck:web` 和
+`git diff --check` 通过。
+
+## 第六轮 Build 全量收敛
+
+- `npm run build`：通过；Dashboard 新 hash `index-9UXUelXP.js`，server 与 CLI tracked
+  bundle 均已更新。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：通过；仅输出仓库既有 React `act(...)` / GSAP 警告。
+- 首次 `npm test`：317 files 中 316 passed；5488 passed / 5 honest skips / 1 failed。
+  唯一失败为与本功能无关的 `internal-skill-gate-hook.integration.test.ts` 5 秒时序超时；
+  随后对该文件独立精确重跑 9/9 通过。该首次全量波动保留为事实，不描述为全绿。
+- `bash tools/test-bundle.sh`：31/31。
+- `npm run check:npx-package`：35/35。
+- `npm run check:docs`：10/10，39 canonical Markdown files。
+- `npm run check:repository-hygiene`：6/6，repository PASS。
+- `npm run check:architecture`：623 production files，5 个 size-only exception。
+- `npm run check:comments`、OpenSpec strict validation、`git diff --check`：通过。
+- built CLI 对 12 个 host × setup/update 的 24 份 DTO 实际烟测全部通过：
+  `side_effects=none`；native setup 保留完整尾步、native update 只有
+  `managed-runtime`；adapter setup 五步/update 三步。custom `.foo`、重复 `--host` 和重复
+  `--operation` 三类非法输入均被拒绝。
+
+最终冻结前只读 reviewer 对完整 `origin/main...working tree` 做 Standards / Spec 双轴审查，
+唯一 HIGH 是暂存前新 hash asset 尚未进入 Git index。把旧 asset 删除、新
+`index-9UXUelXP.js` 与 `dist/index.html` 原子暂存后，复审确认 `R097` rename、HTML 引用、
+Git index 中的 JS/CSS 与 Build6 语义一致，`git diff --cached --check` 通过。最终结论
+PASS：CRITICAL / HIGH / MEDIUM / LOW 均为 0；可以写入 Build 出口的
+`pre_verify_review_result=pass`。

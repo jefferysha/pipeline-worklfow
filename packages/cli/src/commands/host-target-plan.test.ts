@@ -40,7 +40,7 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     })
   })
 
-  test('native setup/update 逐项复用现有 host command plan，再追加只读产品步骤', () => {
+  test('native setup/update 逐项复用现有 host command plan，并按真实外层流程追加只读产品步骤', () => {
     const setup = createHostTargetPlan('codex', 'setup')
     const update = createHostTargetPlan('claude', 'update')
 
@@ -68,6 +68,9 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
       { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
       { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+    ])
+    expect(update.steps.slice(nativeUpdatePlan('claude').length)).toEqual([
+      { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
     ])
   })
 

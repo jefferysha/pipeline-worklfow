@@ -18112,8 +18112,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
   const expectedStepIds = native ? [
     ...expectedOperation === "setup" ? ["marketplace-register", "plugin-install", "plugin-inventory"] : ["marketplace-refresh", "plugin-update", "plugin-inventory"],
     "managed-runtime",
-    "bundled-skills",
-    "runtime-readiness"
+    ...expectedOperation === "setup" ? ["bundled-skills", "runtime-readiness"] : []
   ] : expectedOperation === "setup" ? ["package-assets", "managed-runtime", "adapter-deploy", "bundled-skills", "runtime-readiness"] : ["package-assets", "managed-runtime", "adapter-deploy"];
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
   let expectedStepCommands;
@@ -18122,8 +18121,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     expectedStepCommands = [
       ...nativeCommandTruth(expectedHost, expectedOperation),
       null,
-      null,
-      null
+      ...expectedOperation === "setup" ? [null, null] : []
     ];
   } else {
     expectedStepCommands = expectedOperation === "setup" ? [null, null, command2, null, null] : [null, null, command2];
@@ -18146,6 +18144,15 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
 
 // packages/server/src/serverGetHostTargetPlanRoutes.ts
 var MAX_HOST_PLAN_KEYS = 25;
+function parseHostTargetPlanJson(stdout) {
+  const trimmed = stdout.trim();
+  if (trimmed === "") return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
 function createHostTargetPlanRuntime() {
   const cache = /* @__PURE__ */ new Map();
   const inFlight = /* @__PURE__ */ new Map();
@@ -18203,7 +18210,7 @@ async function runAndDecode(args, deps, decode) {
   try {
     const result = await deps.operationRunner(deps.hostHome, args);
     if (result.exitCode !== 0) return PLAN_INVALID;
-    const decoded = decode(parsePipelineCliJson(result.stdout));
+    const decoded = decode(parseHostTargetPlanJson(result.stdout));
     return decoded === null ? PLAN_INVALID : { status: 200, body: decoded };
   } catch {
     return PLAN_INVALID;

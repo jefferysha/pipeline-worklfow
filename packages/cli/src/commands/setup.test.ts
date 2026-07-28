@@ -903,6 +903,41 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
   })
 
+  test('native update 计划在真实 managed runtime 发布后结束，不调用 setup skills/runtime', async () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv(
+      { pathExists: setupPathExists, readText: setupReadText },
+      codexInstallExec,
+    )
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('codex', 'update').steps.map((step) => step.id)).toEqual([
+      'marketplace-refresh',
+      'plugin-update',
+      'plugin-inventory',
+      'managed-runtime',
+    ])
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin marketplace upgrade tenon --json'],
+      ['codex', 'plugin add tenon@tenon --json'],
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
+    ])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
+  })
+
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
     const deps = makeDeps()
     // 全部已装 → 技能段几乎空跑；fake installer 只记录已校验候选发布，聚焦「运行时段确实被接上」。

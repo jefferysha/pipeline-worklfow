@@ -74,8 +74,12 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
         command: nativeCommands[index],
       })),
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
-      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
-      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+      ...(operation === 'setup'
+        ? [
+            { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+            { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+          ]
+        : []),
     ],
     notices: [
       'host-plan.notice.read-only-generation',
@@ -165,6 +169,16 @@ describe('host target plan read-only client', () => {
     ))
 
     await expect(fetchHostTargetPlan(host, operation)).resolves.toEqual(value)
+    expect(value.steps.map(({ id }) => id)).toEqual(operation === 'setup'
+      ? [
+          'marketplace-register',
+          'plugin-install',
+          'plugin-inventory',
+          'managed-runtime',
+          'bundled-skills',
+          'runtime-readiness',
+        ]
+      : ['marketplace-refresh', 'plugin-update', 'plugin-inventory', 'managed-runtime'])
   })
 
   it.each(['setup', 'update'] as const)(

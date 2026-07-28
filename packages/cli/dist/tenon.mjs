@@ -45111,6 +45111,7 @@ function createHostTargetCatalog() {
 }
 function nativeSteps(operation, plan) {
   const ids = NATIVE_STEP_IDS[operation];
+  const productSteps = operation === "setup" ? PRODUCT_STEPS : PRODUCT_STEPS.slice(0, 1);
   return [
     ...plan.map((item2, index) => {
       const id = ids[index] ?? `host-command-${index + 1}`;
@@ -45120,7 +45121,7 @@ function nativeSteps(operation, plan) {
         command: command(item2.cmd, item2.args)
       };
     }),
-    ...PRODUCT_STEPS
+    ...productSteps
   ];
 }
 function adapterSteps(operation, manualCommand) {

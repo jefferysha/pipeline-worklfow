@@ -118,6 +118,7 @@ function nativeSteps(
   plan: readonly HostCommandPlanItem[],
 ): readonly HostTargetPlanStep[] {
   const ids = NATIVE_STEP_IDS[operation]
+  const productSteps = operation === 'setup' ? PRODUCT_STEPS : PRODUCT_STEPS.slice(0, 1)
   return [
     ...plan.map((item, index) => {
       const id = ids[index] ?? `host-command-${index + 1}`
@@ -127,7 +128,7 @@ function nativeSteps(
         command: command(item.cmd, item.args),
       }
     }),
-    ...PRODUCT_STEPS,
+    ...productSteps,
   ]
 }
 

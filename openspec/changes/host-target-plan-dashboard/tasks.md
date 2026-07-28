@@ -16,6 +16,7 @@
 - [x] 定义 `host-target-plan` delta spec、共享 DTO、严格校验与兼容策略。 (spec)
 - [x] 编写可执行实现计划与验证矩阵。 (spec)
 - [x] 修订 adapter 真实控制流契约：setup 五步、update 三步并排除 setup-only 步骤。 (spec)
+- [x] 修订 native update 与 Host Plan stdout 契约：排除 setup-only 尾步并要求单一完整 JSON 文档。 (spec)
 
 ## 实现
 
@@ -28,6 +29,7 @@
 - [x] 修复冻结前审查发现的 adapter 步骤顺序与真实 setup/update 执行链漂移。 (build)
 - [x] 修复第三轮 Verify 的真实 adapter 编排顺序、空 catalog、测试索引与 ADR 漂移，并以真实 setup 契约测试锁定顺序。 (build)
 - [x] 以真实 `cmdSetup`/`cmdUpdate` 集成测试修复 adapter setup 五步与 update 三步差异，并同步三端严格 fixture。 (build)
+- [x] 以真实 native `cmdUpdate` 与混合 stdout RED 测试修复 native update 尾步和 server 单文档解析。 (build)
 
 ## 验证
 

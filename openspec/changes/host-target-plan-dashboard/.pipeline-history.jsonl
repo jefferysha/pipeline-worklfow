@@ -145,3 +145,34 @@
 {"ts":"2026-07-28T05:05:41Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"36d7677a-b242-4adb-b897-31fc053c470c"}
 {"ts":"2026-07-28T05:05:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T05:19:11Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T05:19:22Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T05:19:22Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T05:19:22Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:19:22Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:19:22Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"57116728-e3ad-4334-9469-bd6bb28a2c86"}
+{"ts":"2026-07-28T05:35:45Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-host-target-plan-dashboard-verify.md"}
+{"ts":"2026-07-28T05:35:45Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T05:35:45Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T05:35:46Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T05:35:54Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T05:35:55Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T05:02:57Z authority_host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T05:35:55Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T05:35:55Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T05:35:55Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:35:55Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:35:55Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"847ae7d1-8724-4fbc-a8f6-7f5559bcb2be"}
+{"ts":"2026-07-28T05:36:41Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T05:36:41Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T05:36:41Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:36:41Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:36:41Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"d3a1cba5-6f85-4a44-b442-d603eff81587"}
+{"ts":"2026-07-28T05:38:12Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-28-host-target-plan-dashboard.md"}
+{"ts":"2026-07-28T05:38:12Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T05:38:13Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T05:38:13Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T05:38:20Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T05:38:20Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T05:02:57Z authority_host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T05:38:21Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"88f96037-b922-4b96-8beb-e286b2e3e1fc"}
+{"ts":"2026-07-28T05:43:15Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T05:49:55Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T05:51:53Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

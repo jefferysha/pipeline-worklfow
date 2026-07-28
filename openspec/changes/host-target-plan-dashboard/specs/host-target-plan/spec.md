@@ -21,7 +21,7 @@
 
 ### Requirement: 单目标 setup/update 计划
 
-系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 操作生成 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标元数据、可复制命令、有序步骤与 notices。native 步骤 SHALL 复用现有 install/update plan 真相；adapter 步骤 SHALL 与当前真实命令编排一致，并仅描述稳定的 release adapter 外层流程，不执行或解析脚本。
+系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 操作生成 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标元数据、可复制命令、有序步骤与 notices。native 与 adapter 步骤 SHALL 分别与当前真实 setup/update 命令编排一致；adapter 仅描述稳定的 release adapter 外层流程，不执行或解析脚本。
 
 #### Scenario: native setup 计划
 
@@ -29,6 +29,12 @@
 - **THEN** 返回 Codex 目标、`tenon setup --codex` 命令与有序 native setup 步骤
 - **AND** `side_effects` 等于 `none`
 - **AND** 不调用真实 setup 路径
+
+#### Scenario: native update 计划
+
+- **WHEN** 为 Codex 或 Claude 请求 update 计划
+- **THEN** 返回现有 `nativeUpdatePlan` 命令步骤并追加 `managed-runtime`
+- **AND** 不包含仅由完整 setup 调用的 `bundled-skills` 或 `runtime-readiness`
 
 #### Scenario: adapter update 计划
 
@@ -75,9 +81,9 @@ server SHALL 暴露 `GET /api/host-targets` 和 `GET /api/host-target-plan`，�
 - **WHEN** server 未配置可用的 CLI runner
 - **THEN** 返回 `503 HOST_TARGET_PLAN_UNAVAILABLE`
 
-#### Scenario: CLI 或 DTO 无效
+#### Scenario: CLI stdout 或 DTO 无效
 
-- **WHEN** CLI 非零退出、输出非 JSON 或 DTO 不满足 v1 契约
+- **WHEN** CLI 非零退出、trim 后的 stdout 不是恰好一个完整 JSON 文档，或 DTO 不满足 v1 契约
 - **THEN** 返回 `502 HOST_TARGET_PLAN_INVALID`
 - **AND** 不向客户端透传 stderr、路径或内部异常
 

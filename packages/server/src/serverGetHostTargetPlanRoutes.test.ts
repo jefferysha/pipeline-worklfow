@@ -83,14 +83,6 @@ const PLAN = {
     id: 'managed-runtime',
     label: 'host-plan.step.managed-runtime',
     command: null,
-  }, {
-    id: 'bundled-skills',
-    label: 'host-plan.step.bundled-skills',
-    command: null,
-  }, {
-    id: 'runtime-readiness',
-    label: 'host-plan.step.runtime-readiness',
-    command: null,
   }],
   notices: [
     'host-plan.notice.read-only-generation',
@@ -157,7 +149,7 @@ function planFor(host: HostId, operation: Operation) {
   if (native) {
     steps.push({ id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null })
   }
-  if (native || operation === 'setup') {
+  if (operation === 'setup') {
     steps.push(
       { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
       { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
@@ -332,6 +324,40 @@ describe('Host Target Plan route resolver', () => {
       },
     })
     expect(runner).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      name: 'human-readable prelude before a valid final JSON line',
+      stdout: `host-target-plan starting\n${JSON.stringify(CATALOG)}`,
+    },
+    {
+      name: 'trailing noise after a valid JSON document',
+      stdout: `${JSON.stringify(CATALOG)}\nhost-target-plan complete`,
+    },
+    {
+      name: 'multiple JSON documents',
+      stdout: `${JSON.stringify({ ignored: true })}\n${JSON.stringify(CATALOG)}`,
+    },
+  ])('rejects ambiguous CLI stdout: $name', async ({ stdout }) => {
+    const runner = vi.fn<PipelineCliRunner>(async () => ({
+      exitCode: 0,
+      stdout,
+      stderr: '',
+    }))
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-targets',
+      '/api/host-targets',
+      deps(runner),
+    )).resolves.toEqual({
+      status: 502,
+      body: {
+        ok: false,
+        code: 'HOST_TARGET_PLAN_INVALID',
+        error: '宿主计划响应无效',
+      },
+    })
   })
 
   it.each([

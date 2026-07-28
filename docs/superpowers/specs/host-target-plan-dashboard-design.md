@@ -98,7 +98,7 @@ interface HostTargetPlan {
 ```
 
 - `command` 始终是用户可在终端手动执行的 `tenon setup|update --<host>`；adapter 使用 `<project>` 占位提示 project scope。
-- native 的步骤复用现有 `nativeInstallPlan` / `nativeUpdatePlan` 命令数组，再附加 managed runtime、bundled skills 与 readiness 的产品步骤。
+- native 的步骤复用现有 `nativeInstallPlan` / `nativeUpdatePlan` 命令数组；setup 再附加 managed runtime、bundled skills 与 readiness，update 只追加真实 managed release 所包含的 managed runtime，不宣称 setup-only skills/readiness。
 - adapter 的步骤按真实命令边界区分操作：setup 为 `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`，update 在 `adapter-deploy` 后结束，不包含 setup-only 的 skills/readiness；两者都不解析或执行 adapter 脚本。
 - `side_effects: 'none'` 是生成器不变量；不是对复制后手动执行命令的承诺。
 
@@ -109,7 +109,7 @@ interface HostTargetPlan {
 - 不接受任何查询参数；有参数返回 `400 HOST_TARGET_QUERY_INVALID`。
 - 使用固定 argv `['host-target-plan', '--json']`。
 - CLI 不可用返回 `503 HOST_TARGET_PLAN_UNAVAILABLE`。
-- CLI 非零或 JSON/DTO 畸形返回 `502 HOST_TARGET_PLAN_INVALID`。
+- CLI 非零、trim 后 stdout 不是恰好一个完整 JSON 文档，或 DTO 畸形时返回 `502 HOST_TARGET_PLAN_INVALID`；本端点不得复用会从多行输出中挑选末行 JSON 的宽松 parser。
 
 ### `GET /api/host-target-plan`
 
@@ -157,7 +157,8 @@ stateDiagram-v2
 4. 计划生成不访问文件系统、网络、环境、宿主 inventory 或项目 root。
 5. API 只把通过严格 decoder 的 CLI DTO返回给前端。
 6. UI 不根据 host ID 重建计划；只翻译稳定 token 并展示服务端事实。
-7. Adapter setup 与 update 不共享同一完整步骤数组：setup 为五步，update 为前三步；三端 decoder、fixture 和测试必须锁定该差异。
+7. Setup 与 update 不共享 setup-only 尾步：adapter setup 为五步、update 为前三步；native setup 追加 managed runtime/skills/readiness，native update 只追加 managed runtime。三端 decoder、fixture 和真实命令测试必须锁定差异。
+8. Host Plan server 只接受 trim 后恰好一个完整 JSON 文档；前置/后置杂讯或多个 JSON 文档一律失败关闭。
 
 ## 术语
 
@@ -177,15 +178,16 @@ stateDiagram-v2
 ## 风险与缓解
 
 - **CLI/server/frontend DTO 漂移**：三层都做严格版本与字段 decoder，契约测试覆盖畸形响应。
-- **计划与真实写路径漂移**：native 步骤复用已有 plan 函数；adapter 的 setup/update 分别对齐 `cmdSetup`/`cmdUpdate` 的外层控制流，并用真实命令集成测试锁定差异，不复制脚本内部。
+- **计划与真实写路径漂移**：native/adapter 的 setup/update 分别对齐真实外层控制流，并用真实命令集成测试锁定 setup-only 尾步差异，不复制脚本内部。
+- **CLI 杂讯被误当成有效 DTO**：Host Plan route 使用局部单文档 parser，禁止通用末行 JSON 容错掩盖协议污染。
 - **误认为已执行**：固定 `side_effects: none`、只读文案、无执行按钮、只提供复制。
 - **参数注入**：server 在 runner 前白名单校验，固定 argv 数组，拒绝所有额外查询参数。
 - **许可污染**：Trellis 仅作为公开设计概念来源；实现从 Tenon 现有代码与本设计独立推导。
 
 ## 验证矩阵
 
-- CLI：catalog、每个注册 host、setup/update、adapter setup 五步与 update 三步差异、真实 `cmdSetup`/`cmdUpdate` 输出编排、未知 host/operation、JSON 稳定性、零 runner/环境访问。
-- Server：Host guard、无参数 catalog、合法 plan、缺失/重复/额外/未知查询、CLI unavailable/nonzero/malformed。
+- CLI：catalog、每个注册 host、setup/update、adapter setup 五步/update 三步、native update 无 setup-only 尾步、真实 `cmdSetup`/`cmdUpdate` 输出编排、未知 host/operation、JSON 稳定性、零 runner/环境访问。
+- Server：Host guard、无参数 catalog、合法 plan、缺失/重复/额外/未知查询、CLI unavailable/nonzero、前置/后置杂讯、多文档和 DTO malformed。
 - Dashboard client：catalog/plan decoder、非 2xx、畸形 JSON、网络错误。
 - Component：catalog loading/empty/error/retry、选择/切换、plan loading/error/retry/ready、复制成功/失败、中英文、键盘。
 - 浏览器：确认 Tenon 页面身份，桌面/移动、键盘 focus、loading/empty/error、命令复制与无执行入口。

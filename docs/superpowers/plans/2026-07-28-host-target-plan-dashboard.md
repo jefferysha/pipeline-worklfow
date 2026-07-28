@@ -24,7 +24,7 @@ capability: host-target-plan
 
 1. 在 `packages/cli/src/commands/host-target-plan.ts` 定义 `host-target-plan/v1` DTO、Codex setup 最小 plan generator 与纯 decoder/validator 测试；在 `packages/cli/src/program-install.ts` 注册只读命令。
 2. 在 `packages/server/src/serverGetHostTargetPlanRoutes.ts` 以严格查询校验和 `PipelineCliRunner` 固定 argv 暴露两个 GET；通过 `packages/server/src/serverGetRoutes.ts` 与 `server.ts` 装配，保持文件行数门禁。
-3. 在 `packages/dashboard-app/src/api/hostTargetPlan.ts` 建立 DTO decoder/client，在 `packages/dashboard-app/src/hostPlan/HostTargetPlanView.tsx` 展示 Codex 卡和 setup 计划；通过 `App.tsx`、`Nav.tsx`、`dashboardLocation.ts` 装配机器级视图。
+3. 在 `packages/dashboard-app/src/api/hostTargetPlanClient.ts`、`hostTargetPlanDecoders.ts` 与 `hostTargetPlanTypes.ts` 建立 DTO client/decoder/types，在 `packages/dashboard-app/src/hostPlan/HostTargetPlanView.tsx` 展示 Codex 卡和 setup 计划；通过 `App.tsx`、`Nav.tsx`、`dashboardLocation.ts` 装配机器级视图。
 4. 为 CLI、server route、client 与 component 各增加至少一个通过案例，运行对应定向测试与 `npm run typecheck:web`。
 
 验收：真实数据从 CLI 经过 server 严格 decoder 到 UI 显示 `tenon setup --codex`；路径中无 setup/update 函数调用。
@@ -72,7 +72,20 @@ capability: host-target-plan
 
 **此处建议 /clear**
 
-## 子阶段 5：验证、浏览器与交付证据
+## 子阶段 5：Native update 与严格 stdout 回归修复
+
+1. 在 CLI 计划测试与真实注入式 `cmdUpdate(codex)` 测试中先断言 native update 只有现有 update plan 加 managed runtime，并排除 `bundled-skills`/`runtime-readiness`；立即运行确认 RED。
+2. 在 server route 测试中先覆盖前置杂讯、后置杂讯与多个 JSON 文档，要求全部 `502 HOST_TARGET_PLAN_INVALID`；立即运行确认 RED。
+3. 在 `host-target-plan.ts` 最小按 operation 追加 native 产品步骤；在 `serverGetHostTargetPlanRoutes.ts` 增加局部完整 stdout `JSON.parse`，不改变其他 route 的通用 parser。
+4. 同步 server/Dashboard 严格 decoder fixtures，运行定向测试、全部 12 hosts × setup/update 烟测与真实 server 错误路径。
+
+验收：native update 不再宣称 setup-only 尾步；Host Plan API 只接受单一完整 JSON 文档；既有 mutation routes 的输出兼容性不变。
+
+回滚：仅回退 native operation-specific 产品步骤、局部 strict parser 与对应测试，不改变 UI 状态机、route argv 或通用 parser。
+
+**此处建议 /clear**
+
+## 子阶段 6：验证、浏览器与交付证据
 
 1. 运行定向 CLI/server/Dashboard 测试、`npm run typecheck:web`、`npm run test:web`、`npm run build`、`npm test`、bundle 与受影响门禁；修复全部可修复失败。
 2. 启动真实 Tenon Dashboard，先用标题、导航和 API health 确认页面身份；验证真实成功路径。
