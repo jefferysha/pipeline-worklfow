@@ -61,3 +61,19 @@
 {"ts":"2026-07-28T08:19:51Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"317f5773-82e4-4f23-a2e9-96ef8d237e0d"}
 {"ts":"2026-07-28T08:29:26Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T08:34:31Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T08:34:46Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T08:34:46Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T08:34:46Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T08:34:46Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T08:34:46Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"6947666e-4ddf-4b44-8316-8d561623015a"}
+{"ts":"2026-07-28T08:56:27Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-28T08:56:27Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T08:56:27Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-pr-5-merge-audit-verify-fail.md"}
+{"ts":"2026-07-28T08:56:28Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T08:56:35Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T08:56:35Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T07:35:33Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T08:56:36Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T08:56:36Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T08:56:36Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T08:56:36Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T08:56:36Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"05a2d92e-c4ed-43eb-a80a-863a8fcc4b45"}

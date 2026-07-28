@@ -57,6 +57,12 @@
           "sha256": "572829d49e8415474f7e2ae34bb963d8ef86bb031e07ec6d55c7b46a4a517dbc",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "572829d49e8415474f7e2ae34bb963d8ef86bb031e07ec6d55c7b46a4a517dbc",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -108,6 +114,12 @@
           "sha256": "4febab4f418f50c74a2573a1049a4539ffd1f240ee5dc78b4120609bba4759f5",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4febab4f418f50c74a2573a1049a4539ffd1f240ee5dc78b4120609bba4759f5",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -123,6 +135,12 @@
           "sha256": "de988fddfa55ab2d70bf158c214f5f68bdce9f1af67d942ef90f80bb491f11ca",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "de988fddfa55ab2d70bf158c214f5f68bdce9f1af67d942ef90f80bb491f11ca",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -138,6 +156,12 @@
           "sha256": "905a5e10a3d620e1122548d1bb9c07a4bf7da693ec2ec4e6fa117fb72ea8dd26",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "905a5e10a3d620e1122548d1bb9c07a4bf7da693ec2ec4e6fa117fb72ea8dd26",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -153,6 +177,12 @@
           "sha256": "905a5e10a3d620e1122548d1bb9c07a4bf7da693ec2ec4e6fa117fb72ea8dd26",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "905a5e10a3d620e1122548d1bb9c07a4bf7da693ec2ec4e6fa117fb72ea8dd26",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -174,6 +204,12 @@
           "sha256": "4d443501d0599f4ae7f3b6ecc75f221b7607c3e8321c88efdcc67dcb01822f1a",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4d443501d0599f4ae7f3b6ecc75f221b7607c3e8321c88efdcc67dcb01822f1a",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -195,6 +231,12 @@
           "sha256": "1b03bbdd68475108f6917412262d650877e706bfa95926982458b7a16e355b2c",
           "readAt": "2026-07-28T08:20:21Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1b03bbdd68475108f6917412262d650877e706bfa95926982458b7a16e355b2c",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
     },
@@ -210,8 +252,22 @@
           "sha256": "b418d8ec884ae96b7f35552f56e683092f61c0cbdd43b19716b196f82609e46f",
           "readAt": "2026-07-28T08:29:27Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b418d8ec884ae96b7f35552f56e683092f61c0cbdd43b19716b196f82609e46f",
+          "readAt": "2026-07-28T08:56:28Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",10]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-28-pr-5-merge-audit-verify-fail.md",
+      "sha256": "4a4d4537c62dfde333d466717a3ab85c50fc3386a58929571982ba86a945aa35",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-28T08:56:28Z",
+      "reads": []
     }
   ]
 }
