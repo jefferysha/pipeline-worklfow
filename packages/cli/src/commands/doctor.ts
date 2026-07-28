@@ -23,6 +23,7 @@ import {
   type DoctorStatus,
 } from './doctor-check.js'
 import { checkCodexProjectSkills, checkSkills } from './doctor-skills.js'
+import { renderCodexAuthLines } from '../codexAuth.js'
 
 export type { DoctorCheck, DoctorStatus } from './doctor-check.js'
 
@@ -187,6 +188,24 @@ async function checkVerifySkills(p: DoctorProbes): Promise<DoctorCheck> {
   )
 }
 
+async function checkCodexAuth(p: DoctorProbes): Promise<DoctorCheck> {
+  if (await p.nativeRuntimeHost() !== 'codex') {
+    return green('auth:codex', '当前 runtime 非 Codex；本机 Codex 登录检查不适用')
+  }
+  const status = await p.codexAuthStatus()
+  if (status.state === 'authenticated') {
+    return green('auth:codex', 'Codex CLI 已登录（ChatGPT 方案或 API Key）')
+  }
+  const lines = renderCodexAuthLines(status)
+  return yellow(
+    'auth:codex',
+    status.state === 'unauthenticated'
+      ? 'Codex CLI 尚未登录；插件已安装，但调用 Codex 前需要完成认证'
+      : '暂时无法确认 Codex CLI 登录状态；插件仍可安装和检查',
+    lines.slice(1).map((line) => line.trim()).join('；'),
+  )
+}
+
 // ── AFK 运行时就绪四检（full-install R1，设计 spec §3 Phase3 / 旅程 BT-就绪）───────────────
 // docker/镜像/两 runner 凭证走同一次 p.afkReadiness() 探测派生。AFK 是**可选能力**：docker 不可用/
 // 镜像缺/凭证缺一律 yellow（降级可见、不阻断 exit），绝不 red——red 只留给探针自身缺失/异常。
@@ -313,6 +332,16 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
       'integration:codex-project-skills',
       `检查自身异常: ${errMsg(e)}`,
       '排除探针环境问题后重跑 tenon doctor',
+    ))
+  }
+
+  try {
+    checks.push(await checkCodexAuth(p))
+  } catch {
+    checks.push(red(
+      'auth:codex',
+      'Codex 登录检查自身异常',
+      '确认 codex CLI 可执行后重跑 tenon doctor',
     ))
   }
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check } from 'lucide-react'
 import { useT } from '../i18n'
 import { Icon } from './Icon'
 import { CreateChangeDialog } from '../progress/CreateChangeDialog'
@@ -42,13 +43,14 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
       <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-text" data-testid={testid}>{cmd}</code>
       <button
         type="button"
-        className="inline-flex flex-none cursor-pointer items-center gap-1 whitespace-nowrap text-[11px] font-bold text-green hover:text-green-d"
+        className="inline-flex flex-none cursor-pointer items-center gap-1 whitespace-nowrap text-[11px] font-bold text-accent-d hover:text-(--accent)"
         data-testid={copyTestid}
         onClick={copy}
       >
-        <Icon name="copy" size={12} />
+        {copied ? <Check size={12} strokeWidth={1.75} aria-hidden="true" /> : <Icon name="copy" size={12} />}
         {copied ? t('onboard.copied') : t('onboard.copy')}
       </button>
+      {copied && <span className="sr-only" role="status" aria-live="polite">{t('onboard.copied')}</span>}
     </div>
   )
 }

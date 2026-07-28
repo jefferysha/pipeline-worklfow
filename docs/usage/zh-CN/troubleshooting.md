@@ -55,6 +55,17 @@ openspec/changes/<change>/.pipeline-document-locale.json
 
 比较 canonical state、host session 和 AFK executor。queued、review waiting、session ended 和 running 是不同状态。生产 Dashboard 默认地址是 `127.0.0.1:18765`；先确认该端口服务的页面标题和项目根。
 
+#### Codex 插件已安装但认证为黄灯
+
+先运行 `codex login status`。若未登录，ChatGPT 方案包含 Codex 时运行 `codex login`；远程或
+无浏览器终端运行 `codex login --device-auth`。使用 Platform API Key 时，先到
+https://platform.openai.com/api-keys 创建，再运行
+`printenv OPENAI_API_KEY | codex login --with-api-key`，最后重新执行 `codex login status`。
+Platform API Key 按用量计费。Tenon 不会替你登录，也不会读取凭证内容。
+
+`auth:codex` 是本机 Codex 宿主登录态；`afk:credential-codex` 是 AFK 容器能否收到 API Key
+或可读 Codex home。两个灯相互独立，不能用其中一个绿色推断另一个也已就绪。
+
 #### Pages 或本地预览 404
 
 本仓是 project site，base 必须为 `/tenon/`：

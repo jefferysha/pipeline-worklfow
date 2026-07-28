@@ -31,9 +31,8 @@ import './workbench.css'
  * 阶段带展示契约：阶段卡横排。卡=序号圆(绿 tint mono)+阶段名 mono+
  * 技能 chips+◇/⚙/▤ 微元信息+复核门红徽章；
  * 选中卡=绿 ring+tint 底（aria-current=step 承载选中态）。段间连接件=CSS
- * repeating-linear-gradient 流动虚线+clip-path 箭头（motion-safe: 变体在 reduced-motion 下停
- * 动画，keyframes 见 ./workbench.css）；demo 语义：gated 连接件跟在门阶段**之后**（复核门拦的
- * 是「离开该阶段」的推进边），红虚线+菱形门节点。连接件仍按「边存在才画」诚实原则（linkEvent
+ * 实色连线+clip-path 箭头；gated 连接件跟在门阶段**之后**（复核门拦的
+ * 是「离开该阶段」的推进边），使用红色语义。连接件仍按「边存在才画」诚实原则（linkEvent
  * null 不画，末尾不画）。行为契约零变化：testid（wb-step-/wb-flow-count-/wb-flow-gate-/
  * wb-flow-gatepop-/wb-flow-gloss-）、onSelect/aria-current/popover/添加阶段 全部保留。
  *
@@ -91,13 +90,13 @@ function shortSkill(id: string): string {
 }
 
 // ── tailwind 原子类合集（原 styles.ts wb8-/wb-flow- 区块的等值搬运；颜色全走 token 语义类）──
-// 连接件流动虚线：gated（门后推进边）=红 + 慢速；普通=绿。reduced-motion 由 motion-safe: 停用。
+// 连接件：gated（门后推进边）=红；普通=绿。静态线条避免持续运动干扰阅读。
 const CONN_BASE =
   "relative h-[34px] w-11 flex-none self-center before:absolute before:top-4 before:right-[9px] before:left-1 before:h-0.5 before:content-[''] after:absolute after:top-3 after:right-0.5 after:h-2.5 after:w-1.5 after:content-[''] after:[clip-path:polygon(0_0,100%_50%,0_100%)]"
 const CONN_PLAIN =
-  'before:bg-[repeating-linear-gradient(90deg,var(--green)_0_6px,transparent_6px_12px)] motion-safe:before:animate-[wb8-flow_1.4s_linear_infinite] after:bg-green'
+  'before:bg-green after:bg-green'
 const CONN_GATED =
-  'before:bg-[repeating-linear-gradient(90deg,var(--red)_0_6px,transparent_6px_12px)] motion-safe:before:animate-[wb8-flow_2.6s_linear_infinite] after:bg-red'
+  'before:bg-red after:bg-red'
 
 export function StepperRail({
   steps,
@@ -138,7 +137,7 @@ export function StepperRail({
           return (
             <Fragment key={s.id}>
               <div
-                className="relative flex min-w-[178px] flex-1 rounded-[13px] border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-border-2 hover:shadow-md aria-[current=step]:border-green aria-[current=step]:bg-[color-mix(in_srgb,var(--green)_7%,var(--card))] aria-[current=step]:shadow-[0_0_0_3px_var(--ring),var(--shadow)]"
+                className="relative flex min-w-[178px] flex-1 rounded-[13px] border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-border-2 hover:shadow-md aria-[current=step]:border-(--accent) aria-[current=step]:bg-accent-t aria-[current=step]:shadow-[0_0_0_3px_var(--ring-blue),var(--shadow)]"
                 data-anim="wb-stage"
                 data-testid={`wb-step-${s.id}`}
                 aria-current={on ? 'step' : undefined}
@@ -154,12 +153,12 @@ export function StepperRail({
                   type="button"
                   className="relative flex min-w-0 flex-1 cursor-pointer items-start gap-[11px] overflow-hidden rounded-[inherit] px-3.5 pt-[13px] pb-[11px] text-left"
                 >
-                  <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full border border-green-b bg-green-t font-mono text-[12.5px] font-bold text-green-d">
+                  <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full border border-accent-b bg-accent-t font-mono text-[12.5px] font-bold text-accent-d">
                     {i + 1}
                   </span>
                   {s.running && (
                     <i
-                      className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-[46px] bg-[linear-gradient(105deg,transparent_6%,color-mix(in_srgb,var(--green)_42%,transparent)_50%,transparent_94%)] opacity-0"
+                      className="pointer-events-none absolute top-2 left-2 z-[1] size-1.5 rounded-full bg-green"
                       data-anim="wb-gloss"
                       data-testid={`wb-flow-gloss-${s.id}`}
                       aria-hidden="true"
@@ -269,7 +268,7 @@ export function StepperRail({
           )
         })}
         <button
-          className="ml-2.5 flex min-w-[104px] flex-none cursor-pointer items-center justify-center self-stretch rounded-[13px] border border-dashed border-border-2 p-3 text-[13px] font-semibold text-text-3 transition-colors enabled:hover:border-green-b enabled:hover:bg-card enabled:hover:text-text-2 disabled:cursor-not-allowed disabled:opacity-55"
+          className="ml-2.5 flex min-w-[104px] flex-none cursor-pointer items-center justify-center self-stretch rounded-[13px] border border-dashed border-border-2 p-3 text-[13px] font-semibold text-text-3 transition-colors enabled:hover:border-accent-b enabled:hover:bg-accent-t enabled:hover:text-accent-d disabled:cursor-not-allowed disabled:opacity-55"
           onClick={onAddStage}
           disabled={!onAddStage}
           title={onAddStage ? undefined : t('workbench.add_stage_pending')}

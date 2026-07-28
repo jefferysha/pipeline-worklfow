@@ -106,6 +106,26 @@ function HostWithInitialFocus() {
   )
 }
 
+/** workspace 冲突回归：关闭控件同时保留本地化标签与共享 Lucide 图标语义。 */
+function HostWorkspace() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOpen(true)}>Open workspace</button>
+      {open && (
+        <Dialog
+          closeLabel="Close evidence composer"
+          onClose={() => setOpen(false)}
+          title="Evidence composer"
+          variant="workspace"
+        >
+          Workspace content
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
 describe('Dialog（共享组件，Task 3）', () => {
   it('挂载时焦点进入对话框：默认落在容器内首个可聚焦元素；提供 initialFocusRef 时优先聚焦它', async () => {
     const user = userEvent.setup()
@@ -238,5 +258,14 @@ describe('Dialog（共享组件，Task 3）', () => {
 
     expect(screen.queryByTestId('inner')).toBeNull()
     expect(screen.getByTestId('outer')).toBeInTheDocument()
+  })
+
+  it('workspace 关闭控件使用本地化 accessible label 与共享 Lucide X', async () => {
+    const user = userEvent.setup()
+    render(<HostWorkspace />)
+    await user.click(screen.getByText('Open workspace'))
+
+    const closeButton = screen.getByRole('button', { name: 'Close evidence composer' })
+    expect(closeButton.querySelector('svg.lucide-x')).not.toBeNull()
   })
 })

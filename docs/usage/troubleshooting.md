@@ -48,6 +48,19 @@ Check:
 
 Do not force a Change merely to make every conversation governed.
 
+### Codex plugin is installed but authentication is yellow
+
+Run `codex login status`. If it is not logged in, use `codex login` for a
+ChatGPT plan that includes Codex, or `codex login --device-auth` on a remote
+terminal. For a Platform key created at https://platform.openai.com/api-keys,
+use `printenv OPENAI_API_KEY | codex login --with-api-key`, then rerun
+`codex login status`. Platform API keys use separate usage-based billing.
+Tenon does not perform the login or read the credential.
+
+`auth:codex` reports the local host login. `afk:credential-codex` separately
+reports whether an AFK container can receive an API key or readable Codex home;
+one green light does not imply the other is green.
+
 ### An unrelated old Change is selected
 
 Run `tenon list --json` and inspect the prompt for an explicit resume. Recent

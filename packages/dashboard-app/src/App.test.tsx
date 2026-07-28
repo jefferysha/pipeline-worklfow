@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { App, ErrorBoundary } from './App'
 import { I18nProvider } from './i18n'
 import { lastEventSource, resetEventSources } from './test-setup'
@@ -75,6 +76,28 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(screen.queryByTestId('nav-board')).toBeNull()
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument()
     expect(screen.queryByTestId('conn-indicator')).toBeNull()
+  })
+
+  it('主内容为移动底栏和 safe area 预留空间', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    const main = screen.getByTestId('app-main')
+    expect(main.className).toContain('mobile:pb-[calc(88px+env(safe-area-inset-bottom))]')
+    expect(screen.getByTestId('app-navigation')).toHaveAttribute('data-responsive', 'rail-to-bottom')
+  })
+
+  it('首个可聚焦控件是跳到主内容的链接，目标 main 可被程序聚焦', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    const skip = screen.getByRole('link', { name: '跳到主要内容' })
+    expect(skip).toHaveAttribute('href', '#main-content')
+    const main = screen.getByTestId('app-main')
+    expect(main).toHaveAttribute('id', 'main-content')
+    expect(main).toHaveAttribute('tabindex', '-1')
+    await userEvent.tab()
+    expect(skip).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    expect(main).toHaveFocus()
   })
 
   it('点 rail「项目」入口 → 渲染 ProjectsView（同 header「所有项目」落点）', async () => {

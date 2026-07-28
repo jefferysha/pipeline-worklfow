@@ -15,4 +15,4 @@ export const SIDE_ROW = 'flex items-center gap-[9px] py-[9px] text-[12.5px] text
 export const SIDE_ROW_LABEL = 'min-w-0 flex-1 truncate font-[550]'
 export const SIDE_ROW_VALUE = 'flex-none font-mono text-sm font-[750] text-accent-d'
 export const FIELD_INPUT =
-  'rounded-[7px] border border-border bg-bg px-2.5 py-[7px] text-[12.5px] font-normal text-text transition-[border-color,box-shadow] placeholder:text-text-3 focus-visible:border-green focus-visible:ring-[3px] focus-visible:ring-green-t focus-visible:outline-none aria-invalid:border-red aria-invalid:focus-visible:border-red aria-invalid:focus-visible:ring-red-t'
+  'rounded-[7px] border border-border bg-bg px-2.5 py-[7px] text-[12.5px] font-normal text-text transition-[border-color,box-shadow] placeholder:text-text-3 focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) focus-visible:outline-none aria-invalid:border-red aria-invalid:focus-visible:border-red aria-invalid:focus-visible:ring-red-t'

@@ -112,6 +112,45 @@ export const GATE_FRESH_MS = 15 * 60 * 1000
  */
 export const SANDCASTLE_BUILD_HINT = 'bash tools/sandcastle/build.sh'
 
+export interface CredentialLight {
+  set: boolean
+  source?: 'host-env' | 'secrets-file' | 'default-home'
+}
+
+/**
+ * CODEX_HOME 认证存在性纯判定：显式配置优先且失败时不偷偷回退默认目录；未显式配置时才检查
+ * 默认目录。调用方负责把目录映射到 auth.json 并执行文件可读性检查，本函数不承担任何 I/O。
+ */
+export function codexHomeCredentialLight(
+  explicitCodexHome: string | undefined,
+  defaultCodexHome: string | undefined,
+  hasReadableAuth: (codexHome: string) => boolean,
+): CredentialLight {
+  if (explicitCodexHome !== undefined && explicitCodexHome !== '') {
+    return hasReadableAuth(explicitCodexHome)
+      ? { set: true, source: 'host-env' }
+      : { set: false }
+  }
+  if (defaultCodexHome && hasReadableAuth(defaultCodexHome)) {
+    return { set: true, source: 'default-home' }
+  }
+  return { set: false }
+}
+
+/**
+ * Codex 宿主认证获取引导的固定命令契约。CLI setup/update/doctor 共用这些字段，避免各入口
+ * 复制登录命令并漂移。这里没有、也不得出现任何凭证值；API Key 只通过 stdin 交给 Codex。
+ */
+export const CODEX_AUTH_GUIDANCE = {
+  cli: '安装或更新官方 Codex CLI：`npm install -g @openai/codex`；验证：`codex --version`',
+  chatgpt: 'ChatGPT 订阅：如果你的方案包含 Codex，运行 `codex login`（无需另设 API Key）',
+  device: '远程或无浏览器环境：运行 `codex login --device-auth`',
+  apiKey:
+    'Platform API Key：在 https://platform.openai.com/api-keys 创建后，运行 ' +
+    '`printenv OPENAI_API_KEY | codex login --with-api-key`（Platform 按用量计费）',
+  verify: '验证认证状态：`codex login status`',
+} as const
+
 /**
  * 前置条件缺失时的「怎么获取」引导 —— 单一真相源（防漂移，同 SANDCASTLE_BUILD_HINT 先例）。
  * cli `setup runtime` 就绪清单与 `doctor afk:*` 检查、以及（未来）server 同 import 此常量:
@@ -123,7 +162,7 @@ export const PREREQ_HINTS = {
   claudeToken: '运行 `claude setup-token` 生成长期 OAuth token',
   /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
   openaiKey:
-    'codex 两条路：① `codex login` 走 ChatGPT 账户（最简，免 API key）；② 到 platform.openai.com/api-keys 建 key 设为 OPENAI_API_KEY',
+    `${CODEX_AUTH_GUIDANCE.chatgpt}；${CODEX_AUTH_GUIDANCE.apiKey}；${CODEX_AUTH_GUIDANCE.verify}`,
   /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
   docker: '装 OrbStack（orbstack.dev，轻量，推荐 macOS）或 Docker Desktop（docker.com）——不自动装，需你自行安装',
 } as const

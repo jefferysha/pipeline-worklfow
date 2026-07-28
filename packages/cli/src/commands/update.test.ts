@@ -9,6 +9,7 @@ import {
   parseHostPluginInventory,
 } from './plugin-host.js'
 import { type SetupEnv } from './setup.js'
+import { nativeHostCommandBinding } from './native-host-command-binding.js'
 import { cmdUpdate, nativeUpdatePlan } from './update.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
@@ -164,6 +165,8 @@ function updateEnv(
       return text === undefined ? { state: 'missing' } : { state: 'ok', text }
     },
     commandExists: () => false,
+    resolveHostCommand: (host) => nativeHostCommandBinding(host, 'darwin', {}),
+    codexAuthStatus: async () => ({ state: 'unauthenticated' }),
     listDir: () => [],
     writeText: (path, text) => { calls.writes.push([path, text]) },
     writeTextAtomic: (path, text) => { calls.writes.push([path, text]) },
@@ -308,6 +311,19 @@ describe('tenon update', () => {
     expect(calls.writes).toEqual([])
   })
 
+  test('a missing trusted Codex CLI fails before update mutation and gives an acquisition path', () => {
+    const deps = makeDeps()
+    const { env, calls } = updateEnv(() => ({ code: 0, stdout: '', stderr: '' }))
+    env.resolveHostCommand = () => undefined
+
+    expect(cmdUpdate(deps, { codex: true }, env)).toBe(1)
+    const output = [...deps.outLines, ...deps.errLines].join('\n')
+    expect(output).toContain('npm install -g @openai/codex')
+    expect(output).toContain('codex --version')
+    expect(calls.exec).toEqual([])
+    expect(calls.writes).toEqual([])
+  })
+
   test('a verified Codex update refreshes only the selected host and atomically publishes the managed runtime', async () => {
     const deps = makeDeps()
     const { env, calls } = updateEnv((cmd, args) => {
@@ -332,6 +348,65 @@ describe('tenon update', () => {
     ]])
     expect(deps.outLines.join('\n')).toContain('稳定 tenon launcher 已保持不变')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
+    expect(deps.outLines.join('\n')).toContain('codex login --device-auth')
+    expect(deps.outLines.join('\n')).toContain('platform.openai.com/api-keys')
+  })
+
+  test('Codex update binds inventory, mutation, observation, and auth to one trusted absolute executable', async () => {
+    const deps = makeDeps()
+    const trustedCodex = '/trusted/bin/codex'
+    const authExecutables: Array<string | undefined> = []
+    const { env, calls } = updateEnv((cmd, args) => {
+      if (cmd === trustedCodex && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      }
+      if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    env.resolveHostCommand = () => nativeHostCommandBinding(trustedCodex, 'darwin', {})
+    env.codexAuthStatus = async (executable) => {
+      authExecutables.push(executable)
+      return { state: 'authenticated' }
+    }
+
+    expect(await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+
+    const hostCalls = calls.exec.filter(([, args]) => args[0] === 'plugin')
+    expect(hostCalls.length).toBeGreaterThan(0)
+    expect(hostCalls.every(([command]) => command === trustedCodex)).toBe(true)
+    expect(calls.exec.some(([command]) => command === 'codex')).toBe(false)
+    expect(authExecutables).toEqual([trustedCodex])
+  })
+
+  test('a successful Claude update never probes or prints Codex authentication', async () => {
+    const deps = makeDeps()
+    let authCalls = 0
+    const { env } = updateEnv((cmd, args) => {
+      if (cmd === 'claude' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: '[{"id":"tenon@tenon","installPath":"/new/tenon"}]', stderr: '' }
+      }
+      if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    env.codexAuthStatus = async () => {
+      authCalls += 1
+      return { state: 'unauthenticated' }
+    }
+    expect(await cmdUpdate(
+      deps,
+      { claude: true },
+      env,
+      fakeRuntimeInstaller().installer,
+      fakeDashboardStarter().starter,
+    )).toBe(0)
+    expect(authCalls).toBe(0)
+    expect(deps.outLines.join('\n')).not.toContain('[Codex 认证]')
   })
 
   test('update 发现冲突登记时只记录 cleanup-pending，当前会话不提前删除旧入口', async () => {
@@ -477,6 +552,11 @@ describe('tenon update', () => {
       if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
       return { code: 0, stdout: '', stderr: '' }
     })
+    let authCalls = 0
+    env.codexAuthStatus = async () => {
+      authCalls += 1
+      return { state: 'unauthenticated' }
+    }
 
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
@@ -489,6 +569,9 @@ describe('tenon update', () => {
     ])
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(deps.outLines.join('\n')).toContain('本地 marketplace 不需要 Git fetch')
+    expect(deps.outLines.join('\n')).toContain('tenon doctor')
+    expect(deps.outLines.join('\n')).not.toContain('codex login --device-auth')
+    expect(authCalls).toBe(0)
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
       { openBrowser: false, port: 18_765, transactionId: 'update-test-transaction' },
@@ -504,6 +587,11 @@ describe('tenon update', () => {
     })
 
     const runtime = fakeRuntimeInstaller()
+    let authCalls = 0
+    env.codexAuthStatus = async () => {
+      authCalls += 1
+      return { state: 'unauthenticated' }
+    }
     expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer)).toBe(1)
     expect(runtime.calls.activations).toEqual([])
     expect(runtime.calls.failures).toEqual([[
@@ -513,6 +601,7 @@ describe('tenon update', () => {
     ]])
     expect(deps.errLines.join('\n')).toContain('宿主插件缓存已由 Codex 更新')
     expect(deps.errLines.join('\n')).toContain('Tenon 未回滚宿主私有缓存')
+    expect(authCalls).toBe(0)
   })
 
   test('managed activation failure is audited without pretending to roll back the host cache', async () => {

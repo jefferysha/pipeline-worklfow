@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+import { Check } from 'lucide-react'
 import { useT } from '../i18n'
 import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
@@ -57,7 +58,7 @@ gsap.registerPlugin(useGSAP)
  *     机器人 Bot / 终端 Terminal）+ AFK/沙箱极轻 accent tint 区分；小卡点击=openDrawer。归档不
  *     失联：带归档的相位小站点开 = 站台线下方只读列出该相位归档 change。
  *
- * 判定徽章语义（rowSemantics 同源，抽屉徽章消费）：gate=「✓ 可以放行」绿 /「等你判断」红；
+ * 判定徽章语义（rowSemantics 同源，抽屉徽章消费）：gate=结构化 Check 图标 +「可以放行」绿 /「等你判断」红；
  * failed=「失败 ×N · 等你决定」红（cause=cancelled → 琥珀「已取消」）；running=蓝「{phase}
  * 运行中」；排队/等产出=中性。状态一律 data-*（data-state/data-pulse/data-sbx），测试断言
  * data/aria/testid 不断言视觉类名。
@@ -218,8 +219,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     if (!root) return
     const cardEl = root.querySelector(`[data-testid="prg-cv-chg-${name}"]`)
     const bdg = root.querySelector('[data-testid="prg9-dw-badge"]')
-    if (cardEl) gsap.fromTo(cardEl, { scale: 0.985 }, { scale: 1, duration: 0.3, ease: 'back.out(2)', clearProps: 'transform' })
-    if (bdg) gsap.fromTo(bdg, { scale: 1.25 }, { scale: 1, duration: 0.35, ease: 'back.out(2)', clearProps: 'transform' })
+    if (cardEl) gsap.fromTo(cardEl, { scale: 0.985 }, { scale: 1, duration: 0.2, ease: 'power3.out', clearProps: 'transform' })
+    if (bdg) gsap.fromTo(bdg, { scale: 1.12 }, { scale: 1, duration: 0.2, ease: 'power3.out', clearProps: 'transform' })
   }
 
   /**
@@ -339,13 +340,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             return
           }
           if (chrome.length > 0) {
-            gsap.fromTo(chrome, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: 'power2.out', stagger: 0.07, clearProps: 'all' })
+            gsap.fromTo(chrome, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out', stagger: 0.05, clearProps: 'all' })
           }
           if (nodes.length > 0) {
             gsap.fromTo(
               nodes,
-              { autoAlpha: 0, scale: 0.9 },
-              { autoAlpha: 1, scale: 1, duration: 0.32, ease: 'back.out(1.8)', stagger: 0.04, delay: 0.08, clearProps: 'all' },
+              { autoAlpha: 0, y: 6 },
+              { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger: 0.035, delay: 0.04, clearProps: 'all' },
             )
           }
         },
@@ -449,6 +450,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         {(b.tone === 'red' || b.tone === 'blue' || b.tone === 'amb') && (
           <span className="h-1.5 w-1.5 rounded-full bg-current" data-pulse={b.tone === 'blue' || undefined} aria-hidden="true" />
         )}
+        {b.tone === 'green' && <Check className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
         {b.text}
       </span>
     )
@@ -489,7 +491,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
 
   return (
-    <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" ref={rootRef}>
+    <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
       <ProgressToolbar
         t={t}
         rowCount={flatRows.length}
@@ -502,15 +504,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         onCreate={() => setCreateOpen(true)}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" data-testid="prg-error">{error}</p>}
-      {loading && !snapshot && <p className="py-2 text-[13px] text-text-3">{t('common.loading')}</p>}
+      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
       {snapshot && flatRows.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" data-testid="prg-empty">
+        <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>
       )}

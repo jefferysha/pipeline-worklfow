@@ -6,6 +6,9 @@
  * 探针是「即将 afk run 的 shell 当刻」权威（P1-X1：终端 doctor/setup 为凭证权威，比 server 快照准）。
  * build_hint 走 kernel 单一真相源常量（防漂移，断言逐字等于 server 同源值）。
  */
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
 import { probeAfkReadiness, type ExecDockerFn } from './afkReadiness.js'
@@ -30,6 +33,7 @@ describe('probeAfkReadiness —— cli 侧 AFK 就绪探测', () => {
       exec: dockerOk(['sandcastle:local']),
       secretsEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'tok-secret-abc' },
       hostEnv: { CODEX_HOME: '/home/u/.codex' },
+      canReadFile: (path) => path === '/home/u/.codex/auth.json',
     })
     expect(r).toEqual({
       ok: true,
@@ -117,6 +121,34 @@ describe('probeAfkReadiness —— cli 侧 AFK 就绪探测', () => {
       hostEnv: {},
     })
     expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
+  })
+
+  it('显式 CODEX_HOME 只有目录但 auth.json 不可读时不得误判为凭证就绪', async () => {
+    const r = await probeAfkReadiness({
+      image: 'x:y',
+      exec: dockerOk(['x:y']),
+      secretsEnv: {},
+      hostEnv: { CODEX_HOME: '/empty/codex-home' },
+      defaultCodexHome: '/default/codex-home',
+      canReadFile: (path) => path === '/default/codex-home/auth.json',
+    })
+    expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
+  })
+
+  it('auth.json 同名目录即使可访问也不得误判为普通凭证文件', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-codex-home-directory-'))
+    try {
+      mkdirSync(join(root, 'auth.json'))
+      const r = await probeAfkReadiness({
+        image: 'x:y',
+        exec: dockerOk(['x:y']),
+        secretsEnv: {},
+        hostEnv: { CODEX_HOME: root },
+      })
+      expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('Codex-first：默认 ~/.codex/auth.json 可读时，即使 shell 未导出 CODEX_HOME 也判就绪', async () => {

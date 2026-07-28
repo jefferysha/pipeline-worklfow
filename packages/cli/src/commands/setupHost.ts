@@ -42,6 +42,7 @@ import {
   type SetupEnv,
   type SetupOpts,
 } from './setupEnvironment.js'
+import { bindNativeHostCommand } from './native-host-command-binding.js'
 export function verifyPackagedAssets(
   deps: CliDeps,
   env: SetupEnv,
@@ -260,14 +261,20 @@ export function cmdSetupHost(
   }
 
   if (isNativePipelineHost(host)) {
+    const hostBinding = env.resolveHostCommand(host)
+    if (hostBinding === undefined) {
+      deps.io.err(`ERROR: ${host} CLI 不在可信的绝对 PATH 项中；未执行宿主或 Tenon 状态变更。`)
+      return 1
+    }
+    const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding)
     return (async () => {
-      const convergence = readHostPluginConvergenceReceipt(env, host)
+      const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host)
       if (convergence.state === 'invalid') {
         deps.io.err(`ERROR: ${convergence.detail}；未执行新的 marketplace/runtime 变更。`)
         return 1
       }
       if (convergence.state === 'receipt' && convergence.receipt.state === 'cleanup-pending') {
-        const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt)
+        const finalized = await finalizePendingHostPluginConflict(deps, lifecycleEnv, installer, host, convergence.receipt)
         if (finalized.state === 'failed') {
           deps.io.err(`ERROR: 冲突插件官方清理失败：${finalized.detail}`)
           return 1
@@ -278,17 +285,17 @@ export function cmdSetupHost(
 
       const runtimeCode = await publishSetupManagedRuntime(
         deps,
-        env,
+        lifecycleEnv,
         installer,
         async (transaction) => {
-          const candidate = await installNativePlugin(deps, env, host, transaction)
+          const candidate = await installNativePlugin(deps, lifecycleEnv, host, transaction)
           if (candidate === null) throw new Error('宿主插件未能解析为可发布候选')
-          const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
+          const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, lifecycleEnv, candidate.root, false)
           if (assetCode !== 0) throw new Error('宿主候选未通过插件资产校验')
           if (host === 'codex') {
             // Hook migration owns its own idempotent file transaction; it is not a host CLI
             // mutation and therefore must not masquerade as a host-inventory WAL checkpoint.
-            const migrationCode = migrateLegacyCodexHooks(deps, env)
+            const migrationCode = migrateLegacyCodexHooks(deps, lifecycleEnv)
             if (migrationCode !== 0) throw new Error('旧 Codex hook 迁移失败')
           }
           return {
@@ -309,7 +316,7 @@ export function cmdSetupHost(
           }
           return recordPendingHostPluginConflict(
             deps,
-            env,
+            lifecycleEnv,
             host,
             inventory,
             activation,
@@ -319,13 +326,13 @@ export function cmdSetupHost(
         },
       )
       if (runtimeCode !== 0) return runtimeCode
-      const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry
+      const migrateProjectRegistry = lifecycleEnv.migrateProjectRegistry ?? migrateLegacyProjectRegistry
       const migrated = await migrateProjectRegistry({
-        homeDir: env.homeDir(),
+        homeDir: lifecycleEnv.homeDir(),
         platform: process.platform,
-        env: env.runtimeEnv(),
-        readText: env.readText,
-        pathExists: env.pathExists,
+        env: lifecycleEnv.runtimeEnv(),
+        readText: lifecycleEnv.readText,
+        pathExists: lifecycleEnv.pathExists,
       })
       if (migrated.discovered > 0 || migrated.rejected > 0) {
         deps.io.out(
@@ -334,7 +341,7 @@ export function cmdSetupHost(
         )
       }
       if (host === 'codex') printCodexHookTrust(deps)
-      return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
+      return configureAutoUpdate(deps, lifecycleEnv, host, opts.autoUpdate === true)
     })()
   } else {
     const root = resolvePipelineRoot(env)

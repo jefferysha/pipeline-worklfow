@@ -489,6 +489,30 @@ var PHASES = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
 var DOCUMENT_LOCALES = ["zh-CN", "en"];
 var GATE_FRESH_MS = 15 * 60 * 1e3;
 var SANDCASTLE_BUILD_HINT = "bash tools/sandcastle/build.sh";
+function codexHomeCredentialLight(explicitCodexHome, defaultCodexHome, hasReadableAuth) {
+  if (explicitCodexHome !== void 0 && explicitCodexHome !== "") {
+    return hasReadableAuth(explicitCodexHome) ? { set: true, source: "host-env" } : { set: false };
+  }
+  if (defaultCodexHome && hasReadableAuth(defaultCodexHome)) {
+    return { set: true, source: "default-home" };
+  }
+  return { set: false };
+}
+var CODEX_AUTH_GUIDANCE = {
+  cli: "\u5B89\u88C5\u6216\u66F4\u65B0\u5B98\u65B9 Codex CLI\uFF1A`npm install -g @openai/codex`\uFF1B\u9A8C\u8BC1\uFF1A`codex --version`",
+  chatgpt: "ChatGPT \u8BA2\u9605\uFF1A\u5982\u679C\u4F60\u7684\u65B9\u6848\u5305\u542B Codex\uFF0C\u8FD0\u884C `codex login`\uFF08\u65E0\u9700\u53E6\u8BBE API Key\uFF09",
+  device: "\u8FDC\u7A0B\u6216\u65E0\u6D4F\u89C8\u5668\u73AF\u5883\uFF1A\u8FD0\u884C `codex login --device-auth`",
+  apiKey: "Platform API Key\uFF1A\u5728 https://platform.openai.com/api-keys \u521B\u5EFA\u540E\uFF0C\u8FD0\u884C `printenv OPENAI_API_KEY | codex login --with-api-key`\uFF08Platform \u6309\u7528\u91CF\u8BA1\u8D39\uFF09",
+  verify: "\u9A8C\u8BC1\u8BA4\u8BC1\u72B6\u6001\uFF1A`codex login status`"
+};
+var PREREQ_HINTS = {
+  /** claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 缺 —— 生成长期 OAuth token。 */
+  claudeToken: "\u8FD0\u884C `claude setup-token` \u751F\u6210\u957F\u671F OAuth token",
+  /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
+  openaiKey: `${CODEX_AUTH_GUIDANCE.chatgpt}\uFF1B${CODEX_AUTH_GUIDANCE.apiKey}\uFF1B${CODEX_AUTH_GUIDANCE.verify}`,
+  /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
+  docker: "\u88C5 OrbStack\uFF08orbstack.dev\uFF0C\u8F7B\u91CF\uFF0C\u63A8\u8350 macOS\uFF09\u6216 Docker Desktop\uFF08docker.com\uFF09\u2014\u2014\u4E0D\u81EA\u52A8\u88C5\uFF0C\u9700\u4F60\u81EA\u884C\u5B89\u88C5"
+};
 var IllegalTransitionError = class extends Error {
   from;
   to;
@@ -16176,7 +16200,7 @@ import { dirname as dirname9, join as join42 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
-import { accessSync, constants as fsConstants } from "node:fs";
+import { accessSync, constants as fsConstants, statSync as statSync2 } from "node:fs";
 import { join as join31 } from "node:path";
 
 // packages/server/src/dockerImages.ts
@@ -16225,17 +16249,12 @@ function credLight(key, hostEnv, fileKeys) {
 }
 function canReadFile(path7) {
   try {
+    if (!statSync2(path7).isFile()) return false;
     accessSync(path7, fsConstants.R_OK);
     return true;
   } catch {
     return false;
   }
-}
-function codexHomeLight(hostEnv, defaultCodexHome, canRead = canReadFile) {
-  const v = hostEnv.CODEX_HOME;
-  if (v !== void 0 && v !== "") return { set: true, source: "host-env" };
-  if (defaultCodexHome && canRead(join31(defaultCodexHome, "auth.json"))) return { set: true, source: "default-home" };
-  return { set: false };
 }
 async function buildAfkReadiness(opts) {
   const hostEnv = opts.hostEnv ?? process.env;
@@ -16255,7 +16274,11 @@ async function buildAfkReadiness(opts) {
       "claude-code": { CLAUDE_CODE_OAUTH_TOKEN: credLight("CLAUDE_CODE_OAUTH_TOKEN", hostEnv, fileKeys) },
       codex: {
         OPENAI_API_KEY: credLight("OPENAI_API_KEY", hostEnv, fileKeys),
-        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile)
+        CODEX_HOME: codexHomeCredentialLight(
+          hostEnv.CODEX_HOME,
+          opts.defaultCodexHome,
+          (home) => (opts.canReadFile ?? canReadFile)(join31(home, "auth.json"))
+        )
       }
     }
   };
@@ -16865,7 +16888,7 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync2 } from "node:fs";
+import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync3 } from "node:fs";
 import { delimiter, dirname as dirname8, join as join35 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
@@ -16935,7 +16958,7 @@ function skillDirsIn(dir) {
     return readdirSync8(dir).filter((name) => {
       const p = join35(dir, name);
       try {
-        return statSync2(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
+        return statSync3(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
       } catch {
         return false;
       }
@@ -16949,7 +16972,7 @@ function childDirsIn(dir) {
   try {
     return readdirSync8(dir).filter((name) => {
       try {
-        return statSync2(join35(dir, name)).isDirectory();
+        return statSync3(join35(dir, name)).isDirectory();
       } catch {
         return false;
       }
@@ -17109,11 +17132,11 @@ import { lstat as lstat14, readFile as readFile18, readdir as readdir4, stat as 
 import { join as join37, resolve as resolve11 } from "node:path";
 
 // packages/server/src/projectCapabilities.ts
-import { statSync as statSync3 } from "node:fs";
+import { statSync as statSync4 } from "node:fs";
 import { join as join36 } from "node:path";
 function projectFileExists(root, repoRelativePath) {
   try {
-    return statSync3(join36(root, repoRelativePath)).isFile();
+    return statSync4(join36(root, repoRelativePath)).isFile();
   } catch {
     return false;
   }
@@ -18506,7 +18529,7 @@ async function handleGet(req, res, path7, deps) {
 import { resolve as resolvePath7 } from "node:path";
 
 // packages/server/src/projects.ts
-import { statSync as statSync4 } from "node:fs";
+import { statSync as statSync5 } from "node:fs";
 import { resolve as resolvePath6 } from "node:path";
 async function addProjectToRegistry(registryPath, rawRoot) {
   if (typeof rawRoot !== "string" || !rawRoot) {
@@ -18514,7 +18537,7 @@ async function addProjectToRegistry(registryPath, rawRoot) {
   }
   let isDir;
   try {
-    isDir = statSync4(rawRoot).isDirectory();
+    isDir = statSync5(rawRoot).isDirectory();
   } catch {
     return { ok: false, code: 404, error: `\u8DEF\u5F84\u4E0D\u5B58\u5728\uFF1A${rawRoot}` };
   }

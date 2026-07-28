@@ -58,7 +58,7 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 
 - Node.js 22 或更高版本
 - Git
-- 一个明确选择的宿主 CLI
+- 一个明确选择的宿主 CLI；Codex 用户可先运行 `npm install -g @openai/codex`，再用 `codex --version` 验证
 - 只有使用 AFK 容器执行时才需要 Docker
 
 新用户无需 clone 仓库。一次安装完整 Codex 插件：
@@ -82,6 +82,26 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
 `tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
 与 `tenon runtime status`。
+
+Codex 插件安装与账号认证是两个独立步骤。安装完成后，Tenon 只读运行
+`codex login status`，不会自动登录或读取凭证内容。若尚未登录：
+
+```bash
+# ChatGPT 方案包含 Codex 时
+codex login
+
+# 远程或无浏览器环境
+codex login --device-auth
+
+# Platform API Key（先在 https://platform.openai.com/api-keys 创建）
+printenv OPENAI_API_KEY | codex login --with-api-key
+
+# 复核
+codex login status
+```
+
+ChatGPT 方案登录通常无需另设 API Key；Platform API 使用单独的 API Key 与按量计费。不要把 Key
+直接写进命令参数、日志或 Issue。
 
 需要自动跟随后续发行版时显式启用每日检查：
 

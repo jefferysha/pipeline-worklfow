@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 
 /**
  * 中立共享 Dialog 组件（评审 P0-5/P1-9 的地基，Task 3）。
@@ -170,7 +171,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6">
               <h2 className="min-w-0 flex-1 truncate text-[18px] font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-xl text-text-3 transition hover:bg-fill hover:text-text" aria-label={closeLabel} onClick={onClose}>×</button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" aria-label={closeLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}

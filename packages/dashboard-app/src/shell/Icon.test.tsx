@@ -20,18 +20,20 @@ const ALL_ICON_NAMES: IconName[] = [
   'layers',
 ]
 
-describe('Icon（内联 SVG 图标 sprite，spec §2 图标语言 + Task 2）', () => {
-  it('渲染 <Icon name="check"/> 产出 svg：aria-hidden=true，宽高=默认 size 14，viewBox/描边契约齐全', () => {
+describe('Icon（稳定 API 映射到 Lucide，spec §2 图标语言 + Task 2）', () => {
+  it('渲染 <Icon name="check"/> 产出 Lucide svg：aria-hidden=true，宽高=默认 size 14，统一描边', () => {
     const { container } = render(<Icon name="check" />)
     const svg = container.querySelector('svg')
     expect(svg).not.toBeNull()
     expect(svg).toHaveAttribute('aria-hidden', 'true')
     expect(svg).toHaveAttribute('width', '14')
     expect(svg).toHaveAttribute('height', '14')
-    expect(svg).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
     expect(svg).toHaveAttribute('fill', 'none')
     expect(svg).toHaveAttribute('stroke', 'currentColor')
-    expect(svg).toHaveAttribute('stroke-width', '1.5')
+    expect(svg).toHaveAttribute('stroke-width', '1.75')
+    expect(svg).toHaveAttribute('data-icon', 'check')
+    expect(svg).toHaveClass('lucide')
   })
 
   it('size prop 覆盖默认值，宽高同步跟随（非常量 14）', () => {
@@ -41,11 +43,13 @@ describe('Icon（内联 SVG 图标 sprite，spec §2 图标语言 + Task 2）', 
     expect(svg).toHaveAttribute('height', '24')
   })
 
-  it('IconName 全集（14 个）逐个渲染，每个都产出至少一个形状子节点——防止 path 表漏项', () => {
+  it('IconName 全集（14 个）逐个映射到 Lucide 形状——防止映射漏项', () => {
     for (const name of ALL_ICON_NAMES) {
       const { container, unmount } = render(<Icon name={name} />)
       const svg = container.querySelector('svg')
       expect(svg, `name=${name} 应渲染出 <svg>`).not.toBeNull()
+      expect(svg).toHaveAttribute('data-icon', name)
+      expect(svg).toHaveClass('lucide')
       const shapes = svg!.querySelectorAll('path, rect, circle')
       expect(shapes.length, `name=${name} 应至少有一个 path/rect/circle 形状`).toBeGreaterThan(0)
       unmount()

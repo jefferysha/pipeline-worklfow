@@ -3032,7 +3032,7 @@ var require_commander = __commonJS({
 // packages/cli/src/main.ts
 import { execFile as execFile5, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
-import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync8 } from "node:fs";
+import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync10 } from "node:fs";
 import { readFile as readFile38, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
 import { dirname as dirname24, join as join84 } from "node:path";
@@ -3145,11 +3145,27 @@ var GATE_TTL_MS = {
 };
 var GATE_FRESH_MS = 15 * 60 * 1e3;
 var SANDCASTLE_BUILD_HINT = "bash tools/sandcastle/build.sh";
+function codexHomeCredentialLight(explicitCodexHome, defaultCodexHome, hasReadableAuth) {
+  if (explicitCodexHome !== void 0 && explicitCodexHome !== "") {
+    return hasReadableAuth(explicitCodexHome) ? { set: true, source: "host-env" } : { set: false };
+  }
+  if (defaultCodexHome && hasReadableAuth(defaultCodexHome)) {
+    return { set: true, source: "default-home" };
+  }
+  return { set: false };
+}
+var CODEX_AUTH_GUIDANCE = {
+  cli: "\u5B89\u88C5\u6216\u66F4\u65B0\u5B98\u65B9 Codex CLI\uFF1A`npm install -g @openai/codex`\uFF1B\u9A8C\u8BC1\uFF1A`codex --version`",
+  chatgpt: "ChatGPT \u8BA2\u9605\uFF1A\u5982\u679C\u4F60\u7684\u65B9\u6848\u5305\u542B Codex\uFF0C\u8FD0\u884C `codex login`\uFF08\u65E0\u9700\u53E6\u8BBE API Key\uFF09",
+  device: "\u8FDC\u7A0B\u6216\u65E0\u6D4F\u89C8\u5668\u73AF\u5883\uFF1A\u8FD0\u884C `codex login --device-auth`",
+  apiKey: "Platform API Key\uFF1A\u5728 https://platform.openai.com/api-keys \u521B\u5EFA\u540E\uFF0C\u8FD0\u884C `printenv OPENAI_API_KEY | codex login --with-api-key`\uFF08Platform \u6309\u7528\u91CF\u8BA1\u8D39\uFF09",
+  verify: "\u9A8C\u8BC1\u8BA4\u8BC1\u72B6\u6001\uFF1A`codex login status`"
+};
 var PREREQ_HINTS = {
   /** claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 缺 —— 生成长期 OAuth token。 */
   claudeToken: "\u8FD0\u884C `claude setup-token` \u751F\u6210\u957F\u671F OAuth token",
   /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
-  openaiKey: "codex \u4E24\u6761\u8DEF\uFF1A\u2460 `codex login` \u8D70 ChatGPT \u8D26\u6237\uFF08\u6700\u7B80\uFF0C\u514D API key\uFF09\uFF1B\u2461 \u5230 platform.openai.com/api-keys \u5EFA key \u8BBE\u4E3A OPENAI_API_KEY",
+  openaiKey: `${CODEX_AUTH_GUIDANCE.chatgpt}\uFF1B${CODEX_AUTH_GUIDANCE.apiKey}\uFF1B${CODEX_AUTH_GUIDANCE.verify}`,
   /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
   docker: "\u88C5 OrbStack\uFF08orbstack.dev\uFF0C\u8F7B\u91CF\uFF0C\u63A8\u8350 macOS\uFF09\u6216 Docker Desktop\uFF08docker.com\uFF09\u2014\u2014\u4E0D\u81EA\u52A8\u88C5\uFF0C\u9700\u4F60\u81EA\u884C\u5B89\u88C5"
 };
@@ -11100,11 +11116,11 @@ function computeContentHash(content) {
 function normalizeOwnedKey(rel) {
   if (!rel)
     return void 0;
-  const posix4 = rel.replace(/\\/g, "/");
-  if (posix4.startsWith("/"))
+  const posix7 = rel.replace(/\\/g, "/");
+  if (posix7.startsWith("/"))
     return void 0;
   const out = [];
-  for (const seg of posix4.split("/")) {
+  for (const seg of posix7.split("/")) {
     if (seg === "" || seg === ".")
       continue;
     if (seg === "..") {
@@ -31626,7 +31642,7 @@ async function launchTap(opts) {
 
 // packages/cli/src/afkReadiness.ts
 import { execFile as execFile2 } from "node:child_process";
-import { accessSync, constants as fsConstants } from "node:fs";
+import { accessSync, constants as fsConstants, statSync as statSync3 } from "node:fs";
 import { join as join43 } from "node:path";
 var nodeExecDocker = (args) => new Promise((resolve36) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
@@ -31657,17 +31673,12 @@ function credLight(key, hostEnv, secretsEnv) {
 }
 function canReadFile(path9) {
   try {
+    if (!statSync3(path9).isFile()) return false;
     accessSync(path9, fsConstants.R_OK);
     return true;
   } catch {
     return false;
   }
-}
-function codexHomeLight(hostEnv, defaultCodexHome, canRead = canReadFile) {
-  const v = hostEnv.CODEX_HOME;
-  if (v !== void 0 && v !== "") return { set: true, source: "host-env" };
-  if (defaultCodexHome && canRead(join43(defaultCodexHome, "auth.json"))) return { set: true, source: "default-home" };
-  return { set: false };
 }
 async function probeAfkReadiness(opts) {
   const hostEnv = opts.hostEnv ?? process.env;
@@ -31687,7 +31698,11 @@ async function probeAfkReadiness(opts) {
       "claude-code": { CLAUDE_CODE_OAUTH_TOKEN: credLight("CLAUDE_CODE_OAUTH_TOKEN", hostEnv, secretsEnv) },
       codex: {
         OPENAI_API_KEY: credLight("OPENAI_API_KEY", hostEnv, secretsEnv),
-        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile)
+        CODEX_HOME: codexHomeCredentialLight(
+          hostEnv.CODEX_HOME,
+          opts.defaultCodexHome,
+          (home) => (opts.canReadFile ?? canReadFile)(join43(home, "auth.json"))
+        )
       }
     }
   };
@@ -32175,6 +32190,306 @@ async function checkCodexProjectSkills(p, inventory) {
   );
 }
 
+// packages/cli/src/codexAuth.ts
+import { spawn as spawn3 } from "node:child_process";
+import { posix as posix3, win32 as win323 } from "node:path";
+
+// packages/cli/src/commands/commandExists.ts
+import { accessSync as accessSync2, constants as fsConstants2, statSync as statSync4 } from "node:fs";
+import { posix as posix2, win32 as win322 } from "node:path";
+function resolveCommandOnPath(name2, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const pathApi2 = platform === "win32" ? win322 : posix2;
+  const candidates = platform === "win32" && pathApi2.extname(name2) === "" ? [
+    name2,
+    ...(options.pathExt ?? process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter((extension2) => extension2 !== "").map((extension2) => `${name2}${extension2}`)
+  ] : [name2];
+  const pathValue = options.pathValue ?? process.env.PATH ?? "";
+  for (const dir of pathValue.split(platform === "win32" ? ";" : ":")) {
+    if (options.requireAbsolutePathEntries === true && (dir === "" || !pathApi2.isAbsolute(dir))) {
+      continue;
+    }
+    for (const candidate of candidates) {
+      const path9 = pathApi2.resolve(dir === "" ? "." : dir, candidate);
+      try {
+        if (!statSync4(path9).isFile()) continue;
+        accessSync2(path9, fsConstants2.X_OK);
+        return path9;
+      } catch {
+      }
+    }
+  }
+  return void 0;
+}
+function commandExistsOnPath(name2, options = {}) {
+  return resolveCommandOnPath(name2, options) !== void 0;
+}
+
+// packages/cli/src/codexAuth.ts
+var CODEX_STATUS_SENTINEL_MAX_BYTES = 4096;
+var CODEX_NOT_LOGGED_IN_SENTINEL = "Not logged in";
+function codexStatusSpawnPlan(platform = process.platform, env = process.env, resolveCommand = resolveCommandOnPath) {
+  if (platform === "win32") {
+    const codexPath2 = resolveCommand("codex", {
+      pathValue: env.PATH ?? "",
+      pathExt: env.PATHEXT,
+      platform,
+      requireAbsolutePathEntries: true
+    });
+    if (codexPath2 === void 0) {
+      return { unavailableReason: "cli-missing" };
+    }
+    const cwd = win323.dirname(codexPath2);
+    const extension2 = win323.extname(codexPath2).toLowerCase();
+    if (extension2 !== ".cmd" && extension2 !== ".bat") {
+      return {
+        status: {
+          file: codexPath2,
+          args: ["login", "status"],
+          cwd
+        }
+      };
+    }
+    if (/[%!^&|<>()"\r\n]/u.test(codexPath2)) {
+      return { unavailableReason: "cli-missing" };
+    }
+    const systemRoot = env.SystemRoot && win323.isAbsolute(env.SystemRoot) ? env.SystemRoot : "C:\\Windows";
+    const commandInterpreter = env.ComSpec && win323.isAbsolute(env.ComSpec) ? env.ComSpec : win323.join(systemRoot, "System32", "cmd.exe");
+    return {
+      status: {
+        file: commandInterpreter,
+        args: ["/d", "/s", "/c", `""${codexPath2}" login status"`],
+        cwd
+      }
+    };
+  }
+  const codexPath = resolveCommand("codex", {
+    pathValue: env.PATH ?? "",
+    platform,
+    requireAbsolutePathEntries: true
+  });
+  if (codexPath === void 0) return { unavailableReason: "cli-missing" };
+  return {
+    status: {
+      file: codexPath,
+      args: ["login", "status"],
+      cwd: posix3.dirname(codexPath)
+    }
+  };
+}
+function classifyCodexAuthResult(result) {
+  if (result.kind === "unavailable") return { state: "unavailable", reason: result.reason };
+  if (result.code === 0) return { state: "authenticated" };
+  if (result.code === 1 && result.unauthenticatedSignal === true) {
+    return { state: "unauthenticated" };
+  }
+  return { state: "unavailable", reason: "status-error" };
+}
+async function probeCodexAuth(exec = REAL_CODEX_AUTH_EXEC) {
+  try {
+    return classifyCodexAuthResult(await exec());
+  } catch {
+    return { state: "unavailable", reason: "spawn-error" };
+  }
+}
+function createCodexAuthExec(options = {}) {
+  return () => new Promise((resolve36) => {
+    const platform = options.platform ?? process.platform;
+    const env = options.env ?? process.env;
+    const plan = options.plan ?? codexStatusSpawnPlan(platform, env);
+    if ("unavailableReason" in plan) {
+      resolve36({ kind: "unavailable", reason: plan.unavailableReason });
+      return;
+    }
+    const spawnProcess = options.spawnProcess ?? spawn3;
+    const processKill = options.processKill ?? process.kill;
+    const detached = platform !== "win32";
+    let settled = false;
+    let timedOut = false;
+    let child;
+    let childDetached = false;
+    let discardCapturedOutput = () => {
+    };
+    let terminationKiller;
+    let terminationProofTimer;
+    let terminationFinalTimer;
+    const directKill = (target) => {
+      try {
+        target.kill("SIGKILL");
+      } catch {
+      }
+    };
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      discardCapturedOutput();
+      clearTimeout(timeoutTimer);
+      if (terminationProofTimer !== void 0) clearTimeout(terminationProofTimer);
+      if (terminationFinalTimer !== void 0) clearTimeout(terminationFinalTimer);
+      if (terminationKiller !== void 0) {
+        const killer = terminationKiller;
+        terminationKiller = void 0;
+        directKill(killer);
+      }
+      resolve36(result);
+    };
+    const terminateCurrentProcessTree = () => {
+      const target = child;
+      if (target === void 0) return;
+      const pid = target.pid;
+      if (platform === "win32" && pid !== void 0 && Number.isSafeInteger(pid) && pid > 0) {
+        try {
+          const systemRoot = env.SystemRoot && win323.isAbsolute(env.SystemRoot) ? env.SystemRoot : "C:\\Windows";
+          const systemDirectory = win323.join(systemRoot, "System32");
+          const killer = spawnProcess(win323.join(systemDirectory, "taskkill.exe"), ["/pid", String(pid), "/t", "/f"], {
+            cwd: systemDirectory,
+            stdio: ["ignore", "ignore", "ignore"],
+            windowsHide: true
+          });
+          terminationKiller = killer;
+          let fellBack = false;
+          const fallback = () => {
+            if (fellBack) return;
+            fellBack = true;
+            directKill(target);
+          };
+          const releaseKiller = () => {
+            if (terminationKiller === killer) terminationKiller = void 0;
+          };
+          killer.once("error", () => {
+            releaseKiller();
+            fallback();
+          });
+          killer.once("close", (code) => {
+            releaseKiller();
+            if (code !== 0) fallback();
+          });
+          return;
+        } catch {
+        }
+      }
+      if (childDetached && pid !== void 0 && Number.isSafeInteger(pid) && pid > 0) {
+        try {
+          processKill(-pid, "SIGKILL");
+          return;
+        } catch {
+        }
+      }
+      directKill(target);
+    };
+    const onTimeout = () => {
+      if (settled) return;
+      timedOut = true;
+      discardCapturedOutput();
+      terminateCurrentProcessTree();
+      const graceMs = options.terminationGraceMs ?? 1e3;
+      terminationProofTimer = setTimeout(() => {
+        if (settled) return;
+        if (terminationKiller !== void 0) {
+          const killer = terminationKiller;
+          terminationKiller = void 0;
+          directKill(killer);
+        }
+        if (child !== void 0) directKill(child);
+        terminationFinalTimer = setTimeout(
+          () => finish({ kind: "unavailable", reason: "timeout" }),
+          graceMs
+        );
+      }, graceMs);
+    };
+    const timeoutTimer = setTimeout(onTimeout, options.timeoutMs ?? 5e3);
+    const startStatus = () => {
+      if (settled || timedOut) return;
+      let statusChild;
+      try {
+        statusChild = spawnProcess(plan.status.file, [...plan.status.args], {
+          cwd: plan.status.cwd,
+          env,
+          detached,
+          shell: false,
+          stdio: ["ignore", "ignore", "pipe"],
+          windowsHide: true
+        });
+      } catch {
+        finish({ kind: "unavailable", reason: "spawn-error" });
+        return;
+      }
+      child = statusChild;
+      childDetached = detached;
+      let statusStderr = "";
+      let statusStderrBytes = 0;
+      let statusStderrOverflow = false;
+      discardCapturedOutput = () => {
+        statusStderr = "";
+      };
+      statusChild.stderr?.on("data", (chunk) => {
+        if (settled || timedOut || statusStderrOverflow) return;
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        if (statusStderrBytes + bytes.length > CODEX_STATUS_SENTINEL_MAX_BYTES) {
+          statusStderrOverflow = true;
+          statusStderr = "";
+          return;
+        }
+        statusStderrBytes += bytes.length;
+        statusStderr += bytes.toString("utf8");
+      });
+      statusChild.once("error", (error) => {
+        if (timedOut) return;
+        finish({
+          kind: "unavailable",
+          reason: error.code === "ENOENT" ? "cli-missing" : "spawn-error"
+        });
+      });
+      statusChild.once("close", (code, signal) => {
+        if (timedOut) {
+          finish({ kind: "unavailable", reason: "timeout" });
+          return;
+        }
+        if (signal !== null) {
+          finish({ kind: "unavailable", reason: "signal" });
+          return;
+        }
+        if (typeof code !== "number") {
+          finish({ kind: "unavailable", reason: "spawn-error" });
+          return;
+        }
+        const unauthenticatedSignal = code === 1 && !statusStderrOverflow && statusStderr.trim() === CODEX_NOT_LOGGED_IN_SENTINEL;
+        discardCapturedOutput();
+        if (statusStderrOverflow) {
+          finish({ kind: "unavailable", reason: "status-error" });
+          return;
+        }
+        finish(unauthenticatedSignal ? { kind: "exit", code, unauthenticatedSignal: true } : { kind: "exit", code });
+      });
+    };
+    startStatus();
+  });
+}
+var REAL_CODEX_AUTH_EXEC = createCodexAuthExec();
+function renderCodexAuthLines(status) {
+  if (status.state === "authenticated") {
+    return [
+      "[Codex \u8BA4\u8BC1] \u5DF2\u767B\u5F55\uFF1BChatGPT \u8BA2\u9605\u767B\u5F55\u6216 API Key \u767B\u5F55\u5747\u53D7\u652F\u6301\u3002",
+      `  ${CODEX_AUTH_GUIDANCE.verify}`
+    ];
+  }
+  return [
+    `[Codex \u8BA4\u8BC1] ${status.state === "unauthenticated" ? "\u5C1A\u672A\u767B\u5F55" : "\u6682\u65F6\u65E0\u6CD5\u786E\u8BA4\u767B\u5F55\u72B6\u6001"}\u3002`,
+    ...status.state === "unavailable" ? [`  ${CODEX_AUTH_GUIDANCE.cli}`] : [],
+    `  ${CODEX_AUTH_GUIDANCE.chatgpt}`,
+    `  ${CODEX_AUTH_GUIDANCE.device}`,
+    `  ${CODEX_AUTH_GUIDANCE.apiKey}`,
+    `  ${CODEX_AUTH_GUIDANCE.verify}`,
+    "  Tenon \u53EA\u68C0\u67E5\u72B6\u6001\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u767B\u5F55\u3001\u8BFB\u53D6 auth.json \u6216\u8BB0\u5F55\u4EFB\u4F55\u51ED\u8BC1\u3002"
+  ];
+}
+function renderDeferredCodexAuthLine(context) {
+  return `[Codex \u8BA4\u8BC1] ${context}\uFF1B\u8FD0\u884C \`codex login status\` \u68C0\u67E5\uFF0C\u6216\u8FD0\u884C \`tenon doctor\` \u67E5\u770B\u5B8C\u6574\u767B\u5F55\u5F15\u5BFC\u3002`;
+}
+function printCodexAuthGuidance(io, status) {
+  for (const line of renderCodexAuthLines(status)) io.out(line);
+}
+
 // packages/cli/src/commands/doctor.ts
 var HOOK_SCRIPTS = ["gate.sh", "breadcrumb.sh", "session-start.sh", "statusline.sh"];
 function checkNode(p) {
@@ -32316,6 +32631,21 @@ async function checkVerifySkills(p) {
     `bash ${join47(p.pluginRoot, "tools", "verify-skills.sh")} \u67E5\u770B\u9010\u6761\u4FEE\u590D\u6307\u5F15`
   );
 }
+async function checkCodexAuth(p) {
+  if (await p.nativeRuntimeHost() !== "codex") {
+    return green("auth:codex", "\u5F53\u524D runtime \u975E Codex\uFF1B\u672C\u673A Codex \u767B\u5F55\u68C0\u67E5\u4E0D\u9002\u7528");
+  }
+  const status = await p.codexAuthStatus();
+  if (status.state === "authenticated") {
+    return green("auth:codex", "Codex CLI \u5DF2\u767B\u5F55\uFF08ChatGPT \u65B9\u6848\u6216 API Key\uFF09");
+  }
+  const lines = renderCodexAuthLines(status);
+  return yellow(
+    "auth:codex",
+    status.state === "unauthenticated" ? "Codex CLI \u5C1A\u672A\u767B\u5F55\uFF1B\u63D2\u4EF6\u5DF2\u5B89\u88C5\uFF0C\u4F46\u8C03\u7528 Codex \u524D\u9700\u8981\u5B8C\u6210\u8BA4\u8BC1" : "\u6682\u65F6\u65E0\u6CD5\u786E\u8BA4 Codex CLI \u767B\u5F55\u72B6\u6001\uFF1B\u63D2\u4EF6\u4ECD\u53EF\u5B89\u88C5\u548C\u68C0\u67E5",
+    lines.slice(1).map((line) => line.trim()).join("\uFF1B")
+  );
+}
 function credDesc(light) {
   if (!light.set) return "\u672A\u914D";
   const source = light.source === "host-env" ? "\u5BBF\u4E3B env" : light.source === "default-home" ? "\u9ED8\u8BA4 ~/.codex \u767B\u5F55" : "secrets \u6587\u4EF6";
@@ -32402,6 +32732,15 @@ async function cmdDoctor(deps, opts) {
       "integration:codex-project-skills",
       `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${errMsg(e)}`,
       "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 tenon doctor"
+    ));
+  }
+  try {
+    checks.push(await checkCodexAuth(p));
+  } catch {
+    checks.push(red(
+      "auth:codex",
+      "Codex \u767B\u5F55\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38",
+      "\u786E\u8BA4 codex CLI \u53EF\u6267\u884C\u540E\u91CD\u8DD1 tenon doctor"
     ));
   }
   try {
@@ -34843,7 +35182,7 @@ import { homedir as homedir11 } from "node:os";
 import { join as join54 } from "node:path";
 
 // packages/cli/src/skillBundleAssembly.ts
-import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync3 } from "node:fs";
+import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
 import { isAbsolute as isAbsolute12, join as join53 } from "node:path";
 
 // packages/cli/src/executionCoordinatePort.ts
@@ -34989,7 +35328,7 @@ function realReaddirDirNames(absDir) {
       if (!entry.isSymbolicLink()) continue;
       let target;
       try {
-        target = statSync3(join53(absDir, entry.name));
+        target = statSync5(join53(absDir, entry.name));
       } catch (error) {
         const code = nodeErrorCode2(error);
         if (code === "ENOENT" || code === "ELOOP") {
@@ -36595,7 +36934,7 @@ function formatBudgetOverflowError(projectKey3, live, limit) {
 }
 
 // packages/channel/dist/fs.js
-import { appendFileSync as appendFileSync2, closeSync as closeSync2, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync2, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync4, writeSync } from "node:fs";
+import { appendFileSync as appendFileSync2, closeSync as closeSync2, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync2, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync6, writeFileSync as writeFileSync4, writeSync } from "node:fs";
 function nodeChannelFs() {
   return {
     pid: process.pid,
@@ -36638,7 +36977,7 @@ function nodeChannelFs() {
     },
     mtimeMs: (p) => {
       try {
-        return statSync4(p).mtimeMs;
+        return statSync6(p).mtimeMs;
       } catch {
         return void 0;
       }
@@ -36835,7 +37174,7 @@ function writeSidecar(fs, path9, seq2) {
 }
 
 // packages/channel/dist/process.js
-import { spawn as spawn3, spawnSync } from "node:child_process";
+import { spawn as spawn4, spawnSync } from "node:child_process";
 function makeLineBuffer(onLine) {
   let carry = "";
   return (chunk) => {
@@ -36863,7 +37202,7 @@ function nodeProcessFace() {
     spawn: (command, args, opts) => nodeSpawnWorker(command, args, opts),
     spawnDetached: (command, args, opts) => {
       try {
-        const child = spawn3(command, args, {
+        const child = spawn4(command, args, {
           cwd: opts?.cwd,
           env: mergeEnv(opts?.env),
           detached: true,
@@ -36933,7 +37272,7 @@ function nodeSpawnWorker(command, args, opts) {
     env: mergeEnv(opts?.env),
     stdio: ["pipe", "pipe", "pipe"]
   };
-  const child = spawn3(command, args, spawnOpts);
+  const child = spawn4(command, args, spawnOpts);
   let exitedFlag = false;
   child.on("exit", () => {
     exitedFlag = true;
@@ -36986,12 +37325,12 @@ function nodeSpawnWorker(command, args, opts) {
 }
 
 // packages/channel/dist/watcher.js
-import { closeSync as closeSync3, openSync as openSync3, readSync, statSync as statSync5 } from "node:fs";
+import { closeSync as closeSync3, openSync as openSync3, readSync, statSync as statSync7 } from "node:fs";
 function nodeTailFs() {
   return {
     size: (p) => {
       try {
-        return statSync5(p).size;
+        return statSync7(p).size;
       } catch {
         return void 0;
       }
@@ -41831,7 +42170,7 @@ async function cmdSync(deps, opts, fs = createOwnedFs()) {
 }
 
 // packages/cli/src/commands/tap.ts
-import { spawn as spawn4 } from "node:child_process";
+import { spawn as spawn5 } from "node:child_process";
 function parseStartArgs(own3) {
   const clients = [];
   let caDir;
@@ -41901,7 +42240,7 @@ async function cmdTap(deps, sub, args) {
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
         const code = await new Promise((resolve36) => {
-          const child = spawn4(executable, command.slice(1), {
+          const child = spawn5(executable, command.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
@@ -42085,7 +42424,7 @@ async function cmdTask(deps, sub, args, fs = REAL_FS4) {
 
 // packages/cli/src/commands/uninstall.ts
 var norm = (p) => p.replace(/\/+$/, "");
-var posix2 = (cwd, key) => `${norm(cwd)}/${key}`;
+var posix4 = (cwd, key) => `${norm(cwd)}/${key}`;
 var REASON_FOR_KIND = {
   nested: "Strip pipeline hooks; preserve user fields",
   flat: "Strip pipeline hooks; preserve user fields"
@@ -42095,7 +42434,7 @@ async function buildPlan(fs, cwd, kept) {
   const deletedPaths = Object.keys(kept).filter((k) => k !== WORKFLOW_DIR && !k.startsWith(`${WORKFLOW_DIR}/`));
   for (const [key, hash] of Object.entries(kept)) {
     if (key === WORKFLOW_DIR || key.startsWith(`${WORKFLOW_DIR}/`)) continue;
-    const abs = posix2(cwd, key);
+    const abs = posix4(cwd, key);
     const content = await fs.readText(abs);
     if (content === void 0) {
       if (await fs.exists(abs)) plan.preserved.push({ key, reason: "unreadable \u2014 conservatively preserved" });
@@ -42119,7 +42458,7 @@ async function buildPlan(fs, cwd, kept) {
   return plan;
 }
 async function renderPlan(deps, fs, cwd, plan) {
-  const hasWorkflow = await fs.isDir(posix2(cwd, WORKFLOW_DIR));
+  const hasWorkflow = await fs.isDir(posix4(cwd, WORKFLOW_DIR));
   const nDel = plan.deletions.length + (hasWorkflow ? 1 : 0);
   deps.io.out(`Will be deleted (${nDel} entries):`);
   for (const k of plan.deletions) deps.io.out(`  - ${k}`);
@@ -42144,7 +42483,7 @@ async function cleanupEmptyDirs(fs, cwd, dir) {
   if (!dir || dir === ".") return;
   if (!isManagedPath(dir)) return;
   if (isManagedRootDir(dir)) return;
-  const abs = posix2(cwd, dir);
+  const abs = posix4(cwd, dir);
   if (!await fs.isDir(abs)) return;
   if ((await fs.listDir(abs)).length !== 0) return;
   if (!await fs.rmdirEmpty(abs)) return;
@@ -42155,14 +42494,14 @@ async function finalPassRemoveEmptyRoots(fs, cwd) {
   let dirs = 0;
   const managed = [".pipeline", ".claude", ".codex", ".agents", ".agents/skills"].filter((d) => d !== WORKFLOW_DIR).sort((a, b) => b.split("/").length - a.split("/").length);
   for (const md of managed) {
-    const abs = posix2(cwd, md);
+    const abs = posix4(cwd, md);
     if (!await fs.isDir(abs)) continue;
     if ((await fs.listDir(abs)).length !== 0) continue;
     if (!await fs.rmdirEmpty(abs)) continue;
     dirs++;
     let parent = md.includes("/") ? md.slice(0, md.lastIndexOf("/")) : ".";
     while (parent !== "." && parent) {
-      const pabs = posix2(cwd, parent);
+      const pabs = posix4(cwd, parent);
       if (!await fs.exists(pabs)) break;
       if ((await fs.listDir(pabs)).length !== 0) break;
       if (!await fs.rmdirEmpty(pabs)) break;
@@ -42175,19 +42514,19 @@ async function finalPassRemoveEmptyRoots(fs, cwd) {
 async function executePlan(fs, cwd, plan) {
   const res = { deletedFiles: 0, modifiedFiles: 0, deletedDirs: 0 };
   for (const m of plan.modifications) {
-    await fs.writeText(posix2(cwd, m.key), m.content);
+    await fs.writeText(posix4(cwd, m.key), m.content);
     res.modifiedFiles++;
   }
   const dirCandidates = /* @__PURE__ */ new Set();
   for (const key of plan.deletions) {
-    const abs = posix2(cwd, key);
+    const abs = posix4(cwd, key);
     if (!await fs.exists(abs)) continue;
     if (await fs.unlink(abs)) {
       res.deletedFiles++;
       if (key.includes("/")) dirCandidates.add(key.slice(0, key.lastIndexOf("/")));
     }
   }
-  const wfAbs = posix2(cwd, WORKFLOW_DIR);
+  const wfAbs = posix4(cwd, WORKFLOW_DIR);
   if (await fs.exists(wfAbs)) {
     await fs.rmrf(wfAbs);
     res.deletedDirs++;
@@ -42218,7 +42557,7 @@ async function cmdUninstall(deps, opts, fs = createOwnedFs()) {
     deps.io.err(`[uninstall] \u6240\u6709\u6743\u6E05\u5355\u65E0\u6709\u6548\u6761\u76EE\uFF08\u7A7A\u5BF9\u8C61/\u635F\u574F\uFF09: ${OWNED_MANIFEST}\u2014\u2014\u62D2\u7EDD\u76F2\u5220\u3002`);
     return 1;
   }
-  const agentsMdContent = await fs.readText(posix2(cwd, AGENTS_MD));
+  const agentsMdContent = await fs.readText(posix4(cwd, AGENTS_MD));
   const { kept, pruned } = pruneOwnedManifest(manifest, {
     knownKeys: Object.keys(manifest),
     agentsMdContent
@@ -42238,8 +42577,8 @@ async function cmdUninstall(deps, opts, fs = createOwnedFs()) {
     return 1;
   }
   const res = await executePlan(fs, cwd, plan);
-  await fs.unlink(posix2(cwd, OWNED_MANIFEST));
-  await fs.unlink(posix2(cwd, VERSION_FILE));
+  await fs.unlink(posix4(cwd, OWNED_MANIFEST));
+  await fs.unlink(posix4(cwd, VERSION_FILE));
   deps.io.out(
     `[uninstall] \u5378\u8F7D\u5B8C\u6210\uFF1A${res.deletedFiles} files deleted, ${res.modifiedFiles} files modified, ${res.deletedDirs} directories removed, ${plan.preserved.length} preserved, ${plan.stubbed.length} stub-skipped.`
   );
@@ -43183,8 +43522,8 @@ function bail(code) {
 var stripNl = (value) => value.replace(/\n$/, "");
 
 // packages/cli/src/commands/dashboard.ts
-import { spawn as spawn6 } from "node:child_process";
-import { accessSync as accessSync2, constants as fsConstants2, realpathSync as realpathSync2 } from "node:fs";
+import { spawn as spawn7 } from "node:child_process";
+import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync2 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
 import { basename as basename6, dirname as dirname14, join as join65, resolve as resolve29 } from "node:path";
 
@@ -43194,7 +43533,7 @@ function resolveRuntimePaths(input = {}) {
 }
 
 // packages/cli/src/commands/dashboard-process.ts
-import { spawn as spawn5 } from "node:child_process";
+import { spawn as spawn6 } from "node:child_process";
 var DashboardTerminationUnconfirmedError = class extends Error {
   constructor(message2) {
     super(message2);
@@ -43265,7 +43604,7 @@ function launchDetachedDashboardProcess(serverBundle, env) {
       settled = true;
       resolveStarted(started);
     };
-    const child = spawn5(process.execPath, [serverBundle], { detached: true, stdio: "ignore", env });
+    const child = spawn6(process.execPath, [serverBundle], { detached: true, stdio: "ignore", env });
     child.once("error", () => finish(null));
     child.once("spawn", () => {
       const pid = child.pid;
@@ -43453,7 +43792,7 @@ function dashboardProcessEnvironment(port, transactionId) {
 var DEFAULT_DASHBOARD_PORT = 18765;
 function fileExists(path9) {
   try {
-    accessSync2(path9, fsConstants2.R_OK);
+    accessSync3(path9, fsConstants3.R_OK);
     return true;
   } catch {
     return false;
@@ -43461,7 +43800,7 @@ function fileExists(path9) {
 }
 function launch(serverBundle, env) {
   return new Promise((resolveCode) => {
-    const child = spawn6(process.execPath, [serverBundle], { stdio: "inherit", env });
+    const child = spawn7(process.execPath, [serverBundle], { stdio: "inherit", env });
     child.once("error", () => resolveCode(1));
     child.once("exit", (code) => resolveCode(code ?? 1));
   });
@@ -43475,7 +43814,7 @@ function openBrowser(url) {
       settled = true;
       resolveOpened(opened);
     };
-    const child = spawn6(command.file, command.args, { detached: true, stdio: "ignore" });
+    const child = spawn7(command.file, command.args, { detached: true, stdio: "ignore" });
     child.once("error", () => finish(false));
     child.once("spawn", () => {
       child.unref();
@@ -45100,11 +45439,68 @@ function nativeInstallPlan(host) {
 // packages/cli/src/commands/setupEnvironment.ts
 import { dirname as dirname18, join as join72, resolve as resolve31 } from "node:path";
 import { randomUUID as randomUUID12 } from "node:crypto";
+
+// packages/cli/src/commands/native-host-command-binding.ts
+import { posix as posix5, win32 as win324 } from "node:path";
+var WINDOWS_BATCH_PATH_UNSAFE = /[%!^&|<>()"\r\n]/u;
+var WINDOWS_BATCH_ARG_UNSAFE = /[%!^&|<>()"\r\n\s]/u;
+function nativeHostCommandBinding(executable, platform = process.platform, runtimeEnv = process.env) {
+  const pathApi2 = platform === "win32" ? win324 : posix5;
+  const cwd = pathApi2.dirname(executable);
+  const extension2 = pathApi2.extname(executable).toLowerCase();
+  if (platform !== "win32" || extension2 !== ".cmd" && extension2 !== ".bat") {
+    return {
+      executable,
+      invocation: (args) => ({ file: executable, args: [...args], cwd })
+    };
+  }
+  if (WINDOWS_BATCH_PATH_UNSAFE.test(executable)) return void 0;
+  const systemRoot = runtimeEnv.SystemRoot && win324.isAbsolute(runtimeEnv.SystemRoot) ? runtimeEnv.SystemRoot : "C:\\Windows";
+  const commandInterpreter = runtimeEnv.ComSpec && win324.isAbsolute(runtimeEnv.ComSpec) ? runtimeEnv.ComSpec : win324.join(systemRoot, "System32", "cmd.exe");
+  return {
+    executable,
+    invocation: (args) => {
+      if (args.some((arg) => arg === "" || WINDOWS_BATCH_ARG_UNSAFE.test(arg))) return void 0;
+      const command = [`"${executable}"`, ...args].join(" ");
+      return {
+        file: commandInterpreter,
+        args: ["/d", "/s", "/c", `"${command}"`],
+        cwd
+      };
+    }
+  };
+}
+function bindNativeHostCommand(env, host, binding) {
+  const invocation = (command, args) => command === host ? binding.invocation(args) : { file: command, args: [...args] };
+  const reconcile = env.managedHostReconciliation;
+  return {
+    ...env,
+    resolveHostCommand: (candidate) => candidate === host ? binding : env.resolveHostCommand(candidate),
+    codexAuthStatus: host === "codex" ? () => env.codexAuthStatus(binding.executable) : env.codexAuthStatus,
+    runCommand: (command, args, options) => {
+      const plan = invocation(command, args);
+      if (plan === void 0) {
+        return { code: 1, stdout: "", stderr: "\u5BBF\u4E3B\u547D\u4EE4\u53C2\u6570\u65E0\u6CD5\u5B89\u5168\u8868\u793A\uFF1B\u672A\u6267\u884C\u3002" };
+      }
+      return env.runCommand(plan.file, [...plan.args], {
+        ...options,
+        ...plan.cwd === void 0 ? {} : { cwd: plan.cwd }
+      });
+    },
+    ...reconcile === void 0 ? {} : {
+      managedHostReconciliation: (candidateHost, stepId, command) => {
+        const plan = invocation(command.cmd, command.args);
+        if (plan === void 0) throw new Error("\u5BBF\u4E3B\u547D\u4EE4\u53C2\u6570\u65E0\u6CD5\u5B89\u5168\u8868\u793A\uFF1B\u672A\u6267\u884C\u3002");
+        return reconcile(candidateHost, stepId, { cmd: plan.file, args: plan.args });
+      }
+    }
+  };
+}
+
+// packages/cli/src/commands/setupEnvironment.ts
 import { execFileSync } from "node:child_process";
 import {
-  accessSync as accessSync3,
   closeSync as closeSync4,
-  constants as fsConstants3,
   lstatSync as lstatSync2,
   mkdirSync as mkdirSync6,
   openSync as openSync4,
@@ -45158,16 +45554,21 @@ var REAL_SETUP_ENV = {
   mkdirp: (dir) => {
     mkdirSync6(dir, { recursive: true });
   },
-  commandExists: (name2) => {
-    for (const dir of (process.env.PATH ?? "").split(":")) {
-      if (dir === "") continue;
-      try {
-        accessSync3(join72(dir, name2), fsConstants3.X_OK);
-        return true;
-      } catch {
-      }
-    }
-    return false;
+  commandExists: (name2) => commandExistsOnPath(name2),
+  resolveHostCommand: (host) => {
+    const executable = resolveCommandOnPath(host, {
+      requireAbsolutePathEntries: true
+    });
+    return executable === void 0 ? void 0 : nativeHostCommandBinding(executable);
+  },
+  codexAuthStatus: (codexExecutable) => {
+    if (codexExecutable === void 0) return probeCodexAuth();
+    const plan = codexStatusSpawnPlan(
+      process.platform,
+      process.env,
+      () => codexExecutable
+    );
+    return probeCodexAuth(createCodexAuthExec({ plan }));
   },
   listDir: (dir) => {
     try {
@@ -45201,9 +45602,13 @@ var REAL_SETUP_ENV = {
       }
     }
   },
-  runCommand: (cmd, args) => {
+  runCommand: (cmd, args, options) => {
     try {
-      const stdout = execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      const stdout = execFileSync(cmd, args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        ...options?.cwd === void 0 ? {} : { cwd: options.cwd }
+      });
       return { code: 0, stdout, stderr: "" };
     } catch (e) {
       const err = e;
@@ -45235,9 +45640,13 @@ function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
   deps.io.out("  1. \u5BBF\u4E3B\u5B89\u88C5:\u53EA\u9A8C\u8BC1/\u90E8\u7F72\u6240\u9009\u5BBF\u4E3B\uFF0C\u4E0D\u4F1A\u540C\u65F6\u6539\u52A8\u5176\u4ED6\u5BBF\u4E3B\u3002");
   deps.io.out("  2. \u7A33\u5B9A\u5165\u53E3:\u628A\u5DF2\u6821\u9A8C release \u539F\u5B50\u53D1\u5E03\u5230\u672C\u673A runtime\uFF0C\u518D\u5199 tenon / tenon-hook \u542F\u52A8\u5668\u3002");
-  deps.io.out("  3. \u5185\u7F6E\u6280\u80FD:\u9A8C\u8BC1\u672C\u63D2\u4EF6\u968F\u5305\u7684 default workflow skills\uFF1B\u4E0D\u62C9\u7B2C\u4E09\u65B9 marketplace\u3002");
-  deps.io.out("  4. \u8FD0\u884C\u65F6\u68C0\u67E5:docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355\uFF08\u672C\u6D41\u7A0B\u672B\u5C3E\u76F4\u63A5\u8DD1;--dry-run \u53EA\u63D0\u793A\u89C1 tenon setup runtime\uFF09\u3002");
-  deps.io.out("  5. \u5168\u529F\u80FD\u7EA2\u9EC4\u7EFF\u6C47\u603B:\u5B89\u88C5\u540E\u8FD0\u884C tenon doctor --json \u83B7\u53D6\u5168\u673A\u6C47\u603B\u3002");
+  if (host === "codex") {
+    deps.io.out("  3. Codex \u8BA4\u8BC1:Codex \u5B89\u88C5\u4F1A\u68C0\u67E5 `codex login status`\uFF0C\u672A\u767B\u5F55\u65F6\u540C\u65F6\u7ED9\u51FA ChatGPT \u65B9\u6848\u4E0E API Key \u8DEF\u5F84\u3002");
+  }
+  const hostStepOffset = host === "codex" ? 1 : 0;
+  deps.io.out(`  ${3 + hostStepOffset}. \u5185\u7F6E\u6280\u80FD:\u9A8C\u8BC1\u672C\u63D2\u4EF6\u968F\u5305\u7684 default workflow skills\uFF1B\u4E0D\u62C9\u7B2C\u4E09\u65B9 marketplace\u3002`);
+  deps.io.out(`  ${4 + hostStepOffset}. \u8FD0\u884C\u65F6\u68C0\u67E5:docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355\uFF08\u672C\u6D41\u7A0B\u672B\u5C3E\u76F4\u63A5\u8DD1;--dry-run \u53EA\u63D0\u793A\u89C1 tenon setup runtime\uFF09\u3002`);
+  deps.io.out(`  ${5 + hostStepOffset}. \u5168\u529F\u80FD\u7EA2\u9EC4\u7EFF\u6C47\u603B:\u5B89\u88C5\u540E\u8FD0\u884C tenon doctor --json \u83B7\u53D6\u5168\u673A\u6C47\u603B\u3002`);
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u4E0D\u53D1\u5E03 runtime\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
 function autoUpdateConfigPath(env) {
@@ -46427,13 +46836,13 @@ async function runManagedHostCommand(transaction, stepId, env, command) {
 }
 
 // packages/cli/src/migration/legacy-project-registry.ts
-import { statSync as statSync6 } from "node:fs";
+import { statSync as statSync8 } from "node:fs";
 import { mkdir as mkdir28, readFile as readFile37 } from "node:fs/promises";
-import { isAbsolute as isAbsolute22, join as join76, posix as posix3, resolve as resolve32, win32 as win322 } from "node:path";
+import { isAbsolute as isAbsolute22, join as join76, posix as posix6, resolve as resolve32, win32 as win325 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
 var MIGRATION_ID = "host-project-registry-v1";
 function resolveHostProjectRegistryCandidates(input) {
-  const paths = input.platform === "win32" ? win322 : posix3;
+  const paths = input.platform === "win32" ? win325 : posix6;
   const homeDir = paths.resolve(input.homeDir);
   return [
     paths.join(homeDir, ".claude", "pipeline-projects.json"),
@@ -46556,7 +46965,7 @@ async function migrateLegacyProjectRegistry(input) {
         for (const item2 of value) {
           const isDirectory = typeof item2 === "string" && (input.pathIsDirectory?.(item2) ?? (() => {
             try {
-              return statSync6(item2).isDirectory();
+              return statSync8(item2).isDirectory();
             } catch {
               return false;
             }
@@ -46983,14 +47392,20 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
     return 0;
   }
   if (isNativePipelineHost(host)) {
+    const hostBinding = env.resolveHostCommand(host);
+    if (hostBinding === void 0) {
+      deps.io.err(`ERROR: ${host} CLI \u4E0D\u5728\u53EF\u4FE1\u7684\u7EDD\u5BF9 PATH \u9879\u4E2D\uFF1B\u672A\u6267\u884C\u5BBF\u4E3B\u6216 Tenon \u72B6\u6001\u53D8\u66F4\u3002`);
+      return 1;
+    }
+    const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding);
     return (async () => {
-      const convergence = readHostPluginConvergenceReceipt(env, host);
+      const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host);
       if (convergence.state === "invalid") {
         deps.io.err(`ERROR: ${convergence.detail}\uFF1B\u672A\u6267\u884C\u65B0\u7684 marketplace/runtime \u53D8\u66F4\u3002`);
         return 1;
       }
       if (convergence.state === "receipt" && convergence.receipt.state === "cleanup-pending") {
-        const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt);
+        const finalized = await finalizePendingHostPluginConflict(deps, lifecycleEnv, installer, host, convergence.receipt);
         if (finalized.state === "failed") {
           deps.io.err(`ERROR: \u51B2\u7A81\u63D2\u4EF6\u5B98\u65B9\u6E05\u7406\u5931\u8D25\uFF1A${finalized.detail}`);
           return 1;
@@ -46999,15 +47414,15 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       }
       const runtimeCode = await publishSetupManagedRuntime(
         deps,
-        env,
+        lifecycleEnv,
         installer,
         async (transaction) => {
-          const candidate = await installNativePlugin(deps, env, host, transaction);
+          const candidate = await installNativePlugin(deps, lifecycleEnv, host, transaction);
           if (candidate === null) throw new Error("\u5BBF\u4E3B\u63D2\u4EF6\u672A\u80FD\u89E3\u6790\u4E3A\u53EF\u53D1\u5E03\u5019\u9009");
-          const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false);
+          const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, lifecycleEnv, candidate.root, false);
           if (assetCode !== 0) throw new Error("\u5BBF\u4E3B\u5019\u9009\u672A\u901A\u8FC7\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C");
           if (host === "codex") {
-            const migrationCode = migrateLegacyCodexHooks(deps, env);
+            const migrationCode = migrateLegacyCodexHooks(deps, lifecycleEnv);
             if (migrationCode !== 0) throw new Error("\u65E7 Codex hook \u8FC1\u79FB\u5931\u8D25");
           }
           return {
@@ -47026,7 +47441,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
           }
           return recordPendingHostPluginConflict(
             deps,
-            env,
+            lifecycleEnv,
             host,
             inventory,
             activation,
@@ -47036,13 +47451,13 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
         }
       );
       if (runtimeCode !== 0) return runtimeCode;
-      const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry;
+      const migrateProjectRegistry = lifecycleEnv.migrateProjectRegistry ?? migrateLegacyProjectRegistry;
       const migrated = await migrateProjectRegistry({
-        homeDir: env.homeDir(),
+        homeDir: lifecycleEnv.homeDir(),
         platform: process.platform,
-        env: env.runtimeEnv(),
-        readText: env.readText,
-        pathExists: env.pathExists
+        env: lifecycleEnv.runtimeEnv(),
+        readText: lifecycleEnv.readText,
+        pathExists: lifecycleEnv.pathExists
       });
       if (migrated.discovered > 0 || migrated.rejected > 0) {
         deps.io.out(
@@ -47050,7 +47465,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
         );
       }
       if (host === "codex") printCodexHookTrust(deps);
-      return configureAutoUpdate(deps, env, host, opts.autoUpdate === true);
+      return configureAutoUpdate(deps, lifecycleEnv, host, opts.autoUpdate === true);
     })();
   } else {
     const root = resolvePipelineRoot(env);
@@ -47445,20 +47860,11 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 
 // packages/cli/src/commands/setupRuntime.ts
 import { join as join80 } from "node:path";
-import { accessSync as accessSync4, constants as fsConstants4 } from "node:fs";
 import { homedir as homedir19 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
   defaultCodexHome: join80(homedir19(), ".codex"),
-  canReadFile: (path9) => {
-    try {
-      accessSync4(path9, fsConstants4.R_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  },
   resolveImage: (cwd) => readAutomationJson(cwd).image ?? "sandcastle:local"
 };
 var READY_TAG = "[\u5C31\u7EEA]";
@@ -47527,20 +47933,37 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
         return 1;
       }
       const host = selection.host;
-      const finish = (hostCode2) => {
-        if (hostCode2 !== 0) return hostCode2;
-        printPlanSkeleton(deps, o, host);
-        const skillsCode = cmdSetupSkills(deps, o, env);
-        if (o.dryRun) {
-          deps.io.out(
-            "[setup] \u8FD0\u884C\u65F6\u5C31\u7EEA\u68C0\u67E5:--dry-run \u8DF3\u8FC7\u771F\u63A2\u6D4B\uFF08\u4E0D\u8D77 docker\uFF09\u2014\u2014\u8DD1 tenon setup runtime \u770B\u771F\u5B9E docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355"
-          );
-          return skillsCode;
-        }
-        return cmdSetupRuntime(deps, o, rt).then((rtCode) => skillsCode !== 0 ? skillsCode : rtCode);
+      const nativeBinding = isNativePipelineHost(host) && !o.dryRun ? env.resolveHostCommand(host) : void 0;
+      const lifecycleEnv = nativeBinding === void 0 ? env : bindNativeHostCommand(env, host, nativeBinding);
+      const finish = (hostCode) => {
+        if (hostCode !== 0) return hostCode;
+        const finishSetup = () => {
+          printPlanSkeleton(deps, o, host);
+          const skillsCode = cmdSetupSkills(deps, o, env);
+          if (o.dryRun) {
+            deps.io.out(
+              "[setup] \u8FD0\u884C\u65F6\u5C31\u7EEA\u68C0\u67E5:--dry-run \u8DF3\u8FC7\u771F\u63A2\u6D4B\uFF08\u4E0D\u8D77 docker\uFF09\u2014\u2014\u8DD1 tenon setup runtime \u770B\u771F\u5B9E docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355"
+            );
+            return skillsCode;
+          }
+          return cmdSetupRuntime(deps, o, rt).then((rtCode) => skillsCode !== 0 ? skillsCode : rtCode);
+        };
+        if (host !== "codex" || o.dryRun) return finishSetup();
+        return lifecycleEnv.codexAuthStatus(nativeBinding?.executable).catch(() => ({ state: "unavailable", reason: "spawn-error" })).then((status) => {
+          printCodexAuthGuidance(deps.io, status);
+          return finishSetup();
+        });
       };
-      const hostCode = cmdSetupHost(deps, host, o, env, installer, dashboardStarter);
-      return typeof hostCode === "number" ? finish(hostCode) : hostCode.then(finish);
+      const runHost = () => {
+        const hostCode = cmdSetupHost(deps, host, o, lifecycleEnv, installer, dashboardStarter);
+        return typeof hostCode === "number" ? finish(hostCode) : hostCode.then((code) => finish(code));
+      };
+      if (host !== "codex" || o.dryRun) return runHost();
+      if (nativeBinding === void 0) {
+        printCodexAuthGuidance(deps.io, { state: "unavailable", reason: "cli-missing" });
+        return 1;
+      }
+      return runHost();
     }
     case "skills":
       return cmdSetupSkills(deps, o, env);
@@ -47626,14 +48049,23 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     deps.io.out("[update] --dry-run:\u672A\u5237\u65B0 marketplace\u3001\u672A\u91CD\u88C5\u63D2\u4EF6\u3001\u672A\u5207\u6362 launcher\u3002");
     return 0;
   }
+  const hostBinding = env.resolveHostCommand(host);
+  if (hostBinding === void 0) {
+    if (host === "codex") {
+      printCodexAuthGuidance(deps.io, { state: "unavailable", reason: "cli-missing" });
+    }
+    deps.io.err(`ERROR: ${host} CLI \u4E0D\u5728\u53EF\u4FE1\u7684\u7EDD\u5BF9 PATH \u9879\u4E2D\uFF1B\u672A\u6267\u884C\u5BBF\u4E3B\u6216 Tenon \u72B6\u6001\u53D8\u66F4\u3002`);
+    return 1;
+  }
+  const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding);
   return (async () => {
-    const convergence = readHostPluginConvergenceReceipt(env, host);
+    const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host);
     if (convergence.state === "invalid") {
       deps.io.err(`ERROR: ${convergence.detail}\uFF1B\u672A\u6267\u884C\u65B0\u7684 marketplace/runtime \u53D8\u66F4\u3002`);
       return 1;
     }
     if (convergence.state === "receipt" && convergence.receipt.state === "cleanup-pending") {
-      const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt);
+      const finalized = await finalizePendingHostPluginConflict(deps, lifecycleEnv, installer, host, convergence.receipt);
       if (finalized.state === "failed") {
         deps.io.err(`ERROR: \u51B2\u7A81\u63D2\u4EF6\u5B98\u65B9\u6E05\u7406\u5931\u8D25\uFF1A${finalized.detail}`);
         return 1;
@@ -47641,15 +48073,15 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
       return 0;
     }
     let hostBoundary = "in-progress";
-    const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT);
+    const dashboardPort = parseDashboardPort(lifecycleEnv.runtimeEnv().TENON_DASHBOARD_PORT);
     const outcome = await publishManagedRelease(
       deps,
       {
         operation: "update",
         source: host,
         runtime: {
-          homeDir: env.homeDir(),
-          env: env.runtimeEnv()
+          homeDir: lifecycleEnv.homeDir(),
+          env: lifecycleEnv.runtimeEnv()
         },
         openBrowser: opts.auto !== true,
         ...dashboardPort === null ? {} : { dashboardPort },
@@ -47658,7 +48090,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
           for (let index = 0; index < plan.length; index += 1) {
             const item2 = plan[index];
             const stepId = index === 0 ? "marketplace-refresh" : index === 1 ? "plugin-install" : "inventory-after";
-            const result = await runManagedHostCommand(transaction, stepId, env, item2);
+            const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item2);
             if (result.stdout.trim() !== "" && !opts.auto) deps.io.out(result.stdout.trimEnd());
             if (host === "codex" && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
               deps.io.out("[update] Codex \u672C\u5730 marketplace \u4E0D\u9700\u8981 Git fetch\uFF1B\u7EE7\u7EED\u5237\u65B0 tenon \u63D2\u4EF6\u7F13\u5B58\u3002");
@@ -47670,7 +48102,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
                 const inventoryResult = await runManagedHostCommand(
                   transaction,
                   "inventory-after",
-                  env,
+                  lifecycleEnv,
                   inventoryItem
                 );
                 const parsedInventory2 = inventoryResult.code === 0 ? parseHostPluginInventory(host, inventoryResult.stdout) : null;
@@ -47694,7 +48126,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
             throw new Error(`${hostFlag(host)} \u66F4\u65B0\u540E\u672A\u5728\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u4E2D\u627E\u5230 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`);
           }
           hostBoundary = "committed";
-          if (!verifyUpdatedRoot(deps, env, root)) {
+          if (!verifyUpdatedRoot(deps, lifecycleEnv, root)) {
             throw new Error("\u5BBF\u4E3B\u5237\u65B0\u540E\u7684 tenon \u5019\u9009\u672A\u901A\u8FC7\u6253\u5305\u8D44\u4EA7\u6821\u9A8C");
           }
           return { candidateRoot: root, evidence: inventory };
@@ -47704,7 +48136,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
           if (parsedInventory === null) throw new Error("journal \u4E2D\u7684\u5BBF\u4E3B inventory evidence \u65E0\u6548");
           if (!recordPendingHostPluginConflict(
             deps,
-            env,
+            lifecycleEnv,
             host,
             parsedInventory,
             activation2,
@@ -47719,7 +48151,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     if (!outcome.ok) {
       deps.io.err(`ERROR: ${outcome.detail}`);
       reportHostBoundary(deps, host, hostBoundary);
-      return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail));
+      return await rejectUpdate(installer, lifecycleEnv, boundaryDetail(hostBoundary, outcome.state, outcome.detail));
     }
     const { activation } = outcome;
     deps.io.out(`[update] \u5DF2\u539F\u5B50\u5207\u6362\u81F3\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
@@ -47730,8 +48162,14 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     }
     if (host === "codex") {
       deps.io.out("[update] \u82E5 Codex \u5C06\u65B0\u7248\u672C Tenon hook \u6807\u4E3A\u672A\u4FE1\u4EFB\u6216\u5DF2\u53D8\u66F4\uFF0C\u8BF7\u5728 Codex \u8F93\u5165 /hooks \u540E\u91CD\u65B0\u4FE1\u4EFB\uFF1B\u8FD9\u662F\u5BBF\u4E3B\u7684\u5B89\u5168\u8FB9\u754C\u3002");
+      if (opts.auto) {
+        deps.io.out(renderDeferredCodexAuthLine("\u540E\u53F0\u66F4\u65B0\u672A\u68C0\u67E5\u767B\u5F55\u72B6\u6001"));
+      } else {
+        const auth = await lifecycleEnv.codexAuthStatus(hostBinding.executable).catch(() => ({ state: "unavailable", reason: "spawn-error" }));
+        printCodexAuthGuidance(deps.io, auth);
+      }
     }
-    reportRegisteredProjects(deps, env, activation.release.source.pluginVersion);
+    reportRegisteredProjects(deps, lifecycleEnv, activation.release.source.pluginVersion);
     return 0;
   })();
 }
@@ -48377,7 +48815,7 @@ function buildProgram(deps, runtimes = {}) {
 }
 
 // packages/cli/src/guardContext.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync7 } from "node:fs";
+import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync9 } from "node:fs";
 import { readdir as readdir14 } from "node:fs/promises";
 import { join as join83 } from "node:path";
 async function listChanges(changesRoot2) {
@@ -48420,14 +48858,14 @@ function makeGuardCtx(cwd) {
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
     fileExists: (path9) => {
       try {
-        return statSync7(abs(path9)).isFile();
+        return statSync9(abs(path9)).isFile();
       } catch {
         return false;
       }
     },
     fileNonempty: (path9) => {
       try {
-        const state = statSync7(abs(path9));
+        const state = statSync9(abs(path9));
         return state.isFile() && state.size > 0;
       } catch {
         return false;
@@ -48442,7 +48880,7 @@ function makeGuardCtx(cwd) {
     },
     dirExists: (path9) => {
       try {
-        return statSync7(abs(path9)).isDirectory();
+        return statSync9(abs(path9)).isDirectory();
       } catch {
         return false;
       }
@@ -48578,7 +49016,7 @@ function scanCodexProjectSkillNames(cwd, root) {
   for (const skillsRoot of [join84(root, "skills"), join84(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync8(join84(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync10(join84(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -48590,7 +49028,7 @@ function scanSkillDigests(skillsRoot) {
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
       const skillPath = join84(skillsRoot, name2, "SKILL.md");
-      if (!statSync8(skillPath).isFile()) continue;
+      if (!statSync10(skillPath).isFile()) continue;
       digests.set(name2, createHash31("sha256").update(readFileSync27(skillPath)).digest("hex"));
     } catch {
     }
@@ -48615,7 +49053,7 @@ function makeDoctorProbes(runtimeScope2) {
     },
     fileExists: (p) => {
       try {
-        return statSync8(p).isFile();
+        return statSync10(p).isFile();
       } catch {
         return false;
       }
@@ -48630,7 +49068,7 @@ function makeDoctorProbes(runtimeScope2) {
     },
     dirExists: (p) => {
       try {
-        return statSync8(p).isDirectory();
+        return statSync10(p).isDirectory();
       } catch {
         return false;
       }
@@ -48652,6 +49090,7 @@ function makeDoctorProbes(runtimeScope2) {
       })).active?.source.host;
       return host === "codex" || host === "claude" ? host : null;
     },
+    codexAuthStatus: () => probeCodexAuth(),
     runVerifySkills: () => new Promise((resolve36) => {
       execFile5(
         "bash",
