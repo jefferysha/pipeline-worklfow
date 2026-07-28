@@ -31,7 +31,7 @@
 - [x] 完成 pre-Verify Spec、Rules/Architecture/Security、Dashboard visual 复审，修复所有 C/H/M。
 - [x] 提交、普通推送并取得精确 head CI；登记 `pre_verify_review_result=pass`。
 - [x] 以红测固定默认 workflow 英文阶段/动作标签，保持 custom 作者标签，并完成最小实现。
-- [ ] 串行复跑 focus 相关 Web 测试、全量门禁、生成物、独立复审与精确 head CI，冻结新的 Verify SHA。
+- [x] 串行复跑 focus 相关 Web 测试、全量门禁、生成物、独立复审与精确 head CI，冻结新的 Verify SHA。
 
 ## 验证
 

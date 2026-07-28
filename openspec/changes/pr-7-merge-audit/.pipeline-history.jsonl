@@ -61,3 +61,5 @@
 {"ts":"2026-07-28T20:11:02Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
 {"ts":"2026-07-28T20:11:02Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-28T20:11:02Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"2f8940b8-5c52-4a65-ba8a-3f4e9e390909"}
+{"ts":"2026-07-28T20:21:23Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T20:21:24Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
