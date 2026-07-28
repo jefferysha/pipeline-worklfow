@@ -859,6 +859,36 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(opener).toHaveFocus()
   })
 
+  it('嵌套证据 composer 通过 body portal 覆盖抽屉外区域且关闭后保留草稿', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+
+    expect(dialog.parentElement).toBe(document.body)
+
+    fireEvent.click(screen.getByTestId('evidence-add-entry'))
+    fireEvent.change(screen.getByTestId('evidence-title-1'), {
+      target: { value: 'DRAFT_MUST_SURVIVE' },
+    })
+    fireEvent.click(dialog)
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('DRAFT_MUST_SURVIVE')
+  })
+
   it.each([
     ['build', false],
     ['verify', true],

@@ -86,13 +86,15 @@ export function useProgressDrawer({
     function onKey(event: KeyboardEvent): void {
       // A nested modal owns its complete keyboard boundary. Let its focus trap and Escape
       // handler run without the surrounding drawer moving focus or closing underneath it.
-      if (drawerRef.current?.querySelector('[role="dialog"][aria-modal="true"]')) return
+      const drawer = drawerRef.current
+      const hasChildModal = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')]
+        .some((modal) => modal !== drawer)
+      if (hasChildModal) return
       if (event.key === 'Escape') {
         closeDrawer()
         return
       }
       if (event.key !== 'Tab') return
-      const drawer = drawerRef.current
       if (!drawer) return
       const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SEL))
       const first = focusables[0]

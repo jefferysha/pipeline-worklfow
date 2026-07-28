@@ -82,3 +82,19 @@
 {"ts":"2026-07-28T14:16:54Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"d805df35-a87b-4c90-91ed-0750dba00769"}
 {"ts":"2026-07-28T14:18:47Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T14:53:13Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T15:02:09Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T15:02:09Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T15:02:09Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T15:02:09Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T15:02:09Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"34f5aeb4-f499-4e32-84cc-bbaaed1fc7f9"}
+{"ts":"2026-07-28T15:21:29Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify-fail-3.md"}
+{"ts":"2026-07-28T15:21:29Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T15:21:30Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T15:21:57Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T15:22:02Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T11:06:58Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T15:22:03Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T15:22:03Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T15:22:03Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T15:22:03Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T15:22:03Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"1d77066e-f179-44e5-b547-9c5731650774"}
+{"ts":"2026-07-28T15:55:30Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

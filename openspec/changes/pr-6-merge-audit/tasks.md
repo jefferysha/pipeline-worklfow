@@ -28,15 +28,19 @@
 - [x] 第二轮 Verify 后以 TDD 修复不可信数组 canonical snapshot 与非治理 Verify 入口。
 - [x] 补旧请求晚失败回归，并重建与新 head 匹配的正式产物及 sandcastle 验证环境。
 - [x] 串行重跑定向/全量门禁与独立 pre-Verify 全量复审，非强制 push 后等待 exact-head CI。
+- [x] 以 TDD 修复嵌套证据 composer 的 body portal、模态层所有权与草稿保留。
+- [x] 在真实生产 Dashboard 上验证桌面/移动端全屏遮罩、外部点击、Escape、焦点恢复与无横向溢出。
+- [x] 按 Dashboard 适用范围完成第四轮 Standards、Spec、前后端架构、安全与 design-taste-frontend 复审。
+- [ ] 重跑全部风险匹配门禁，提交并非强制 push 新 exact head，等待 GitHub CI 全绿。
 
 ## 验证
 
 - [x] 冻结新 `build_sha`，执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
 - [x] 执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
 - [x] 复核新 head GitHub CI、mergeability、review threads 与最新 main，登记验证报告。
-- [ ] 第三次冻结新 `build_sha`，重新执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
-- [ ] 第三次执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
-- [ ] 复核第三次冻结 head 的 GitHub CI、mergeability、review threads 与最新 main，登记最终验证报告。
+- [x] 第三次冻结新 `build_sha`，重新执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
+- [x] 第三次执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
+- [x] 复核第三次冻结 head 的 GitHub CI、mergeability、review threads 与最新 main，登记最终验证报告。
 
 ## 交付
 

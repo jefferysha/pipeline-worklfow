@@ -383,10 +383,12 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   }, { scope: rootRef, dependencies: [def?.name] })
   useGSAP(() => {
     if (pendingSwitch !== null) {
-      revealDialog(
-        '[data-testid="wb-switch-confirm"]',
-        '[data-testid="wb-switch-confirm"] [role="dialog"]',
-      )
+      // Shared Dialogs live in a document.body portal, outside rootRef's GSAP selector scope.
+      // Resolve the portal nodes explicitly so the animation keeps working without widening
+      // the workbench context or handing GSAP an empty scoped selector.
+      const backdrop = document.querySelector<HTMLElement>('[data-testid="wb-switch-confirm"]')
+      const content = backdrop?.querySelector<HTMLElement>('[role="dialog"]')
+      if (backdrop && content) revealDialog(backdrop, content)
     }
   }, { scope: rootRef, dependencies: [pendingSwitch] })
   const stepName = useCallback(

@@ -273,3 +273,121 @@ pushed without force and exact-head GitHub CI run `30369887369` passed in 7m29s,
 freshness, clean install, full repository and Dashboard tests, hooks, adapters, Skill inventory,
 migration CAS, N-1 bundle and golden oracle. GitHub reports the PR MERGEABLE/CLEAN. The final
 governance commit and its fresh exact-head CI remain required before freezing the third Verify.
+
+## Third Verify return-loop repair
+
+The third frozen Verify correctly failed with one High visual/interaction finding. The nested
+evidence composer was rendered inside the transformed right drawer, so its fixed overlay covered
+only the 559-pixel drawer instead of the viewport. A real pointer click on the exposed parent
+scrim closed both the parent drawer and composer, removed the `change` route parameter, and lost a
+non-empty draft. The registered failure report is
+`docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify-fail-3.md`.
+
+### Fourth Build implementation evidence
+
+- A red `ProgressView` production-path regression proved the overlay was not owned by
+  `document.body`. It also encoded the required parent-drawer survival and draft-preservation
+  behavior.
+- The shared Dialog now renders its overlay through a body portal. The outer progress drawer's
+  Escape handler recognizes any active document-level modal and defers ownership to that modal.
+- The focused Progress integration suite passed 57/57 after the repair. Full Web passed 56/56 files
+  and 1011/1011 tests, Web typecheck passed, the official production build passed, and the full
+  repository passed 317/317 files with 5469 tests and five honest credential-gated skips.
+- The production artifact changed from `index-CMPmAaKx.js` to `index-D8Bc1TJ1.js`; the stylesheet
+  remained `index-De9VVOJA.css`.
+
+### Dashboard design and browser evidence
+
+The user explicitly requires `design-taste-frontend` to cover Dashboard work. This review therefore
+does not apply the skill's ordinary Dashboard exclusion. The established B2B engineering Dashboard
+is preserved with `DESIGN_VARIANCE=3`, `MOTION_INTENSITY=2`, and `VISUAL_DENSITY=7`; existing Tenon
+tokens, component geometry, dark/light themes, typography and interaction language remain the
+source of truth. The repair changes modal ownership and hierarchy only, with no new visual system.
+
+A real Codex in-app browser exercised the rebuilt production assets from an isolated Verify fixture:
+
+- at 1440x900, the drawer remained x=880, width=560 while the composer overlay was a direct body
+  child at x=0, y=0, width=1440, height=900;
+- clicking x=100, y=450 closed only the composer, preserved the parent drawer and
+  `change=pr-6-merge-audit`, and reopening restored `DRAFT_MUST_SURVIVE`;
+- Escape closed only the composer, kept the route and drawer, and restored focus to
+  `evidence-compose-open`;
+- at 390x844, the overlay remained 390x844 and the panel was x=16, width=358, with document
+  scroll width equal to client width;
+- browser warning and error logs were empty.
+
+The inspected screenshots are outside the repository at:
+
+- `/private/tmp/pr6-build4-browser-20260728/01-portal-before-outside-click.png`
+- `/private/tmp/pr6-build4-browser-20260728/02-portal-after-reopen-draft-preserved.png`
+- `/private/tmp/pr6-build4-browser-20260728/03-mobile-390-portal.png`
+
+For this narrow repair, the current design-taste and accessibility inspection has no remaining
+Critical, High, Medium or Low finding. This is implementation evidence, not the fourth
+pre-Verify PASS: complete Standards, Spec, frontend/backend architecture, security, shared Dialog
+call-site review, fresh static gates, commit/push and exact-head GitHub CI remain mandatory.
+
+## Fourth pre-Verify review status
+
+PASS on the complete fourth-Build worktree relative to base
+`2394ac71efc87193350d476266a3219c320bb5b1`, after one Medium review finding was fixed.
+
+### Finding resolved during review
+
+1. **Medium — the Workbench switch-confirm animation could not resolve a body-portal Dialog.**
+   - The shared Dialog repair moved the overlay outside the Workbench `rootRef`, but
+     `revealDialog` still received two string selectors scoped to that root. Real Web test logs
+     reported both GSAP targets missing and the entrance animation no longer ran.
+   - A red Workbench regression opened the real dirty-switch journey, proved the overlay was a body
+     child, and failed on the GSAP warning. The Workbench now explicitly resolves the portal
+     backdrop and dialog nodes and passes the elements to `revealDialog`. The regression and full
+     Workbench file pass 72/72 with no switch-confirm target warning.
+   - A fresh in-app browser loaded the rebuilt `index-CGj7mXYA.js` in the isolated fixture, created
+     a temporary editable workflow, made it dirty and switched toward `default`. The real
+     switch-confirm portal finished at backdrop `opacity: 1` and panel
+     `transform: translate(0px, 0px); opacity: 1`; warning/error logs were empty. The temporary
+     workflow was deleted from the fixture after the check.
+
+### Final review coverage
+
+- **Spec/Correctness — C0/H0/M0/L0.** The third Verify High is reproduced by its frozen report and
+  is closed by the body-portal ownership test, real outside-pointer journey, Escape ownership,
+  focus restoration, route preservation and draft preservation.
+- **Rules/Architecture — C0/H0/M0/L0.** All shared Dialog call sites were inspected. The portal
+  stays in the shared presentation layer; Progress owns only drawer state; Workbench animation
+  receives concrete DOM elements without widening its GSAP context. No frontend-to-backend reverse
+  dependency, public export drift or new abstraction was introduced.
+- **Backend/Security — C0/H0/M0/L0.** The kernel still canonical-snapshots untrusted records and
+  arrays without invoking accessors or overridden methods, caps input/error/output work, and emits
+  fenced Markdown. The server uses the established bearer/content-type/body limits and validates
+  the workflow root anchor both before and after composition. The fourth-Build portal changes do
+  not alter API, persistence, logging, secrets, authorization or dependency surfaces.
+- **Dashboard design/accessibility — C0/H0/M0/L0.** Under the user's explicit Dashboard coverage
+  requirement, `design-taste-frontend` preserve mode used `DESIGN_VARIANCE=3`,
+  `MOTION_INTENSITY=2`, and `VISUAL_DENSITY=7`. Desktop and 390-pixel mobile screenshots preserve
+  the established visual language; the overlay hierarchy, keyboard ownership, focus, responsive
+  fit and console are clean.
+
+### Fresh fourth-Build evidence
+
+- Full repository JSON result: 1388/1388 suites, 5469 passed, 5 credential-gated pending, 0 failed.
+- Full Web: 56/56 files and 1012/1012 tests; Web typecheck passed.
+- Kernel composer plus server route: 295/295 targeted tests.
+- Official root build passed and produced `index-CGj7mXYA.js`, `index-De9VVOJA.css`, server and CLI
+  bundles.
+- Hooks, migration CAS, adapters, Skill inventory and bundle passed at 482, 13, 272, complete
+  inventory, and 31 checks respectively.
+- Architecture over 626 production files, comments, docs, document templates, repository hygiene,
+  identity/interaction, npx package, default-workflow freshness, strict OpenSpec and diff check
+  passed.
+- Golden oracle completed all five fixtures with zero unrecognized difference; only the recorded
+  in-place isolation and PM auto-queue product evolutions were classified as known.
+- `origin/main` remains exactly `2394ac71efc87193350d476266a3219c320bb5b1`; PR #6 is OPEN,
+  non-Draft, MERGEABLE/CLEAN at the prior remote head.
+
+The optional separate `codex review --base` subprocess was attempted and honestly stopped by the
+account usage limit before producing a review. It is not recorded as passing. The current Codex
+host performed the complete review above, and the third frozen head already had an independent
+Codex track; the fourth Verify must still re-run its required Codex track against the new frozen
+head. Product/review commit, non-force push and fresh exact-head GitHub CI remain Build exit
+evidence.
