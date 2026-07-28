@@ -1,0 +1,260 @@
+const HOST_IDS = [
+  'codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi',
+  'devin', 'zed', 'aider', 'continue', 'cline', 'amp',
+] as const
+
+const CAPABILITIES = [
+  'native-marketplace',
+  'project-adapter',
+  'managed-runtime',
+  'bundled-skills',
+  'automatic-update',
+] as const
+
+const STEP_IDS = [
+  'marketplace-register',
+  'plugin-install',
+  'plugin-inventory',
+  'marketplace-refresh',
+  'plugin-update',
+  'package-assets',
+  'adapter-deploy',
+  'managed-runtime',
+  'bundled-skills',
+  'runtime-readiness',
+] as const
+
+const NOTICE_IDS = [
+  'host-plan.notice.read-only-generation',
+  'host-plan.notice.manual-command-has-effects',
+  'host-plan.notice.project-placeholder',
+] as const
+
+export type HostId = (typeof HOST_IDS)[number]
+export type HostOperation = 'setup' | 'update'
+type HostCapability = (typeof CAPABILITIES)[number]
+type HostPlanStepId = (typeof STEP_IDS)[number]
+
+export interface HostTargetDto {
+  readonly id: HostId
+  readonly kind: 'native' | 'adapter'
+  readonly cli_flag: `--${HostId}`
+  readonly target_scope: 'user' | 'project'
+  readonly supported_operations: readonly ['setup', 'update']
+  readonly capabilities: readonly HostCapability[]
+}
+
+export interface HostTargetCatalogDto {
+  readonly schema_version: 'host-target-plan/v1'
+  readonly targets: readonly HostTargetDto[]
+}
+
+export interface HostPlanCommandDto {
+  readonly executable: string
+  readonly args: readonly string[]
+  readonly display: string
+}
+
+export interface HostTargetPlanStepDto {
+  readonly id: string
+  readonly label: string
+  readonly command: HostPlanCommandDto | null
+}
+
+export interface HostTargetPlanDto {
+  readonly schema_version: 'host-target-plan/v1'
+  readonly side_effects: 'none'
+  readonly host: HostTargetDto
+  readonly operation: HostOperation
+  readonly command: HostPlanCommandDto
+  readonly steps: readonly HostTargetPlanStepDto[]
+  readonly notices: readonly string[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value)
+  return actual.length === keys.length && actual.every((key) => keys.includes(key))
+}
+
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+export function isHostId(value: unknown): value is HostId {
+  return typeof value === 'string' && (HOST_IDS as readonly string[]).includes(value)
+}
+
+function isCapability(value: unknown): value is HostCapability {
+  return typeof value === 'string' && (CAPABILITIES as readonly string[]).includes(value)
+}
+
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index])
+}
+
+function decodeCommand(value: unknown): HostPlanCommandDto | null {
+  if (!isRecord(value) || !hasExactKeys(value, ['executable', 'args', 'display'])) return null
+  if (!isNonemptyString(value.executable) || !isNonemptyString(value.display)) return null
+  if (
+    !Array.isArray(value.args)
+    || !value.args.every((arg) => typeof arg === 'string')
+    || value.display !== [value.executable, ...value.args].join(' ')
+  ) return null
+  return { executable: value.executable, args: value.args, display: value.display }
+}
+
+function decodeTarget(value: unknown): HostTargetDto | null {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, [
+      'id',
+      'kind',
+      'cli_flag',
+      'target_scope',
+      'supported_operations',
+      'capabilities',
+    ])
+    || !isHostId(value.id)
+  ) return null
+  const native = value.id === 'codex' || value.id === 'claude'
+  if (value.kind !== (native ? 'native' : 'adapter')) return null
+  if (value.target_scope !== (native ? 'user' : 'project')) return null
+  if (value.cli_flag !== `--${value.id}`) return null
+  if (
+    !Array.isArray(value.supported_operations)
+    || value.supported_operations.length !== 2
+    || value.supported_operations[0] !== 'setup'
+    || value.supported_operations[1] !== 'update'
+  ) return null
+  if (
+    !Array.isArray(value.capabilities)
+    || !value.capabilities.every(isCapability)
+    || new Set(value.capabilities).size !== value.capabilities.length
+  ) return null
+  const expectedCapabilities = native
+    ? ['native-marketplace', 'managed-runtime', 'bundled-skills', 'automatic-update']
+    : ['project-adapter', 'managed-runtime', 'bundled-skills']
+  if (!arraysEqual(value.capabilities, expectedCapabilities)) return null
+  return {
+    id: value.id,
+    kind: native ? 'native' : 'adapter',
+    cli_flag: `--${value.id}`,
+    target_scope: native ? 'user' : 'project',
+    supported_operations: ['setup', 'update'],
+    capabilities: value.capabilities,
+  }
+}
+
+export function decodeHostTargetCatalog(value: unknown): HostTargetCatalogDto | null {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ['schema_version', 'targets'])
+    || value.schema_version !== 'host-target-plan/v1'
+    || !Array.isArray(value.targets)
+    || value.targets.length !== HOST_IDS.length
+  ) return null
+  const targets: HostTargetDto[] = []
+  for (let index = 0; index < value.targets.length; index += 1) {
+    const item = value.targets[index]
+    const target = decodeTarget(item)
+    if (target === null || target.id !== HOST_IDS[index]) return null
+    targets.push(target)
+  }
+  return { schema_version: 'host-target-plan/v1', targets }
+}
+
+function decodePlanStep(value: unknown): HostTargetPlanStepDto | null {
+  if (!isRecord(value) || !hasExactKeys(value, ['id', 'label', 'command'])) return null
+  if (
+    typeof value.id !== 'string'
+    || !(STEP_IDS as readonly string[]).includes(value.id)
+    || value.label !== `host-plan.step.${value.id}`
+  ) return null
+  const command = value.command === null ? null : decodeCommand(value.command)
+  if (value.command !== null && command === null) return null
+  return { id: value.id, label: value.label, command }
+}
+
+export function decodeHostTargetPlan(
+  value: unknown,
+  expectedHost: HostId,
+  expectedOperation: HostOperation,
+): HostTargetPlanDto | null {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, [
+      'schema_version',
+      'side_effects',
+      'host',
+      'operation',
+      'command',
+      'steps',
+      'notices',
+    ])
+    || value.schema_version !== 'host-target-plan/v1'
+    || value.side_effects !== 'none'
+    || value.operation !== expectedOperation
+    || !Array.isArray(value.steps)
+    || !Array.isArray(value.notices)
+    || !value.notices.every(isNonemptyString)
+  ) return null
+  const host = decodeTarget(value.host)
+  const command = decodeCommand(value.command)
+  if (host === null || host.id !== expectedHost || command === null) return null
+  const native = host.kind === 'native'
+  const expectedCommandArgs = native
+    ? [expectedOperation, `--${expectedHost}`]
+    : [expectedOperation, `--${expectedHost}`, '--target', '<project>']
+  if (
+    command.executable !== 'tenon'
+    || !arraysEqual(command.args, expectedCommandArgs)
+    || command.display !== ['tenon', ...expectedCommandArgs].join(' ')
+  ) return null
+  const steps: HostTargetPlanStepDto[] = []
+  for (const item of value.steps) {
+    const step = decodePlanStep(item)
+    if (step === null) return null
+    steps.push(step)
+  }
+  const expectedStepIds: readonly HostPlanStepId[] = native
+    ? [
+        ...(expectedOperation === 'setup'
+          ? ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
+          : ['marketplace-refresh', 'plugin-update', 'plugin-inventory'] as const),
+        'managed-runtime',
+        'bundled-skills',
+        'runtime-readiness',
+      ]
+    : ['package-assets', 'adapter-deploy', 'managed-runtime', 'bundled-skills', 'runtime-readiness']
+  if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null
+  for (const step of steps) {
+    const shouldHaveCommand = native
+      ? !['managed-runtime', 'bundled-skills', 'runtime-readiness'].includes(step.id)
+      : step.id === 'adapter-deploy'
+    if ((step.command !== null) !== shouldHaveCommand) return null
+    if (
+      step.id === 'adapter-deploy'
+      && step.command !== null
+      && (
+        step.command.executable !== command.executable
+        || !arraysEqual(step.command.args, command.args)
+        || step.command.display !== command.display
+      )
+    ) return null
+  }
+  const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS
+  if (!arraysEqual(value.notices, expectedNotices)) return null
+  return {
+    schema_version: 'host-target-plan/v1',
+    side_effects: 'none',
+    host,
+    operation: expectedOperation,
+    command,
+    steps,
+    notices: value.notices,
+  }
+}

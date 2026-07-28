@@ -60,11 +60,11 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('主导航只保留项目 / 进度 / AFK / 工作台 / 机器；状态、主题与语言收进设置', async () => {
+  it('主导航只保留项目 / 进度 / AFK / 工作台 / 机器 / 宿主计划；状态、主题与语言收进设置', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(5)
+    expect(within(nav).getAllByRole('button')).toHaveLength(6)
     expect(screen.getByTestId('nav-afk')).toBeInTheDocument()
     // 项目上下文不再占用全局顶栏；项目入口只保留在 rail。
     expect(screen.getByTestId('nav-projects')).toBeInTheDocument()
@@ -84,6 +84,32 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
     expect(screen.queryByTestId('project-register')).toBeNull()
     expect(screen.queryByTestId('project-register-path')).toBeNull()
+  })
+})
+
+describe('App 宿主计划机器级视图', () => {
+  it('零项目时仍可通过 hostPlan 深链加载，不落入项目 Onboarding', async () => {
+    window.history.replaceState({}, '', '/?view=hostPlan')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([]) }
+      }
+      if (url === '/api/host-targets') {
+        return {
+          ok: true,
+          json: async () => ({ schema_version: 'host-target-plan/v1', targets: [] }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('host-plan-view')).toBeInTheDocument()
+    expect(screen.getByTestId('host-plan-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('onboard-no-project')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toContain('/api/host-targets')
   })
 })
 

@@ -17,6 +17,7 @@ import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
 import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
+import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -25,7 +26,7 @@ const THEME_KEY = 'tenon-dashboard-theme'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'tenon-dashboard-view'
-// 可路由的全部视图 = rail 五项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器）。「项目」是 rail
+// 可路由的全部视图 = rail 六项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器/宿主计划）。「项目」是 rail
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
 
@@ -232,7 +233,7 @@ function AppShell(): JSX.Element {
           </section>
         ) : view === 'overview' ? (
           <SolutionView />
-        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' ? (
+        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
           <Onboarding kind="no-project" />
         ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
           <Onboarding
@@ -316,6 +317,7 @@ function AppShell(): JSX.Element {
             }}
           />
         )}
+        {view === 'hostPlan' && <HostTargetPlanView />}
           </>
         )}
       </main>

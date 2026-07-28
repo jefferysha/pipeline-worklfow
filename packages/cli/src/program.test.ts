@@ -33,6 +33,41 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     expect(out).toContain('未刷新 marketplace')
   })
 
+  test('host-target-plan help 明示只读 catalog 与单目标 JSON 计划参数', async () => {
+    const deps = makeDeps()
+    const program = buildProgram(deps)
+    const command = program.commands.find((candidate) => candidate.name() === 'host-target-plan')
+
+    expect(command?.description()).toContain('只读')
+    expect(command?.options.map(({ long }) => long)).toEqual(
+      expect.arrayContaining(['--host', '--operation', '--json']),
+    )
+    await expect(
+      program.parseAsync(['host-target-plan', '--help'], { from: 'user' }),
+    ).rejects.toMatchObject({ code: 'commander.helpDisplayed' })
+    expect(deps.outLines.join('\n')).toContain('--operation <operation>')
+  })
+
+  test('host-target-plan 通过 Commander 输出白名单单目标计划', async () => {
+    const deps = makeDeps()
+
+    expect(await run(deps, [
+      'host-target-plan',
+      '--host',
+      'codex',
+      '--operation',
+      'setup',
+      '--json',
+    ])).toBe(0)
+    expect(JSON.parse(deps.outLines[0]!)).toMatchObject({
+      schema_version: 'host-target-plan/v1',
+      side_effects: 'none',
+      host: { id: 'codex', kind: 'native' },
+      operation: 'setup',
+      command: { display: 'tenon setup --codex' },
+    })
+  })
+
   test('完整插件只有一个 update 入口，不再暴露第二套 --self-update', () => {
     const deps = makeDeps()
     const update = buildProgram(deps).commands.find((command) => command.name() === 'update')

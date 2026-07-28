@@ -16,9 +16,8 @@ import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   isNativePipelineHost,
+  nativeUpdatePlan,
   parseHostPluginInventory,
-  TENON_MARKETPLACE_NAME,
-  TENON_PLUGIN_NAME,
   selectPipelineHost,
   type HostCommandPlanItem,
   type PipelineHost,
@@ -42,20 +41,7 @@ export interface UpdateOpts extends PipelineHostFlags {
   target?: string
 }
 
-export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
-  if (host === 'codex') {
-    return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', TENON_MARKETPLACE_NAME, '--json'] },
-      { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
-      { cmd: 'codex', args: ['plugin', 'list', '--json'] },
-    ]
-  }
-  return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', TENON_MARKETPLACE_NAME] },
-    { cmd: 'claude', args: ['plugin', 'update', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
-    { cmd: 'claude', args: ['plugin', 'list', '--json'] },
-  ]
-}
+export { nativeUpdatePlan } from './plugin-host.js'
 
 function renderPlan(deps: CliDeps, host: PipelineHost, plan: readonly HostCommandPlanItem[]): void {
   deps.io.out(`[update] ${hostFlag(host)} 发布更新计划（只更新所选宿主）`)

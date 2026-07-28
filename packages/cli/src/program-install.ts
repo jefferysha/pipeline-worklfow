@@ -6,6 +6,10 @@ import {
   type DashboardRuntime,
 } from './commands/dashboard.js'
 import { cmdRuntime, type RuntimeCommandOpts } from './commands/runtime.js'
+import {
+  cmdHostTargetPlan,
+  type HostTargetPlanOpts,
+} from './commands/host-target-plan.js'
 import { cmdSetup, type SetupOpts } from './commands/setup.js'
 import { cmdUpdate, type UpdateOpts } from './commands/update.js'
 import { bail } from './program-exit.js'
@@ -59,6 +63,16 @@ export function registerInstallCommands(
     .option('--auto', '由已明确启用的自动更新任务调用（不改变用户的 opt-in 状态）')
     .action(async (opts: UpdateOpts) => {
       bail(await cmdUpdate(deps, opts))
+    })
+
+  program
+    .command('host-target-plan')
+    .description('只读输出已注册宿主 catalog，或一个 setup/update JSON 计划；不执行宿主写操作')
+    .option('--host <host>', 'TENON_HOSTS 中的已注册宿主 id')
+    .option('--operation <operation>', 'setup | update')
+    .option('--json', '输出 host-target-plan/v1 JSON DTO')
+    .action((opts: HostTargetPlanOpts) => {
+      bail(cmdHostTargetPlan(deps, opts))
     })
 
   program

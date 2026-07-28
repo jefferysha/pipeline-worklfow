@@ -17950,6 +17950,210 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   }
 }
 
+// packages/server/src/hostTargetPlanProtocol.ts
+var HOST_IDS = [
+  "codex",
+  "claude",
+  "cursor",
+  "gemini",
+  "copilot",
+  "pi",
+  "devin",
+  "zed",
+  "aider",
+  "continue",
+  "cline",
+  "amp"
+];
+var CAPABILITIES = [
+  "native-marketplace",
+  "project-adapter",
+  "managed-runtime",
+  "bundled-skills",
+  "automatic-update"
+];
+var STEP_IDS = [
+  "marketplace-register",
+  "plugin-install",
+  "plugin-inventory",
+  "marketplace-refresh",
+  "plugin-update",
+  "package-assets",
+  "adapter-deploy",
+  "managed-runtime",
+  "bundled-skills",
+  "runtime-readiness"
+];
+var NOTICE_IDS = [
+  "host-plan.notice.read-only-generation",
+  "host-plan.notice.manual-command-has-effects",
+  "host-plan.notice.project-placeholder"
+];
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasExactKeys(value, keys) {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+}
+function isNonemptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function isHostId(value) {
+  return typeof value === "string" && HOST_IDS.includes(value);
+}
+function isCapability(value) {
+  return typeof value === "string" && CAPABILITIES.includes(value);
+}
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((item2, index) => item2 === right[index]);
+}
+function decodeCommand(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["executable", "args", "display"])) return null;
+  if (!isNonemptyString(value.executable) || !isNonemptyString(value.display)) return null;
+  if (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string") || value.display !== [value.executable, ...value.args].join(" ")) return null;
+  return { executable: value.executable, args: value.args, display: value.display };
+}
+function decodeTarget(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, [
+    "id",
+    "kind",
+    "cli_flag",
+    "target_scope",
+    "supported_operations",
+    "capabilities"
+  ]) || !isHostId(value.id)) return null;
+  const native = value.id === "codex" || value.id === "claude";
+  if (value.kind !== (native ? "native" : "adapter")) return null;
+  if (value.target_scope !== (native ? "user" : "project")) return null;
+  if (value.cli_flag !== `--${value.id}`) return null;
+  if (!Array.isArray(value.supported_operations) || value.supported_operations.length !== 2 || value.supported_operations[0] !== "setup" || value.supported_operations[1] !== "update") return null;
+  if (!Array.isArray(value.capabilities) || !value.capabilities.every(isCapability) || new Set(value.capabilities).size !== value.capabilities.length) return null;
+  const expectedCapabilities = native ? ["native-marketplace", "managed-runtime", "bundled-skills", "automatic-update"] : ["project-adapter", "managed-runtime", "bundled-skills"];
+  if (!arraysEqual(value.capabilities, expectedCapabilities)) return null;
+  return {
+    id: value.id,
+    kind: native ? "native" : "adapter",
+    cli_flag: `--${value.id}`,
+    target_scope: native ? "user" : "project",
+    supported_operations: ["setup", "update"],
+    capabilities: value.capabilities
+  };
+}
+function decodeHostTargetCatalog(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
+  const targets = [];
+  for (let index = 0; index < value.targets.length; index += 1) {
+    const item2 = value.targets[index];
+    const target = decodeTarget(item2);
+    if (target === null || target.id !== HOST_IDS[index]) return null;
+    targets.push(target);
+  }
+  return { schema_version: "host-target-plan/v1", targets };
+}
+function decodePlanStep(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
+  if (typeof value.id !== "string" || !STEP_IDS.includes(value.id) || value.label !== `host-plan.step.${value.id}`) return null;
+  const command = value.command === null ? null : decodeCommand(value.command);
+  if (value.command !== null && command === null) return null;
+  return { id: value.id, label: value.label, command };
+}
+function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
+  if (!isRecord5(value) || !hasExactKeys(value, [
+    "schema_version",
+    "side_effects",
+    "host",
+    "operation",
+    "command",
+    "steps",
+    "notices"
+  ]) || value.schema_version !== "host-target-plan/v1" || value.side_effects !== "none" || value.operation !== expectedOperation || !Array.isArray(value.steps) || !Array.isArray(value.notices) || !value.notices.every(isNonemptyString)) return null;
+  const host = decodeTarget(value.host);
+  const command = decodeCommand(value.command);
+  if (host === null || host.id !== expectedHost || command === null) return null;
+  const native = host.kind === "native";
+  const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "<project>"];
+  if (command.executable !== "tenon" || !arraysEqual(command.args, expectedCommandArgs) || command.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
+  const steps = [];
+  for (const item2 of value.steps) {
+    const step = decodePlanStep(item2);
+    if (step === null) return null;
+    steps.push(step);
+  }
+  const expectedStepIds = native ? [
+    ...expectedOperation === "setup" ? ["marketplace-register", "plugin-install", "plugin-inventory"] : ["marketplace-refresh", "plugin-update", "plugin-inventory"],
+    "managed-runtime",
+    "bundled-skills",
+    "runtime-readiness"
+  ] : ["package-assets", "adapter-deploy", "managed-runtime", "bundled-skills", "runtime-readiness"];
+  if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
+  for (const step of steps) {
+    const shouldHaveCommand = native ? !["managed-runtime", "bundled-skills", "runtime-readiness"].includes(step.id) : step.id === "adapter-deploy";
+    if (step.command !== null !== shouldHaveCommand) return null;
+    if (step.id === "adapter-deploy" && step.command !== null && (step.command.executable !== command.executable || !arraysEqual(step.command.args, command.args) || step.command.display !== command.display)) return null;
+  }
+  const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS;
+  if (!arraysEqual(value.notices, expectedNotices)) return null;
+  return {
+    schema_version: "host-target-plan/v1",
+    side_effects: "none",
+    host,
+    operation: expectedOperation,
+    command,
+    steps,
+    notices: value.notices
+  };
+}
+
+// packages/server/src/serverGetHostTargetPlanRoutes.ts
+var QUERY_INVALID = {
+  status: 400,
+  body: { ok: false, code: "HOST_TARGET_QUERY_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u67E5\u8BE2\u53C2\u6570\u65E0\u6548" }
+};
+var PLAN_UNAVAILABLE = {
+  status: 503,
+  body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
+};
+var PLAN_INVALID = {
+  status: 502,
+  body: { ok: false, code: "HOST_TARGET_PLAN_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u54CD\u5E94\u65E0\u6548" }
+};
+function parsePlanQuery(searchParams) {
+  const entries = [...searchParams.entries()];
+  if (entries.length !== 2 || searchParams.getAll("host").length !== 1 || searchParams.getAll("operation").length !== 1 || entries.some(([key]) => key !== "host" && key !== "operation")) return null;
+  const host = searchParams.get("host");
+  const operation = searchParams.get("operation");
+  if (!isHostId(host) || operation !== "setup" && operation !== "update") return null;
+  return { host, operation };
+}
+async function runAndDecode(args, deps, decode) {
+  try {
+    const result = await deps.operationRunner(deps.hostHome, args);
+    if (result.exitCode !== 0) return PLAN_INVALID;
+    const decoded = decode(parsePipelineCliJson(result.stdout));
+    return decoded === null ? PLAN_INVALID : { status: 200, body: decoded };
+  } catch {
+    return PLAN_INVALID;
+  }
+}
+async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
+  if (path7 !== "/api/host-targets" && path7 !== "/api/host-target-plan") return null;
+  const searchParams = new URL(requestUrl, "http://localhost").searchParams;
+  if (path7 === "/api/host-targets") {
+    if ([...searchParams].length !== 0) return QUERY_INVALID;
+    if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
+    return runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog);
+  }
+  const query = parsePlanQuery(searchParams);
+  if (query === null) return QUERY_INVALID;
+  if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
+  return runAndDecode(
+    ["host-target-plan", "--host", query.host, "--operation", query.operation, "--json"],
+    deps,
+    (value) => decodeHostTargetPlan(value, query.host, query.operation)
+  );
+}
+
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
   return join42(dirname9(fileURLToPath2(import.meta.url)), "..", "..", "..");
@@ -17986,13 +18190,17 @@ async function handleGet(req, res, path7, deps) {
     manifestPath: manifestPath2,
     paths,
     hostHome,
+    operationsAvailable,
     options,
+    operationRunner,
     resolveSessionLink,
     errMsg: errMsg2
   } = deps;
   const boundPort = deps.boundPort();
   await handleGetActivityRoutes(req, res, path7, deps);
   if (res.headersSent) return;
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner });
+  if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body);
   if (path7 === "/api/loops/snapshot") {
     try {
       const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) });
@@ -20151,7 +20359,9 @@ function createDashboardServer(options) {
     manifestPath: manifestPath2,
     paths,
     hostHome,
+    operationsAvailable,
     options,
+    operationRunner,
     resolveSessionLink,
     errMsg
   });

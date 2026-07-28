@@ -310,7 +310,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       version, releaseId, transactionId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
-      hostHome, options, resolveSessionLink, errMsg,
+      hostHome, operationsAvailable, options, operationRunner, resolveSessionLink, errMsg,
     })
   const handlePost = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handlePostRoute(req, res, path, {

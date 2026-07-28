@@ -9,8 +9,8 @@ use the local API within its security boundary.
 
 - a verified managed release
 - a supported local browser
-- at least one project for operational views; the bundled Overview remains
-  readable without one
+- at least one project for project-scoped operational views; the bundled
+  Overview and Host Plan remain readable without one
 
 <img src="../../docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard project overview" width="1440" height="900">
 
@@ -47,16 +47,18 @@ development port is not a second production frontend.
 
 ## Views
 
-The five operational destinations are:
+The operational destinations are:
 
 - Projects — registered local roots and project selection
 - Progress — Workflow graph, phase, Todo, history, and evidence
 - AFK — readiness, queue, worker state, logs, and control
 - Workbench — Workflows, Tracks, hooks, automation, loops, and configuration
 - Machine — runtime identity, traffic, and advanced diagnostics
+- Host Plan (`hostPlan`) — choose a registered host and preview a zero-side-effect
+  setup or update command and its ordered steps
 
 The product Overview at `/?view=overview` is a separate brand-level read-only
-view, not a sixth operational destination and not the installed default.
+view, not an operational destination and not the installed default.
 
 Optional surfaces are advertised by snapshot capability flags. A disabled
 capability is not an empty success state.
@@ -110,6 +112,8 @@ HTTP checks:
 ```bash
 curl --fail http://127.0.0.1:18765/api/health
 curl --fail http://127.0.0.1:18765/api/snapshot
+curl --fail http://127.0.0.1:18765/api/host-targets
+curl --fail 'http://127.0.0.1:18765/api/host-target-plan?host=codex&operation=setup'
 ```
 
 Health includes release and state-scope identity. A process merely listening on
@@ -120,6 +124,10 @@ Health includes release and state-scope identity. A process merely listening on
 The loopback API exposes current health/snapshot/SSE plus local operations for
 projects, Changes/runs, Workflows, Tracks, hooks, automation, loops, AFK,
 configuration, and diagnostics.
+
+The Host Plan endpoints are strictly read-only. They accept only registered
+Tenon hosts and the `setup` or `update` operation, return
+`host-target-plan/v1`, and never execute the displayed command.
 
 Mutation requests require:
 
