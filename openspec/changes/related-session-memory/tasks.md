@@ -60,6 +60,7 @@
 - [x] 以官方 project/session 索引约束 OpenCode 候选，批量读取 parts，并修复 exact discovery 与 canonical alias 边界。 (build)
 - [x] 在有界扫描中覆盖 Claude/Pi 后代 shard，保留旧 Claude CLI 未知 cwd 兼容，并按更新时间选取 OpenCode 候选。 (build)
 - [x] 对不可证明 recency 的 OpenCode 关系 fail closed，并用有界主键查询补入候选 child 的 parent 图支撑节点。 (build)
+- [x] 保持公开 excerpt 含命中词、稳定映射 Change I/O 错误，并拆分有界 SQLite 对话预算与稳定 part 次序。 (build)
 
 ## 验证
 

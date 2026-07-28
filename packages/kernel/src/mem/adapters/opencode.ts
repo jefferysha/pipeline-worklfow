@@ -53,9 +53,9 @@ import { searchInDialogue } from '../search.js'
 import {
   readBoundedSessionRowById,
   readBoundedSessionRows,
-  readBoundedSqliteRows,
   sqliteSourceBudget,
 } from './opencode-budget.js'
+import { readBoundedSqliteRows } from './opencode-dialogue-budget.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -236,7 +236,7 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
         db,
         {
           sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
-                length(CAST(id AS blob)) AS relation_full_bytes,
+                length(CAST(id AS blob)) AS id_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
@@ -245,7 +245,8 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
          LIMIT ?`,
           hasMoreSql: 'SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?',
           scopeId: s.id,
-          relationField: 'id',
+          relationFields: ['id'],
+          orderField: 'id',
         },
         sourceBudget,
       )
@@ -260,7 +261,9 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
         db,
         {
           sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
-                length(CAST(message_id AS blob)) AS relation_full_bytes,
+                length(CAST(message_id AS blob)) AS message_id_full_bytes,
+                CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS id_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
@@ -269,7 +272,8 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
          LIMIT ?`,
           hasMoreSql: 'SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?',
           scopeId: s.id,
-          relationField: 'message_id',
+          relationFields: ['message_id', 'id'],
+          orderField: 'id',
         },
         sourceBudget,
       )

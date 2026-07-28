@@ -353,6 +353,36 @@ describe('POST /api/mem/related-sessions/search', () => {
     expect(h.calls).toHaveLength(0)
   })
 
+  it('maps Change-state inspection failures to a stable path-free unavailable response', async () => {
+    const h = await start()
+    const runStateDir = join(
+      h.root,
+      'openspec',
+      'changes',
+      'memory-change',
+      '.pipeline-run',
+    )
+    await rename(runStateDir, `${runStateDir}.backup`)
+    await writeFile(runStateDir, 'not-a-directory', 'utf8')
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(h.root),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(404)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'project-or-change-not-found',
+      error: 'Project or Change is unavailable',
+    })
+    expect(response.body).not.toContain(h.root)
+    expect(response.body).not.toContain('ENOTDIR')
+    expect(h.calls).toHaveLength(0)
+  })
+
   it('fails closed when the registered project inode drifts and does not expose its path', async () => {
     const h = await start()
     const movedRoot = `${h.root}-moved`

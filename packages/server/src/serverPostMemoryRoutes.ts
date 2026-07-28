@@ -59,7 +59,13 @@ export async function handlePostMemoryRoutes(
   const rootCheck = deps.workflowRootForRequest(root)
   if (!rootCheck.ok) return missingTarget(deps, res)
   const anchoredRoot = rootCheck.anchor.path
-  if (!stateStorageExistsSync(join(anchoredRoot, 'openspec', 'changes', name))) {
+  let changeExists = false
+  try {
+    changeExists = stateStorageExistsSync(join(anchoredRoot, 'openspec', 'changes', name))
+  } catch {
+    return missingTarget(deps, res)
+  }
+  if (!changeExists) {
     return missingTarget(deps, res)
   }
 

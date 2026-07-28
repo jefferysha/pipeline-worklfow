@@ -701,6 +701,32 @@ describe('opencodeExtractDialogue —— message+part 联表，只收 text part'
     expect(turns).toEqual([{ role: 'assistant', text: 'Part one.\n\nPart two.' }])
   })
 
+  test('有界读取以 part id 稳定排序同一时间戳的多个 text part', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, { id: 'ses_1', directory: '/p', title: 't', created: '2026-07-05T10:00:00Z', updated: '2026-07-05T10:00:10Z' })
+    insertMessage(db, { id: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:01Z', data: { role: 'assistant' } })
+    insertPart(db, { id: 'prt_2', messageId: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:02Z', data: { type: 'text', text: 'Part two.' } })
+    insertPart(db, { id: 'prt_1', messageId: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:02Z', data: { type: 'text', text: 'Part one.' } })
+    db.close()
+
+    let bytesRead = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+    const turns = opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toEqual([{ role: 'assistant', text: 'Part one.\n\nPart two.' }])
+  })
+
   test('同一请求读取同一数据库的多个会话，共享累计 per-source 字节上限并报告截断', async () => {
     const db = await openFixtureDb(root)
     for (const sessionId of ['ses_1', 'ses_2']) {

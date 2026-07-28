@@ -374,6 +374,7 @@ export function searchRelatedSessions(
     includeChildren: true,
     candidateLimit: RELATED_SESSION_SEARCH_BUDGETS.candidates,
     hostSummariesAsAssistant: true,
+    excerptChars: RELATED_SESSION_SEARCH_BUDGETS.excerptChars,
   })
   for (const warning of search.warnings) addWarning(state, warning)
 

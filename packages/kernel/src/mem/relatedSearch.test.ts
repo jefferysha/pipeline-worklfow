@@ -357,6 +357,25 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     expect(result.matches[0]).not.toHaveProperty('filePath')
   })
 
+  test('keeps a late search hit inside the 320-character API excerpt', () => {
+    const path = codexFile('late-hit')
+    const result = searchRelatedSessions(boundedFakeFs({
+      [path]: codexSession('late-hit', [{
+        role: 'user',
+        text: `${'prefix '.repeat(52)}memory search`,
+      }]),
+    }), {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]?.excerpt).toContain('memory search')
+    expect(Array.from(result.matches[0]?.excerpt ?? '').length)
+      .toBeLessThanOrEqual(RELATED_SESSION_SEARCH_BUDGETS.excerptChars)
+  })
+
   test('drops sessions whose query appears only in assistant content', () => {
     const path = codexFile('assistant-only')
     const result = searchRelatedSessions(boundedFakeFs({

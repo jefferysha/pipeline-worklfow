@@ -106,13 +106,14 @@ function searchSession(
   s: MemSession,
   kw: string,
   hostSummariesAsAssistant = false,
+  excerptChars = 400,
 ): SearchHit {
   if (hostSummariesAsAssistant) {
     return searchInDialogue(
       extractDialogue(fs, s),
       kw,
       3,
-      400,
+      excerptChars,
       { hostSummariesAsAssistant: true },
     )
   }
@@ -232,12 +233,13 @@ function searchSessionWithChildren(
   childIndex: Map<string, MemSession[]>,
   hostSummariesAsAssistant: boolean,
   searchableKeys?: ReadonlySet<string>,
+  excerptChars = 400,
 ): SearchHit {
   const rootKey = sessionKey(s.platform, s.id)
   const children = (childIndex.get(rootKey) ?? [])
     .filter((child) => searchableKeys?.has(sessionKey(child.platform, child.id)) ?? true)
   if (!children.length && (searchableKeys?.has(rootKey) ?? true)) {
-    return searchSession(fs, s, kw, hostSummariesAsAssistant)
+    return searchSession(fs, s, kw, hostSummariesAsAssistant, excerptChars)
   }
   const merged = (searchableKeys?.has(rootKey) ?? true) ? [...extractDialogue(fs, s)] : []
   for (const c of children) merged.push(...extractDialogue(fs, c))
@@ -245,7 +247,7 @@ function searchSessionWithChildren(
     merged,
     kw,
     3,
-    400,
+    excerptChars,
     hostSummariesAsAssistant ? { hostSummariesAsAssistant: true } : {},
   )
 }
@@ -340,12 +342,15 @@ export function searchMemSessions(
     candidateLimit?: number
     /** Related Sessions only: synthetic host summaries never qualify as original user content. */
     hostSummariesAsAssistant?: boolean
+    /** Related Sessions only: build excerpts at the public DTO limit so later shaping keeps the hit. */
+    excerptChars?: number
   },
 ): SearchResult {
   const f = resolveFilter(options.filter)
   const kw = options.keyword
   const includeChildren = options.includeChildren === true
   const hostSummariesAsAssistant = options.hostSummariesAsAssistant === true
+  const excerptChars = options.excerptChars ?? 400
 
   const requestedCandidateLimit = options.candidateLimit
   const candidateLimit =
@@ -387,8 +392,9 @@ export function searchMemSessions(
         childIndex,
         hostSummariesAsAssistant,
         searchableKeys,
+        excerptChars,
       )
-      : searchSession(fs, s, kw, hostSummariesAsAssistant)
+      : searchSession(fs, s, kw, hostSummariesAsAssistant, excerptChars)
     if (hit.count === 0) continue
     const descendantsMerged = (childIndex.get(sessionKey(s.platform, s.id)) ?? [])
       .filter((child) => searchableKeys.has(sessionKey(child.platform, child.id)))

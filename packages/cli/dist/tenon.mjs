@@ -14153,15 +14153,38 @@ function readBoundedSessionRowById(fs, db, f, source, id) {
   const row = db.prepare(sql).get(...params);
   return row ? accountSessionRow(row, f, source, budget) : null;
 }
-var SQLITE_RELATION_ID_BYTES = 512;
-var SQLITE_ROW_DATA_BYTES = 4 * 1024;
-var SQLITE_MAX_ROWS_PER_QUERY = 512;
 var boundedPlanCache = /* @__PURE__ */ new WeakMap();
 function hasBoundedQueryPlan(db, sql, params) {
   let cache2 = boundedPlanCache.get(db);
   if (!cache2) {
     cache2 = /* @__PURE__ */ new Map();
     boundedPlanCache.set(db, cache2);
+  }
+  const cached = cache2.get(sql);
+  if (cached !== void 0)
+    return cached;
+  let bounded = false;
+  try {
+    const rows = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params);
+    const details = rows.map((row) => String(row.detail ?? "").toUpperCase());
+    bounded = details.some((detail) => detail.includes("SEARCH ")) && details.every((detail) => !detail.includes("SCAN ") && !detail.includes("USE TEMP B-TREE"));
+  } catch {
+    bounded = false;
+  }
+  cache2.set(sql, bounded);
+  return bounded;
+}
+
+// packages/kernel/dist/mem/adapters/opencode-dialogue-budget.js
+var SQLITE_RELATION_ID_BYTES = 512;
+var SQLITE_ROW_DATA_BYTES = 4 * 1024;
+var SQLITE_MAX_ROWS_PER_QUERY = 512;
+var boundedPlanCache2 = /* @__PURE__ */ new WeakMap();
+function hasBoundedQueryPlan2(db, sql, params) {
+  let cache2 = boundedPlanCache2.get(db);
+  if (!cache2) {
+    cache2 = /* @__PURE__ */ new Map();
+    boundedPlanCache2.set(db, cache2);
   }
   const cached = cache2.get(sql);
   if (cached !== void 0)
@@ -14184,24 +14207,25 @@ function readBoundedSqliteRows(fs, db, query, source) {
   const budget = fs.contentReadBudget;
   if (!budget)
     return [];
+  const relationAllowance = SQLITE_RELATION_ID_BYTES * query.relationFields.length;
   const sourceRemaining = budget.perSourceBytes - source.bytesRead;
   const aggregateRemaining = budget.remainingBytes();
-  const rowBytes = Math.min(SQLITE_ROW_DATA_BYTES, Math.max(0, sourceRemaining - SQLITE_RELATION_ID_BYTES), Math.max(0, aggregateRemaining - SQLITE_RELATION_ID_BYTES));
+  const rowBytes = Math.min(SQLITE_ROW_DATA_BYTES, Math.max(0, sourceRemaining - relationAllowance), Math.max(0, aggregateRemaining - relationAllowance));
   if (rowBytes <= 0) {
-    if (sourceRemaining <= SQLITE_RELATION_ID_BYTES)
+    if (sourceRemaining <= relationAllowance)
       budget.noteSourceTruncated();
-    if (aggregateRemaining <= SQLITE_RELATION_ID_BYTES)
+    if (aggregateRemaining <= relationAllowance)
       budget.noteTotalExhausted();
     source.truncated = true;
     return [];
   }
   const queryParams = [
-    SQLITE_RELATION_ID_BYTES,
+    ...query.relationFields.map(() => SQLITE_RELATION_ID_BYTES),
     rowBytes,
     query.scopeId,
     SQLITE_MAX_ROWS_PER_QUERY
   ];
-  if (!hasBoundedQueryPlan(db, query.sql, queryParams) || !hasBoundedQueryPlan(db, query.hasMoreSql, [query.scopeId, 0])) {
+  if (!hasBoundedQueryPlan2(db, query.sql, queryParams) || !hasBoundedQueryPlan2(db, query.hasMoreSql, [query.scopeId, 0])) {
     budget.noteSourceUnavailable("opencode");
     source.truncated = true;
     return [];
@@ -14216,7 +14240,7 @@ function readBoundedSqliteRows(fs, db, query, source) {
       }
       break;
     }
-    const maximumProjectedBytes = SQLITE_RELATION_ID_BYTES + rowBytes;
+    const maximumProjectedBytes = relationAllowance + rowBytes;
     if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes || budget.remainingBytes() < maximumProjectedBytes) {
       if (hasMoreRows(db, query, rows.length)) {
         if (budget.perSourceBytes - source.bytesRead < maximumProjectedBytes) {
@@ -14232,8 +14256,7 @@ function readBoundedSqliteRows(fs, db, query, source) {
     if (next.done)
       break;
     const row = next.value;
-    const relationValue = row[query.relationField];
-    const relationBytes = typeof relationValue === "string" ? Buffer.byteLength(relationValue) : 0;
+    const relationBytes = query.relationFields.reduce((total, field2) => total + (typeof row[field2] === "string" ? Buffer.byteLength(row[field2]) : 0), 0);
     const returnedDataBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
     const returnedBytes = relationBytes + returnedDataBytes;
     if (budget.perSourceBytes - source.bytesRead < returnedBytes || budget.remainingBytes() < returnedBytes) {
@@ -14246,21 +14269,20 @@ function readBoundedSqliteRows(fs, db, query, source) {
     }
     budget.consume(returnedBytes);
     source.bytesRead += returnedBytes;
-    const relationTruncated = typeof row.relation_full_bytes === "number" && row.relation_full_bytes > SQLITE_RELATION_ID_BYTES;
+    const relationTruncated = query.relationFields.some((field2) => typeof row[`${field2}_full_bytes`] === "number" && Number(row[`${field2}_full_bytes`]) > SQLITE_RELATION_ID_BYTES);
     const dataTruncated = typeof row.full_bytes === "number" && row.full_bytes > rowBytes;
     if (relationTruncated || dataTruncated) {
       budget.noteSourceTruncated();
       source.truncated = true;
     }
-    if (relationTruncated)
-      continue;
-    rows.push(row);
+    if (!relationTruncated)
+      rows.push(row);
   }
   rows.sort((left, right) => {
     const time = Number(left.time_created ?? 0) - Number(right.time_created ?? 0);
     if (time !== 0)
       return time;
-    return String(left[query.relationField] ?? "").localeCompare(String(right[query.relationField] ?? ""));
+    return String(left[query.orderField] ?? "").localeCompare(String(right[query.orderField] ?? ""));
   });
   return rows;
 }
@@ -14400,7 +14422,7 @@ function opencodeExtractDialogue(fs, s) {
     const sourceBudget = sqliteSourceBudget(fs, opencodeDbPath(fs));
     const messageRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
       sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
-                length(CAST(id AS blob)) AS relation_full_bytes,
+                length(CAST(id AS blob)) AS id_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
@@ -14409,13 +14431,16 @@ function opencodeExtractDialogue(fs, s) {
          LIMIT ?`,
       hasMoreSql: "SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?",
       scopeId: s.id,
-      relationField: "id"
+      relationFields: ["id"],
+      orderField: "id"
     }, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     if (!messageRows.length)
       return [];
     const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
       sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
-                length(CAST(message_id AS blob)) AS relation_full_bytes,
+                length(CAST(message_id AS blob)) AS message_id_full_bytes,
+                CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS id_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
@@ -14424,7 +14449,8 @@ function opencodeExtractDialogue(fs, s) {
          LIMIT ?`,
       hasMoreSql: "SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?",
       scopeId: s.id,
-      relationField: "message_id"
+      relationFields: ["message_id", "id"],
+      orderField: "id"
     }, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     const partsByMessage = /* @__PURE__ */ new Map();
     for (const p of partRows) {
@@ -15622,9 +15648,9 @@ function extractDialogue(fs, s) {
       return [];
   }
 }
-function searchSession(fs, s, kw, hostSummariesAsAssistant = false) {
+function searchSession(fs, s, kw, hostSummariesAsAssistant = false, excerptChars = 400) {
   if (hostSummariesAsAssistant) {
-    return searchInDialogue(extractDialogue(fs, s), kw, 3, 400, { hostSummariesAsAssistant: true });
+    return searchInDialogue(extractDialogue(fs, s), kw, 3, excerptChars, { hostSummariesAsAssistant: true });
   }
   switch (s.platform) {
     case "claude":
@@ -15731,16 +15757,16 @@ function buildAbsorbedChildKeys(sessions) {
   }
   return absorbed;
 }
-function searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys) {
+function searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys, excerptChars = 400) {
   const rootKey = sessionKey(s.platform, s.id);
   const children = (childIndex.get(rootKey) ?? []).filter((child) => searchableKeys?.has(sessionKey(child.platform, child.id)) ?? true);
   if (!children.length && (searchableKeys?.has(rootKey) ?? true)) {
-    return searchSession(fs, s, kw, hostSummariesAsAssistant);
+    return searchSession(fs, s, kw, hostSummariesAsAssistant, excerptChars);
   }
   const merged = searchableKeys?.has(rootKey) ?? true ? [...extractDialogue(fs, s)] : [];
   for (const c of children)
     merged.push(...extractDialogue(fs, c));
-  return searchInDialogue(merged, kw, 3, 400, hostSummariesAsAssistant ? { hostSummariesAsAssistant: true } : {});
+  return searchInDialogue(merged, kw, 3, excerptChars, hostSummariesAsAssistant ? { hostSummariesAsAssistant: true } : {});
 }
 function findSessionById(fs, sid, f) {
   const wide = { ...resolveFilter(f), cwd: null, limit: WIDE_LIMIT };
@@ -15809,6 +15835,7 @@ function searchMemSessions(fs, options) {
   const kw = options.keyword;
   const includeChildren = options.includeChildren === true;
   const hostSummariesAsAssistant = options.hostSummariesAsAssistant === true;
+  const excerptChars = options.excerptChars ?? 400;
   const requestedCandidateLimit = options.candidateLimit;
   const candidateLimit = typeof requestedCandidateLimit === "number" && Number.isSafeInteger(requestedCandidateLimit) && requestedCandidateLimit > 0 ? requestedCandidateLimit : null;
   const wide = { ...f, limit: candidateLimit === null ? WIDE_LIMIT : candidateLimit + 1 };
@@ -15831,7 +15858,7 @@ function searchMemSessions(fs, options) {
   for (const s of searchRoots) {
     if (absorbedChildKeys.has(sessionKey(s.platform, s.id)))
       continue;
-    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys) : searchSession(fs, s, kw, hostSummariesAsAssistant);
+    const hit = includeChildren ? searchSessionWithChildren(fs, s, kw, childIndex, hostSummariesAsAssistant, searchableKeys, excerptChars) : searchSession(fs, s, kw, hostSummariesAsAssistant, excerptChars);
     if (hit.count === 0)
       continue;
     const descendantsMerged = (childIndex.get(sessionKey(s.platform, s.id)) ?? []).filter((child) => searchableKeys.has(sessionKey(child.platform, child.id))).length;
