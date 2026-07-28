@@ -35,6 +35,8 @@ export interface DialogProps {
   children: React.ReactNode
   actions?: React.ReactNode      // 底部动作条（调用方放确认/取消按钮）
   testid?: string
+  /** Localized accessible label for the workspace close icon. */
+  closeLabel?: string
   /** 少数编排型对话框需要更宽的工作面；缺省仍保持既有 420px。 */
   panelClassName?: string
   /** 大型编辑器使用沉浸式工作区骨架；普通确认框保持 default。 */
@@ -69,7 +71,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, closeLabel = '关闭', panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
@@ -164,7 +166,7 @@ export function Dialog({ title, onClose, children, actions, testid, panelClassNa
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6">
               <h2 className="min-w-0 flex-1 truncate text-[18px] font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-xl text-text-3 transition hover:bg-fill hover:text-text" aria-label="关闭" onClick={onClose}>×</button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-xl text-text-3 transition hover:bg-fill hover:text-text" aria-label={closeLabel} onClick={onClose}>×</button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}

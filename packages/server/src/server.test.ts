@@ -1408,6 +1408,95 @@ tracks:
   })
 })
 
+describe('POST /api/verification-evidence/compose —— 受保护的无状态草稿格式化', () => {
+  const entry = {
+    kind: 'command',
+    title: 'Run server tests',
+    status: 'passed',
+    command: 'npm test -- server.test.ts',
+    result: 'passed',
+  }
+
+  it('registered root + token 生成 Markdown，canonical state 和 ledger 零变化', async () => {
+    const h = await start()
+    const statePath = join(h.changeDir, '.pipeline-run', 'current.json')
+    const ledgerPath = join(h.changeDir, '.pipeline-documents.json')
+    const beforeState = await readFile(statePath, 'utf8')
+    const beforeLedger = await readFile(ledgerPath, 'utf8')
+
+    const response = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      { root: h.root, locale: 'en', entries: [entry] },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toMatchObject({
+      ok: true,
+      entryCount: 1,
+      markdown: expect.stringContaining('## Verification evidence draft'),
+    })
+    expect(await readFile(statePath, 'utf8')).toBe(beforeState)
+    expect(await readFile(ledgerPath, 'utf8')).toBe(beforeLedger)
+  })
+
+  it('validation error 返回稳定 code/path，空数组不生成假证据', async () => {
+    const h = await start()
+    const auth = { Authorization: `Bearer ${h.token}` }
+    const invalid = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      {
+        root: h.root,
+        locale: 'en',
+        entries: [{ ...entry, status: 'skipped', result: 'forged pass' }],
+      },
+      { headers: auth },
+    )
+    expect(invalid.status).toBe(400)
+    expect(invalid.json()).toMatchObject({
+      ok: false,
+      code: 'verification_evidence_invalid',
+      details: [
+        { code: 'field_forbidden', path: 'entries[0].result' },
+        { code: 'field_required', path: 'entries[0].skipReason' },
+      ],
+    })
+
+    const empty = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      { root: h.root, locale: 'en', entries: [] },
+      { headers: auth },
+    )
+    expect(empty.status).toBe(400)
+    expect(empty.json()).toMatchObject({
+      ok: false,
+      code: 'verification_evidence_invalid',
+      details: [{ code: 'entries_empty', path: 'entries' }],
+    })
+  })
+
+  it('复用 token 与 registered-root 安全边界', async () => {
+    const h = await start()
+    const missingToken = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      { root: h.root, locale: 'en', entries: [entry] },
+    )
+    expect(missingToken.status).toBe(401)
+
+    const unknownRoot = await reqPost(
+      h.port,
+      '/api/verification-evidence/compose',
+      { root: '/tmp/not-registered-verification-root', locale: 'en', entries: [entry] },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(unknownRoot.status).toBe(404)
+  })
+})
+
 describe('GET/POST/PATCH/DELETE /api/tracks —— v3 Studio Track CRUD', () => {
   const policy = {
     reviewSeed: 'pending' as const,

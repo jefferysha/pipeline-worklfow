@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-28T04:13:41Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-28-verification-evidence-composer-explore.md",
+      "sha256": "fec0eeaca356238995d9a851adc3d40d22e1c89f28cd4fbce35addb2a8bec797",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-28T04:26:36Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "fec0eeaca356238995d9a851adc3d40d22e1c89f28cd4fbce35addb2a8bec797",
+          "readAt": "2026-07-28T04:29:58Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fec0eeaca356238995d9a851adc3d40d22e1c89f28cd4fbce35addb2a8bec797",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/verification-evidence-composer/proposal.md",
+      "sha256": "1e68f213c7f263dc8f913bc8b620ac979a11d66ec54e58e0ff2b9a1a5660d729",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T04:26:37Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "1e68f213c7f263dc8f913bc8b620ac979a11d66ec54e58e0ff2b9a1a5660d729",
+          "readAt": "2026-07-28T04:26:38Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "1e68f213c7f263dc8f913bc8b620ac979a11d66ec54e58e0ff2b9a1a5660d729",
+          "readAt": "2026-07-28T04:29:58Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1e68f213c7f263dc8f913bc8b620ac979a11d66ec54e58e0ff2b9a1a5660d729",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/verification-evidence-composer/design.md",
+      "sha256": "37d878be70c5cb6c66a1462780112da2341adc1477e6e4bc6ae739d37804cdaa",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T04:26:38Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "37d878be70c5cb6c66a1462780112da2341adc1477e6e4bc6ae739d37804cdaa",
+          "readAt": "2026-07-28T04:26:38Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "37d878be70c5cb6c66a1462780112da2341adc1477e6e4bc6ae739d37804cdaa",
+          "readAt": "2026-07-28T04:29:58Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "37d878be70c5cb6c66a1462780112da2341adc1477e6e4bc6ae739d37804cdaa",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/verification-evidence-composer/specs/verification-evidence-composer/spec.md",
+      "sha256": "48ec6961dfd10706840bf2f706b4162fc3ee09ce44ab086d64b9523c1a051dc3",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T04:29:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "48ec6961dfd10706840bf2f706b4162fc3ee09ce44ab086d64b9523c1a051dc3",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-verification-evidence-composer.md",
+      "sha256": "e41f02a35213fcc9a7325eb8f55caca36c21ffc56573c42a9f39e60c4fcd693b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T04:29:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "e41f02a35213fcc9a7325eb8f55caca36c21ffc56573c42a9f39e60c4fcd693b",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-28-verification-evidence-composer.md",
+      "sha256": "e41f02a35213fcc9a7325eb8f55caca36c21ffc56573c42a9f39e60c4fcd693b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T04:29:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "e41f02a35213fcc9a7325eb8f55caca36c21ffc56573c42a9f39e60c4fcd693b",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-28-verification-evidence-composer-design.md",
+      "sha256": "51a98833e10b893fe47899fa126e4e58313e16199a341e30aaaa53db963018d4",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-28T04:29:58Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "51a98833e10b893fe47899fa126e4e58313e16199a341e30aaaa53db963018d4",
+          "readAt": "2026-07-28T04:29:58Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "51a98833e10b893fe47899fa126e4e58313e16199a341e30aaaa53db963018d4",
+          "readAt": "2026-07-28T04:30:21Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/verification-evidence-composer/tasks.md",
+      "sha256": "674c8f49100a9519efaff36ab722cda1b397bdfb21d82397ab90a3f422dbe136",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T04:54:01Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "674c8f49100a9519efaff36ab722cda1b397bdfb21d82397ab90a3f422dbe136",
+          "readAt": "2026-07-28T04:54:02Z",
+          "visitId": "[\"f0ef9d0f-b6f0-4cf2-8861-50518602672d\",3]"
+        }
+      ]
+    }
+  ]
+}

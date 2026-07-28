@@ -72,7 +72,7 @@ export function TaskDetail({
   onClose,
   onToast,
 }: TaskDetailProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const scopeRef = useRef<HTMLElement>(null)
   const [entries, setEntries] = useState<ChangeHistoryEntry[] | null>(null)
   useEffect(() => {
@@ -360,7 +360,13 @@ export function TaskDetail({
         )}
       </div>
       {change.documents?.governed && (
-        <TaskDocumentsSection documents={change.documents} />
+        <TaskDocumentsSection
+          documents={change.documents}
+          locale={lang === 'zh' ? 'zh-CN' : 'en'}
+          onToast={onToast}
+          phase={change.phase}
+          root={root}
+        />
       )}
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">

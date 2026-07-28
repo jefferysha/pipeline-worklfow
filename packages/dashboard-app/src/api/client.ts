@@ -61,6 +61,11 @@ export {
   fetchTraceSessions,
 } from './auditClient'
 
+export {
+  postVerificationEvidenceCompose,
+  VerificationEvidenceApiError,
+} from './verificationEvidenceClient'
+
 export type {
   ChangeHistoryEntry,
   ChangeSessionLaunch,
@@ -107,3 +112,13 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  VerificationEvidenceComposeInput,
+  VerificationEvidenceComposeResponse,
+  VerificationEvidenceDraftEntry,
+  VerificationEvidenceFieldError,
+  VerificationEvidenceKind,
+  VerificationEvidenceLocale,
+  VerificationEvidenceStatus,
+} from './verificationEvidenceTypes'
