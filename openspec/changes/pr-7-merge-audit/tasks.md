@@ -37,7 +37,7 @@
 - [x] 第三轮 Verify 因共享 `npm ci` 漂移回退后恢复 tracked mode，并用完整 `change@root` key 在冻结 production Chromium 证明 direct-route Escape 焦点恢复。
 - [x] 以红测固定窄屏已完成任务折叠与 workspace 长标题完整换行，修复 Dashboard 信息层级和标题截断并重建正式资产。
 - [x] 修正 TEST-REALITY 的 tap 集成用例计数与 earliest-readiness SIGINT 竞态覆盖事实。
-- [ ] 使用显式隔离根断言重跑全部前后端门禁、独立 pre-Verify 复审、普通推送和 fresh exact-head CI。
+- [x] 使用显式隔离根断言重跑全部前后端门禁、独立 pre-Verify 复审、普通推送和 fresh exact-head CI。
 
 ## 验证
 
