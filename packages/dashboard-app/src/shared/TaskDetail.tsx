@@ -15,7 +15,7 @@ import { copyBtnCls } from './SessionResumeRow'
 import { revealStages } from './motion'
 import { Icon } from './Icon'
 import { RunAuditPanel } from './RunAuditPanel'
-import { BoxField, StageChip } from './taskDetailParts'
+import { BoxField, StageChip, StageTaskList } from './taskDetailParts'
 import { TaskHistorySection } from './TaskHistorySection'
 import { TaskConnectionCard } from './TaskConnectionCard'
 import { TaskDetailIntro } from './TaskDetailIntro'
@@ -327,22 +327,11 @@ export function TaskDetail({
                     </>
                   )}
                   {todo !== undefined && todo.tasks.length > 0 && (
-                    <ul
-                      className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs"
-                      data-testid={`dtl-todo-${st.step}`}
-                    >
-                      {todo.tasks.map((task, taskIndex) => (
-                        <li
-                          className={`flex gap-1.5 [overflow-wrap:anywhere] ${task.completed ? 'text-text-3 line-through' : 'text-text-2'}`}
-                          data-completed={task.completed ? 'true' : 'false'}
-                          data-testid={`dtl-todo-${st.step}-${taskIndex}`}
-                          key={`${taskIndex}-${task.text}`}
-                        >
-                          {task.completed ? <Check className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" />}
-                          <span>{task.text}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <StageTaskList
+                      stage={st.step}
+                      tasks={todo.tasks}
+                      collapseCompleted={status === 'done' && todo.tasks.every((task) => task.completed)}
+                    />
                   )}
                 </div>
               )

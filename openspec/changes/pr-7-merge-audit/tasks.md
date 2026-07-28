@@ -34,6 +34,10 @@
 - [x] 串行复跑 focus 相关 Web 测试、全量门禁、生成物、独立复审与精确 head CI，冻结新的 Verify SHA。
 - [x] 以红测复现父抽屉原 trigger 被同 key 新节点替换后的焦点丢失，并实现稳定、精确的连接节点 fallback。
 - [x] 使用强制隔离目录断言重跑 OpenSpec 演练、前后端全量门禁、Dashboard 真实浏览器与独立复审，并修复 readiness 前 SIGINT 竞态后取得新的精确 head CI。
+- [x] 第三轮 Verify 因共享 `npm ci` 漂移回退后恢复 tracked mode，并用完整 `change@root` key 在冻结 production Chromium 证明 direct-route Escape 焦点恢复。
+- [x] 以红测固定窄屏已完成任务折叠与 workspace 长标题完整换行，修复 Dashboard 信息层级和标题截断并重建正式资产。
+- [x] 修正 TEST-REALITY 的 tap 集成用例计数与 earliest-readiness SIGINT 竞态覆盖事实。
+- [ ] 使用显式隔离根断言重跑全部前后端门禁、独立 pre-Verify 复审、普通推送和 fresh exact-head CI。
 
 ## 验证
 

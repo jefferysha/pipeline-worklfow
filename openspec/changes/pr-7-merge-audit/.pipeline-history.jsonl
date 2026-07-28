@@ -81,3 +81,19 @@
 {"ts":"2026-07-28T22:13:06Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
 {"ts":"2026-07-28T22:20:03Z","kind":"set","field":"pre_verify_review_result","to":"pending"}
 {"ts":"2026-07-28T22:47:52Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T22:56:12Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T22:56:12Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T22:56:12Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T22:56:12Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T22:56:12Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"ea1be4de-52c1-446b-9bc8-eb0e935fe318"}
+{"ts":"2026-07-28T23:07:09Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-pr-7-merge-audit-verify-fail-3.md"}
+{"ts":"2026-07-28T23:08:42Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T23:08:43Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T23:08:53Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T23:08:53Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T23:08:42Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T23:09:23Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T23:09:47Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T23:09:47Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T23:09:47Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T23:09:47Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"ae1b4360-0b44-42d9-8211-ca95d79e4c32"}
+{"ts":"2026-07-28T23:12:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
