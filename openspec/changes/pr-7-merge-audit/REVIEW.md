@@ -361,3 +361,26 @@ TDD 新增两条红测并在旧实现上同时稳定失败：
 
 完整 Build diff 至此没有未关闭的 C/H/M/L。下一门禁是提交、普通推送并等待该精确 product/review
 head 的 GitHub CI；在 CI 成功前，最后 Build task 和 `pre_verify_review_result` 必须继续保持 pending。
+
+### Product/review head CI 失败与测试同步修复
+
+Product/review head `f4aba9564d2876605b2c8df35ce0273fe23fefd0` 正常推送后，GitHub CI
+run `30401772822` 的 build、freshness、clean install、docs、sandcastle 与 root Vitest 均通过，
+但 Dashboard 全量在 `GovernanceRail.test.tsx:227` 失败：点击 L2 后测试同步读取
+`wb-gov-promote-confirm`，CI 调度下 React state commit 尚未成为可观察 DOM，最终为
+`1055 passed / 1 failed`。因此该 head 没有被当作通过证据。
+
+`diagnosing-bugs` 反馈回路结果：
+
+- exact focused 连续 30 次和正常 full Web 连续 10 次均通过，证明不是稳定的按钮业务缺陷；
+- 高负载并发 full Web 成功复现原确认框抢跑，说明断言依赖调度时序；
+- 全部“请求升档并打开确认框”的测试统一通过异步 helper 点击并
+  `findByTestId('wb-gov-promote-confirm')` 等待用户可观察终态，再继续确认/取消与 POST 断言；
+- 修复后的高负载四路复测不再出现 GovernanceRail 原失败；四倍超配仍会触发其他测试的资源时序
+  失败，因此只作为放大诊断器，不冒充正式门禁；
+- 正式 focused GovernanceRail + ProgressView 为 101/101；Web 默认与串行各 59 files /
+  1056 tests；root 为 320 files / 5520 passed / 14 honest conditional skips。
+
+该修复只改变测试同步语义，不改变 production source、Dashboard bundle 或视觉合同；此前
+Spec、Rules/Architecture/Security 与 `design-taste-frontend` 的产品结论继续适用。必须把测试
+修复与本记录提交、普通推送，并重新取得新的 exact-head CI，不能 rerun 失败的旧 SHA 充数。
