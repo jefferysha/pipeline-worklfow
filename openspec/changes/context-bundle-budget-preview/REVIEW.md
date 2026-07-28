@@ -166,3 +166,21 @@ TDD 修复先以一致改写 N-1 revision + TransitionRecord 并重算摘要复�
 `origin/main` 已推进至 `15fe619…`，当前 branch merge-base 仍为 `2d103e3…`，且两份生成 bundle
 存在 merge conflict，因此本轮结论为 `FAIL — C0/H0/M1/L0`。处置：先保存当前治理修复，再 rebase
 最新主线、从合并后源码重建 bundle 并完整重跑门禁与全量审查；不得在旧基线上冻结。
+
+## 第十三轮：最新主线收敛
+
+已将分支 rebase 至 `origin/main@15fe619b2885b928dd27be9668cca6b0ee903c57`。两份生成 bundle
+的冲突未手工拼接业务逻辑：rebase 完成后从合并源码重跑 `npm run build`；server bundle 已与
+合并结果一致，CLI bundle 重新生成并同时包含主线 Codex auth 能力与本 Change 的 Context Bundle /
+N-2 连续性实现。
+
+最新基线门禁：
+
+- `npm test -- --minWorkers=1 --maxWorkers=4`：318 files，5,490 passed，12 skipped；
+- `npm run build`、`typecheck:web`、docs、architecture（627 个 production files）、
+  comments、repository hygiene、identity、skills 与 OpenSpec strict validate 通过；
+- hooks 482/0、adapters 272/0、bundle 31/0；
+- oracle 连续两轮均为 0 处不一致。
+
+主线漂移 finding 已修复。仍须在提交重建 bundle 后对 `origin/main...HEAD` 完整差异重新执行
+pre-Verify Standards + Spec 固定点审查；该复审通过前不得设置 `pre_verify_review_result=pass`。
