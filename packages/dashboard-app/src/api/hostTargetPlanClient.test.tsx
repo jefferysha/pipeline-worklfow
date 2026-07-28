@@ -97,9 +97,9 @@ function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
     steps: [
       { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: hostCommand },
       { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
       { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
-      { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: hostCommand },
     ],
     notices: [
       'host-plan.notice.read-only-generation',

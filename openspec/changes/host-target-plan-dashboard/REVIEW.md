@@ -137,3 +137,45 @@ Build。本轮只收紧输入歧义和只读请求的资源边界，不改变 DT
 
 最终独立只读复审再次确认完整差异 PASS，CRITICAL / HIGH / MEDIUM / LOW 均为 0；adapter
 顺序、前两项 P2 修复、tracked bundles 与新 Dashboard hash asset 均保持一致。
+
+## 第三轮 Verify 回环发现与第四轮 Build 修复
+
+冻结提交 `75df836602fe1bb3e79bf95c0ffad44837822d7a` 的第三轮 Verify 中，E2E、浏览器、
+OpenSpec 隔离验证和既有门禁均通过，但对抗性审查发现两项 MEDIUM，并通过确切
+`verify-fail` review receipt 返回 Build：
+
+| 严重度 | 第三轮 Verify finding | 第四轮 Build 修复 | RED → GREEN |
+| --- | --- | --- | --- |
+| MEDIUM | adapter 的真实 `cmdSetup` 在 managed runtime 发布后立即运行 `adapters/install.sh`，随后才进入 bundled skills 与 runtime readiness；三端契约把 deploy 错放在末尾 | CLI 真相、server 严格 decoder、Dashboard 严格 decoder 与 fixtures 统一为 `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness` | CLI 1 个、server 20 个、Dashboard 1 个场景先失败；CLI/server 78/78、Dashboard client 16/16 修绿 |
+| MEDIUM | server 将空 CLI catalog 当作成功并永久缓存，违背 v1 必须暴露完整 12 个注册宿主的契约 | server decoder 只接受精确 12-host catalog 并返回 502；Dashboard decoder 保留空 catalog 作为前端独立空态契约 | server 空 catalog 用例先失败，route focused 修绿 |
+| LOW | route 测试用固定数组索引制造 deploy mismatch，可能偏离目标步骤 | 测试按 `step.id === 'adapter-deploy'` 定位并篡改 | route focused 修绿 |
+| LOW | ADR 仍声称每个请求都会启动 CLI，未反映同键合并、串行化、25-key 成功缓存与失败重试 | ADR 更新为 server-instance runtime 的真实生命周期和安全边界 | 文档 diff 复核 |
+
+此外新增一条真实编排契约测试：直接以 `cursor` 运行注入式 `cmdSetup`，同时断言 DTO 步骤
+ID 和实际输出标记顺序，防止 CLI、server 与 Dashboard 三端 fixtures 同时漂移仍“互相通过”。
+该测试在不访问真实宿主、Docker 或用户目录的情况下通过（`setup.test.ts` 55/55）。
+
+第四轮 Build 的全量门禁、独立审查与冻结 SHA 将在本节后续收敛；第三轮冻结提交的 PASS
+证据不复用于下一轮 Verify。
+
+## 第四轮 Build 全量收敛
+
+- `npm run build`：通过；Dashboard 新 hash `index-BStVpnm7.js`、server 与 CLI bundle 均已更新。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 files / 997 tests 通过；只有既有 React `act(...)` / GSAP 警告。
+- `npm test`：317 files 通过；5484 passed / 5 honest skips（5489 total）。
+- `bash tools/test-bundle.sh`：31/31。
+- `npm run check:npx-package`：35/35。
+- `npm run check:docs`：10/10，39 canonical Markdown files。
+- `npm run check:repository-hygiene`：6/6，repository PASS。
+- `npm run check:architecture`、`npm run check:comments`、`git diff --check`：通过。
+
+独立 reviewer 对完整 119-file 差异再次给出 Standards / Spec 双轴 PASS，最终
+CRITICAL / HIGH / MEDIUM / LOW 均为 0，并确认真实 setup 编排契约、adapter 步骤顺序、
+server 空目录拒绝、Dashboard 空态和 ADR 均一致。
+
+Codex 的完整 `origin/main` 差异审查没有发现新的源码或契约缺陷；它报告的唯一 P1 是审查时
+新 Dashboard hash asset 仍为未跟踪文件。该交付完整性 finding 通过把
+`index-BStVpnm7.js`、`dist/index.html` 和旧 `index-D_k5gMMg.js` 删除原子纳入本次提交处理，
+并将在冻结后的干净检出 E2E 中复验。Codex 隔离环境中的 server bind 测试因 `listen EPERM`
+无法运行；同一源码已在真实 worktree 的上述全量 `npm test` 中通过。

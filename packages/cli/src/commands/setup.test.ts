@@ -25,6 +25,7 @@ import type { ExecDockerFn } from '../afkReadiness.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
+import { createHostTargetPlan } from './host-target-plan.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -838,6 +839,44 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
 })
 
 describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry-run 只提示不真探测,R1 concern#1）', () => {
+  test('adapter 计划步骤与真实 setup 编排保持同序', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText })
+    const runtime = fakeRuntimeInstaller()
+    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdSetup(
+      deps,
+      undefined,
+      { cursor: true, yes: true },
+      env,
+      rt,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('cursor', 'setup').steps.map((step) => step.id)).toEqual([
+      'package-assets',
+      'managed-runtime',
+      'adapter-deploy',
+      'bundled-skills',
+      'runtime-readiness',
+    ])
+
+    const output = deps.outLines
+    const actualStepIndexes = [
+      output.findIndex((line) => line.includes('插件资产校验')),
+      output.findIndex((line) => line.includes('已发布已验证 runtime')),
+      output.findIndex((line) => line.includes('/adapters/install.sh --cursor')),
+      output.findIndex((line) => line.includes('[setup skills] 技能安装计划')),
+      output.findIndex((line) => line.includes('[setup runtime] AFK 运行时就绪清单')),
+    ]
+    expect(actualStepIndexes.every((index) => index >= 0)).toBe(true)
+    expect(actualStepIndexes).toEqual([...actualStepIndexes].sort((left, right) => left - right))
+  })
+
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
     const deps = makeDeps()
     // 全部已装 → 技能段几乎空跑；fake installer 只记录已校验候选发布，聚焦「运行时段确实被接上」。

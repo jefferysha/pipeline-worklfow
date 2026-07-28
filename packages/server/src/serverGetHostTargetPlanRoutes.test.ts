@@ -151,15 +151,16 @@ function planFor(host: HostId, operation: Operation) {
       })
     : [
         { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
+        { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+        { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command },
       ]
+  if (native) {
+    steps.push({ id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null })
+  }
   steps.push(
-    { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
     { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
     { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
   )
-  if (!native) {
-    steps.push({ id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command })
-  }
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',
@@ -254,7 +255,7 @@ describe('Host Target Plan route resolver', () => {
     )
   })
 
-  it('accepts the explicit empty catalog state without weakening full-catalog validation', async () => {
+  it('rejects an impossible empty CLI catalog instead of caching it as success', async () => {
     const empty = { schema_version: 'host-target-plan/v1', targets: [] }
     const runner = vi.fn<PipelineCliRunner>(async () => jsonResult(empty))
 
@@ -262,7 +263,14 @@ describe('Host Target Plan route resolver', () => {
       '/api/host-targets',
       '/api/host-targets',
       deps(runner),
-    )).resolves.toEqual({ status: 200, body: empty })
+    )).resolves.toEqual({
+      status: 502,
+      body: {
+        ok: false,
+        code: 'HOST_TARGET_PLAN_INVALID',
+        error: '宿主计划响应无效',
+      },
+    })
   })
 
   it.each(HOST_IDS.flatMap((host) =>
@@ -434,11 +442,9 @@ describe('Host Target Plan route resolver', () => {
       name: 'adapter deploy command differs from the top command',
       mutate: (value: ReturnType<typeof planFor>) => ({
         ...value,
-        steps: [
-          value.steps[0],
-          { ...value.steps[1], command: planCommand('tenon', ['setup', '--cursor', '--target', '/tmp']) },
-          ...value.steps.slice(2),
-        ],
+        steps: value.steps.map((step) => step.id === 'adapter-deploy'
+          ? { ...step, command: planCommand('tenon', ['setup', '--cursor', '--target', '/tmp']) }
+          : step),
       }),
     },
     {

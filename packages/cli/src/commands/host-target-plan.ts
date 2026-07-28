@@ -61,11 +61,11 @@ export interface HostTargetPlanOpts {
   readonly json?: boolean
 }
 
-const PRODUCT_STEPS: readonly HostTargetPlanStep[] = [
+const PRODUCT_STEPS = [
   { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
   { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
   { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
-]
+] as const satisfies readonly HostTargetPlanStep[]
 
 const NATIVE_STEP_IDS: Readonly<Record<HostTargetOperation, readonly string[]>> = {
   setup: ['marketplace-register', 'plugin-install', 'plugin-inventory'],
@@ -134,8 +134,9 @@ function nativeSteps(
 function adapterSteps(manualCommand: HostPlanCommand): readonly HostTargetPlanStep[] {
   return [
     { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
-    ...PRODUCT_STEPS,
+    PRODUCT_STEPS[0],
     { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: manualCommand },
+    ...PRODUCT_STEPS.slice(1),
   ]
 }
 

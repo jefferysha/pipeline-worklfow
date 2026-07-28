@@ -199,7 +199,7 @@ export function decodeHostTargetCatalog(value: unknown): HostTargetCatalogDto | 
     || !hasExactKeys(value, ['schema_version', 'targets'])
     || value.schema_version !== 'host-target-plan/v1'
     || !Array.isArray(value.targets)
-    || (value.targets.length !== 0 && value.targets.length !== HOST_IDS.length)
+    || value.targets.length !== HOST_IDS.length
   ) return null
   const targets: HostTargetDto[] = []
   for (let index = 0; index < value.targets.length; index += 1) {
@@ -273,7 +273,7 @@ export function decodeHostTargetPlan(
         'bundled-skills',
         'runtime-readiness',
       ]
-    : ['package-assets', 'managed-runtime', 'bundled-skills', 'runtime-readiness', 'adapter-deploy']
+    : ['package-assets', 'managed-runtime', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null
   let expectedStepCommands: readonly (HostPlanCommandDto | null)[]
   if (native) {
@@ -285,7 +285,7 @@ export function decodeHostTargetPlan(
       null,
     ]
   } else {
-    expectedStepCommands = [null, null, null, null, command]
+    expectedStepCommands = [null, null, command, null, null]
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null

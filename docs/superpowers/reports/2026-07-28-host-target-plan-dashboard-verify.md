@@ -2,146 +2,130 @@
 
 ## 结论
 
-第二轮 Verify 审查冻结提交
-`8928d9d484395c84e87fc8b044a9af5423663f3a` 的完整
-`origin/main...build_sha` 交付面。Reviewer、隔离 E2E 与真实浏览器视觉轨均通过，
-Codex CLI 轨发现 2 个可修复 MEDIUM/P2 输入边界问题，因此聚合结论为 **FAIL**，必须回到
+第三轮 Verify 审查冻结提交
+`75df836602fe1bb3e79bf95c0ffad44837822d7a` 的完整
+`origin/main...build_sha` 交付面。隔离 E2E 与真实浏览器/视觉轨通过；Reviewer 发现 2 个
+LOW，Codex CLI 发现 2 个可修复 MEDIUM/P2 契约问题，因此聚合结论为 **FAIL**。必须回到
 Build 修复、重新提交、重新冻结并再次全量验证。
 
 - CRITICAL：0
 - HIGH：0
 - MEDIUM：2
-- LOW：0
-- 首轮 Verify 的 1 HIGH / 6 MEDIUM / 2 LOW 与 hygiene 门禁问题均已回归修复。
+- LOW：2
+- 前三轮发现中的 clean-room、严格 decoder、i18n、snapshot、live announcement、文档、
+  repository hygiene、重复 CLI option、server 有界 runtime 与初次 adapter 顺序修复均已回归。
 
 ## 冻结与零输出
 
-- `build_sha`：`8928d9d484395c84e87fc8b044a9af5423663f3a`
-- 比较基线：`origin/main` /
-  `2d103e330f847e003ff5909097d892f5722cca04`
-- 主线前后 worktree fingerprint：
-  `6fda9323ce2c1efb1492ebab31c2e0809f8606789533b61a348d44bafbc2fee0`
-- Reviewer 前后 fingerprint：
-  `915f9afb25e9d51531bd67900927b8f38cf3f153dda657ff1ec0c7eed19b5e66`
-- E2E 真实 worktree 前后 HEAD、status、unstaged、staged digest 完全一致。
-- 视觉轨前后 fingerprint：
-  `587277f8ff6726cd366cb649269df913584fec512e2fe83f3e2036a55304c0b8`
+- `build_sha`：`75df836602fe1bb3e79bf95c0ffad44837822d7a`
+- 比较基线：`origin/main` / `2d103e330f847e003ff5909097d892f5722cca04`
+- 主线实现 fingerprint 前后均为
+  `workspace:sha256:591aad9530e58783f714e49316c5778851d5bdfebab5c4d19827135258ddc632`。
 - 真实 `openspec/specs/**/spec.md` 聚合 digest 前后均为
   `44328f9c948d747c455e279f141d5eeb4d0f9db8571afdbb2de3bcc40aa299eb`。
-- 验证期间没有实现、配置或生成物写入真实 worktree；本报告是聚合后唯一写入的治理产物。
+- Reviewer delivery patch SHA-256：
+  `85b22164b76830e634f9475b653fc4846aa81f5d97174c243563f0e9a8b4023a`。
+- E2E 与浏览器轨只在 `/tmp` 隔离副本写入。并行 Codex skill/review 追加了受信
+  `.pipeline-history.jsonl` ledger 行，造成全 worktree byte fingerprint 变化；实现路径、
+  HEAD、status path set 与 staged digest 未变。本报告是轨道聚合后的唯一产品仓治理写入。
 
 ## 四轨聚合
 
 ### Reviewer Agent
 
-结论：PASS，CRITICAL/HIGH/MEDIUM/LOW 均为 0。
+结论：FAIL，仅 2 个 LOW，CRITICAL/HIGH/MEDIUM 为 0。
 
-- 完整审阅 2 个提交、105 个文件、COMMON/FRONTEND/BACKEND、proposal、design、ADR、
-  delta spec、tasks 与 REVIEW。
-- 覆盖 CLI catalog/plan、native truth 复用、setup/update 兼容与零写操作。
-- 覆盖 API 白名单、固定 argv、严格 DTO、Host guard、脱敏错误。
-- 覆盖 Dashboard 全状态、并发陈旧响应、键盘语义、响应式、双语与无执行入口。
-- 回归首轮全部 finding，并确认 clean-room 文档和依赖没有 Comet/Trellis 源码或 AGPL 污染。
+1. ADR 仍写“每次读取计划会启动一次 CLI bundle”，与已实现的成功缓存、同键合并和跨键串行
+   不一致。
+2. server 测试名为 “adapter deploy command differs” 的用例仍修改 `steps[1]`；新顺序中
+   deploy 不在该位置，测试实际命中 managed-runtime 非空命令，没有覆盖其声明的 mismatch。
+
+完整 119-file 差异、生产源、测试、tracked bundles、usage/ADR/OpenSpec 与门禁工具均已回读；
+重复 CLI option、25-key runtime 和 adapter decoder 同步未回退。
+
+### Codex CLI
+
+结论：FAIL，P0/P1/P3 为 0，P2 为 2。
+
+1. Adapter DTO 当前为
+   `package-assets → managed-runtime → bundled-skills → runtime-readiness → adapter-deploy`，
+   但真实完整 `tenon setup/update --<adapter>` 链在 `cmdSetupHost` 发布 runtime 后执行
+   adapter，随后 `cmdSetup` 才运行 skills 与 readiness。正确顺序应为
+   `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`。
+   三端 decoder/fixtures 同步锁定了错误顺序，需要加入与真实编排链的契约测试。
+2. Server decoder 接受 `targets: []` 为成功，并由无失效期成功缓存永久保存。CLI 真相规定完整
+   `TENON_HOSTS`，空 catalog 应是 `502 HOST_TARGET_PLAN_INVALID`。Frontend 可保留可达 empty
+   状态测试，但 production server 不应把不可能的空 CLI catalog 当成成功。
+
+Codex 只读验证：CLI 38/38、server resolver 66/66、Dashboard focused 106/106、三端
+TypeScript、OpenSpec strict、docs、hygiene、`git diff --check` 均通过；其沙箱内 6 个真实
+HTTP assembly 用例因 `listen EPERM` 未运行，由隔离 E2E 轨补足。
 
 ### 隔离 E2E
 
-结论：PASS。隔离副本：
-`/tmp/tenon-host-plan-verify2-track2.XwB9BU/repo`，日志位于其父目录。
+结论：PASS。隔离克隆：
+`/tmp/tenon-host-plan-final-e2e.8VR4Oj/repo`，日志位于其父目录。
 
-实际通过：
-
-- `npm ci`
-- `npm run build`：2011 modules；Dashboard JS 772.56 kB、server 822.0 kB、CLI 1.9 MB。
-- CLI/server focused：3 files，102/102。
+- `npm ci`：exit 0；401 packages。
+- `npm run build`：exit 0；2011 modules，Dashboard 772.62 kB，server 823.4 kB，CLI 1.9 MB。
+- CLI/server focused：3 files，110/110。
 - Dashboard focused：5 files，106/106。
-- `npm run typecheck:web`
+- `npm run typecheck:web`：通过。
 - `npm run test:web`：52 files，997/997。
-- `npm test`：317 files，5475 passed、5 skipped，共 5480。
+- `npm test`：317 files，5483 passed、5 skipped，共 5488，exit 0。
 - `bash tools/test-bundle.sh`：31/31。
 - `npm run check:npx-package`：35/35。
 - `npm run check:docs`：10/10，39 canonical Markdown files。
 - `npm run check:repository-hygiene`：6/6。
-- `npm run check:architecture`：623 production files。
-- `npm run check:comments`
-- `git diff --check`
+- `npm run check:architecture`：623 production files，5 个 size-only exception。
+- `npm run check:comments`、`git diff --check`：通过。
 
-真实 CLI smoke 确认 catalog 为有序 12 targets（2 native、10 adapter），Codex
-setup/update 与 Cursor update 均为 `side_effects=none`，adapter 保留 `<project>`；
-`.foo`、非法或缺失 operation、额外 `--root` 均 exit 1。真实 API smoke 确认 health、
-catalog、Codex setup 成功，缺失/重复/额外/未知查询均为脱敏
-`400 HOST_TARGET_QUERY_INVALID`。CLI/API 前后隔离状态 fingerprint 均相同。
+真实 bundle smoke：四种重复/非法首值后合法末值的 host/operation 均 exit 1；20 个 adapter
+setup/update DTO 与当前 tracked decoder 一致；真实 server 对 20 路同 key 只产生 1 个 CLI
+child，25 个 canonical key 的 CLI 峰值并发为 1，失败不缓存、成功可重试并缓存。
 
-诚实跳过与警告：
+诚实记录：
 
-- 1 个真实 Codex 场景因 `TENON_REQUIRE_REAL_CODEX!=1` 跳过。
-- 4 个 container agent 场景因缺少 `CLAUDE_CODE_OAUTH_TOKEN` 跳过。
-- 既有 React `act(...)`、GSAP target、Vite >500 kB chunk 警告。
-- `npm ci` 报告既有 5 moderate、1 high、1 critical 依赖漏洞及 4 个未批准 install scripts。
-- `check:npx-package` 只在一次性隔离克隆内把 bootstrap mode 改为 `100755`，真实 worktree 未变。
-
-### Codex CLI
-
-结论：FAIL。命令：
-
-```text
-codex exec review --base origin/main
-```
-
-原始日志：
-`/tmp/host-target-plan-codex-review-2.log`。
-
-1. MEDIUM/P2：Commander 对重复 `--host` 与 `--operation` 采用末值覆盖。例如非法首值后接
-   合法末值会成功，违背单目标计划“恰好一个 host 和一个 operation”及 API 的重复参数
-   fail-closed 口径。必须在 action 前拒绝重复值并加入 bundle/Commander 回归测试。
-2. MEDIUM/P2：两个只读 GET 对每次请求都启动 CLI 子进程。任意网页可对 loopback 发起无法读取
-   响应但仍能触发的 simple GET；当前没有成功结果缓存、相同请求 in-flight 去重或跨 key 并发上限，
-   而 runner 超时很长，可能耗尽本机进程。必须在 server 实例范围提供有界并发，并缓存/合并
-   catalog 与至多 24 个白名单计划 key；失败结果不可永久缓存。
-
-Codex 轨同时复跑 focused Dashboard、typecheck、docs、hygiene 与 bundle，均通过；其前后主线
-fingerprint 相同。
+- 干净 clone 在 build 前先跑 focused，因 `@tenon/kernel` 尚未构建而 exit 1；build 后原样复跑
+  110/110。
+- 1 个 real-Codex 场景因 `TENON_REQUIRE_REAL_CODEX!=1` 跳过，4 个 container agent 场景因
+  缺 `CLAUDE_CODE_OAUTH_TOKEN` 跳过。
+- `npm ci` 报告既有 5 moderate、1 high、1 critical 漏洞、1 deprecated package 与 4 个未批准
+  install scripts；既有 React `act(...)`、GSAP target 与 Vite chunk 警告保留。
+- `check:npx-package` 只在隔离克隆将 bootstrap mode 改为 `100755`，真实 worktree 未变。
 
 ### 真实 Dashboard 浏览器与视觉
 
 结论：PASS，CRITICAL/HIGH/MEDIUM/LOW 均为 0。
 
-- 冻结代码在临时 archive 中构建并运行于 `127.0.0.1:58725`。
-- 页面身份：health `{ok:true,scope:global,version:1.0.1}`，title `Tenon Dashboard`。
-- Desktop `1440×900`：显示 2 native + 10 adapter；键盘 Enter 选择 Codex、Space 选择
-  Setup；`aria-pressed` 生效，focus ring 为 `rgb(37,99,235) 0 0 0 2px`。
-- Codex Setup 显示 `tenon setup --codex`；复制后 clipboard 值一致。
-- Cursor Update 显示 `tenon update --cursor --target <project>` 与项目占位 notice。
-- 页面只有 Copy，没有 Run/Execute/立即执行控制。
-- Mobile `390×844`：目标卡单列；body/document `scrollWidth=390`；长命令只在 code block
-  内横向滚动，无页面级溢出。
-- 实测 catalog loading、empty→Retry、英文 503；plan loading、英文 502→Retry→ready。
-  英文错误不泄漏 server 原文或内部 detail。
-- 正常 desktop/mobile console 与 pageerror 均为空；人为 502/503 mock 只有 Chrome 预期资源错误。
-- Browser/server 已关闭，端口已释放。
+- 从冻结 SHA 的 git archive 构建，运行
+  `http://127.0.0.1:61944/?view=hostPlan`；health
+  `{ok:true,scope:global,version:1.0.1}`、title `Tenon Dashboard`、12 targets 身份正确。
+- Desktop `1440×900` 与 mobile `390×844` 通过；键盘 Enter/Space、`aria-pressed`、复制、
+  2px focus ring、loading/empty/error/retry/ready 均可用。
+- 英文 network、HTTP 418、decoder invalid v2 文案正确且不泄漏原始 body。
+- 页面没有 Run/Execute；请求日志只有两个只读 GET，没有 setup/update 执行。
+- 移动端单列且页面宽度 390；长命令仅 code block `overflow-x:auto`。
+- 正常 console/pageerror 为空；mock 错误只有 Chrome 预期资源错误。
+- Browser/server 已关闭，61944 端口已释放。
 
-主证据：
-`/tmp/tenon-host-plan-verify-v4ISXv/browser-evidence.json`。
-同目录保存 desktop/mobile、loading/empty/error/plan、health、server log、关闭与 fingerprint
-截图/文本证据。
+证据：`/tmp/tenon-host-plan-final-M5JPNJ/browser-evidence.json`
+（SHA-256 `c58b07dc38eaa646bce6ec5c4978476d7f3c6cad2b2212c4673634285ae8969a`）
+及同目录 10 张关键状态截图。
 
 ## 逐文件 Spec 回读
 
-`git diff --name-only origin/main...8928d9d` 的 105 个文件已逐项枚举，并按下表的唯一覆盖规则
-回读 `openspec/changes/host-target-plan-dashboard/specs/host-target-plan/spec.md`。表内 glob
-覆盖清单的每个路径；没有未映射文件。
+`git diff --name-only origin/main...75df836` 的 119 个文件已逐项枚举并回读
+`openspec/changes/host-target-plan-dashboard/specs/host-target-plan/spec.md`。
 
 | 冻结文件集合 | 命中的 requirement | 结论 |
 | --- | --- | --- |
-| `packages/cli/src/**`、`packages/cli/dist/tenon.mjs` | catalog、单目标计划、兼容与许可 | 主路径通过；重复 option fail-closed 失败 |
-| `packages/server/src/**`、`packages/server/dist/dashboard.mjs` | 严格只读 API、安全与兼容 | DTO/query/Host guard 通过；子进程并发边界失败 |
-| `packages/dashboard-app/src/api/**` | client DTO 与错误契约 | 通过 |
-| `packages/dashboard-app/src/hostPlan/**` | 选择、预览、复制与全状态 | 通过 |
-| `packages/dashboard-app/src/App*`、`src/shell/**`、`src/i18n/**` | machine-level view、路由、双语、a11y | 通过 |
-| `packages/dashboard-app/dist/**` | 可发布 Dashboard bundle | 通过 |
-| `docs/adr/**`、`docs/superpowers/**` | clean-room、固定来源、设计与验证 | 通过 |
-| `docs/usage/**` | CLI/API 用法与安全边界 | 通过 |
-| `openspec/changes/host-target-plan-dashboard/**` | 五项 requirement 与治理证据 | delta valid；证据齐全 |
-| `tools/check-docs*`、`tools/check-repository-hygiene*` | 文档/导航与许可边界门禁 | 通过 |
+| `packages/cli/src/**`、CLI bundle | catalog、单目标计划、兼容与许可 | 重复 option 通过；完整 adapter 顺序失败 |
+| `packages/server/src/**`、server bundle | 严格只读 API、安全与兼容 | runtime 通过；空 catalog 失败关闭缺失 |
+| Dashboard `src/api/**`、`hostPlan/**` | DTO、状态、复制、无执行入口 | 通过；需随 server 真相更新顺序 |
+| Dashboard `App*`、`shell/**`、`i18n/**`、dist | 路由、双语、a11y、响应式 | 通过 |
+| `docs/**`、OpenSpec Change | clean-room、设计、五项 requirement | delta valid；ADR 一处 LOW 漂移 |
+| `tools/check-docs*`、`check-repository-hygiene*` | 文档与许可门禁 | 通过 |
 
 ## OpenSpec 隔离应用演练
 
@@ -149,18 +133,19 @@ fingerprint 相同。
 - `openspec show host-target-plan-dashboard --json --deltas-only`：成功。
 - `openspec validate host-target-plan-dashboard --strict`：成功。
 - 隔离 clone：
-  `/tmp/host-target-plan-openspec.de9ZRC/repo`
+  `/private/var/folders/1c/hyn3mfvd12ngm6sgy28_s5gm0000gn/T/tmp.jM6hI5RyF7/repo`
 - 隔离 `openspec archive host-target-plan-dashboard --yes --json`：成功，应用 5 个新增
   requirement，生成 archive `2026-07-28-host-target-plan-dashboard`。
-- 隔离 `openspec validate host-target-plan --strict`：成功。
-- 真实主规格 digest 演练前后不变；Ship 仍是唯一真实 apply 边界。
+- 隔离 `openspec validate host-target-plan --type spec --strict`：成功。
+- 真实主规格 digest 未变；Ship 仍是唯一真实 apply 边界。
+- 附加 `openspec validate --all --strict` 有 12 个既有无关 change/spec 失败，不属于本 Change
+  成功硬门，已如实保留。
 
 ## 下一轮 Build 必修项
 
-1. CLI 在 Commander 解析层拒绝重复 `--host` / `--operation`，增加非法首值、重复合法值与
-   bundle 回归。
-2. server 为 deterministic host plan 请求增加 server-instance scoped 的成功缓存、同 key
-   in-flight 去重和跨 key 有界并发；失败必须可重试。
-3. 重新运行全部 Build 门禁、独立 pre-Verify review、提交和 `build-complete`。
-4. 下一轮 Verify 同时回归本轮两项 finding，并重新全量完成 reviewer、E2E、Codex 与真实浏览器，
-   不只复查修复点。
+1. Adapter 步骤调整为
+   `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`，
+   并增加与真实 setup 编排的契约测试。
+2. Production server decoder 拒绝空 catalog；Dashboard empty 状态保持独立组件/客户端测试。
+3. 修正 server mismatch 测试索引与 ADR 缓存说明。
+4. 重跑全部 Build 门禁、独立 pre-Verify review、提交与冻结；下一轮 Verify 重新全量完成四轨。

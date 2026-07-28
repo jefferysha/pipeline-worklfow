@@ -42,7 +42,8 @@ Tenon 已在 `packages/cli/src/commands/plugin-host.ts` 维护 `TENON_HOSTS`、n
 
 ### 代价
 
-- Dashboard 每次读取计划会启动一次 CLI bundle；目标集合小且请求由用户选择触发，P1 可接受。
+- Dashboard server 以实例级 runtime 合并同键 in-flight 请求、串行不同 key，并缓存最多 25 个
+  canonical 成功结果；失败不缓存且可重试。
 - adapter 内部步骤只展示稳定外层计划，不承诺脚本内部每个文件动作。
 - CLI/server/frontend 各有 decoder，需要用契约测试保持同步。
 

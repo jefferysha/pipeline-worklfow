@@ -25,6 +25,7 @@
 - [x] 修复首轮 Verify 的 clean-room、strict decoder、错误 i18n、snapshot 独立性、live announcement、文档和 hygiene findings。 (build)
 - [x] 修复第二轮 Verify 的重复 CLI option 与宿主计划子进程有界并发 findings。 (build)
 - [x] 修复冻结前审查发现的 adapter 步骤顺序与真实 setup/update 执行链漂移。 (build)
+- [x] 修复第三轮 Verify 的真实 adapter 编排顺序、空 catalog、测试索引与 ADR 漂移，并以真实 setup 契约测试锁定顺序。 (build)
 
 ## 验证
 

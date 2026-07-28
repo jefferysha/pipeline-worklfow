@@ -18070,7 +18070,7 @@ function decodeTarget(value) {
   };
 }
 function decodeHostTargetCatalog(value) {
-  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== 0 && value.targets.length !== HOST_IDS.length) return null;
+  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
   const targets = [];
   for (let index = 0; index < value.targets.length; index += 1) {
     const item2 = value.targets[index];
@@ -18114,7 +18114,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     "managed-runtime",
     "bundled-skills",
     "runtime-readiness"
-  ] : ["package-assets", "managed-runtime", "bundled-skills", "runtime-readiness", "adapter-deploy"];
+  ] : ["package-assets", "managed-runtime", "adapter-deploy", "bundled-skills", "runtime-readiness"];
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
   let expectedStepCommands;
   if (native) {
@@ -18126,7 +18126,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
       null
     ];
   } else {
-    expectedStepCommands = [null, null, null, null, command2];
+    expectedStepCommands = [null, null, command2, null, null];
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null;

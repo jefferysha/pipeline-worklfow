@@ -45126,8 +45126,9 @@ function nativeSteps(operation, plan) {
 function adapterSteps(manualCommand) {
   return [
     { id: "package-assets", label: "host-plan.step.package-assets", command: null },
-    ...PRODUCT_STEPS,
-    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand }
+    PRODUCT_STEPS[0],
+    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand },
+    ...PRODUCT_STEPS.slice(1)
   ];
 }
 function createHostTargetPlan(host, operation) {
