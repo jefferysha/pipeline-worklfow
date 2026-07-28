@@ -219,32 +219,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/pr-5-merge-audit/tasks.md",
-      "sha256": "560b46183cbbd0cce4fd97380732916ebabbfef9de26e3c13d802e26ad704d19",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:09:49Z",
+      "sha256": "a3c19ca0685a828e5fab7552f1cd67157b4c239ec043843f7b22cb8008fccf7e",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T08:13:13Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "560b46183cbbd0cce4fd97380732916ebabbfef9de26e3c13d802e26ad704d19",
-          "readAt": "2026-07-28T08:00:11Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",3]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "560b46183cbbd0cce4fd97380732916ebabbfef9de26e3c13d802e26ad704d19",
-          "readAt": "2026-07-28T08:07:32Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",4]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "560b46183cbbd0cce4fd97380732916ebabbfef9de26e3c13d802e26ad704d19",
-          "readAt": "2026-07-28T08:09:49Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",6]"
-        },
-        {
-          "phase": "build",
-          "sha256": "560b46183cbbd0cce4fd97380732916ebabbfef9de26e3c13d802e26ad704d19",
-          "readAt": "2026-07-28T08:12:03Z",
+          "sha256": "a3c19ca0685a828e5fab7552f1cd67157b4c239ec043843f7b22cb8008fccf7e",
+          "readAt": "2026-07-28T08:13:13Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",7]"
         }
       ]
