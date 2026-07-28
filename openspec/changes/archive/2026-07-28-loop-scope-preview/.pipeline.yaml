@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-28-loop-scope-preview-design.md
 plan: docs/superpowers/plans/2026-07-28-loop-scope-preview.md
 verification_report: docs/superpowers/reports/2026-07-28-loop-scope-preview-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/11
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T07:59:37Z
-updated_at: 2026-07-28T14:12:27Z
+updated_at: 2026-07-28T14:17:03Z
 verified_at: 2026-07-28T14:12:27Z
-archived_at: null
-archived: false
+archived_at: 2026-07-28T14:17:03Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 670c6a60-c9a5-421c-9f9f-86e26c4335ec
-pipeline_transition_sequence: 25
-pipeline_transition_head: c60d224f-ba9c-4ec8-85cd-30eead09866e
-pipeline_state_revision: 78
-pipeline_state_revision_id: dff29755-ba1d-4a04-a63f-8a8d7eff4803
-pipeline_state_digest: 5168cdcd1ca0514d1e978e3a7887fe490988759acaee33d244d3df661978ab1d
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NzgsInJldmlzaW9uSWQiOiJkZmYyOTc1NS1iYTFkLTRhMDQtYTYzZi04YThkN2VmZjQ4MDMiLCJwYXlsb2FkRGlnZXN0IjoiNWRhMDBhNDQxOWU4MTdhNDE3NDE5ODcwN2JiMzNiYzA4NGNmZTdlNjc1ZDI2MjNkZjJhODRmMmM5NmRhOTJkZiJ9
+pipeline_transition_sequence: 27
+pipeline_transition_head: 2b1c7500-8d6f-4707-9267-377660a128ee
+pipeline_state_revision: 81
+pipeline_state_revision_id: 66c5d78f-60bf-407d-acb3-1ec71bf62511
+pipeline_state_digest: bb351e4118971f625717aa219e3eb4d8bdd77a2804c4dd2bfd55473dadb3c796
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6ODEsInJldmlzaW9uSWQiOiI2NmM1ZDc4Zi02MGJmLTQwN2QtYWNiMy0xZWM3MWJmNjI1MTEiLCJwYXlsb2FkRGlnZXN0IjoiNjk5NTc1YWZjZmYzOGY4NWY3ODIyNTdjYzYyYTI0NmFmOTg2N2VlOWRlOGFiYzIzYjE0YjExZmFiZDY4YzU1NiJ9
