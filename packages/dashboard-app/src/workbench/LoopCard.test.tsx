@@ -178,6 +178,30 @@ describe('LoopCard 读回显（验收①）', () => {
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
+  it('仅路径策略未保存时阻止预检，其他草稿不阻断；保存回读后重新启用', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const preview = screen.getByTestId('lp-scope-open')
+    expect(preview).toBeEnabled()
+
+    fireEvent.change(screen.getByTestId('lp-goal'), { target: { value: '仅修改目标' } })
+    expect(preview).toBeEnabled()
+    expect(screen.queryByTestId('lp-scope-dirty-policy')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增允许路径' }))
+    const input = screen.getByLabelText('新增允许路径')
+    fireEvent.change(input, { target: { value: 'docs/**' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(preview).toBeDisabled()
+    expect(screen.getByTestId('lp-scope-dirty-policy')).toHaveTextContent('先保存路径策略，再运行预检')
+
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    expect(preview).toBeEnabled()
+    expect(screen.queryByTestId('lp-scope-dirty-policy')).toBeNull()
+  })
+
   it('拖滑杆 → 未保存 chip；保存 body 只带被改字段；成功后 reload 清脏 + 已保存', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')

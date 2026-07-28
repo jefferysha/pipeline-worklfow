@@ -17,10 +17,10 @@ const success = {
   ],
 }
 
-function renderPreview(): void {
+function renderPreview(policyDirty = false): void {
   render(
     <I18nProvider>
-      <LoopScopePreview root="/repo" loopId="release-loop" />
+      <LoopScopePreview root="/repo" loopId="release-loop" policyDirty={policyDirty} />
     </I18nProvider>,
   )
 }
@@ -32,6 +32,22 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('LoopScopePreview', () => {
+  it('uses the stronger secondary text token for readable placeholder copy', () => {
+    renderPreview()
+    fireEvent.click(screen.getByTestId('lp-scope-open'))
+    expect(screen.getByTestId('lp-scope-input')).toHaveClass('placeholder:text-text-2')
+  })
+
+  it('explains a dirty persisted policy boundary in English without opening the dialog', () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderPreview(true)
+    expect(screen.getByTestId('lp-scope-open')).toBeDisabled()
+    expect(screen.getByTestId('lp-scope-dirty-policy')).toHaveTextContent(
+      'Save the path policy before running a preview.',
+    )
+    expect(screen.queryByTestId('lp-scope-dialog')).toBeNull()
+  })
+
   it('keeps empty input local, submits with Ctrl+Enter, and renders allowed/blocked explanations', async () => {
     let resolveFetch: ((value: Response) => void) | undefined
     global.fetch = vi.fn(() => new Promise<Response>((resolve) => { resolveFetch = resolve }))

@@ -13,7 +13,15 @@ import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import { ERR_BLOCK_TW, WB_TW } from './loopCardModel'
 
-export function LoopScopePreview({ root, loopId }: { root: string; loopId: string }): JSX.Element {
+export function LoopScopePreview({
+  root,
+  loopId,
+  policyDirty = false,
+}: {
+  root: string
+  loopId: string
+  policyDirty?: boolean
+}): JSX.Element {
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const [raw, setRaw] = useState('')
@@ -69,6 +77,16 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
       <div className="min-w-0 flex-1">
         <p className="text-[12.5px] font-bold text-text">{t('workbench.lp_scope_title')}</p>
         <p className={WB_TW.note}>{t('workbench.lp_scope_desc')}</p>
+        {policyDirty && (
+          <p
+            id={`lp-scope-policy-dirty-${loopId}`}
+            className="mt-1 text-xs font-semibold text-amb-d"
+            data-testid="lp-scope-dirty-policy"
+            role="status"
+          >
+            {t('workbench.lp_scope_dirty_policy')}
+          </p>
+        )}
       </div>
       <Button
         type="button"
@@ -77,6 +95,8 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
         className="shrink-0 gap-1.5"
         data-testid="lp-scope-open"
         aria-label={t('workbench.lp_scope_open')}
+        aria-describedby={policyDirty ? `lp-scope-policy-dirty-${loopId}` : undefined}
+        disabled={policyDirty}
         onClick={() => setOpen(true)}
       >
         <ScanSearch className="size-3.5" aria-hidden="true" />
@@ -109,7 +129,7 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
         <textarea
           ref={inputRef}
           id={`lp-scope-input-${loopId}`}
-          className={cn(WB_TW.input, 'min-h-28 resize-y font-mono leading-5')}
+          className={cn(WB_TW.input, 'min-h-28 resize-y font-mono leading-5 placeholder:text-text-2')}
           data-testid="lp-scope-input"
           value={raw}
           disabled={busy}
