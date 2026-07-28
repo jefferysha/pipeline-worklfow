@@ -81,8 +81,8 @@ function addError(
 }
 
 function snapshotRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
   try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
     const prototype = Object.getPrototypeOf(value)
     if (prototype !== Object.prototype && prototype !== null) return null
     const keys = Reflect.ownKeys(value)
@@ -100,6 +100,46 @@ function snapshotRecord(value: unknown): Record<string, unknown> | null {
     return copy
   } catch {
     return null
+  }
+}
+
+type ArraySnapshot =
+  | { readonly kind: 'ok'; readonly value: readonly unknown[] }
+  | { readonly kind: 'not_array' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'too_many' }
+
+function snapshotArray(value: unknown, maxLength: number): ArraySnapshot {
+  try {
+    if (!Array.isArray(value)) return { kind: 'not_array' }
+    if (Object.getPrototypeOf(value) !== Array.prototype) return { kind: 'invalid' }
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length')
+    if (
+      lengthDescriptor === undefined
+      || !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value')
+      || typeof lengthDescriptor.value !== 'number'
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+    ) return { kind: 'invalid' }
+    const length = lengthDescriptor.value
+    if (length > maxLength) return { kind: 'too_many' }
+    const keys = Reflect.ownKeys(value)
+    if (keys.length !== length + 1 || keys.some((key) => typeof key !== 'string')) {
+      return { kind: 'invalid' }
+    }
+    const copy: unknown[] = []
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+      if (
+        descriptor === undefined
+        || !descriptor.enumerable
+        || !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      ) return { kind: 'invalid' }
+      copy.push(descriptor.value)
+    }
+    return { kind: 'ok', value: Object.freeze(copy) }
+  } catch {
+    return { kind: 'invalid' }
   }
 }
 
@@ -345,15 +385,25 @@ export function composeVerificationEvidence(input: unknown): VerificationEvidenc
     'locale',
     collector,
   )
-  if (!Array.isArray(record.entries)) {
-    addError(collector, 'field_type', 'entries')
+  const entriesSnapshot = snapshotArray(record.entries, VERIFICATION_EVIDENCE_LIMITS.maxEntries)
+  if (entriesSnapshot.kind !== 'ok') {
+    addError(
+      collector,
+      entriesSnapshot.kind === 'not_array'
+        ? 'field_type'
+        : entriesSnapshot.kind === 'too_many'
+          ? 'entries_too_many'
+          : 'object_invalid',
+      'entries',
+    )
     return Object.freeze({
       ok: false,
       errors: Object.freeze(collector.errors),
       overflow: collector.overflow,
     })
   }
-  if (record.entries.length === 0) {
+  const sourceEntries = entriesSnapshot.value
+  if (sourceEntries.length === 0) {
     addError(collector, 'entries_empty', 'entries')
     return Object.freeze({
       ok: false,
@@ -361,19 +411,12 @@ export function composeVerificationEvidence(input: unknown): VerificationEvidenc
       overflow: collector.overflow,
     })
   }
-  if (record.entries.length > VERIFICATION_EVIDENCE_LIMITS.maxEntries) {
-    addError(collector, 'entries_too_many', 'entries')
-    return Object.freeze({
-      ok: false,
-      errors: Object.freeze(collector.errors),
-      overflow: collector.overflow,
-    })
-  }
 
-  const entries = record.entries.flatMap((entry, index) => {
-    const normalized = entryFromUnknown(entry, index, collector)
-    return normalized === undefined ? [] : [normalized]
-  })
+  const entries: VerificationEvidenceEntry[] = []
+  for (let index = 0; index < sourceEntries.length; index += 1) {
+    const normalized = entryFromUnknown(sourceEntries[index], index, collector)
+    if (normalized !== undefined) entries.push(normalized)
+  }
   if (collector.errors.length > 0 || collector.overflow || locale === undefined) {
     return Object.freeze({
       ok: false,

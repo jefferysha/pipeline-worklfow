@@ -884,6 +884,24 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     }
   })
 
+  it('非文档治理 workflow 的真实 Verify 阶段仍显示证据 composer', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = 'verify'
+    change.documents = {
+      governed: false,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    expect(screen.queryByTestId('dt-documents')).not.toBeInTheDocument()
+  })
+
   it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
     const snapshot = makeFixture()
     const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')

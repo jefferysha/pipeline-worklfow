@@ -25,12 +25,18 @@
 - [x] 以 TDD 修复 shared 依赖、title 保真、root 失败关闭、请求取消/过期响应和字段错误定位。
 - [x] 补全 OpenSpec 隔离 apply，正式重建生成物并重跑风险匹配的定向与全量门禁。
 - [x] 独立 pre-Verify 全量复审通过后非强制 push 新 exact head，并等待 GitHub CI。
+- [x] 第二轮 Verify 后以 TDD 修复不可信数组 canonical snapshot 与非治理 Verify 入口。
+- [x] 补旧请求晚失败回归，并重建与新 head 匹配的正式产物及 sandcastle 验证环境。
+- [ ] 串行重跑定向/全量门禁与独立 pre-Verify 全量复审，非强制 push 后等待 exact-head CI。
 
 ## 验证
 
-- [ ] 冻结新 `build_sha`，执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
-- [ ] 执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
-- [ ] 复核新 head GitHub CI、mergeability、review threads 与最新 main，登记验证报告。
+- [x] 冻结新 `build_sha`，执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
+- [x] 执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
+- [x] 复核新 head GitHub CI、mergeability、review threads 与最新 main，登记验证报告。
+- [ ] 第三次冻结新 `build_sha`，重新执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
+- [ ] 第三次执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
+- [ ] 复核第三次冻结 head 的 GitHub CI、mergeability、review threads 与最新 main，登记最终验证报告。
 
 ## 交付
 

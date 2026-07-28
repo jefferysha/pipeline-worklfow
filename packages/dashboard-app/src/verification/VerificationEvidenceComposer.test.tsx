@@ -206,6 +206,39 @@ describe('VerificationEvidenceComposer', () => {
     expect(screen.getByTestId('evidence-output')).toHaveValue('# New session')
   })
 
+  it('ignores a closed request that rejects after a reopened session succeeds', async () => {
+    let rejectStale!: (reason?: unknown) => void
+    const stale = new Promise<Response>((_resolve, reject) => {
+      rejectStale = reject
+    })
+    const fresh = Promise.resolve(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# New session after stale failure',
+      entryCount: 1,
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', vi.fn()
+      .mockReturnValueOnce(stale)
+      .mockReturnValueOnce(fresh))
+    renderComposer('en')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    await waitFor(() => expect(screen.getByTestId('evidence-output'))
+      .toHaveValue('# New session after stale failure'))
+
+    rejectStale(new Error('stale network failure'))
+    await Promise.resolve()
+
+    expect(screen.getByTestId('evidence-output')).toHaveValue('# New session after stale failure')
+    expect(screen.queryByTestId('evidence-error')).not.toBeInTheDocument()
+    expect(screen.getByTestId('evidence-compose')).not.toBeDisabled()
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
+  })
+
   it('reports clipboard failure inline and confirms successful copies through the host toast', async () => {
     const onToast = vi.fn()
     const writeText = vi.fn()

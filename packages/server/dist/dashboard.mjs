@@ -12898,9 +12898,9 @@ function addError(collector, code, path7) {
   }
 }
 function snapshotRecord2(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    return null;
   try {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return null;
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null)
       return null;
@@ -12917,6 +12917,34 @@ function snapshotRecord2(value) {
     return copy;
   } catch {
     return null;
+  }
+}
+function snapshotArray2(value, maxLength) {
+  try {
+    if (!Array.isArray(value))
+      return { kind: "not_array" };
+    if (Object.getPrototypeOf(value) !== Array.prototype)
+      return { kind: "invalid" };
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (lengthDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(lengthDescriptor, "value") || typeof lengthDescriptor.value !== "number" || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0)
+      return { kind: "invalid" };
+    const length = lengthDescriptor.value;
+    if (length > maxLength)
+      return { kind: "too_many" };
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== length + 1 || keys.some((key) => typeof key !== "string")) {
+      return { kind: "invalid" };
+    }
+    const copy = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === void 0 || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value"))
+        return { kind: "invalid" };
+      copy.push(descriptor.value);
+    }
+    return { kind: "ok", value: Object.freeze(copy) };
+  } catch {
+    return { kind: "invalid" };
   }
 }
 function hasInvalidSurrogate(value) {
@@ -13102,15 +13130,17 @@ function composeVerificationEvidence(input) {
       addError(collector, "unknown_field", key);
   }
   const locale = enumValue(record2.locale, /* @__PURE__ */ new Set(["zh-CN", "en"]), "locale", collector);
-  if (!Array.isArray(record2.entries)) {
-    addError(collector, "field_type", "entries");
+  const entriesSnapshot = snapshotArray2(record2.entries, VERIFICATION_EVIDENCE_LIMITS.maxEntries);
+  if (entriesSnapshot.kind !== "ok") {
+    addError(collector, entriesSnapshot.kind === "not_array" ? "field_type" : entriesSnapshot.kind === "too_many" ? "entries_too_many" : "object_invalid", "entries");
     return Object.freeze({
       ok: false,
       errors: Object.freeze(collector.errors),
       overflow: collector.overflow
     });
   }
-  if (record2.entries.length === 0) {
+  const sourceEntries = entriesSnapshot.value;
+  if (sourceEntries.length === 0) {
     addError(collector, "entries_empty", "entries");
     return Object.freeze({
       ok: false,
@@ -13118,18 +13148,12 @@ function composeVerificationEvidence(input) {
       overflow: collector.overflow
     });
   }
-  if (record2.entries.length > VERIFICATION_EVIDENCE_LIMITS.maxEntries) {
-    addError(collector, "entries_too_many", "entries");
-    return Object.freeze({
-      ok: false,
-      errors: Object.freeze(collector.errors),
-      overflow: collector.overflow
-    });
+  const entries = [];
+  for (let index = 0; index < sourceEntries.length; index += 1) {
+    const normalized2 = entryFromUnknown(sourceEntries[index], index, collector);
+    if (normalized2 !== void 0)
+      entries.push(normalized2);
   }
-  const entries = record2.entries.flatMap((entry, index) => {
-    const normalized2 = entryFromUnknown(entry, index, collector);
-    return normalized2 === void 0 ? [] : [normalized2];
-  });
   if (collector.errors.length > 0 || collector.overflow || locale === void 0) {
     return Object.freeze({
       ok: false,

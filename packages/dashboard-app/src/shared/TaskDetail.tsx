@@ -362,12 +362,19 @@ export function TaskDetail({
           </div>
         )}
       </div>
-      {change.documents?.governed && (
+      {change.documents?.governed ? (
         <TaskDocumentsSection
           documents={change.documents}
           extra={documentsExtra}
         />
-      )}
+      ) : documentsExtra !== undefined ? (
+        <div
+          className="border-b border-border py-[13px] last:border-b-0"
+          data-testid="dt-verification-tools"
+        >
+          {documentsExtra}
+        </div>
+      ) : null}
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
           <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>

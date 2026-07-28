@@ -192,3 +192,81 @@ independent evidence included:
 
 The pre-Verify source/review conclusion is final. The exact committed SHA, non-force remote update
 and fresh GitHub CI result remain Build exit evidence and must be recorded before freezing Verify.
+
+This result was subsequently superseded by the second frozen Verify at
+`a08e5ed3a3fb58a59c3de6ff9b377aab8c7af8aa`, which correctly failed and returned the Change to
+Build. The failure report is
+`docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify-fail-2.md`.
+
+## Second Verify return-loop repairs
+
+### Resolved during the third Build visit
+
+1. **Medium — the kernel invoked methods on an untrusted entries array.**
+   - Added a red adversarial regression covering sparse arrays, accessor-backed indices, named and
+     symbol extensions, an overridden `flatMap`, and a mutated prototype.
+   - The composer now canonical-snapshots only dense ordinary arrays through own data descriptors,
+     copies them to a trusted frozen array, and normalizes entries with an explicit loop. It rejects
+     malformed array containers without invoking their getters or methods.
+
+2. **Medium — a valid ungoverned workflow could hide the Verify composer.**
+   - Added a red production-path regression through
+     `ProgressView → ProgressDrawer → TaskDetail` with `documents.governed=false`.
+   - Governed workflows still render the normal document surface and its neutral extra slot.
+     Ungoverned workflows now render an independent neutral verification-tools slot, so a real
+     Verify step remains usable without fabricating document governance.
+
+3. **Low — stale late rejection was not directly covered.**
+   - Added the missing regression where an old request rejects after a reopened session already
+     succeeded.
+   - The existing monotonic request identity and abort behavior correctly preserved the newer
+     Markdown result and left the dialog open.
+
+4. **Medium — revoked proxies could escape the public kernel trust boundary.**
+   - Independent Rules/Architecture/Security review proved that an `Array.isArray` call outside the
+     guarded snapshot path threw for revoked top-level and entries proxies.
+   - Red regressions reproduced both throws. Record and array classification now run inside the
+     guarded snapshot boundary and return closed `not_array` / `invalid` / `too_many` / `ok`
+     outcomes, so the exported `unknown` API always returns a bounded composition result.
+
+5. **Medium — an oversized entries array was copied before the declared limit was enforced.**
+   - The review measured avoidable work on a 100,000-entry input and showed that the old path reached
+     `ownKeys` and copied every descriptor before returning `entries_too_many`.
+   - A red proxy regression observed the premature enumeration. The snapshot now checks the safely
+     read length against `maxEntries` before `ownKeys`, index descriptor reads or allocation.
+
+### Third Build verification before independent review
+
+- Focused kernel composer: 15/15 passed.
+- Focused frontend production path and request lifecycle: 67/67 passed.
+- Full repository: 317/317 files, 5469 passing and 5 credential-gated skips.
+- Full Web: 56/56 files, 1010/1010 passed.
+- Official root build, Web typecheck, architecture, comments, docs, document templates,
+  repository hygiene, identity, npx package, default-workflow freshness and diff check passed.
+- Hooks 482/482, adapters 272/272, migration CAS 13/13, bundle 31/31 and Skill inventory passed.
+- Strict OpenSpec validation passed for both `pr-6-merge-audit` and
+  `verification-evidence-composer`.
+- The full repository suite passed when run serially with no competing sandcastle image writer.
+  This resolves the prior stale-image failure as an environment race rather than a product defect.
+- The rebuilt production server at `http://127.0.0.1:18978/` served `Tenon Dashboard`, the exact
+  registered root and `index-CMPmAaKx.js`. The current real Build phase correctly hides the
+  phase-gated composer.
+
+## Current third pre-Verify review status
+
+PASS on the complete third-Build worktree relative to base
+`2394ac71efc87193350d476266a3219c320bb5b1`.
+
+- Spec/Correctness: Critical 0 / High 0 / Medium 0 / Low 0 across 258 mutually exclusive paths.
+- Rules/Architecture/Security: Critical 0 / High 0 / Medium 0 / Low 0 after the two Medium
+  trust-boundary findings were fixed and independently re-probed.
+- Visual/Accessibility: Critical 0 / High 0 / Medium 0 / Low 0 across the real Build-hidden and
+  governed Verify journeys, field ARIA/focus, stale-request cancellation, nested keyboard behavior,
+  responsive layouts, themes, locales and reduced motion. Evidence is under
+  `/private/tmp/pr6-build3-visual.1vuw78`.
+
+The Spec reviewer reproduced the five formal Dashboard/server/CLI artifacts byte-for-byte in an
+isolated root. The Rules reviewer independently proved revoked and throwing proxies return stable
+errors, and a 100,000-entry proxy returns `entries_too_many` without `ownKeys` or index-descriptor
+reads. The exact committed SHA, non-force remote update and fresh GitHub CI result remain Build exit
+evidence and must be recorded before freezing the third Verify.

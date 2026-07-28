@@ -182,6 +182,86 @@ describe('verification evidence composer', () => {
     })
   })
 
+  test('returns bounded invalid-object errors for revoked proxies', () => {
+    const topLevel = Proxy.revocable({}, {})
+    topLevel.revoke()
+    expect(() => composeVerificationEvidence(topLevel.proxy)).not.toThrow()
+    expect(composeVerificationEvidence(topLevel.proxy)).toMatchObject({
+      ok: false,
+      errors: [{ code: 'object_invalid', path: '' }],
+    })
+
+    const entries = Proxy.revocable([commandEntry()], {})
+    entries.revoke()
+    expect(() => composeVerificationEvidence({ locale: 'en', entries: entries.proxy })).not.toThrow()
+    expect(composeVerificationEvidence({ locale: 'en', entries: entries.proxy })).toMatchObject({
+      ok: false,
+      errors: [{ code: 'object_invalid', path: 'entries' }],
+    })
+  })
+
+  test('rejects oversized arrays before enumerating or copying their entries', () => {
+    let ownKeyReads = 0
+    let indexDescriptorReads = 0
+    const entries = new Proxy(
+      Array.from(
+        { length: VERIFICATION_EVIDENCE_LIMITS.maxEntries + 1 },
+        () => commandEntry(),
+      ),
+      {
+        ownKeys(target) {
+          ownKeyReads += 1
+          return Reflect.ownKeys(target)
+        },
+        getOwnPropertyDescriptor(target, key) {
+          if (key !== 'length') indexDescriptorReads += 1
+          return Reflect.getOwnPropertyDescriptor(target, key)
+        },
+      },
+    )
+
+    expect(composeVerificationEvidence({ locale: 'en', entries })).toMatchObject({
+      ok: false,
+      errors: [{ code: 'entries_too_many', path: 'entries' }],
+    })
+    expect(ownKeyReads).toBe(0)
+    expect(indexDescriptorReads).toBe(0)
+  })
+
+  test('rejects sparse, accessor-backed, extended, and prototype-mutated entry arrays without executing them', () => {
+    const sparse = new Array(1)
+    let reads = 0
+    const accessorBacked = [commandEntry()]
+    Object.defineProperty(accessorBacked, '0', {
+      enumerable: true,
+      get() {
+        reads += 1
+        return commandEntry({ title: 'forged through getter' })
+      },
+    })
+    const named = [commandEntry()] as unknown[] & { surprise?: boolean }
+    named.surprise = true
+    const symbol = [commandEntry()]
+    Object.defineProperty(symbol, Symbol('surprise'), {
+      enumerable: true,
+      value: true,
+    })
+    const overridden = [commandEntry()] as unknown[] & {
+      flatMap?: (callback: (entry: unknown, index: number) => unknown[]) => unknown[]
+    }
+    overridden.flatMap = () => [commandEntry({ title: 'unvalidated replacement' })]
+    const prototypeMutated = [commandEntry()]
+    Object.setPrototypeOf(prototypeMutated, null)
+
+    for (const entries of [sparse, accessorBacked, named, symbol, overridden, prototypeMutated]) {
+      expect(composeVerificationEvidence({ locale: 'en', entries })).toMatchObject({
+        ok: false,
+        errors: [{ code: 'object_invalid', path: 'entries' }],
+      })
+    }
+    expect(reads).toBe(0)
+  })
+
   test('enforces result and skipReason XOR with field paths', () => {
     const result = compose([
       commandEntry({ status: 'skipped', result: 'not run', skipReason: undefined }),
