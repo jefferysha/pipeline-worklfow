@@ -27,7 +27,7 @@
 - [x] 运行 hooks、server、web 定向测试与 typecheck/build。
 - [x] 运行 npm test、bundle/adapters/skills/oracle 等受影响门禁。
 - [x] 在真实 Tenon Dashboard 验收成功、禁用、校验失败、保存失败与键盘路径，并登记验证报告。
-- [ ] 重跑安全/并发/i18n 修复后的全量门禁、浏览器验收与四轨冻结 Verify。
+- [x] 重跑安全/并发/i18n 修复后的全量门禁、浏览器验收与四轨冻结 Verify。
 
 ## 交付
 

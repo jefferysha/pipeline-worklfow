@@ -130,3 +130,22 @@
 {"ts":"2026-07-28T07:34:12Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"d1c87284-f380-4b44-9a6e-de9299a93fa8"}
 {"ts":"2026-07-28T07:54:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T07:54:57Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T07:55:10Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T07:55:10Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T07:55:10Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T07:55:10Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T07:55:10Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"c981b475-31a6-455d-b2e2-5b471f5cefcb"}
+{"ts":"2026-07-28T08:11:11Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-5.md"}
+{"ts":"2026-07-28T08:11:11Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T08:11:11Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T08:11:12Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T08:11:12Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T08:11:12Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T08:11:21Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-28T08:11:22Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T07:23:23Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T08:11:22Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T08:11:22Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T08:11:22Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T08:11:22Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T08:11:22Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"135b4dc7-a34e-4a4b-926f-b09b5032d19f"}
+{"ts":"2026-07-28T08:12:50Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
