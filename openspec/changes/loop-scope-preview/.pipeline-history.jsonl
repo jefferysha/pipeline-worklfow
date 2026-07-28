@@ -135,3 +135,4 @@
 {"ts":"2026-07-28T12:22:18Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
 {"ts":"2026-07-28T12:22:18Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-28T12:22:18Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"54901e28-0296-4341-8229-398e4151814d"}
+{"ts":"2026-07-28T12:28:04Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
