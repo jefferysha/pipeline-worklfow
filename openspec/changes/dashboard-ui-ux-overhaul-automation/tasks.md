@@ -24,7 +24,8 @@
 - [x] SolutionView：先补失败测试，约束七章节页内导航、锚点目标与语义。
 - [x] SolutionView：实现域内章节导航、44px 移动目标、可见焦点、横向滚动与 reduced-motion 兼容。
 - [x] SolutionView：完成桌面/移动、明暗主题、键盘与 reduced-motion 浏览器验收。
-- [ ] 后续切片：按 overlap 选择共享 primitive 或单一功能域，同步中英文、状态和测试。
+- [x] 复核 PR #5–#8 overlap，并为多消费者 Button 原语补齐移动触控、disabled 与 reduced-motion 状态。
+- [x] 为 SolutionView 页内导航增加 URL hash 驱动的当前章节反馈与 `aria-current`。
 
 ## 验证
 

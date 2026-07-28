@@ -6,6 +6,8 @@
 - `packages/dashboard-app/src/solution/SolutionSectionNav.tsx`
 - `packages/dashboard-app/src/solution/solutionModel.ts`
 - `packages/dashboard-app/src/solution/SolutionView.test.tsx`
+- `packages/dashboard-app/src/components/ui/button.tsx`
+- `packages/dashboard-app/src/components/ui/button.test.tsx`
 
 ## 第 1 轮：基线问题
 
@@ -39,7 +41,33 @@
 
 复评结论：Critical / High / Medium = 0 / 0 / 0。
 
-## LOW / 后续观察
+## 第 3 轮：共享原语与状态反馈
 
-- 当前章节没有自动高亮。首切片不引入 IntersectionObserver 与状态同步，避免为简单定位扩大复杂度；
-  若后续真实使用反馈表明需要，可在独立切片中设计 URL hash、滚动与返回行为。
+最新 overlap 复核确认 PR #5–#8 仍覆盖 App、Nav、i18n、progress、workbench、shared 与 API；
+`components/ui/button.tsx` 和 `solution/` 未发生文件重叠。
+
+| Severity | 问题 | 用户影响 | 处置 |
+| --- | --- | --- | --- |
+| MEDIUM | SolutionView 激活锚点后没有当前章节反馈 | 用户到达章节后仍需重新从内容推断位置，辅助技术也没有当前位置语义 | 使用 URL hash 驱动 `aria-current="location"` 与 token 化选中样式 |
+| MEDIUM | 共享 Button 的 default/sm/lg/icon 移动尺寸为 32–40px | 高频移动操作低于本 Change 采用的 44px 增强目标 | 仅在 ≤720px 将常规和图标尺寸提升到 44px；保留明确紧凑的 xs 变体 |
+| MEDIUM | Button 的通用 transition 未显式降级 | reduced-motion 用户仍会看到按钮状态过渡 | 原语统一添加 `motion-reduce:transition-none` |
+| LOW | disabled Button 只有 50% opacity，且 pointer-events 使禁用光标反馈不可见 | 状态可辨认但反馈较弱 | 使用原生 disabled 阻断语义、60% opacity 与 `cursor-not-allowed` |
+
+TDD 红灯：Button 两项与当前章节一项共 3 个断言按预期失败。最小实现后，定向测试
+`10/10` 通过，`npm run typecheck:web` 与生产构建通过。
+
+## 第 4 轮：运行态复评
+
+环境：当前 automation worktree 的生产构建，`http://127.0.0.1:18832/?view=overview`，
+页面标题 `Tenon Dashboard`。
+
+- 1200×870 浅色：键盘激活“03 · 证明”后 hash 为 `#solution-evidence`，
+  链接获得 `aria-current="location"`，焦点和选中层级清晰。
+- 390×844 深色 + reduced-motion：根级无水平溢出；七个导航链接和两个概览 Button 均为
+  44px 高；按钮与链接的 `transition-property=none`。
+- 聚焦末项时横向导航滚动至 `262.5`，末项仍完整可见；激活后“07 · 社区”获得当前章节语义。
+- 桌面证据：`docs/ux/shots/dashboard-ui-ux-overhaul-automation/solution-section-nav-active-desktop-light.png`
+- 移动证据：`docs/ux/shots/dashboard-ui-ux-overhaul-automation/solution-section-nav-active-mobile-dark-reduced.png`
+
+复评结论：Critical / High / Medium = 0 / 0 / 0。当前章节只跟随 URL hash，不引入
+IntersectionObserver、滚动监听或 GSAP，避免高频观察器和额外清理负担。

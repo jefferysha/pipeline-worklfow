@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +18,7 @@ function renderSolution(lang: 'zh' | 'en' = 'zh'): void {
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  window.history.replaceState(null, '', '/')
   vi.unstubAllGlobals()
 })
 
@@ -48,6 +49,26 @@ describe('SolutionView 开源产品概览', () => {
       expect(target).toBeInTheDocument()
       expect(target).toHaveAttribute('aria-labelledby')
     }
+  })
+
+  it('根据 URL hash 向辅助技术和视觉样式标记当前章节', () => {
+    window.history.replaceState(null, '', '#solution-evidence')
+    renderSolution()
+
+    const sectionNav = screen.getByRole('navigation', { name: 'Tenon 概览' })
+    const evidenceLink = within(sectionNav).getByRole('link', { name: /证明/ })
+    const installLink = within(sectionNav).getByRole('link', { name: /安装/ })
+    expect(evidenceLink).toHaveAttribute('aria-current', 'location')
+    expect(evidenceLink).toHaveClass('bg-fill', 'text-text')
+    expect(installLink).not.toHaveAttribute('aria-current')
+
+    act(() => {
+      window.history.replaceState(null, '', '#solution-install')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    expect(installLink).toHaveAttribute('aria-current', 'location')
+    expect(evidenceLink).not.toHaveAttribute('aria-current')
   })
 
   it('以单一 h1 和完整 adoption 路径呈现产品，不伪造运行状态', () => {

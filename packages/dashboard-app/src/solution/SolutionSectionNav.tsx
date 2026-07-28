@@ -1,8 +1,22 @@
+import { useEffect, useState } from 'react'
 import { useT } from '../i18n'
-import { solutionSectionId, solutionSections } from './solutionModel'
+import { cn } from '../lib/utils'
+import { solutionSectionId, solutionSections, type SolutionSection } from './solutionModel'
+
+function sectionFromHash(): SolutionSection | null {
+  if (typeof window === 'undefined') return null
+  return solutionSections.find((section) => window.location.hash === `#${solutionSectionId(section)}`) ?? null
+}
 
 export function SolutionSectionNav(): JSX.Element {
   const { t } = useT()
+  const [currentSection, setCurrentSection] = useState<SolutionSection | null>(sectionFromHash)
+
+  useEffect(() => {
+    const syncHash = (): void => setCurrentSection(sectionFromHash())
+    window.addEventListener('hashchange', syncHash)
+    return () => window.removeEventListener('hashchange', syncHash)
+  }, [])
 
   return (
     <nav
@@ -15,7 +29,11 @@ export function SolutionSectionNav(): JSX.Element {
           <li key={section}>
             <a
               href={`#${solutionSectionId(section)}`}
-              className="flex min-h-11 items-center whitespace-nowrap rounded-xl border border-transparent px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:border-border hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)"
+              aria-current={currentSection === section ? 'location' : undefined}
+              className={cn(
+                'flex min-h-11 items-center whitespace-nowrap rounded-xl border border-transparent px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:border-border hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)',
+                currentSection === section && 'border-border bg-fill text-text shadow-xs',
+              )}
             >
               {t(`solution.sections.${section}_eyebrow`)}
             </a>
