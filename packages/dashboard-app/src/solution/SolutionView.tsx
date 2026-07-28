@@ -20,22 +20,32 @@ import {
   communityLinks,
   evidenceSteps,
   hostTiers,
+  solutionSectionHeadingId,
+  solutionSectionId,
   solutionModes,
   solutionModules,
   solutionPhases,
+  type SolutionSection,
 } from './solutionModel'
+import { SolutionSectionNav } from './SolutionSectionNav'
 
 interface SectionHeadingProps {
+  section: SolutionSection
   eyebrow: string
   title: string
   description: string
 }
 
-function SectionHeading({ eyebrow, title, description }: SectionHeadingProps): JSX.Element {
+function SectionHeading({ section, eyebrow, title, description }: SectionHeadingProps): JSX.Element {
   return (
     <div className="mb-8 max-w-3xl">
       <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-(--accent)">{eyebrow}</p>
-      <h2 className="text-3xl font-bold tracking-[-0.03em] text-text max-[720px]:text-2xl">{title}</h2>
+      <h2
+        id={solutionSectionHeadingId(section)}
+        className="text-3xl font-bold tracking-[-0.03em] text-text max-[720px]:text-2xl"
+      >
+        {title}
+      </h2>
       <p className="mt-3 text-base leading-7 text-muted-foreground">{description}</p>
     </div>
   )
@@ -48,7 +58,7 @@ export function SolutionView(): JSX.Element {
   const { t } = useT()
 
   return (
-    <div className="mx-auto min-w-0 w-full max-w-[1240px] space-y-20 overflow-hidden pb-16" data-testid="solution-view">
+    <div className="mx-auto min-w-0 w-full max-w-[1240px] space-y-20 overflow-x-clip pb-16" data-testid="solution-view">
       <section className="grid min-w-0 max-w-full grid-cols-1 gap-10 rounded-3xl border border-border bg-card px-10 py-14 shadow-sm min-[940px]:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] max-[720px]:px-5 max-[720px]:py-9">
         <div className="min-w-0 w-full max-w-full">
           <Badge
@@ -113,8 +123,15 @@ export function SolutionView(): JSX.Element {
         })}
       </section>
 
-      <section>
+      <SolutionSectionNav />
+
+      <section
+        id={solutionSectionId('modes')}
+        aria-labelledby={solutionSectionHeadingId('modes')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="modes"
           eyebrow={t('solution.sections.modes_eyebrow')}
           title={t('solution.sections.modes_title')}
           description={t('solution.sections.modes_desc')}
@@ -135,8 +152,13 @@ export function SolutionView(): JSX.Element {
         </div>
       </section>
 
-      <section>
+      <section
+        id={solutionSectionId('workflow')}
+        aria-labelledby={solutionSectionHeadingId('workflow')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="workflow"
           eyebrow={t('solution.sections.workflow_eyebrow')}
           title={t('solution.sections.workflow_title')}
           description={t('solution.sections.workflow_desc')}
@@ -170,8 +192,13 @@ export function SolutionView(): JSX.Element {
         </div>
       </section>
 
-      <section>
+      <section
+        id={solutionSectionId('evidence')}
+        aria-labelledby={solutionSectionHeadingId('evidence')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="evidence"
           eyebrow={t('solution.sections.evidence_eyebrow')}
           title={t('solution.sections.evidence_title')}
           description={t('solution.sections.evidence_desc')}
@@ -188,8 +215,13 @@ export function SolutionView(): JSX.Element {
         </ol>
       </section>
 
-      <section>
+      <section
+        id={solutionSectionId('modules')}
+        aria-labelledby={solutionSectionHeadingId('modules')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="modules"
           eyebrow={t('solution.sections.modules_eyebrow')}
           title={t('solution.sections.modules_title')}
           description={t('solution.sections.modules_desc')}
@@ -215,8 +247,14 @@ export function SolutionView(): JSX.Element {
         </div>
       </section>
 
-      <section data-testid="solution-install">
+      <section
+        id={solutionSectionId('install')}
+        aria-labelledby={solutionSectionHeadingId('install')}
+        className="scroll-mt-20"
+        data-testid="solution-install"
+      >
         <SectionHeading
+          section="install"
           eyebrow={t('solution.sections.install_eyebrow')}
           title={t('solution.sections.install_title')}
           description={t('solution.sections.install_desc')}
@@ -259,8 +297,13 @@ export function SolutionView(): JSX.Element {
         </div>
       </section>
 
-      <section>
+      <section
+        id={solutionSectionId('safety')}
+        aria-labelledby={solutionSectionHeadingId('safety')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="safety"
           eyebrow={t('solution.sections.safety_eyebrow')}
           title={t('solution.sections.safety_title')}
           description={t('solution.sections.safety_desc')}
@@ -276,8 +319,13 @@ export function SolutionView(): JSX.Element {
         </div>
       </section>
 
-      <section>
+      <section
+        id={solutionSectionId('community')}
+        aria-labelledby={solutionSectionHeadingId('community')}
+        className="scroll-mt-20"
+      >
         <SectionHeading
+          section="community"
           eyebrow={t('solution.sections.community_eyebrow')}
           title={t('solution.sections.community_title')}
           description={t('solution.sections.community_desc')}

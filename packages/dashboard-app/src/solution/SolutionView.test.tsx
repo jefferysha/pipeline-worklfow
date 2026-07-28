@@ -22,6 +22,34 @@ afterEach(() => {
 })
 
 describe('SolutionView 开源产品概览', () => {
+  it('提供七个键盘可达的页内章节链接，并且每个锚点都有真实标题目标', () => {
+    renderSolution()
+
+    const sectionNav = screen.getByRole('navigation', { name: 'Tenon 概览' })
+    const links = within(sectionNav).getAllByRole('link')
+    expect(links).toHaveLength(7)
+    expect(sectionNav).toHaveClass('overflow-x-auto')
+
+    const hrefs = links.map((link) => link.getAttribute('href'))
+    expect(hrefs).toEqual([
+      '#solution-modes',
+      '#solution-workflow',
+      '#solution-evidence',
+      '#solution-modules',
+      '#solution-install',
+      '#solution-safety',
+      '#solution-community',
+    ])
+    for (const link of links) {
+      expect(link).toHaveClass('min-h-11', 'motion-reduce:transition-none')
+      const href = link.getAttribute('href')
+      expect(href).not.toBeNull()
+      const target = document.querySelector(href ?? '')
+      expect(target).toBeInTheDocument()
+      expect(target).toHaveAttribute('aria-labelledby')
+    }
+  })
+
   it('以单一 h1 和完整 adoption 路径呈现产品，不伪造运行状态', () => {
     renderSolution()
 
@@ -123,7 +151,7 @@ describe('SolutionView 开源产品概览', () => {
 
     expect(screen.getByText('本地优先的 Agent 交付控制面')).toHaveClass('max-w-full', 'shrink', 'whitespace-normal')
     for (const eyebrow of ['路由', '治理', '证明', '运行', '安装', '信任', '社区']) {
-      expect(screen.getByText(new RegExp(`· ${eyebrow}$`))).toBeInTheDocument()
+      expect(screen.getAllByText(new RegExp(`· ${eyebrow}$`))).toHaveLength(2)
     }
     for (const link of screen.getAllByRole('link')) {
       expect(link).toHaveClass('motion-reduce:transition-none')
