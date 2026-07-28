@@ -243,6 +243,11 @@ describe('buildChildIndex —— platform-scoped OpenCode parent identity', () =
   })
 
   test('does not let a legacy bare alias overwrite a canonical OpenCode parent key', () => {
+    const actualParent = {
+      platform: 'opencode' as const,
+      id: 'x',
+      filePath: '/opencode.db',
+    }
     const canonicalChild = {
       platform: 'opencode' as const,
       id: 'canonical-child',
@@ -256,9 +261,28 @@ describe('buildChildIndex —— platform-scoped OpenCode parent identity', () =
       filePath: '/opencode.db',
     }
 
-    const index = buildChildIndex([canonicalChild, collidingAliasChild])
+    const index = buildChildIndex([actualParent, canonicalChild, collidingAliasChild])
 
     expect(index.get('opencode:x')).toEqual([canonicalChild])
+    expect(index.get('opencode:opencode:x')).toEqual([collidingAliasChild])
+  })
+
+  test('does not create a bare alias that impersonates an actual canonical session key', () => {
+    const actualParent = {
+      platform: 'opencode' as const,
+      id: 'x',
+      filePath: '/opencode.db',
+    }
+    const collidingAliasChild = {
+      platform: 'opencode' as const,
+      id: 'alias-child',
+      parent_id: 'opencode:x',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([actualParent, collidingAliasChild])
+
+    expect(index.get('opencode:x')).toBeUndefined()
     expect(index.get('opencode:opencode:x')).toEqual([collidingAliasChild])
   })
 

@@ -184,7 +184,6 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
                 time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created
          LIMIT ?`,
           hasMoreSql: 'SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?',
           scopeId: s.id,
@@ -198,7 +197,7 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
     if (!messageRows.length) return []
 
     const partRows = fs.contentReadBudget
-      ? messageRows.flatMap((message) => readBoundedSqliteRows(
+      ? readBoundedSqliteRows(
         fs,
         db,
         {
@@ -208,15 +207,14 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
          FROM part
-         WHERE message_id = ?
-         ORDER BY id
+         WHERE session_id = ?
          LIMIT ?`,
-          hasMoreSql: 'SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?',
-          scopeId: String(message.id),
+          hasMoreSql: 'SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?',
+          scopeId: s.id,
           relationField: 'message_id',
         },
         sourceBudget,
-      ))
+      )
       : db
         .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
         .all(s.id) as Json[]

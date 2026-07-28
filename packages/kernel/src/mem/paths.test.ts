@@ -148,6 +148,43 @@ describe('Related Sessions production filesystem discovery', () => {
     expect(truncated).toBe(1)
   })
 
+  test('keeps entries already returned at the exact discovery-entry boundary', () => {
+    let consumed = 0
+    const entries = [
+      { name: 'one.jsonl', isFile: true, isDirectory: false },
+      { name: 'two.jsonl', isFile: true, isDirectory: false },
+    ]
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 1024,
+      remainingBytes: () => 1024,
+      consume: () => undefined,
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+      remainingDiscoveryEntries: () => 2 - consumed,
+      consumeDiscoveryEntries: (_source, count) => { consumed += count },
+      remainingDiscoveryFiles: () => 2,
+      consumeDiscoveryFiles: () => undefined,
+      shouldContinueDiscovery: () => consumed < 2,
+      maxDiscoveryDepth: 8,
+      maxDiscoveryFiles: 2,
+      noteDiscoveryTruncated: () => undefined,
+    }
+    const fs: MemFs = {
+      home: '/home/u',
+      exists: () => true,
+      readDir: () => entries,
+      readDirBounded: () => ({ entries, unavailable: false, truncated: false }),
+      readText: () => undefined,
+      mtimeMs: () => 1,
+      contentReadBudget: budget,
+    }
+
+    expect(walkDirForRelatedSearch(fs, '/sessions', () => true, 2, 'codex'))
+      .toEqual(['/sessions/two.jsonl', '/sessions/one.jsonl'])
+    expect(consumed).toBe(2)
+  })
+
   test('enforces the deadline inside the production bounded directory reader', async () => {
     const home = await mkdtemp(join(tmpdir(), 'tenon-mem-deadline-'))
     roots.push(home)

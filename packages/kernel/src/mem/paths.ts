@@ -175,17 +175,21 @@ export function walkDirForRelatedSearch(
     const checked = bounded ?? fs.readDirChecked?.(current.path)
     const sourceEntries = checked?.entries ?? fs.readDir(current.path)
     const entries = sourceEntries.slice(0, remaining)
-    budget.consumeDiscoveryEntries(source, entries.length)
     if (bounded?.truncated || (!bounded && sourceEntries.length > remaining)) {
       budget.noteDiscoveryTruncated()
     }
 
     const ranked: Array<{ entry: (typeof entries)[number]; path: string; mtime: number }> = []
     for (const entry of entries) {
-      if (!budget.shouldContinueDiscovery(source)) {
+      // Production readDirBounded already checks the wall-clock deadline before returning each
+      // entry. Do not discard those collected entries merely because consuming the exact entry
+      // allowance makes shouldContinueDiscovery false. Legacy injected readers still need the
+      // explicit per-entry deadline check here.
+      if (!bounded && !budget.shouldContinueDiscovery(source)) {
         budget.noteDiscoveryTruncated()
         break
       }
+      budget.consumeDiscoveryEntries(source, 1)
       const path = join(current.path, entry.name)
       ranked.push({ entry, path, mtime: entry.isFile ? (fs.mtimeMs(path) ?? 0) : 0 })
     }

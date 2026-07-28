@@ -2,16 +2,45 @@
 
 ## 结论
 
-**FAIL — 第四轮 Verify 返回 Build 修复。**
+**FAIL — 第五轮 Verify 返回 Build 修复。**
 
-- 冻结构建：`51e52374ac3faed7b82e9a8b2a461dba45c6c814`
+- 冻结构建：`ede094b57014dd46c1f1c3b226a4eaed7dfe02ea`
 - 基线：`origin/main@15fe619b2885b928dd27be9668cca6b0ee903c57`
 - Change：`related-session-memory`
 - Track：`frontend`（实际交付覆盖 kernel、server、Dashboard）
-- 聚合结果：代码 Reviewer `FAIL`（Critical 0 / High 2 / Medium 1）；E2E `PASS`；Codex CLI `FAIL`；视觉 `PASS`。
+- 聚合结果：`FAIL`（Critical 0 / High 2 / Medium 3）；代码 Reviewer `FAIL`（High 1 / Medium 1）；E2E `PASS`；Codex CLI `FAIL`（P1 1 / P2 2）；视觉 `PASS`。
 - Verify 前后实现、配置、生成物与冻结 SHA 一致；仅 Tenon 治理状态和本报告发生允许的 Verify 写入。
 
 ## 阻断发现
+
+### 第五轮冻结新增
+
+1. **HIGH — OpenCode session 候选 SQL 在官方无对应索引的 schema 上仍全表扫描并排序**
+   - 位置：`packages/kernel/src/mem/adapters/opencode-budget.ts:114-170`
+   - 独立真实 SQLite plan 为 `SCAN session` 与 `USE TEMP B-TREE FOR ORDER BY`；`LIMIT` 不能约束 LIMIT 前的同步扫描、统计与排序。
+   - 修复要求：候选查询也必须在执行前检查 bounded query plan 并 fail closed，或改成能由受支持宿主索引驱动的查询；补无索引/真实 schema 的工作量回归。
+2. **HIGH — OpenCode dialogue 的 query-plan 判定会拒绝受支持但只有普通索引的数据库**
+   - 位置：`packages/kernel/src/mem/adapters/opencode-budget.ts:202-203`
+   - 只有 `session_id` 或 `message_id` 普通索引时，SQLite 可产生 `SEARCH ...` 加 `USE TEMP B-TREE FOR ORDER BY`；当前实现直接返回 `opencode-reader-unavailable`，合法结果会静默退化为空。
+   - 修复要求：重塑有界查询/排序，使其匹配受支持的真实宿主 schema；不得依赖 Tenon 不创建的 fixture-only 复合索引。
+3. **MEDIUM — `buildChildIndex` 裸兼容 alias 可覆盖真实 canonical key**
+   - 位置：`packages/kernel/src/mem/sessions.ts:168-174`
+   - 当前只避让已写入 `out` 的键，未避让所有真实 session canonical keys；真实 parent id=`x` 且另一 child 的 `parent_id=opencode:x` 时，裸 alias `opencode:x` 会把 child 错并入 parent `x`。
+   - 修复要求：先保留全部 canonical keys，再只为无歧义的 OpenCode 裸 parent id 建 alias；补该精确碰撞回归。
+4. **MEDIUM — discovery 在处理已读取 entry 前耗尽计数会丢弃全部候选**
+   - 位置：`packages/kernel/src/mem/paths.ts:178`
+   - bounded reader 恰好返回剩余 allowance 或因 deadline 截止时，代码先消费全部 entry，再在 ranking loop 检查 `shouldContinueDiscovery`；已成功读取的 entry 可全部被跳过。
+   - 修复要求：区分“是否允许新的读取”与“是否处理已经读取的 entry”，或逐条消费；补 exact-boundary 与 deadline 回归。
+5. **MEDIUM — OpenCode part 查询存在 request-wide 同步 query amplification**
+   - 位置：`packages/kernel/src/mem/adapters/opencode.ts:200-202`
+   - 每个 session 最多 512 条 message 各执行一次同步 part 查询，100 个候选可产生约 51,200 次 prepare/query；空结果几乎不消费 byte budget，事件循环工作量未被契约约束。
+   - 修复要求：用单个有界查询批量取 part，或加入 request-wide query/row 预算并返回诚实 partial warning；补 metadata-only 大候选回归。
+
+第五轮代码审查：`/tmp/tenon-rsm-ede094-code/report.md`；Codex CLI：
+`/tmp/tenon-rsm-ede094-codex-review.md`；E2E：`/tmp/tenon-rsm-ede094-e2e/SUMMARY.md`；
+视觉：`/tmp/tenon-rsm-ede094-visual/visual-review.md`。E2E 与视觉 PASS 仅适用于冻结
+`ede094b57014dd46c1f1c3b226a4eaed7dfe02ea`，回 Build 后不得复用。隔离 OpenSpec 应用演练
+`/tmp/tenon-rsm-openspec-rehearsal.K8U3h6/repo` 已通过，但同样随本冻结作废。
 
 ### 第四轮冻结新增
 

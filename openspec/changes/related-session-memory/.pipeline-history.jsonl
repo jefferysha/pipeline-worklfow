@@ -105,3 +105,18 @@
 {"ts":"2026-07-28T09:11:53Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"f616a228-d26c-4f21-9f24-5eb01f3bb936"}
 {"ts":"2026-07-28T09:34:44Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T11:15:08Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T11:15:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T11:15:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T11:15:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T11:15:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T11:15:44Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"49319496-b7f1-434d-922e-e05aef8b7add"}
+{"ts":"2026-07-28T11:31:06Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T11:31:16Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-related-session-memory-verify.md"}
+{"ts":"2026-07-28T11:31:24Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T11:31:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T06:34:08Z authority_host_session=019fa722-b72d-72f1-9cef-a0086ac7e580"}
+{"ts":"2026-07-28T11:31:25Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T11:31:25Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T11:33:19Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T11:33:19Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T11:33:19Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"f9908346-7646-4412-b99e-15ea7ae35854"}
+{"ts":"2026-07-28T11:45:41Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

@@ -57,6 +57,7 @@
 - [x] 排除 Claude 嵌套 subagent 日志，并按原始 SQL byte cap 识别多字节 SQLite 截断。 (build)
 - [x] 惰性执行 Claude fallback，并在缺少有界 SQLite query plan 时 fail closed。 (build)
 - [x] 复用稳定 OpenCode source warning，使 query-plan 失败进入正确 Dashboard partial 状态。 (build)
+- [x] 以官方 project/session 索引约束 OpenCode 候选，批量读取 parts，并修复 exact discovery 与 canonical alias 边界。 (build)
 
 ## 验证
 

@@ -142,6 +142,7 @@ function collectTurnsAndEvents(fs: MemFs, s: MemSession): { turns: DialogueTurn[
 
 /** 建 parent → 后代（传递展平）索引，供 OpenCode 子 agent 链。栈 DFS 展平。 */
 export function buildChildIndex(sessions: readonly MemSession[]): Map<string, MemSession[]> {
+  const canonicalKeys = new Set(sessions.map((session) => sessionKey(session.platform, session.id)))
   const directChildren = new Map<string, MemSession[]>()
   for (const s of sessions) {
     if (s.platform !== 'opencode' || !s.parent_id) continue
@@ -168,9 +169,9 @@ export function buildChildIndex(sessions: readonly MemSession[]): Map<string, Me
     legacyAliases.push({ key: parentKey.slice('opencode:'.length), children: flat })
   }
   // Preserve unambiguous historical bare OpenCode lookups without letting an opaque id such as
-  // "opencode:x" overwrite the canonical key for parent "x".
+  // "opencode:x" impersonate the canonical key of an actual session with id "x".
   for (const alias of legacyAliases) {
-    if (!out.has(alias.key)) out.set(alias.key, alias.children)
+    if (!canonicalKeys.has(alias.key) && !out.has(alias.key)) out.set(alias.key, alias.children)
   }
   return out
 }

@@ -56,6 +56,10 @@ function filter(overrides: Partial<MemFilter> = {}): MemFilter {
 
 function createOpencodeSchema(db: DatabaseSyncInstance): void {
   db.exec(`
+    CREATE TABLE project (
+      id text PRIMARY KEY,
+      worktree text NOT NULL
+    );
     CREATE TABLE session (
       id text PRIMARY KEY,
       project_id text NOT NULL,
@@ -69,6 +73,8 @@ function createOpencodeSchema(db: DatabaseSyncInstance): void {
       time_created integer NOT NULL,
       time_updated integer NOT NULL
     );
+    CREATE INDEX session_project_idx
+      ON session (project_id);
     CREATE TABLE message (
       id text PRIMARY KEY,
       session_id text NOT NULL,
@@ -106,14 +112,28 @@ async function openFixtureDb(home: string): Promise<DatabaseSyncInstance> {
 
 function insertSession(
   db: DatabaseSyncInstance,
-  row: { id: string; directory: string; title: string; parentId?: string | null; created: string; updated: string },
+  row: {
+    id: string
+    directory: string
+    title: string
+    projectId?: string
+    projectWorktree?: string
+    parentId?: string | null
+    created: string
+    updated: string
+  },
 ): void {
+  const projectId = row.projectId ?? `project:${row.directory}`
+  db.prepare('INSERT OR IGNORE INTO project (id, worktree) VALUES (?, ?)').run(
+    projectId,
+    row.projectWorktree ?? row.directory,
+  )
   db.prepare(
     `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.id,
-    'global',
+    projectId,
     row.parentId ?? null,
     'test-slug',
     row.directory,
@@ -253,6 +273,8 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
       id: 'ses_normal',
       directory: '/p/' + 'd'.repeat(20_000),
       title: 't'.repeat(20_000),
+      projectId: 'project:p',
+      projectWorktree: '/p',
       parentId: 'p'.repeat(20_000),
       created: '2026-07-05T10:00:00Z',
       updated: '2026-07-05T10:00:10Z',
@@ -261,6 +283,7 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
       id: 'i'.repeat(20_000),
       directory: '/p',
       title: 'oversized id',
+      projectId: 'project:p',
       created: '2026-07-05T10:00:00Z',
       updated: '2026-07-05T10:00:09Z',
     })
@@ -298,6 +321,29 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
 })
 
 describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
+  test('缺少 session_project_idx 时 fail closed，不执行候选全表扫描与排序', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/home/u/work/proj',
+      title: 'Unindexed session candidates',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    db.exec('DROP INDEX session_project_idx')
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'session candidates',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+  })
+
   test('缺少有界 query plan 时复用稳定 source-unavailable warning code', async () => {
     const db = await openFixtureDb(root)
     insertSession(db, {
@@ -691,6 +737,93 @@ describe('opencodeExtractDialogue —— message+part 联表，只收 text part'
       filePath: dbFile(root),
     })).toEqual([])
     expect(unavailable).toBeGreaterThan(0)
+  })
+
+  test('普通 relation 索引仍可走有界查询，不要求 fixture-only 排序复合索引', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.exec(`
+      DROP INDEX message_session_time_created_id_idx;
+      DROP INDEX part_message_id_id_idx;
+      CREATE INDEX message_session_idx ON message (session_id);
+      CREATE INDEX part_message_idx ON part (message_id);
+    `)
+    db.close()
+
+    let unavailable = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024,
+      consume: () => undefined,
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([{ role: 'user', text: 'memory search' }])
+    expect(unavailable).toBe(0)
+  })
+
+  test('批量按 session_id 读取 parts，不依赖逐 message 查询索引', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    for (let index = 0; index < 32; index += 1) {
+      const messageId = `msg_${String(index).padStart(3, '0')}`
+      insertMessage(db, {
+        id: messageId,
+        sessionId: 'ses_1',
+        created: `2026-07-05T10:00:${String(index).padStart(2, '0')}Z`,
+        data: { role: 'user' },
+      })
+      insertPart(db, {
+        id: `part_${String(index).padStart(3, '0')}`,
+        messageId,
+        sessionId: 'ses_1',
+        created: `2026-07-05T10:00:${String(index).padStart(2, '0')}Z`,
+        data: { type: 'text', text: `turn ${index}` },
+      })
+    }
+    db.exec('DROP INDEX part_message_id_id_idx')
+    db.close()
+
+    const turns = opencodeExtractDialogue(fs, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toHaveLength(32)
+    expect(turns[0]).toEqual({ role: 'user', text: 'turn 0' })
+    expect(turns[31]).toEqual({ role: 'user', text: 'turn 31' })
   })
 
   test('剩余预算不足关系 id 预留时诚实报告截断', async () => {

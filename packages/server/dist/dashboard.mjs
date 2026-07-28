@@ -9738,7 +9738,7 @@ function createChunkLocator(text2, maxChars) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode-budget.js
-import { resolve as resolve7, sep as sep5 } from "node:path";
+import { resolve as resolve7 } from "node:path";
 var sqliteSourceBudgets = /* @__PURE__ */ new WeakMap();
 function sqliteSourceBudget(fs, dbPath) {
   const budget = fs.contentReadBudget;
@@ -9768,7 +9768,10 @@ var SQLITE_SESSION_FIELD_LIMITS = {
   parent_id: SQLITE_SESSION_PARENT_ID_BYTES
 };
 var SQLITE_SESSION_METADATA_MAX_BYTES = 3 * (SQLITE_SESSION_ID_BYTES + SQLITE_SESSION_DIRECTORY_BYTES + SQLITE_SESSION_TITLE_BYTES + SQLITE_SESSION_PARENT_ID_BYTES) + SQLITE_SESSION_FIXED_BYTES;
-function boundedSessionSql(scoped) {
+var SQLITE_PROJECT_ID_BYTES = 512;
+var SQLITE_PROJECT_DIRECTORY_BYTES = 4 * 1024;
+var SQLITE_PROJECT_ROWS = 256;
+function boundedSessionSql() {
   return `
     SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
            length(CAST(id AS blob)) AS id_full_bytes,
@@ -9780,38 +9783,23 @@ function boundedSessionSql(scoped) {
            length(CAST(parent_id AS blob)) AS parent_id_full_bytes,
            time_created, time_updated
     FROM session
-    ${scoped ? "WHERE directory = ? OR substr(directory, 1, length(?)) = ?" : ""}
-    ORDER BY time_updated DESC, id
+    WHERE project_id = ?
+    ORDER BY rowid DESC
     LIMIT ?
   `;
 }
-function boundedSessionParams(f, limit) {
-  const bounds = [
+function boundedSessionParams(projectId, limit) {
+  return [
     SQLITE_SESSION_ID_BYTES,
     SQLITE_SESSION_DIRECTORY_BYTES,
     SQLITE_SESSION_TITLE_BYTES,
-    SQLITE_SESSION_PARENT_ID_BYTES
+    SQLITE_SESSION_PARENT_ID_BYTES,
+    projectId,
+    limit
   ];
-  if (!f.cwd)
-    return [...bounds, limit];
-  const projectRoot = resolve7(f.cwd);
-  const projectPrefix = projectRoot + sep5;
-  return [...bounds, projectRoot, projectPrefix, projectPrefix, limit];
 }
-function hasMoreSessionRows(db, f, offset) {
-  const scoped = Boolean(f.cwd);
-  const sql = `
-    SELECT 1 AS present
-    FROM session
-    ${scoped ? "WHERE directory = ? OR substr(directory, 1, length(?)) = ?" : ""}
-    ORDER BY time_updated DESC, id
-    LIMIT 1 OFFSET ?
-  `;
-  if (!f.cwd)
-    return db.prepare(sql).get(offset) !== void 0;
-  const projectRoot = resolve7(f.cwd);
-  const projectPrefix = projectRoot + sep5;
-  return db.prepare(sql).get(projectRoot, projectPrefix, projectPrefix, offset) !== void 0;
+function hasMoreSessionRows(db, projectId, offset) {
+  return db.prepare("SELECT 1 AS present FROM session WHERE project_id = ? LIMIT 1 OFFSET ?").get(projectId, offset) !== void 0;
 }
 function sessionFieldBytes(row, field) {
   return typeof row[field] === "string" ? Buffer.byteLength(row[field]) : 0;
@@ -9820,25 +9808,113 @@ function sessionFieldTruncated(row, field) {
   const fullBytes = row[`${field}_full_bytes`];
   return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field];
 }
+function boundedProjectRows(db, table, source, budget) {
+  const maximumRowBytes = SQLITE_PROJECT_ID_BYTES + SQLITE_PROJECT_DIRECTORY_BYTES;
+  const capacity = Math.min(SQLITE_PROJECT_ROWS, Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / maximumRowBytes), Math.floor(Math.max(0, budget.remainingBytes()) / maximumRowBytes));
+  if (capacity <= 0) {
+    budget.noteSourceTruncated();
+    source.truncated = true;
+    return [];
+  }
+  const idField = table === "project" ? "id" : "project_id";
+  const directoryField = table === "project" ? "worktree" : "directory";
+  try {
+    const rows = db.prepare(`
+      SELECT CAST(substr(CAST(${idField} AS blob), 1, ?) AS text) AS project_id,
+             length(CAST(${idField} AS blob)) AS project_id_full_bytes,
+             CAST(substr(CAST(${directoryField} AS blob), 1, ?) AS text) AS directory,
+             length(CAST(${directoryField} AS blob)) AS directory_full_bytes
+      FROM ${table}
+      LIMIT ?
+    `).all(SQLITE_PROJECT_ID_BYTES, SQLITE_PROJECT_DIRECTORY_BYTES, capacity);
+    const safe = [];
+    for (const row of rows) {
+      const idBytes = typeof row.project_id === "string" ? Buffer.byteLength(row.project_id) : 0;
+      const directoryBytes = typeof row.directory === "string" ? Buffer.byteLength(row.directory) : 0;
+      budget.consume(idBytes + directoryBytes);
+      source.bytesRead += idBytes + directoryBytes;
+      const idTruncated = typeof row.project_id_full_bytes === "number" && row.project_id_full_bytes > SQLITE_PROJECT_ID_BYTES;
+      const directoryTruncated = typeof row.directory_full_bytes === "number" && row.directory_full_bytes > SQLITE_PROJECT_DIRECTORY_BYTES;
+      if (idTruncated || directoryTruncated) {
+        budget.noteSourceTruncated();
+        source.truncated = true;
+      }
+      if (!idTruncated && !directoryTruncated)
+        safe.push(row);
+    }
+    if (rows.length === capacity && db.prepare(`SELECT 1 AS present FROM ${table} LIMIT 1 OFFSET ?`).get(capacity) !== void 0) {
+      budget.noteSourceTruncated();
+      source.truncated = true;
+    }
+    return safe;
+  } catch {
+    return null;
+  }
+}
+function projectIdsForFilter(db, f, source, budget) {
+  const projects = boundedProjectRows(db, "project", source, budget);
+  if (projects === null)
+    return null;
+  const directories = boundedProjectRows(db, "project_directory", source, budget) ?? [];
+  const target = f.cwd ? resolve7(f.cwd) : null;
+  const ids = /* @__PURE__ */ new Set();
+  for (const row of [...projects, ...directories]) {
+    if (typeof row.project_id !== "string" || typeof row.directory !== "string")
+      continue;
+    if (!target || sameProject(row.directory, target))
+      ids.add(row.project_id);
+  }
+  return [...ids].sort();
+}
 function readBoundedSessionRows(fs, db, f, source) {
   const budget = fs.contentReadBudget;
   if (!budget)
     return [];
   const requestedLimit = Math.max(0, Math.trunc(f.limit));
-  const sourceCapacity = Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / SQLITE_SESSION_METADATA_MAX_BYTES);
-  const aggregateCapacity = Math.floor(Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES);
-  const limit = Math.min(requestedLimit, sourceCapacity, aggregateCapacity);
-  if (limit <= 0) {
-    if (requestedLimit > 0 && hasMoreSessionRows(db, f, 0)) {
-      if (sourceCapacity <= 0)
-        budget.noteSourceTruncated();
-      if (aggregateCapacity <= 0)
-        budget.noteTotalExhausted();
-      source.truncated = true;
-    }
+  const projectIds = projectIdsForFilter(db, f, source, budget);
+  if (projectIds === null) {
+    budget.noteSourceUnavailable("opencode");
+    source.truncated = true;
     return [];
   }
-  const rows = Array.from(db.prepare(boundedSessionSql(Boolean(f.cwd))).iterate(...boundedSessionParams(f, limit)));
+  if (projectIds.length === 0 || requestedLimit <= 0)
+    return [];
+  const sourceCapacity = Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / SQLITE_SESSION_METADATA_MAX_BYTES);
+  const aggregateCapacity = Math.floor(Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES);
+  const limit = Math.min(requestedLimit + 1, sourceCapacity, aggregateCapacity);
+  if (limit <= 0) {
+    if (sourceCapacity <= 0)
+      budget.noteSourceTruncated();
+    if (aggregateCapacity <= 0)
+      budget.noteTotalExhausted();
+    source.truncated = true;
+    return [];
+  }
+  const sql = boundedSessionSql();
+  const hasMoreSql = "SELECT 1 AS present FROM session WHERE project_id = ? LIMIT 1 OFFSET ?";
+  const rows = [];
+  let candidateRowsTruncated = false;
+  for (const [projectIndex, projectId] of projectIds.entries()) {
+    const remaining = limit - rows.length;
+    if (remaining <= 0) {
+      candidateRowsTruncated = true;
+      break;
+    }
+    const params = boundedSessionParams(projectId, remaining);
+    if (!hasBoundedQueryPlan(db, sql, params) || !hasBoundedQueryPlan(db, hasMoreSql, [projectId, 0])) {
+      budget.noteSourceUnavailable("opencode");
+      source.truncated = true;
+      return [];
+    }
+    const projectRows = Array.from(db.prepare(sql).iterate(...params));
+    rows.push(...projectRows);
+    if (projectRows.length === remaining && hasMoreSessionRows(db, projectId, projectRows.length))
+      candidateRowsTruncated = true;
+    if (rows.length >= limit && projectIndex < projectIds.length - 1) {
+      candidateRowsTruncated = true;
+      break;
+    }
+  }
   const safeRows = [];
   for (const row of rows) {
     const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
@@ -9854,16 +9930,28 @@ function readBoundedSessionRows(fs, db, f, source) {
       continue;
     if (truncatedFields.includes("parent_id"))
       row.parent_id = null;
-    safeRows.push(row);
+    if (!f.cwd || sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
+      safeRows.push(row);
+    }
   }
-  if (rows.length === limit && limit < requestedLimit && hasMoreSessionRows(db, f, limit)) {
-    if (limit === sourceCapacity)
+  const capped = safeRows.sort((left, right) => {
+    const updated = Number(right.time_updated ?? 0) - Number(left.time_updated ?? 0);
+    if (updated !== 0)
+      return updated;
+    return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+  }).slice(0, requestedLimit);
+  if (candidateRowsTruncated || rows.length > requestedLimit) {
+    if (budget.noteDiscoveryTruncated)
+      budget.noteDiscoveryTruncated();
+    else
+      budget.noteSourceTruncated();
+    if (limit === sourceCapacity && sourceCapacity <= requestedLimit)
       budget.noteSourceTruncated();
     if (limit === aggregateCapacity)
       budget.noteTotalExhausted();
     source.truncated = true;
   }
-  return safeRows;
+  return capped;
 }
 var SQLITE_RELATION_ID_BYTES = 512;
 var SQLITE_ROW_DATA_BYTES = 4 * 1024;
@@ -10069,7 +10157,6 @@ function opencodeExtractDialogue(fs, s) {
                 time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created
          LIMIT ?`,
       hasMoreSql: "SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?",
       scopeId: s.id,
@@ -10077,20 +10164,19 @@ function opencodeExtractDialogue(fs, s) {
     }, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     if (!messageRows.length)
       return [];
-    const partRows = fs.contentReadBudget ? messageRows.flatMap((message) => readBoundedSqliteRows(fs, db, {
+    const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
       sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
                 length(CAST(message_id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
          FROM part
-         WHERE message_id = ?
-         ORDER BY id
+         WHERE session_id = ?
          LIMIT ?`,
-      hasMoreSql: "SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?",
-      scopeId: String(message.id),
+      hasMoreSql: "SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?",
+      scopeId: s.id,
       relationField: "message_id"
-    }, sourceBudget)) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+    }, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     const partsByMessage = /* @__PURE__ */ new Map();
     for (const p of partRows) {
       const mid = String(p.message_id);
@@ -10434,16 +10520,16 @@ function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDesc
     const checked = bounded ?? fs.readDirChecked?.(current.path);
     const sourceEntries = checked?.entries ?? fs.readDir(current.path);
     const entries = sourceEntries.slice(0, remaining);
-    budget.consumeDiscoveryEntries(source, entries.length);
     if (bounded?.truncated || !bounded && sourceEntries.length > remaining) {
       budget.noteDiscoveryTruncated();
     }
     const ranked = [];
     for (const entry of entries) {
-      if (!budget.shouldContinueDiscovery(source)) {
+      if (!bounded && !budget.shouldContinueDiscovery(source)) {
         budget.noteDiscoveryTruncated();
         break;
       }
+      budget.consumeDiscoveryEntries(source, 1);
       const path7 = join16(current.path, entry.name);
       ranked.push({ entry, path: path7, mtime: entry.isFile ? fs.mtimeMs(path7) ?? 0 : 0 });
     }
@@ -11092,6 +11178,7 @@ function searchSession(fs, s, kw, hostSummariesAsAssistant = false) {
   }
 }
 function buildChildIndex(sessions) {
+  const canonicalKeys = new Set(sessions.map((session) => sessionKey(session.platform, session.id)));
   const directChildren2 = /* @__PURE__ */ new Map();
   for (const s of sessions) {
     if (s.platform !== "opencode" || !s.parent_id)
@@ -11121,7 +11208,7 @@ function buildChildIndex(sessions) {
     legacyAliases.push({ key: parentKey.slice("opencode:".length), children: flat });
   }
   for (const alias of legacyAliases) {
-    if (!out.has(alias.key))
+    if (!canonicalKeys.has(alias.key) && !out.has(alias.key))
       out.set(alias.key, alias.children);
   }
   return out;
@@ -14548,7 +14635,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep8) {
+function splitTopLevel(s, sep7) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -14560,7 +14647,7 @@ function splitTopLevel(s, sep8) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep8) {
+    } else if (ch === sep7) {
       out.push(cur);
       cur = "";
     } else {
@@ -15477,7 +15564,7 @@ var DEFAULT_TTL_MS = 10 * 60 * 1e3;
 import { createHash as createHash11 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat12, mkdir as mkdir13, open as open3, readdir as readdir3, realpath as realpath4, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join23, relative as relative4, sep as sep6 } from "node:path";
+import { dirname as dirname6, join as join23, relative as relative4, sep as sep5 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -15525,13 +15612,13 @@ async function assertDirectoryIdentities(identities, onFailure) {
 async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFailure) {
   const parent = dirname6(absFile);
   const fromRoot = relative4(realRoot, parent);
-  if (fromRoot === ".." || fromRoot.startsWith(`..${sep6}`)) {
+  if (fromRoot === ".." || fromRoot.startsWith(`..${sep5}`)) {
     throw onFailure(`\u6587\u4EF6\u7236\u76EE\u5F55\u5DF2\u9003\u9038\u5185\u5BB9\u6839\uFF1A${parent}`);
   }
   const paths = [realRoot];
   let cursor = realRoot;
   if (fromRoot !== "") {
-    for (const segment of fromRoot.split(sep6)) {
+    for (const segment of fromRoot.split(sep5)) {
       cursor = join23(cursor, segment);
       paths.push(cursor);
     }
@@ -16392,7 +16479,7 @@ import {
   realpathSync as realpathSync2,
   unlinkSync
 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep7 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep6 } from "node:path";
 
 // packages/server/src/workflowRootAnchor.ts
 import {
@@ -16487,7 +16574,7 @@ var WorkflowDeleteConflictError = class extends Error {
 // packages/server/src/workflowTrustedFs.ts
 function assertInsideRoot(realRoot, realPath, label) {
   const fromRoot = relative5(realRoot, realPath);
-  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep7}`) || isAbsolute5(fromRoot)) {
+  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep6}`) || isAbsolute5(fromRoot)) {
     throw new Error(`${label} \u5DF2\u9003\u9038 registered root: ${realPath}`);
   }
 }

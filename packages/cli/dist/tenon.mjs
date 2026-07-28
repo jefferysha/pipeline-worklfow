@@ -13874,7 +13874,7 @@ function createChunkLocator(text2, maxChars) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode-budget.js
-import { resolve as resolve6, sep as sep5 } from "node:path";
+import { resolve as resolve6 } from "node:path";
 var sqliteSourceBudgets = /* @__PURE__ */ new WeakMap();
 function sqliteSourceBudget(fs, dbPath) {
   const budget = fs.contentReadBudget;
@@ -13904,7 +13904,10 @@ var SQLITE_SESSION_FIELD_LIMITS = {
   parent_id: SQLITE_SESSION_PARENT_ID_BYTES
 };
 var SQLITE_SESSION_METADATA_MAX_BYTES = 3 * (SQLITE_SESSION_ID_BYTES + SQLITE_SESSION_DIRECTORY_BYTES + SQLITE_SESSION_TITLE_BYTES + SQLITE_SESSION_PARENT_ID_BYTES) + SQLITE_SESSION_FIXED_BYTES;
-function boundedSessionSql(scoped) {
+var SQLITE_PROJECT_ID_BYTES = 512;
+var SQLITE_PROJECT_DIRECTORY_BYTES = 4 * 1024;
+var SQLITE_PROJECT_ROWS = 256;
+function boundedSessionSql() {
   return `
     SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
            length(CAST(id AS blob)) AS id_full_bytes,
@@ -13916,38 +13919,23 @@ function boundedSessionSql(scoped) {
            length(CAST(parent_id AS blob)) AS parent_id_full_bytes,
            time_created, time_updated
     FROM session
-    ${scoped ? "WHERE directory = ? OR substr(directory, 1, length(?)) = ?" : ""}
-    ORDER BY time_updated DESC, id
+    WHERE project_id = ?
+    ORDER BY rowid DESC
     LIMIT ?
   `;
 }
-function boundedSessionParams(f, limit) {
-  const bounds = [
+function boundedSessionParams(projectId, limit) {
+  return [
     SQLITE_SESSION_ID_BYTES,
     SQLITE_SESSION_DIRECTORY_BYTES,
     SQLITE_SESSION_TITLE_BYTES,
-    SQLITE_SESSION_PARENT_ID_BYTES
+    SQLITE_SESSION_PARENT_ID_BYTES,
+    projectId,
+    limit
   ];
-  if (!f.cwd)
-    return [...bounds, limit];
-  const projectRoot = resolve6(f.cwd);
-  const projectPrefix = projectRoot + sep5;
-  return [...bounds, projectRoot, projectPrefix, projectPrefix, limit];
 }
-function hasMoreSessionRows(db, f, offset) {
-  const scoped = Boolean(f.cwd);
-  const sql = `
-    SELECT 1 AS present
-    FROM session
-    ${scoped ? "WHERE directory = ? OR substr(directory, 1, length(?)) = ?" : ""}
-    ORDER BY time_updated DESC, id
-    LIMIT 1 OFFSET ?
-  `;
-  if (!f.cwd)
-    return db.prepare(sql).get(offset) !== void 0;
-  const projectRoot = resolve6(f.cwd);
-  const projectPrefix = projectRoot + sep5;
-  return db.prepare(sql).get(projectRoot, projectPrefix, projectPrefix, offset) !== void 0;
+function hasMoreSessionRows(db, projectId, offset) {
+  return db.prepare("SELECT 1 AS present FROM session WHERE project_id = ? LIMIT 1 OFFSET ?").get(projectId, offset) !== void 0;
 }
 function sessionFieldBytes(row, field2) {
   return typeof row[field2] === "string" ? Buffer.byteLength(row[field2]) : 0;
@@ -13956,25 +13944,113 @@ function sessionFieldTruncated(row, field2) {
   const fullBytes = row[`${field2}_full_bytes`];
   return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field2];
 }
+function boundedProjectRows(db, table, source, budget) {
+  const maximumRowBytes = SQLITE_PROJECT_ID_BYTES + SQLITE_PROJECT_DIRECTORY_BYTES;
+  const capacity = Math.min(SQLITE_PROJECT_ROWS, Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / maximumRowBytes), Math.floor(Math.max(0, budget.remainingBytes()) / maximumRowBytes));
+  if (capacity <= 0) {
+    budget.noteSourceTruncated();
+    source.truncated = true;
+    return [];
+  }
+  const idField = table === "project" ? "id" : "project_id";
+  const directoryField = table === "project" ? "worktree" : "directory";
+  try {
+    const rows = db.prepare(`
+      SELECT CAST(substr(CAST(${idField} AS blob), 1, ?) AS text) AS project_id,
+             length(CAST(${idField} AS blob)) AS project_id_full_bytes,
+             CAST(substr(CAST(${directoryField} AS blob), 1, ?) AS text) AS directory,
+             length(CAST(${directoryField} AS blob)) AS directory_full_bytes
+      FROM ${table}
+      LIMIT ?
+    `).all(SQLITE_PROJECT_ID_BYTES, SQLITE_PROJECT_DIRECTORY_BYTES, capacity);
+    const safe = [];
+    for (const row of rows) {
+      const idBytes = typeof row.project_id === "string" ? Buffer.byteLength(row.project_id) : 0;
+      const directoryBytes = typeof row.directory === "string" ? Buffer.byteLength(row.directory) : 0;
+      budget.consume(idBytes + directoryBytes);
+      source.bytesRead += idBytes + directoryBytes;
+      const idTruncated = typeof row.project_id_full_bytes === "number" && row.project_id_full_bytes > SQLITE_PROJECT_ID_BYTES;
+      const directoryTruncated = typeof row.directory_full_bytes === "number" && row.directory_full_bytes > SQLITE_PROJECT_DIRECTORY_BYTES;
+      if (idTruncated || directoryTruncated) {
+        budget.noteSourceTruncated();
+        source.truncated = true;
+      }
+      if (!idTruncated && !directoryTruncated)
+        safe.push(row);
+    }
+    if (rows.length === capacity && db.prepare(`SELECT 1 AS present FROM ${table} LIMIT 1 OFFSET ?`).get(capacity) !== void 0) {
+      budget.noteSourceTruncated();
+      source.truncated = true;
+    }
+    return safe;
+  } catch {
+    return null;
+  }
+}
+function projectIdsForFilter(db, f, source, budget) {
+  const projects = boundedProjectRows(db, "project", source, budget);
+  if (projects === null)
+    return null;
+  const directories = boundedProjectRows(db, "project_directory", source, budget) ?? [];
+  const target = f.cwd ? resolve6(f.cwd) : null;
+  const ids = /* @__PURE__ */ new Set();
+  for (const row of [...projects, ...directories]) {
+    if (typeof row.project_id !== "string" || typeof row.directory !== "string")
+      continue;
+    if (!target || sameProject(row.directory, target))
+      ids.add(row.project_id);
+  }
+  return [...ids].sort();
+}
 function readBoundedSessionRows(fs, db, f, source) {
   const budget = fs.contentReadBudget;
   if (!budget)
     return [];
   const requestedLimit = Math.max(0, Math.trunc(f.limit));
-  const sourceCapacity = Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / SQLITE_SESSION_METADATA_MAX_BYTES);
-  const aggregateCapacity = Math.floor(Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES);
-  const limit = Math.min(requestedLimit, sourceCapacity, aggregateCapacity);
-  if (limit <= 0) {
-    if (requestedLimit > 0 && hasMoreSessionRows(db, f, 0)) {
-      if (sourceCapacity <= 0)
-        budget.noteSourceTruncated();
-      if (aggregateCapacity <= 0)
-        budget.noteTotalExhausted();
-      source.truncated = true;
-    }
+  const projectIds = projectIdsForFilter(db, f, source, budget);
+  if (projectIds === null) {
+    budget.noteSourceUnavailable("opencode");
+    source.truncated = true;
     return [];
   }
-  const rows = Array.from(db.prepare(boundedSessionSql(Boolean(f.cwd))).iterate(...boundedSessionParams(f, limit)));
+  if (projectIds.length === 0 || requestedLimit <= 0)
+    return [];
+  const sourceCapacity = Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / SQLITE_SESSION_METADATA_MAX_BYTES);
+  const aggregateCapacity = Math.floor(Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES);
+  const limit = Math.min(requestedLimit + 1, sourceCapacity, aggregateCapacity);
+  if (limit <= 0) {
+    if (sourceCapacity <= 0)
+      budget.noteSourceTruncated();
+    if (aggregateCapacity <= 0)
+      budget.noteTotalExhausted();
+    source.truncated = true;
+    return [];
+  }
+  const sql = boundedSessionSql();
+  const hasMoreSql = "SELECT 1 AS present FROM session WHERE project_id = ? LIMIT 1 OFFSET ?";
+  const rows = [];
+  let candidateRowsTruncated = false;
+  for (const [projectIndex, projectId] of projectIds.entries()) {
+    const remaining = limit - rows.length;
+    if (remaining <= 0) {
+      candidateRowsTruncated = true;
+      break;
+    }
+    const params = boundedSessionParams(projectId, remaining);
+    if (!hasBoundedQueryPlan(db, sql, params) || !hasBoundedQueryPlan(db, hasMoreSql, [projectId, 0])) {
+      budget.noteSourceUnavailable("opencode");
+      source.truncated = true;
+      return [];
+    }
+    const projectRows = Array.from(db.prepare(sql).iterate(...params));
+    rows.push(...projectRows);
+    if (projectRows.length === remaining && hasMoreSessionRows(db, projectId, projectRows.length))
+      candidateRowsTruncated = true;
+    if (rows.length >= limit && projectIndex < projectIds.length - 1) {
+      candidateRowsTruncated = true;
+      break;
+    }
+  }
   const safeRows = [];
   for (const row of rows) {
     const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
@@ -13990,16 +14066,28 @@ function readBoundedSessionRows(fs, db, f, source) {
       continue;
     if (truncatedFields.includes("parent_id"))
       row.parent_id = null;
-    safeRows.push(row);
+    if (!f.cwd || sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
+      safeRows.push(row);
+    }
   }
-  if (rows.length === limit && limit < requestedLimit && hasMoreSessionRows(db, f, limit)) {
-    if (limit === sourceCapacity)
+  const capped = safeRows.sort((left, right) => {
+    const updated = Number(right.time_updated ?? 0) - Number(left.time_updated ?? 0);
+    if (updated !== 0)
+      return updated;
+    return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+  }).slice(0, requestedLimit);
+  if (candidateRowsTruncated || rows.length > requestedLimit) {
+    if (budget.noteDiscoveryTruncated)
+      budget.noteDiscoveryTruncated();
+    else
+      budget.noteSourceTruncated();
+    if (limit === sourceCapacity && sourceCapacity <= requestedLimit)
       budget.noteSourceTruncated();
     if (limit === aggregateCapacity)
       budget.noteTotalExhausted();
     source.truncated = true;
   }
-  return safeRows;
+  return capped;
 }
 var SQLITE_RELATION_ID_BYTES = 512;
 var SQLITE_ROW_DATA_BYTES = 4 * 1024;
@@ -14208,7 +14296,6 @@ function opencodeExtractDialogue(fs, s) {
                 time_created
          FROM message
          WHERE session_id = ?
-         ORDER BY time_created
          LIMIT ?`,
       hasMoreSql: "SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?",
       scopeId: s.id,
@@ -14216,20 +14303,19 @@ function opencodeExtractDialogue(fs, s) {
     }, sourceBudget) : db.prepare("SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     if (!messageRows.length)
       return [];
-    const partRows = fs.contentReadBudget ? messageRows.flatMap((message2) => readBoundedSqliteRows(fs, db, {
+    const partRows = fs.contentReadBudget ? readBoundedSqliteRows(fs, db, {
       sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
                 length(CAST(message_id AS blob)) AS relation_full_bytes,
                 CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
                 length(CAST(data AS blob)) AS full_bytes,
                 time_created
          FROM part
-         WHERE message_id = ?
-         ORDER BY id
+         WHERE session_id = ?
          LIMIT ?`,
-      hasMoreSql: "SELECT 1 AS present FROM part WHERE message_id = ? LIMIT 1 OFFSET ?",
-      scopeId: String(message2.id),
+      hasMoreSql: "SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?",
+      scopeId: s.id,
       relationField: "message_id"
-    }, sourceBudget)) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
+    }, sourceBudget) : db.prepare("SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id").all(s.id);
     const partsByMessage = /* @__PURE__ */ new Map();
     for (const p of partRows) {
       const mid = String(p.message_id);
@@ -14645,16 +14731,16 @@ function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDesc
     const checked = bounded ?? fs.readDirChecked?.(current.path);
     const sourceEntries = checked?.entries ?? fs.readDir(current.path);
     const entries = sourceEntries.slice(0, remaining);
-    budget.consumeDiscoveryEntries(source, entries.length);
     if (bounded?.truncated || !bounded && sourceEntries.length > remaining) {
       budget.noteDiscoveryTruncated();
     }
     const ranked = [];
     for (const entry of entries) {
-      if (!budget.shouldContinueDiscovery(source)) {
+      if (!bounded && !budget.shouldContinueDiscovery(source)) {
         budget.noteDiscoveryTruncated();
         break;
       }
+      budget.consumeDiscoveryEntries(source, 1);
       const path9 = join14(current.path, entry.name);
       ranked.push({ entry, path: path9, mtime: entry.isFile ? fs.mtimeMs(path9) ?? 0 : 0 });
     }
@@ -15456,6 +15542,7 @@ function collectTurnsAndEvents(fs, s) {
   }
 }
 function buildChildIndex(sessions) {
+  const canonicalKeys = new Set(sessions.map((session) => sessionKey(session.platform, session.id)));
   const directChildren2 = /* @__PURE__ */ new Map();
   for (const s of sessions) {
     if (s.platform !== "opencode" || !s.parent_id)
@@ -15485,7 +15572,7 @@ function buildChildIndex(sessions) {
     legacyAliases.push({ key: parentKey.slice("opencode:".length), children: flat });
   }
   for (const alias of legacyAliases) {
-    if (!out.has(alias.key))
+    if (!canonicalKeys.has(alias.key) && !out.has(alias.key))
       out.set(alias.key, alias.children);
   }
   return out;
@@ -21412,7 +21499,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep15) {
+function splitTopLevel(s, sep14) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -21424,7 +21511,7 @@ function splitTopLevel(s, sep15) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep15) {
+    } else if (ch === sep14) {
       out.push(cur);
       cur = "";
     } else {
@@ -26145,7 +26232,7 @@ function createLoopAdmission(deps) {
 import { createHash as createHash22 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod, lstat as lstat13, mkdir as mkdir14, open as open4, readdir as readdir7, realpath as realpath4, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join27, relative as relative4, sep as sep6 } from "node:path";
+import { dirname as dirname6, join as join27, relative as relative4, sep as sep5 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -26208,13 +26295,13 @@ async function assertDirectoryIdentities(identities, onFailure) {
 async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFailure) {
   const parent = dirname6(absFile);
   const fromRoot = relative4(realRoot, parent);
-  if (fromRoot === ".." || fromRoot.startsWith(`..${sep6}`)) {
+  if (fromRoot === ".." || fromRoot.startsWith(`..${sep5}`)) {
     throw onFailure(`\u6587\u4EF6\u7236\u76EE\u5F55\u5DF2\u9003\u9038\u5185\u5BB9\u6839\uFF1A${parent}`);
   }
   const paths = [realRoot];
   let cursor = realRoot;
   if (fromRoot !== "") {
-    for (const segment of fromRoot.split(sep6)) {
+    for (const segment of fromRoot.split(sep5)) {
       cursor = join27(cursor, segment);
       paths.push(cursor);
     }
@@ -33825,22 +33912,22 @@ import { relative as relative9, resolve as resolve22 } from "node:path";
 // packages/cli/src/codexSkillReceipt.ts
 import { appendFile as appendFile2, lstat as lstat20, mkdir as mkdir19, readdir as readdir11, readFile as readFile24 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
-import { basename as basename5, isAbsolute as isAbsolute10, join as join51, relative as relative7, resolve as resolve19, sep as sep9 } from "node:path";
+import { basename as basename5, isAbsolute as isAbsolute10, join as join51, relative as relative7, resolve as resolve19, sep as sep8 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { createReadStream } from "node:fs";
 import { lstat as lstat19, readdir as readdir10, realpath as realpath8, stat as stat10 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
-import { isAbsolute as isAbsolute9, join as join50, relative as relative6, resolve as resolve18, sep as sep8 } from "node:path";
+import { isAbsolute as isAbsolute9, join as join50, relative as relative6, resolve as resolve18, sep as sep7 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
 
 // packages/cli/src/codexSkillTrust.ts
 import { lstat as lstat17, readFile as readFile22, realpath as realpath6 } from "node:fs/promises";
 import { homedir as homedir7 } from "node:os";
-import { dirname as dirname10, isAbsolute as isAbsolute7, join as join48, relative as relative5, resolve as resolve16, sep as sep7 } from "node:path";
+import { dirname as dirname10, isAbsolute as isAbsolute7, join as join48, relative as relative5, resolve as resolve16, sep as sep6 } from "node:path";
 function isInside(base, candidate) {
   const fromBase = relative5(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep7}`) && !isAbsolute7(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep6}`) && !isAbsolute7(fromBase);
 }
 function safeAbsolute(value) {
   return value?.trim() && isAbsolute7(value.trim()) ? resolve16(value.trim()) : void 0;
@@ -33866,7 +33953,7 @@ function productionCodexSkillTrustRoots() {
   };
 }
 async function ordinaryDirectoryChain(base, candidate) {
-  const parts = relative5(base, candidate).split(sep7).filter((part) => part !== "");
+  const parts = relative5(base, candidate).split(sep6).filter((part) => part !== "");
   if (parts.some((part) => part === "..")) return false;
   let current = base;
   for (const part of ["", ...parts]) {
@@ -33893,7 +33980,7 @@ async function selectedCacheRoot(roots, homeDir, configured) {
   if (!logical) return void 0;
   const cacheBase = join48(codexHomeRoot(homeDir, configured), "plugins", "cache", "tenon", "tenon");
   const rel = relative5(cacheBase, logical);
-  if (rel === "" || rel.startsWith("..") || rel.split(sep7).length !== 1) return void 0;
+  if (rel === "" || rel.startsWith("..") || rel.split(sep6).length !== 1) return void 0;
   if (!await ordinaryDirectoryChain(codexHomeRoot(homeDir, configured), logical)) return void 0;
   try {
     return { logical, physical: await realpath6(logical) };
@@ -33906,7 +33993,7 @@ async function activeReleaseRoot(roots) {
   const runtimeData = safeAbsolute(roots.runtimeDataRoot);
   const runtimeState = safeAbsolute(roots.runtimeStateRoot);
   if (!logical || !runtimeData || !runtimeState || !await samePhysicalDirectory(roots.executingPluginRoot, logical)) return void 0;
-  const rel = relative5(join48(runtimeData, "releases"), logical).split(sep7);
+  const rel = relative5(join48(runtimeData, "releases"), logical).split(sep6);
   if (rel.length !== 2 || !/^sha256-[a-f0-9]{64}$/.test(rel[0] ?? "") || rel[1] !== "payload") return void 0;
   if (!await ordinaryDirectoryChain(runtimeData, logical)) return void 0;
   try {
@@ -34147,7 +34234,7 @@ function asString(value) {
 }
 function isInside2(base, candidate) {
   const fromBase = relative6(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute9(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep7}`) && !isAbsolute9(fromBase);
 }
 function codexSessionsRoot2(homeDir, configured) {
   return join50(codexHomeRoot(homeDir, configured), "sessions");
@@ -34331,7 +34418,7 @@ function commandReadsTrustedSkill(command, skillPath) {
     const commandSegment = unwrapReadCommand(segment) ?? segment.trim();
     const path9 = commandSegment ? finalReadPath(commandSegment) : void 0;
     if (path9 === void 0) return false;
-    const sibling = relative6(skillsRoot, resolve18(path9)).split(sep8);
+    const sibling = relative6(skillsRoot, resolve18(path9)).split(sep7);
     if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return false;
     if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
       if (trustedPath.test(path9)) observedRead = true;
@@ -34520,7 +34607,7 @@ function isSafeOpaqueId(value) {
 }
 function isInside3(base, candidate) {
   const fromBase = relative7(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute10(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute10(fromBase);
 }
 function codexSessionsRoot3(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
@@ -34843,7 +34930,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
 import { lstat as lstat21, realpath as realpath9 } from "node:fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute11, relative as relative8, resolve as resolve21, sep as sep10 } from "node:path";
+import { dirname as dirname11, isAbsolute as isAbsolute11, relative as relative8, resolve as resolve21, sep as sep9 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
 }
@@ -34862,7 +34949,7 @@ function requiredDeltaCapability(requestedCapability) {
 async function assertSafeChangeRoot(repoRoot, changeRoot) {
   const root = resolve21(repoRoot);
   const lexical = relative8(root, resolve21(changeRoot));
-  if (lexical === ".." || lexical.startsWith(`..${sep10}`) || isAbsolute11(lexical)) {
+  if (lexical === ".." || lexical.startsWith(`..${sep9}`) || isAbsolute11(lexical)) {
     throw new Error(`Change \u6839\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
   const rootInfo = await lstat21(root);
@@ -34870,7 +34957,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
     throw new Error(`\u9879\u76EE\u6839\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${root}`);
   }
   let cursor = root;
-  for (const segment of lexical.split(sep10).filter(Boolean)) {
+  for (const segment of lexical.split(sep9).filter(Boolean)) {
     cursor = resolve21(cursor, segment);
     const info = await lstat21(cursor);
     if (!info.isDirectory() || info.isSymbolicLink()) {
@@ -34879,7 +34966,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
   }
   const [rootReal, changeReal] = await Promise.all([realpath9(root), realpath9(changeRoot)]);
   const escaped3 = relative8(rootReal, changeReal);
-  if (escaped3 === ".." || escaped3.startsWith(`..${sep10}`) || isAbsolute11(escaped3)) {
+  if (escaped3 === ".." || escaped3.startsWith(`..${sep9}`) || isAbsolute11(escaped3)) {
     throw new Error(`Change \u6839\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
 }
@@ -41694,12 +41781,12 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 
 // packages/cli/src/commands/scaffold.ts
 import { lstat as lstat27, mkdir as mkdir22, readFile as readFile29, rm as rm8, stat as stat11, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
-import { dirname as dirname14, isAbsolute as isAbsolute17, join as join60, relative as relative13, resolve as resolve28, sep as sep13 } from "node:path";
+import { dirname as dirname14, isAbsolute as isAbsolute17, join as join60, relative as relative13, resolve as resolve28, sep as sep12 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 import { lstat as lstat26, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname13, isAbsolute as isAbsolute16, relative as relative12, resolve as resolve27, sep as sep12 } from "node:path";
+import { dirname as dirname13, isAbsolute as isAbsolute16, relative as relative12, resolve as resolve27, sep as sep11 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash28 } from "node:crypto";
@@ -41782,7 +41869,7 @@ function ordinaryPathKey(target) {
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
 import { lstat as lstat25, readFile as readFile28, rename as rename7, rm as rm6 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute15, relative as relative11, resolve as resolve26, sep as sep11 } from "node:path";
+import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute15, relative as relative11, resolve as resolve26, sep as sep10 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
   const code = Reflect.get(error, "code");
@@ -41790,7 +41877,7 @@ function errorCode7(error) {
 }
 function contained2(root, target) {
   const rel = relative11(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep11}`) && !isAbsolute15(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep10}`) && !isAbsolute15(rel);
 }
 async function existingOrdinaryFile(target) {
   try {
@@ -41965,7 +42052,7 @@ async function acquireTransaction(specDirectory, receipt, anchor) {
 // packages/cli/src/commands/specScaffoldTransaction.ts
 function contained3(root, target) {
   const rel = relative12(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep12}`) && !isAbsolute16(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep11}`) && !isAbsolute16(rel);
 }
 async function existingOrdinaryDirectory2(target) {
   try {
@@ -41986,7 +42073,7 @@ async function publishSpecScaffoldTransaction(options) {
     throw new Error(`spec scaffold \u4E8B\u52A1\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${options.specDirectory}`);
   }
   const specRelative = relative12(repoRoot, specDirectory);
-  const topLevelName = specRelative.split(sep12).filter(Boolean)[0];
+  const topLevelName = specRelative.split(sep11).filter(Boolean)[0];
   if (!topLevelName) {
     throw new Error("spec scaffold \u4E8B\u52A1\u76EE\u6807\u4E0D\u80FD\u662F\u9879\u76EE\u6839");
   }
@@ -42137,17 +42224,17 @@ var SPEC_STRATEGY_SIGNAL = "TENON_SPEC_STRATEGY";
 function safeSpecDir(cwd, specDir) {
   if (isAbsolute17(specDir)) return false;
   const rel = relative13(resolve28(cwd), resolve28(cwd, specDir));
-  return rel !== ".." && !rel.startsWith(`..${sep13}`) && !isAbsolute17(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep12}`) && !isAbsolute17(rel);
 }
 async function assertExistingParentsSafe(cwd, target) {
   const root = resolve28(cwd);
   const parent = dirname14(target);
   const rel = relative13(root, parent);
-  if (rel === ".." || rel.startsWith(`..${sep13}`) || isAbsolute17(rel)) {
+  if (rel === ".." || rel.startsWith(`..${sep12}`) || isAbsolute17(rel)) {
     throw new Error(`scaffold \u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${target}`);
   }
   let cursor = root;
-  for (const segment of rel.split(sep13).filter(Boolean)) {
+  for (const segment of rel.split(sep12).filter(Boolean)) {
     cursor = resolve28(cursor, segment);
     try {
       const info = await lstat27(cursor);
@@ -44811,7 +44898,7 @@ import {
   rm as rm12,
   stat as stat12
 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname17, join as join69, relative as relative14, resolve as resolve31, sep as sep14 } from "node:path";
+import { basename as basename8, dirname as dirname17, join as join69, relative as relative14, resolve as resolve31, sep as sep13 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -45009,7 +45096,7 @@ async function compensateActivation(input) {
 // packages/cli/src/runtime/release-store.ts
 function isWithin(root, candidate) {
   const rel = relative14(root, candidate);
-  return rel === "" || !rel.startsWith(`..${sep14}`) && rel !== ".." && !rel.includes(`${sep14}..${sep14}`);
+  return rel === "" || !rel.startsWith(`..${sep13}`) && rel !== ".." && !rel.includes(`${sep13}..${sep13}`);
 }
 function candidatePath(root, entry) {
   const path9 = resolve31(root, entry);
