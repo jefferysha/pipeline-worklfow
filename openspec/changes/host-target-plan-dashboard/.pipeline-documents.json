@@ -123,16 +123,14 @@
           "sha256": "46a6956cac2e931883b2e63ebc7e9d2684ace8e6e752533ced87cb46aaee7ea3",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "46a6956cac2e931883b2e63ebc7e9d2684ace8e6e752533ced87cb46aaee7ea3",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-28-host-target-plan-dashboard-verify.md",
-      "sha256": "dabc6d326a300b934af32f089adff634bd670cef0655ae2bcc456a320f2310ee",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-28T05:35:45Z",
-      "reads": []
     },
     {
       "kind": "delta-spec",
@@ -146,6 +144,12 @@
           "sha256": "b64edcd67417ae3c07b5bf493e7f7fbcec6a8951cbfe6c7ed814efaa45bd50a4",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b64edcd67417ae3c07b5bf493e7f7fbcec6a8951cbfe6c7ed814efaa45bd50a4",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -161,6 +165,12 @@
           "sha256": "b43d2fce92c55f5b2d0cd2b2ad6eba37a5dee9c56126f07f9d163e83a2aa9794",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b43d2fce92c55f5b2d0cd2b2ad6eba37a5dee9c56126f07f9d163e83a2aa9794",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -176,6 +186,12 @@
           "sha256": "b43d2fce92c55f5b2d0cd2b2ad6eba37a5dee9c56126f07f9d163e83a2aa9794",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b43d2fce92c55f5b2d0cd2b2ad6eba37a5dee9c56126f07f9d163e83a2aa9794",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -197,6 +213,12 @@
           "sha256": "6bb137fc604225c338c7e3cdfd5977eff9343baaf184da82d3450c2f99f7b20a",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "6bb137fc604225c338c7e3cdfd5977eff9343baaf184da82d3450c2f99f7b20a",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -218,6 +240,12 @@
           "sha256": "cbf148a67f607db5f03f5e9f9e0371963eece1abc7fb8da42de26ed91f8dba44",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cbf148a67f607db5f03f5e9f9e0371963eece1abc7fb8da42de26ed91f8dba44",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -239,6 +267,12 @@
           "sha256": "80220c103f5bda59e87e77df4c646fe0fcbb0d96896320c6ebe813cba973fe42",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "80220c103f5bda59e87e77df4c646fe0fcbb0d96896320c6ebe813cba973fe42",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
     },
@@ -254,8 +288,22 @@
           "sha256": "a41087f92655b47423d20a0074ae3d994ff95c22ea5d9495a7bb7dc0da1114ce",
           "readAt": "2026-07-28T05:43:16Z",
           "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a41087f92655b47423d20a0074ae3d994ff95c22ea5d9495a7bb7dc0da1114ce",
+          "readAt": "2026-07-28T06:07:07Z",
+          "visitId": "[\"3b11a539-5077-4ae9-a28e-607a93577261\",20]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-28-host-target-plan-dashboard-verify.md",
+      "sha256": "ee213f1354ee26e57e122758d44526a69cfce2194ac12ce457f3853794b0cc36",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-28T06:07:07Z",
+      "reads": []
     }
   ]
 }

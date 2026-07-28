@@ -176,3 +176,18 @@
 {"ts":"2026-07-28T05:43:15Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T05:49:55Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
 {"ts":"2026-07-28T05:51:53Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T05:52:05Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T05:52:05Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T05:52:05Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:52:05Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:52:05Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"d14ed543-9853-4cae-865c-c0799b05490e"}
+{"ts":"2026-07-28T06:07:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T06:07:57Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T06:08:03Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T06:08:59Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T06:07:57Z authority_host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T06:08:59Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T06:08:59Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T06:08:59Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T06:08:59Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T06:08:59Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4f6c2283-02a3-4003-826c-487badfb3e35"}
+{"ts":"2026-07-28T06:09:06Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}

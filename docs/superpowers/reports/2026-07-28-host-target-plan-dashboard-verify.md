@@ -1,6 +1,91 @@
 # Host Target Plan Center 验证报告
 
-## 结论
+## 第六轮 Verify 结论
+
+冻结提交 `b1a21eecfd66283139e9388c5da33b2004e25808` 的产品、运行时、浏览器与完整代码
+审查均通过，先前 native update 与混合 stdout 两项 finding 已关闭。验证期间
+`origin/main` 从本 Change 的起始基线 `2d103e330f847e003ff5909097d892f5722cca04`
+前进到 `15fe619b2885b928dd27be9668cca6b0ee903c57`；隔离 E2E 证明当前分支与新 main
+存在真实 merge conflict。因此聚合结论仍为 **FAIL**，必须通过确切 `verify-fail`
+返回 Build，合并最新 main、保留双方语义并重新冻结验证。
+
+- CRITICAL：0
+- HIGH：0
+- MEDIUM：1（分支集成冲突）
+- LOW：0
+
+### 冻结与 repo-zero
+
+- base / merge-base：`2d103e330f847e003ff5909097d892f5722cca04`
+- `build_sha`：`b1a21eecfd66283139e9388c5da33b2004e25808`
+- frozen tree：`305ade998107095c757a20485ba19fae3f2c3aff`
+- frozen patch SHA-256：
+  `a0924a5c58d4a46f9d27ea94afb185c342db8ac274781e5815c9178d73ecdea8`
+- 真实 worktree 前后 HEAD 均为 `b1a21eec...`；status、unstaged、staged 指纹分别保持
+  `4153d5b4...`、`e341b207...`、`e3b0c442...`。
+- 真实 `openspec/specs/**/spec.md` digest 前后保持
+  `44328f9c948d747c455e279f141d5eeb4d0f9db8571afdbb2de3bcc40aa299eb`。
+
+### 四轨聚合
+
+1. Reviewer：PASS，`C0/H0/M0/L0`。逐项审查 200/200 个冻结路径；144 个 JSON、
+   1 个 178 行 JSONL、9 条 document ledger、60 组 revision/pre-review 与 19 个 transition
+   identity/link chain 均一致。CLI/server/UI、真实 setup/update 编排、并发缓存、clean-room、
+   i18n/a11y 与 tracked bundles 未发现 finding。
+2. Codex CLI：PASS，无 actionable correctness regression。read-only sandbox 中写入型 Vitest
+   以 exit 130 终止；静态 docs/hygiene、built CLI smoke 和完整源码审查成功。原始输出：
+   `/tmp/tenon-host-plan-codex-b1a21.s3yWAN/codex-review.txt`，SHA-256
+   `9c4f4b1be955fee7f95a355d2c4428696eb22805de326ad672574c3589d57073`。
+3. 隔离 E2E：产品与运行时 PASS，交付 FAIL，`M1`。隔离目录
+   `/tmp/tenon-host-plan-final4-verify.rnAhv7/repo-local`：
+   - build、typecheck、52 files / 999 web tests、317 files /
+     5489 passed + 5 honest skips、bundle 31/31、npx 35/35、docs 10/10、
+     hygiene 6/6、architecture/comments/OpenSpec/diff 全部通过；
+   - CLI/server focused 187/187，Dashboard focused 108/108；
+   - 12 hosts × 2 共 24 份 DTO 全部 `side_effects=none`；native update 精确四步，
+     adapter setup 五步/update 三步；custom/repeated options 均拒绝；
+   - 真实 server 对非法 query、前置杂讯 JSON、失败重试、20 路同键、25 个 canonical key、
+     跨键并发 1 与 cache hit 的断言全部通过，29921/29922/29923 均已关闭；
+   - `git merge-tree --write-tree origin/main HEAD` exit 1，在
+     `packages/cli/src/commands/setup.test.ts` 与 `packages/cli/dist/tenon.mjs` 发生冲突。
+4. 真实 Dashboard 浏览器/视觉：PASS，`C0/H0/M0/L0`。独立 clone
+   `/tmp/tenon-host-plan-final-b1a21-oVIR4P/repo`，真实 URL
+   `http://127.0.0.1:57394/?view=hostPlan` 已关闭。页面身份、12 targets、
+   desktop `1440×900`、mobile `390×844`、键盘/2px focus、zh/en、
+   loading/empty/error/retry/ready、copy success/failure、长命令内部滚动均通过；
+   Codex/Claude update 均为四步且无 setup-only 步骤，setup 均为六步；只有只读 GET，
+   console/page errors 为 0。
+   - `browser-evidence.json` SHA-256：
+     `1bba89512234ee009b411d2f12ec8b7c35faf4ae1bd16c3db8d1135668b5e296`
+   - `native-update-setup-trace.zip` SHA-256：
+     `204f3a387192984c11511a28f7e995459bed91c5e141908b10ac383e124d0a14`
+
+### 逐文件 Spec 回读与 OpenSpec 演练
+
+`origin/main@起始基线...build_sha` 共 200 个冻结路径已全部映射到
+`host-target-plan` delta spec：CLI 8、server 6、Dashboard 20、docs 11、
+OpenSpec/治理 151、tools 4；路径列表 SHA-256 为
+`a51268e5359493583a05c99ede1af80eae14330ba91f7cc49de935e9dc30c1a5`。
+Reviewer 对 200/200 路径逐项回读，未发现未映射文件。
+
+OpenSpec `1.6.0` 的 show 与 strict validate 通过；隔离 clone
+`/tmp/tenon-host-plan-openspec-b1a21.TJYKPb/repo` 中 archive/apply 成功，应用 5 个
+新增 requirement，归档名为 `2026-07-28-host-target-plan-dashboard`，生成后的
+`host-target-plan` main spec strict valid。真实主规格未修改。
+
+### 下一轮要求
+
+1. 通过确切 `verify-fail` review receipt 返回 Build。
+2. 合并当前 `origin/main`，在 `setup.test.ts` 中同时保留上游 Codex 认证安装测试与本 Change
+   的真实 host-plan 编排测试，重新生成 CLI bundle。
+3. 运行冲突相关 focused、完整 build/typecheck/test 门禁，重新提交并冻结。
+4. 对新冻结 SHA 重做完整 reviewer、隔离 E2E、Codex 与真实浏览器聚合，不复用本轮 PASS。
+
+---
+
+## 第五轮 Verify 历史报告
+
+### 当时结论
 
 第五轮 Verify 审查冻结提交
 `db167a9f112d7a14773e819d40bb8c33b2b12e3e` 的完整
