@@ -20242,6 +20242,18 @@ resolved_at=${ts}
 `;
 }
 
+// packages/kernel/dist/verification/evidence-composer.js
+var VERIFICATION_EVIDENCE_LIMITS = Object.freeze({
+  maxEntries: 12,
+  maxErrors: 20,
+  titleBytes: 240,
+  commandBytes: 2e3,
+  resultBytes: 4e3,
+  skipReasonBytes: 2e3,
+  outputBytes: 32 * 1024
+});
+var encoder2 = new TextEncoder();
+
 // packages/kernel/dist/triage/types.js
 var TRIAGE_SCHEMA_VERSION = 1;
 var OBSERVE_ACTION_KINDS = ["git-commits", "loop-run-terminals"];

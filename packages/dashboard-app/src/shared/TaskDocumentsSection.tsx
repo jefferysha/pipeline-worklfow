@@ -1,12 +1,17 @@
 import { X } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot } from '../types'
 
 export interface TaskDocumentsSectionProps {
   documents: NonNullable<ChangeSnapshot['documents']>
+  extra?: ReactNode
 }
 
-export function TaskDocumentsSection({ documents }: TaskDocumentsSectionProps): JSX.Element {
+export function TaskDocumentsSection({
+  documents,
+  extra,
+}: TaskDocumentsSectionProps): JSX.Element {
   const { t } = useT()
   return (
     <div className="border-b border-border py-[13px] last:border-b-0" data-testid="dt-documents">
@@ -47,6 +52,11 @@ export function TaskDocumentsSection({ documents }: TaskDocumentsSectionProps): 
       )}
       {documents.items.length === 0 && documents.blockers.length === 0 && (
         <p className="m-0 text-xs text-text-3" role="status" aria-live="polite">{t('detail.docs_empty')}</p>
+      )}
+      {extra !== undefined && (
+        <div className="mt-3 border-t border-border pt-3">
+          {extra}
+        </div>
       )}
     </div>
   )

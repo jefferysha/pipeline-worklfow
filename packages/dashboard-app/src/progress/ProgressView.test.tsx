@@ -836,6 +836,131 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(document.documentElement.classList.contains('prg9-lock')).toBe(false)
   })
 
+  it('嵌套证据 composer 的 Escape 只关闭内层并把焦点归还入口', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    const opener = screen.getByTestId('evidence-compose-open')
+    fireEvent.click(opener)
+    expect(screen.getByTestId('evidence-compose-dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).toBeNull()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  })
+
+  it('嵌套证据 composer 通过 body portal 覆盖抽屉外区域且关闭后保留草稿', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+
+    expect(dialog.parentElement).toBe(document.body)
+
+    fireEvent.click(screen.getByTestId('evidence-add-entry'))
+    fireEvent.change(screen.getByTestId('evidence-title-1'), {
+      target: { value: 'DRAFT_MUST_SURVIVE' },
+    })
+    fireEvent.click(dialog)
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('DRAFT_MUST_SURVIVE')
+  })
+
+  it.each([
+    ['build', false],
+    ['verify', true],
+  ] as const)('证据 composer phase gate：%s 阶段可见=%s', async (phase, visible) => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = phase
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    if (visible) {
+      expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    } else {
+      expect(screen.queryByTestId('evidence-compose-open')).not.toBeInTheDocument()
+    }
+  })
+
+  it('非文档治理 workflow 的真实 Verify 阶段仍显示证据 composer', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = 'verify'
+    change.documents = {
+      governed: false,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    expect(screen.queryByTestId('dt-documents')).not.toBeInTheDocument()
+  })
+
+  it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    expect(first).toBeDefined()
+    expect(last).toBeDefined()
+    last!.focus()
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(document.activeElement).toBe(first)
+    expect(screen.getByTestId('detail-close')).not.toHaveFocus()
+  })
+
   it('running 行抽屉：TaskDetail 之下挂日志区，2.5s 轮询；抽屉关闭即停（组件卸载）', async () => {
     vi.useFakeTimers()
     renderView()

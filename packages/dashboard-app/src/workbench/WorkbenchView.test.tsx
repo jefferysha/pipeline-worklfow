@@ -894,6 +894,19 @@ describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
 })
 
 describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③）', () => {
+  it('body portal 中的切换确认框仍能被 GSAP 定位且不产生空目标警告', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', '初稿')
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+
+    expect(screen.getByTestId('wb-switch-confirm').parentElement).toBe(document.body)
+    expect(warn.mock.calls.flat().join('\n')).not.toContain('GSAP target')
+  })
+
   it('dirty 时切 workflow → 共享 Dialog 确认；取消停留原 workflow，确认丢弃并切换', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
