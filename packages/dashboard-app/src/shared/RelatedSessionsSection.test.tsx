@@ -71,6 +71,32 @@ describe('RelatedSessionsSection', () => {
     expect(results).not.toHaveTextContent('/repo')
   })
 
+  it('counts Unicode code points and does not submit Enter while an IME composition is active', async () => {
+    searchMock.mockResolvedValue(response())
+    const user = userEvent.setup()
+    renderSection()
+    const input = screen.getByRole('textbox', { name: '检索词' })
+
+    await user.clear(input)
+    await user.type(input, '🙂'.repeat(128))
+    expect(input).toHaveValue('🙂'.repeat(128))
+
+    await user.click(screen.getByRole('button', { name: '检索' }))
+    await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1))
+
+    searchMock.mockClear()
+    input.focus()
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        bubbles: true,
+        isComposing: true,
+      }))
+    })
+    expect(searchMock).not.toHaveBeenCalled()
+  })
+
   it('distinguishes empty and typed error states, with a safe retry action', async () => {
     const user = userEvent.setup()
     searchMock.mockResolvedValueOnce(response({ matches: [] }))

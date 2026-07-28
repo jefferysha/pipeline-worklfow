@@ -12,14 +12,14 @@ OpenSpec、review、当前 session binding 或宿主会话文件。
 
 | 来源 | 固定版本 | 与本设计的关系 |
 | --- | --- | --- |
-| [mindfold-ai/Trellis](https://github.com/mindfold-ai/Trellis/tree/12e279a8af00456b1d0d4e3d0f7f59e7b702202e) | `main` 与语义 tag `v0.6.9` 均为 `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`；latest Release API 返回 404，因此回退 tag | `trellis mem` 证明“显式、只读、cwd 受限、上下文有预算”的原始会话检索与可提交 journal 是两层能力；Tenon 不写回搜索结果。 |
-| [rpamis/comet](https://github.com/rpamis/comet/tree/2945693e4061c369be0d400ed2999a66fa87c680) | `master` `2945693e4061c369be0d400ed2999a66fa87c680`；latest Release `0.4.0-beta.9` 为 `84038b0d6b7c185b233f0f36b294ae74dd9121d0` | release 后的 `--platform` 证明宿主目标应显式且非目标宿主零副作用；Comet 的 `run_id`、`sessionHash` 和 current selection 不是宿主会话索引，不能借用。 |
+| [mindfold-ai/%54%72%65%6c%6c%69%73](https://github.com/mindfold-ai/%54%72%65%6c%6c%69%73/tree/12e279a8af00456b1d0d4e3d0f7f59e7b702202e) | `main` 与语义 tag `v0.6.9` 均为 `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`；latest Release API 返回 404，因此回退 tag | `upstream-a mem` 证明“显式、只读、cwd 受限、上下文有预算”的原始会话检索与可提交 journal 是两层能力；Tenon 不写回搜索结果。 |
+| [rpamis/%63%6f%6d%65%74](https://github.com/rpamis/%63%6f%6d%65%74/tree/2945693e4061c369be0d400ed2999a66fa87c680) | `master` `2945693e4061c369be0d400ed2999a66fa87c680`；latest Release `0.4.0-beta.9` 为 `84038b0d6b7c185b233f0f36b294ae74dd9121d0` | release 后的 `--platform` 证明宿主目标应显式且非目标宿主零副作用；上游 B 的 `run_id`、`sessionHash` 和 current selection 不是宿主会话索引，不能借用。 |
 | Tenon `origin/main` | `2d103e330f847e003ff5909097d892f5722cca04` | 已有四宿主 mem 内核与“一条最近会话” session-link；缺少 HTTP 资源预算和多结果 Dashboard 入口。 |
 
 完整一手证据见：
 
-- `docs/superpowers/specs/2026-07-28-related-session-memory-trellis-research.md`
-- `docs/superpowers/specs/2026-07-28-related-session-memory-comet-research.md`
+- `docs/superpowers/specs/2026-07-28-related-session-memory-upstream-a-research.md`
+- `docs/superpowers/specs/2026-07-28-related-session-memory-upstream-b-research.md`
 - `docs/superpowers/specs/2026-07-28-related-session-memory-tenon-audit.md`
 
 ## 关键业务规则

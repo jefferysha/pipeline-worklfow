@@ -218,13 +218,20 @@ describe('searchRelatedSessions bounded privacy contract', () => {
       }])
       mtimes[path] = Date.parse('2026-07-28T00:00:00Z') + i
     }
-    const result = searchRelatedSessions(boundedFakeFs(files, { mtimes }), {
+    let reads = 0
+    const result = searchRelatedSessions(boundedFakeFs(files, {
+      mtimes,
+      onRead: () => { reads += 1 },
+    }), {
       root: PROJECT,
       query: 'oldest needle',
       platform: 'codex',
     })
 
+    expect(reads).toBe(RELATED_SESSION_SEARCH_BUDGETS.candidates)
     expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('candidate-limit-reached')
   })
 
   test('caps results at eight while preserving the existing relevance ordering', () => {

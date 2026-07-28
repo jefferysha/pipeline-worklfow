@@ -2,8 +2,8 @@
 
 ## Explore 结论
 
-- Trellis 的 project journal 与只读 raw-session mem 是不同共享边界；本功能属于后者，不写回仓库。
-- Comet release 后的 `--platform` 支持显式宿主隔离，但其 `run_id/sessionHash` 不是会话索引。
+- 上游 A 的 project journal 与只读 raw-session mem 是不同共享边界；本功能属于后者，不写回仓库。
+- 上游 B release 后的 `--platform` 支持显式宿主隔离，但其 `run_id/sessionHash` 不是会话索引。
 - 现有 `searchMemSessions` 只有结果条数上限，没有 HTTP 所需的候选/单文件/总读取预算。
 - 采用独立 bounded kernel use case、受保护 POST 和 TaskDetail 自包含区块。
 - V1 只返回 user excerpt，不返回 source path/cwd，不生成新的 resume 命令。

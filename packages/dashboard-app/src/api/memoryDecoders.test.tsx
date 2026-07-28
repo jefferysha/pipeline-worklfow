@@ -24,6 +24,10 @@ describe('related-session search decoder', () => {
     expect(decodeRelatedSessionSearch(validResponse)).toEqual(validResponse)
     expect(decodeRelatedSessionSearch({
       ...validResponse,
+      query: '🙂'.repeat(128),
+    })?.query).toBe('🙂'.repeat(128))
+    expect(decodeRelatedSessionSearch({
+      ...validResponse,
       matches: [{ ...validResponse.matches[0], platform: 'unknown-host' }],
     })).toBeNull()
   })

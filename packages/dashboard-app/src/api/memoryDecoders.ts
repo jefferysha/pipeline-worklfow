@@ -66,8 +66,8 @@ export function decodeRelatedSessionSearch(value: unknown): RelatedSessionSearch
   if (!isRecord(value)
     || value.protocol !== 'tenon-related-session-memory/v1'
     || typeof value.query !== 'string'
-    || value.query.length < 2
-    || value.query.length > 128
+    || Array.from(value.query).length < 2
+    || Array.from(value.query).length > 128
     || !isPlatform(value.platform)
     || typeof value.partial !== 'boolean'
     || !Array.isArray(value.matches)

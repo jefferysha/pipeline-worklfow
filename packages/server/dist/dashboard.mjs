@@ -9410,10 +9410,11 @@ function nodeMemFs(homeOverride) {
             break;
           bytesRead += count;
         }
+        const finalSize = fstatSync(fd).size;
         return {
           text: buffer.subarray(0, bytesRead).toString("utf8"),
           bytesRead,
-          truncated: size > bytesRead
+          truncated: finalSize > bytesRead
         };
       } catch {
         return void 0;
@@ -9634,13 +9635,16 @@ function withOpenCodeDb(fs, fallback, fn) {
   if (!fs.exists(dbPath))
     return fallback;
   const sqlite = loadSqlite();
-  if (!sqlite)
+  if (!sqlite) {
+    fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
+  }
   let db;
   try {
     db = new sqlite.DatabaseSync(dbPath, { readOnly: true });
     return fn(db);
   } catch {
+    fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
   } finally {
     if (db) {
@@ -9695,6 +9699,10 @@ function opencodeListSessions(fs, f) {
     }
     const out = [];
     for (const row of rows) {
+      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+        fs.contentReadBudget.noteCandidateLimitReached();
+        break;
+      }
       const cwd = typeof row.directory === "string" && row.directory ? row.directory : null;
       if (f.cwd && !sameProject(cwd, f.cwd))
         continue;
@@ -10104,9 +10112,16 @@ function claudeListSessions(fs, f) {
       } catch {
       }
     }
-    for (const e of entries) {
-      if (!e.isFile || !e.name.endsWith(".jsonl"))
-        continue;
+    const sessionEntries = entries.filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).sort((left, right) => {
+      const leftPath = join17(d, left.name);
+      const rightPath = join17(d, right.name);
+      return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
+    });
+    for (const e of sessionEntries) {
+      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+        fs.contentReadBudget.noteCandidateLimitReached();
+        break;
+      }
       const filePath = join17(d, e.name);
       const sid = e.name.slice(0, -".jsonl".length);
       const idx = indexById.get(sid);
@@ -10127,7 +10142,7 @@ function claudeListSessions(fs, f) {
         continue;
       if (!inRangeOverlap(created, updated, f))
         continue;
-      if (f.cwd && cwd && !sameProject(cwd, f.cwd))
+      if (f.cwd && !sameProject(cwd, f.cwd))
         continue;
       out.push({ platform: "claude", id: sid, title, cwd, created, updated, filePath });
     }
@@ -10208,9 +10223,12 @@ function codexListSessions(fs, f) {
   if (!fs.exists(root))
     return [];
   const out = [];
-  for (const file of walkDir(fs, root)) {
-    if (!file.endsWith(".jsonl"))
-      continue;
+  const files = walkDir(fs, root).filter((file) => file.endsWith(".jsonl")).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
+  for (const file of files) {
+    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+      fs.contentReadBudget.noteCandidateLimitReached();
+      break;
+    }
     const base = basename2(file).slice(0, -".jsonl".length);
     const m = ROLLOUT_RE.exec(base);
     let tsFromName = null;
@@ -10297,7 +10315,12 @@ function codexSearch(fs, s, kw) {
 import { basename as basename3, join as join18, resolve as resolve9 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
-  for (const filePath of candidateFiles(fs, f)) {
+  const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
+  for (const filePath of files) {
+    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+      fs.contentReadBudget.noteCandidateLimitReached();
+      break;
+    }
     const header = readJsonlFirst(fs.readText(filePath));
     if (!header || header.type !== "session")
       continue;
@@ -10783,6 +10806,20 @@ function budgetedFs(source, state) {
         const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead;
         state.bytesRead += Math.min(remaining, Math.max(0, Math.trunc(bytes)));
       },
+      claimCandidate: () => {
+        if (state.candidatesClaimed >= RELATED_SESSION_SEARCH_BUDGETS.candidates)
+          return false;
+        state.candidatesClaimed += 1;
+        return true;
+      },
+      noteCandidateLimitReached: () => addWarning(state, {
+        code: "candidate-limit-reached",
+        message: `Only the ${RELATED_SESSION_SEARCH_BUDGETS.candidates} most recent session sources were inspected.`
+      }),
+      noteSourceUnavailable: (source2) => addWarning(state, {
+        code: `${source2}-reader-unavailable`,
+        message: `The ${source2} session source could not be read.`
+      }),
       noteSourceTruncated: () => addWarning(state, {
         code: "file-read-truncated",
         message: "At least one session exceeded the per-file read budget."
@@ -10821,7 +10858,12 @@ function boundedDisplayText(raw, maxChars) {
 }
 function searchRelatedSessions(fs, options) {
   const { query, platform } = validateOptions(options);
-  const state = { bytesRead: 0, warnings: [], warningCodes: /* @__PURE__ */ new Set() };
+  const state = {
+    bytesRead: 0,
+    candidatesClaimed: 0,
+    warnings: [],
+    warningCodes: /* @__PURE__ */ new Set()
+  };
   const scopedFs = budgetedFs(fs, state);
   const search = searchMemSessions(scopedFs, {
     keyword: query,

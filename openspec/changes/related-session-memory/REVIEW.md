@@ -30,6 +30,34 @@
 
 No remaining Critical, High, or Medium findings.
 
+### Iteration 3 — Verify-fail remediation
+
+1. **High — Claude sessions without cwd failed open inside a sanitized project directory.**
+   Changed scoped listing to require `sameProject(cwd, requestedRoot)` even when `cwd` is absent, and added a
+   collision-shaped regression fixture.
+2. **Medium — the 100-candidate limit happened after adapter metadata reads.**
+   Added a request-local candidate admission budget before session-file reads, sorted file-backed adapters by
+   mtime first, and surfaced `candidate-limit-reached` as an honest partial result.
+3. **Medium — an unavailable or invalid OpenCode SQLite reader looked like a complete empty result.**
+   Existing databases that cannot be opened or queried now add `opencode-reader-unavailable`; an absent database
+   still remains the legitimate complete-empty case.
+4. **Medium — query length diverged between Unicode code points and UTF-16 code units.**
+   Dashboard validation and response decoding now match the kernel's code-point contract, including 128 emoji.
+5. **Medium — Enter could submit during IME composition.**
+   The explicit fallback now ignores `isComposing` and legacy key code 229.
+6. **Medium — the primary search button's light-theme contrast was below 4.5:1.**
+   The button now uses the existing theme-aware `--btn-hover` background with `--btn-fg`; this yields the darker
+   green/white pair in light mode and the bright green/dark-ink pair in dark mode.
+7. **Low — documentation and concurrent append edge.**
+   Corrected the 上游 B mapping from GET to protected read-semantics POST and re-checks final file size after the
+   bounded read so a concurrent append is reported as truncated.
+
+The targeted TDD regressions, root build, and generated Dashboard/server/CLI bundles pass after this remediation.
+The rebuilt production Dashboard was then re-opened at `http://127.0.0.1:62419/`: the page title was
+`Tenon Dashboard`, the search button computed to `rgb(21, 128, 61)` on `rgb(255, 255, 255)` (contrast
+`5.02:1`), a composing Enter emitted zero requests, and an explicit click submitted all 128 emoji through
+the real POST endpoint. At `390 × 844`, document `scrollWidth` remained exactly `390`.
+
 ## Frontend design and browser review
 
 - Reused existing semantic tokens and detail-section rhythm; no new visual system or raw palette was introduced.

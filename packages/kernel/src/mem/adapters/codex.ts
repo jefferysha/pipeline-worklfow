@@ -63,8 +63,14 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const root = codexSessionsRoot(fs)
   if (!fs.exists(root)) return []
   const out: MemSession[] = []
-  for (const file of walkDir(fs, root)) {
-    if (!file.endsWith('.jsonl')) continue
+  const files = walkDir(fs, root)
+    .filter((file) => file.endsWith('.jsonl'))
+    .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
+  for (const file of files) {
+    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+      fs.contentReadBudget.noteCandidateLimitReached()
+      break
+    }
     const base = basename(file).slice(0, -'.jsonl'.length)
     const m = ROLLOUT_RE.exec(base)
     let tsFromName: string | null = null

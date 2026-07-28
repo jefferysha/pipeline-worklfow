@@ -41,6 +41,7 @@ export interface RelatedSessionSearchOptions {
 
 interface BudgetState {
   bytesRead: number
+  candidatesClaimed: number
   warnings: MemWarning[]
   warningCodes: Set<string>
 }
@@ -138,6 +139,19 @@ function budgetedFs(source: MemFs, state: BudgetState): MemFs {
         const remaining = RELATED_SESSION_SEARCH_BUDGETS.totalBytes - state.bytesRead
         state.bytesRead += Math.min(remaining, Math.max(0, Math.trunc(bytes)))
       },
+      claimCandidate: () => {
+        if (state.candidatesClaimed >= RELATED_SESSION_SEARCH_BUDGETS.candidates) return false
+        state.candidatesClaimed += 1
+        return true
+      },
+      noteCandidateLimitReached: () => addWarning(state, {
+        code: 'candidate-limit-reached',
+        message: `Only the ${RELATED_SESSION_SEARCH_BUDGETS.candidates} most recent session sources were inspected.`,
+      }),
+      noteSourceUnavailable: (source) => addWarning(state, {
+        code: `${source}-reader-unavailable`,
+        message: `The ${source} session source could not be read.`,
+      }),
       noteSourceTruncated: () => addWarning(state, {
         code: 'file-read-truncated',
         message: 'At least one session exceeded the per-file read budget.',
@@ -188,7 +202,12 @@ export function searchRelatedSessions(
   options: RelatedSessionSearchOptions,
 ): RelatedSessionSearchResult {
   const { query, platform } = validateOptions(options)
-  const state: BudgetState = { bytesRead: 0, warnings: [], warningCodes: new Set() }
+  const state: BudgetState = {
+    bytesRead: 0,
+    candidatesClaimed: 0,
+    warnings: [],
+    warningCodes: new Set(),
+  }
   const scopedFs = budgetedFs(fs, state)
 
   const search = searchMemSessions(scopedFs, {

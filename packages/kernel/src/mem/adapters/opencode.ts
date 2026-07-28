@@ -90,12 +90,16 @@ function withOpenCodeDb<T>(fs: MemFs, fallback: T, fn: (db: SqliteDb) => T): T {
   const dbPath = opencodeDbPath(fs)
   if (!fs.exists(dbPath)) return fallback
   const sqlite = loadSqlite()
-  if (!sqlite) return fallback
+  if (!sqlite) {
+    fs.contentReadBudget?.noteSourceUnavailable('opencode')
+    return fallback
+  }
   let db: SqliteDb | undefined
   try {
     db = new sqlite.DatabaseSync(dbPath, { readOnly: true })
     return fn(db)
   } catch {
+    fs.contentReadBudget?.noteSourceUnavailable('opencode')
     return fallback
   } finally {
     if (db) {
@@ -159,6 +163,10 @@ export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     }
     const out: MemSession[] = []
     for (const row of rows) {
+      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+        fs.contentReadBudget.noteCandidateLimitReached()
+        break
+      }
       const cwd: string | null = typeof row.directory === 'string' && row.directory ? row.directory : null
       if (f.cwd && !sameProject(cwd, f.cwd)) continue
       const created = msToIso(row.time_created)

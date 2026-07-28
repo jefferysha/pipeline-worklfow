@@ -6,7 +6,7 @@
 
 ## 调研
 
-- [x] 固定 Trellis/Comet 默认分支与 release/tag 证据并形成差异映射。 (explore)
+- [x] 固定 上游 A/上游 B 默认分支与 release/tag 证据并形成差异映射。 (explore)
 - [x] 审计现有 kernel mem、server session-link 与 Dashboard 任务详情调用链。 (explore)
 - [x] 完成设计 RFC 与 ADR，明确隐私、预算和错误语义。 (explore)
 
@@ -21,12 +21,17 @@
 - [x] 完成读取预算、user-only 隐私 DTO、宿主闭集、single-flight 与 typed errors。 (build)
 - [x] 完成 Dashboard 空/错/partial/重试/旧响应丢弃状态和中英文文案。 (build)
 - [x] 回归 session-link、CLI mem search 与生成物，完成集成门禁。 (build)
+- [x] 修复 Claude 缺失 cwd 时的项目隔离 fail-open，并用回归测试覆盖目录名碰撞。 (build)
+- [x] 将 related search 的文件候选读取限制落实到 adapter 读取前，并显式报告截断。 (build)
+- [x] 将 OpenCode reader/schema 失败映射为 partial warning，而非完整空结果。 (build)
+- [x] 统一 Unicode code-point 查询长度、IME Enter 与主按钮对比度。 (build)
+- [x] 更正 POST 调研措辞，并让 bounded read 检测并发 append。 (build)
 
 ## 验证
 
-- [ ] 运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。 (verify)
-- [ ] 对真实 Tenon Dashboard 执行成功、空、错误和键盘路径浏览器验收。 (verify)
-- [ ] 完成验证报告与 review gate。 (verify)
+- [ ] 重新运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。 (verify)
+- [ ] 对新冻结基线重新执行四轨审查与真实 Tenon Dashboard 浏览器验收。 (verify)
+- [ ] 更新验证报告并完成 verify-pass review gate。 (verify)
 
 ## 交付
 

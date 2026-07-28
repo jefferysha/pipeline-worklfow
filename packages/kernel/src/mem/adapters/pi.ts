@@ -21,7 +21,13 @@ type Json = any
 
 export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const out: MemSession[] = []
-  for (const filePath of candidateFiles(fs, f)) {
+  const files = candidateFiles(fs, f)
+    .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
+  for (const filePath of files) {
+    if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+      fs.contentReadBudget.noteCandidateLimitReached()
+      break
+    }
     const header = readJsonlFirst(fs.readText(filePath)) as Json
     if (!header || header.type !== 'session') continue
 

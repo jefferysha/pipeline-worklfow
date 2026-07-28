@@ -27,6 +27,9 @@ export interface MemContentReadBudget {
   readonly perSourceBytes: number
   remainingBytes(): number
   consume(bytes: number): void
+  claimCandidate(): boolean
+  noteCandidateLimitReached(): void
+  noteSourceUnavailable(source: string): void
   noteSourceTruncated(): void
   noteTotalExhausted(): void
 }
@@ -90,10 +93,11 @@ export function nodeMemFs(homeOverride?: string): MemFs {
           if (count === 0) break
           bytesRead += count
         }
+        const finalSize = fstatSync(fd).size
         return {
           text: buffer.subarray(0, bytesRead).toString('utf8'),
           bytesRead,
-          truncated: size > bytesRead,
+          truncated: finalSize > bytesRead,
         }
       } catch {
         return undefined

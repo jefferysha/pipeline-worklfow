@@ -243,6 +243,21 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
 })
 
 describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
+  test('数据库存在但不可读时返回 partial warning，而不是完整空结果', async () => {
+    await mkdir(dirname(dbFile(root)), { recursive: true })
+    await writeFile(dbFile(root), 'not a sqlite database', 'utf8')
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+  })
+
   test('候选上限在项目过滤后生效，不被其他项目的更新会话挤出', async () => {
     const db = await openFixtureDb(root)
     insertSession(db, {

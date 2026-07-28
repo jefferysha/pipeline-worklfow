@@ -66,7 +66,8 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
 
   async function runSearch(): Promise<void> {
     const normalizedQuery = query.trim()
-    if (normalizedQuery.length < 2 || normalizedQuery.length > 128) return
+    const queryLength = Array.from(normalizedQuery).length
+    if (queryLength < 2 || queryLength > 128) return
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -108,11 +109,10 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
           <Input
             disabled={busy}
             id="related-session-query"
-            maxLength={128}
-            minLength={2}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return
               event.preventDefault()
               event.currentTarget.form?.requestSubmit()
             }}
@@ -138,7 +138,7 @@ export function RelatedSessionsSection({ root, name }: RelatedSessionsSectionPro
             ))}
           </select>
         </div>
-        <Button className="self-end" disabled={busy} type="submit">
+        <Button className="self-end bg-btn-hover text-btn-fg hover:bg-btn-hover/90" disabled={busy} type="submit">
           {busy ? t('detail.related_sessions.searching_short') : t('detail.related_sessions.search')}
         </Button>
       </form>

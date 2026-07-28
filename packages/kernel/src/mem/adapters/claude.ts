@@ -50,8 +50,18 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       }
     }
 
-    for (const e of entries) {
-      if (!e.isFile || !e.name.endsWith('.jsonl')) continue
+    const sessionEntries = entries
+      .filter((entry) => entry.isFile && entry.name.endsWith('.jsonl'))
+      .sort((left, right) => {
+        const leftPath = join(d, left.name)
+        const rightPath = join(d, right.name)
+        return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
+      })
+    for (const e of sessionEntries) {
+      if (fs.contentReadBudget && !fs.contentReadBudget.claimCandidate()) {
+        fs.contentReadBudget.noteCandidateLimitReached()
+        break
+      }
       const filePath = join(d, e.name)
       const sid = e.name.slice(0, -'.jsonl'.length)
       const idx = indexById.get(sid)
@@ -72,7 +82,7 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
       const updated = mtimeIso(fs, filePath)
       if (updated === undefined) continue
       if (!inRangeOverlap(created, updated, f)) continue
-      if (f.cwd && cwd && !sameProject(cwd, f.cwd)) continue
+      if (f.cwd && !sameProject(cwd, f.cwd)) continue
 
       out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
     }
