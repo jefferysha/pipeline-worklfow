@@ -13468,17 +13468,17 @@ function isRejection(x) {
 function fieldStr4(v) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
-async function planDefaultTransition(state, command, flow, clock, effectivePlan) {
-  const edge = eventEdge(command.event);
+async function planDefaultTransition(state, command2, flow, clock, effectivePlan) {
+  const edge = eventEdge(command2.event);
   if (!edge)
-    return { kind: "unknown-event", event: command.event };
+    return { kind: "unknown-event", event: command2.event };
   const current = fieldStr4(state.fields.phase);
   if (current !== edge.from) {
-    return { kind: "event-source-mismatch", event: command.event, current, expected: edge.from, to: edge.to };
+    return { kind: "event-source-mismatch", event: command2.event, current, expected: edge.from, to: edge.to };
   }
-  const event = command.event;
+  const event = command2.event;
   const policy = DEFAULT_EVENT_POLICY[event];
-  const violations = await checkDefaultEventPreconditions(event, state, command.context);
+  const violations = await checkDefaultEventPreconditions(event, state, command2.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
   let result;
@@ -13495,8 +13495,8 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
     const outcome = await applyActions(policy.actions, {
       fields: result.state.fields,
       clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
+      gitHeadSha: command2.context.gitHeadSha,
+      workspaceFingerprint: command2.context.workspaceFingerprint
     });
     nextFields = { ...result.state.fields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -13512,11 +13512,11 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
     warnings
   };
 }
-async function planCustomTransition(state, effectivePlan, command, clock) {
+async function planCustomTransition(state, effectivePlan, command2, clock) {
   const ir = effectivePlan.workflow;
   const workflowName = effectivePlan.id;
   const currentBeforePlan = resolveStep(ir, fieldStr4(state.fields.phase));
-  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command.event === "archived";
+  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command2.event === "archived";
   const planningIr = terminalArchive ? {
     ...ir,
     steps: ir.steps.map((step) => step.id === "archive" ? {
@@ -13529,16 +13529,16 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
       }]
     } : step)
   } : ir;
-  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
+  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command2.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
   const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
-  const plan = await planStepTransition(planningIr, state, command.event, {
-    changeDirAbs: command.changeDir,
-    fileExists: command.context.fileExists,
-    gitHeadSha: command.context.gitHeadSha,
-    workspaceFingerprint: command.context.workspaceFingerprint,
-    specMigrationStatus: command.context.specMigrationStatus
+  const plan = await planStepTransition(planningIr, state, command2.event, {
+    changeDirAbs: command2.changeDir,
+    fileExists: command2.context.fileExists,
+    gitHeadSha: command2.context.gitHeadSha,
+    workspaceFingerprint: command2.context.workspaceFingerprint,
+    specMigrationStatus: command2.context.specMigrationStatus
   }, lifecycle?.guards);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
@@ -13548,7 +13548,7 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
         kind: "event-unsupported",
         workflowName,
         stepId: plan.stepId,
-        event: command.event,
+        event: command2.event,
         available: plan.available
       };
     }
@@ -13566,8 +13566,8 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
       clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
+      gitHeadSha: command2.context.gitHeadSha,
+      workspaceFingerprint: command2.context.workspaceFingerprint
     });
     nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -13585,8 +13585,8 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
 }
 function createTransitionApplication(deps) {
   return {
-    async execute(command) {
-      return deps.runRepository.transact(command.changeDir, async (tx) => {
+    async execute(command2) {
+      return deps.runRepository.transact(command2.changeDir, async (tx) => {
         const workflowName = tx.run.workflowId;
         let effectivePlan;
         try {
@@ -13596,7 +13596,7 @@ function createTransitionApplication(deps) {
             documentProfile: tx.run.documentProfile,
             documentGovernanceFingerprint: tx.run.documentGovernanceFingerprint,
             workflowPlanFingerprint: tx.run.workflowPlanFingerprint
-          }, command.loadWorkflow, track, tx.run.workflowPlanSnapshot);
+          }, command2.loadWorkflow, track, tx.run.workflowPlanSnapshot);
         } catch (error) {
           if (error instanceof DocumentGovernanceBindingError) {
             return { kind: "document-governance-invalid", workflowName, reason: error.message };
@@ -13607,15 +13607,15 @@ function createTransitionApplication(deps) {
           return { kind: "workflow-not-found", workflowName };
         let prepared;
         if (effectivePlan.capabilities.execution.model === "phase-manifest") {
-          prepared = await planDefaultTransition(tx.state, command, deps.flow, deps.clock, effectivePlan);
+          prepared = await planDefaultTransition(tx.state, command2, deps.flow, deps.clock, effectivePlan);
         } else {
-          prepared = await planCustomTransition(tx.state, effectivePlan, command, deps.clock);
+          prepared = await planCustomTransition(tx.state, effectivePlan, command2, deps.clock);
         }
         if (isRejection(prepared))
           return prepared;
         if (deps.missingStepSkills !== void 0) {
           const missing3 = await deps.missingStepSkills({
-            changeDir: command.changeDir,
+            changeDir: command2.changeDir,
             stepId: prepared.from,
             capability: effectivePlan.capabilities.skills
           });
@@ -13630,7 +13630,7 @@ function createTransitionApplication(deps) {
         }
         const policy = tx.run.automationPolicy;
         if (policy !== void 0) {
-          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command, target: prepared.to });
+          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command: command2, target: prepared.to });
           const decision = evaluateConstraintPolicy(policy.constraints, {
             operation: "transition",
             active: facts.active,
@@ -13658,19 +13658,19 @@ function createTransitionApplication(deps) {
                 blockers: [`legacy document contract \u4F7F\u7528\u4E86\u975E\u6CD5 phase '${prepared.from}'`]
               };
             }
-            evidence = await deps.documentEvidence(command.root, command.changeDir, prepared.from);
+            evidence = await deps.documentEvidence(command2.root, command2.changeDir, prepared.from);
           } else {
-            evidence = await evaluateDocumentEvidence(command.root, command.changeDir, prepared.from, {}, prepared.documentPolicy);
+            evidence = await evaluateDocumentEvidence(command2.root, command2.changeDir, prepared.from, {}, prepared.documentPolicy);
           }
           if (!evidence.pass) {
             return { kind: "document-evidence-failed", phase: prepared.from, blockers: evidence.blockers };
           }
         }
-        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
-          return { kind: "review-approval-required", phase: prepared.from, event: command.event };
+        if (prepared.requiresReviewApproval && command2.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command2.event)) {
+          return { kind: "review-approval-required", phase: prepared.from, event: command2.event };
         }
         const { record: record2, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
-          event: command.event,
+          event: command2.event,
           from: prepared.from,
           to: prepared.to
         });
@@ -13683,14 +13683,14 @@ function createTransitionApplication(deps) {
           });
         }
         if (prepared.governedDocumentContract) {
-          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: prepared.to });
+          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command2.changeDir, name: command2.changeName, to: prepared.to });
           if (!breadcrumbTail.ok) {
             warnings.push({ kind: "projection-write-failed", projection: "breadcrumb", cause: breadcrumbTail.error });
           }
         }
         if (deps.history) {
           try {
-            await deps.history.append(command.changeDir, transitionRecordToHistoryEntry(record2));
+            await deps.history.append(command2.changeDir, transitionRecordToHistoryEntry(record2));
           } catch (e) {
             warnings.push({ kind: "projection-write-failed", projection: "history", cause: e });
           }
@@ -18014,6 +18014,35 @@ function decodeCommand(value) {
   if (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string") || value.display !== [value.executable, ...value.args].join(" ")) return null;
   return { executable: value.executable, args: value.args, display: value.display };
 }
+function command(executable, args) {
+  return { executable, args, display: [executable, ...args].join(" ") };
+}
+function nativeCommandTruth(host, operation) {
+  if (host === "codex") {
+    return operation === "setup" ? [
+      command("codex", ["plugin", "marketplace", "add", "jefferysha/tenon", "--ref", "main"]),
+      command("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      command("codex", ["plugin", "list", "--json"])
+    ] : [
+      command("codex", ["plugin", "marketplace", "upgrade", "tenon", "--json"]),
+      command("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      command("codex", ["plugin", "list", "--json"])
+    ];
+  }
+  return operation === "setup" ? [
+    command("claude", ["plugin", "marketplace", "add", "jefferysha/tenon"]),
+    command("claude", ["plugin", "install", "tenon@tenon"]),
+    command("claude", ["plugin", "list", "--json"])
+  ] : [
+    command("claude", ["plugin", "marketplace", "update", "tenon"]),
+    command("claude", ["plugin", "update", "tenon@tenon"]),
+    command("claude", ["plugin", "list", "--json"])
+  ];
+}
+function commandsEqual(actual, expected) {
+  if (actual === null || expected === null) return actual === expected;
+  return actual.executable === expected.executable && arraysEqual(actual.args, expected.args) && actual.display === expected.display;
+}
 function decodeTarget(value) {
   if (!isRecord5(value) || !hasExactKeys(value, [
     "id",
@@ -18041,7 +18070,7 @@ function decodeTarget(value) {
   };
 }
 function decodeHostTargetCatalog(value) {
-  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
+  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== 0 && value.targets.length !== HOST_IDS.length) return null;
   const targets = [];
   for (let index = 0; index < value.targets.length; index += 1) {
     const item2 = value.targets[index];
@@ -18054,9 +18083,9 @@ function decodeHostTargetCatalog(value) {
 function decodePlanStep(value) {
   if (!isRecord5(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
   if (typeof value.id !== "string" || !STEP_IDS.includes(value.id) || value.label !== `host-plan.step.${value.id}`) return null;
-  const command = value.command === null ? null : decodeCommand(value.command);
-  if (value.command !== null && command === null) return null;
-  return { id: value.id, label: value.label, command };
+  const command2 = value.command === null ? null : decodeCommand(value.command);
+  if (value.command !== null && command2 === null) return null;
+  return { id: value.id, label: value.label, command: command2 };
 }
 function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
   if (!isRecord5(value) || !hasExactKeys(value, [
@@ -18069,11 +18098,11 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     "notices"
   ]) || value.schema_version !== "host-target-plan/v1" || value.side_effects !== "none" || value.operation !== expectedOperation || !Array.isArray(value.steps) || !Array.isArray(value.notices) || !value.notices.every(isNonemptyString)) return null;
   const host = decodeTarget(value.host);
-  const command = decodeCommand(value.command);
-  if (host === null || host.id !== expectedHost || command === null) return null;
+  const command2 = decodeCommand(value.command);
+  if (host === null || host.id !== expectedHost || command2 === null) return null;
   const native = host.kind === "native";
   const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "<project>"];
-  if (command.executable !== "tenon" || !arraysEqual(command.args, expectedCommandArgs) || command.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
+  if (command2.executable !== "tenon" || !arraysEqual(command2.args, expectedCommandArgs) || command2.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
   const steps = [];
   for (const item2 of value.steps) {
     const step = decodePlanStep(item2);
@@ -18087,10 +18116,20 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     "runtime-readiness"
   ] : ["package-assets", "adapter-deploy", "managed-runtime", "bundled-skills", "runtime-readiness"];
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
-  for (const step of steps) {
-    const shouldHaveCommand = native ? !["managed-runtime", "bundled-skills", "runtime-readiness"].includes(step.id) : step.id === "adapter-deploy";
-    if (step.command !== null !== shouldHaveCommand) return null;
-    if (step.id === "adapter-deploy" && step.command !== null && (step.command.executable !== command.executable || !arraysEqual(step.command.args, command.args) || step.command.display !== command.display)) return null;
+  let expectedStepCommands;
+  if (native) {
+    if (expectedHost !== "codex" && expectedHost !== "claude") return null;
+    expectedStepCommands = [
+      ...nativeCommandTruth(expectedHost, expectedOperation),
+      null,
+      null,
+      null
+    ];
+  } else {
+    expectedStepCommands = [null, command2, null, null, null];
+  }
+  for (let index = 0; index < steps.length; index += 1) {
+    if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null;
   }
   const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS;
   if (!arraysEqual(value.notices, expectedNotices)) return null;
@@ -18099,7 +18138,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     side_effects: "none",
     host,
     operation: expectedOperation,
-    command,
+    command: command2,
     steps,
     notices: value.notices
   };

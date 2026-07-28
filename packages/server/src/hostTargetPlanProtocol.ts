@@ -107,6 +107,50 @@ function decodeCommand(value: unknown): HostPlanCommandDto | null {
   return { executable: value.executable, args: value.args, display: value.display }
 }
 
+function command(executable: string, args: readonly string[]): HostPlanCommandDto {
+  return { executable, args, display: [executable, ...args].join(' ') }
+}
+
+function nativeCommandTruth(
+  host: 'codex' | 'claude',
+  operation: HostOperation,
+): readonly HostPlanCommandDto[] {
+  if (host === 'codex') {
+    return operation === 'setup'
+      ? [
+          command('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'list', '--json']),
+        ]
+      : [
+          command('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'list', '--json']),
+        ]
+  }
+  return operation === 'setup'
+    ? [
+        command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+        command('claude', ['plugin', 'install', 'tenon@tenon']),
+        command('claude', ['plugin', 'list', '--json']),
+      ]
+    : [
+        command('claude', ['plugin', 'marketplace', 'update', 'tenon']),
+        command('claude', ['plugin', 'update', 'tenon@tenon']),
+        command('claude', ['plugin', 'list', '--json']),
+      ]
+}
+
+function commandsEqual(
+  actual: HostPlanCommandDto | null,
+  expected: HostPlanCommandDto | null,
+): boolean {
+  if (actual === null || expected === null) return actual === expected
+  return actual.executable === expected.executable
+    && arraysEqual(actual.args, expected.args)
+    && actual.display === expected.display
+}
+
 function decodeTarget(value: unknown): HostTargetDto | null {
   if (
     !isRecord(value)
@@ -155,7 +199,7 @@ export function decodeHostTargetCatalog(value: unknown): HostTargetCatalogDto | 
     || !hasExactKeys(value, ['schema_version', 'targets'])
     || value.schema_version !== 'host-target-plan/v1'
     || !Array.isArray(value.targets)
-    || value.targets.length !== HOST_IDS.length
+    || (value.targets.length !== 0 && value.targets.length !== HOST_IDS.length)
   ) return null
   const targets: HostTargetDto[] = []
   for (let index = 0; index < value.targets.length; index += 1) {
@@ -231,20 +275,20 @@ export function decodeHostTargetPlan(
       ]
     : ['package-assets', 'adapter-deploy', 'managed-runtime', 'bundled-skills', 'runtime-readiness']
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null
-  for (const step of steps) {
-    const shouldHaveCommand = native
-      ? !['managed-runtime', 'bundled-skills', 'runtime-readiness'].includes(step.id)
-      : step.id === 'adapter-deploy'
-    if ((step.command !== null) !== shouldHaveCommand) return null
-    if (
-      step.id === 'adapter-deploy'
-      && step.command !== null
-      && (
-        step.command.executable !== command.executable
-        || !arraysEqual(step.command.args, command.args)
-        || step.command.display !== command.display
-      )
-    ) return null
+  let expectedStepCommands: readonly (HostPlanCommandDto | null)[]
+  if (native) {
+    if (expectedHost !== 'codex' && expectedHost !== 'claude') return null
+    expectedStepCommands = [
+      ...nativeCommandTruth(expectedHost, expectedOperation),
+      null,
+      null,
+      null,
+    ]
+  } else {
+    expectedStepCommands = [null, command, null, null, null]
+  }
+  for (let index = 0; index < steps.length; index += 1) {
+    if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null
   }
   const expectedNotices = native ? NOTICE_IDS.slice(0, 2) : NOTICE_IDS
   if (!arraysEqual(value.notices, expectedNotices)) return null

@@ -1,42 +1,112 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from './transport'
-import { fetchHostTargetPlan, fetchHostTargets } from './hostTargetPlanClient'
+import {
+  fetchHostTargetPlan,
+  fetchHostTargets,
+  HostTargetPlanClientError,
+} from './hostTargetPlanClient'
+
+const HOST_IDS = [
+  'codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi',
+  'devin', 'zed', 'aider', 'continue', 'cline', 'amp',
+] as const
+
+function target(id: (typeof HOST_IDS)[number]) {
+  const native = id === 'codex' || id === 'claude'
+  return {
+    id,
+    kind: native ? 'native' as const : 'adapter' as const,
+    cli_flag: `--${id}`,
+    target_scope: native ? 'user' as const : 'project' as const,
+    supported_operations: ['setup', 'update'],
+    capabilities: native
+      ? ['native-marketplace', 'managed-runtime', 'bundled-skills', 'automatic-update']
+      : ['project-adapter', 'managed-runtime', 'bundled-skills'],
+  }
+}
 
 const catalog = {
   schema_version: 'host-target-plan/v1',
-  targets: [{
-    id: 'codex',
-    kind: 'native',
-    cli_flag: '--codex',
-    target_scope: 'user',
-    supported_operations: ['setup', 'update'],
-    capabilities: ['native-marketplace', 'managed-runtime', 'bundled-skills', 'automatic-update'],
-  }],
+  targets: HOST_IDS.map(target),
 }
 
-const plan = {
-  schema_version: 'host-target-plan/v1',
-  side_effects: 'none',
-  host: catalog.targets[0],
-  operation: 'setup',
-  command: {
-    executable: 'tenon',
-    args: ['setup', '--codex'],
-    display: 'tenon setup --codex',
-  },
-  steps: [
-    { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
-    {
-      id: 'plugin-install',
-      label: 'host-plan.step.plugin-install',
-      command: {
-        executable: 'codex',
-        args: ['plugins', 'install', 'tenon'],
-        display: 'codex plugins install tenon',
-      },
-    },
-  ],
-  notices: ['host-plan.notice.read-only-generation'],
+function command(executable: string, args: string[]) {
+  return { executable, args, display: [executable, ...args].join(' ') }
+}
+
+function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
+  const hostCommand = command('tenon', [operation, `--${host}`])
+  const nativeCommands = host === 'codex'
+    ? operation === 'setup'
+      ? [
+          command('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'list', '--json']),
+        ]
+      : [
+          command('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+          command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'list', '--json']),
+        ]
+    : operation === 'setup'
+      ? [
+          command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+          command('claude', ['plugin', 'install', 'tenon@tenon']),
+          command('claude', ['plugin', 'list', '--json']),
+        ]
+      : [
+          command('claude', ['plugin', 'marketplace', 'update', 'tenon']),
+          command('claude', ['plugin', 'update', 'tenon@tenon']),
+          command('claude', ['plugin', 'list', '--json']),
+        ]
+  const nativeIds = operation === 'setup'
+    ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
+    : ['marketplace-refresh', 'plugin-update', 'plugin-inventory']
+  return {
+    schema_version: 'host-target-plan/v1',
+    side_effects: 'none',
+    host: target(host),
+    operation,
+    command: hostCommand,
+    steps: [
+      ...nativeIds.map((id, index) => ({
+        id,
+        label: `host-plan.step.${id}`,
+        command: nativeCommands[index],
+      })),
+      { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+    ],
+    notices: [
+      'host-plan.notice.read-only-generation',
+      'host-plan.notice.manual-command-has-effects',
+    ],
+  }
+}
+
+const plan = nativePlan('codex', 'setup')
+
+function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
+  const hostCommand = command('tenon', [operation, `--${host}`, '--target', '<project>'])
+  return {
+    schema_version: 'host-target-plan/v1',
+    side_effects: 'none',
+    host: target(host),
+    operation,
+    command: hostCommand,
+    steps: [
+      { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
+      { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: hostCommand },
+      { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+      { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+    ],
+    notices: [
+      'host-plan.notice.read-only-generation',
+      'host-plan.notice.manual-command-has-effects',
+      'host-plan.notice.project-placeholder',
+    ],
+  }
 }
 
 afterEach(() => {
@@ -44,79 +114,164 @@ afterEach(() => {
 })
 
 describe('host target plan read-only client', () => {
-  it('loads and strictly decodes the v1 target catalog', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(catalog), { status: 200 }),
-    )
+  it('accepts only an empty catalog or the complete ordered unique registered catalog', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...catalog, targets: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(catalog), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
+    await expect(fetchHostTargets()).resolves.toEqual({ ...catalog, targets: [] })
     await expect(fetchHostTargets()).resolves.toEqual(catalog)
     expect(fetchMock).toHaveBeenCalledWith('/api/host-targets', {
       headers: { Accept: 'application/json' },
     })
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ...catalog, schema_version: 'host-target-plan/v2' }), { status: 200 }),
-    )
-    await expect(fetchHostTargets()).rejects.toThrow('宿主目录响应形状无效')
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...catalog,
-        targets: [{ ...catalog.targets[0], capabilities: ['unknown-capability'] }],
-      }), { status: 200 }),
-    )
-    await expect(fetchHostTargets()).rejects.toBeInstanceOf(ApiError)
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...catalog,
-        targets: [{ ...catalog.targets[0], internal_path: '/secret/path' }],
-      }), { status: 200 }),
-    )
-    await expect(fetchHostTargets()).rejects.toThrow('宿主目录响应形状无效')
   })
 
-  it('URL-encodes the selected host and operation, then rejects a side-effectful or mismatched plan', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(plan), { status: 200 }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    await expect(fetchHostTargetPlan('codex', 'setup')).resolves.toEqual(plan)
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/host-target-plan?host=codex&operation=setup',
-      { headers: { Accept: 'application/json' } },
-    )
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ...plan, side_effects: 'writes-files' }), { status: 200 }),
-    )
-    await expect(fetchHostTargetPlan('codex', 'setup')).rejects.toThrow('宿主计划响应形状无效')
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ...plan, operation: 'update' }), { status: 200 }),
-    )
-    await expect(fetchHostTargetPlan('codex', 'setup')).rejects.toThrow('与请求不匹配')
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        ...plan,
-        command: { ...plan.command, display: 'tenon update --codex' },
-      }), { status: 200 }),
-    )
-    await expect(fetchHostTargetPlan('codex', 'setup')).rejects.toThrow('宿主计划响应形状无效')
-  })
-
-  it('preserves the server error envelope for retryable catalog failures', async () => {
+  it.each([
+    ['partial', catalog.targets.slice(0, 1)],
+    ['reordered', [catalog.targets[1], catalog.targets[0], ...catalog.targets.slice(2)]],
+    ['duplicate', [catalog.targets[0], catalog.targets[0], ...catalog.targets.slice(2)]],
+    ['wrong metadata', [{ ...catalog.targets[0], target_scope: 'project' }, ...catalog.targets.slice(1)]],
+    ['wrong capabilities', [
+      { ...catalog.targets[0], capabilities: ['native-marketplace', 'bundled-skills'] },
+      ...catalog.targets.slice(1),
+    ]],
+  ])('rejects a %s catalog with a stable decoder error', async (_label, targets) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: '宿主探测暂时不可用' }), { status: 503 }),
+      new Response(JSON.stringify({ ...catalog, targets }), { status: 200 }),
     ))
 
     await expect(fetchHostTargets()).rejects.toMatchObject({
-      name: 'ApiError',
+      name: 'HostTargetPlanClientError',
+      kind: 'decoder',
+      code: 'HOST_TARGET_CATALOG_RESPONSE_INVALID',
+      status: 200,
+    })
+  })
+
+  it.each([
+    ['codex', 'setup'],
+    ['codex', 'update'],
+    ['claude', 'setup'],
+    ['claude', 'update'],
+  ] as const)('accepts the exact native command truth for %s %s', async (host, operation) => {
+    const value = nativePlan(host, operation)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(value), { status: 200 }),
+    ))
+
+    await expect(fetchHostTargetPlan(host, operation)).resolves.toEqual(value)
+  })
+
+  it('strictly validates plan command, step commands/order, and notices', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(plan), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...plan,
+        command: { ...plan.command, display: 'tenon update --codex' },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...plan,
+        steps: [plan.steps[1], plan.steps[0], ...plan.steps.slice(2)],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...plan,
+        steps: plan.steps.map((step, index) => index === 0
+          ? { ...step, command: command('codex', ['plugin', 'list', '--json']) }
+          : step),
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...plan,
+        notices: [...plan.notices].reverse(),
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchHostTargetPlan('codex', 'setup')).resolves.toEqual(plan)
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(fetchHostTargetPlan('codex', 'setup')).rejects.toMatchObject({
+        kind: 'decoder',
+        code: 'HOST_TARGET_PLAN_RESPONSE_INVALID',
+      })
+    }
+  })
+
+  it('requires an adapter project placeholder, matching deploy command, and exact notice set', async () => {
+    const adapter = adapterPlan('cursor', 'update')
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(adapter), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...adapter,
+        command: command('tenon', ['update', '--cursor']),
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...adapter,
+        steps: adapter.steps.map((step) => step.id === 'adapter-deploy'
+          ? { ...step, command: command('tenon', ['setup', '--cursor', '--target', '<project>']) }
+          : step),
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...adapter,
+        notices: adapter.notices.slice(0, 2),
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchHostTargetPlan('cursor', 'update')).resolves.toEqual(adapter)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(fetchHostTargetPlan('cursor', 'update')).rejects.toMatchObject({
+        kind: 'decoder',
+        code: 'HOST_TARGET_PLAN_RESPONSE_INVALID',
+      })
+    }
+  })
+
+  it('returns a stable network kind/code without localized transport copy', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(fetchHostTargets()).rejects.toMatchObject({
+      name: 'HostTargetPlanClientError',
+      kind: 'network',
+      code: 'HOST_TARGET_NETWORK_ERROR',
+    })
+  })
+
+  it('preserves only a recognized stable HTTP code and status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        ok: false,
+        code: 'HOST_TARGET_PLAN_UNAVAILABLE',
+        error: '本地化服务文案不得穿透 UI',
+      }), { status: 503 }),
+    ))
+
+    await expect(fetchHostTargets()).rejects.toMatchObject({
+      name: 'HostTargetPlanClientError',
+      kind: 'http',
+      code: 'HOST_TARGET_PLAN_UNAVAILABLE',
       status: 503,
-      message: '宿主探测暂时不可用',
+    })
+  })
+
+  it('distinguishes decoder and request-mismatch errors with stable kind/code', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...catalog, schema_version: 'v2' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(nativePlan('claude', 'setup')), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchHostTargets()).rejects.toMatchObject({
+      kind: 'decoder',
+      code: 'HOST_TARGET_CATALOG_RESPONSE_INVALID',
+    })
+    await expect(fetchHostTargetPlan('codex', 'setup')).rejects.toMatchObject({
+      kind: 'mismatch',
+      code: 'HOST_TARGET_PLAN_REQUEST_MISMATCH',
+    })
+  })
+
+  it('exports a typed stable error value for component-level i18n mapping', () => {
+    expect(new HostTargetPlanClientError('http', 'HOST_TARGET_HTTP_ERROR', 500)).toMatchObject({
+      kind: 'http',
+      code: 'HOST_TARGET_HTTP_ERROR',
+      status: 500,
     })
   })
 })

@@ -48,6 +48,8 @@ const TRUTH_SOURCES = [
   'templates/workflows/simple.yaml',
 ]
 
+const EXPECTED_PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan']
+
 function slash(path) {
   return path.split(sep).join('/')
 }
@@ -379,8 +381,13 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (navSource !== undefined) {
     const primaryViews = extractPrimaryViews(navSource)
     const viewUnion = extractViewUnion(navSource)
-    if (primaryViews.length === 0) {
-      failures.push('packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must contain at least one operational view')
+    if (
+      primaryViews.length !== EXPECTED_PRIMARY_VIEWS.length
+      || !primaryViews.every((view, index) => view === EXPECTED_PRIMARY_VIEWS[index])
+    ) {
+      failures.push(
+        `packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must remain the exact operational set: ${EXPECTED_PRIMARY_VIEWS.join(' -> ')}`,
+      )
     }
     if (new Set(primaryViews).size !== primaryViews.length) {
       failures.push('packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must not contain duplicate operational views')

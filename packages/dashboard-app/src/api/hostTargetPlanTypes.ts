@@ -1,5 +1,18 @@
 export const HOST_PLAN_SCHEMA_VERSION = 'host-target-plan/v1' as const
 
+export type HostId =
+  | 'codex'
+  | 'claude'
+  | 'cursor'
+  | 'gemini'
+  | 'copilot'
+  | 'pi'
+  | 'devin'
+  | 'zed'
+  | 'aider'
+  | 'continue'
+  | 'cline'
+  | 'amp'
 export type HostOperation = 'setup' | 'update'
 export type HostTargetKind = 'native' | 'adapter'
 export type HostTargetScope = 'user' | 'project'
@@ -11,9 +24,9 @@ export type HostCapability =
   | 'automatic-update'
 
 export interface HostTarget {
-  id: string
+  id: HostId
   kind: HostTargetKind
-  cli_flag: string
+  cli_flag: `--${HostId}`
   target_scope: HostTargetScope
   supported_operations: ['setup', 'update']
   capabilities: HostCapability[]

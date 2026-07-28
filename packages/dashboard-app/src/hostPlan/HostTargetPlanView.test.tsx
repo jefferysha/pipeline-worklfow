@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
+import { HostTargetPlanClientError } from '../api/hostTargetPlanClient'
 import type { HostTargetCatalog, HostTargetPlan } from '../api/hostTargetPlanTypes'
 import { HostTargetPlanView } from './HostTargetPlanView'
 
@@ -88,12 +89,14 @@ describe('HostTargetPlanView', () => {
 
   it('shows a catalog error and retries without reloading the page', async () => {
     const loadTargets = vi.fn()
-      .mockRejectedValueOnce(new Error('catalog offline'))
+      .mockRejectedValueOnce(
+        new HostTargetPlanClientError('network', 'HOST_TARGET_NETWORK_ERROR'),
+      )
       .mockResolvedValueOnce(catalog)
     renderView({ loadTargets })
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('catalog offline')
+    expect(alert).toHaveTextContent('无法连接本机 Tenon 服务')
     fireEvent.click(screen.getByRole('button', { name: '重试宿主目录' }))
 
     expect(await screen.findByRole('button', { name: '选择 Codex' })).toBeInTheDocument()
@@ -125,6 +128,9 @@ describe('HostTargetPlanView', () => {
     resolvePlan?.(setupPlan)
     const preview = await screen.findByTestId('host-plan-preview')
     expect(preview).toHaveTextContent('tenon setup --codex')
+    expect(screen.getByTestId('host-plan-ready-announcement')).toHaveTextContent(
+      'Codex 的 Setup 计划已就绪',
+    )
     expect(preview).toHaveTextContent('登记宿主 marketplace')
     expect(preview).toHaveTextContent('安装 Tenon 插件')
     expect(preview).toHaveTextContent('生成计划是只读操作')
@@ -137,7 +143,9 @@ describe('HostTargetPlanView', () => {
 
   it('shows a plan error and retries the exact selected operation', async () => {
     const loadPlan = vi.fn()
-      .mockRejectedValueOnce(new Error('plan unavailable'))
+      .mockRejectedValueOnce(
+        new HostTargetPlanClientError('http', 'HOST_TARGET_PLAN_UNAVAILABLE', 503),
+      )
       .mockResolvedValueOnce(setupPlan)
     renderView({
       loadTargets: vi.fn().mockResolvedValue(catalog),
@@ -146,7 +154,7 @@ describe('HostTargetPlanView', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('plan unavailable')
+    expect(await screen.findByRole('alert')).toHaveTextContent('宿主计划服务暂时不可用')
 
     fireEvent.click(screen.getByRole('button', { name: '重试 Setup 计划' }))
     expect(await screen.findByTestId('host-plan-preview')).toHaveTextContent('tenon setup --codex')
@@ -165,7 +173,7 @@ describe('HostTargetPlanView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('命令已复制')
+    expect(await screen.findByText('命令已复制。')).toHaveAttribute('role', 'status')
     expect(copyText).toHaveBeenCalledWith('tenon setup --codex')
   })
 
@@ -181,7 +189,7 @@ describe('HostTargetPlanView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('复制失败')
+    expect(await screen.findByText('复制失败，请手动选择命令。')).toHaveAttribute('role', 'status')
     expect(screen.getByText('tenon setup --codex')).toBeVisible()
   })
 
@@ -199,7 +207,7 @@ describe('HostTargetPlanView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('复制失败')
+    expect(await screen.findByText('复制失败，请手动选择命令。')).toHaveAttribute('role', 'status')
   })
 
   it('ignores a late plan response after the user switches targets', async () => {
@@ -239,6 +247,47 @@ describe('HostTargetPlanView', () => {
     expect(view).toHaveTextContent('Register the host marketplace')
     expect(view).toHaveTextContent('Generating this plan is read-only')
     expect(view.textContent).not.toMatch(/[宿主选择计划步骤复制安装更新]/)
+  })
+
+  it.each([
+    [
+      'network',
+      new HostTargetPlanClientError('network', 'HOST_TARGET_NETWORK_ERROR'),
+      'Could not reach the local Tenon service. Check the connection and retry.',
+    ],
+    [
+      'HTTP',
+      new HostTargetPlanClientError('http', 'HOST_TARGET_PLAN_UNAVAILABLE', 503),
+      'Host plan service is temporarily unavailable. Retry in a moment.',
+    ],
+    [
+      'decoder',
+      new HostTargetPlanClientError('decoder', 'HOST_TARGET_CATALOG_RESPONSE_INVALID', 200),
+      'The host target catalog response was invalid. Retry after updating Tenon.',
+    ],
+  ])('maps a stable %s catalog error to English UI copy', async (_kind, error, expected) => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView({ loadTargets: vi.fn().mockRejectedValue(error) })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(expected)
+    expect(screen.queryByText(error.code)).toBeNull()
+  })
+
+  it('maps a stable plan mismatch to English UI copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadPlan: vi.fn().mockRejectedValue(
+        new HostTargetPlanClientError('mismatch', 'HOST_TARGET_PLAN_REQUEST_MISMATCH', 200),
+      ),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The returned plan did not match the selected host and operation. Retry the request.',
+    )
   })
 
   it('falls back to unknown stable step and notice tokens without hiding the plan', async () => {

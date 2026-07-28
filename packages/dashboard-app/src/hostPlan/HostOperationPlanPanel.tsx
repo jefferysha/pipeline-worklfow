@@ -1,4 +1,5 @@
 import type {
+  HostId,
   HostOperation,
   HostTarget,
   HostTargetPlan,
@@ -9,7 +10,7 @@ import { HostPlanPreview } from './HostPlanPreview'
 export type HostPlanRequestState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; error: unknown }
   | { status: 'ready'; plan: HostTargetPlan }
 
 interface HostOperationPlanPanelProps {
@@ -18,7 +19,8 @@ interface HostOperationPlanPanelProps {
   selectedOperation: HostOperation | null
   planState: HostPlanRequestState
   copyText: (text: string) => Promise<void>
-  onRequestPlan: (host: string, operation: HostOperation) => void
+  onRequestPlan: (host: HostId, operation: HostOperation) => void
+  errorMessage: (error: unknown) => string
 }
 
 export function HostOperationPlanPanel({
@@ -28,6 +30,7 @@ export function HostOperationPlanPanel({
   planState,
   copyText,
   onRequestPlan,
+  errorMessage,
 }: HostOperationPlanPanelProps): JSX.Element {
   const { t } = useT()
 
@@ -64,7 +67,7 @@ export function HostOperationPlanPanel({
         </p>
       ) : planState.status === 'error' && selectedOperation ? (
         <div className="mt-4 rounded-xl border border-red-b bg-red-t p-4 text-red-d" role="alert">
-          <p className="break-words text-sm">{planState.message}</p>
+          <p className="break-words text-sm">{errorMessage(planState.error)}</p>
           <button
             type="button"
             className="mt-3 rounded-lg border border-red-b bg-card px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
@@ -74,7 +77,20 @@ export function HostOperationPlanPanel({
           </button>
         </div>
       ) : planState.status === 'ready' ? (
-        <HostPlanPreview plan={planState.plan} copyText={copyText} />
+        <>
+          <p
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            data-testid="host-plan-ready-announcement"
+          >
+            {t('hostPlan.plan_ready', {
+              host: targetLabel,
+              operation: t(`hostPlan.operation.${planState.plan.operation}`),
+            })}
+          </p>
+          <HostPlanPreview plan={planState.plan} copyText={copyText} />
+        </>
       ) : null}
     </section>
   )

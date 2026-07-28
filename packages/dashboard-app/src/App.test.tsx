@@ -111,6 +111,37 @@ describe('App 宿主计划机器级视图', () => {
     expect(screen.queryByTestId('onboard-no-project')).toBeNull()
     expect(fetchMock.mock.calls.map(([url]) => url)).toContain('/api/host-targets')
   })
+
+  it('全局 snapshot 首次失败时仍渲染独立 Host Plan，不被 snapshot 错误页遮蔽', async () => {
+    window.history.replaceState({}, '', '/?view=hostPlan')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, error: 'snapshot 暂时不可用' }),
+        }
+      }
+      if (url === '/api/host-targets') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ schema_version: 'host-target-plan/v1', targets: [] }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('host-plan-view')).toBeInTheDocument()
+    expect(screen.getByTestId('host-plan-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('snapshot-error')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(
+      expect.arrayContaining(['/api/snapshot', '/api/host-targets']),
+    )
+  })
 })
 
 describe('App 初始 snapshot 错误恢复', () => {

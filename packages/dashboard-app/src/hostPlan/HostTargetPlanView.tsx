@@ -1,6 +1,11 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { fetchHostTargetPlan, fetchHostTargets } from '../api/hostTargetPlanClient'
+import {
+  fetchHostTargetPlan,
+  fetchHostTargets,
+  HostTargetPlanClientError,
+} from '../api/hostTargetPlanClient'
 import type {
+  HostId,
   HostOperation,
   HostTarget,
   HostTargetCatalog,
@@ -14,13 +19,13 @@ import {
 
 interface HostTargetPlanViewProps {
   loadTargets?: () => Promise<HostTargetCatalog>
-  loadPlan?: (host: string, operation: HostOperation) => Promise<HostTargetPlan>
+  loadPlan?: (host: HostId, operation: HostOperation) => Promise<HostTargetPlan>
   copyText?: (text: string) => Promise<void>
 }
 
 type CatalogState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; error: unknown }
   | { status: 'ready'; catalog: HostTargetCatalog }
 
 const HOST_NAMES: Record<string, string> = {
@@ -42,6 +47,31 @@ function hostName(target: HostTarget): string {
   return HOST_NAMES[target.id] ?? target.id
 }
 
+function localizedError(
+  error: unknown,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (!(error instanceof HostTargetPlanClientError)) return t('hostPlan.errors.unknown')
+  switch (error.code) {
+    case 'HOST_TARGET_NETWORK_ERROR':
+      return t('hostPlan.errors.network')
+    case 'HOST_TARGET_QUERY_INVALID':
+      return t('hostPlan.errors.query_invalid')
+    case 'HOST_TARGET_PLAN_UNAVAILABLE':
+      return t('hostPlan.errors.unavailable')
+    case 'HOST_TARGET_PLAN_INVALID':
+      return t('hostPlan.errors.upstream_invalid')
+    case 'HOST_TARGET_CATALOG_RESPONSE_INVALID':
+      return t('hostPlan.errors.catalog_invalid')
+    case 'HOST_TARGET_PLAN_RESPONSE_INVALID':
+      return t('hostPlan.errors.plan_invalid')
+    case 'HOST_TARGET_PLAN_REQUEST_MISMATCH':
+      return t('hostPlan.errors.mismatch')
+    case 'HOST_TARGET_HTTP_ERROR':
+      return t('hostPlan.errors.http', { status: error.status ?? 'unknown' })
+  }
+}
+
 export function HostTargetPlanView({
   loadTargets = fetchHostTargets,
   loadPlan = fetchHostTargetPlan,
@@ -49,7 +79,7 @@ export function HostTargetPlanView({
 }: HostTargetPlanViewProps): JSX.Element {
   const { t } = useT()
   const [catalogState, setCatalogState] = useState<CatalogState>({ status: 'loading' })
-  const [selectedHost, setSelectedHost] = useState<string | null>(null)
+  const [selectedHost, setSelectedHost] = useState<HostId | null>(null)
   const [selectedOperation, setSelectedOperation] = useState<HostOperation | null>(null)
   const [planState, setPlanState] = useState<HostPlanRequestState>({ status: 'idle' })
   const requestSequence = useRef(0)
@@ -69,7 +99,7 @@ export function HostTargetPlanView({
         if (requestSequence.current === sequence) {
           setCatalogState({
             status: 'error',
-            message: error instanceof Error ? error.message : String(error),
+            error,
           })
         }
       },
@@ -83,14 +113,14 @@ export function HostTargetPlanView({
     }
   }, [refreshCatalog])
 
-  const selectHost = (host: string): void => {
+  const selectHost = (host: HostId): void => {
     requestSequence.current += 1
     setSelectedHost(host)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
   }
 
-  const requestPlan = (host: string, operation: HostOperation): void => {
+  const requestPlan = (host: HostId, operation: HostOperation): void => {
     const sequence = requestSequence.current + 1
     requestSequence.current = sequence
     setSelectedOperation(operation)
@@ -103,7 +133,7 @@ export function HostTargetPlanView({
         if (requestSequence.current === sequence) {
           setPlanState({
             status: 'error',
-            message: error instanceof Error ? error.message : String(error),
+            error,
           })
         }
       },
@@ -124,7 +154,7 @@ export function HostTargetPlanView({
         <p className="mt-8 text-sm text-text-3" role="status">{t('hostPlan.catalog_loading')}</p>
       ) : catalogState.status === 'error' ? (
         <div className="mt-8 rounded-2xl border border-red-b bg-red-t p-5 text-red-d" role="alert">
-          <p className="break-words text-sm">{catalogState.message}</p>
+          <p className="break-words text-sm">{localizedError(catalogState.error, t)}</p>
           <button
             type="button"
             className="mt-4 rounded-lg border border-red-b bg-card px-3.5 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
@@ -201,6 +231,7 @@ export function HostTargetPlanView({
                     planState={planState}
                     copyText={copyText}
                     onRequestPlan={requestPlan}
+                    errorMessage={(error) => localizedError(error, t)}
                   />
                 )}
                 </Fragment>

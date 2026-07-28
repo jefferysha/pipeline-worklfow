@@ -213,7 +213,7 @@ function AppShell(): JSX.Element {
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {snapshot === null && !loading && error ? (
+        {snapshot === null && !loading && error && view !== 'hostPlan' ? (
           <section
             className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d max-[720px]:mt-4 max-[720px]:p-5"
             role="alert"

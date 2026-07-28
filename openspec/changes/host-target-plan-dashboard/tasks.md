@@ -22,6 +22,7 @@
 - [x] 完成全部 TENON_HOSTS、setup/update DTO、严格 CLI/server decoder 与兼容测试。 (build)
 - [x] 完成目标卡、操作选择、loading/empty/error/retry/ready、复制反馈和响应式样式。 (build)
 - [x] 完成中英文 i18n、键盘可访问性与 Dashboard client/component/location 测试。 (build)
+- [x] 修复首轮 Verify 的 clean-room、strict decoder、错误 i18n、snapshot 独立性、live announcement、文档和 hygiene findings。 (build)
 
 ## 验证
 

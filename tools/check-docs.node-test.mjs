@@ -291,6 +291,20 @@ test('keeps operational views declared in View and Overview outside PRIMARY_VIEW
   assert.match(failures, /PRIMARY_VIEWS entry missing must be declared in View/)
 })
 
+test('rejects removing or replacing one of the six primary operational views', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await write(
+    root,
+    'packages/dashboard-app/src/shell/Nav.tsx',
+    [
+      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan' | 'other'",
+      "export const PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'other']",
+    ].join('\n'),
+  )
+  assert.match(checkRepository(root).join('\n'), /PRIMARY_VIEWS must remain the exact operational set/)
+})
+
 test('requires README language and community links', async (t) => {
   const root = await fixture()
   t.after(() => rm(root, { recursive: true, force: true }))

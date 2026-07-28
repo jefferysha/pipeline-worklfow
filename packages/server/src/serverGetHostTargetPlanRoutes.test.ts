@@ -59,16 +59,16 @@ const PLAN = {
     label: 'host-plan.step.marketplace-refresh',
     command: {
       executable: 'codex',
-      args: ['plugin', 'marketplace', 'update', 'tenon'],
-      display: 'codex plugin marketplace update tenon',
+      args: ['plugin', 'marketplace', 'upgrade', 'tenon', '--json'],
+      display: 'codex plugin marketplace upgrade tenon --json',
     },
   }, {
     id: 'plugin-update',
     label: 'host-plan.step.plugin-update',
     command: {
       executable: 'codex',
-      args: ['plugin', 'update', 'tenon@tenon', '--json'],
-      display: 'codex plugin update tenon@tenon --json',
+      args: ['plugin', 'add', 'tenon@tenon', '--json'],
+      display: 'codex plugin add tenon@tenon --json',
     },
   }, {
     id: 'plugin-inventory',
@@ -96,6 +96,81 @@ const PLAN = {
     'host-plan.notice.manual-command-has-effects',
   ],
 } as const
+
+type HostId = (typeof HOST_IDS)[number]
+type Operation = 'setup' | 'update'
+
+function planCommand(executable: string, args: readonly string[]) {
+  return { executable, args: [...args], display: [executable, ...args].join(' ') }
+}
+
+const NATIVE_COMMANDS = {
+  codex: {
+    setup: [
+      planCommand('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+      planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+      planCommand('codex', ['plugin', 'list', '--json']),
+    ],
+    update: [
+      planCommand('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+      planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
+      planCommand('codex', ['plugin', 'list', '--json']),
+    ],
+  },
+  claude: {
+    setup: [
+      planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+      planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
+      planCommand('claude', ['plugin', 'list', '--json']),
+    ],
+    update: [
+      planCommand('claude', ['plugin', 'marketplace', 'update', 'tenon']),
+      planCommand('claude', ['plugin', 'update', 'tenon@tenon']),
+      planCommand('claude', ['plugin', 'list', '--json']),
+    ],
+  },
+} as const
+
+function planFor(host: HostId, operation: Operation) {
+  const target = CATALOG.targets.find((candidate) => candidate.id === host)
+  if (target === undefined) throw new Error(`missing test target ${host}`)
+  const native = host === 'codex' || host === 'claude'
+  const command = planCommand(
+    'tenon',
+    native ? [operation, `--${host}`] : [operation, `--${host}`, '--target', '<project>'],
+  )
+  const nativeIds = operation === 'setup'
+    ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
+    : ['marketplace-refresh', 'plugin-update', 'plugin-inventory']
+  const steps = native
+    ? NATIVE_COMMANDS[host][operation].map((stepCommand, index) => {
+        const id = nativeIds[index]
+        if (id === undefined) throw new Error('missing native test step id')
+        return { id, label: `host-plan.step.${id}`, command: stepCommand }
+      })
+    : [
+        { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
+        { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command },
+      ]
+  steps.push(
+    { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+    { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
+    { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
+  )
+  return {
+    schema_version: 'host-target-plan/v1',
+    side_effects: 'none',
+    host: target,
+    operation,
+    command,
+    steps,
+    notices: [
+      'host-plan.notice.read-only-generation',
+      'host-plan.notice.manual-command-has-effects',
+      ...(native ? [] : ['host-plan.notice.project-placeholder']),
+    ],
+  }
+}
 
 function jsonResult(value: unknown): { exitCode: number; stdout: string; stderr: string } {
   return { exitCode: 0, stdout: JSON.stringify(value), stderr: '' }
@@ -151,6 +226,30 @@ describe('Host Target Plan route resolver', () => {
       '/host/home',
       ['host-target-plan', '--host', 'codex', '--operation', 'update', '--json'],
     )
+  })
+
+  it('accepts the explicit empty catalog state without weakening full-catalog validation', async () => {
+    const empty = { schema_version: 'host-target-plan/v1', targets: [] }
+    const runner = vi.fn<PipelineCliRunner>(async () => jsonResult(empty))
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-targets',
+      '/api/host-targets',
+      deps(runner),
+    )).resolves.toEqual({ status: 200, body: empty })
+  })
+
+  it.each(HOST_IDS.flatMap((host) =>
+    (['setup', 'update'] as const).map((operation) => ({ host, operation }))),
+  )('accepts the exact CLI plan truth for $host $operation', async ({ host, operation }) => {
+    const value = planFor(host, operation)
+    const runner = vi.fn<PipelineCliRunner>(async () => jsonResult(value))
+
+    await expect(resolveHostTargetPlanRoute(
+      `/api/host-target-plan?host=${host}&operation=${operation}`,
+      '/api/host-target-plan',
+      deps(runner),
+    )).resolves.toEqual({ status: 200, body: value })
   })
 
   it.each([
@@ -217,6 +316,26 @@ describe('Host Target Plan route resolver', () => {
       ...CATALOG,
       targets: [{ ...CODEX_TARGET, capabilities: ['shell-access'] }, ...CATALOG.targets.slice(1)],
     }) },
+    { name: 'wrong target kind', run: async () => jsonResult({
+      ...CATALOG,
+      targets: [{ ...CODEX_TARGET, kind: 'adapter' }, ...CATALOG.targets.slice(1)],
+    }) },
+    { name: 'wrong target scope', run: async () => jsonResult({
+      ...CATALOG,
+      targets: [{ ...CODEX_TARGET, target_scope: 'project' }, ...CATALOG.targets.slice(1)],
+    }) },
+    { name: 'wrong target flag', run: async () => jsonResult({
+      ...CATALOG,
+      targets: [{ ...CODEX_TARGET, cli_flag: '--claude' }, ...CATALOG.targets.slice(1)],
+    }) },
+    { name: 'wrong target operations', run: async () => jsonResult({
+      ...CATALOG,
+      targets: [{ ...CODEX_TARGET, supported_operations: ['update', 'setup'] }, ...CATALOG.targets.slice(1)],
+    }) },
+    { name: 'out-of-order targets', run: async () => jsonResult({
+      ...CATALOG,
+      targets: [CATALOG.targets[1], CATALOG.targets[0], ...CATALOG.targets.slice(2)],
+    }) },
     { name: 'runner rejection', run: async () => { throw new Error('/secret/path token=abc') } },
   ])('maps $name to a redacted stable 502', async ({ run }) => {
     const result = await resolveHostTargetPlanRoute(
@@ -246,6 +365,21 @@ describe('Host Target Plan route resolver', () => {
     { name: 'duplicate step ids', value: { ...PLAN, steps: [PLAN.steps[0], PLAN.steps[0]] } },
     { name: 'unknown step label token', value: { ...PLAN, steps: [{ ...PLAN.steps[0], label: 'Update plugin' }, ...PLAN.steps.slice(1)] } },
     { name: 'unknown notice token', value: { ...PLAN, notices: ['preview-only'] } },
+    { name: 'native step command differs from CLI truth', value: {
+      ...PLAN,
+      steps: [{
+        ...PLAN.steps[0],
+        command: planCommand('codex', ['plugin', 'marketplace', 'update', 'tenon']),
+      }, ...PLAN.steps.slice(1)],
+    } },
+    { name: 'native commands are swapped under valid step ids', value: {
+      ...PLAN,
+      steps: [
+        { ...PLAN.steps[0], command: PLAN.steps[1].command },
+        { ...PLAN.steps[1], command: PLAN.steps[0].command },
+        ...PLAN.steps.slice(2),
+      ],
+    } },
   ])('strictly rejects a malformed plan: $name', async ({ value }) => {
     const runner = vi.fn<PipelineCliRunner>(async () => jsonResult(value))
     const result = await resolveHostTargetPlanRoute(
@@ -259,6 +393,60 @@ describe('Host Target Plan route resolver', () => {
       ok: false,
       code: 'HOST_TARGET_PLAN_INVALID',
       error: '宿主计划响应无效',
+    })
+  })
+
+  it.each([
+    {
+      name: 'top command omits the project placeholder',
+      mutate: (value: ReturnType<typeof planFor>) => ({
+        ...value,
+        command: planCommand('tenon', ['setup', '--cursor']),
+      }),
+    },
+    {
+      name: 'adapter deploy command differs from the top command',
+      mutate: (value: ReturnType<typeof planFor>) => ({
+        ...value,
+        steps: [
+          value.steps[0],
+          { ...value.steps[1], command: planCommand('tenon', ['setup', '--cursor', '--target', '/tmp']) },
+          ...value.steps.slice(2),
+        ],
+      }),
+    },
+    {
+      name: 'package-assets unexpectedly gains a command',
+      mutate: (value: ReturnType<typeof planFor>) => ({
+        ...value,
+        steps: [
+          { ...value.steps[0], command: value.command },
+          ...value.steps.slice(1),
+        ],
+      }),
+    },
+    {
+      name: 'project-placeholder notice is missing',
+      mutate: (value: ReturnType<typeof planFor>) => ({
+        ...value,
+        notices: value.notices.slice(0, 2),
+      }),
+    },
+  ])('strictly rejects adapter semantic drift: $name', async ({ mutate }) => {
+    const runner = vi.fn<PipelineCliRunner>(async () => jsonResult(mutate(planFor('cursor', 'setup'))))
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-plan?host=cursor&operation=setup',
+      '/api/host-target-plan',
+      deps(runner),
+    )
+
+    expect(result).toEqual({
+      status: 502,
+      body: {
+        ok: false,
+        code: 'HOST_TARGET_PLAN_INVALID',
+        error: '宿主计划响应无效',
+      },
     })
   })
 

@@ -28,3 +28,59 @@
 - 浏览器控制台：最终路径 error logs 为 0。
 
 结论：第二轮无 CRITICAL / HIGH / MEDIUM；LOW 已处理，无遗留 UI finding。
+
+## Verify 回环发现与修复
+
+冻结提交 `e32cf7f924cf3964e46bc942e9dff31192733d4a` 的首轮 Verify 结论为
+FAIL，已通过确切 `verify-fail` review receipt 返回 Build。下表记录本轮修复；新的浏览器与
+对抗式全量复验必须在重新提交、冻结之后执行，不沿用旧冻结提交的通过结论。
+
+| 严重度 | 首轮 Verify finding | Build 修复 | 聚焦复验 |
+| --- | --- | --- | --- |
+| HIGH | Comet 研究文档保存上游源码、测试、Changelog 与 package metadata 逐字块，违反 clean-room 边界 | 删除全部逐字实现材料，仅保留固定 URL/SHA、发布与许可事实、独立摘要和差异矩阵；Trellis 研究同步采用相同证据边界 | research 文件不再含上游代码块；`check:docs` 9/9 |
+| MEDIUM | server decoder 接受与 CLI 真相不一致的 native command chain | 对空或完整 catalog、12-host 顺序/metadata/capabilities，以及 24 组 host×operation 的 top command、步骤、null command 与 notices 做精确校验 | server focused 68/68；server 宽回归 343/343 |
+| MEDIUM | Dashboard decoder 接受部分 catalog、顺序/能力/命令/步骤/notices 漂移 | client decoder 只接受空目录或完整有序唯一目录，并逐项校验 v1 plan 不变量 | Dashboard focused 71/71；子流全量 `test:web` 52 files / 993 tests |
+| MEDIUM | 英文网络、HTTP、decoder 和请求不匹配路径显示中文 | client 返回稳定 `HostTargetPlanClientError(kind/code/status)`；组件按当前 locale 映射文案，不透传 server error | 中英文 network/HTTP/decoder/mismatch 组件测试通过 |
+| MEDIUM | 全局 snapshot 首次失败会遮蔽机器级 Host Plan | `hostPlan` 独立绕过 snapshot error shell，同时保留其他视图原错误页 | 新增 App 回归测试通过 |
+| MEDIUM | ready 状态没有辅助技术完成公告 | 增加 `role=status`、`aria-live=polite` 的本地化就绪公告 | 中英文组件断言通过 |
+| LOW | 中英文 CLI reference 缺少 `host-target-plan` | 补 catalog 与单计划命令、`--json`、只读与 custom-host 拒绝边界 | `check:docs` 通过 |
+| LOW | Nav 注释仍描述五个一级视图 | 注释更新为六视图与完整顺序 | source-bound docs checker 通过 |
+| 门禁 | repository hygiene 全局身份禁令与本 Change 固定来源证据冲突 | 增加仅覆盖两项研究身份、本 Change 精确 docs/current archive/日期 archive/唯一 main spec 的 allowlist；实现与无关文档仍失败关闭 | checker 6/6；`check:repository-hygiene` PASS |
+
+全量收敛审查随后发现并修复两项 MEDIUM 门禁回退：
+
+1. `check-docs` 曾把原来的固定视图数量改成仅非空/无重复，删除既有视图仍可能通过。现在锁定
+   `projects → progress → afk → workbench → machine → hostPlan` 精确六视图，并增加删除/替换回归测试。
+2. hygiene 曾对本 Change 整个 current/archive 目录放行两个研究身份。现在只放行
+   `REVIEW.md`、`applied-spec.md`、`design.md`、`proposal.md`、`tasks.md` 与单一 delta spec；
+   同目录任意 source/notes 仍拒绝。
+
+## Verify 回环后的 frontend-design / design-taste-frontend 复评
+
+- 错误文案从 transport 层移到 i18n，状态卡的层级、颜色与 retry 位置保持原有设计系统。
+- ready 公告使用 `sr-only`，不改变桌面或移动视觉布局。
+- Host Plan 在 snapshot 失败时仍保留独立页面身份和局部 catalog 状态，不显示无关全局错误卡。
+- decoder 与错误契约变更没有新增执行按钮或写路径；计划仍只有复制动作。
+- 复用首轮桌面/移动截图对布局影响做静态复评，本轮实现无可见布局变化；重新冻结后的真实页面身份、
+  桌面/移动、键盘、loading/empty/error/ready 验收留给第二轮 Verify。
+
+结论：Build 回环设计复评无 CRITICAL / HIGH / MEDIUM；全部首轮 finding 已有实现与聚焦测试，
+但只有重新完成全量 Build 门禁、提交和冻结后，才能写入 `pre_verify_review_result=pass`。
+
+## Build 回环全量门禁
+
+- `npm run build`：通过；重新生成 Dashboard、server 与 CLI tracked bundles。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 files / 997 tests；focused client 16/16。
+- `npm test`：317 files / 5475 passed / 5 honest skips（5480 total）。
+- `bash tools/test-bundle.sh`：31/31。
+- `npm run check:npx-package`：35/35。
+- `npm run check:docs`：10/10，39 canonical Markdown files。
+- `npm run check:repository-hygiene`：6/6，repository PASS。
+- `npm run check:architecture`、`npm run check:comments`、`git diff --check`：通过。
+- 已知非阻断输出：既有 React `act(...)` / GSAP 警告、Vite 大 chunk 警告；5 个测试因
+  `TENON_REQUIRE_REAL_CODEX` 或 `CLAUDE_CODE_OAUTH_TOKEN` 缺失诚实跳过。
+
+独立全量 reviewer 在两项门禁修复后重新审阅完整交付面，Standards 与 Spec 两轴均
+PASS，最终 CRITICAL / HIGH / MEDIUM / LOW 均为 0。新的 Dashboard hash asset 必须与
+`dist/index.html` 和旧 asset 删除成对提交。
