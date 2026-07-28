@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdir, rename, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, realpath, rename, symlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { nodeMemFs, type MemFs } from '@tenon/kernel'
 import { createDashboardServer } from './server.js'
@@ -50,9 +50,10 @@ async function start(
     query: request.query,
     platform: request.platform,
   }),
+  registeredRoot?: string,
 ): Promise<Harness> {
   const home = await makeTempHome()
-  const root = await makeProject()
+  const root = registeredRoot ?? await makeProject()
   const store = newStore()
   await initChange(store, root, 'memory-change')
   const calls: RelatedSessionSearchRequest[] = []
@@ -171,6 +172,7 @@ describe('POST /api/mem/related-sessions/search', () => {
   it('runs the production kernel adapter against a bounded Codex file', async () => {
     const home = await makeTempHome()
     const root = await makeProject()
+    const canonicalRoot = await realpath(root)
     const store = newStore()
     await initChange(store, root, 'memory-change')
     const sessionsDir = join(home, '.codex', 'sessions', '2026', '07')
@@ -182,7 +184,7 @@ describe('POST /api/mem/related-sessions/search', () => {
     await writeFile(sessionPath, [
       JSON.stringify({
         timestamp: '2026-07-28T12:00:00Z',
-        payload: { id: 'opaque-production-session', cwd: root },
+        payload: { id: 'opaque-production-session', cwd: canonicalRoot },
       }),
       JSON.stringify({
         payload: {
@@ -232,6 +234,7 @@ describe('POST /api/mem/related-sessions/search', () => {
 
   it('returns the bounded v1 DTO and scopes the runner to the anchored project root', async () => {
     const h = await start()
+    const canonicalRoot = await realpath(h.root)
 
     const response = await reqPost(
       h.port,
@@ -243,7 +246,30 @@ describe('POST /api/mem/related-sessions/search', () => {
     expect(response.status).toBe(200)
     expect(response.json()).toEqual(SUCCESS)
     expect(h.calls).toEqual([{
-      root: h.root,
+      root: canonicalRoot,
+      query: 'bounded memory',
+      platform: 'codex',
+    }])
+  })
+
+  it('uses the anchored canonical path for session scope through a symlinked ancestor', async () => {
+    const physicalRoot = await makeProject()
+    const canonicalRoot = await realpath(physicalRoot)
+    const aliasParent = join(dirname(physicalRoot), `${basename(physicalRoot)}-alias-parent`)
+    await symlink(dirname(physicalRoot), aliasParent, 'dir')
+    const lexicalRoot = join(aliasParent, basename(physicalRoot))
+    const h = await start(undefined, lexicalRoot)
+
+    const response = await reqPost(
+      h.port,
+      '/api/mem/related-sessions/search',
+      requestBody(lexicalRoot),
+      auth(h.token),
+    )
+
+    expect(response.status).toBe(200)
+    expect(h.calls).toEqual([{
+      root: canonicalRoot,
       query: 'bounded memory',
       platform: 'codex',
     }])

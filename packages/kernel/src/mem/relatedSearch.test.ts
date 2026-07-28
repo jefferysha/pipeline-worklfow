@@ -357,6 +357,25 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     expect(result.matches[0]).not.toHaveProperty('filePath')
   })
 
+  test('does not inspect OpenCode storage for an explicit Codex-only search', () => {
+    const path = codexFile('codex-only')
+    const result = searchRelatedSessions(boundedFakeFs({
+      [path]: codexSession('codex-only', [{
+        role: 'user',
+        text: 'memory search from the selected host',
+      }]),
+      '/home/u/.local/share/opencode/opencode.db': 'not a sqlite database',
+    }), {
+      root: PROJECT,
+      query: 'memory search',
+      platform: 'codex',
+    })
+
+    expect(result.matches.map((match) => match.sessionId)).toEqual(['codex-only'])
+    expect(result.partial).toBe(false)
+    expect(result.warnings).toEqual([])
+  })
+
   test('keeps a late search hit inside the 320-character API excerpt', () => {
     const path = codexFile('late-hit')
     const result = searchRelatedSessions(boundedFakeFs({

@@ -366,7 +366,8 @@ export function searchMemSessions(
   const searchableKeys = new Set(
     candidates.map((session) => sessionKey(session.platform, session.id)),
   )
-  const supportSessions = includeChildren && candidateLimit !== null
+  const hasOpenCodeCandidate = candidates.some((session) => session.platform === 'opencode')
+  const supportSessions = includeChildren && candidateLimit !== null && hasOpenCodeCandidate
     ? opencodeResolveParentSessions(fs, candidates, f, candidateLimit)
     : []
   const graphSessions = [...candidates, ...supportSessions]

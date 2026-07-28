@@ -70,7 +70,7 @@ export async function handlePostMemoryRoutes(
   }
 
   const result = await deps.relatedSessionSearch({
-    root: anchoredRoot,
+    root: rootCheck.anchor.realPath,
     query,
     platform: platform as MemPlatformFilter,
   })

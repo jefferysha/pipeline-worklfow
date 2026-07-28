@@ -61,6 +61,7 @@
 - [x] 在有界扫描中覆盖 Claude/Pi 后代 shard，保留旧 Claude CLI 未知 cwd 兼容，并按更新时间选取 OpenCode 候选。 (build)
 - [x] 对不可证明 recency 的 OpenCode 关系 fail closed，并用有界主键查询补入候选 child 的 parent 图支撑节点。 (build)
 - [x] 保持公开 excerpt 含命中词、稳定映射 Change I/O 错误，并拆分有界 SQLite 对话预算与稳定 part 次序。 (build)
+- [x] 单宿主搜索不再探测无关 OpenCode 来源，并以注册锚的 canonical realpath 对齐会话项目作用域。 (build)
 
 ## 验证
 
