@@ -41,10 +41,13 @@
 - [x] 第三次冻结新 `build_sha`，重新执行 Reviewer、E2E、Codex 与适用视觉轨全量聚合。
 - [x] 第三次执行 OpenSpec 隔离 apply、逐文件 capability 回读和 repo-zero-output 检查。
 - [x] 复核第三次冻结 head 的 GitHub CI、mergeability、review threads 与最新 main，登记最终验证报告。
+- [x] 第四次冻结 `build_sha=f111bd09...`，执行 Reviewer、E2E、Codex 降级与 Dashboard 视觉轨全量聚合。
+- [x] 第四次执行 OpenSpec 隔离 apply、277 路径 capability 回读和 repo-zero-output 检查。
+- [x] 复核第四次冻结 head 的 CI、mergeability、review threads 与最新 main，登记通过报告。
 
 ## 交付
 
-- [ ] 应用审计 delta，确认 README/docs/回滚，登记 applied-spec。
+- [x] 应用审计 delta，确认 README/docs/回滚，登记 applied-spec。
 - [ ] 所有最终门禁成功后按仓库历史方法合并 PR #6 并记录 merge SHA。
 
 ## 归档
