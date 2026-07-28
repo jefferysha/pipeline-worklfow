@@ -1,0 +1,22 @@
+{"ts":"2026-07-28T17:10:41Z","kind":"init"}
+{"ts":"2026-07-28T17:10:41Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T17:12:49Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T17:12:50Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"fed06ee0-c5c5-4556-adab-33b5e52c0383"}
+{"ts":"2026-07-28T17:18:39Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-28-pr-7-merge-audit-design.md"}
+{"ts":"2026-07-28T17:18:40Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-28T17:18:40Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-28T17:18:58Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-28T17:18:59Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-28T17:10:41Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T17:18:59Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-28T17:18:59Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-28T17:18:59Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"5fa5e33e-478f-4fe1-917e-a3700fce5965"}
+{"ts":"2026-07-28T17:21:49Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md"}
+{"ts":"2026-07-28T17:21:49Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T17:21:50Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T17:21:50Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T17:22:00Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T17:22:00Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T17:10:41Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T17:22:00Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"e4740d2a-b7f3-4d8e-9837-98e5800d1839"}
+{"ts":"2026-07-28T17:22:28Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-28T17:22:28Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-28T17:22:29Z","kind":"set","field":"direct_override","to":"true"}

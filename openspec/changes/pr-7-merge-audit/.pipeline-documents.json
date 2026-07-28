@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-28T17:10:41Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/pr-7-merge-audit/proposal.md",
+      "sha256": "bc54553a6f0c50d3da3bfa00f39ceb886655d9f609148e3cd325a7b9c40d0b08",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T17:18:40Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "bc54553a6f0c50d3da3bfa00f39ceb886655d9f609148e3cd325a7b9c40d0b08",
+          "readAt": "2026-07-28T17:18:58Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "bc54553a6f0c50d3da3bfa00f39ceb886655d9f609148e3cd325a7b9c40d0b08",
+          "readAt": "2026-07-28T17:21:51Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bc54553a6f0c50d3da3bfa00f39ceb886655d9f609148e3cd325a7b9c40d0b08",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/pr-7-merge-audit/design.md",
+      "sha256": "5b9d2fd0417aa5bebaea579d1a93cecedf80ea4cf21b21dfbfe111d38b6762e7",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T17:18:40Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "5b9d2fd0417aa5bebaea579d1a93cecedf80ea4cf21b21dfbfe111d38b6762e7",
+          "readAt": "2026-07-28T17:18:58Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "5b9d2fd0417aa5bebaea579d1a93cecedf80ea4cf21b21dfbfe111d38b6762e7",
+          "readAt": "2026-07-28T17:21:51Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5b9d2fd0417aa5bebaea579d1a93cecedf80ea4cf21b21dfbfe111d38b6762e7",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-28-pr-7-merge-audit-explore.md",
+      "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-28T17:18:41Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+          "readAt": "2026-07-28T17:21:51Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/pr-7-merge-audit/specs/context-bundle-budget-preview/spec.md",
+      "sha256": "48efe2b7fac3fbbe53d52792b7819f4c6d0aef39653de36a2a9a506b164d9531",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T17:21:50Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "48efe2b7fac3fbbe53d52792b7819f4c6d0aef39653de36a2a9a506b164d9531",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md",
+      "sha256": "f3a0968aa7224b2fc3586416ada7c1d8e6ec45d0700a7c437c4ddf9ad4ab3495",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T17:21:50Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f3a0968aa7224b2fc3586416ada7c1d8e6ec45d0700a7c437c4ddf9ad4ab3495",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md",
+      "sha256": "f3a0968aa7224b2fc3586416ada7c1d8e6ec45d0700a7c437c4ddf9ad4ab3495",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T17:21:50Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f3a0968aa7224b2fc3586416ada7c1d8e6ec45d0700a7c437c4ddf9ad4ab3495",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/pr-7-merge-audit/tasks.md",
+      "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-28T17:21:50Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
+          "readAt": "2026-07-28T17:21:51Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-28-pr-7-merge-audit-design.md",
+      "sha256": "215df97e5ae502e695f720f7a8672430e92ee86252d87d6540886e88eaf0c7ce",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-28T17:21:51Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "215df97e5ae502e695f720f7a8672430e92ee86252d87d6540886e88eaf0c7ce",
+          "readAt": "2026-07-28T17:21:51Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "215df97e5ae502e695f720f7a8672430e92ee86252d87d6540886e88eaf0c7ce",
+          "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    }
+  ]
+}
