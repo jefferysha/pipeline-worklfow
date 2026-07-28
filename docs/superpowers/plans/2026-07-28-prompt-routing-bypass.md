@@ -59,7 +59,7 @@ bullet 暴露无法在现有边界解决的状态或 Bash 兼容问题，再以 
 ## Ship 与回滚
 
 1. 只提交本 Change 范围，推送 `codex/prompt-routing-bypass-20260728` 并创建非草稿 PR。
-2. PR 固定 Trellis/Comet SHA，列明 API、持久化、测试、浏览器、兼容与风险；检查 CI 并修复代码失败。
+2. PR 固定上游参考 A/B 的仓库、URL 与 SHA，列明 API、持久化、测试、浏览器、兼容与风险；检查 CI 并修复代码失败。
 3. 回滚只需撤销本 PR；旧配置缺字段会继续回退默认值。若需操作级禁用，可把
    `prompt_skip_keyword` 保存为 `""`，不关闭任何安全 Hook。
 4. 应用 delta spec、完成 Ship/Archive 证据并归档 Change。

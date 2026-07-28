@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { invalidateWorkflowRules } from '../model/workflowModel'
 import { invalidateMandatoryConfig } from './mandatorySkills'
 import { useHooksConfig } from './HookTimeline'
@@ -48,6 +48,24 @@ function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
     <I18nProvider>
       <WorkbenchView root={ROOT} {...props} />
     </I18nProvider>,
+  )
+}
+
+function PromptSkipLocaleRaceHarness(): JSX.Element {
+  const { setLang } = useT()
+  const config = useHooksConfig(ROOT)
+  return (
+    <>
+      <button type="button" onClick={() => setLang('en')}>switch locale</button>
+      <button
+        type="button"
+        onClick={() => void config.savePromptSkipKeyword('saved-tenon')}
+      >
+        save keyword
+      </button>
+      <span data-testid="prompt-skip-keyword">{config.promptSkipKeyword ?? 'loading'}</span>
+      <span data-testid="prompt-skip-busy">{String(config.promptSkipBusy)}</span>
+    </>
   )
 }
 
@@ -262,6 +280,18 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     expect(status).not.toHaveClass('text-green')
   })
 
+  it.each([
+    ['zh', 'path/no-tenon.md', '路径分隔符'],
+    ['en', 'path/no-tenon.md', 'path separators'],
+  ] as const)('%s 提示明确说明标点与路径边界', async (lang, example, boundaryCopy) => {
+    localStorage.setItem('tenon-dashboard-lang', lang)
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    expect(editor).toHaveTextContent(example)
+    expect(editor).toHaveTextContent(boundaryCopy)
+  })
+
   it('加载真实值并可用 Enter 保存，成功状态以 server 返回值为准', async () => {
     renderView()
     const zone = await selectStage('draft')
@@ -280,6 +310,30 @@ describe('UserPromptSubmit 单轮旁路词', () => {
       })
     })
     expect(await within(editor).findByRole('status')).toHaveTextContent('skip-tenon')
+  })
+
+  it('清空草稿不会隐式关闭开关，可继续键入并用 Enter 保存替换词', async () => {
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
+    const toggle = within(editor).getByRole('switch', { name: '启用单轮旁路' })
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(input).toBeEnabled()
+
+    fireEvent.change(input, { target: { value: 'replacement-tenon' } })
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+    await waitFor(() => {
+      const post = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([url]) => url === '/api/hooks/prompt-routing-bypass',
+      )
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({
+        root: ROOT,
+        prompt_skip_keyword: 'replacement-tenon',
+      })
+    })
   })
 
   it('非法草稿显示 alert 且不发送请求', async () => {
@@ -364,5 +418,45 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     expect(hook.result.current.promptSkipKeyword).toBe('root-b')
     expect(hook.result.current.promptSkipError).toBeNull()
     expect(hook.result.current.promptSkipBusy).toBe(false)
+  })
+
+  it('同一 root 保存期间切换语言不会重发 GET、解锁 busy 或丢弃 POST 结果', async () => {
+    let resolveSave: ((value: Response) => void) | undefined
+    let getCount = 0
+    global.fetch = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === `/api/hooks?root=${encodeURIComponent(ROOT)}`) {
+        getCount += 1
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true, hooks: HOOKS, matrix: {}, prompt_skip_keyword: 'no-tenon',
+        }), { status: 200 }))
+      }
+      if (url === '/api/hooks/prompt-routing-bypass' && opts?.method === 'POST') {
+        return new Promise<Response>((resolve) => {
+          resolveSave = resolve
+        })
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`))
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><PromptSkipLocaleRaceHarness /></I18nProvider>)
+    await waitFor(() => expect(screen.getByTestId('prompt-skip-keyword')).toHaveTextContent('no-tenon'))
+    fireEvent.click(screen.getByRole('button', { name: 'save keyword' }))
+    expect(screen.getByTestId('prompt-skip-busy')).toHaveTextContent('true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch locale' }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(getCount).toBe(1)
+    expect(screen.getByTestId('prompt-skip-busy')).toHaveTextContent('true')
+
+    await act(async () => {
+      resolveSave?.(new Response(JSON.stringify({
+        ok: true,
+        prompt_skip_keyword: 'saved-tenon',
+      }), { status: 200 }))
+    })
+    await waitFor(() => expect(screen.getByTestId('prompt-skip-keyword')).toHaveTextContent('saved-tenon'))
+    expect(screen.getByTestId('prompt-skip-busy')).toHaveTextContent('false')
   })
 })

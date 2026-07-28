@@ -2,7 +2,7 @@
 
 ## Why
 
-Tenon 的 UserPromptSubmit 路由会在开发提示中自动注入治理上下文，但用户缺少一个可审计的单轮旁路入口；在临时讨论、粘贴外部指令或排查路由本身时，只能关闭整个 Hook，影响范围过大。Trellis v0.6.9 已验证“独立 keyword 只抑制当前 turn”的用户价值，Tenon 仍缺少 API 与 Dashboard 闭环。
+Tenon 的 UserPromptSubmit 路由会在开发提示中自动注入治理上下文，但用户缺少一个可审计的单轮旁路入口；在临时讨论、粘贴外部指令或排查路由本身时，只能关闭整个 Hook，影响范围过大。固定版本的上游参考 A 已验证“独立 keyword 只抑制当前 turn”的用户价值，Tenon 仍缺少 API 与 Dashboard 闭环。
 
 ## What Changes
 

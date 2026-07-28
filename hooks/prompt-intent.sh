@@ -6,7 +6,7 @@
 # pattern 判定；用户文本始终保持数据，绝不 eval/source。
 
 pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
-  local root="${1:-}" file line trimmed raw value state=0 keyword='no-tenon' valid=1
+  local root="${1:-}" file line trimmed raw value state=0 keyword='no-tenon' valid=1 seen_matrix_keys=''
   file="$root/.pipeline/hooks.json"
   [ -r "$file" ] || {
     printf 'no-tenon'
@@ -65,6 +65,10 @@ pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表
               *) valid=0; break ;;
             esac
             case "$value" in ''|*[!A-Za-z0-9_.-]*) valid=0; break ;; esac
+            case "|$seen_matrix_keys|" in
+              *"|$value|"*) valid=0; break ;;
+            esac
+            seen_matrix_keys="${seen_matrix_keys:+$seen_matrix_keys|}$value"
             state=8
             ;;
           \"*\":\ false)
@@ -78,6 +82,10 @@ pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表
               *) valid=0; break ;;
             esac
             case "$value" in ''|*[!A-Za-z0-9_.-]*) valid=0; break ;; esac
+            case "|$seen_matrix_keys|" in
+              *"|$value|"*) valid=0; break ;;
+            esac
+            seen_matrix_keys="${seen_matrix_keys:+$seen_matrix_keys|}$value"
             state=5
             ;;
           *) valid=0; break ;;

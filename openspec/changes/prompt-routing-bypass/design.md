@@ -16,6 +16,6 @@
 
 ## 已验证问题
 
-- Trellis GitHub Latest Release API 返回 404，已按规则回退 `v0.6.9` tag；其 `no-trellis` 契约与测试已固定。
-- Comet latest release 为 `0.4.0-beta.9`，当前 `master` 的 platform target 变化与本功能无关。
+- 上游参考 A 的 GitHub Latest Release API 返回 404，已按规则回退 `v0.6.9` tag；其单轮旁路契约与测试已固定。
+- 上游参考 B 的 latest release 为 `0.4.0-beta.9`，当前 `master` 的 platform target 变化与本功能无关。
 - 现有 `/api/hooks`、`.pipeline/hooks.json` 和 Workbench Hook 时间线可直接承载闭环；不需要新依赖或新顶层模块。

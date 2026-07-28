@@ -56,15 +56,50 @@ export interface HooksRuntimeConfig {
   matrix: Record<string, false>
 }
 
+function isCanonicalHooksConfigText(text: string, parsed: unknown): parsed is Record<string, unknown> {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false
+  const record = parsed as Record<string, unknown>
+  const keys = Object.keys(record)
+  const fullKeys = ['version', 'prompt_skip_keyword', 'matrix']
+  const legacyKeys = ['version', 'matrix']
+  if (
+    keys.length !== fullKeys.length && keys.length !== legacyKeys.length
+    || !keys.every((key, index) => key === (keys.length === fullKeys.length ? fullKeys : legacyKeys)[index])
+    || record.version !== 1
+  ) return false
+  if (
+    keys.length === fullKeys.length
+    && (
+      typeof record.prompt_skip_keyword !== 'string'
+      || (
+        record.prompt_skip_keyword !== ''
+        && !PROMPT_SKIP_KEYWORD_RE.test(record.prompt_skip_keyword)
+      )
+    )
+  ) return false
+  if (typeof record.matrix !== 'object' || record.matrix === null || Array.isArray(record.matrix)) return false
+  for (const [key, value] of Object.entries(record.matrix as Record<string, unknown>)) {
+    if (value !== false || !key.includes('.') || !/^[A-Za-z0-9_.-]+$/.test(key)) return false
+  }
+  const normalizedLines = (value: string): string => {
+    const lines = value.replace(/\r\n?/g, '\n').split('\n')
+    if (lines.at(-1) === '') lines.pop()
+    return lines.map((line) => line.trim()).join('\n')
+  }
+  return normalizedLines(text) === normalizedLines(JSON.stringify(parsed, null, 2))
+}
+
 export function hooksConfigPath(root: string): string {
   return join(root, '.pipeline', 'hooks.json')
 }
 
-/** 完整运行时配置。损坏字段各自回退，不让一项手改错误污染另一项。 */
+/** 完整运行时配置。keyword 只认与 Bash 一致的 canonical 文本；matrix 保持既有逐项 fail-open。 */
 export function readHooksConfig(root: string): HooksRuntimeConfig {
+  let text: string
   let parsed: unknown
   try {
-    parsed = JSON.parse(readFileSync(hooksConfigPath(root), 'utf8'))
+    text = readFileSync(hooksConfigPath(root), 'utf8')
+    parsed = JSON.parse(text)
   } catch {
     return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
   }
@@ -73,7 +108,8 @@ export function readHooksConfig(root: string): HooksRuntimeConfig {
   }
   const record = parsed as Record<string, unknown>
   const rawKeyword = record.prompt_skip_keyword
-  const promptSkipKeyword = typeof rawKeyword === 'string'
+  const promptSkipKeyword = isCanonicalHooksConfigText(text, parsed)
+    && typeof rawKeyword === 'string'
     && (rawKeyword === '' || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword))
     ? rawKeyword
     : DEFAULT_PROMPT_SKIP_KEYWORD

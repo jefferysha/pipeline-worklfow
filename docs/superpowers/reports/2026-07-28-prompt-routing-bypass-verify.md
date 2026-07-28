@@ -119,9 +119,9 @@ E2E 隔离副本轨提供，不把该环境限制记作产品失败。
 | `docs/CONTRACT.md` | `openspec/changes/prompt-routing-bypass/specs/prompt-routing-bypass/spec.md` | ☑ |
 | `docs/adr/2026-07-28-prompt-routing-bypass-explore.md` | 同上 | ☑ |
 | `docs/superpowers/plans/2026-07-28-prompt-routing-bypass.md` | 同上 | ☑ |
-| `docs/superpowers/specs/2026-07-28-prompt-routing-bypass-comet-research.md` | 同上 | ☑ |
+| `docs/superpowers/specs/2026-07-28-prompt-routing-bypass-upstream-b-research.md` | 同上 | ☑ |
 | `docs/superpowers/specs/2026-07-28-prompt-routing-bypass-design.md` | 同上 | ☑ |
-| `docs/superpowers/specs/2026-07-28-prompt-routing-bypass-trellis-research.md` | 同上 | ☑ |
+| `docs/superpowers/specs/2026-07-28-prompt-routing-bypass-upstream-a-research.md` | 同上 | ☑ |
 | `hooks/breadcrumb.sh` | delta + `openspec/specs/normal-chat-routing/spec.md` | ☑ |
 | `hooks/prompt-intent.sh` | delta + `openspec/specs/normal-chat-routing/spec.md` | ☑ |
 | `hooks/router.sh` | delta + `openspec/specs/normal-chat-routing/spec.md` | ☑ |

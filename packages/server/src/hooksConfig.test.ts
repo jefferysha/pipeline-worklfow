@@ -203,8 +203,27 @@ describe('prompt routing bypass —— 读取、校验与字段互保', () => {
     expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
     await seedConfig(root, JSON.stringify({ version: 1, prompt_skip_keyword: 'bad value', matrix: {} }))
     expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
-    await seedConfig(root, JSON.stringify({ version: 1, prompt_skip_keyword: '', matrix: {} }))
+    await seedConfig(root, `${JSON.stringify({ version: 1, prompt_skip_keyword: '', matrix: {} }, null, 2)}\n`)
     expect(readHooksConfig(root).promptSkipKeyword).toBe('')
+  })
+
+  it('duplicate、额外字段和键顺序漂移与 Bash canonical parser 一样整体回退默认 keyword', async () => {
+    const root = await tempRoot()
+    for (const content of [
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "prompt_skip_keyword": "other-tenon",\n  "matrix": {}\n}\n',
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {\n    "router.build": false,\n    "router.build": false\n  }\n}\n',
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "extra": true,\n  "matrix": {}\n}\n',
+      '{\n  "version": 1,\n  "matrix": {},\n  "prompt_skip_keyword": "skip-tenon"\n}\n',
+    ]) {
+      await seedConfig(root, content)
+      expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
+    }
+  })
+
+  it('与 Bash parser 一样容忍每行外围空白、CRLF 和末行无换行', async () => {
+    const root = await tempRoot()
+    await seedConfig(root, '  {\r\n\t"version": 1,\r\n  "prompt_skip_keyword": "skip-tenon",\r\n\t"matrix": {}\r\n  }')
+    expect(readHooksConfig(root).promptSkipKeyword).toBe('skip-tenon')
   })
 
   it('只接受空字符串或 1-32 字符 ASCII token，不 trim', () => {

@@ -13,8 +13,8 @@
 
 ## 固定上游依据
 
-- Trellis `v0.6.9` / `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`：默认 `no-trellis`、大小写不敏感、独立边界、空字符串禁用，仅跳过当前 turn；GitHub Latest Release API 返回 404，按规则回退语义版本 tag。详见 [Trellis 报告](./2026-07-28-prompt-routing-bypass-trellis-research.md)。
-- Comet `0.4.0-beta.9` / `84038b0d6b7c185b233f0f36b294ae74dd9121d0`，当前 `master` / `2945693e4061c369be0d400ed2999a66fa87c680`：采用窄 schema、canonical 格式、原子写与失败显式化，不移植通用底层原语。详见 [Comet 报告](./2026-07-28-prompt-routing-bypass-comet-research.md)。
+- 上游参考 A `v0.6.9` / `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`：默认旁路词、大小写不敏感、独立边界、空字符串禁用，仅跳过当前 turn；GitHub Latest Release API 返回 404，按规则回退语义版本 tag。详见 [上游参考 A 报告](./2026-07-28-prompt-routing-bypass-upstream-a-research.md)。
+- 上游参考 B `0.4.0-beta.9` / `84038b0d6b7c185b233f0f36b294ae74dd9121d0`，当前 `master` / `2945693e4061c369be0d400ed2999a66fa87c680`：采用窄 schema、canonical 格式、原子写与失败显式化，不移植通用底层原语。详见 [上游参考 B 报告](./2026-07-28-prompt-routing-bypass-upstream-b-research.md)。
 
 ## 方案比较
 
@@ -100,7 +100,7 @@ Hook 运行态是确定性分支：`配置解析 → token 边界匹配 → 命�
 
 ## Assumptions / Decision Log
 
-- 选择 ASCII token，消除 Trellis Python/JS Unicode `\w` 不一致；这是兼容收缩，不承诺任意自然语言短语。
+- 选择 ASCII token，消除上游参考 A 的 Python/JS Unicode `\w` 不一致；这是兼容收缩，不承诺任意自然语言短语。
 - 接受 `/no-tenon.md` 的标点边界命中，并在 UI 说明；要求空白边界会偏离上游且增加规则认知成本。
 - 空字符串作为磁盘禁用语义，Dashboard 用开关表达，避免用户直接猜空值含义。
 - 不新增通用锁/CAS；沿用当前 Hook 配置 endpoint 的原子 last-write-wins 语义。本轮测试覆盖“切开关保留 keyword / 改 keyword 保留 matrix”。
@@ -109,7 +109,7 @@ Hook 运行态是确定性分支：`配置解析 → token 边界匹配 → 命�
 
 | 假设 | 所有者/证据 | 若为假 | 落点 |
 | --- | --- | --- | --- |
-| 用户只需单轮旁路 | 项目维护者；Trellis issue/实现 | 会出现持久禁用诉求，可能削弱治理 | 明确非目标与 UI 文案 |
+| 用户只需单轮旁路 | 项目维护者；上游参考 A 的 issue/实现 | 会出现持久禁用诉求，可能削弱治理 | 明确非目标与 UI 文案 |
 | `hooks.json` 是正确所有权 | Tenon server/Workbench 现有契约 | Track 或 workflow 会错误拥有全局策略 | ADR |
 | ASCII token 足够 | 默认词与 CLI 使用场景 | 国际化 token 需求需新版本 schema | Delta spec 限制 |
 | 旁路不应影响 review | Tenon 安全边界 | 审核可能被提示词静默绕过 | Hook 负向测试 |

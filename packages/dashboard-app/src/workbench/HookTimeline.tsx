@@ -71,6 +71,8 @@ export interface HooksConfigState {
  */
 export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
   const { t } = useT()
+  const tRef = useRef(t)
+  tRef.current = t
   const [hooks, setHooks] = useState<WbHookMeta[] | null>(null)
   const [matrix, setMatrix] = useState<Record<string, false>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -101,12 +103,14 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       .catch((err: unknown) => {
         // 加载失败不挡工作台其余区块：计数回落 '—' 占位、时序线区行内报错。
         if (cancelled) return
-        setLoadError(t('workbench.hk_load_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        setLoadError(tRef.current('workbench.hk_load_error', {
+          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
+        }))
       })
     return () => {
       cancelled = true
     }
-  }, [root, t])
+  }, [root])
 
   // 故意不 useCallback：闭包要读最新 busyKeys 守卫（WorkbenchView 脏守卫四件套的同一条
   // React 记忆化纪律——冻结的快照会放行同键并发写）。
@@ -131,7 +135,9 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
           else delete next[key]
           return next
         })
-        const msg = t('workbench.hk_toggle_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') })
+        const msg = tRef.current('workbench.hk_toggle_error', {
+          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
+        })
         if (onError) onError(msg)
         else setToggleError(msg)
       })
@@ -156,8 +162,8 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       return true
     } catch (err: unknown) {
       if (generation !== promptSkipGeneration.current) return false
-      setPromptSkipError(t('workbench.hk_bypass_save_error', {
-        msg: err instanceof Error ? err.message : t('workbench.network_error'),
+      setPromptSkipError(tRef.current('workbench.hk_bypass_save_error', {
+        msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
       }))
       return false
     } finally {

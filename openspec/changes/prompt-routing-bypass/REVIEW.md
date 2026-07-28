@@ -62,5 +62,21 @@ Oracle 双跑，均通过。全仓 `npm test` 首轮因资源竞争出现 2 个�
 相关 2 文件 / 27 用例全部通过，波动将在最终 Verify 报告中保留。Reviewer 重新覆盖完整 diff，
 结论为无 critical / high / medium。
 
+## 第二次 Verify 回退修复
+
+第二次冻结审查确认 3 个 MEDIUM 与 1 个 LOW，均已在本次 Build 中闭环：
+
+| 严重度 | 问题 | 修复 |
+| --- | --- | --- |
+| MEDIUM | 清空草稿会隐式关闭开关并禁用输入，阻断“全选删除后直接输入” | 将显式启用状态与草稿内容分离；只有用户操作 switch 才禁用控件，并补 clear → type → Enter 回归 |
+| MEDIUM | 同 root 切换语言会重跑 GET 并重置 generation/busy，可能覆盖进行中的 POST | 数据请求只依赖 root；翻译函数用 ref 读取当前 locale，语言切换不再制造请求竞态 |
+| MEDIUM | server 的通用 JSON 解析会接受 Bash canonical parser 拒绝的重复、额外或重排字段 | server 改用与 Bash 同构的 canonical parser；重复、额外、重排整体回退默认值，并补 CRLF/外层空白/无末尾换行 parity |
+| MEDIUM | `matrix` 内重复 key 仍被 Bash 接受、但被 server canonical 比较拒绝 | Bash 以 Bash 3.2 兼容的分隔集合拒绝重复 matrix key；两侧加入相同 fixture，红态 494/1 后绿态 495/0 |
+| LOW | 提示没有明确标点和路径分隔符也是边界 | 中英文文案加入标点、路径分隔符与 `path/no-tenon.md` 示例 |
+
+新测试先在旧实现上分别观察到预期失败，再修复至 server 24/24、Dashboard 18/18、hooks
+494/494。全量 `npm test` 首轮出现未改动临时目录竞态，精确复跑 32/32，通过后独立全量重跑为
+315/315 files、5406 pass、5 skip；`npm run test:web` 独立重跑为 50/50 files、975 tests。
+
 结论：SHIP。视觉 baseline 不存在，因此像素回归项为 INCONCLUSIVE；功能、响应式、键盘、错误恢复与
 WCAG AA 对比度验收通过。

@@ -43,3 +43,39 @@
 {"ts":"2026-07-28T04:26:00Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
 {"ts":"2026-07-28T04:33:42Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T04:53:49Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T04:55:31Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T04:55:31Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T04:55:31Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T04:55:31Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T04:55:31Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"79f6c7c3-1e26-4ba5-a0ec-e801f6709abe"}
+{"ts":"2026-07-28T05:06:23Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-28T05:06:23Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T05:06:24Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T05:06:31Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-2.md"}
+{"ts":"2026-07-28T05:09:23Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-2.md"}
+{"ts":"2026-07-28T05:11:37Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T05:11:37Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T04:26:00Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:11:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:11:44Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"2df8c63d-3520-4307-b8f0-a8cd0df01f00"}
+{"ts":"2026-07-28T05:23:58Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T05:23:58Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T05:23:58Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:23:58Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:23:58Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"2232e358-4fb8-4eeb-a978-f143f2ac93f6"}
+{"ts":"2026-07-28T05:29:23Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T05:29:24Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T05:29:24Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T05:29:29Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T05:29:30Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T04:26:00Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T05:29:30Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-28T05:29:30Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T05:29:30Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-28T05:29:30Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"fcd577ba-05b4-4612-b59a-0eb838a436c5"}
+{"ts":"2026-07-28T05:38:27Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T05:39:15Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

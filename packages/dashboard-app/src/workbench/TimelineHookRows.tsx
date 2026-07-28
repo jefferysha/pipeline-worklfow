@@ -99,6 +99,7 @@ export function HookRows({
 function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JSX.Element {
   const { t } = useT()
   const [draft, setDraft] = useState(config.promptSkipKeyword ?? '')
+  const [enabled, setEnabled] = useState(config.promptSkipKeyword !== null && config.promptSkipKeyword !== '')
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const lastEnabledKeyword = useRef('no-tenon')
@@ -106,11 +107,11 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
   useEffect(() => {
     if (config.promptSkipKeyword === null) return
     setDraft(config.promptSkipKeyword)
+    setEnabled(config.promptSkipKeyword !== '')
     if (config.promptSkipKeyword !== '') lastEnabledKeyword.current = config.promptSkipKeyword
   }, [config.promptSkipKeyword])
 
-  const enabled = draft !== ''
-  const valid = draft === '' || /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(draft)
+  const valid = !enabled || /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(draft)
 
   async function save(): Promise<void> {
     setSaved(false)
@@ -119,7 +120,7 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
       return
     }
     setValidationError(null)
-    if (await config.savePromptSkipKeyword(draft)) setSaved(true)
+    if (await config.savePromptSkipKeyword(enabled ? draft : '')) setSaved(true)
   }
 
   return (
@@ -143,9 +144,11 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
             setSaved(false)
             setValidationError(null)
             if (enabled) {
-              lastEnabledKeyword.current = draft
+              if (draft !== '') lastEnabledKeyword.current = draft
+              setEnabled(false)
               setDraft('')
             } else {
+              setEnabled(true)
               setDraft(lastEnabledKeyword.current)
             }
           }}
@@ -194,9 +197,9 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
           {validationError ?? config.promptSkipError}
         </p>
       )}
-      {(saved || config.promptSkipKeyword === '') && (
+      {(saved || (config.promptSkipKeyword === '' && !enabled)) && (
         <p className="mt-2 text-[11px] leading-4 text-green-d" role="status">
-          {config.promptSkipKeyword === ''
+          {!enabled
             ? t('workbench.hk_bypass_disabled')
             : t('workbench.hk_bypass_saved', { keyword: draft })}
         </p>

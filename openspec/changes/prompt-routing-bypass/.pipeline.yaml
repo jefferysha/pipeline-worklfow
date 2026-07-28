@@ -3,17 +3,17 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: in_progress
+phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-28-prompt-routing-bypass-design.md
 plan: docs/superpowers/plans/2026-07-28-prompt-routing-bypass.md
-verification_report: docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify.md
+verification_report: docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-2.md
 build_mode: direct
 isolation: worktree
 build_sha: null
 agent_review_result: fail
 codex_review_result: fail
 verify_result: fail
-branch_status: pending
+branch_status: handled
 direct_override: true
 prd_path: null
 pr_url: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T03:15:44Z
-updated_at: 2026-07-28T04:08:08Z
+updated_at: 2026-07-28T05:29:30Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: d0bb40d2-ad2d-463d-aa5e-a9bbcba83274
-pipeline_transition_sequence: 5
-pipeline_transition_head: 7adab9e7-0a36-4d14-a86b-161f637a7ebb
-pipeline_state_revision: 22
-pipeline_state_revision_id: 88e7dcd1-acb0-4bb2-a5fb-b801240e5c38
-pipeline_state_digest: c6eecd2df4ddb82f8dc432e38b92f7a2e0932497178cca2dc4337928af51a1c6
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjIsInJldmlzaW9uSWQiOiI4OGU3ZGNkMS1hY2IwLTRiYjItYTVmYi1iODAxMjQwZTVjMzgiLCJwYXlsb2FkRGlnZXN0IjoiNjk2NDc0YWU5Yjk1YzMzYWU1MDEyM2Y0NWU2MmQ3YTg5NzliMzA4OTMzOTRmN2JhZDkxNDUxMDUyMmFhNjk0OSJ9
+pipeline_transition_sequence: 9
+pipeline_transition_head: fcd577ba-05b4-4612-b59a-0eb838a436c5
+pipeline_state_revision: 36
+pipeline_state_revision_id: f7356d19-37e8-43e2-83ad-ae857e1d1749
+pipeline_state_digest: e07e2b404fe27ef28bfae6f5bf107e7839136ae5aa1252a469a30171409912b5
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzYsInJldmlzaW9uSWQiOiJmNzM1NmQxOS0zN2U4LTQzZTItODNhZC1hZTg1N2UxZDE3NDkiLCJwYXlsb2FkRGlnZXN0IjoiYWFhOTIxZTkyYmZkZmE5MTQ3YWJjZjRlNGMzMjdkYjY2OGQwYjM4ZGE5NjllNDcyYWUwNmNiNzE2M2U2MGM1NSJ9

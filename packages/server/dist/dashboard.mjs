@@ -16302,13 +16302,34 @@ var CONFIGURABLE_IDS = HOOK_METAS.filter((h) => h.configurable).map((h) => h.id)
 var PHASE_RE = /^[a-zA-Z0-9_-]+$/;
 var PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 var DEFAULT_PROMPT_SKIP_KEYWORD = "no-tenon";
+function isCanonicalHooksConfigText(text2, parsed) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+  const record2 = parsed;
+  const keys = Object.keys(record2);
+  const fullKeys = ["version", "prompt_skip_keyword", "matrix"];
+  const legacyKeys = ["version", "matrix"];
+  if (keys.length !== fullKeys.length && keys.length !== legacyKeys.length || !keys.every((key, index) => key === (keys.length === fullKeys.length ? fullKeys : legacyKeys)[index]) || record2.version !== 1) return false;
+  if (keys.length === fullKeys.length && (typeof record2.prompt_skip_keyword !== "string" || record2.prompt_skip_keyword !== "" && !PROMPT_SKIP_KEYWORD_RE.test(record2.prompt_skip_keyword))) return false;
+  if (typeof record2.matrix !== "object" || record2.matrix === null || Array.isArray(record2.matrix)) return false;
+  for (const [key, value] of Object.entries(record2.matrix)) {
+    if (value !== false || !key.includes(".") || !/^[A-Za-z0-9_.-]+$/.test(key)) return false;
+  }
+  const normalizedLines = (value) => {
+    const lines = value.replace(/\r\n?/g, "\n").split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    return lines.map((line) => line.trim()).join("\n");
+  };
+  return normalizedLines(text2) === normalizedLines(JSON.stringify(parsed, null, 2));
+}
 function hooksConfigPath(root) {
   return join33(root, ".pipeline", "hooks.json");
 }
 function readHooksConfig(root) {
+  let text2;
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync19(hooksConfigPath(root), "utf8"));
+    text2 = readFileSync19(hooksConfigPath(root), "utf8");
+    parsed = JSON.parse(text2);
   } catch {
     return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
   }
@@ -16317,7 +16338,7 @@ function readHooksConfig(root) {
   }
   const record2 = parsed;
   const rawKeyword = record2.prompt_skip_keyword;
-  const promptSkipKeyword = typeof rawKeyword === "string" && (rawKeyword === "" || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword)) ? rawKeyword : DEFAULT_PROMPT_SKIP_KEYWORD;
+  const promptSkipKeyword = isCanonicalHooksConfigText(text2, parsed) && typeof rawKeyword === "string" && (rawKeyword === "" || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword)) ? rawKeyword : DEFAULT_PROMPT_SKIP_KEYWORD;
   const rawMatrix = record2.matrix;
   const matrix = {};
   if (typeof rawMatrix === "object" && rawMatrix !== null && !Array.isArray(rawMatrix)) {
