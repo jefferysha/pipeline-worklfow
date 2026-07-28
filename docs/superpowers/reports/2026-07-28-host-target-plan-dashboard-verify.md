@@ -1,5 +1,102 @@
 # Host Target Plan Center 验证报告
 
+## 最终 Verify 结论
+
+冻结提交 `6769b6929c6d5a99fa6794c4843f397fab1f0e52` 的完整 reviewer、隔离 E2E、
+真实 Dashboard 浏览器/视觉均通过；隔离 Codex CLI 轨完成全量静态回读，但在有界窗口内未输出
+终态文本，按 Tenon 降级规则由其余完整轨承担结论。聚合结果为 **PASS**。
+
+- CRITICAL：0
+- HIGH：0
+- MEDIUM：0
+- LOW：0
+- base / merge-base：`15fe619b2885b928dd27be9668cca6b0ee903c57`
+- frozen tree：`cecf4b5b4a921d85b2a40a58c1c1bf6a553868d3`
+- `origin/main` 是冻结提交祖先；`git merge-tree --write-tree origin/main HEAD` exit 0。
+
+### repo-zero 与 Codex 轨事件
+
+冻结后第一次在真实 worktree 启动的 Codex review 试图把它看到的合法 Verify ledger 恢复为
+HEAD，并删除本次 transition/revision 文件。该进程已立即终止；它没有触碰产品源码、配置或生成物。
+恢复只通过合法的 `tenon transition host-target-plan-dashboard build-complete` 完成，未手改
+canonical state、未 backfill、未删除 marker，重新冻结的 `build_sha` 仍是同一提交。
+
+随后在独立 detached clone
+`/tmp/host-target-plan-codex-review-6769b69.7bw90n/repo` 以 read-only sandbox 重跑 Codex
+review。该轨逐项回读 CLI/server/Dashboard、测试、文档、生成物与 OpenSpec，执行
+`git diff --check`，隔离 clone 前后 clean；但因 clone 未安装 `node_modules`，其测试尝试
+不可用，且约 7 分钟有界窗口内未输出最终 PASS/FAIL 文本，因此如实按 Codex 轨异常降级，不把
+静态过程冒充完成结论。原始日志：
+`/tmp/host-target-plan-codex-review-6769b69.7bw90n/codex-review.log`，SHA-256
+`ec321fb982a020179a25aec28ea543c8da2051424661349708944f5ad9cf300b`。
+
+Reviewer、E2E 与浏览器轨均观察并记录了上述治理窗口。恢复后的完整 status fingerprint
+连续稳定；真实 worktree 的产品源码、配置、生成物 diff 与 staged digest 始终为空。四轨
+截图、trace、构建和测试产物全部位于仓库外。
+
+### 四轨聚合
+
+1. Reviewer：PASS，`C0/H0/M0/L0`。覆盖 222/222 个冻结路径：
+   OpenSpec/治理 173、docs 11、CLI 8、server 6、Dashboard 20、tools 4；166 个 JSON、
+   1 个 JSONL / 209 rows、9/9 ledger hashes、69 revision/pre-review 和 23 transition
+   记录一致。Codex setup/update 7/5、Claude 6/4、十个 adapter 5/3、严格 decoder、
+   zero-side-effect、copy-only UI、生成物与 clean-room 边界全部通过。
+2. Codex CLI：降级。隔离、read-only 的完整静态回读未报告 actionable finding，但有界窗口内
+   未形成终态文本；测试由下方独立 E2E 轨完整执行。
+3. 隔离 E2E：PASS，`C0/H0/M0/L0`。隔离 clone
+   `/tmp/tenon-host-plan-final5-verify.LPLd9k/repo`：
+   - `npm ci`、`npm run build`、`npm run typecheck:web` 全部 exit 0；
+   - CLI/server focused 5 files / 200 tests，Dashboard focused 5 files / 108 tests；
+   - `npm run test:web` 52 files / 999 tests；
+   - `npm test` 318 files / 5539 passed / 5 honest skips；
+   - bundle 31/31、npx 39/39、docs 10/10、hygiene 6/6、architecture 627 files、
+     comments、diff 与 OpenSpec strict 全部通过；
+   - built CLI catalog 为 12 个目标，24/24 plans 均 `side_effects=none`；Codex 7/5
+     且含 auth step/notice，Claude 6/4，adapter 5/3；五类非法输入全部 exit 1；
+   - 真实 server 拒绝五类非法 query 和两类混合 stdout；失败重试、success cache、
+     20 路同 key 与 25 canonical keys 并发均通过，最大 child 并发为 1；XDG 零写。
+4. 真实 Dashboard 浏览器/视觉：PASS，`C0/H0/M0/L0`。独立 clone
+   `/tmp/tenon-host-plan-final-6769-gs0iHb/repo`，真实 URL
+   `http://127.0.0.1:52429/?view=hostPlan` 已关闭。页面身份、12 targets、desktop
+   `1440×900`、mobile `390×844`、键盘与 2px focus、copy 成功/失败、loading/empty/
+   error/retry/ready、zh/en、长命令内部滚动均通过；Codex 7/5 可见 auth status/guidance，
+   Claude 6/4 与 Cursor 5/3 无 auth 泄漏；API trace 只有 GET，无执行按钮、console/page
+   errors 为 0。
+   - `browser-evidence.json` SHA-256：
+     `789f3708c23601394e0d73caa497c728b0792270f8f7ff96887314efb2e6f8be`
+   - `host-plan-variants-trace.zip` SHA-256：
+     `088fb6ae3bf85d5d82636f728c72259e7b767d647de44476285eefb029ac5c2a`
+
+### 逐文件 Spec 回读与 OpenSpec 演练
+
+`origin/main...build_sha` 的 222 个路径已全部枚举并映射到 `host-target-plan` delta spec；
+路径清单 `/tmp/host-target-plan-paths-6769b69.txt` 的 SHA-256 为
+`cb236f29a93ec23eedc7f86c8565a0a75dff0326e99f7d5cf88ded43664ddbc7`。逐组结论：
+
+| 冻结文件集合 | 数量 | 命中的 requirement | 结论 |
+| --- | ---: | --- | --- |
+| CLI source/tests/bundle | 8 | catalog、单目标计划、兼容与许可 | 通过 |
+| server source/tests/bundle | 6 | 严格只读 API、安全、缓存与并发 | 通过 |
+| Dashboard source/tests/dist | 20 | 状态、复制、无执行、i18n、a11y、响应式 | 通过 |
+| docs | 11 | 用户契约、研究与 clean-room 许可边界 | 通过 |
+| OpenSpec/治理 | 173 | 五个新增 requirements 与 phase 证据 | 通过 |
+| tools | 4 | docs/hygiene 与上游证据 allowlist | 通过 |
+
+OpenSpec `show` 与 strict validate 均 exit 0。隔离 archive/apply 演练 exit 0，按当前阶段如实提示
+22/28 tasks 已完成、6 个 Ship/Archive 未来任务未完成；成功应用 5 个 requirements，归档后的
+main spec strict valid，SHA-256
+`c7d9fcdda9242080383eaa75ec36a932168a61c202ae2e3d6d69e696d560551d`。
+真实 `openspec/specs/` 未在 Verify 写入。
+
+### 非阻断环境告警
+
+- `npm audit`：5 moderate、1 high、1 critical；本 Change 未新增依赖。
+- web suite 有 46 条既有 React `act(...)` 与 3 条 GSAP warning。
+- Vite 有既有大 chunk advisory。
+- 5 个 honest skip 来自 real-Codex 环境门和缺 Claude credential；未执行真实 setup/update。
+
+---
+
 ## 第六轮 Verify 结论
 
 冻结提交 `b1a21eecfd66283139e9388c5da33b2004e25808` 的产品、运行时、浏览器与完整代码

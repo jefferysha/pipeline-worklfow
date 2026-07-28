@@ -36,9 +36,9 @@
 
 ## 验证
 
-- [ ] 运行定向测试、typecheck:web、test:web、build、npm test 与受影响门禁。 (verify)
-- [ ] 在真实 Tenon Dashboard 完成页面身份、桌面/移动、键盘及 loading/empty/error 验收。 (verify)
-- [ ] 生成三轨验证报告并处理全部可修复失败。 (verify)
+- [x] 运行定向测试、typecheck:web、test:web、build、npm test 与受影响门禁。 (verify)
+- [x] 在真实 Tenon Dashboard 完成页面身份、桌面/移动、键盘及 loading/empty/error 验收。 (verify)
+- [x] 生成三轨验证报告并处理全部可修复失败。 (verify)
 
 ## 交付
 

@@ -207,3 +207,21 @@
 {"ts":"2026-07-28T06:36:01Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
 {"ts":"2026-07-28T06:41:25Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T06:41:35Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T06:49:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T06:49:36Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T06:49:36Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T06:49:36Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T06:49:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"9763647b-b238-4580-9ca3-953f62211dc9"}
+{"ts":"2026-07-28T06:58:34Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T06:58:39Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T06:58:44Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-28T06:58:45Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-28T06:58:45Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-28T06:58:52Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-28T06:58:52Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T06:36:01Z authority_host_session=019fa64e-0d84-7001-a18d-281d0c6d6ab5"}
+{"ts":"2026-07-28T06:59:24Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T06:59:24Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T06:59:24Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T06:59:24Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T06:59:24Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"26c63a3d-9fa4-4378-ae8e-d1c2732acc91"}
+{"ts":"2026-07-28T07:01:21Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
