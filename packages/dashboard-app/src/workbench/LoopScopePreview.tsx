@@ -54,6 +54,7 @@ export function LoopScopePreview({
     const controller = new AbortController()
     controllerRef.current = controller
     setBusy(true)
+    setResult(null)
     setError(null)
     try {
       const nextResult = await postLoopScopePreview({ root, loopId, paths, signal: controller.signal })

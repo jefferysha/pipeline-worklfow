@@ -118,8 +118,10 @@ export function decodeLoopScopePreview(value: unknown): LoopScopePreviewResponse
     || value.ok !== true
     || value.schema_version !== 1
     || typeof value.loop_id !== 'string'
-    || !['active', 'paused', 'retired'].includes(String(value.loop_status))
-    || !['L1', 'L2', 'L3'].includes(String(value.autonomy_level))
+    || typeof value.loop_status !== 'string'
+    || !['active', 'paused', 'retired'].includes(value.loop_status)
+    || typeof value.autonomy_level !== 'string'
+    || !['L1', 'L2', 'L3'].includes(value.autonomy_level)
     || typeof value.enforced_for_unattended_merge !== 'boolean'
     || !isRecord(value.summary)
     || !exactKeys(value.summary, ['total', 'allowed', 'blocked'])
@@ -176,7 +178,8 @@ export async function postLoopScopePreview(input: {
     try {
       const body = await readJson(response)
       if (isRecord(body) && typeof body.code === 'string') code = body.code
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
       // Stable HTTP status remains sufficient for a localized fallback.
     }
     const kind: LoopScopePreviewErrorKind = code === 'LOOP_SCOPE_REQUEST_INVALID' || response.status === 400

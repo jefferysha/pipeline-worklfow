@@ -137,3 +137,19 @@
 {"ts":"2026-07-28T12:22:18Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"54901e28-0296-4341-8229-398e4151814d"}
 {"ts":"2026-07-28T12:28:04Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T12:42:03Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T12:42:31Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T12:42:31Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T12:42:31Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T12:42:31Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T12:42:31Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"ecdbd05f-6d09-43d2-960e-b4ad945895dd"}
+{"ts":"2026-07-28T12:59:02Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-28T12:59:03Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T12:59:14Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T07:59:49Z authority_host_session=019fa7b7-f107-78d0-8daf-08bbdd0d9205"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T12:59:20Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T12:59:20Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"8a001d5b-bb2e-48ce-bcf0-d2359501d4d1"}
+{"ts":"2026-07-28T13:04:03Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

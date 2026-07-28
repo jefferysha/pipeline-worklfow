@@ -43,6 +43,20 @@ describe('loop scope preview API', () => {
     expect(decodeLoopScopePreview(response)).toEqual(response)
     expect(decodeLoopScopePreview({ ...response, schema_version: 2 })).toBeNull()
     expect(decodeLoopScopePreview({ ...response, surprise: true })).toBeNull()
+    for (const loop_status of [['active'], { value: 'active' }, 1]) {
+      expect(decodeLoopScopePreview({
+        ...response,
+        loop_status,
+        enforced_for_unattended_merge: false,
+      })).toBeNull()
+    }
+    for (const autonomy_level of [['L3'], { value: 'L3' }, 3]) {
+      expect(decodeLoopScopePreview({
+        ...response,
+        autonomy_level,
+        enforced_for_unattended_merge: false,
+      })).toBeNull()
+    }
     expect(decodeLoopScopePreview({ ...response, summary: { total: 3, allowed: 1, blocked: 2 } })).toBeNull()
     expect(decodeLoopScopePreview({
       ...response,
@@ -166,6 +180,18 @@ describe('loop scope preview API', () => {
       root: '/repo',
       loopId: 'release-loop',
       paths: ['src/app.ts', 'docs/guide.md'],
+    })).rejects.toBe(abort)
+  })
+
+  it('preserves an abort raised while reading an unsuccessful response body', async () => {
+    const abort = new DOMException('Aborted', 'AbortError')
+    const abortedResponse = new Response(JSON.stringify({ ok: false }), { status: 409 })
+    vi.spyOn(abortedResponse, 'json').mockRejectedValue(abort)
+    global.fetch = vi.fn(async () => abortedResponse)
+    await expect(postLoopScopePreview({
+      root: '/repo',
+      loopId: 'release-loop',
+      paths: ['src/app.ts'],
     })).rejects.toBe(abort)
   })
 

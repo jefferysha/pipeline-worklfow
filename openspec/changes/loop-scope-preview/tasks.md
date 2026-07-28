@@ -28,6 +28,7 @@
 - [x] B2g transport 返工：以 TDD 拒绝未成对 Unicode surrogate，保证路径预算不会因 JSON 转义膨胀越过公共 body 上限。
 - [x] B2h client 返工：以 TDD 将 2xx 空体与 malformed JSON 归一化为稳定 `response` 错误、保留 body-read abort 身份并重建 Dashboard bundle。
 - [x] B2i 交互返工：仅在路径策略草稿未保存时阻止预检，补齐中英文提示，并修复 light/dark placeholder 对比度。
+- [x] B2j 冻结返工：严格关闭响应枚举类型，清除重新提交期间的旧结果，并保留非 2xx body-read abort 身份。
 
 ## 验证
 

@@ -104,6 +104,28 @@ describe('LoopScopePreview', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
+  it('hides a stale successful result while a fresh revalidation is pending', async () => {
+    let resolveRevalidation: ((value: Response) => void) | undefined
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(success), { status: 200 }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveRevalidation = resolve }))
+    renderPreview()
+    fireEvent.click(screen.getByTestId('lp-scope-open'))
+    const dialog = screen.getByTestId('lp-scope-dialog')
+    fireEvent.change(within(dialog).getByTestId('lp-scope-input'), {
+      target: { value: 'src/app.ts\ndocs/guide.md' },
+    })
+    fireEvent.click(within(dialog).getByTestId('lp-scope-submit'))
+    await waitFor(() => expect(within(dialog).getByTestId('lp-scope-summary')).toBeInTheDocument())
+
+    fireEvent.click(within(dialog).getByTestId('lp-scope-submit'))
+    expect(within(dialog).getByTestId('lp-scope-loading')).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('lp-scope-summary')).toBeNull()
+
+    resolveRevalidation?.(new Response(JSON.stringify(success), { status: 200 }))
+    await waitFor(() => expect(within(dialog).getByTestId('lp-scope-summary')).toBeInTheDocument())
+  })
+
   it('renders the same complete interaction in English', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     global.fetch = vi.fn(async () => new Response(JSON.stringify(success), { status: 200 }))
