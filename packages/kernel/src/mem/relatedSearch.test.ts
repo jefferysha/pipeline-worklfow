@@ -226,6 +226,57 @@ describe('searchRelatedSessions bounded privacy contract', () => {
     expect(result.matches.map((match) => match.sessionId)).toEqual(['fallback'])
   })
 
+  test('discovers Claude sessions in a descendant project shard', () => {
+    const descendant = '/home/u/.claude/projects/-home-u-work-proj-subdir/descendant.jsonl'
+    const result = searchRelatedSessions(boundedFakeFs({
+      [descendant]: claudeSession(
+        'descendant',
+        'memory needle from a descendant project directory',
+      ).replace(`"cwd":"${PROJECT}"`, `"cwd":"${PROJECT}/subdir"`),
+    }), {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'claude',
+    })
+
+    expect(result.matches.map((match) => match.sessionId)).toEqual(['descendant'])
+  })
+
+  test('fails closed for a bounded Claude session with unknown cwd in a colliding shard', () => {
+    const collision = '/home/u/.claude/projects/-home-u-work-proj/missing-cwd.jsonl'
+    const result = searchRelatedSessions(boundedFakeFs({
+      [collision]: JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: 'private memory needle' },
+        sessionId: 'missing-cwd',
+        timestamp: '2026-07-28T12:00:00Z',
+      }),
+    }), {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'claude',
+    })
+
+    expect(result.matches).toEqual([])
+  })
+
+  test('discovers Pi sessions in a descendant default project shard', () => {
+    const descendant = '/home/u/.pi/agent/sessions/--home-u-work-proj-subdir--/2026-07-28_descendant.jsonl'
+    const result = searchRelatedSessions(boundedFakeFs({
+      [descendant]: piSession(
+        'descendant',
+        `${PROJECT}/subdir`,
+        'memory needle from a descendant project directory',
+      ),
+    }), {
+      root: PROJECT,
+      query: 'memory needle',
+      platform: 'pi',
+    })
+
+    expect(result.matches.map((match) => match.sessionId)).toEqual(['descendant'])
+  })
+
   test('excludes nested Claude subagent logs from top-level related sessions', () => {
     const parent = claudeFile('parent')
     const subagent = `${dirname(parent)}/parent/subagents/agent-sensitive.jsonl`

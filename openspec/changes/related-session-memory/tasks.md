@@ -58,6 +58,7 @@
 - [x] 惰性执行 Claude fallback，并在缺少有界 SQLite query plan 时 fail closed。 (build)
 - [x] 复用稳定 OpenCode source warning，使 query-plan 失败进入正确 Dashboard partial 状态。 (build)
 - [x] 以官方 project/session 索引约束 OpenCode 候选，批量读取 parts，并修复 exact discovery 与 canonical alias 边界。 (build)
+- [x] 在有界扫描中覆盖 Claude/Pi 后代 shard，保留旧 Claude CLI 未知 cwd 兼容，并按更新时间选取 OpenCode 候选。 (build)
 
 ## 验证
 

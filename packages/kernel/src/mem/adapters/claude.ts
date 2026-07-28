@@ -59,9 +59,10 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     return indexById
   }
 
-  const relatedRoot = f.cwd && fs.exists(claudeProjectDirFromCwd(fs, f.cwd))
-    ? claudeProjectDirFromCwd(fs, f.cwd)
-    : root
+  // A descendant cwd is stored in a sibling encoded shard rather than below the exact derived
+  // shard. Related Sessions therefore performs one bounded first-level scan from the provider root
+  // and lets the metadata scope check below admit only the requested project and its descendants.
+  const relatedRoot = root
   const sessionEntries = fs.contentReadBudget
     ? walkDirForRelatedSearch(
       fs,
@@ -111,7 +112,11 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     const updated = mtimeIso(fs, filePath)
     if (updated === undefined) continue
     if (!inRangeOverlap(created, updated, f)) continue
-    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+    if (f.cwd && cwd && !sameProject(cwd, f.cwd)) continue
+    // The existing unbudgeted CLI historically trusted the exact derived shard when old logs had
+    // no cwd in their first 100 events. Preserve that contract; the privacy-reduced Dashboard scan
+    // visits sibling shards, so unknown cwd must fail closed there.
+    if (f.cwd && !cwd && fs.contentReadBudget) continue
 
     out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
     if (fs.contentReadBudget && out.length >= f.limit) break

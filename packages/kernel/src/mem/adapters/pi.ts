@@ -114,7 +114,13 @@ function candidateFiles(fs: MemFs, f: MemFilter): string[] {
       ? normalLimit
       : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots))
     if (f.cwd && resolve(root) === resolve(defaultRoot)) {
-      pushJsonl(piProjectDirFromCwd(fs, f.cwd), fairLimit)
+      // Descendant cwd values live in sibling encoded shards, not under the exact project shard.
+      // The related-search path scans this provider root with hard discovery limits, then the
+      // metadata sameProject check admits only the requested project tree.
+      pushJsonl(
+        fs.contentReadBudget ? root : piProjectDirFromCwd(fs, f.cwd),
+        fairLimit,
+      )
     } else {
       pushJsonl(root, fairLimit)
     }

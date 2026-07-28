@@ -9784,7 +9784,6 @@ function boundedSessionSql() {
            time_created, time_updated
     FROM session
     WHERE project_id = ?
-    ORDER BY rowid DESC
     LIMIT ?
   `;
 }
@@ -9881,8 +9880,8 @@ function readBoundedSessionRows(fs, db, f, source) {
     return [];
   const sourceCapacity = Math.floor(Math.max(0, budget.perSourceBytes - source.bytesRead) / SQLITE_SESSION_METADATA_MAX_BYTES);
   const aggregateCapacity = Math.floor(Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES);
-  const limit = Math.min(requestedLimit + 1, sourceCapacity, aggregateCapacity);
-  if (limit <= 0) {
+  const scanCapacity = Math.min(sourceCapacity, aggregateCapacity);
+  if (scanCapacity <= 0) {
     if (sourceCapacity <= 0)
       budget.noteSourceTruncated();
     if (aggregateCapacity <= 0)
@@ -9895,12 +9894,14 @@ function readBoundedSessionRows(fs, db, f, source) {
   const rows = [];
   let candidateRowsTruncated = false;
   for (const [projectIndex, projectId] of projectIds.entries()) {
-    const remaining = limit - rows.length;
-    if (remaining <= 0) {
+    const remainingCapacity = scanCapacity - rows.length;
+    if (remainingCapacity <= 0) {
       candidateRowsTruncated = true;
       break;
     }
-    const params = boundedSessionParams(projectId, remaining);
+    const remainingProjects = projectIds.length - projectIndex;
+    const projectScanLimit = Math.max(1, Math.floor(remainingCapacity / remainingProjects));
+    const params = boundedSessionParams(projectId, projectScanLimit);
     if (!hasBoundedQueryPlan(db, sql, params) || !hasBoundedQueryPlan(db, hasMoreSql, [projectId, 0])) {
       budget.noteSourceUnavailable("opencode");
       source.truncated = true;
@@ -9908,9 +9909,9 @@ function readBoundedSessionRows(fs, db, f, source) {
     }
     const projectRows = Array.from(db.prepare(sql).iterate(...params));
     rows.push(...projectRows);
-    if (projectRows.length === remaining && hasMoreSessionRows(db, projectId, projectRows.length))
+    if (projectRows.length === projectScanLimit && hasMoreSessionRows(db, projectId, projectRows.length))
       candidateRowsTruncated = true;
-    if (rows.length >= limit && projectIndex < projectIds.length - 1) {
+    if (rows.length >= scanCapacity && projectIndex < projectIds.length - 1) {
       candidateRowsTruncated = true;
       break;
     }
@@ -9945,9 +9946,9 @@ function readBoundedSessionRows(fs, db, f, source) {
       budget.noteDiscoveryTruncated();
     else
       budget.noteSourceTruncated();
-    if (limit === sourceCapacity && sourceCapacity <= requestedLimit)
+    if (scanCapacity === sourceCapacity && sourceCapacity <= rows.length)
       budget.noteSourceTruncated();
-    if (limit === aggregateCapacity)
+    if (scanCapacity === aggregateCapacity && aggregateCapacity <= rows.length)
       budget.noteTotalExhausted();
     source.truncated = true;
   }
@@ -10602,7 +10603,7 @@ function claudeListSessions(fs, f) {
     indexes.set(directory, indexById);
     return indexById;
   };
-  const relatedRoot = f.cwd && fs.exists(claudeProjectDirFromCwd(fs, f.cwd)) ? claudeProjectDirFromCwd(fs, f.cwd) : root;
+  const relatedRoot = root;
   const sessionEntries = fs.contentReadBudget ? walkDirForRelatedSearch(fs, relatedRoot, (file) => file.endsWith(".jsonl"), Math.max(f.limit * 4, f.limit + 1), "claude", (directory) => relatedRoot === root && dirname4(directory) === root).map((file) => ({
     directory: dirname4(file),
     entry: { name: basename2(file), isFile: true, isDirectory: false }
@@ -10639,7 +10640,9 @@ function claudeListSessions(fs, f) {
       continue;
     if (!inRangeOverlap(created, updated, f))
       continue;
-    if (f.cwd && !sameProject(cwd, f.cwd))
+    if (f.cwd && cwd && !sameProject(cwd, f.cwd))
+      continue;
+    if (f.cwd && !cwd && fs.contentReadBudget)
       continue;
     out.push({ platform: "claude", id: sid, title, cwd, created, updated, filePath });
     if (fs.contentReadBudget && out.length >= f.limit)
@@ -10921,7 +10924,7 @@ function candidateFiles(fs, f) {
     const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.("pi");
     const fairLimit = remainingFiles === void 0 ? normalLimit : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots));
     if (f.cwd && resolve9(root) === resolve9(defaultRoot)) {
-      pushJsonl(piProjectDirFromCwd(fs, f.cwd), fairLimit);
+      pushJsonl(fs.contentReadBudget ? root : piProjectDirFromCwd(fs, f.cwd), fairLimit);
     } else {
       pushJsonl(root, fairLimit);
     }

@@ -70,7 +70,6 @@ function boundedSessionSql(): string {
            time_created, time_updated
     FROM session
     WHERE project_id = ?
-    ORDER BY rowid DESC
     LIMIT ?
   `
 }
@@ -201,8 +200,11 @@ export function readBoundedSessionRows(
   const aggregateCapacity = Math.floor(
     Math.max(0, budget.remainingBytes()) / SQLITE_SESSION_METADATA_MAX_BYTES,
   )
-  const limit = Math.min(requestedLimit + 1, sourceCapacity, aggregateCapacity)
-  if (limit <= 0) {
+  // Scan only as many indexed project rows as the hard byte budgets can account for, retaining a
+  // fixed top-K below. This avoids both a full-table/temp-sort query and the incorrect assumption
+  // that insertion rowid represents update recency.
+  const scanCapacity = Math.min(sourceCapacity, aggregateCapacity)
+  if (scanCapacity <= 0) {
     if (sourceCapacity <= 0) budget.noteSourceTruncated()
     if (aggregateCapacity <= 0) budget.noteTotalExhausted()
     source.truncated = true
@@ -214,12 +216,14 @@ export function readBoundedSessionRows(
   const rows: Json[] = []
   let candidateRowsTruncated = false
   for (const [projectIndex, projectId] of projectIds.entries()) {
-    const remaining = limit - rows.length
-    if (remaining <= 0) {
+    const remainingCapacity = scanCapacity - rows.length
+    if (remainingCapacity <= 0) {
       candidateRowsTruncated = true
       break
     }
-    const params = boundedSessionParams(projectId, remaining)
+    const remainingProjects = projectIds.length - projectIndex
+    const projectScanLimit = Math.max(1, Math.floor(remainingCapacity / remainingProjects))
+    const params = boundedSessionParams(projectId, projectScanLimit)
     if (
       !hasBoundedQueryPlan(db, sql, params)
       || !hasBoundedQueryPlan(db, hasMoreSql, [projectId, 0])
@@ -233,10 +237,10 @@ export function readBoundedSessionRows(
     )
     rows.push(...projectRows)
     if (
-      projectRows.length === remaining
+      projectRows.length === projectScanLimit
       && hasMoreSessionRows(db, projectId, projectRows.length)
     ) candidateRowsTruncated = true
-    if (rows.length >= limit && projectIndex < projectIds.length - 1) {
+    if (rows.length >= scanCapacity && projectIndex < projectIds.length - 1) {
       candidateRowsTruncated = true
       break
     }
@@ -274,8 +278,8 @@ export function readBoundedSessionRows(
   if (candidateRowsTruncated || rows.length > requestedLimit) {
     if (budget.noteDiscoveryTruncated) budget.noteDiscoveryTruncated()
     else budget.noteSourceTruncated()
-    if (limit === sourceCapacity && sourceCapacity <= requestedLimit) budget.noteSourceTruncated()
-    if (limit === aggregateCapacity) budget.noteTotalExhausted()
+    if (scanCapacity === sourceCapacity && sourceCapacity <= rows.length) budget.noteSourceTruncated()
+    if (scanCapacity === aggregateCapacity && aggregateCapacity <= rows.length) budget.noteTotalExhausted()
     source.truncated = true
   }
   return capped

@@ -79,7 +79,7 @@ describe('Claude compaction —— isCompactSummary 重置 turns（老仓 claude
     expect(res.turns.find((t) => t.text === 'early stuff')).toBeUndefined()
   })
 
-  test('项目目录名碰撞且会话缺少 cwd 时 fail closed，不泄露到请求项目', () => {
+  test('旧 CLI 保留派生项目目录中未知 cwd 会话的兼容语义', () => {
     const collision = '/home/u/.claude/projects/-home-u-work-proj/missing-cwd.jsonl'
     const rows = listMemSessions(fakeFs({
       [collision]: JSON.stringify({
@@ -91,6 +91,6 @@ describe('Claude compaction —— isCompactSummary 重置 turns（老仓 claude
       filter: { cwd: '/home/u/work/proj', platform: 'claude' },
     })
 
-    expect(rows).toEqual([])
+    expect(rows.map((row) => row.id)).toEqual(['missing-cwd'])
   })
 })
