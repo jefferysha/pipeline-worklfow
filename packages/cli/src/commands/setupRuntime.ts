@@ -41,14 +41,6 @@ export const REAL_RUNTIME_ENV: RuntimeEnv = {
   exec: nodeExecDocker,
   hostEnv: process.env,
   defaultCodexHome: join(homedir(), '.codex'),
-  canReadFile: (path) => {
-    try {
-      accessSync(path, fsConstants.R_OK)
-      return true
-    } catch {
-      return false
-    }
-  },
   resolveImage: (cwd) => readAutomationJson(cwd).image ?? 'sandcastle:local',
 }
 
@@ -153,5 +145,4 @@ export async function cmdSetupRuntime(
  *   避免 buildProgram 单测经空 sub 起真 docker 子进程）;非 dry-run 才经注入 rt 真探测（单测注入 fakeRt 仍零真 docker）。
  * --yes:跳技能安装确认位。env/rt 缺省真实现;测试注入临时 HOME / spy / fakeRt 快速回归。
  */
-import { accessSync, constants as fsConstants } from 'node:fs'
 import { homedir } from 'node:os'

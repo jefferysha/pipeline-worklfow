@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import {
+  assertCodexAuthGuidance,
   assertCodexDiscovery,
   assertDashboardHealthIdentity,
   assertExternalStateUnchanged,
@@ -26,6 +27,27 @@ import {
   snapshotExternalTenonState,
   waitForHealth,
 } from './clean-codex-install-acceptance.mjs'
+
+test('clean-install auth guidance requires every supported login route and status verification', () => {
+  const complete = [
+    'codex login',
+    'codex login --device-auth',
+    'https://platform.openai.com/api-keys',
+    'printenv OPENAI_API_KEY | codex login --with-api-key',
+    'codex login status',
+  ].join('\n')
+  assert.doesNotThrow(() => assertCodexAuthGuidance(complete))
+  assert.throws(
+    () => assertCodexAuthGuidance(complete.replace('codex login --device-auth', '')),
+    /device-auth/,
+  )
+  assert.throws(
+    () => assertCodexAuthGuidance(
+      complete.split('\n').filter((line) => line !== 'codex login').join('\n'),
+    ),
+    /codex login/,
+  )
+})
 
 const identity = {
   ok: true,

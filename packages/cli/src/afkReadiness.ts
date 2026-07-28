@@ -12,9 +12,13 @@
  * 统一按「不可用」收敛（返回 null），绝不上抛。build_hint 走 kernel 单一真相源常量（防漂移）。
  */
 import { execFile } from 'node:child_process'
-import { accessSync, constants as fsConstants } from 'node:fs'
+import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
+import {
+  codexHomeCredentialLight,
+  SANDCASTLE_BUILD_HINT,
+  type CredentialLight,
+} from '@tenon/kernel'
 
 export interface ExecResult {
   stdout: string
@@ -53,10 +57,7 @@ async function execDocker(
   }
 }
 
-export interface CredLight {
-  set: boolean
-  source?: 'host-env' | 'secrets-file' | 'default-home'
-}
+export type CredLight = CredentialLight
 
 export interface AfkReadiness {
   ok: true
@@ -83,23 +84,12 @@ function credLight(
 
 function canReadFile(path: string): boolean {
   try {
+    if (!statSync(path).isFile()) return false
     accessSync(path, fsConstants.R_OK)
     return true
   } catch {
     return false
   }
-}
-
-/** CODEX_HOME 不进 secrets store；显式 env 优先，否则只认默认 home 下可读的 auth.json。 */
-function codexHomeLight(
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  defaultCodexHome?: string,
-  canRead: (path: string) => boolean = canReadFile,
-): CredLight {
-  const v = hostEnv.CODEX_HOME
-  if (v !== undefined && v !== '') return { set: true, source: 'host-env' }
-  if (defaultCodexHome && canRead(join(defaultCodexHome, 'auth.json'))) return { set: true, source: 'default-home' }
-  return { set: false }
 }
 
 /**
@@ -135,7 +125,11 @@ export async function probeAfkReadiness(opts: {
       'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: credLight('CLAUDE_CODE_OAUTH_TOKEN', hostEnv, secretsEnv) },
       codex: {
         OPENAI_API_KEY: credLight('OPENAI_API_KEY', hostEnv, secretsEnv),
-        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile),
+        CODEX_HOME: codexHomeCredentialLight(
+          hostEnv.CODEX_HOME,
+          opts.defaultCodexHome,
+          (home) => (opts.canReadFile ?? canReadFile)(join(home, 'auth.json')),
+        ),
       },
     },
   }

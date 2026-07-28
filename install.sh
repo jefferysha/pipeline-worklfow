@@ -55,9 +55,11 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "[dry-run] Tenon --${HOST} 一步安装计划："
   case "$HOST" in
     codex)
+      echo "  preflight: require codex CLI in PATH (missing: npm install -g @openai/codex; verify: codex --version)"
       echo "  codex plugin marketplace add ${MARKETPLACE_SOURCE} --ref ${MARKETPLACE_REF}"
       echo "  codex plugin add tenon@${MARKETPLACE_NAME} --json"
       echo "  codex plugin list --json"
+      echo "  packaged setup: read-only codex login status; if needed, print ChatGPT/device/API-key guidance"
       ;;
     claude)
       echo "  claude plugin marketplace add ${MARKETPLACE_SOURCE}"
@@ -72,8 +74,38 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 
+resolve_trusted_path_command() {
+  local command_name="$1" path_entry
+  local -a path_entries=()
+  IFS=: read -r -a path_entries <<< "${PATH:-}"
+  for path_entry in "${path_entries[@]}"; do
+    [ -n "$path_entry" ] || continue
+    case "$path_entry" in
+      /*) ;;
+      *) continue ;;
+    esac
+    if [ -f "$path_entry/$command_name" ] && [ -x "$path_entry/$command_name" ]; then
+      printf '%s\n' "$path_entry/$command_name"
+      return 0
+    fi
+  done
+  return 1
+}
+
+CODEX_BIN=""
+if [ "$HOST" = codex ]; then
+  CODEX_BIN="$(resolve_trusted_path_command codex || true)"
+fi
+
+if [ "$HOST" = codex ] && [ -z "$CODEX_BIN" ]; then
+  echo "install.sh: Codex CLI was not found in PATH; no plugin or Tenon state was changed." >&2
+  echo "Install it first: npm install -g @openai/codex" >&2
+  echo "Then verify it is available: codex --version" >&2
+  exit 1
+fi
+
 find_codex_root() {
-  codex plugin list --json | node -e '
+  "$CODEX_BIN" plugin list --json | node -e '
     let text=""; process.stdin.on("data", c => { text += c }); process.stdin.on("end", () => {
       try {
         const entries = JSON.parse(text).installed ?? [];
@@ -110,8 +142,8 @@ add_marketplace() {
 
 case "$HOST" in
   codex)
-    add_marketplace codex plugin marketplace add "$MARKETPLACE_SOURCE" --ref "$MARKETPLACE_REF"
-    if ! codex plugin add "tenon@${MARKETPLACE_NAME}" --json; then
+    add_marketplace "$CODEX_BIN" plugin marketplace add "$MARKETPLACE_SOURCE" --ref "$MARKETPLACE_REF"
+    if ! "$CODEX_BIN" plugin add "tenon@${MARKETPLACE_NAME}" --json; then
       ROOT="$(find_codex_root)"
       [ -n "$ROOT" ] || {
         echo "install.sh: Codex could not install tenon and no existing installation was found." >&2

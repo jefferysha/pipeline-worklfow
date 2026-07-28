@@ -9,7 +9,8 @@ verify the managed runtime, and load its packaged hooks and Skills.
 
 - Node.js 22 or later
 - Git
-- the selected host CLI available on `PATH`
+- the selected host CLI available on `PATH`; for Codex:
+  `npm install -g @openai/codex`, then `codex --version`
 - Docker only for later AFK container execution
 
 Tenon does not require users to install mandatory Skills one by one.
@@ -39,6 +40,32 @@ The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
 `tenon setup --<host>` operation. Tenon does not guess private host
 cache locations.
+
+### Codex authentication
+
+Plugin installation and account authentication are separate. After a successful
+Codex setup, Tenon runs the read-only `codex login status` check. It never starts
+a login flow, reads `auth.json`, or records credentials.
+
+Use one route:
+
+```bash
+# A ChatGPT plan that includes Codex
+codex login
+
+# A remote or browserless terminal
+codex login --device-auth
+
+# A Platform API key created at https://platform.openai.com/api-keys
+printenv OPENAI_API_KEY | codex login --with-api-key
+
+# Verify either route
+codex login status
+```
+
+A ChatGPT-plan login does not require a separate API key. Platform API keys use
+separate usage-based billing. Keep keys out of argv, logs, and support reports.
+Authentication guidance does not block a non-interactive or CI install.
 
 This Marketplace bootstrap is the currently available one-command install.
 The repository also builds a thin npx package, but documentation will publish

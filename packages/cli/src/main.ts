@@ -33,6 +33,7 @@ import { listChangeDirs, listChanges, makeGuardCtx } from './guardContext.js'
 import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
 import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime/scope.js'
 import { enabledHostPluginIds } from './commands/plugin-host.js'
+import { probeCodexAuth } from './codexAuth.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -274,6 +275,7 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
       })).active?.source.host
       return host === 'codex' || host === 'claude' ? host : null
     },
+    codexAuthStatus: () => probeCodexAuth(),
     runVerifySkills: () =>
       new Promise((resolve) => {
         execFile(

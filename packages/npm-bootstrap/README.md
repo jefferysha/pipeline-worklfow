@@ -13,3 +13,10 @@ npm 的公共包。
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
 ```
+
+Codex CLI 缺失时先运行 `npm install -g @openai/codex`，再用 `codex --version` 验证。插件安装后，
+包内 setup 会用 `codex login status` 只读检查认证，并在 ChatGPT 方案包含 Codex 时给出
+`codex login`、
+`codex login --device-auth` 与
+`printenv OPENAI_API_KEY | codex login --with-api-key` 三条路径；API Key 在
+https://platform.openai.com/api-keys 创建，Platform API Key 按用量计费。bootstrap 不会自动登录或保存凭证。

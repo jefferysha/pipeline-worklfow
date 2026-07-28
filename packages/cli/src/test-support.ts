@@ -331,6 +331,7 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     env: () => undefined,
     statuslineConfigured: () => true,
     nativeRuntimeHost: async () => 'claude',
+    codexAuthStatus: async () => ({ state: 'authenticated' }),
     runVerifySkills: async () => ({ code: 0, output: '[verify-skills] OK' }),
     // 默认 registry 全部 bundled，空的宿主级扫描仍是 packaged workflow 的双绿基线。
     installedSkillNames: () => new Set(),

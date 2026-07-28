@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readAutomationJson } from '@tenon/automation'
-import { PREREQ_HINTS, type ProductPathInput } from '@tenon/kernel'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -21,73 +21,17 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
-import type {
-  LegacyProjectRegistryMigrationInput,
-  LegacyProjectRegistryMigrationResult,
-} from '../migration/legacy-project-registry.js'
-
-// ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
-
-export interface SetupEnv {
-  /** 用户 home（真实现 os.homedir();managed runtime 与稳定启动器定位锚）。 */
-  homeDir(): string
-  /** adapter 边界显式提供的进程环境；应用服务不得自行读取 process.env。 */
-  runtimeEnv(): NonNullable<ProductPathInput['env']>
-  /** $PLUGIN_ROOT / $CLAUDE_PLUGIN_ROOT（插件安装根）;未设 → null（dev 回退 selfPath）。 */
-  pluginRoot(): string | null
-  /** 本 CLI bundle 自身路径（真实现 resolve(process.argv[1]);pluginRoot 缺失时的 dev 回退源）。 */
-  selfPath(): string
-  /** lstat 存在性（软链本身也算存在）；用于已安装 skill / marketplace 的只读幂等检查。 */
-  pathExists(path: string): boolean
-  /** 读取用户级配置；缺失或不可读时返回 undefined，调用方不得猜测或覆盖其内容。 */
-  readText(path: string): string | undefined
-  /** 原子地区分“缺失”和“I/O 失败”；迁移事务不得从 readText 的 undefined 猜状态。 */
-  readTextState(path: string):
-    | { readonly state: 'ok'; readonly text: string }
-    | { readonly state: 'missing' }
-    | { readonly state: 'error'; readonly detail: string }
-  /** mkdir -p。 */
-  mkdirp(dir: string): void
-  /** PATH 中是否已有可执行命令；只读探测，用于全局 npm 工具的幂等差集。 */
-  commandExists(name: string): boolean
-  /** 列目录直接子项名（仅目录/软链，缺目录/无权限 → []，fail-safe）——plugin-cache 双层扫用。 */
-  listDir(dir: string): string[]
-  /** 写入受控的用户级 Tenon 配置（自动更新 opt-in）。 */
-  writeText(path: string, text: string): void
-  /** 同目录临时文件 + rename，并以独占锁串行化受控事务 receipt。 */
-  writeTextAtomic(path: string, text: string): void
-  /**
-   * setup 完成后执行一次性宿主注册表迁移。生产环境缺省走真实迁移器；
-   * 测试环境必须显式注入，避免绕过 SetupEnv 的文件系统边界。
-   */
-  migrateProjectRegistry?(
-    input: LegacyProjectRegistryMigrationInput,
-  ): Promise<LegacyProjectRegistryMigrationResult>
-  /**
-   * 跑一条命令（技能安装 / `--list` 核 id）——真实现 execFileSync 捕获退出码+stdout+stderr（不抛,非零折算 code）;
-   * 测试注入 spy（记录调用、伪造成功/失败），不起真装。dry-run 路径**绝不调用**（零执行不变量）。
-   */
-  runCommand(cmd: string, args: string[]): { code: number; stdout: string; stderr: string }
-  /**
-   * Optional native-host observation adapter. Tests and future hosts can inject the same
-   * desired-state contract without emulating a private CLI schema; production uses the built-in
-   * Codex/Claude inventory adapter when omitted.
-   */
-  managedHostReconciliation?(
-    host: 'codex' | 'claude',
-    stepId: string,
-    command: { readonly cmd: string; readonly args: readonly string[] },
-  ): {
-    readonly desired: string
-    observe(): string
-    isDesired(observation: string): boolean
-  }
-  /**
-   * 终端 y/N 确认（非 dry-run 且非 --yes 时问一次）——真实现同步读 stdin fd0;
-   * 非 TTY / 无输入 → false（fail-closed,不误装;自动化用 --yes 跳过）。测试注入定值。
-   */
-  confirm(question: string): boolean
-}
+import {
+  codexStatusSpawnPlan,
+  createCodexAuthExec,
+  probeCodexAuth,
+} from '../codexAuth.js'
+import { commandExistsOnPath, resolveCommandOnPath } from './commandExists.js'
+import {
+  nativeHostCommandBinding,
+} from './native-host-command-binding.js'
+import type { SetupEnv } from './setup-env-types.js'
+export type { SetupEnv } from './setup-env-types.js'
 
 export const REAL_SETUP_ENV: SetupEnv = {
   homeDir: () => homedir(),
@@ -133,17 +77,21 @@ export const REAL_SETUP_ENV: SetupEnv = {
     }
   },
   mkdirp: (dir) => { mkdirSync(dir, { recursive: true }) },
-  commandExists: (name) => {
-    for (const dir of (process.env.PATH ?? '').split(':')) {
-      if (dir === '') continue
-      try {
-        accessSync(join(dir, name), fsConstants.X_OK)
-        return true
-      } catch {
-        // 继续检查下一个 PATH 目录。
-      }
-    }
-    return false
+  commandExists: (name) => commandExistsOnPath(name),
+  resolveHostCommand: (host) => {
+    const executable = resolveCommandOnPath(host, {
+      requireAbsolutePathEntries: true,
+    })
+    return executable === undefined ? undefined : nativeHostCommandBinding(executable)
+  },
+  codexAuthStatus: (codexExecutable) => {
+    if (codexExecutable === undefined) return probeCodexAuth()
+    const plan = codexStatusSpawnPlan(
+      process.platform,
+      process.env,
+      () => codexExecutable,
+    )
+    return probeCodexAuth(createCodexAuthExec({ plan }))
   },
   listDir: (dir) => {
     try {
@@ -171,9 +119,13 @@ export const REAL_SETUP_ENV: SetupEnv = {
       }
     }
   },
-  runCommand: (cmd, args) => {
+  runCommand: (cmd, args, options) => {
     try {
-      const stdout = execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+      const stdout = execFileSync(cmd, args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
+      })
       return { code: 0, stdout, stderr: '' }
     } catch (e) {
       // execFileSync 非零退出会抛;把 status/stdout/stderr 折算回结构（不抛,逐条容错的前提）
@@ -227,9 +179,13 @@ export function printPlanSkeleton(deps: CliDeps, opts: SetupOpts, host: Pipeline
   deps.io.out(`[setup] ${hostFlag(host)} 全功能就绪引导 —— 计划骨架`)
   deps.io.out('  1. 宿主安装:只验证/部署所选宿主，不会同时改动其他宿主。')
   deps.io.out('  2. 稳定入口:把已校验 release 原子发布到本机 runtime，再写 tenon / tenon-hook 启动器。')
-  deps.io.out('  3. 内置技能:验证本插件随包的 default workflow skills；不拉第三方 marketplace。')
-  deps.io.out('  4. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 tenon setup runtime）。')
-  deps.io.out('  5. 全功能红黄绿汇总:安装后运行 tenon doctor --json 获取全机汇总。')
+  if (host === 'codex') {
+    deps.io.out('  3. Codex 认证:Codex 安装会检查 `codex login status`，未登录时同时给出 ChatGPT 方案与 API Key 路径。')
+  }
+  const hostStepOffset = host === 'codex' ? 1 : 0
+  deps.io.out(`  ${3 + hostStepOffset}. 内置技能:验证本插件随包的 default workflow skills；不拉第三方 marketplace。`)
+  deps.io.out(`  ${4 + hostStepOffset}. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 tenon setup runtime）。`)
+  deps.io.out(`  ${5 + hostStepOffset}. 全功能红黄绿汇总:安装后运行 tenon doctor --json 获取全机汇总。`)
   if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,不发布 runtime、不写任何文件）')
 }
 

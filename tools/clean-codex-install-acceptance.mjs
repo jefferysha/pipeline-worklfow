@@ -22,6 +22,26 @@ export function publicInstallUrl(ref) {
   }
   return `https://raw.githubusercontent.com/jefferysha/tenon/${ref}/install.sh`
 }
+
+export function assertCodexAuthGuidance(output, label = 'install output') {
+  const exactCommands = [
+    'codex login',
+    'codex login --device-auth',
+    'printenv OPENAI_API_KEY | codex login --with-api-key',
+    'codex login status',
+  ]
+  for (const expected of exactCommands) {
+    const present = output.split(/\r?\n/u).some((line) => {
+      const trimmed = line.trim()
+      return trimmed === expected || trimmed.includes(`\`${expected}\``)
+    })
+    if (!present) throw new Error(`${label} is missing ${expected}`)
+  }
+  const apiKeysUrl = 'https://platform.openai.com/api-keys'
+  if (!output.includes(apiKeysUrl)) {
+    throw new Error(`${label} is missing ${apiKeysUrl}`)
+  }
+}
 const REQUIRED_HOOK_EVENTS = new Set([
   'sessionStart',
   'userPromptSubmit',
@@ -507,7 +527,7 @@ async function installLocal(repoRoot, env, cwd) {
   }
   const current = await inventory(env, cwd)
   const root = installedTenonRoot(current)
-  await runCommand(
+  return runCommand(
     process.execPath,
     [join(root, 'packages/cli/dist/tenon.mjs'), 'setup', '--codex', '--yes'],
     { cwd, env, timeoutMs: 120_000 },
@@ -520,7 +540,7 @@ async function installPublic(env, cwd, ref) {
     env,
     timeoutMs: 60_000,
   })
-  await runCommand('bash', ['-s', '--', '--codex', '--ref', ref], {
+  return runCommand('bash', ['-s', '--', '--codex', '--ref', ref], {
     cwd,
     env,
     input: download.stdout,
@@ -852,7 +872,14 @@ export async function main(argv = process.argv.slice(2)) {
       ? () => installLocal(repoRoot, env, work)
       : () => installPublic(env, work, publicRef)
     installationStarted = true
-    await install()
+    const firstInstall = await install()
+    assertCodexAuthGuidance(`${firstInstall.stdout}\n${firstInstall.stderr}`, 'first install output')
+    try {
+      await lstat(join(codexHome, 'auth.json'))
+      throw new Error('first install created an unexpected Codex auth.json')
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
     const registerOwnedHealth = (health) => {
       ownedHealth = preserveOwnedDashboardIdentity(ownedHealth, health)
     }
@@ -864,7 +891,14 @@ export async function main(argv = process.argv.slice(2)) {
     )
     await runCodexDiscovery(env, work)
 
-    await install()
+    const secondInstall = await install()
+    assertCodexAuthGuidance(`${secondInstall.stdout}\n${secondInstall.stderr}`, 'repeated install output')
+    try {
+      await lstat(join(codexHome, 'auth.json'))
+      throw new Error('repeated install created an unexpected Codex auth.json')
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
     const second = await assertInstalledRuntime(
       env,
       work,
