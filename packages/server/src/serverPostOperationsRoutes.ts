@@ -13,7 +13,9 @@ import {
   loadRegistry,
   loadTrackRegistry,
   loadWorkflow,
+  nodeLoopIoStrict,
   requireTrack,
+  RegistryReadError,
   stateStorageExistsSync,
   validateWorkflow,
   validateWorkflowTrackReferences,
@@ -50,7 +52,9 @@ import { validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
 import {
   buildLoopScopePreviewResponse,
   LoopScopePreviewInputError,
+  LoopScopePreviewRootUntrustedError,
   parseLoopScopePreviewRequest,
+  readWithLoopScopeRootTrust,
 } from './loopScopePreview.js'
 import { applyLoopsUpdate, type LoopActivationValidator } from './loops.js'
 import { parsePipelineCliJson, type PipelineCliRunner } from './operations.js'
@@ -96,13 +100,21 @@ export async function handlePostOperationsRoutes(
   function isWorkflowName(name: string): boolean {
     return name !== '' && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name)
   }
+  function sendLoopScopeUntrustedRoot(): void {
+    sendJson(res, 403, {
+      ok: false,
+      code: 'LOOP_SCOPE_ROOT_UNTRUSTED',
+      error: 'root 信任锚已失效',
+    })
+  }
     if (path === '/api/loops/scope-preview') {
+      const raw = await readJsonBody(req)
       let input
       try {
-        input = parseLoopScopePreviewRequest(await readJsonBody(req))
+        input = parseLoopScopePreviewRequest(raw)
       } catch (error) {
-        const message = error instanceof LoopScopePreviewInputError ? error.message : '请求体不是有效 JSON'
-        return sendJson(res, 400, { ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID', error: message })
+        if (!(error instanceof LoopScopePreviewInputError)) throw error
+        return sendJson(res, 400, { ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID', error: error.message })
       }
       const rootCheck = workflowRootForRequest(input.root)
       if (!rootCheck.ok) {
@@ -112,49 +124,37 @@ export async function handlePostOperationsRoutes(
           error: rootCheck.error,
         })
       }
+      let loaded
       try {
-        assertWorkflowRootAnchor(rootCheck.anchor)
-      } catch {
-        return sendJson(res, 403, {
+        loaded = readWithLoopScopeRootTrust(
+          () => assertWorkflowRootAnchor(rootCheck.anchor),
+          () => loadRegistry(rootCheck.anchor.path, nodeLoopIoStrict),
+        )
+      } catch (error) {
+        if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot()
+        if (!(error instanceof RegistryReadError)) throw error
+        return sendJson(res, 500, {
           ok: false,
-          code: 'LOOP_SCOPE_ROOT_UNTRUSTED',
-          error: 'root 信任锚已失效',
+          code: 'LOOP_SCOPE_REGISTRY_READ_FAILED',
+          error: 'Loop registry 读取失败',
         })
       }
-      try {
-        const loaded = loadRegistry(rootCheck.anchor.path)
-        if (loaded.data === null || loaded.errors.length > 0) {
-          return sendJson(res, 409, {
-            ok: false,
-            code: 'LOOP_SCOPE_REGISTRY_INVALID',
-            error: 'Loop registry 无法形成可信策略',
-          })
-        }
-        const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId)
-        if (loop === undefined) {
-          return sendJson(res, 404, {
-            ok: false,
-            code: 'LOOP_SCOPE_LOOP_NOT_FOUND',
-            error: 'Loop 不存在',
-          })
-        }
-        try {
-          assertWorkflowRootAnchor(rootCheck.anchor)
-        } catch {
-          return sendJson(res, 403, {
-            ok: false,
-            code: 'LOOP_SCOPE_ROOT_UNTRUSTED',
-            error: 'root 信任锚已失效',
-          })
-        }
-        return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob))
-      } catch {
+      if (loaded.data === null || loaded.errors.length > 0) {
         return sendJson(res, 409, {
           ok: false,
           code: 'LOOP_SCOPE_REGISTRY_INVALID',
           error: 'Loop registry 无法形成可信策略',
         })
       }
+      const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId)
+      if (loop === undefined) {
+        return sendJson(res, 404, {
+          ok: false,
+          code: 'LOOP_SCOPE_LOOP_NOT_FOUND',
+          error: 'Loop 不存在',
+        })
+      }
+      return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob))
     }
 
     if (path === '/api/router/preview') {

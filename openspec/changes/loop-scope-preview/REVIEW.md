@@ -26,6 +26,17 @@ Date: 2026-07-28
 - English: inspected the entry, explanatory copy, field label, limits, and actions after switching language through Dashboard settings.
 - Result cards preserve path readability, status color contrast, and compact summary hierarchy in both themes.
 
+### Loop 4 — standards and specification review
+
+- Rejected Windows drive-letter and backslash absolute forms in both the API UX parser and authoritative server parser.
+- Moved UX parsing and protocol limits out of the component into the typed API adapter.
+- Added `AbortController` propagation and close/unmount cancellation; stale results remain generation-guarded.
+- Replaced domain-type aliases in the HTTP response with an explicit DTO conversion.
+- Narrowed request and registry error handling, separated registry syntax (409) from registry I/O (500), and removed duplicate trust-anchor response construction.
+- Mapped stable server codes and client failure kinds to complete Chinese and English messages; raw server-localized text is no longer rendered.
+- Added regression tests for Windows paths, cancellation, English errors, stable code mapping, and registry I/O failure.
+- Added explicit before-read and after-read trust-anchor failure coverage; both stages preserve the cause and map to the same stable 403 response.
+
 ## Acceptance environment
 
 - Dashboard URL: `http://127.0.0.1:19765/`
@@ -38,3 +49,5 @@ Date: 2026-07-28
 ## Review result
 
 PASS. No critical, high, or medium UI findings remain.
+
+The final two-axis Standards/Spec re-review reported no remaining actionable findings.

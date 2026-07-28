@@ -1,39 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleAlert, ScanSearch, ShieldCheck, ShieldX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { postLoopScopePreview, type LoopScopePreviewResponse } from '../api/loopScopePreview'
+import {
+  LoopScopePreviewError,
+  parseLoopScopePreviewPaths,
+  postLoopScopePreview,
+  type LoopScopePreviewErrorKind,
+  type LoopScopePreviewResponse,
+} from '../api/loopScopePreview'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import { ERR_BLOCK_TW, WB_TW } from './loopCardModel'
-
-const MAX_PATHS = 100
-const MAX_PATH_BYTES = 1024
-const MAX_TOTAL_BYTES = 32768
-
-function previewPaths(raw: string): string[] | null {
-  const paths = raw.split(/\r?\n/).filter((path) => path !== '')
-  if (paths.length === 0 || paths.length > MAX_PATHS) return null
-  let total = 0
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const path of paths) {
-    const segments = path.split('/')
-    const invalid = path.includes('\0')
-      || path.includes('\\')
-      || path.startsWith('/')
-      || path.endsWith('/')
-      || segments.some((segment) => segment === '' || segment === '.' || segment === '..')
-    const bytes = new TextEncoder().encode(path).length
-    total += bytes
-    if (invalid || bytes > MAX_PATH_BYTES || total > MAX_TOTAL_BYTES) return null
-    if (!seen.has(path)) {
-      seen.add(path)
-      result.push(path)
-    }
-  }
-  return result
-}
 
 export function LoopScopePreview({ root, loopId }: { root: string; loopId: string }): JSX.Element {
   const { t } = useT()
@@ -41,13 +19,18 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
   const [raw, setRaw] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<LoopScopePreviewResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoopScopePreviewErrorKind | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestRef = useRef(0)
-  const paths = previewPaths(raw)
+  const controllerRef = useRef<AbortController | null>(null)
+  const paths = parseLoopScopePreviewPaths(raw)
+
+  useEffect(() => () => controllerRef.current?.abort(), [])
 
   const close = (): void => {
     requestRef.current += 1
+    controllerRef.current?.abort()
+    controllerRef.current = null
     setOpen(false)
     setRaw('')
     setBusy(false)
@@ -59,18 +42,25 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
     if (paths === null || busy) return
     const request = requestRef.current + 1
     requestRef.current = request
+    controllerRef.current?.abort()
+    const controller = new AbortController()
+    controllerRef.current = controller
     setBusy(true)
     setError(null)
     try {
-      const nextResult = await postLoopScopePreview({ root, loopId, paths })
+      const nextResult = await postLoopScopePreview({ root, loopId, paths, signal: controller.signal })
       if (requestRef.current !== request) return
       setResult(nextResult)
     } catch (nextError) {
       if (requestRef.current !== request) return
+      if (nextError instanceof DOMException && nextError.name === 'AbortError') return
       setResult(null)
-      setError(nextError instanceof Error ? nextError.message : String(nextError))
+      setError(nextError instanceof LoopScopePreviewError ? nextError.kind : 'response')
     } finally {
-      if (requestRef.current === request) setBusy(false)
+      if (requestRef.current === request) {
+        controllerRef.current = null
+        setBusy(false)
+      }
     }
   }
 
@@ -147,7 +137,7 @@ export function LoopScopePreview({ root, loopId }: { root: string; loopId: strin
         {error && (
           <div className={cn(ERR_BLOCK_TW, 'mt-3')} data-testid="lp-scope-error" data-tone="error" role="alert">
             <CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />
-            {error}
+            {t(`workbench.lp_scope_error_${error}`)}
             <button type="button" className="ml-2 font-bold underline underline-offset-2" data-testid="lp-scope-retry" onClick={() => void submit()}>
               {t('workbench.lp_scope_retry')}
             </button>

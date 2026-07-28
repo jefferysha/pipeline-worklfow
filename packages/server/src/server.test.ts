@@ -1743,6 +1743,11 @@ describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', 
     }, auth)
     expect(invalid.status).toBe(400)
     expect(invalid.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const windowsAbsolute = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['C:/Windows/system32'],
+    }, auth)
+    expect(windowsAbsolute.status).toBe(400)
+    expect(windowsAbsolute.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
 
     const unknownRoot = await reqPost(h.port, '/api/loops/scope-preview', {
       root: '/tmp/not-registered', loop_id: 'build-loop', paths: ['src/app.ts'],
@@ -1764,6 +1769,23 @@ describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', 
     }, auth)
     expect(invalidRegistry.status).toBe(409)
     expect(invalidRegistry.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REGISTRY_INVALID' })
+  })
+
+  it('将 registry I/O 故障与无效策略分开，返回稳定的 500 错误码', async () => {
+    const h = await start()
+    const pipelineDir = join(h.root, '.pipeline')
+    const registryPath = join(pipelineDir, 'loops.yaml')
+    await mkdir(pipelineDir, { recursive: true })
+    await mkdir(registryPath)
+    const response = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(response.status).toBe(500)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'LOOP_SCOPE_REGISTRY_READ_FAILED',
+      error: 'Loop registry 读取失败',
+    })
   })
 
   it('沿用公共 POST 的 token 与 JSON content-type 安全闸', async () => {

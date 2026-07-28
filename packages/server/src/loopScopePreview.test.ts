@@ -3,7 +3,9 @@ import type { LoopEntry } from '@tenon/kernel'
 import {
   buildLoopScopePreviewResponse,
   LoopScopePreviewInputError,
+  LoopScopePreviewRootUntrustedError,
   parseLoopScopePreviewRequest,
+  readWithLoopScopeRootTrust,
 } from './loopScopePreview.js'
 
 const loop = (overrides: Partial<LoopEntry> = {}): LoopEntry => ({
@@ -34,6 +36,29 @@ const matches = (path: string, glob: string): boolean => {
 }
 
 describe('Loop scope preview request', () => {
+  it('fails closed when the root trust anchor is stale before or after the registry read', () => {
+    let reads = 0
+    expect(() => readWithLoopScopeRootTrust(
+      () => { throw new Error('stale before read') },
+      () => { reads += 1; return 'registry' },
+    )).toThrow(expect.objectContaining<Partial<LoopScopePreviewRootUntrustedError>>({
+      stage: 'before-read',
+    }))
+    expect(reads).toBe(0)
+
+    let assertions = 0
+    expect(() => readWithLoopScopeRootTrust(
+      () => {
+        assertions += 1
+        if (assertions === 2) throw new Error('stale after read')
+      },
+      () => { reads += 1; return 'registry' },
+    )).toThrow(expect.objectContaining<Partial<LoopScopePreviewRootUntrustedError>>({
+      stage: 'after-read',
+    }))
+    expect(reads).toBe(1)
+  })
+
   it('accepts only closed, canonical, bounded paths and deduplicates in first-seen order', () => {
     expect(parseLoopScopePreviewRequest({
       root: '/repo',
@@ -48,6 +73,8 @@ describe('Loop scope preview request', () => {
     for (const input of [
       { root: '/repo', loop_id: 'release-loop', paths: ['../secret'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['/etc/passwd'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['C:/Windows/system32'] },
+      { root: '/repo', loop_id: 'release-loop', paths: ['C:\\Windows\\system32'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src\\app.ts'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src//app.ts'] },
       { root: '/repo', loop_id: 'release-loop', paths: ['src/app.ts/'] },

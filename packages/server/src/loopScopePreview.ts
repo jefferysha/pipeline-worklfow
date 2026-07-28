@@ -14,6 +14,17 @@ export class LoopScopePreviewInputError extends Error {
   override readonly name = 'LoopScopePreviewInputError'
 }
 
+export class LoopScopePreviewRootUntrustedError extends Error {
+  override readonly name = 'LoopScopePreviewRootUntrustedError'
+
+  constructor(
+    readonly stage: 'before-read' | 'after-read',
+    readonly cause: unknown,
+  ) {
+    super(`Loop scope root trust failed ${stage}`)
+  }
+}
+
 export interface LoopScopePreviewRequest {
   readonly root: string
   readonly loopId: string
@@ -24,8 +35,31 @@ function invalid(message: string): never {
   throw new LoopScopePreviewInputError(message)
 }
 
+export function readWithLoopScopeRootTrust<T>(
+  assertTrusted: () => void,
+  read: () => T,
+): T {
+  try {
+    assertTrusted()
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError('before-read', error)
+  }
+  const result = read()
+  try {
+    assertTrusted()
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError('after-read', error)
+  }
+  return result
+}
+
 function isCanonicalRelativePath(path: string): boolean {
-  if (path === '' || path.includes('\0') || path.includes('\\') || path.startsWith('/') || path.endsWith('/')) return false
+  if (path === ''
+    || path.includes('\0')
+    || path.includes('\\')
+    || path.startsWith('/')
+    || path.endsWith('/')
+    || /^[A-Za-z]:/.test(path)) return false
   const segments = path.split('/')
   if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) return false
   return posix.normalize(path) === path
@@ -62,11 +96,18 @@ export interface LoopScopePreviewResponse {
   readonly ok: true
   readonly schema_version: 1
   readonly loop_id: string
-  readonly loop_status: LoopEntry['status']
-  readonly autonomy_level: LoopEntry['autonomy_level']
+  readonly loop_status: 'active' | 'paused' | 'retired'
+  readonly autonomy_level: 'L1' | 'L2' | 'L3'
   readonly enforced_for_unattended_merge: boolean
   readonly summary: { readonly total: number; readonly allowed: number; readonly blocked: number }
-  readonly items: ReturnType<typeof explainConstraintPaths>
+  readonly items: readonly LoopScopePreviewItem[]
+}
+
+export interface LoopScopePreviewItem {
+  readonly path: string
+  readonly verdict: 'allowed' | 'blocked'
+  readonly reason: 'allowlist' | 'path-denied' | 'path-outside-allowlist'
+  readonly matched_pattern: string | null
 }
 
 export function buildLoopScopePreviewResponse(
@@ -74,7 +115,17 @@ export function buildLoopScopePreviewResponse(
   paths: readonly string[],
   matches: (path: string, pattern: string) => boolean,
 ): LoopScopePreviewResponse {
-  const items = explainConstraintPaths(compileConstraintPolicy(loop), 'merge', paths, matches)
+  const items: LoopScopePreviewItem[] = explainConstraintPaths(
+    compileConstraintPolicy(loop),
+    'merge',
+    paths,
+    matches,
+  ).map((item) => ({
+    path: item.path,
+    verdict: item.verdict,
+    reason: item.reason,
+    matched_pattern: item.matched_pattern,
+  }))
   const allowed = items.filter((item) => item.verdict === 'allowed').length
   return {
     ok: true,

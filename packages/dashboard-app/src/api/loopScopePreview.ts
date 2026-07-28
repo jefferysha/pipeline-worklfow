@@ -1,4 +1,25 @@
-import { ApiError, getToken, isRecord, readJson, throwListApiError, wrapNetwork } from './transport'
+import { ApiError, getToken, isRecord, readJson } from './transport'
+
+const MAX_PATHS = 100
+const MAX_PATH_BYTES = 1024
+const MAX_TOTAL_BYTES = 32768
+
+export type LoopScopePreviewErrorKind =
+  | 'network' | 'invalid' | 'untrusted' | 'missing' | 'registry' | 'registry_read' | 'response'
+
+export class LoopScopePreviewError extends ApiError {
+  readonly cause?: unknown
+
+  constructor(
+    public readonly kind: LoopScopePreviewErrorKind,
+    status?: number,
+    cause?: unknown,
+  ) {
+    super(`Loop scope preview failed: ${kind}`, status)
+    this.name = 'LoopScopePreviewError'
+    this.cause = cause
+  }
+}
 
 export type LoopScopePreviewReason = 'allowlist' | 'path-denied' | 'path-outside-allowlist'
 
@@ -18,6 +39,31 @@ export interface LoopScopePreviewResponse {
   enforced_for_unattended_merge: boolean
   summary: { total: number; allowed: number; blocked: number }
   items: LoopScopePreviewItem[]
+}
+
+export function parseLoopScopePreviewPaths(raw: string): string[] | null {
+  const paths = raw.split(/\r?\n/).filter((path) => path !== '')
+  if (paths.length === 0 || paths.length > MAX_PATHS) return null
+  let total = 0
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const path of paths) {
+    const segments = path.split('/')
+    const invalid = path.includes('\0')
+      || path.includes('\\')
+      || path.startsWith('/')
+      || path.endsWith('/')
+      || /^[A-Za-z]:/.test(path)
+      || segments.some((segment) => segment === '' || segment === '.' || segment === '..')
+    const bytes = new TextEncoder().encode(path).length
+    total += bytes
+    if (invalid || bytes > MAX_PATH_BYTES || total > MAX_TOTAL_BYTES) return null
+    if (!seen.has(path)) {
+      seen.add(path)
+      result.push(path)
+    }
+  }
+  return result
 }
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -86,6 +132,7 @@ export async function postLoopScopePreview(input: {
   root: string
   loopId: string
   paths: readonly string[]
+  signal?: AbortSignal
 }): Promise<LoopScopePreviewResponse> {
   let response: Response
   try {
@@ -93,12 +140,34 @@ export async function postLoopScopePreview(input: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
       body: JSON.stringify({ root: input.root, loop_id: input.loopId, paths: input.paths }),
+      signal: input.signal,
     })
   } catch (error) {
-    wrapNetwork(error)
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new LoopScopePreviewError('network', undefined, error)
   }
-  if (!response.ok) await throwListApiError(response, 'Loop 路径策略预检失败')
+  if (!response.ok) {
+    let code = ''
+    try {
+      const body = await readJson(response)
+      if (isRecord(body) && typeof body.code === 'string') code = body.code
+    } catch {
+      // Stable HTTP status remains sufficient for a localized fallback.
+    }
+    const kind: LoopScopePreviewErrorKind = code === 'LOOP_SCOPE_REQUEST_INVALID' || response.status === 400
+      ? 'invalid'
+      : code === 'LOOP_SCOPE_ROOT_UNTRUSTED' || response.status === 403
+        ? 'untrusted'
+        : code === 'LOOP_SCOPE_ROOT_NOT_FOUND' || code === 'LOOP_SCOPE_LOOP_NOT_FOUND' || response.status === 404
+          ? 'missing'
+          : code === 'LOOP_SCOPE_REGISTRY_INVALID' || response.status === 409
+            ? 'registry'
+            : code === 'LOOP_SCOPE_REGISTRY_READ_FAILED'
+              ? 'registry_read'
+            : 'response'
+    throw new LoopScopePreviewError(kind, response.status)
+  }
   const decoded = decodeLoopScopePreview(await readJson(response))
-  if (decoded === null) throw new ApiError('Loop 路径策略预检响应形状无效', response.status)
+  if (decoded === null) throw new LoopScopePreviewError('response', response.status)
   return decoded
 }

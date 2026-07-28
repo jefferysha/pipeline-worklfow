@@ -25,8 +25,8 @@
 
 ## 验证
 
-- [ ] 运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
-- [ ] 在真实 Tenon Dashboard 对桌面/移动、明暗主题、空/加载/允许/拒绝/错误重试和键盘路径完成浏览器验收。
+- [x] 运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
+- [x] 在真实 Tenon Dashboard 对桌面/移动、明暗主题、空/加载/允许/拒绝/错误重试和键盘路径完成浏览器验收。
 
 ## 交付
 

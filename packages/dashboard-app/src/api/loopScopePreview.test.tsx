@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { decodeLoopScopePreview, postLoopScopePreview } from './loopScopePreview'
+import {
+  decodeLoopScopePreview,
+  LoopScopePreviewError,
+  parseLoopScopePreviewPaths,
+  postLoopScopePreview,
+} from './loopScopePreview'
 
 const response = {
   ok: true,
@@ -18,6 +23,15 @@ const response = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('loop scope preview API', () => {
+  it('keeps UX parsing in the protocol adapter and rejects Windows absolute paths', () => {
+    expect(parseLoopScopePreviewPaths('src/app.ts\nsrc/app.ts\ndocs/guide.md')).toEqual([
+      'src/app.ts',
+      'docs/guide.md',
+    ])
+    expect(parseLoopScopePreviewPaths('C:/Windows/system32')).toBeNull()
+    expect(parseLoopScopePreviewPaths('C:\\Windows\\system32')).toBeNull()
+  })
+
   it('decodes only a complete, internally consistent closed response', () => {
     expect(decodeLoopScopePreview(response)).toEqual(response)
     expect(decodeLoopScopePreview({ ...response, schema_version: 2 })).toBeNull()
@@ -46,11 +60,26 @@ describe('loop scope preview API', () => {
         loop_id: 'release-loop',
         paths: ['src/app.ts', 'docs/guide.md'],
       }),
+      signal: undefined,
     })
 
     global.fetch = vi.fn(async () => new Response(JSON.stringify({ ...response, items: [] }), { status: 200 }))
     await expect(postLoopScopePreview({
       root: '/repo', loopId: 'release-loop', paths: ['src/app.ts'],
-    })).rejects.toThrow(/响应形状无效/)
+    })).rejects.toMatchObject({ kind: 'response', status: 200 })
+  })
+
+  it('maps stable server codes without exposing server-localized text', async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({
+      ok: false,
+      code: 'LOOP_SCOPE_REGISTRY_INVALID',
+      error: '服务端中文细节',
+    }), { status: 409 }))
+    await expect(postLoopScopePreview({
+      root: '/repo', loopId: 'release-loop', paths: ['src/app.ts'],
+    })).rejects.toEqual(expect.objectContaining<Partial<LoopScopePreviewError>>({
+      kind: 'registry',
+      status: 409,
+    }))
   })
 })

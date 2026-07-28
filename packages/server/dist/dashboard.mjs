@@ -19265,11 +19265,35 @@ var MAX_TOTAL_PATH_BYTES = 32768;
 var LoopScopePreviewInputError = class extends Error {
   name = "LoopScopePreviewInputError";
 };
+var LoopScopePreviewRootUntrustedError = class extends Error {
+  constructor(stage, cause) {
+    super(`Loop scope root trust failed ${stage}`);
+    this.stage = stage;
+    this.cause = cause;
+  }
+  stage;
+  cause;
+  name = "LoopScopePreviewRootUntrustedError";
+};
 function invalid(message) {
   throw new LoopScopePreviewInputError(message);
 }
+function readWithLoopScopeRootTrust(assertTrusted, read) {
+  try {
+    assertTrusted();
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError("before-read", error);
+  }
+  const result = read();
+  try {
+    assertTrusted();
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError("after-read", error);
+  }
+  return result;
+}
 function isCanonicalRelativePath(path7) {
-  if (path7 === "" || path7.includes("\0") || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/")) return false;
+  if (path7 === "" || path7.includes("\0") || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/") || /^[A-Za-z]:/.test(path7)) return false;
   const segments = path7.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return false;
   return posix2.normalize(path7) === path7;
@@ -19300,7 +19324,17 @@ function parseLoopScopePreviewRequest(input) {
   return { root: body.root, loopId: body.loop_id.trim(), paths };
 }
 function buildLoopScopePreviewResponse(loop, paths, matches) {
-  const items = explainConstraintPaths(compileConstraintPolicy(loop), "merge", paths, matches);
+  const items = explainConstraintPaths(
+    compileConstraintPolicy(loop),
+    "merge",
+    paths,
+    matches
+  ).map((item2) => ({
+    path: item2.path,
+    verdict: item2.verdict,
+    reason: item2.reason,
+    matched_pattern: item2.matched_pattern
+  }));
   const allowed = items.filter((item2) => item2.verdict === "allowed").length;
   return {
     ok: true,
@@ -19350,13 +19384,21 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
   function isWorkflowName4(name) {
     return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
   }
+  function sendLoopScopeUntrustedRoot() {
+    sendJson(res, 403, {
+      ok: false,
+      code: "LOOP_SCOPE_ROOT_UNTRUSTED",
+      error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
+    });
+  }
   if (path7 === "/api/loops/scope-preview") {
+    const raw = await readJsonBody(req);
     let input;
     try {
-      input = parseLoopScopePreviewRequest(await readJsonBody(req));
+      input = parseLoopScopePreviewRequest(raw);
     } catch (error) {
-      const message = error instanceof LoopScopePreviewInputError ? error.message : "\u8BF7\u6C42\u4F53\u4E0D\u662F\u6709\u6548 JSON";
-      return sendJson(res, 400, { ok: false, code: "LOOP_SCOPE_REQUEST_INVALID", error: message });
+      if (!(error instanceof LoopScopePreviewInputError)) throw error;
+      return sendJson(res, 400, { ok: false, code: "LOOP_SCOPE_REQUEST_INVALID", error: error.message });
     }
     const rootCheck = workflowRootForRequest(input.root);
     if (!rootCheck.ok) {
@@ -19366,49 +19408,37 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
         error: rootCheck.error
       });
     }
+    let loaded;
     try {
-      assertWorkflowRootAnchor(rootCheck.anchor);
-    } catch {
-      return sendJson(res, 403, {
+      loaded = readWithLoopScopeRootTrust(
+        () => assertWorkflowRootAnchor(rootCheck.anchor),
+        () => loadRegistry(rootCheck.anchor.path, nodeLoopIoStrict)
+      );
+    } catch (error) {
+      if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot();
+      if (!(error instanceof RegistryReadError)) throw error;
+      return sendJson(res, 500, {
         ok: false,
-        code: "LOOP_SCOPE_ROOT_UNTRUSTED",
-        error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
+        code: "LOOP_SCOPE_REGISTRY_READ_FAILED",
+        error: "Loop registry \u8BFB\u53D6\u5931\u8D25"
       });
     }
-    try {
-      const loaded = loadRegistry(rootCheck.anchor.path);
-      if (loaded.data === null || loaded.errors.length > 0) {
-        return sendJson(res, 409, {
-          ok: false,
-          code: "LOOP_SCOPE_REGISTRY_INVALID",
-          error: "Loop registry \u65E0\u6CD5\u5F62\u6210\u53EF\u4FE1\u7B56\u7565"
-        });
-      }
-      const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId);
-      if (loop === void 0) {
-        return sendJson(res, 404, {
-          ok: false,
-          code: "LOOP_SCOPE_LOOP_NOT_FOUND",
-          error: "Loop \u4E0D\u5B58\u5728"
-        });
-      }
-      try {
-        assertWorkflowRootAnchor(rootCheck.anchor);
-      } catch {
-        return sendJson(res, 403, {
-          ok: false,
-          code: "LOOP_SCOPE_ROOT_UNTRUSTED",
-          error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
-        });
-      }
-      return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob));
-    } catch {
+    if (loaded.data === null || loaded.errors.length > 0) {
       return sendJson(res, 409, {
         ok: false,
         code: "LOOP_SCOPE_REGISTRY_INVALID",
         error: "Loop registry \u65E0\u6CD5\u5F62\u6210\u53EF\u4FE1\u7B56\u7565"
       });
     }
+    const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId);
+    if (loop === void 0) {
+      return sendJson(res, 404, {
+        ok: false,
+        code: "LOOP_SCOPE_LOOP_NOT_FOUND",
+        error: "Loop \u4E0D\u5B58\u5728"
+      });
+    }
+    return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob));
   }
   if (path7 === "/api/router/preview") {
     const raw = await readJsonBody(req);
