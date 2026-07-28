@@ -18114,7 +18114,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
     "managed-runtime",
     "bundled-skills",
     "runtime-readiness"
-  ] : ["package-assets", "adapter-deploy", "managed-runtime", "bundled-skills", "runtime-readiness"];
+  ] : ["package-assets", "managed-runtime", "bundled-skills", "runtime-readiness", "adapter-deploy"];
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
   let expectedStepCommands;
   if (native) {
@@ -18126,7 +18126,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
       null
     ];
   } else {
-    expectedStepCommands = [null, command2, null, null, null];
+    expectedStepCommands = [null, null, null, null, command2];
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null;
@@ -18145,6 +18145,40 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
 }
 
 // packages/server/src/serverGetHostTargetPlanRoutes.ts
+var MAX_HOST_PLAN_KEYS = 25;
+function createHostTargetPlanRuntime() {
+  const cache = /* @__PURE__ */ new Map();
+  const inFlight = /* @__PURE__ */ new Map();
+  let queueTail = Promise.resolve();
+  return {
+    resolve(key, load) {
+      const cached = cache.get(key);
+      if (cached !== void 0) return Promise.resolve(cached);
+      const existing = inFlight.get(key);
+      if (existing !== void 0) return existing;
+      const queued = queueTail.then(load);
+      queueTail = queued.then(() => void 0, () => void 0);
+      const shared = queued.then((result) => {
+        if (result.status === 200) {
+          cache.delete(key);
+          cache.set(key, result);
+          while (cache.size > MAX_HOST_PLAN_KEYS) {
+            const oldest = cache.keys().next().value;
+            if (oldest === void 0) break;
+            cache.delete(oldest);
+          }
+        }
+        return result;
+      });
+      inFlight.set(key, shared);
+      const cleanup = () => {
+        if (inFlight.get(key) === shared) inFlight.delete(key);
+      };
+      void shared.then(cleanup, cleanup);
+      return shared;
+    }
+  };
+}
 var QUERY_INVALID = {
   status: 400,
   body: { ok: false, code: "HOST_TARGET_QUERY_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u67E5\u8BE2\u53C2\u6570\u65E0\u6548" }
@@ -18181,15 +18215,21 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
   if (path7 === "/api/host-targets") {
     if ([...searchParams].length !== 0) return QUERY_INVALID;
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
-    return runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog);
+    return deps.runtime.resolve(
+      "catalog",
+      () => runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog)
+    );
   }
   const query = parsePlanQuery(searchParams);
   if (query === null) return QUERY_INVALID;
   if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
-  return runAndDecode(
-    ["host-target-plan", "--host", query.host, "--operation", query.operation, "--json"],
-    deps,
-    (value) => decodeHostTargetPlan(value, query.host, query.operation)
+  return deps.runtime.resolve(
+    `plan:${query.host}:${query.operation}`,
+    () => runAndDecode(
+      ["host-target-plan", "--host", query.host, "--operation", query.operation, "--json"],
+      deps,
+      (value) => decodeHostTargetPlan(value, query.host, query.operation)
+    )
   );
 }
 
@@ -18230,6 +18270,7 @@ async function handleGet(req, res, path7, deps) {
     paths,
     hostHome,
     operationsAvailable,
+    hostTargetPlanRuntime,
     options,
     operationRunner,
     resolveSessionLink,
@@ -18238,7 +18279,7 @@ async function handleGet(req, res, path7, deps) {
   const boundPort = deps.boundPort();
   await handleGetActivityRoutes(req, res, path7, deps);
   if (res.headersSent) return;
-  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner });
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime });
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body);
   if (path7 === "/api/loops/snapshot") {
     try {
@@ -20281,6 +20322,7 @@ function createDashboardServer(options) {
   const manifestPath2 = options.manifestPath;
   const operationRunner = options.runPipelineCli ?? runPipelineCli;
   const operationsAvailable = options.runPipelineCli !== void 0 || pipelineCliAvailable();
+  const hostTargetPlanRuntime = createHostTargetPlanRuntime();
   const cadenceScheduler = options.cadence === void 0 || options.cadence === false ? null : createCadenceScheduler({
     ...options.cadence,
     roots: registry,
@@ -20399,6 +20441,7 @@ function createDashboardServer(options) {
     paths,
     hostHome,
     operationsAvailable,
+    hostTargetPlanRuntime,
     options,
     operationRunner,
     resolveSessionLink,

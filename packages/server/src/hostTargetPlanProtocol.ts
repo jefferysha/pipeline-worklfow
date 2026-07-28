@@ -273,7 +273,7 @@ export function decodeHostTargetPlan(
         'bundled-skills',
         'runtime-readiness',
       ]
-    : ['package-assets', 'adapter-deploy', 'managed-runtime', 'bundled-skills', 'runtime-readiness']
+    : ['package-assets', 'managed-runtime', 'bundled-skills', 'runtime-readiness', 'adapter-deploy']
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null
   let expectedStepCommands: readonly (HostPlanCommandDto | null)[]
   if (native) {
@@ -285,7 +285,7 @@ export function decodeHostTargetPlan(
       null,
     ]
   } else {
-    expectedStepCommands = [null, command, null, null, null]
+    expectedStepCommands = [null, null, null, null, command]
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null

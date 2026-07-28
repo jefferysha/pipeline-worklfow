@@ -45126,8 +45126,8 @@ function nativeSteps(operation, plan) {
 function adapterSteps(manualCommand) {
   return [
     { id: "package-assets", label: "host-plan.step.package-assets", command: null },
-    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand },
-    ...PRODUCT_STEPS
+    ...PRODUCT_STEPS,
+    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand }
   ];
 }
 function createHostTargetPlan(host, operation) {
@@ -47885,6 +47885,14 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
 }
 
 // packages/cli/src/program-install.ts
+function rejectRepeatedOption(flag) {
+  return (value, previous) => {
+    if (previous !== void 0) {
+      throw new InvalidArgumentError(`\u4E0D\u5F97\u91CD\u590D\u6307\u5B9A ${flag}`);
+    }
+    return value;
+  };
+}
 function registerInstallCommands(program2, deps, dashboardRuntime) {
   program2.command("setup [sub]").description("\u5B89\u88C5\u5B8C\u6574 Tenon\uFF1A\u5FC5\u987B\u9009\u62E9\u4E00\u4E2A\u5BBF\u4E3B\uFF08\u5982 --codex\uFF09\uFF1B\u4E0D\u4F1A\u540C\u65F6\u4FEE\u6539 Codex \u4E0E Claude").option("--codex", "\u5B89\u88C5/\u9A8C\u8BC1 Codex \u539F\u751F\u63D2\u4EF6").option("--claude", "\u5B89\u88C5/\u9A8C\u8BC1 Claude \u539F\u751F\u63D2\u4EF6").option("--cursor", "\u90E8\u7F72 Cursor adapter").option("--gemini", "\u90E8\u7F72 Gemini adapter").option("--copilot", "\u90E8\u7F72 Copilot adapter").option("--pi", "\u90E8\u7F72 Pi adapter").option("--devin", "\u90E8\u7F72 Devin adapter").option("--zed", "\u90E8\u7F72 Zed adapter").option("--aider", "\u90E8\u7F72 Aider adapter").option("--continue", "\u90E8\u7F72 Continue adapter").option("--cline", "\u90E8\u7F72 Cline adapter").option("--amp", "\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--auto-update", "\u4E3A\u6240\u9009\u539F\u751F\u5BBF\u4E3B\u542F\u7528\u6BCF\u65E5\u4E00\u6B21\u7684\u81EA\u52A8\u5347\u7EA7\u68C0\u67E5").option("--dry-run", "\u4EC5\u6253\u5370\u6240\u9009\u5BBF\u4E3B\u5B89\u88C5\u8BA1\u5212\uFF0C\u4E0D\u5199\u6587\u4EF6\u3001\u4E0D\u6267\u884C adapter \u6216 marketplace \u64CD\u4F5C").option("-y, --yes", "\u8DF3\u8FC7\u517C\u5BB9 skills/setup \u7684 y/N \u786E\u8BA4\u4F4D").action(async (sub, opts) => {
     bail(await cmdSetup(deps, sub, opts));
@@ -47892,7 +47900,7 @@ function registerInstallCommands(program2, deps, dashboardRuntime) {
   program2.command("update").description("\u5237\u65B0\u4E00\u4E2A\u5DF2\u5B89\u88C5\u7684\u539F\u751F Tenon \u63D2\u4EF6\uFF1B\u5347\u7EA7\u540E\u8BF7\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D skills \u548C hooks").option("--codex", "\u66F4\u65B0 Codex marketplace \u4E2D\u7684 tenon").option("--claude", "\u66F4\u65B0 Claude marketplace \u4E2D\u7684 tenon").option("--cursor", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cursor adapter").option("--gemini", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Gemini adapter").option("--copilot", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Copilot adapter").option("--pi", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Pi adapter").option("--devin", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Devin adapter").option("--zed", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Zed adapter").option("--aider", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Aider adapter").option("--continue", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Continue adapter").option("--cline", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cline adapter").option("--amp", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--dry-run", "\u4EC5\u6253\u5370\u5347\u7EA7\u8BA1\u5212\uFF0C\u4E0D\u6267\u884C marketplace \u6216 adapter \u64CD\u4F5C").option("-y, --yes", "\u4F9B\u81EA\u52A8\u66F4\u65B0\u8C03\u7528\u7684\u975E\u4EA4\u4E92\u786E\u8BA4").option("--auto", "\u7531\u5DF2\u660E\u786E\u542F\u7528\u7684\u81EA\u52A8\u66F4\u65B0\u4EFB\u52A1\u8C03\u7528\uFF08\u4E0D\u6539\u53D8\u7528\u6237\u7684 opt-in \u72B6\u6001\uFF09").action(async (opts) => {
     bail(await cmdUpdate(deps, opts));
   });
-  program2.command("host-target-plan").description("\u53EA\u8BFB\u8F93\u51FA\u5DF2\u6CE8\u518C\u5BBF\u4E3B catalog\uFF0C\u6216\u4E00\u4E2A setup/update JSON \u8BA1\u5212\uFF1B\u4E0D\u6267\u884C\u5BBF\u4E3B\u5199\u64CD\u4F5C").option("--host <host>", "TENON_HOSTS \u4E2D\u7684\u5DF2\u6CE8\u518C\u5BBF\u4E3B id").option("--operation <operation>", "setup | update").option("--json", "\u8F93\u51FA host-target-plan/v1 JSON DTO").action((opts) => {
+  program2.command("host-target-plan").description("\u53EA\u8BFB\u8F93\u51FA\u5DF2\u6CE8\u518C\u5BBF\u4E3B catalog\uFF0C\u6216\u4E00\u4E2A setup/update JSON \u8BA1\u5212\uFF1B\u4E0D\u6267\u884C\u5BBF\u4E3B\u5199\u64CD\u4F5C").option("--host <host>", "TENON_HOSTS \u4E2D\u7684\u5DF2\u6CE8\u518C\u5BBF\u4E3B id", rejectRepeatedOption("--host")).option("--operation <operation>", "setup | update", rejectRepeatedOption("--operation")).option("--json", "\u8F93\u51FA host-target-plan/v1 JSON DTO").action((opts) => {
     bail(cmdHostTargetPlan(deps, opts));
   });
   program2.command("runtime <sub>").description("\u67E5\u770B managed runtime\uFF0C\u6216\u4EC5\u56DE\u6EDA\u5230\u4E0A\u4E00\u4EFD\u5B8C\u6574\u6821\u9A8C\u901A\u8FC7\u7684 release").option("--rollback", "\u4EC5 runtime repair \u4F7F\u7528\uFF1A\u5207\u6362\u5230\u4E0A\u4E00\u4EFD\u5DF2\u9A8C\u8BC1 release").option("--json", "\u673A\u5668\u53EF\u8BFB\u8F93\u51FA").action(async (sub, opts) => {

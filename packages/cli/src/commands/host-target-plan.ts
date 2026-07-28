@@ -134,8 +134,8 @@ function nativeSteps(
 function adapterSteps(manualCommand: HostPlanCommand): readonly HostTargetPlanStep[] {
   return [
     { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
-    { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: manualCommand },
     ...PRODUCT_STEPS,
+    { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: manualCommand },
   ]
 }
 

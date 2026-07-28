@@ -56,6 +56,7 @@ import {
 import { applyRouterDraft, parseRouterDraft, previewTrackRouting, scoreRouterPatternWithGrep } from './routerPreview.js'
 import { createCadenceScheduler } from './cadence.js'
 import { handleGet as handleGetRoute } from './serverGetRoutes.js'
+import { createHostTargetPlanRuntime } from './serverGetHostTargetPlanRoutes.js'
 import { handleDeleteRoute, handlePatchRoute } from './serverMutationRoutes.js'
 import { handlePostRoute } from './serverPostRoutes.js'
 import {
@@ -79,7 +80,6 @@ const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
 function isWorkflowName(name: string): boolean {
   return name !== '' && WORKFLOW_NAME_RE.test(name)
 }
-
 export { isLocalHost } from './serverSupport.js'
 
 export function createDashboardServer(options: DashboardServerOptions): DashboardServer {
@@ -166,12 +166,12 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
   // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
   const manifestPath = options.manifestPath
-
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
   // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）；
   // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
   const operationRunner: PipelineCliRunner = options.runPipelineCli ?? runPipelineCli
   const operationsAvailable = options.runPipelineCli !== undefined || pipelineCliAvailable()
+  const hostTargetPlanRuntime = createHostTargetPlanRuntime()
   const cadenceScheduler = options.cadence === undefined || options.cadence === false
     ? null
     : createCadenceScheduler({
@@ -310,7 +310,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       version, releaseId, transactionId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
-      hostHome, operationsAvailable, options, operationRunner, resolveSessionLink, errMsg,
+      hostHome, operationsAvailable, hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
     })
   const handlePost = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handlePostRoute(req, res, path, {

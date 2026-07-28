@@ -84,3 +84,56 @@ FAIL，已通过确切 `verify-fail` review receipt 返回 Build。下表记录�
 独立全量 reviewer 在两项门禁修复后重新审阅完整交付面，Standards 与 Spec 两轴均
 PASS，最终 CRITICAL / HIGH / MEDIUM / LOW 均为 0。新的 Dashboard hash asset 必须与
 `dist/index.html` 和旧 asset 删除成对提交。
+
+## 第二轮 Verify 回环发现与修复
+
+冻结提交 `8928d9d484395c84e87fc8b044a9af5423663f3a` 的第二轮 Verify 在其余三轨均
+PASS 后，Codex 审查仍发现两项 MEDIUM；已通过确切 `verify-fail` review receipt 返回
+Build。本轮只收紧输入歧义和只读请求的资源边界，不改变 DTO、URL、UI 或计划内容。
+
+| 严重度 | 第二轮 Verify finding | Build 修复 | RED → GREEN |
+| --- | --- | --- | --- |
+| MEDIUM | Commander 对重复 `--host` / `--operation` 采用 last-wins，前一个非法值可被后一个合法值遮蔽 | 使用 Commander `InvalidArgumentError` 和 option accumulator，在第二次出现同名 option 时立即拒绝 | 4 个重复/非法后合法用例先全部失败，修复后 CLI focused 38/38 |
+| MEDIUM | 每个合法只读 GET 都可新建 `tenon host-target-plan` 子进程，缺少去重、并发与缓存边界 | 为每个 Dashboard server 建立隔离 runtime：同键 in-flight Promise 共享、成功结果最多缓存 25 个 canonical key、跨键子进程并发上限 1、失败不缓存且可重试 | 同键、25-key 双轮、失败重试、跨键并发 4 个用例先全部失败，修复后 route focused 72/72 |
+
+## 第三轮 Build 门禁
+
+- 集成 focused：CLI + command + server route 3 files / 110 tests 全部通过。
+- CLI 与 server TypeScript 编译、`git diff --check`：通过。
+- `npm run build`：通过；Dashboard hash 保持 `index-BwhWJn1i.js`，server/CLI bundle 已更新。
+- `npm run typecheck:web`：通过。
+- `npm run test:web`：52 files / 997 tests；只有既有 React `act(...)` / GSAP 警告。
+- `bash tools/test-bundle.sh`：31/31。
+- `npm run check:npx-package`：35/35。
+- `npm run check:docs`：10/10，39 canonical Markdown files。
+- `npm run check:repository-hygiene`：6/6，repository PASS。
+- `npm run check:architecture`、`npm run check:comments`、`git diff --check`：通过。
+- 首次 `npm test`：317 files 中 316 passed；5482 passed / 5 skipped / 1 failed。唯一失败为
+  与本功能无关的 Docker AFK `默认 L1 report-only` 时序用例；随后独立重跑该用例通过
+  （1 passed / 4 filtered skips）。该波动保留为事实，不把首次全量运行描述为全绿。
+
+第三轮完整冻结审查和浏览器验收必须在重新提交后进行；在那之前不复用第二轮的 PASS。
+
+## 第三轮冻结前审查修复
+
+独立 reviewer 对全部 Standards / Spec 两轴给出 PASS（CRITICAL / HIGH / MEDIUM / LOW 均为
+0）；Codex 对完整 `origin/main` 差异另发现 1 项 MEDIUM：
+
+- adapter DTO 原为 `package-assets → adapter-deploy → managed-runtime → bundled-skills →
+  runtime-readiness`，但真实 `cmdSetupHost` 在验证资产后先完成 managed runtime 发布，再执行
+  `adapters/install.sh`，update adapter 也委托同一路径。
+- CLI 真相、server 严格 decoder、Dashboard 严格 decoder 与三端 fixtures 已统一为
+  `package-assets → managed-runtime → bundled-skills → runtime-readiness → adapter-deploy`。
+- RED：CLI 1 个、server 22 个场景失败；GREEN：CLI/server 78/78，Dashboard decoder 16/16。
+
+修复后的重新收敛：
+
+- `npm run build`：通过；Dashboard 新 hash `index-D_k5gMMg.js`，server/CLI tracked bundle 已更新。
+- `npm run test:web`：52 files / 997 tests 通过。
+- 第二次 `npm test`：317 files 中 316 passed；5482 passed / 5 skipped / 1 failed。唯一失败为
+  与本功能无关的 release-store 20ms lock 调度断言，独立精确重跑 1 passed / 17 filtered skips。
+  同一轮中此前波动的 AFK report-only 用例已通过。两次全量测试的单一时序波动均如实保留，
+  不将任一次描述为全绿。
+
+最终独立只读复审再次确认完整差异 PASS，CRITICAL / HIGH / MEDIUM / LOW 均为 0；adapter
+顺序、前两项 P2 修复、tracked bundles 与新 Dashboard hash asset 均保持一致。

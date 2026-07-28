@@ -72,7 +72,7 @@ export interface GetRouteDeps {
   trackRegistryBody: (registry: TrackRegistry) => Record<string, unknown>
   manifestPath?: string
   paths: ServerPaths
-  hostHome: string; operationsAvailable: boolean
+  hostHome: string; operationsAvailable: boolean; hostTargetPlanRuntime: import('./serverGetHostTargetPlanRoutes.js').HostTargetPlanRuntime
   options: DashboardServerOptions; operationRunner: import('./operations.js').PipelineCliRunner
   resolveSessionLink: (root: string, name: string) => Promise<Record<string, unknown>>
   errMsg: (error: unknown) => string
@@ -95,13 +95,13 @@ export async function handleGet(
     cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
     version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
-    trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, operationsAvailable, options,
-    operationRunner, resolveSessionLink, errMsg,
+    trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, operationsAvailable,
+    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
   } = deps
   const boundPort = deps.boundPort()
   await handleGetActivityRoutes(req, res, path, deps)
   if (res.headersSent) return
-  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? '/', path, { hostHome, operationsAvailable, operationRunner })
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? '/', path, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime })
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {

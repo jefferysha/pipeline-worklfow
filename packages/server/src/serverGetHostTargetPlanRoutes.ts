@@ -15,11 +15,57 @@ export interface HostTargetPlanRouteDeps {
   readonly hostHome: string
   readonly operationsAvailable: boolean
   readonly operationRunner: PipelineCliRunner
+  readonly runtime: HostTargetPlanRuntime
 }
 
 export interface HostTargetPlanRouteResult {
   readonly status: number
   readonly body: unknown
+}
+
+export interface HostTargetPlanRuntime {
+  resolve(
+    key: string,
+    load: () => Promise<HostTargetPlanRouteResult>,
+  ): Promise<HostTargetPlanRouteResult>
+}
+
+const MAX_HOST_PLAN_KEYS = 25
+
+export function createHostTargetPlanRuntime(): HostTargetPlanRuntime {
+  const cache = new Map<string, HostTargetPlanRouteResult>()
+  const inFlight = new Map<string, Promise<HostTargetPlanRouteResult>>()
+  let queueTail: Promise<void> = Promise.resolve()
+
+  return {
+    resolve(key, load) {
+      const cached = cache.get(key)
+      if (cached !== undefined) return Promise.resolve(cached)
+      const existing = inFlight.get(key)
+      if (existing !== undefined) return existing
+
+      const queued = queueTail.then(load)
+      queueTail = queued.then(() => undefined, () => undefined)
+      const shared = queued.then((result) => {
+        if (result.status === 200) {
+          cache.delete(key)
+          cache.set(key, result)
+          while (cache.size > MAX_HOST_PLAN_KEYS) {
+            const oldest = cache.keys().next().value
+            if (oldest === undefined) break
+            cache.delete(oldest)
+          }
+        }
+        return result
+      })
+      inFlight.set(key, shared)
+      const cleanup = (): void => {
+        if (inFlight.get(key) === shared) inFlight.delete(key)
+      }
+      void shared.then(cleanup, cleanup)
+      return shared
+    },
+  }
 }
 
 const QUERY_INVALID: HostTargetPlanRouteResult = {
@@ -79,14 +125,20 @@ export async function resolveHostTargetPlanRoute(
   if (path === '/api/host-targets') {
     if ([...searchParams].length !== 0) return QUERY_INVALID
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE
-    return runAndDecode(['host-target-plan', '--json'], deps, decodeHostTargetCatalog)
+    return deps.runtime.resolve(
+      'catalog',
+      () => runAndDecode(['host-target-plan', '--json'], deps, decodeHostTargetCatalog),
+    )
   }
   const query = parsePlanQuery(searchParams)
   if (query === null) return QUERY_INVALID
   if (!deps.operationsAvailable) return PLAN_UNAVAILABLE
-  return runAndDecode(
-    ['host-target-plan', '--host', query.host, '--operation', query.operation, '--json'],
-    deps,
-    (value) => decodeHostTargetPlan(value, query.host, query.operation),
+  return deps.runtime.resolve(
+    `plan:${query.host}:${query.operation}`,
+    () => runAndDecode(
+      ['host-target-plan', '--host', query.host, '--operation', query.operation, '--json'],
+      deps,
+      (value) => decodeHostTargetPlan(value, query.host, query.operation),
+    ),
   )
 }

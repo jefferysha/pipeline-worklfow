@@ -68,6 +68,44 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     })
   })
 
+  test.each([
+    {
+      name: '重复 --host',
+      flag: '--host',
+      args: ['--host', 'claude', '--host', 'codex', '--operation', 'setup'],
+    },
+    {
+      name: '非法首值不能被后续合法 --host 洗白',
+      flag: '--host',
+      args: ['--host', '.foo', '--host', 'codex', '--operation', 'setup'],
+    },
+    {
+      name: '重复 --operation',
+      flag: '--operation',
+      args: ['--host', 'codex', '--operation', 'update', '--operation', 'setup'],
+    },
+    {
+      name: '非法首值不能被后续合法 --operation 洗白',
+      flag: '--operation',
+      args: ['--host', 'codex', '--operation', 'remove', '--operation', 'setup'],
+    },
+  ])('host-target-plan 在 action 前拒绝 $name', async ({ args, flag }) => {
+    const deps = makeDeps()
+
+    await expect(
+      buildProgram(deps).parseAsync(['host-target-plan', ...args, '--json'], { from: 'user' }),
+    ).rejects.toMatchObject({
+      code: 'commander.invalidArgument',
+      exitCode: 1,
+    })
+    expect(deps.errLines.join('\n')).toContain(`不得重复指定 ${flag}`)
+    expect(deps.outLines).toEqual([])
+    expect(deps.store.write.calls).toHaveLength(0)
+    expect(deps.store.set.calls).toHaveLength(0)
+    expect(deps.store.setMany.calls).toHaveLength(0)
+    expect(deps.store.cas.calls).toHaveLength(0)
+  })
+
   test('完整插件只有一个 update 入口，不再暴露第二套 --self-update', () => {
     const deps = makeDeps()
     const update = buildProgram(deps).commands.find((command) => command.name() === 'update')

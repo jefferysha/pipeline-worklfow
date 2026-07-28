@@ -201,9 +201,12 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
       : []
     : [
         { id: 'package-assets' },
+        ...PRODUCT_STEP_IDS.map((id) => ({ id })),
         { id: 'adapter-deploy', executable: command.executable, args: command.args },
       ]
-  return [...operationSteps, ...PRODUCT_STEP_IDS.map((id) => ({ id }))]
+  return host.kind === 'native'
+    ? [...operationSteps, ...PRODUCT_STEP_IDS.map((id) => ({ id }))]
+    : operationSteps
 }
 
 export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {

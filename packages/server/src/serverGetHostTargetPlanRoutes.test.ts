@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import {
+  createHostTargetPlanRuntime,
   resolveHostTargetPlanRoute,
   type HostTargetPlanRouteDeps,
 } from './serverGetHostTargetPlanRoutes.js'
@@ -150,13 +151,15 @@ function planFor(host: HostId, operation: Operation) {
       })
     : [
         { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
-        { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command },
       ]
   steps.push(
     { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
     { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
     { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
   )
+  if (!native) {
+    steps.push({ id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command })
+  }
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',
@@ -176,6 +179,28 @@ function jsonResult(value: unknown): { exitCode: number; stdout: string; stderr:
   return { exitCode: 0, stdout: JSON.stringify(value), stderr: '' }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function valueForArgs(args: readonly string[]): typeof CATALOG | ReturnType<typeof planFor> {
+  const hostIndex = args.indexOf('--host')
+  if (hostIndex < 0) return CATALOG
+  const operationIndex = args.indexOf('--operation')
+  const host = args[hostIndex + 1]
+  const operation = args[operationIndex + 1]
+  if (!HOST_IDS.some((candidate) => candidate === host)) throw new Error(`unexpected host ${host}`)
+  if (operation !== 'setup' && operation !== 'update') throw new Error(`unexpected operation ${operation}`)
+  return planFor(host, operation)
+}
+
+const ALL_ROUTE_URLS = [
+  '/api/host-targets',
+  ...HOST_IDS.flatMap((host) =>
+    (['setup', 'update'] as const).map((operation) =>
+      `/api/host-target-plan?host=${host}&operation=${operation}`)),
+] as const
+
 function deps(
   runner: PipelineCliRunner,
   operationsAvailable = true,
@@ -184,6 +209,7 @@ function deps(
     hostHome: '/host/home',
     operationsAvailable,
     operationRunner: runner,
+    runtime: createHostTargetPlanRuntime(),
   }
 }
 
@@ -479,5 +505,68 @@ describe('Host Target Plan server assembly', () => {
     const response = await reqGet(port, '/api/host-targets', '127.0.0.1', { Host: 'evil.example.com' })
     expect(response.status).toBe(403)
     expect(runner).not.toHaveBeenCalled()
+  })
+
+  it('shares one in-flight CLI request for concurrent requests with the same key', async () => {
+    const runner = vi.fn<PipelineCliRunner>(async () => {
+      await delay(30)
+      return jsonResult(CATALOG)
+    })
+    const { port } = await start(runner)
+
+    const [first, second] = await Promise.all([
+      reqGet(port, '/api/host-targets'),
+      reqGet(port, '/api/host-targets'),
+    ])
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(first.json()).toEqual(CATALOG)
+    expect(second.json()).toEqual(CATALOG)
+    expect(runner).toHaveBeenCalledTimes(1)
+  })
+
+  it('caches every successful response in the fixed 25-key host-plan space', async () => {
+    const runner = vi.fn<PipelineCliRunner>(async (_root, args) => jsonResult(valueForArgs(args)))
+    const { port } = await start(runner)
+
+    const first = await Promise.all(ALL_ROUTE_URLS.map((url) => reqGet(port, url)))
+    const second = await Promise.all(ALL_ROUTE_URLS.map((url) => reqGet(port, url)))
+
+    expect(first.every((result) => result.status === 200)).toBe(true)
+    expect(second.every((result) => result.status === 200)).toBe(true)
+    expect(runner).toHaveBeenCalledTimes(25)
+  })
+
+  it('does not cache failures permanently, then caches the successful retry', async () => {
+    const runner = vi.fn<PipelineCliRunner>(async () =>
+      runner.mock.calls.length === 1
+        ? { exitCode: 1, stdout: '', stderr: 'transient' }
+        : jsonResult(CATALOG))
+    const { port } = await start(runner)
+
+    expect((await reqGet(port, '/api/host-targets')).status).toBe(502)
+    expect((await reqGet(port, '/api/host-targets')).status).toBe(200)
+    expect((await reqGet(port, '/api/host-targets')).status).toBe(200)
+    expect(runner).toHaveBeenCalledTimes(2)
+  })
+
+  it('caps cross-key CLI concurrency at one across all 25 valid keys', async () => {
+    let active = 0
+    let maxActive = 0
+    const runner = vi.fn<PipelineCliRunner>(async (_root, args) => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await delay(5)
+      active -= 1
+      return jsonResult(valueForArgs(args))
+    })
+    const { port } = await start(runner)
+
+    const responses = await Promise.all(ALL_ROUTE_URLS.map((url) => reqGet(port, url)))
+
+    expect(responses.every((result) => result.status === 200)).toBe(true)
+    expect(runner).toHaveBeenCalledTimes(25)
+    expect(maxActive).toBe(1)
   })
 })
