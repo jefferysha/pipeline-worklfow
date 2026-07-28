@@ -73,9 +73,9 @@
 
 ## 交付
 
-- [ ] 应用 OpenSpec，提交、推送并创建包含上游映射和真实证据的非草稿 PR。 (ship)
-- [ ] 检查远端 PR 与 CI，修复可归因失败并记录外部阻塞。 (ship)
+- [x] 应用 OpenSpec，提交、推送并创建包含上游映射和真实证据的非草稿 PR。 (ship)
+- [x] 检查远端 PR 与 CI，修复可归因失败并记录外部阻塞。 (ship)
 
 ## 归档
 
-- [ ] 归档 Change 并将本轮结果写回 automation memory。 (archive)
+- [x] 归档 Change 并将本轮结果写回 automation memory。 (archive)

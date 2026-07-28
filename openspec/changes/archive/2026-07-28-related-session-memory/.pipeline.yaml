@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-28-related-session-memory-design.md
 plan: docs/superpowers/plans/2026-07-28-related-session-memory.md
 verification_report: docs/superpowers/reports/2026-07-28-related-session-memory-verify-final.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: false
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/12
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T05:14:43Z
-updated_at: 2026-07-28T14:41:37Z
+updated_at: 2026-07-28T14:57:18Z
 verified_at: 2026-07-28T14:41:37Z
-archived_at: null
-archived: false
+archived_at: 2026-07-28T14:57:18Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 6372f68a-cc7b-4bfa-a55f-9156d1e27327
-pipeline_transition_sequence: 19
-pipeline_transition_head: f2dc7974-ef4f-4b95-a6c7-997b2e7f10ea
-pipeline_state_revision: 66
-pipeline_state_revision_id: 8d1098ae-c879-4340-b967-16fe37de2281
-pipeline_state_digest: c9195b0f546ac6bee71294e6d2832305abe8e8e1a14c786ca3b4aedf55957234
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NjYsInJldmlzaW9uSWQiOiI4ZDEwOThhZS1jODc5LTQzNDAtYjk2Ny0xNmZlMzdkZTIyODEiLCJwYXlsb2FkRGlnZXN0IjoiY2Y3MGQ3MTlhYzkzOGJiZDRhM2FkMWRhNzVkODA4ZjgyNmU0MGIwZWFmMWM5MzNiYmQ4YzUyMTk4ODhjOGE1YSJ9
+pipeline_transition_sequence: 21
+pipeline_transition_head: 2df519bd-8109-4a1f-b778-5b3d9e669026
+pipeline_state_revision: 69
+pipeline_state_revision_id: 44011949-ed4d-4b06-ac35-9e9ea5ffa699
+pipeline_state_digest: 11bd40109f34baa942d1fec78a08447064fc3f027dcaa2c5c02680e9c05a94d0
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NjksInJldmlzaW9uSWQiOiI0NDAxMTk0OS1lZDRkLTRiMDYtYWMzNS05ZTllYTVmZmE2OTkiLCJwYXlsb2FkRGlnZXN0IjoiZWE4OTk1ZTA5ZDg5ZTQ3NmJkNTg5MDM3NjFlMDdhOTkyZGZhOTMxNDgyNDFlMDE4ZGM1NGJiN2NjNmVmNTdiNCJ9

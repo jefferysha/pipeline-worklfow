@@ -146,3 +146,4 @@ esbuild source comments 含 symlink 绝对路径，不能用于生成物逐字�
 - OpenCode live WAL 场景会诚实降级为 source partial，而不是读取未 checkpoint 内容或产生 sidecar。
 - 若需回退，撤销本功能提交并恢复三个生成 bundle；没有数据迁移或清理步骤。
 - 现有 Vite chunk warning、7 个无关 OpenSpec 债务和 5 个凭据 gate 不阻断本轮功能。
+
