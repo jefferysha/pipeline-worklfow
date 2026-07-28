@@ -30,17 +30,20 @@ afterEach(() => {
 })
 
 describe('VerificationEvidenceComposer', () => {
-  it('is exposed only from the governed Verify document section', () => {
+  it('renders through the neutral document-section slot', () => {
     const documents = { governed: true, pass: true, blockers: [], items: [] }
     const { rerender } = render(
       <I18nProvider>
-        <TaskDocumentsSection documents={documents} locale="en" phase="build" root="/repo" />
+        <TaskDocumentsSection documents={documents} />
       </I18nProvider>,
     )
     expect(screen.queryByTestId('evidence-compose-open')).not.toBeInTheDocument()
     rerender(
       <I18nProvider>
-        <TaskDocumentsSection documents={documents} locale="en" phase="verify" root="/repo" />
+        <TaskDocumentsSection
+          documents={documents}
+          extra={<VerificationEvidenceComposer root="/repo" locale="en" />}
+        />
       </I18nProvider>,
     )
     expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
@@ -95,6 +98,12 @@ describe('VerificationEvidenceComposer', () => {
     await waitFor(() => expect(screen.getByTestId('evidence-error')).toHaveTextContent('entries[0].result'))
     expect(screen.getByTestId('evidence-error')).not.toHaveTextContent('do not render me')
     expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
+    expect(screen.getByTestId('evidence-result-1')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByTestId('evidence-result-1')).toHaveAttribute(
+      'aria-describedby',
+      'verification-evidence-error',
+    )
+    expect(screen.getByTestId('evidence-result-1')).toHaveFocus()
   })
 
   it.each([
@@ -128,15 +137,17 @@ describe('VerificationEvidenceComposer', () => {
     fireEvent.click(screen.getByTestId('evidence-compose-open'))
     addCommandEntry()
     fireEvent.change(screen.getByTestId('evidence-command-1'), { target: { value: ' \tnpm test\n ' } })
+    fireEvent.change(screen.getByTestId('evidence-title-1'), { target: { value: ' \tUnit tests  ' } })
     fireEvent.change(screen.getByTestId('evidence-result-1'), { target: { value: '\n 42 passed \t\n' } })
     fireEvent.click(screen.getByTestId('evidence-compose'))
     await screen.findByTestId('evidence-output')
 
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit
     const body = JSON.parse(String(request.body)) as {
-      entries: Array<{ command?: string; result?: string }>
+      entries: Array<{ title: string; command?: string; result?: string }>
     }
     expect(body.entries[0]).toMatchObject({
+      title: ' \tUnit tests  ',
       command: ' \tnpm test\n ',
       result: '\n 42 passed \t\n',
     })
@@ -154,7 +165,45 @@ describe('VerificationEvidenceComposer', () => {
     fireEvent.click(screen.getByTestId('evidence-compose'))
 
     expect(screen.getByTestId('evidence-error')).toHaveTextContent('请填写结果')
+    expect(screen.getByTestId('evidence-result-1')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByTestId('evidence-result-1')).toHaveFocus()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('aborts a closed request and ignores its late response after reopening', async () => {
+    const resolvers: Array<(response: Response) => void> = []
+    const signals: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      if (init.signal) signals.push(init.signal)
+      return new Promise<Response>((resolve) => resolvers.push(resolve))
+    }))
+    renderComposer('en')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    expect(signals).toHaveLength(1)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(signals[0]?.aborted).toBe(true)
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    expect(screen.getByTestId('evidence-compose')).not.toBeDisabled()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    expect(signals).toHaveLength(2)
+
+    resolvers[1]?.(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# New session',
+      entryCount: 1,
+    }), { status: 200 }))
+    await waitFor(() => expect(screen.getByTestId('evidence-output')).toHaveValue('# New session'))
+
+    resolvers[0]?.(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# Stale session',
+      entryCount: 1,
+    }), { status: 200 }))
+    await Promise.resolve()
+    expect(screen.getByTestId('evidence-output')).toHaveValue('# New session')
   })
 
   it('reports clipboard failure inline and confirms successful copies through the host toast', async () => {

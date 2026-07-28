@@ -9,6 +9,7 @@ import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import {
   VerificationEvidenceEntryEditor,
+  type VerificationEvidenceEditorField,
   type VerificationEvidenceEditorEntry,
 } from './VerificationEvidenceEntryEditor'
 
@@ -21,7 +22,7 @@ interface VerificationEvidenceComposerProps {
 function draftEntry(entry: VerificationEvidenceEditorEntry): VerificationEvidenceDraftEntry {
   return {
     kind: entry.kind,
-    title: entry.title.trim(),
+    title: entry.title,
     status: entry.status,
     ...(entry.kind === 'command' && entry.command.trim() !== '' ? { command: entry.command } : {}),
     ...(entry.status === 'skipped'
@@ -29,6 +30,19 @@ function draftEntry(entry: VerificationEvidenceEditorEntry): VerificationEvidenc
       : { result: entry.result }),
   }
 }
+
+interface ValidationFailure {
+  message: string
+  path: string
+}
+
+interface ActiveRequest {
+  id: number
+  controller: AbortController
+}
+
+const ERROR_ID = 'verification-evidence-error'
+const ENTRY_FIELD_PATH = /^entries\[(\d+)\]\.(title|kind|status|command|result|skipReason)$/u
 
 export function VerificationEvidenceComposer({
   root,
@@ -40,11 +54,14 @@ export function VerificationEvidenceComposer({
   const [entries, setEntries] = useState<VerificationEvidenceEditorEntry[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [invalidPath, setInvalidPath] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [copyError, setCopyError] = useState('')
   const nextId = useRef(1)
   const openerRef = useRef<HTMLButtonElement>(null)
   const restoreFocusRef = useRef(false)
+  const activeRequestRef = useRef<ActiveRequest | null>(null)
+  const nextRequestIdRef = useRef(1)
 
   useEffect(() => {
     if (!open && restoreFocusRef.current) {
@@ -53,13 +70,30 @@ export function VerificationEvidenceComposer({
     }
   }, [open])
 
+  useEffect(() => () => {
+    activeRequestRef.current?.controller.abort()
+    activeRequestRef.current = null
+  }, [])
+
+  useEffect(() => {
+    if (error === '' || invalidPath === '') return
+    const target = [...document.querySelectorAll<HTMLElement>('[data-evidence-path]')]
+      .find((element) => element.dataset.evidencePath === invalidPath)
+    target?.focus()
+  }, [error, invalidPath])
+
   function closeComposer(): void {
+    const active = activeRequestRef.current
+    activeRequestRef.current = null
+    active?.controller.abort()
+    setBusy(false)
     restoreFocusRef.current = true
     setOpen(false)
   }
 
   function resetOutcome(): void {
     setError('')
+    setInvalidPath('')
     setMarkdown('')
     setCopyError('')
   }
@@ -84,24 +118,49 @@ export function VerificationEvidenceComposer({
     resetOutcome()
   }
 
-  function validate(): string {
-    const invalid = entries.find((entry) => entry.title.trim() === '')
-    if (invalid) return t('detail.evidence_error_title')
-    const missingBody = entries.find((entry) => entry.status === 'skipped'
+  function validate(): ValidationFailure | null {
+    const invalidTitleIndex = entries.findIndex((entry) => entry.title.trim() === '')
+    if (invalidTitleIndex !== -1) {
+      return {
+        message: t('detail.evidence_error_title'),
+        path: `entries[${invalidTitleIndex}].title`,
+      }
+    }
+    const missingBodyIndex = entries.findIndex((entry) => entry.status === 'skipped'
       ? entry.skipReason.trim() === ''
       : entry.result.trim() === '')
-    if (!missingBody) return ''
-    return missingBody.status === 'skipped'
-      ? t('detail.evidence_error_skip_reason')
-      : t('detail.evidence_error_result')
+    if (missingBodyIndex === -1) return null
+    const missingBody = entries[missingBodyIndex]
+    if (!missingBody) return null
+    return {
+      message: missingBody.status === 'skipped'
+        ? t('detail.evidence_error_skip_reason')
+        : t('detail.evidence_error_result'),
+      path: `entries[${missingBodyIndex}].${missingBody.status === 'skipped' ? 'skipReason' : 'result'}`,
+    }
+  }
+
+  function editorInvalidField(index: number): VerificationEvidenceEditorField | undefined {
+    const match = ENTRY_FIELD_PATH.exec(invalidPath)
+    if (!match || Number(match[1]) !== index) return undefined
+    return match[2] as VerificationEvidenceEditorField
   }
 
   async function compose(): Promise<void> {
-    const localError = validate()
-    if (localError !== '') {
-      setError(localError)
+    const validation = validate()
+    if (validation !== null) {
+      setInvalidPath(validation.path)
+      setError(validation.message)
       return
     }
+    const controller = new AbortController()
+    const request: ActiveRequest = {
+      id: nextRequestIdRef.current,
+      controller,
+    }
+    nextRequestIdRef.current += 1
+    activeRequestRef.current?.controller.abort()
+    activeRequestRef.current = request
     setBusy(true)
     resetOutcome()
     try {
@@ -109,17 +168,24 @@ export function VerificationEvidenceComposer({
         root,
         locale,
         entries: entries.map(draftEntry),
-      })
+      }, controller.signal)
+      if (activeRequestRef.current?.id !== request.id) return
       setMarkdown(result.markdown)
     } catch (caught) {
+      if (activeRequestRef.current?.id !== request.id || controller.signal.aborted) return
       if (caught instanceof VerificationEvidenceApiError) {
         const path = caught.details[0]?.path || t('detail.evidence_error_request_path')
+        setInvalidPath(caught.details[0]?.path ?? '')
         setError(t('detail.evidence_error_invalid', { path }))
       } else {
+        setInvalidPath('')
         setError(t('detail.evidence_error_request'))
       }
     } finally {
-      setBusy(false)
+      if (activeRequestRef.current?.id === request.id) {
+        activeRequestRef.current = null
+        setBusy(false)
+      }
     }
   }
 
@@ -185,7 +251,9 @@ export function VerificationEvidenceComposer({
                 <VerificationEvidenceEntryEditor
                   disabled={busy}
                   entry={entry}
+                  errorId={ERROR_ID}
                   index={index}
+                  invalidField={editorInvalidField(index)}
                   key={entry.id}
                   onChange={(patch) => updateEntry(entry.id, patch)}
                   onRemove={() => {
@@ -206,7 +274,7 @@ export function VerificationEvidenceComposer({
             + {t('detail.evidence_add')}
           </button>
           {error !== '' && (
-            <p aria-live="polite" className="mt-3 rounded-lg border border-red-b bg-red-t px-3 py-2 text-xs text-red-d" data-testid="evidence-error">
+            <p aria-live="polite" className="mt-3 rounded-lg border border-red-b bg-red-t px-3 py-2 text-xs text-red-d" data-testid="evidence-error" id={ERROR_ID}>
               {error}
             </p>
           )}

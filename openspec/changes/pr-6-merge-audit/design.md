@@ -23,12 +23,21 @@
   的共享 Dialog 冲突必须在 Build 采用语义并集并重新跑嵌套浏览器验收。
 - README 不需要把局部辅助入口提升为通用命令；原 capability、设计、ADR、计划和报告已
   描述边界，最终发布说明仍须避免暗示 Tenon 自动执行或保存证据。
+- 首轮冻结 Verify 的四轨与 OpenSpec 隔离演练已完整结束：E2E 通过，Reviewer/Codex
+  分别发现 shared 反向依赖、root 失败关闭、title 空白保真和请求取消问题，视觉轨发现
+  字段级错误关联不足；MODIFIED Requirement 省略既有键盘场景导致隔离 apply 失败。
 
 ## 决策
 
 - 采用普通 merge commit 纳入最新 main；拒绝需要强推的 rebase 和割裂证据身份的重放。
 - `Dialog.tsx` 保留 PR #6 的 `closeLabel`、Escape 事件消费，同时采用 main 的 Lucide `X`。
 - `dist/index.html` 和其他 bundle 通过构建重生；保留 main 的 ease-out motion。
+- canonical formatter 规格优先于原设计中的 title trim 描述：`trim()` 只用于非空判定，
+  合法 title 原文只做 CRLF→LF，不丢 Tab、前后空白或换行。
+- shared 文档区通过中性 slot 接收 composer；缺失/空白/非字符串 root 在 resolver 前返回 400；
+  dialog 关闭时 abort 进行中请求并拒绝旧响应；字段错误关联控件并聚焦首个无效项。
+- audit delta 的 MODIFIED Requirement 必须携带主规格全部既有场景；隔离 archive/apply
+  成功是下一轮 Verify 的硬门。
 - 详细发现、三方案比较、验证矩阵和停止条件见
   `docs/superpowers/specs/2026-07-28-pr-6-merge-audit-design.md`；决策记录见
   `docs/adr/2026-07-28-pr-6-merge-audit.md`。

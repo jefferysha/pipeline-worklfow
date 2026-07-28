@@ -1532,6 +1532,30 @@ describe('POST /api/verification-evidence/compose —— 受保护的无状态�
     )
     expect(unknownRoot.status).toBe(404)
   })
+
+  it('缺失、空白或非字符串 root 在 registered-root resolver 前稳定失败关闭', async () => {
+    const h = await start()
+    const auth = { Authorization: `Bearer ${h.token}` }
+    for (const body of [
+      { locale: 'en', entries: [entry] },
+      { root: ' \t', locale: 'en', entries: [entry] },
+      { root: 42, locale: 'en', entries: [entry] },
+    ]) {
+      const response = await reqPost(
+        h.port,
+        '/api/verification-evidence/compose',
+        body,
+        { headers: auth },
+      )
+      expect(response.status).toBe(400)
+      expect(response.json()).toMatchObject({
+        ok: false,
+        code: 'verification_evidence_invalid',
+        details: [{ path: 'root' }],
+        overflow: false,
+      })
+    }
+  })
 })
 
 describe('GET/POST/PATCH/DELETE /api/tracks —— v3 Studio Track CRUD', () => {

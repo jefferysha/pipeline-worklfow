@@ -29,6 +29,7 @@ export interface TaskDetailProps {
   badge?: ReactNode
   actions?: ReactNode
   curStageExtra?: ReactNode
+  documentsExtra?: ReactNode
   collapseTechnical?: boolean
   onClose?: () => void
   onToast?: (msg: string) => void
@@ -69,11 +70,12 @@ export function TaskDetail({
   badge,
   actions,
   curStageExtra,
+  documentsExtra,
   collapseTechnical = false,
   onClose,
   onToast,
 }: TaskDetailProps): JSX.Element {
-  const { t, lang } = useT()
+  const { t } = useT()
   const scopeRef = useRef<HTMLElement>(null)
   const [entries, setEntries] = useState<ChangeHistoryEntry[] | null>(null)
   useEffect(() => {
@@ -363,10 +365,7 @@ export function TaskDetail({
       {change.documents?.governed && (
         <TaskDocumentsSection
           documents={change.documents}
-          locale={lang === 'zh' ? 'zh-CN' : 'en'}
-          onToast={onToast}
-          phase={change.phase}
-          root={root}
+          extra={documentsExtra}
         />
       )}
       {collapseTechnical ? (

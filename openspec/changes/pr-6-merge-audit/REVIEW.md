@@ -93,7 +93,7 @@ new correctness or UX defects in this delta.
 - hooks 482/482, adapters 272/272, bundle 31/31, skill registry verification
 - strict OpenSpec validation for `pr-6-merge-audit` and `verification-evidence-composer`
 
-## Review result
+## Initial Build review result
 
 PASS at `986de487797c8df816518dd95f1c694f47a8503a`.
 
@@ -104,3 +104,91 @@ PASS at `986de487797c8df816518dd95f1c694f47a8503a`.
 The final product source and generated assets are unchanged from the isolated reproducibility and
 real-browser review baseline; the later commit only corrected the executable plan command and
 recorded the required Tenon Spec return loop.
+
+This result was subsequently superseded by the first frozen Verify at
+`7280dd3d45be69e88a695b82580ea2c5b3779f88`, which correctly failed and returned the Change through
+Spec to Build. The failure report is
+`docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify-fail.md`.
+
+## First Verify return-loop repairs
+
+### Resolved during the second Build visit
+
+1. **Medium — shared document surface imported the verification feature.**
+   - `TaskDocumentsSection` now accepts only a neutral `ReactNode` slot.
+   - `TaskDetail` forwards a neutral `documentsExtra` slot and `ProgressDrawer`, which owns the
+     phase/root/locale/toast context, conditionally composes the Verify-only feature.
+   - Architecture and the existing ProgressView integration matrix pass with the dependency
+     direction restored.
+
+2. **Medium — canonical title whitespace was trimmed.**
+   - Kernel normalization now uses trim only to reject blank titles while preserving legal
+     leading/trailing whitespace, Tab, newline and normalized CRLF content.
+   - The UI sends the title draft byte content unchanged. Kernel, UI and real HTTP regressions
+     confirm the preservation behavior.
+
+3. **Medium — active compose requests could update a reopened dialog.**
+   - The API client accepts `AbortSignal`.
+   - The composer aborts on close/unmount and uses monotonic request identity so late resolve or
+     reject paths cannot change a newer session.
+
+4. **Low — absent or non-string root could fall through to root resolution.**
+   - The route now rejects missing, blank and non-string `root` with a stable
+     `verification_evidence_invalid` 400 envelope before calling the registered-root resolver.
+
+5. **Low — structured field errors were not associated with their controls.**
+   - Entry controls now expose stable evidence paths; the first matching invalid field receives
+     `aria-invalid`, `aria-describedby` and focus while the live summary remains available.
+
+6. **OpenSpec apply failure — the audit MODIFIED Requirement omitted an existing scenario.**
+   - The delta now carries the complete existing keyboard scenario plus the new shared-slot,
+     root, request-lifecycle and field-error scenarios.
+   - A fresh isolated archive/apply changed two requirements, left the real capability digest at
+     `39829bf745e187ee03849579099216912a8e736cdde830a4dd34c48ac3ae8fe5`, and produced a strict-valid
+     isolated capability digest `927a7d42955acca081d559b92dac862fb6a4c81d704ae302143387f16d523bfc`.
+
+### Second Build verification
+
+- Targeted kernel/server: 292/292 passed.
+- Targeted API/composer/progress: 67/67 passed.
+- Full Web: 56 files / 1006 tests passed.
+- Full repository: 317 files / 5466 tests passed, with 5 credential-gated skips.
+- `npm run build`, Web typecheck, architecture, comments, docs and repository hygiene passed.
+- Hooks 482/482, adapters 272/272, bundle 31/31 and Skill registry verification passed.
+- Change and capability strict OpenSpec validation passed.
+- Current production server at `http://127.0.0.1:18977/` served `Tenon Dashboard`, product
+  version `1.0.1`, exact registered root and the rebuilt `index-C2cHWZ4f.js` asset.
+- Real HTTP returned stable 400 envelopes for missing/non-string root, preserved title whitespace
+  in Markdown, and left canonical state/document-ledger digests unchanged.
+- The real Build-phase detail correctly hid the Verify-only composer, retained 1280px viewport
+  width without horizontal overflow, and focused the localized detail close control.
+
+## Current pre-Verify review status
+
+PASS on the complete second-Build worktree relative to base
+`2394ac71efc87193350d476266a3219c320bb5b1`.
+
+- Spec/Correctness: Critical 0 / High 0 / Medium 0 / Low 0.
+- Rules/Architecture/Security: Critical 0 / High 0 / Medium 0 / Low 0.
+- Visual/Accessibility: Critical 0 / High 0 / Medium 0 / Low 0.
+
+The first Visual re-review found one Low test-coverage gap: the neutral slot unit test still claimed
+to prove the production Verify phase gate, while the ProgressView integration suite covered only
+the Verify-positive path. The test was renamed to its actual neutral-slot scope, and a production
+`ProgressView → ProgressDrawer → TaskDetail` parameterized regression now proves `build=false` and
+`verify=true`. The same reviewer re-ran 65 focused tests, Web typecheck and diff check, then cleared
+the Low finding.
+
+The final reviewers covered all 211 base-diff product/test/document/spec/governance/generated paths,
+the latest uncommitted return-loop changes, 347 JSON/JSONL values, dependency direction, trust
+guards, concurrency, compatibility, rollback, accessibility and isolated reproducibility. Their
+independent evidence included:
+
+- full repository 317/317 files with 5466 passing and 5 credential-gated skips;
+- kernel/server 292/292 and frontend API/composer/progress/Dialog 79/79;
+- architecture across 626 production files, comments, typecheck, diff check and strict OpenSpec;
+- isolated root build with Dashboard/server/CLI artifacts byte-identical to the tracked output;
+- isolated OpenSpec archive/apply with two modified requirements and unchanged live main-spec digest.
+
+The pre-Verify source/review conclusion is final. The exact committed SHA, non-force remote update
+and fresh GitHub CI result remain Build exit evidence and must be recorded before freezing Verify.

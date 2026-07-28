@@ -14,10 +14,20 @@ export interface VerificationEvidenceEditorEntry {
   skipReason: string
 }
 
+export type VerificationEvidenceEditorField =
+  | 'title'
+  | 'kind'
+  | 'status'
+  | 'command'
+  | 'result'
+  | 'skipReason'
+
 interface VerificationEvidenceEntryEditorProps {
   entry: VerificationEvidenceEditorEntry
   index: number
   disabled?: boolean
+  errorId?: string
+  invalidField?: VerificationEvidenceEditorField
   onChange: (patch: Partial<VerificationEvidenceEditorEntry>) => void
   onRemove: () => void
 }
@@ -28,10 +38,20 @@ export function VerificationEvidenceEntryEditor({
   entry,
   index,
   disabled = false,
+  errorId,
+  invalidField,
   onChange,
   onRemove,
 }: VerificationEvidenceEntryEditorProps): JSX.Element {
   const { t } = useT()
+  function errorProps(field: VerificationEvidenceEditorField) {
+    const invalid = invalidField === field
+    return {
+      'aria-describedby': invalid ? errorId : undefined,
+      'aria-invalid': invalid || undefined,
+      'data-evidence-path': `entries[${index}].${field}`,
+    }
+  }
   return (
     <fieldset className="rounded-xl border border-border bg-card p-4" data-testid={`evidence-entry-${entry.id}`}>
       <legend className="px-1 text-xs font-bold text-text">
@@ -48,6 +68,7 @@ export function VerificationEvidenceEntryEditor({
             onChange={(event) => onChange({ title: event.target.value })}
             placeholder={t('detail.evidence_title_placeholder')}
             value={entry.title}
+            {...errorProps('title')}
           />
         </label>
         <label className="grid gap-1 text-xs font-semibold text-text-2">
@@ -58,6 +79,7 @@ export function VerificationEvidenceEntryEditor({
             disabled={disabled}
             onChange={(event) => onChange({ kind: event.target.value as VerificationEvidenceKind, command: '' })}
             value={entry.kind}
+            {...errorProps('kind')}
           >
             {(['command', 'browser', 'review', 'other'] as const).map((kind) => (
               <option key={kind} value={kind}>{t(`detail.evidence_kind_${kind}`)}</option>
@@ -76,6 +98,7 @@ export function VerificationEvidenceEntryEditor({
               skipReason: '',
             })}
             value={entry.status}
+            {...errorProps('status')}
           >
             {(['passed', 'failed', 'skipped'] as const).map((status) => (
               <option key={status} value={status}>{t(`detail.evidence_status_${status}`)}</option>
@@ -91,6 +114,7 @@ export function VerificationEvidenceEntryEditor({
               disabled={disabled}
               onChange={(event) => onChange({ command: event.target.value })}
               value={entry.command}
+              {...errorProps('command')}
             />
           </label>
         )}
@@ -104,6 +128,7 @@ export function VerificationEvidenceEntryEditor({
               ? onChange({ skipReason: event.target.value })
               : onChange({ result: event.target.value })}
             value={entry.status === 'skipped' ? entry.skipReason : entry.result}
+            {...errorProps(entry.status === 'skipped' ? 'skipReason' : 'result')}
           />
         </label>
       </div>

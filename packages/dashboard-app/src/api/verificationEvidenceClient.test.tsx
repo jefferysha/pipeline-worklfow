@@ -32,7 +32,8 @@ describe('postVerificationEvidenceCompose', () => {
         result: '42 tests passed',
       }],
     }
-    await expect(postVerificationEvidenceCompose(input)).resolves.toEqual({
+    const controller = new AbortController()
+    await expect(postVerificationEvidenceCompose(input, controller.signal)).resolves.toEqual({
       markdown: '# Verification evidence draft',
       entryCount: 1,
     })
@@ -43,6 +44,7 @@ describe('postVerificationEvidenceCompose', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
+      signal: controller.signal,
     })
   })
 

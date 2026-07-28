@@ -1,23 +1,16 @@
 import { X } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot } from '../types'
-import type { VerificationEvidenceLocale } from '../api/client'
-import { VerificationEvidenceComposer } from '../verification/VerificationEvidenceComposer'
 
 export interface TaskDocumentsSectionProps {
   documents: NonNullable<ChangeSnapshot['documents']>
-  locale: VerificationEvidenceLocale
-  phase: string
-  root: string
-  onToast?: (message: string) => void
+  extra?: ReactNode
 }
 
 export function TaskDocumentsSection({
   documents,
-  locale,
-  phase,
-  root,
-  onToast,
+  extra,
 }: TaskDocumentsSectionProps): JSX.Element {
   const { t } = useT()
   return (
@@ -60,9 +53,9 @@ export function TaskDocumentsSection({
       {documents.items.length === 0 && documents.blockers.length === 0 && (
         <p className="m-0 text-xs text-text-3" role="status" aria-live="polite">{t('detail.docs_empty')}</p>
       )}
-      {phase === 'verify' && (
+      {extra !== undefined && (
         <div className="mt-3 border-t border-border pt-3">
-          <VerificationEvidenceComposer locale={locale} onToast={onToast} root={root} />
+          {extra}
         </div>
       )}
     </div>

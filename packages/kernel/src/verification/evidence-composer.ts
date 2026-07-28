@@ -201,6 +201,7 @@ function entryFromUnknown(
     VERIFICATION_EVIDENCE_LIMITS.titleBytes,
     collector,
     true,
+    true,
   )
   const status = enumValue(record.status, STATUSES, `${path}.status`, collector)
 

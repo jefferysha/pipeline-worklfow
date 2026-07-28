@@ -83,6 +83,26 @@ Dashboard 工作区、生成物和治理证据，并为合并决定留下可复�
    以 `requirements-changed` 返回 Spec。
 7. 只做非强制 push；远端必需 CI、review、mergeability 或冻结验证失败时保留 PR。
 
+## 首轮 Verify 受控修订
+
+冻结 SHA `7280dd3d45be69e88a695b82580ea2c5b3779f88` 的四轨均已完成，报告为
+`docs/superpowers/reports/2026-07-28-pr-6-merge-audit-verify-fail.md`。E2E 产品矩阵通过，
+但聚合仍有 3 个 Medium、3 个 Low，且 OpenSpec 隔离 archive/apply 为硬失败：
+
+1. `shared/TaskDocumentsSection` 反向导入 `verification` feature。采用上层 slot 装配，
+   shared 只认识中性 React 内容，不携带 locale/phase/root/toast 等 feature props。
+2. formatter 与 UI 修剪 title，违反 canonical spec 的合法 Unicode/Tab/换行保真。
+   `trim()` 只判断空值，payload 与 canonical copy 保留合法原文。
+3. audit MODIFIED Requirement 省略主规格既有“键盘路径完整”场景。delta 必须完整携带
+   既有与新增场景，隔离 archive 后目标规格 strict valid。
+4. compose route 的缺失/非字符串 root 不得解析为 cwd；resolver 前稳定返回 400。
+5. API client 与 dialog 增加 AbortSignal、cleanup 与 request identity，旧响应不能污染重开会话。
+6. validation field path 映射到 `aria-invalid`/`aria-describedby`，失败后聚焦首个无效控件。
+
+这些修订不扩大可信 Verify 能力、持久化或依赖范围；它们把冻结实现恢复到既有 capability 与
+仓库层次/可访问性规则。修复全部完成后必须重新做 pre-Verify 全量审查、生成物构建、GitHub CI
+与四轨 Verify，不允许只复查上述六项。
+
 ## 验收矩阵
 
 | 风险 | 自动验证 | 真实行为验证 |
@@ -94,6 +114,11 @@ Dashboard 工作区、生成物和治理证据，并为合并决定留下可复�
 | 响应式/i18n | zh/en key、类型、组件、生产 CSS/HTML | 桌面与移动、亮暗主题、无横向溢出 |
 | 全仓与分发 | architecture、comments、docs、hygiene、hooks、adapters、skills、bundle、全量测试/构建 | 正确标题、root、Change、API version |
 | GitHub 合并 | 新 head CI 成功、无未解决 thread、mergeable、main 未前进导致新冲突 | 合并后 main CI 成功 |
+| title 保真 | kernel/UI/HTTP 覆盖 Tab、前后空白和 CRLF；只拒绝 trim 后为空 | 真实输出保留合法内容且 Markdown 结构不被注入 |
+| shared 依赖 | architecture guard + import/slot 组件测试 | Task detail 内入口和 composer 行为不变 |
+| root 失败关闭 | route handler/真实 HTTP 缺失、空白、非字符串 root 均 400 | resolver/state/ledger 调用计数与 digest 不变 |
+| 取消与错误定位 | client signal、关闭/重开、旧响应晚到、字段 ARIA/focus 测试 | 慢请求关闭重开无污染；首个无效控件获焦 |
+| OpenSpec 应用 | show、strict validate、隔离 archive/apply、目标 spec strict validate | 真实主规格 digest 在 Verify 前后不变 |
 
 ## 回滚与停止条件
 
@@ -107,10 +132,10 @@ Dashboard 工作区、生成物和治理证据，并为合并决定留下可复�
 touches: kernel-domain, protected-api, frontend-ui, shared-dialog, generated-bundles, governance
 L1_api: filled -> #领域、协议与信任边界, #验收矩阵
 L2_data: waived -> 无 schema、数据库或持久化变更，且明确验证 state/ledger 零变化
-L3_rules: filled -> #审计发现, #Build 实施边界, #验收矩阵
-L4_state: filled -> #领域、协议与信任边界, #验收矩阵
-L5_errors: filled -> #领域、协议与信任边界, #验收矩阵
-L6_security: filled -> #领域、协议与信任边界, #Build 实施边界
+L3_rules: filled -> #审计发现, #Build 实施边界, #首轮-Verify-受控修订, #验收矩阵
+L4_state: filled -> #领域、协议与信任边界, #首轮-Verify-受控修订, #验收矩阵
+L5_errors: filled -> #领域、协议与信任边界, #首轮-Verify-受控修订, #验收矩阵
+L6_security: filled -> #领域、协议与信任边界, #Build 实施边界, #首轮-Verify-受控修订
 L7_perf: waived -> 输入与输出均有固定 byte/entry 上限，不新增长任务或持久队列
 L8_deps: waived -> package 与 lockfile 不变，不新增或升级依赖
 L10_terms: filled -> #固定输入, #回滚与停止条件

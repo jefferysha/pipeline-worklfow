@@ -59,6 +59,42 @@ bundle，尽早暴露共享层集成问题。
 
 **子阶段边界：此处建议 /clear**
 
+## 子阶段 1.5：首轮 Verify 受控返工
+
+1. 先以规范回归锁定 title 保真和 root 失败关闭。
+   - `packages/kernel/src/verification/evidence-composer.test.ts`：前导/尾随空白、Tab、CRLF
+     在非空 title 中保留；trim 后为空仍失败。
+   - `packages/dashboard-app/src/verification/VerificationEvidenceComposer.test.tsx`：
+     payload 保留 title 原文。
+   - `packages/server/src/server.test.ts`：缺失、空白、非字符串 root 均在 resolver 前返回
+     400 stable envelope。
+2. 修复 shared 依赖方向。
+   - 从 `packages/dashboard-app/src/shared/TaskDocumentsSection.tsx` 移除
+     `verification/VerificationEvidenceComposer` import 和 feature props。
+   - 由 `TaskDetail` 或更高层拥有 locale/phase/root/toast 的装配点构造 composer slot。
+   - 组件回归证明 Verify-only 入口、outer drawer 与 toast 行为保持。
+3. 修复请求生命周期。
+   - `verificationEvidenceClient.ts` 接受并传递 `AbortSignal`。
+   - composer 关闭/卸载时 abort；每次 submit 使用 request identity，过期 resolve/reject
+     不更新新会话。
+   - 测试覆盖关闭、重开、新请求、旧请求晚成功/晚失败，不靠弱化计时断言。
+4. 修复字段级可访问错误。
+   - 稳定把 `details[].path` 映射到 entry 控件 id。
+   - 首个无效控件设置 `aria-invalid`/`aria-describedby` 并在失败后获焦；
+     全局 live region 保留。
+   - 覆盖多 entry、服务端字段错误与本地 validation。
+5. 修复 delta 完整性并演练。
+   - MODIFIED Requirement 保留主规格“键盘路径完整”及全部既有场景。
+   - `/opt/homebrew/bin/openspec show/validate` 成功。
+   - 在保留权限/软链的隔离副本执行 `openspec archive pr-6-merge-audit --yes --json`，
+     再 strict validate 结果规格；真实主规格 digest 不变。
+6. 正式执行 `npm run build` 刷新 CLI/server/Dashboard 生成物，不手改 bundle。
+
+验收：六类首轮 finding 均有先红后绿的定向回归；architecture、target OpenSpec 与隔离
+archive/apply 成功；无已知 Low 遗留。
+
+**子阶段边界：此处建议 /clear**
+
 ## 子阶段 2：规则、架构和全量回归
 
 1. 静态与规范门禁。

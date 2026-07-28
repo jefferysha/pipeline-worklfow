@@ -15,12 +15,16 @@
 
 - [x] 把全部发现转为 capability delta、冲突解决策略、验证矩阵和可执行计划。
 - [x] 登记 delta/plan/tasks 并取得 exact-event Spec review receipt。
+- [x] 首轮 Verify 失败后补全既有键盘场景、title/root/请求生命周期/shared/ARIA 修订与返工计划。
 
 ## 实现
 
 - [x] 以 merge commit 纳入最新 `origin/main`，解决冲突并完成最小充分修复。
 - [x] 运行 TDD、定向/全量测试、构建、静态、分发与真实行为检查。
 - [x] 完成独立 pre-Verify 复审，提交并非强制 push 到原 PR 分支。
+- [x] 以 TDD 修复 shared 依赖、title 保真、root 失败关闭、请求取消/过期响应和字段错误定位。
+- [x] 补全 OpenSpec 隔离 apply，正式重建生成物并重跑风险匹配的定向与全量门禁。
+- [ ] 独立 pre-Verify 全量复审通过后非强制 push 新 exact head，并等待 GitHub CI。
 
 ## 验证
 

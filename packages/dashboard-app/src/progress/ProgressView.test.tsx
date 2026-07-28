@@ -859,6 +859,31 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(opener).toHaveFocus()
   })
 
+  it.each([
+    ['build', false],
+    ['verify', true],
+  ] as const)('证据 composer phase gate：%s 阶段可见=%s', async (phase, visible) => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = phase
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    if (visible) {
+      expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    } else {
+      expect(screen.queryByTestId('evidence-compose-open')).not.toBeInTheDocument()
+    }
+  })
+
   it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
     const snapshot = makeFixture()
     const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')

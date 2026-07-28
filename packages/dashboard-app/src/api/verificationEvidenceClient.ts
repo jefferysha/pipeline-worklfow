@@ -22,6 +22,7 @@ export class VerificationEvidenceApiError extends ApiError {
 
 export async function postVerificationEvidenceCompose(
   input: VerificationEvidenceComposeInput,
+  signal?: AbortSignal,
 ): Promise<VerificationEvidenceComposeResponse> {
   let response: Response
   try {
@@ -32,6 +33,7 @@ export async function postVerificationEvidenceCompose(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(input),
+      signal,
     })
   } catch (error) {
     wrapNetwork(error)

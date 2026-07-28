@@ -136,6 +136,7 @@ describe('verification evidence composer', () => {
   test('preserves leading and trailing whitespace in evidence bodies while rejecting blank values', () => {
     const result = compose([
       commandEntry({
+        title: ' \tFocused tests\r\n ',
         command: ' \tprintf ok\r\n ',
         result: '\n result with evidence \t\n',
       }),
@@ -148,6 +149,7 @@ describe('verification evidence composer', () => {
     ])
     expect(result.ok).toBe(true)
     if (!result.ok) return
+    expect(result.markdown).toContain('```text\n \tFocused tests\n \n```')
     expect(result.markdown).toContain('```text\n \tprintf ok\n \n```')
     expect(result.markdown).toContain('```text\n\n result with evidence \t\n\n```')
     expect(result.markdown).toContain('```text\n\n unavailable in sandbox \t\n\n```')
@@ -155,6 +157,10 @@ describe('verification evidence composer', () => {
     expect(compose([commandEntry({ result: ' \t\n ' })])).toMatchObject({
       ok: false,
       errors: [{ code: 'field_required', path: 'entries[0].result' }],
+    })
+    expect(compose([commandEntry({ title: ' \t\r\n ' })])).toMatchObject({
+      ok: false,
+      errors: [{ code: 'field_required', path: 'entries[0].title' }],
     })
   })
 

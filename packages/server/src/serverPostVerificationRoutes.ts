@@ -23,7 +23,21 @@ export async function handlePostVerificationRoutes(
     })
   }
   const body = raw as Record<string, unknown>
-  const root = typeof body.root === 'string' ? body.root : ''
+  if (typeof body.root !== 'string' || body.root.trim() === '') {
+    return deps.sendJson(res, 400, {
+      ok: false,
+      code: 'verification_evidence_invalid',
+      error: 'Verification evidence root must be a non-empty string',
+      details: [{
+        code: typeof body.root === 'string' || body.root === undefined
+          ? 'field_required'
+          : 'field_type',
+        path: 'root',
+      }],
+      overflow: false,
+    })
+  }
+  const root = body.root
   const rootCheck = deps.workflowRootForRequest(root)
   if (!rootCheck.ok) {
     return deps.sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })

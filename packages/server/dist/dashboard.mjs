@@ -12994,7 +12994,7 @@ function entryFromUnknown(value, index, collector) {
       addError(collector, "unknown_field", `${path7}.${key}`);
   }
   const kind = enumValue(record2.kind, KINDS, `${path7}.kind`, collector);
-  const title = normalizeText(record2.title, `${path7}.title`, VERIFICATION_EVIDENCE_LIMITS.titleBytes, collector, true);
+  const title = normalizeText(record2.title, `${path7}.title`, VERIFICATION_EVIDENCE_LIMITS.titleBytes, collector, true, true);
   const status = enumValue(record2.status, STATUSES, `${path7}.status`, collector);
   let command;
   if (record2.command !== void 0) {
@@ -19757,7 +19757,19 @@ async function handlePostVerificationRoutes(req, res, path7, deps) {
     });
   }
   const body = raw;
-  const root = typeof body.root === "string" ? body.root : "";
+  if (typeof body.root !== "string" || body.root.trim() === "") {
+    return deps.sendJson(res, 400, {
+      ok: false,
+      code: "verification_evidence_invalid",
+      error: "Verification evidence root must be a non-empty string",
+      details: [{
+        code: typeof body.root === "string" || body.root === void 0 ? "field_required" : "field_type",
+        path: "root"
+      }],
+      overflow: false
+    });
+  }
+  const root = body.root;
   const rootCheck = deps.workflowRootForRequest(root);
   if (!rootCheck.ok) {
     return deps.sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });

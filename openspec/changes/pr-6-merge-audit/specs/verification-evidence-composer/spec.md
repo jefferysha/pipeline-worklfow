@@ -12,12 +12,16 @@ status-specific result/skipReason 控件；当前 Dashboard locale 必须显式�
 空态不得发请求。提交期间必须显示 loading 并防重复提交；server validation/network failure
 必须以内联 error/live feedback 呈现且保留草稿；成功后必须显示只读 Markdown 与复制操作。
 clipboard 成功和失败必须分别反馈，失败时只读文本仍可手工选择。所有可见文案必须提供中英文翻译。
+validation error 必须以 `aria-invalid` 与 `aria-describedby` 关联具体失败控件，并将焦点移到首个
+无效控件。关闭或卸载 dialog 必须取消进行中的 compose 请求；晚到的旧响应不得覆盖重开后的新会话。
 
 composer 与共享 Dashboard surface 集成时 `MUST` 保留 shared `Dialog` 的统一 Lucide 图标、
 theme token、ease-out motion 和 reduced-motion 语义。嵌套在 Task detail/drawer 内时，
 topmost dialog 必须独占 Escape 与双向 Tab；单次 Escape 只能关闭 composer，外层详情和
 `change=` URL 必须保留，焦点必须归还 composer 入口。关闭图标的 accessible label 必须使用
 当前 locale，不得退化为硬编码字形或硬编码语言。
+共享文档区不得反向导入 verification feature；composer 必须由拥有 feature/shell 上下文的上层
+通过中性 slot 装配。
 
 #### Scenario: 非 Verify 阶段不出现入口
 
@@ -34,7 +38,14 @@ topmost dialog 必须独占 Escape 与双向 Tab；单次 Escape 只能关闭 co
 
 - **WHEN** server 返回 validation error 或网络失败
 - **THEN** dialog 保持打开、输入不丢失且错误可被辅助技术感知
+- **AND** 字段错误关联对应控件，焦点进入首个无效控件
 - **AND** 用户修复后可重试
+
+#### Scenario: 关闭后旧请求不能污染新会话
+
+- **WHEN** 用户在 compose 请求进行中关闭 dialog，随后重新打开并开始新会话
+- **THEN** 已关闭会话的请求被取消
+- **AND** 旧请求的晚到成功或失败响应不能改变新会话的 loading、草稿、错误或输出
 
 #### Scenario: 复制成功和失败都诚实反馈
 
@@ -42,6 +53,11 @@ topmost dialog 必须独占 Escape 与双向 Tab；单次 Escape 只能关闭 co
 - **THEN** 使用现有 toast 显示成功
 - **WHEN** clipboard API 缺失或拒绝
 - **THEN** 显示失败反馈且保留可选择的只读 Markdown
+
+#### Scenario: 键盘路径完整
+
+- **WHEN** 用户仅使用键盘打开和操作 dialog
+- **THEN** 初始焦点进入 dialog、Tab 焦点不逃逸、所有控件可达、Escape 关闭并归还焦点
 
 #### Scenario: 嵌套键盘与共享视觉语义完整
 
@@ -57,6 +73,9 @@ verification report 格式、document ledger、CAS/原子写、build fingerprint
 或 phase gate。删除新增 formatter、route、API client 和 UI 入口必须能完整回滚，不要求
 state/schema/data migration，不新增 runtime dependency。
 
+compose route 必须要求 `root` 是显式非空字符串。缺失、空白或非字符串 root 必须在调用
+registered-root resolver 前返回稳定 HTTP 400 validation envelope，不得隐式采用 server cwd。
+
 与最新 `main` 集成时 `MUST` 使用不改写 PR 历史的普通 merge，语义解决共享源文件冲突，并从
 合并后的源码重建 Dashboard HTML/assets、server bundle 与 CLI bundle；不得手工拼接生成物。
 合并后的 exact head 必须重新通过目标 OpenSpec strict validation、架构/规则门禁、kernel/API/UI
@@ -71,6 +90,12 @@ state/schema/data migration，不新增 runtime dependency。
 
 - **WHEN** 用户不打开 composer 或运行现有 API/workflow
 - **THEN** 既有 snapshot、state、document evidence、transition 和 report 行为保持兼容
+
+#### Scenario: 缺失 root 失败关闭
+
+- **WHEN** compose 请求缺失 root，或 root 为空白/非字符串
+- **THEN** 返回 HTTP 400 与稳定 `verification_evidence_invalid` envelope
+- **AND** 不调用 registered-root resolver、formatter 或任何持久化路径
 
 #### Scenario: 冲突与生成物按源码真相解决
 
