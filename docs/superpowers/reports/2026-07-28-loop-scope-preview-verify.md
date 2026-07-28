@@ -2,77 +2,88 @@
 
 ## 结论
 
-FAIL。冻结构建 `d632ad7442b085637ae5247e8706ed43cb9e3c0e` 的完整四轨验证汇总为
-Critical 0 / High 0 / Medium 1 / Low 0。Reviewer、Spec/E2E 与独立 Codex CLI
-共同确认 Loop 身份切换时存在结果串线；视觉轨的既有矩阵通过，但未覆盖该身份切换。
-持续自主模式不接受偏差，本轮按确切 `verify-fail` 返回 Build。
+PASS。冻结构建 `23d69fee5bba42326d7c332c6ff251c0927c9605` 的正式四轨验证均为
+Critical 0 / High 0 / Medium 0 / Low 0。完整 207/207 changed files 已由 Standards、
+Spec/E2E、独立 Codex CLI 与真实浏览器/视觉轨覆盖；上一轮发现的跨 Loop 结果串线已通过
+completed 与 in-flight 两条身份回归关闭。
 
 ## 冻结坐标与零输出边界
 
 - base / merge-base：`2394ac71efc87193350d476266a3219c320bb5b1`
-- build SHA：`d632ad7442b085637ae5247e8706ed43cb9e3c0e`
-- tree：`0ddc71539e99d8c3c62145641c700b505efe1734`
-- 所有写测试、构建、浏览器证据和 OpenSpec archive/apply 均在精确 `git archive`
-  的仓库外隔离目录执行；共享实现树保持冻结。
+- build SHA：`23d69fee5bba42326d7c332c6ff251c0927c9605`
+- tree：`7023803e911e12a5be4dcf3676187c5682c577b7`
+- diff：207 files，+4273 / -460；10 个生产源码、7 个测试、7 个生成/分发资产、
+  15 个规格与治理文档、168 个 pipeline revision/review/transition artifact。
+- 所有 clean build、测试、浏览器证据和 OpenSpec archive/apply 均在精确 `git archive`
+  的仓库外隔离目录执行；共享实现树保持冻结，正式报告是聚合后唯一写入的治理产物。
 
 ## 四轨结果
 
 | 轨道 | 结论 | 证据与边界 |
 | --- | --- | --- |
-| Reviewer / Standards | FAIL · M1 | 完整审查 191/191 changed files、3470/3470 blobs、全量源码/治理/生成物和门禁；独立 SSR rerender 证明 completed 与 in-flight 两类结果均可跨 Loop 串线。 |
-| E2E / Spec | FAIL · M1 | 191/191 文件映射、5 requirements / 21 scenarios、OpenSpec 隔离演练与既有测试通过；新增临时安全回归 2/2 按预期失败，确认违反 R4 身份绑定。 |
-| Codex CLI | FAIL · M1 | 只读审查完整冻结 diff，独立定位同一 row-switch 代际失效缺口。它同时提示最终 PASS 报告尚未生成；该项是 Verify 本阶段先审查、后生成报告的规定时序，不计 finding。 |
-| 视觉审查 | PASS | 冻结 Dashboard 身份/资产、重提 pending、2xx/非 2xx abort、dirty/save、双语、错误/重试、键盘、焦点、响应式与对比度矩阵通过；未覆盖 Loop row 切换。 |
+| Reviewer / Standards | PASS · C0/H0/M0/L0 | 207/207 文件内容覆盖；核对 kernel、server、Dashboard、生成 bundle、调用方、安全边界和全部治理链。新增 revision 71 与 pre-Verify receipt 的 revision id、state digest、previous revision、payload digest 和 current projection 一致，无 secret。 |
+| E2E / Spec | PASS · C0/H0/M0/L0 | 207/207 文件映射、5 requirements / 21 scenarios；隔离 clean build 与 `npm run test:all` 通过，OpenSpec show/strict/archive/apply 成功，真实主规格 digest 未变化。 |
+| Codex CLI | PASS · C0/H0/M0/L0 | 只读审查完整冻结 diff；覆盖 correctness、security、API compatibility、concurrency、abort/error、a11y、spec 和生成资产。 |
+| 浏览器 / 视觉 | PASS · C0/H0/M0/L0 | 确认目标 Tenon Dashboard 与冻结资产；覆盖成功、空、invalid、loading、403/409/500、异常 200、network drop/retry、abort、revalidation、dirty/save、双语、键盘、焦点、响应式、明暗主题和对比度。 |
 
-## 必须修复的发现
+## 规格与逐文件回读
 
-### Medium · Loop 身份切换未使预检代际失效
+- 逐文件映射：`/tmp/loop-scope-23d-file-map.tsv`，207 rows，0 unmapped。
+- R1 kernel 逐路径解释：3 scenarios；R2 protected API：9；R3 fresh/no-permit：2；
+  R4 typed client/UI：6；R5 aggregate compatibility：1。
+- Delta spec、ADR、plan、详细设计与实现一致；无 missing、partial、scope creep 或错误映射。
+- OpenSpec `1.6` 隔离演练：show 5/21；change strict 1/1；archive
+  `specsUpdated=true`、added 5；applied strict 1/1。delta/applied normalized SHA-256
+  均为 `addce34b…`。真实 `openspec/specs` digest 前后均为
+  `9cf77c8354822b949ccfaa3ee75eef236a13e85f566ccf4d16529a938f5391d1`。
 
-`LoopCard` 在同一组件树内切换 `loops.selected`，`LoopAdvancedFields` 随后只更新
-`LoopScopePreview` 的 `root` / `loopId` props，没有 key。组件内部的 open、raw、busy、
-result、error、request generation 和 AbortController 因而保留；唯一 cleanup effect 只在
-unmount 时取消。结果有两条确定性失败路径：
+## 测试、构建与分发资产
 
-1. Loop A 已成功后切换到 Loop B，A 的 summary/items 仍显示在 B 的 Dialog 标题下。
-2. Loop A 请求在途时切换到 Loop B，A 的迟到响应仍通过 request generation 检查并发布到 B。
+- Node `v22.23.1` / npm `11.16.0`；隔离 `npm ci`、`npm run build` 通过。
+- Root：317/317 files，5462 passed，5 honest skipped；Web：56/56 files，
+  1008/1008。
+- focused server/API：286/286；focused client/UI 与 identity 专项通过。
+- repository hygiene、architecture（622 production files）、comments、
+  default-workflow freshness、bundle 31/31、hooks 482/482、adapters 272/272、
+  skills、oracle、OpenSpec 和 `git diff --check` 通过。
+- Dashboard JS `index-sS78pN8a.js` SHA-256
+  `5074b0b8f20f98b6e1e6eccb32ea731362ccf1962b460acb2c87a850ef01f876`；
+  CSS `index-EnliBiGT.css` SHA-256
+  `c04ba7a1885866622f632f7ea09d60fd0947b0147c988668566813afadc646fc`；
+  server `be57d276671203669606ec09cc963ab69e3e3e6c0d17b546c2bf4b2e3abe6b60`；
+  CLI `c533963501ccc1ab7b6bee29d857d8fcac84c016167277e36f4deb810fcdd802`；
+  index HTML `3ab74b0fc64c43c7eaff95f9126d21d43145ac81adf2974d04908db068ae7560`。
+  全部与 clean build 逐字节一致。
 
-这违反 R4 对成功响应绑定当前 Loop/请求、串线响应不得渲染的要求。预检不是执行许可且真实 gate
-仍会 fresh 重检，因此定级 Medium，而不是 High。
+## 浏览器证据
 
-修复要求：`root` 或 `loopId` 改变时必须使请求代际失效、取消当前 controller 并清空或关闭
-全部 Dialog 状态；补已完成与在途两条身份切换回归，重建受跟踪 Web bundle 后重新冻结并重跑四轨。
-
-## 通过的验证
-
-- Node `v22.23.1` / npm `11.16.0`，clean `npm ci` 与 `npm run build` 通过。
-- Dashboard JS `index-CNYyyV41.js`
-  SHA-256 `bcd2bfd3787305a8d04aa7d780a46d88bb2c7fb7e5c0c688fac69f60396e4273`；
-  CSS `index-EnliBiGT.css`
-  SHA-256 `c04ba7a1885866622f632f7ea09d60fd0947b0147c988668566813afadc646fc`；
-  server SHA-256
-  `be57d276671203669606ec09cc963ab69e3e3e6c0d17b546c2bf4b2e3abe6b60`。
-  Dashboard、server、CLI 与 clean rebuild 逐字节一致。
-- Root：317/317 files，5462 passed，5 honest skipped。
-- Web：56/56 files，1006/1006；focused server 286/286，client/UI 56/56。
-- repository hygiene、architecture（622 production files）、comments、default-workflow
-  freshness、bundle 31/31、hooks 482/482、adapters 272/272、skills、oracle、identity、
-  docs、templates、migration 与 `git diff --check` 通过。
-- OpenSpec 5 requirements / 21 scenarios；隔离 show/strict/archive/apply 成功，真实
-  `openspec/specs` digest 未变化。
-- 浏览器覆盖重提 stale 清除、2xx/500 headers/body abort、goal-only dirty、allow/deny
-  dirty 双语阻断、save 500、save success + reload、成功/全部与部分拒绝、403/409/500、
-  200 empty/non-JSON、retry、Ctrl/Cmd+Enter、Tab/Shift+Tab/Escape、焦点返回、
-  375/768/1440、light/dark；placeholder 对比度 light `7.75:1`、dark `8.63:1`。
+- 报告：`/tmp/loop-scope-verify-23d69f-visual.md`，SHA-256
+  `946a074e4007db6d67294bb2df2a5cd3a475c34396a261ed0c8f72e43564eec1`。
+- 结构化证据：`/tmp/loop-scope-verify-23d69f-browser/browser-evidence.json`，
+  SHA-256 `1de1c9cf70b2aab6fd1eefecb6acc3c84a7f72f3ba1b40ca0b750be692f42ea5`。
+- 浏览器网络层 `connectionreset` 显示本地化错误、保留输入，真实 retry 返回 HTTP 200，
+  page errors 为 0。
+- completed 的受控 Loop 切换清除旧结果；in-flight 切换观测
+  `clientAborted=true`，迟到响应未送达新 Loop。该专项使用真实生产 `<select>` 的受控
+  `change` 验证 identity 链，不宣称用户可以点击穿透 Dialog scrim。
+- 375 / 768 / 1440、light/dark、Tab/Shift+Tab/Escape、Ctrl/Cmd+Enter、焦点返回与
+  placeholder 对比度通过。无 committed pixel baseline，pixel diff 如实记为
+  INCONCLUSIVE；实时视觉验收通过。
+- 冻结副本 3486 文件的前后 aggregate fingerprint 均为
+  `767e1a62df4ff360a3a3236e111d571fa1ae2dd8e9b0af54b8d408f073bb2c1c`。
 
 ## 已知基线与剩余风险
 
 - clean install 报告 7 个既有依赖漏洞；本 Change 未修改 package manifest 或 lockfile。
-- 高负载 Web 首轮出现一个既有 ProgressView GSAP 时序失败；隔离与完整复跑均通过。
+- 主工作树高负载 `npm test` 曾出现 tap SIGINT 与 ledger-store 30ms ordering 两个既有时序噪声；
+  定向复跑 51/51 通过，隔离 `npm run test:all` 一次完整通过。
+- 浏览器矩阵首轮 mobile keyboard harness 单次 timeout；完整重跑通过且不可复现。
 - 5 个条件跳过来自未开启真实 Codex 门和缺少外部 Claude OAuth secret，与代码失败分开记录。
-- 无 `openat` 平台仍沿用项目既有同-principal-writer 信任边界；预检不是 permit。
+- 无 `openat` 平台仍沿用项目既有同-principal-writer 信任边界；预检不产生 permit，执行 gate
+  继续 fresh 重检。
 
 ## 决策
 
-精确请求 `verify-fail`，使用当前 Change 与 host session 绑定的 delegated receipt 返回 Build。
-以测试先行补齐 completed 与 in-flight Loop identity 两条回归，修复后重新执行全量 Build 收敛和
-冻结四轨；不得只复查本次 finding。
+四轨全部零 finding，设置 reviewer / Codex / branch 状态为 pass/handled，登记本报告 exact digest，
+请求确切 `verify-pass` review event。持续自主授权只用于留下 Change 与 host session 绑定的
+delegated receipt，不删除 marker、不复用 `verify-fail` receipt。

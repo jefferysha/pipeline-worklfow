@@ -35,11 +35,11 @@
 
 - [x] 重新运行 kernel/server/Dashboard 定向测试、`typecheck:web`、`test:web`、`build:web`、`build` 与 `npm test`。
 - [x] 重新完成真实浏览器验收与隔离 OpenSpec show/strict validate/archive/apply 演练。
-- [ ] 重新运行 repository hygiene、边界 HTTP/client 测试、全量门禁与冻结四轨验证。
+- [x] 重新运行 repository hygiene、边界 HTTP/client 测试、全量门禁与冻结四轨验证。
 
 ## 交付
 
-- [ ] 应用主规格，提交、推送并创建含完整证据的非草稿 PR。
+- [x] 应用主规格，提交、推送并创建含完整证据的非草稿 PR。
 
 ## 归档
 
