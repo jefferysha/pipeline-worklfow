@@ -5,12 +5,15 @@
 ### Requirement: 项目 SHALL 持久化可配置的单轮路由旁路词
 
 系统 SHALL 在项目 `.pipeline/hooks.json` version 1 中持久化
-`prompt_skip_keyword`。缺文件、旧文件缺字段或字段类型/字符非法时，读侧 SHALL 回退默认值
-`no-tenon`；显式空字符串 SHALL 表示禁用旁路。非空值 SHALL 匹配
+`prompt_skip_keyword`。缺文件、旧文件缺字段、非普通文件、符号链接、超过 4096 bytes，
+或 canonical header 中字段类型/字符非法时，读侧 SHALL 回退默认值 `no-tenon`；显式空字符串
+SHALL 表示禁用旁路。非空值 SHALL 匹配
 `^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`，不得隐式 trim 或求值为 shell/正则。
 
-Hook 开关和旁路词写回 SHALL 使用同目录临时文件加 rename 的 canonical JSON 写入，并 SHALL
-保留彼此管理的字段。
+Keyword SHALL 只从固定的 version/keyword canonical header 提取；matrix 解析失败 SHALL
+独立 fail-open 为空矩阵，不得迫使 Bash Hook 复制完整 JSON/matrix codec。Hook 开关和旁路词
+写回 SHALL 在项目配置锁内完成 read-modify-write，并使用同目录临时文件加 rename 的 canonical
+JSON 写入；同进程或跨进程并发时均 SHALL 保留彼此管理的字段。
 
 #### Scenario: 旧配置获得兼容默认值
 
@@ -31,6 +34,20 @@ Hook 开关和旁路词写回 SHALL 使用同目录临时文件加 rename 的 ca
 - **WHEN** 用户切换单个 Hook 或更新旁路词
 - **THEN** 写回只改变目标值
 - **AND** 另一类值保持不变。
+- **AND** 两个进程并发执行两类写回时仍不丢失任一值。
+
+#### Scenario: 不可信配置不会阻塞提示 Hook
+
+- **WHEN** `.pipeline/hooks.json` 是符号链接、FIFO、非普通文件或超过 4096 bytes
+- **THEN** UserPromptSubmit Hook 在有界时间内回退 `no-tenon`
+- **AND** 不读取无界字节或等待特殊文件。
+
+#### Scenario: keyword 与 matrix 独立降级
+
+- **GIVEN** version/keyword canonical header 合法
+- **WHEN** matrix 内容损坏、重复或无法解析
+- **THEN** server 与 Bash Hook 使用同一 keyword
+- **AND** matrix 独立 fail-open 为空矩阵。
 
 ### Requirement: Dashboard API SHALL 暴露可信且向后兼容的配置闭环
 

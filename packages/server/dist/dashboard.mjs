@@ -3,7 +3,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
-import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
+import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname13, join as join52 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -10689,8 +10689,8 @@ function parseRunHistory(text2, loopId) {
       continue;
     if (!HIST_TS_RE.test(required(cols[0])))
       continue;
-    const rm4 = line.match(HIST_RESULT_RE);
-    results.push(rm4 ? rm4[1] : null);
+    const rm5 = line.match(HIST_RESULT_RE);
+    results.push(rm5 ? rm5[1] : null);
   }
   let failStreak = 0;
   for (let i = results.length - 1; i >= 0; i--) {
@@ -16285,7 +16285,14 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
 }
 
 // packages/server/src/hooksConfig.ts
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync19, renameSync as renameSync5, writeFileSync as writeFileSync5 } from "node:fs";
+import {
+  closeSync as closeSync2,
+  constants as constants6,
+  fstatSync as fstatSync5,
+  openSync as openSync5,
+  readSync
+} from "node:fs";
+import { mkdir as mkdir14, rename as rename8, rm as rm4, writeFile as writeFile11 } from "node:fs/promises";
 import { join as join33 } from "node:path";
 var HOOK_METAS = [
   { id: "session-start", event: "SessionStart", matcher: "*", script: "hooks/session-start.sh", configurable: true },
@@ -16301,49 +16308,83 @@ var HOOK_BY_ID = new Map(HOOK_METAS.map((h) => [h.id, h]));
 var CONFIGURABLE_IDS = HOOK_METAS.filter((h) => h.configurable).map((h) => h.id);
 var PHASE_RE = /^[a-zA-Z0-9_-]+$/;
 var PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+var HOOKS_CONFIG_MAX_BYTES = 4096;
 var DEFAULT_PROMPT_SKIP_KEYWORD = "no-tenon";
-function isCanonicalHooksConfigText(text2, parsed) {
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
-  const record2 = parsed;
-  const keys = Object.keys(record2);
-  const fullKeys = ["version", "prompt_skip_keyword", "matrix"];
-  const legacyKeys = ["version", "matrix"];
-  if (keys.length !== fullKeys.length && keys.length !== legacyKeys.length || !keys.every((key, index) => key === (keys.length === fullKeys.length ? fullKeys : legacyKeys)[index]) || record2.version !== 1) return false;
-  if (keys.length === fullKeys.length && (typeof record2.prompt_skip_keyword !== "string" || record2.prompt_skip_keyword !== "" && !PROMPT_SKIP_KEYWORD_RE.test(record2.prompt_skip_keyword))) return false;
-  if (typeof record2.matrix !== "object" || record2.matrix === null || Array.isArray(record2.matrix)) return false;
-  for (const [key, value] of Object.entries(record2.matrix)) {
-    if (value !== false || !key.includes(".") || !/^[A-Za-z0-9_.-]+$/.test(key)) return false;
+function readBoundedHooksConfig(root) {
+  let fd;
+  try {
+    fd = openSync5(hooksConfigPath(root), constants6.O_RDONLY | constants6.O_NOFOLLOW);
+    const stat6 = fstatSync5(fd);
+    if (!stat6.isFile() || stat6.size > HOOKS_CONFIG_MAX_BYTES) return null;
+    const buffer = Buffer.alloc(HOOKS_CONFIG_MAX_BYTES + 1);
+    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, 0);
+    if (bytesRead > HOOKS_CONFIG_MAX_BYTES) return null;
+    return buffer.toString("utf8", 0, bytesRead);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== void 0) closeSync2(fd);
   }
-  const normalizedLines = (value) => {
-    const lines = value.replace(/\r\n?/g, "\n").split("\n");
-    if (lines.at(-1) === "") lines.pop();
-    return lines.map((line) => line.trim()).join("\n");
-  };
-  return normalizedLines(text2) === normalizedLines(JSON.stringify(parsed, null, 2));
+}
+function readPromptSkipKeywordHeader(text2) {
+  const lines = text2.replace(/\r\n?/g, "\n").split("\n").map((line2) => line2.trim());
+  if (lines[0] !== "{" || lines[1] !== '"version": 1,') return DEFAULT_PROMPT_SKIP_KEYWORD;
+  const prefix = '"prompt_skip_keyword": ';
+  const line = lines[2];
+  if (line === void 0 || !line.startsWith(prefix) || !line.endsWith(",")) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  const encoded = line.slice(prefix.length, -1);
+  let keyword;
+  if (encoded === '""') {
+    keyword = "";
+  } else if (encoded.length >= 2 && encoded.startsWith('"') && encoded.endsWith('"') && PROMPT_SKIP_KEYWORD_RE.test(encoded.slice(1, -1))) {
+    keyword = encoded.slice(1, -1);
+  } else {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  if (lines.slice(3).some((candidate) => candidate.startsWith(prefix))) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  return keyword;
+}
+function hasDuplicateMatrixKey(text2, key) {
+  const encoded = JSON.stringify(key);
+  let count = 0;
+  let from = 0;
+  for (; ; ) {
+    const index = text2.indexOf(encoded, from);
+    if (index < 0) return count > 1;
+    const remainder = text2.slice(index + encoded.length);
+    if (/^\s*:/.test(remainder)) count += 1;
+    from = index + encoded.length;
+  }
 }
 function hooksConfigPath(root) {
   return join33(root, ".pipeline", "hooks.json");
 }
 function readHooksConfig(root) {
-  let text2;
+  const text2 = readBoundedHooksConfig(root);
+  if (text2 === null) {
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
+  }
+  const promptSkipKeyword = readPromptSkipKeywordHeader(text2);
   let parsed;
   try {
-    text2 = readFileSync19(hooksConfigPath(root), "utf8");
     parsed = JSON.parse(text2);
   } catch {
-    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
+    return { promptSkipKeyword, matrix: {} };
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
+    return { promptSkipKeyword, matrix: {} };
   }
   const record2 = parsed;
-  const rawKeyword = record2.prompt_skip_keyword;
-  const promptSkipKeyword = isCanonicalHooksConfigText(text2, parsed) && typeof rawKeyword === "string" && (rawKeyword === "" || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword)) ? rawKeyword : DEFAULT_PROMPT_SKIP_KEYWORD;
   const rawMatrix = record2.matrix;
   const matrix = {};
   if (typeof rawMatrix === "object" && rawMatrix !== null && !Array.isArray(rawMatrix)) {
     for (const [key, value] of Object.entries(rawMatrix)) {
       if (value !== false) continue;
+      if (hasDuplicateMatrixKey(text2, key)) return { promptSkipKeyword, matrix: {} };
       const dot = key.indexOf(".");
       if (dot <= 0) continue;
       const hook = key.slice(0, dot);
@@ -16388,48 +16429,65 @@ function validatePromptRoutingBypassBody(body) {
   }
   return { ok: true, value: { promptSkipKeyword: keyword } };
 }
-function writeHooksConfig(root, config) {
+var tempSequence = 0;
+async function writeHooksConfig(root, config) {
   const dir = join33(root, ".pipeline");
-  mkdirSync5(dir, { recursive: true });
+  await mkdir14(dir, { recursive: true });
   const file = hooksConfigPath(root);
-  const tmp = `${file}.tmp.${process.pid}`;
-  writeFileSync5(tmp, `${JSON.stringify({
-    version: 1,
-    prompt_skip_keyword: config.promptSkipKeyword,
-    matrix: config.matrix
-  }, null, 2)}
+  tempSequence += 1;
+  const tmp = `${file}.tmp.${process.pid}.${tempSequence}`;
+  try {
+    await writeFile11(tmp, `${JSON.stringify({
+      version: 1,
+      prompt_skip_keyword: config.promptSkipKeyword,
+      matrix: config.matrix
+    }, null, 2)}
 `, "utf8");
-  renameSync5(tmp, file);
-}
-function writeHookToggle(root, toggle) {
-  const config = readHooksConfig(root);
-  const key = `${toggle.hook}.${toggle.phase}`;
-  if (toggle.enabled) {
-    delete config.matrix[key];
-  } else {
-    config.matrix[key] = false;
+    await rename8(tmp, file);
+  } catch (error) {
+    await rm4(tmp, { force: true }).catch(() => {
+    });
+    throw error;
   }
-  writeHooksConfig(root, config);
 }
-function writePromptRoutingBypass(root, value) {
-  const config = readHooksConfig(root);
-  config.promptSkipKeyword = value.promptSkipKeyword;
-  writeHooksConfig(root, config);
+async function withHooksConfigLock(root, operation) {
+  const dir = join33(root, ".pipeline");
+  await mkdir14(dir, { recursive: true });
+  await withLock(dir, operation);
+}
+async function writeHookToggle(root, toggle) {
+  await withHooksConfigLock(root, async () => {
+    const config = readHooksConfig(root);
+    const key = `${toggle.hook}.${toggle.phase}`;
+    if (toggle.enabled) {
+      delete config.matrix[key];
+    } else {
+      config.matrix[key] = false;
+    }
+    await writeHooksConfig(root, config);
+  });
+}
+async function writePromptRoutingBypass(root, value) {
+  await withHooksConfigLock(root, async () => {
+    const config = readHooksConfig(root);
+    config.promptSkipKeyword = value.promptSkipKeyword;
+    await writeHooksConfig(root, config);
+  });
 }
 
 // packages/server/src/loops.ts
-import { existsSync as existsSync6, readdirSync as readdirSync7, readFileSync as readFileSync20 } from "node:fs";
+import { existsSync as existsSync6, readdirSync as readdirSync7, readFileSync as readFileSync19 } from "node:fs";
 import { join as join34 } from "node:path";
 function readRunLogText(root) {
   try {
-    return readFileSync20(join34(root, ".superpowers", "loops", "progress.md"), "utf8");
+    return readFileSync19(join34(root, ".superpowers", "loops", "progress.md"), "utf8");
   } catch {
     return null;
   }
 }
 function readLoopDocText(root) {
   try {
-    return readFileSync20(join34(root, "LOOP.md"), "utf8");
+    return readFileSync19(join34(root, "LOOP.md"), "utf8");
   } catch {
     return null;
   }
@@ -16661,12 +16719,12 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync3 } from "node:fs";
+import { accessSync as accessSync2, constants as constants7, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync20, statSync as statSync3 } from "node:fs";
 import { delimiter, dirname as dirname8, join as join35 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
   try {
-    const text2 = readFileSync21(path7, "utf8");
+    const text2 = readFileSync20(path7, "utf8");
     const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(text2)?.[1];
     if (frontmatter) {
       const line = frontmatter.split("\n").find((candidate) => /^description\s*:/.test(candidate.trim()));
@@ -16682,7 +16740,7 @@ function skillDescriptionFrom(path7) {
 }
 function installedPluginRoots(claudeDir) {
   try {
-    const parsed = JSON.parse(readFileSync21(join35(claudeDir, "plugins", "installed_plugins.json"), "utf8"));
+    const parsed = JSON.parse(readFileSync20(join35(claudeDir, "plugins", "installed_plugins.json"), "utf8"));
     const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
     if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return [];
     return Object.values(plugins).flat().map((entry) => typeof entry === "object" && entry !== null ? Reflect.get(entry, "installPath") : void 0).filter((path7) => typeof path7 === "string" && path7.trim() !== "");
@@ -16762,7 +16820,7 @@ function externalSkillSections(repoRoot) {
   const out = /* @__PURE__ */ new Map();
   if (!existsSync7(p)) return out;
   let section2 = "";
-  for (const raw of readFileSync21(p, "utf8").split("\n")) {
+  for (const raw of readFileSync20(p, "utf8").split("\n")) {
     const line = raw.trim();
     const h = /^\*\*(.+)\*\*$/.exec(line);
     if (h?.[1]) {
@@ -16784,11 +16842,11 @@ function detectInstalled(claudeDir) {
     for (const plugin of childDirsIn(join35(codexCache, marketplace))) codexPluginBases.add(plugin);
   }
   try {
-    const raw = readFileSync21(join35(claudeDir, "plugins", "installed_plugins.json"), "utf8");
+    const raw = readFileSync20(join35(claudeDir, "plugins", "installed_plugins.json"), "utf8");
     const parsed = JSON.parse(raw);
     let disabled = {};
     try {
-      const settings = JSON.parse(readFileSync21(join35(claudeDir, "settings.json"), "utf8"));
+      const settings = JSON.parse(readFileSync20(join35(claudeDir, "settings.json"), "utf8"));
       if (typeof settings === "object" && settings !== null) {
         const candidate = Reflect.get(settings, "enabledPlugins");
         if (typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)) {
@@ -16817,7 +16875,7 @@ function detectInstalled(claudeDir) {
 }
 function sourceRegistry(repoRoot) {
   try {
-    const rows = parseSkillSources(readFileSync21(join35(repoRoot, "templates", "skill-sources.yaml"), "utf8"));
+    const rows = parseSkillSources(readFileSync20(join35(repoRoot, "templates", "skill-sources.yaml"), "utf8"));
     return new Map(rows.map((row) => [row.token, row]));
   } catch {
     return /* @__PURE__ */ new Map();
@@ -16831,7 +16889,7 @@ function executableOnPath(bin) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (dir === "") continue;
     try {
-      accessSync2(join35(dir, bin), constants6.X_OK);
+      accessSync2(join35(dir, bin), constants7.X_OK);
       return true;
     } catch {
     }
@@ -17265,7 +17323,7 @@ import { join as join41, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
 import { execFile as execFile3 } from "node:child_process";
-import { readFile as readFile19, writeFile as writeFile11 } from "node:fs/promises";
+import { readFile as readFile19, writeFile as writeFile12 } from "node:fs/promises";
 import { join as join38 } from "node:path";
 var AFK_LANES = ["queued", "running", "merged", "failed", "conflict", "paused"];
 function isAutomationState(value) {
@@ -17387,7 +17445,7 @@ async function cancelAfkRun(store, changeDir) {
     return { ok: false, error: "\u7F3A automation_worktree/automation_sandbox\uFF0C\u65E0\u6CD5\u5B9A\u4F4D\u5BB9\u5668" };
   }
   try {
-    await writeFile11(join38(worktree, CANCEL_MARKER_FILE), "1", "utf8");
+    await writeFile12(join38(worktree, CANCEL_MARKER_FILE), "1", "utf8");
   } catch (err) {
     const code = err?.code ?? "unknown";
     return {
@@ -18555,7 +18613,7 @@ import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
-import { lstat as lstat15, readFile as readFile22, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
+import { lstat as lstat15, readFile as readFile22, rename as rename9, unlink as unlink3, writeFile as writeFile13 } from "node:fs/promises";
 import { join as join43 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
@@ -18598,9 +18656,9 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
   const temporary = join43(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID7()}.tmp`);
   try {
-    await writeFile12(temporary, `${prompt}
+    await writeFile13(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
-    await rename8(temporary, target);
+    await rename9(temporary, target);
   } catch (error) {
     try {
       await unlink3(temporary);
@@ -19171,7 +19229,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
     try {
-      writeHookToggle(root, validated.value);
+      await writeHookToggle(root, validated.value);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -19187,7 +19245,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
     try {
-      writePromptRoutingBypass(root, validated.value);
+      await writePromptRoutingBypass(root, validated.value);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -19597,21 +19655,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync22 } from "node:fs";
+import { readFileSync as readFileSync21 } from "node:fs";
 import { dirname as dirname10, join as join47 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync21(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync21(join47(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -19665,7 +19723,7 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync23 } from "node:fs";
+import { readFileSync as readFileSync22 } from "node:fs";
 import { join as join48 } from "node:path";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
@@ -19815,7 +19873,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join48(webRoot, "index.html"), "utf8");
+      let html = readFileSync22(join48(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -19832,7 +19890,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     const abs = join48(webRoot, rel);
     if (!abs.startsWith(join48(webRoot, "assets"))) return false;
     try {
-      const body = readFileSync23(abs);
+      const body = readFileSync22(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       res.writeHead(200, {
         "Content-Type": STATIC_TYPES[ext] ?? "application/octet-stream",
@@ -20030,7 +20088,7 @@ function createServerGovernance(options) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync23 } from "node:fs";
 import { basename as basename4, dirname as dirname11, join as join50 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
@@ -20040,7 +20098,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative6 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join50(pluginRoot2, relative6), "utf8"));
+      const parsed = JSON.parse(readFileSync23(join50(pluginRoot2, relative6), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -20371,7 +20429,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile4 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync25 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -20408,7 +20466,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync24(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {
@@ -20620,7 +20678,7 @@ async function main() {
   const releaseId = resolvePayloadReleaseId(root);
   const transactionId = managedTransactionId();
   const stateScopeId = machineStateScopeId(paths.stateRoot);
-  mkdirSync6(paths.stateRoot, { recursive: true, mode: 448 });
+  mkdirSync5(paths.stateRoot, { recursive: true, mode: 448 });
   const existing = await probeHealth(port, host, 400);
   const decision = decidePreemption(existing, version, releaseId, stateScopeId, transactionId);
   if (decision === "reuse") {
@@ -20674,7 +20732,7 @@ async function main() {
   } catch {
   }
   try {
-    writeFileSync6(paths.pidfilePath, JSON.stringify({
+    writeFileSync5(paths.pidfilePath, JSON.stringify({
       pid: process.pid,
       port,
       version,

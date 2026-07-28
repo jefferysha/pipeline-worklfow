@@ -11,8 +11,9 @@
 ## 风险
 
 - 标点属于边界，因此路径片段可能命中；UI 明示该语义并用严格 token 限制降低误触发。
-- 手改损坏配置必须回退默认值，不能把项目字节求值为 shell/regex。
-- Hook config 现有 endpoint 是 last-write-wins；本轮保证原子可见与字段互保，不冒充 CAS。
+- 非普通文件、symlink、超限或损坏 keyword header 必须回退默认值，不能把项目字节求值为
+  shell/regex；matrix 损坏与 keyword 独立降级，避免在 Hook 内复制 JSON codec。
+- Hook config 的两个 writer 必须复用 kernel 跨进程锁，在锁内 read-modify-rename，保证并发字段互保。
 
 ## 已验证问题
 

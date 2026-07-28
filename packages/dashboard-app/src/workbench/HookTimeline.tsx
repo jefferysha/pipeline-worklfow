@@ -100,12 +100,10 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
         setMatrix(body.matrix)
         setPromptSkipKeyword(body.promptSkipKeyword)
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         // 加载失败不挡工作台其余区块：计数回落 '—' 占位、时序线区行内报错。
         if (cancelled) return
-        setLoadError(tRef.current('workbench.hk_load_error', {
-          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
-        }))
+        setLoadError(tRef.current('workbench.hk_load_error'))
       })
     return () => {
       cancelled = true
@@ -160,11 +158,9 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       if (generation !== promptSkipGeneration.current) return false
       setPromptSkipKeyword(saved)
       return true
-    } catch (err: unknown) {
+    } catch {
       if (generation !== promptSkipGeneration.current) return false
-      setPromptSkipError(tRef.current('workbench.hk_bypass_save_error', {
-        msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
-      }))
+      setPromptSkipError(tRef.current('workbench.hk_bypass_save_error'))
       return false
     } finally {
       if (generation === promptSkipGeneration.current) setPromptSkipBusy(false)

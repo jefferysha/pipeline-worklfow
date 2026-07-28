@@ -17,8 +17,16 @@
  *   confirm-clear（gate 的解封配对，关了会把交互门锁死到 TTL）与 decision-recorder 本轮
  *   同样不开放开关（sh 侧未接线，开了就是「设置不起效」，违反交付门槛②）。
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readSync,
+} from 'node:fs'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { withLock } from '@tenon/kernel'
 
 export interface HookMeta {
   id: string
@@ -48,6 +56,7 @@ const CONFIGURABLE_IDS: readonly string[] = HOOK_METAS.filter((h) => h.configura
 /** 阶段名字符集：同 workflow step id / change 名的既有白名单（自定义 step id 放行，拒 . / 空白等）。 */
 const PHASE_RE = /^[a-zA-Z0-9_-]+$/
 const PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
+const HOOKS_CONFIG_MAX_BYTES = 4096
 
 export const DEFAULT_PROMPT_SKIP_KEYWORD = 'no-tenon'
 
@@ -56,37 +65,67 @@ export interface HooksRuntimeConfig {
   matrix: Record<string, false>
 }
 
-function isCanonicalHooksConfigText(text: string, parsed: unknown): parsed is Record<string, unknown> {
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false
-  const record = parsed as Record<string, unknown>
-  const keys = Object.keys(record)
-  const fullKeys = ['version', 'prompt_skip_keyword', 'matrix']
-  const legacyKeys = ['version', 'matrix']
-  if (
-    keys.length !== fullKeys.length && keys.length !== legacyKeys.length
-    || !keys.every((key, index) => key === (keys.length === fullKeys.length ? fullKeys : legacyKeys)[index])
-    || record.version !== 1
-  ) return false
-  if (
-    keys.length === fullKeys.length
-    && (
-      typeof record.prompt_skip_keyword !== 'string'
-      || (
-        record.prompt_skip_keyword !== ''
-        && !PROMPT_SKIP_KEYWORD_RE.test(record.prompt_skip_keyword)
-      )
-    )
-  ) return false
-  if (typeof record.matrix !== 'object' || record.matrix === null || Array.isArray(record.matrix)) return false
-  for (const [key, value] of Object.entries(record.matrix as Record<string, unknown>)) {
-    if (value !== false || !key.includes('.') || !/^[A-Za-z0-9_.-]+$/.test(key)) return false
+/** O_NOFOLLOW + fstat + fixed-size read：项目可控文件不能借 symlink/FIFO/无限增长阻塞 server。 */
+function readBoundedHooksConfig(root: string): string | null {
+  let fd: number | undefined
+  try {
+    fd = openSync(hooksConfigPath(root), constants.O_RDONLY | constants.O_NOFOLLOW)
+    const stat = fstatSync(fd)
+    if (!stat.isFile() || stat.size > HOOKS_CONFIG_MAX_BYTES) return null
+    const buffer = Buffer.alloc(HOOKS_CONFIG_MAX_BYTES + 1)
+    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, 0)
+    if (bytesRead > HOOKS_CONFIG_MAX_BYTES) return null
+    return buffer.toString('utf8', 0, bytesRead)
+  } catch {
+    return null
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
-  const normalizedLines = (value: string): string => {
-    const lines = value.replace(/\r\n?/g, '\n').split('\n')
-    if (lines.at(-1) === '') lines.pop()
-    return lines.map((line) => line.trim()).join('\n')
+}
+
+/**
+ * Bash 与 server 共用的窄 header 契约：只解释前三个 canonical 字段，不复制 JSON/matrix codec。
+ * 后续重复 keyword 一律拒绝；matrix 是否可解析不影响合法 keyword。
+ */
+function readPromptSkipKeywordHeader(text: string): string {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').map((line) => line.trim())
+  if (lines[0] !== '{' || lines[1] !== '"version": 1,') return DEFAULT_PROMPT_SKIP_KEYWORD
+  const prefix = '"prompt_skip_keyword": '
+  const line = lines[2]
+  if (line === undefined || !line.startsWith(prefix) || !line.endsWith(',')) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD
   }
-  return normalizedLines(text) === normalizedLines(JSON.stringify(parsed, null, 2))
+  const encoded = line.slice(prefix.length, -1)
+  let keyword: string
+  if (encoded === '""') {
+    keyword = ''
+  } else if (
+    encoded.length >= 2
+    && encoded.startsWith('"')
+    && encoded.endsWith('"')
+    && PROMPT_SKIP_KEYWORD_RE.test(encoded.slice(1, -1))
+  ) {
+    keyword = encoded.slice(1, -1)
+  } else {
+    return DEFAULT_PROMPT_SKIP_KEYWORD
+  }
+  if (lines.slice(3).some((candidate) => candidate.startsWith(prefix))) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD
+  }
+  return keyword
+}
+
+function hasDuplicateMatrixKey(text: string, key: string): boolean {
+  const encoded = JSON.stringify(key)
+  let count = 0
+  let from = 0
+  for (;;) {
+    const index = text.indexOf(encoded, from)
+    if (index < 0) return count > 1
+    const remainder = text.slice(index + encoded.length)
+    if (/^\s*:/.test(remainder)) count += 1
+    from = index + encoded.length
+  }
 }
 
 export function hooksConfigPath(root: string): string {
@@ -95,29 +134,27 @@ export function hooksConfigPath(root: string): string {
 
 /** 完整运行时配置。keyword 只认与 Bash 一致的 canonical 文本；matrix 保持既有逐项 fail-open。 */
 export function readHooksConfig(root: string): HooksRuntimeConfig {
-  let text: string
+  const text = readBoundedHooksConfig(root)
+  if (text === null) {
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
+  }
+  const promptSkipKeyword = readPromptSkipKeywordHeader(text)
   let parsed: unknown
   try {
-    text = readFileSync(hooksConfigPath(root), 'utf8')
     parsed = JSON.parse(text)
   } catch {
-    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
+    return { promptSkipKeyword, matrix: {} }
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} }
+    return { promptSkipKeyword, matrix: {} }
   }
   const record = parsed as Record<string, unknown>
-  const rawKeyword = record.prompt_skip_keyword
-  const promptSkipKeyword = isCanonicalHooksConfigText(text, parsed)
-    && typeof rawKeyword === 'string'
-    && (rawKeyword === '' || PROMPT_SKIP_KEYWORD_RE.test(rawKeyword))
-    ? rawKeyword
-    : DEFAULT_PROMPT_SKIP_KEYWORD
   const rawMatrix = record.matrix
   const matrix: Record<string, false> = {}
   if (typeof rawMatrix === 'object' && rawMatrix !== null && !Array.isArray(rawMatrix)) {
     for (const [key, value] of Object.entries(rawMatrix as Record<string, unknown>)) {
       if (value !== false) continue // 只存禁用项：true/杂值一律不是本矩阵的合法条目
+      if (hasDuplicateMatrixKey(text, key)) return { promptSkipKeyword, matrix: {} }
       const dot = key.indexOf('.')
       if (dot <= 0) continue
       const hook = key.slice(0, dot)
@@ -190,17 +227,31 @@ export function validatePromptRoutingBypassBody(body: unknown): PromptRoutingByp
   return { ok: true, value: { promptSkipKeyword: keyword } }
 }
 
-function writeHooksConfig(root: string, config: HooksRuntimeConfig): void {
+let tempSequence = 0
+
+async function writeHooksConfig(root: string, config: HooksRuntimeConfig): Promise<void> {
   const dir = join(root, '.pipeline')
-  mkdirSync(dir, { recursive: true })
+  await mkdir(dir, { recursive: true })
   const file = hooksConfigPath(root)
-  const tmp = `${file}.tmp.${process.pid}`
-  writeFileSync(tmp, `${JSON.stringify({
-    version: 1,
-    prompt_skip_keyword: config.promptSkipKeyword,
-    matrix: config.matrix,
-  }, null, 2)}\n`, 'utf8')
-  renameSync(tmp, file)
+  tempSequence += 1
+  const tmp = `${file}.tmp.${process.pid}.${tempSequence}`
+  try {
+    await writeFile(tmp, `${JSON.stringify({
+      version: 1,
+      prompt_skip_keyword: config.promptSkipKeyword,
+      matrix: config.matrix,
+    }, null, 2)}\n`, 'utf8')
+    await rename(tmp, file)
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+async function withHooksConfigLock(root: string, operation: () => Promise<void>): Promise<void> {
+  const dir = join(root, '.pipeline')
+  await mkdir(dir, { recursive: true })
+  await withLock(dir, operation)
 }
 
 /**
@@ -208,20 +259,24 @@ function writeHooksConfig(root: string, config: HooksRuntimeConfig): void {
  * 同目录 tmp+rename 原子写（对齐 workflows.ts::writeWorkflowForApi）；既有文件损坏 →
  * readHooksMatrix 已 fail-open 成空矩阵，等价于重建。
  */
-export function writeHookToggle(root: string, toggle: HookToggle): void {
-  const config = readHooksConfig(root)
-  const key = `${toggle.hook}.${toggle.phase}`
-  if (toggle.enabled) {
-    delete config.matrix[key]
-  } else {
-    config.matrix[key] = false
-  }
-  // canonical 契约：null,2 缩进让矩阵一键一行 `"<hook>.<阶段>": false`——sh 侧 grep -F 的唯一判据。
-  writeHooksConfig(root, config)
+export async function writeHookToggle(root: string, toggle: HookToggle): Promise<void> {
+  await withHooksConfigLock(root, async () => {
+    const config = readHooksConfig(root)
+    const key = `${toggle.hook}.${toggle.phase}`
+    if (toggle.enabled) {
+      delete config.matrix[key]
+    } else {
+      config.matrix[key] = false
+    }
+    // canonical 契约：null,2 缩进让矩阵一键一行 `"<hook>.<阶段>": false`——sh 侧 grep -F 的唯一判据。
+    await writeHooksConfig(root, config)
+  })
 }
 
-export function writePromptRoutingBypass(root: string, value: PromptRoutingBypass): void {
-  const config = readHooksConfig(root)
-  config.promptSkipKeyword = value.promptSkipKeyword
-  writeHooksConfig(root, config)
+export async function writePromptRoutingBypass(root: string, value: PromptRoutingBypass): Promise<void> {
+  await withHooksConfigLock(root, async () => {
+    const config = readHooksConfig(root)
+    config.promptSkipKeyword = value.promptSkipKeyword
+    await writeHooksConfig(root, config)
+  })
 }

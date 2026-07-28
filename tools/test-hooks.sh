@@ -705,16 +705,42 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: duplicate keyword 使配置整体回退默认值" "$ROUT" "<tenon-dispatch>"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_empty "router: truncated config 整体回退默认 no-tenon" "$ROUT"
+  assert_contains "router: truncated matrix 不覆盖合法 disabled keyword" "$ROUT" "<tenon-dispatch>"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {\n    "router.build": false,\n  }\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_empty "router: matrix trailing comma 整体回退默认 no-tenon" "$ROUT"
+  assert_contains "router: matrix trailing comma 不覆盖合法 disabled keyword" "$ROUT" "<tenon-dispatch>"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {\n    "router.build": false,\n    "router.build": false\n  }\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_empty "router: matrix duplicate key 整体回退默认 no-tenon" "$ROUT"
+  assert_contains "router: matrix duplicate key 不覆盖合法 disabled keyword" "$ROUT" "<tenon-dispatch>"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {\n    "router.build" junk": false\n  }\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
-  assert_empty "router: matrix malformed key 整体回退默认 no-tenon" "$ROUT"
+  assert_contains "router: matrix malformed key 不覆盖合法 disabled keyword" "$ROUT" "<tenon-dispatch>"
+  printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n' > "$rproj/linked-hooks.json"
+  rm -f "$rproj/.pipeline/hooks.json"
+  ln -s "$rproj/linked-hooks.json" "$rproj/.pipeline/hooks.json"
+  run_router "{\"prompt\":\"skip-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: symlink hooks config 回退默认值" "$ROUT" "<tenon-dispatch>"
+  rm -f "$rproj/.pipeline/hooks.json"
+  {
+    printf '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n'
+    dd if=/dev/zero bs=4097 count=1 2>/dev/null | tr '\0' ' '
+  } > "$rproj/.pipeline/hooks.json"
+  run_router "{\"prompt\":\"skip-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: 超过 4096 bytes 的 hooks config 回退默认值" "$ROUT" "<tenon-dispatch>"
+  rm -f "$rproj/.pipeline/hooks.json"
+  mkfifo "$rproj/.pipeline/hooks.json"
+  FIFO_RESULT="$(node -e '
+    const { spawnSync } = require("node:child_process")
+    const result = spawnSync("bash", ["-c", ". \"$1\"; pipeline_prompt_skip_keyword \"$2\"", "_", process.argv[1], process.argv[2]], {
+      encoding: "utf8",
+      timeout: 1000,
+    })
+    process.stdout.write(`${result.error?.code ?? ""}|${result.status ?? ""}|${result.stdout}`)
+  ' "$ROOT/hooks/prompt-intent.sh" "$rproj")"
+  [ "$FIFO_RESULT" = "|0|no-tenon" ] \
+    && ok "router: FIFO hooks config 有界回退默认值" \
+    || bad "router: FIFO hooks config 有界回退默认值" "实际 ${FIFO_RESULT:-<empty>}"
+  rm -f "$rproj/.pipeline/hooks.json"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
   run_router "{\"prompt\":\"no-tenon 帮我实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
   assert_contains "router: 显式空 keyword 禁用旁路" "$ROUT" "<tenon-dispatch>"

@@ -6,101 +6,97 @@
 # pattern 判定；用户文本始终保持数据，绝不 eval/source。
 
 pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
-  local root="${1:-}" file line trimmed raw value state=0 keyword='no-tenon' valid=1 seen_matrix_keys=''
+  local root="${1:-}" file line trimmed raw value size keyword='no-tenon'
   file="$root/.pipeline/hooks.json"
-  [ -r "$file" ] || {
+  [ ! -L "$file" ] && [ -f "$file" ] && [ -r "$file" ] || {
     printf 'no-tenon'
     return 0
   }
+  size="$(stat -f '%z' "$file" 2>/dev/null || true)"
+  case "$size" in ''|*[!0-9]*) size="$(stat -c '%s' "$file" 2>/dev/null || true)" ;; esac
+  case "$size" in
+    ''|*[!0-9]*)
+      printf 'no-tenon'
+      return 0
+      ;;
+  esac
+  [ "$size" -le 4096 ] || {
+    printf 'no-tenon'
+    return 0
+  }
+
+  {
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  [ "$trimmed" = '{' ] || {
+    printf 'no-tenon'
+    return 0
+  }
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  [ "$trimmed" = '"version": 1,' ] || {
+    printf 'no-tenon'
+    return 0
+  }
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  case "$trimmed" in
+    '"prompt_skip_keyword": '*',') raw="${trimmed#'"prompt_skip_keyword": '}"; raw="${raw%,}" ;;
+    *)
+      printf 'no-tenon'
+      return 0
+      ;;
+  esac
+  case "$raw" in
+    '""') keyword='' ;;
+    \"*\")
+      value="${raw#\"}"
+      value="${value%\"}"
+      [ "$raw" = "\"$value\"" ] || {
+        printf 'no-tenon'
+        return 0
+      }
+      case "$value" in
+        [A-Za-z0-9]*)
+          case "$value" in *[!A-Za-z0-9_-]*) value='' ;; esac
+          ;;
+        *) value='' ;;
+      esac
+      [ -n "$value" ] && [ "${#value}" -le 32 ] || {
+        printf 'no-tenon'
+        return 0
+      }
+      keyword="$value"
+      ;;
+    *)
+      printf 'no-tenon'
+      return 0
+      ;;
+  esac
+
   while IFS= read -r line || [ -n "$line" ]; do
     trimmed="${line#"${line%%[![:space:]]*}"}"
-    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
-    case "$state:$trimmed" in
-      '0:{') state=1 ;;
-      '1:"version": 1,') state=2 ;;
-      '2:"matrix": {}') state=6 ;; # 旧 canonical config：缺字段使用默认值
-      '2:"matrix": {') state=4 ;;
-      2:'"prompt_skip_keyword": '*)
-        raw="${trimmed#'"prompt_skip_keyword": '}"
-        case "$raw" in *,) raw="${raw%,}" ;; *) valid=0; break ;; esac
-        case "$raw" in
-          '""') keyword='' ;;
-          \"*\")
-            value="${raw#\"}"
-            value="${value%\"}"
-            case "$value" in
-              ''|*[!A-Za-z0-9_-]*)
-                valid=0
-                break
-                ;;
-            esac
-            [ "${#value}" -le 32 ] || {
-              valid=0
-              break
-            }
-            case "$value" in
-              [A-Za-z0-9]*) keyword="$value" ;;
-              *) valid=0; break ;;
-            esac
-            ;;
-          *)
-            valid=0
-            break
-            ;;
-        esac
-        state=3
+    case "$trimmed" in
+      '"prompt_skip_keyword": '*)
+        printf 'no-tenon'
+        return 0
         ;;
-      '3:"matrix": {}') state=6 ;;
-      '3:"matrix": {') state=4 ;;
-      4:*|8:*)
-        case "$trimmed" in
-          \"*\":\ false,)
-            value="${trimmed#\"}"; value="${value%%\"*}"
-            [ "$trimmed" = "\"$value\": false," ] || {
-              valid=0
-              break
-            }
-            case "$value" in
-              *.*) ;;
-              *) valid=0; break ;;
-            esac
-            case "$value" in ''|*[!A-Za-z0-9_.-]*) valid=0; break ;; esac
-            case "|$seen_matrix_keys|" in
-              *"|$value|"*) valid=0; break ;;
-            esac
-            seen_matrix_keys="${seen_matrix_keys:+$seen_matrix_keys|}$value"
-            state=8
-            ;;
-          \"*\":\ false)
-            value="${trimmed#\"}"; value="${value%%\"*}"
-            [ "$trimmed" = "\"$value\": false" ] || {
-              valid=0
-              break
-            }
-            case "$value" in
-              *.*) ;;
-              *) valid=0; break ;;
-            esac
-            case "$value" in ''|*[!A-Za-z0-9_.-]*) valid=0; break ;; esac
-            case "|$seen_matrix_keys|" in
-              *"|$value|"*) valid=0; break ;;
-            esac
-            seen_matrix_keys="${seen_matrix_keys:+$seen_matrix_keys|}$value"
-            state=5
-            ;;
-          *) valid=0; break ;;
-        esac
-        ;;
-      '5:}') state=6 ;;
-      '6:}') state=7 ;;
-      *) valid=0; break ;;
     esac
-  done < "$file"
-  if [ "$valid" -eq 1 ] && [ "$state" -eq 7 ]; then
-    printf '%s' "$keyword"
-  else
-    printf 'no-tenon'
-  fi
+  done
+  printf '%s' "$keyword"
+  } < "$file"
 }
 
 pipeline_prompt_should_skip_routing() { # $1=项目根 $2=prompt；0=只抑制本轮 router/breadcrumb

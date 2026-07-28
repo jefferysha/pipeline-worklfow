@@ -265,8 +265,18 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     hooksGetResponse = () => new Response(JSON.stringify({ ok: false, error: '配置损坏' }), { status: 500 })
     renderView()
     const zone = await selectStage('draft')
-    expect(await within(zone).findByRole('alert')).toHaveTextContent('配置损坏')
+    expect(await within(zone).findByRole('alert')).toHaveTextContent('无法读取 Hook 配置，请重试。')
+    expect(within(zone).queryByText('配置损坏')).toBeNull()
     expect(within(zone).queryByText('Hook 配置读取中…')).toBeNull()
+  })
+
+  it('英文 GET 失败不泄漏中文 server 详情', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    hooksGetResponse = () => new Response(JSON.stringify({ ok: false, error: '配置损坏' }), { status: 500 })
+    renderView()
+    const zone = await selectStage('draft')
+    expect(await within(zone).findByRole('alert')).toHaveTextContent('Could not load Hook configuration. Try again.')
+    expect(within(zone).queryByText('配置损坏')).toBeNull()
   })
 
   it('初始加载空字符串时持续显示已禁用状态，且使用高对比文本 token', async () => {
@@ -356,7 +366,8 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
     fireEvent.click(within(editor).getByRole('switch', { name: '启用单轮旁路' }))
     fireEvent.click(within(editor).getByRole('button', { name: '保存旁路词' }))
-    expect(await within(editor).findByRole('alert')).toHaveTextContent('磁盘只读')
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('旁路词未保存，请重试。')
+    expect(within(editor).queryByText('磁盘只读')).toBeNull()
     expect(within(editor).getByRole('textbox', { name: '单轮旁路词' })).toHaveValue('')
 
     postPromptBypassResponse = () => new Response(JSON.stringify({
@@ -365,6 +376,37 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     }), { status: 200 })
     fireEvent.click(within(editor).getByRole('button', { name: '重试保存' }))
     expect(await within(editor).findByRole('status')).toHaveTextContent('已禁用')
+  })
+
+  it.each([
+    {
+      label: 'server 错误',
+      response: () => Promise.resolve(new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })),
+    },
+    {
+      label: 'network 错误',
+      response: () => Promise.reject(new Error('网络断开')),
+    },
+    {
+      label: 'malformed response',
+      response: () => Promise.resolve(new Response(JSON.stringify({ ok: true, prompt_skip_keyword: 42 }), { status: 200 })),
+    },
+  ])('英文 POST $label 不泄漏中文底层详情', async ({ response }) => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === '/api/hooks/prompt-routing-bypass' && opts?.method === 'POST') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    fireEvent.change(within(editor).getByRole('textbox', { name: 'One-turn bypass keyword' }), {
+      target: { value: 'skip-tenon' },
+    })
+    fireEvent.click(within(editor).getByRole('button', { name: 'Save bypass keyword' }))
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('Bypass keyword was not saved. Try again.')
+    expect(within(editor).queryByText(/磁盘|网络/)).toBeNull()
   })
 
   it.each([

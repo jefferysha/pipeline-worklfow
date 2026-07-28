@@ -6,7 +6,7 @@ phase: build
 phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-28-prompt-routing-bypass-design.md
 plan: docs/superpowers/plans/2026-07-28-prompt-routing-bypass.md
-verification_report: docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-2.md
+verification_report: docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify-3.md
 build_mode: direct
 isolation: worktree
 build_sha: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T03:15:44Z
-updated_at: 2026-07-28T05:29:30Z
+updated_at: 2026-07-28T05:59:05Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: d0bb40d2-ad2d-463d-aa5e-a9bbcba83274
-pipeline_transition_sequence: 9
-pipeline_transition_head: fcd577ba-05b4-4612-b59a-0eb838a436c5
-pipeline_state_revision: 36
-pipeline_state_revision_id: f7356d19-37e8-43e2-83ad-ae857e1d1749
-pipeline_state_digest: e07e2b404fe27ef28bfae6f5bf107e7839136ae5aa1252a469a30171409912b5
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzYsInJldmlzaW9uSWQiOiJmNzM1NmQxOS0zN2U4LTQzZTItODNhZC1hZTg1N2UxZDE3NDkiLCJwYXlsb2FkRGlnZXN0IjoiYWFhOTIxZTkyYmZkZmE5MTQ3YWJjZjRlNGMzMjdkYjY2OGQwYjM4ZGE5NjllNDcyYWUwNmNiNzE2M2U2MGM1NSJ9
+pipeline_transition_sequence: 13
+pipeline_transition_head: cc5ecd7f-ae2d-4afc-b03c-5f98e06fd1b8
+pipeline_state_revision: 45
+pipeline_state_revision_id: 0683bc12-66bd-40e6-aa28-1064c4cdd772
+pipeline_state_digest: 2261d684ab632d79230108e8e09a037ff5fc3257a50ace301874b4668d071a0e
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDUsInJldmlzaW9uSWQiOiIwNjgzYmMxMi02NmJkLTQwZTYtYWEyOC0xMDY0YzRjZGQ3NzIiLCJwYXlsb2FkRGlnZXN0IjoiZmY4ODE3Y2RlYmY3NzkzZTU1ZDUyYTM5MzllMTExODI3Zjg5ZmY4MTFmNDMzYzFiYzVhYzMwYjRmMzk3MzU2YiJ9

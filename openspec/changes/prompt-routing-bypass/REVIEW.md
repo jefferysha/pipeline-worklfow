@@ -75,8 +75,25 @@ Oracle 双跑，均通过。全仓 `npm test` 首轮因资源竞争出现 2 个�
 | LOW | 提示没有明确标点和路径分隔符也是边界 | 中英文文案加入标点、路径分隔符与 `path/no-tenon.md` 示例 |
 
 新测试先在旧实现上分别观察到预期失败，再修复至 server 24/24、Dashboard 18/18、hooks
-494/494。全量 `npm test` 首轮出现未改动临时目录竞态，精确复跑 32/32，通过后独立全量重跑为
+495/495。全量 `npm test` 首轮出现未改动临时目录竞态，精确复跑 32/32，通过后独立全量重跑为
 315/315 files、5406 pass、5 skip；`npm run test:web` 独立重跑为 50/50 files、975 tests。
+
+## 第三次 Verify 回退修复
+
+第三次冻结审查的 1 个 HIGH、3 个 MEDIUM 与 2 个 LOW 均已闭环：
+
+| 严重度 | 问题 | 修复 |
+| --- | --- | --- |
+| HIGH | 项目可控 `hooks.json` 可借 symlink、FIFO 或超大文件阻塞读取 | server 使用 `O_NOFOLLOW`、同一 fd 的 `fstat` 与 4097-byte 有界读取；Bash 在打开前拒绝 symlink/非普通文件并限制 4096 bytes；新增 symlink、目录、超限和 FIFO 回归 |
+| MEDIUM | 两个 writer 无跨进程锁，read-modify-rename 会丢字段 | 复用 kernel `withLock(.pipeline)`，锁内重读并异步原子写；真实 holder/writer 双进程 barrier 证明 matrix 与 keyword 互保 |
+| MEDIUM | Bash 复制完整 JSON/matrix codec | 收敛为仅解析固定 version/keyword header，matrix 损坏独立降级；hooks 498/498 |
+| MEDIUM | 英文错误态可透传中文 server/network/fallback 详情 | GET 与旁路 POST 使用完整本地化错误句；覆盖 server 500、network reject 与 malformed 200 response |
+| LOW | server/Bash 重复解析分支 | 共享同一三行 header 契约与相同 fixture，删除 server 全文 canonical 比较和 Bash matrix 状态机 |
+| LOW | REVIEW 的历史 Hook 计数不一致 | 逐轮明确为第二次修复 495/495、第三次修复 498/498 |
+
+红态证据：server 新增用例分别因 matrix 牵连 keyword、symlink 被跟随而失败；跨进程 writer 在
+holder 释放前即退出；修复后 server 304/304（含 1 个真实跨进程用例）、Dashboard 定向 22/22、
+hooks 498/498、`typecheck:web` 与生产 build 通过。最终全量门禁与浏览器复评在下一轮冻结前登记。
 
 结论：SHIP。视觉 baseline 不存在，因此像素回归项为 INCONCLUSIVE；功能、响应式、键盘、错误恢复与
 WCAG AA 对比度验收通过。

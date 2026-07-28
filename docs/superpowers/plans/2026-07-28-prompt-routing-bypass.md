@@ -37,11 +37,13 @@ bullet 暴露无法在现有边界解决的状态或 Bash 兼容问题，再以 
 ## Build 子阶段 B：边界、错误与兼容
 
 1. 补齐 server 测试：空字符串、非法类型/字符/长度、未注册 root、写入错误，以及
-   “切 Hook 保留 keyword / 改 keyword 保留 matrix”。
+   “切 Hook 保留 keyword / 改 keyword 保留 matrix”；用真实双进程 barrier 证明并发字段互保。
 2. 补齐 shell 测试：大小写、标点、行首/尾、词内前后缀、连字符前缀、custom keyword、
-   空字符串、损坏配置，并证明 review/confirm Hook 不读取旁路配置。
+   空字符串、损坏 matrix、非普通文件、symlink、4096-byte 上限，并证明 review/confirm Hook
+   不读取旁路配置；Bash 只解析有界 canonical header，不复制 matrix codec。
 3. 在 `packages/dashboard-app/src/i18n/translations.ts` 和时间线组件补齐中英文文案、label、
-   Enter 提交、busy、disabled、validation alert、读取/保存错误、成功 status 与重试。
+   Enter 提交、busy、disabled、validation alert、读取/保存错误、成功 status 与重试；英文
+   GET/POST/network/malformed-response 错误不得拼接中文底层详情。
 4. 更新 `docs/CONTRACT.md` 中 UserPromptSubmit/Hook config 的兼容和安全边界。
 5. 运行定向测试、`npm run typecheck:web`、`npm run test:web`、`npm run build:web`。
 

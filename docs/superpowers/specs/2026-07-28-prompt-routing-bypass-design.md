@@ -36,21 +36,26 @@
 }
 ```
 
-- 缺文件、旧文件无字段、字段类型/字符集非法：读取为默认 `no-tenon`。
+- 缺文件、旧文件无字段、非普通文件、符号链接、超过 4096 bytes，或 canonical header 中
+  字段类型/字符集非法：读取为默认 `no-tenon`。
 - 显式 `""`：禁用旁路。
 - 非空值必须匹配 `^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`；不隐式 trim。
 - `GET /api/hooks?root=...` 向后兼容增加 `prompt_skip_keyword`。
 - `POST /api/hooks/prompt-routing-bypass` 接受 `{ root, prompt_skip_keyword }`；沿用 Host/token/content-type/root 校验顺序，400 表示 DTO 非法，404 表示 root 未注册，500 表示写入失败。
-- Hook toggle 和 keyword 写回都先读取完整 config，再以同目录临时文件 + rename 写出 canonical JSON，互相保留字段。
+- Keyword 只从固定的 version/keyword canonical header 提取；matrix 损坏独立 fail-open，
+  不让 Bash Hook 复制完整 JSON/matrix codec。
+- Hook toggle 和 keyword 写回都在项目 `.pipeline` 配置锁内读取完整 config，再以同目录临时文件
+  + rename 写出 canonical JSON；同进程和跨进程并发均互相保留字段。
 
 ## 匹配规则
 
 共享 `hooks/prompt-intent.sh` 提供纯 Bash helper：
 
-1. 从 canonical 单行字段读取 keyword，手改异常回退 `no-tenon`。
-2. 用 Bash 3.2 兼容的 ASCII 大小写折叠，不调用 Node/Python。
-3. 两侧字符若属于 `[A-Za-z0-9_-]` 则不命中；空白、标点、行首/行尾是边界。
-4. 空 keyword 永不命中。
+1. 只读取普通、非 symlink、最大 4096 bytes 的配置；特殊文件或超限立即回退 `no-tenon`。
+2. 只解析前三行固定 canonical header 并拒绝后续重复 keyword 字段，不解析 matrix。
+3. 用 Bash 3.2 兼容的 ASCII 大小写折叠，不调用 Node/Python。
+4. 两侧字符若属于 `[A-Za-z0-9_-]` 则不命中；空白、标点、行首/行尾是边界。
+5. 空 keyword 永不命中。
 
 示例：
 
@@ -103,7 +108,8 @@ Hook 运行态是确定性分支：`配置解析 → token 边界匹配 → 命�
 - 选择 ASCII token，消除上游参考 A 的 Python/JS Unicode `\w` 不一致；这是兼容收缩，不承诺任意自然语言短语。
 - 接受 `/no-tenon.md` 的标点边界命中，并在 UI 说明；要求空白边界会偏离上游且增加规则认知成本。
 - 空字符串作为磁盘禁用语义，Dashboard 用开关表达，避免用户直接猜空值含义。
-- 不新增通用锁/CAS；沿用当前 Hook 配置 endpoint 的原子 last-write-wins 语义。本轮测试覆盖“切开关保留 keyword / 改 keyword 保留 matrix”。
+- 复用 kernel 的跨进程 `withLock`，在同一项目配置锁内执行 Hook toggle 与 keyword 的
+  read-modify-rename；跨进程测试固定“同时改两字段不丢更新”。
 
 ## Grill 自检
 

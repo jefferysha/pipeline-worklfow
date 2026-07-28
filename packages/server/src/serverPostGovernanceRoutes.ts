@@ -182,7 +182,7 @@ export async function handlePostGovernanceRoutes(
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
-        writeHookToggle(root, validated.value)
+        await writeHookToggle(root, validated.value)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -201,7 +201,7 @@ export async function handlePostGovernanceRoutes(
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
-        writePromptRoutingBypass(root, validated.value)
+        await writePromptRoutingBypass(root, validated.value)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

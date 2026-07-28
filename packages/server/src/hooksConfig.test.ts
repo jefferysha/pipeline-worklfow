@@ -2,7 +2,7 @@
  * hooksConfig.test —— 阶段×hook 开关矩阵存储（v5 T5 / 决议#2）。
  * 真 fs（mkdtemp 临时目录，绝不碰真实项目/HOME）：读写 <root>/.pipeline/hooks.json。
  */
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -161,7 +161,7 @@ describe('validateHookToggleBody —— POST /api/hooks 请求体校验（fail-l
 describe('writeHookToggle —— 真落盘 .pipeline/hooks.json（canonical 一键一行，bash 可 grep）', () => {
   it('disable → 建文件；矩阵含该键；canonical 形态 `"<hook>.<阶段>": false` 独立成行（sh 侧 grep -F 契约）', async () => {
     const root = await tempRoot()
-    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
+    await writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
     const file = hooksConfigPath(root)
     expect(existsSync(file)).toBe(true)
     const text = await readFile(file, 'utf8')
@@ -175,20 +175,20 @@ describe('writeHookToggle —— 真落盘 .pipeline/hooks.json（canonical 一�
 
   it('enable → 删除该键（矩阵只存禁用项）；重复操作幂等', async () => {
     const root = await tempRoot()
-    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
-    writeHookToggle(root, { hook: 'breadcrumb', phase: 'open', enabled: false })
-    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: true })
+    await writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
+    await writeHookToggle(root, { hook: 'breadcrumb', phase: 'open', enabled: false })
+    await writeHookToggle(root, { hook: 'router', phase: 'build', enabled: true })
     expect(readHooksMatrix(root)).toEqual({ 'breadcrumb.open': false })
-    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: true }) // 幂等
+    await writeHookToggle(root, { hook: 'router', phase: 'build', enabled: true }) // 幂等
     expect(readHooksMatrix(root)).toEqual({ 'breadcrumb.open': false })
-    writeHookToggle(root, { hook: 'breadcrumb', phase: 'open', enabled: false }) // 幂等
+    await writeHookToggle(root, { hook: 'breadcrumb', phase: 'open', enabled: false }) // 幂等
     expect(readHooksMatrix(root)).toEqual({ 'breadcrumb.open': false })
   })
 
   it('既有文件损坏 → fail-open 视作空矩阵重建（不抛错、不落半成品）', async () => {
     const root = await tempRoot()
     await seedConfig(root, '{{{broken')
-    writeHookToggle(root, { hook: 'skill-tracker', phase: 'build', enabled: false })
+    await writeHookToggle(root, { hook: 'skill-tracker', phase: 'build', enabled: false })
     expect(readHooksMatrix(root)).toEqual({ 'skill-tracker.build': false })
     // 重建后是合法 JSON
     expect(() => JSON.parse(readFileSync(hooksConfigPath(root), 'utf8'))).not.toThrow()
@@ -207,17 +207,58 @@ describe('prompt routing bypass —— 读取、校验与字段互保', () => {
     expect(readHooksConfig(root).promptSkipKeyword).toBe('')
   })
 
-  it('duplicate、额外字段和键顺序漂移与 Bash canonical parser 一样整体回退默认 keyword', async () => {
+  it('duplicate keyword 与键顺序漂移回退默认 keyword', async () => {
     const root = await tempRoot()
     for (const content of [
       '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "prompt_skip_keyword": "other-tenon",\n  "matrix": {}\n}\n',
-      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {\n    "router.build": false,\n    "router.build": false\n  }\n}\n',
-      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "extra": true,\n  "matrix": {}\n}\n',
       '{\n  "version": 1,\n  "matrix": {},\n  "prompt_skip_keyword": "skip-tenon"\n}\n',
     ]) {
       await seedConfig(root, content)
       expect(readHooksConfig(root).promptSkipKeyword).toBe(DEFAULT_PROMPT_SKIP_KEYWORD)
     }
+  })
+
+  it('合法 canonical header 与 matrix 独立降级', async () => {
+    const root = await tempRoot()
+    for (const content of [
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {\n    "router.build": false,\n    "router.build": false\n  }\n}\n',
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {\n',
+      '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "extra": true,\n  "matrix": {}\n}\n',
+    ]) {
+      await seedConfig(root, content)
+      expect(readHooksConfig(root)).toEqual({
+        promptSkipKeyword: 'skip-tenon',
+        matrix: {},
+      })
+    }
+  })
+
+  it('拒绝 symlink、非普通文件和超过 4096 bytes 的配置', async () => {
+    const canonical = '{\n  "version": 1,\n  "prompt_skip_keyword": "skip-tenon",\n  "matrix": {}\n}\n'
+
+    const symlinkRoot = await tempRoot()
+    const target = join(symlinkRoot, 'target.json')
+    await writeFile(target, canonical, 'utf8')
+    await mkdir(join(symlinkRoot, '.pipeline'), { recursive: true })
+    await symlink(target, hooksConfigPath(symlinkRoot))
+    expect(readHooksConfig(symlinkRoot)).toEqual({
+      promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD,
+      matrix: {},
+    })
+
+    const directoryRoot = await tempRoot()
+    await mkdir(hooksConfigPath(directoryRoot), { recursive: true })
+    expect(readHooksConfig(directoryRoot)).toEqual({
+      promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD,
+      matrix: {},
+    })
+
+    const oversizedRoot = await tempRoot()
+    await seedConfig(oversizedRoot, `${canonical}${' '.repeat(4097)}`)
+    expect(readHooksConfig(oversizedRoot)).toEqual({
+      promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD,
+      matrix: {},
+    })
   })
 
   it('与 Bash parser 一样容忍每行外围空白、CRLF 和末行无换行', async () => {
@@ -238,13 +279,13 @@ describe('prompt routing bypass —— 读取、校验与字段互保', () => {
 
   it('切 Hook 保留 keyword；改 keyword 保留 matrix，并以 snake_case canonical 落盘', async () => {
     const root = await tempRoot()
-    writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' })
-    writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
+    await writePromptRoutingBypass(root, { promptSkipKeyword: 'skip-tenon' })
+    await writeHookToggle(root, { hook: 'router', phase: 'build', enabled: false })
     expect(readHooksConfig(root)).toEqual({
       promptSkipKeyword: 'skip-tenon',
       matrix: { 'router.build': false },
     })
-    writePromptRoutingBypass(root, { promptSkipKeyword: '' })
+    await writePromptRoutingBypass(root, { promptSkipKeyword: '' })
     expect(readHooksConfig(root)).toEqual({
       promptSkipKeyword: '',
       matrix: { 'router.build': false },
