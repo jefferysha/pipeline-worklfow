@@ -367,3 +367,23 @@ Medium：`revealList` / `revealDialog` 仍只在创建时读取 reduced-motion�
 
 第四次 pre-Verify 最终结论：Critical / High / Medium = 0 / 0 / 0。视觉仍为既定“安静的操作台”，
 没有增加手机端专项、新依赖、API、数据模型或业务规则。
+
+## 第四次 Verify 失败整改后的 pre-Verify
+
+冻结候选 `506299138485b52dd03bbea6cc9537af539b5336` 已完成完整 Change 复审。
+独立 reviewer 对照 proposal、design、delta spec、tasks 与前端规则检查
+`origin/main...50629913`，结论为 PASS：Critical / High / Medium = 0 / 0 / 0，
+Low = 2。
+
+- 同 basename 的可达与不可达项目均显示完整 root；可达按钮名称包含 basename 与 root，
+  重复行 ID 基于 root 唯一化，动画 key 也使用稳定 root。
+- 零 change 页面拥有唯一 H1；Projects loading 使用 polite status。
+- 独立冻结副本运行 `npm run test:web` 为 52 files / 997 tests，通过 `npm run build:web`
+  与 `git diff --check`。
+- Low 仅为既有 React `act(...)` / GSAP target 测试提示，以及 Overview 长页的重复卡片节奏；
+  两者均不违反本次冻结规格。
+
+审查期间共享 worktree 的 web dist 被另一执行者单跑 `build:web` 改写。主 writer 随后按本 Change
+的全仓门禁重新运行 `npm run build`；构建通过，并以全仓构建产物
+`index-DFehSF8m.js` / `index-DTKOR_iv.css` 作为下一次冻结候选。JS 内容与冻结副本哈希一致，
+CSS 则纳入全仓上游 package 重建后的 canonical 输出。
