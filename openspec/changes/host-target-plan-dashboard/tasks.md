@@ -42,8 +42,8 @@
 
 ## 交付
 
-- [ ] 应用 OpenSpec，提交本轮文件并推送 `codex/` 分支。 (ship)
-- [ ] 创建面向 main 的非草稿 PR，记录上游 SHA、契约、安全、证据、测试、浏览器与 CI 状态。 (ship)
+- [x] 应用 OpenSpec，提交本轮文件并推送 `codex/` 分支。 (ship)
+- [x] 创建面向 main 的非草稿 PR，记录上游 SHA、契约、安全、证据、测试、浏览器与 CI 状态。 (ship)
 
 ## 归档
 
