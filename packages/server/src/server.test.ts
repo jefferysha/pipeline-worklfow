@@ -3,8 +3,9 @@
  * node:http 真发请求、断言真实响应与真实落盘副作用。零 mock。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
@@ -18,6 +19,7 @@ import {
 import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
   createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
+  DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
   machineStateScopeId,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
 } from '@tenon/kernel'
@@ -164,6 +166,303 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
     expect(body.releaseId).toBe(releaseId)
     expect(body.stateScopeId).toBe(machineStateScopeId(paths.stateRoot))
     expect(JSON.stringify(body)).not.toContain(stateHome)
+  })
+})
+
+describe('GET /api/context-bundle/preview —— ledger-bound 只读预算预览', () => {
+  const previewPath = (
+    root: string,
+    change = 'my-change',
+    target = 'explore',
+    budgetBytes = '120000',
+  ): string =>
+    `/api/context-bundle/preview?root=${encodeURIComponent(root)}&change=${encodeURIComponent(change)}`
+    + `&target=${encodeURIComponent(target)}&budgetBytes=${encodeURIComponent(budgetBytes)}`
+
+  it.runIf(process.platform === 'linux')('以真 Change/ledger 返回安全 metadata，并把无 required reads 的 open 明确投影为空态', async () => {
+    const h = await start()
+    const ledgerPath = join(h.changeDir, '.pipeline-documents.json')
+    const stateBefore = await h.store.read(h.changeDir)
+    const ledgerBefore = await readFile(ledgerPath, 'utf8')
+
+    const success = await reqGet(h.port, previewPath(h.root))
+    expect(success.status).toBe(200)
+    const body = success.json<{
+      ok: true
+      preview: {
+        schemaVersion: string
+        sideEffects: string
+        change: string
+        from: string
+        to: string
+        tier: string
+        documentCount: number
+        aggregateDigest: string
+        budget: { maxBytes: number; usedBytes: number; fits: boolean }
+        inputs: Array<{
+          kind: string
+          path: string
+          digest: string
+          reason: string
+          reasonCode: string
+          mode: string
+          sourceBytes: number
+          materializedBytes: number
+        }>
+      }
+    }>()
+    expect(body.ok).toBe(true)
+    expect(body.preview).toMatchObject({
+      schemaVersion: 'context-bundle-preview/v1',
+      sideEffects: 'none',
+      change: h.name,
+      from: 'open',
+      to: 'explore',
+      tier: 'strong',
+      documentCount: 3,
+      budget: { maxBytes: 120000, fits: true },
+    })
+    expect(body.preview.inputs.map((input) => input.kind)).toEqual([
+      'proposal', 'openspec-design', 'tasks',
+    ])
+    expect(body.preview.inputs.every((input) =>
+      input.path.startsWith('openspec/changes/my-change/')
+      && input.digest.startsWith('sha256:')
+      && input.reason.length > 0
+      && input.reasonCode === `context-bundle.reason.${input.kind}`
+      && input.sourceBytes > 0
+      && input.materializedBytes >= 0)).toBe(true)
+    expect(body.preview.aggregateDigest).toMatch(/^sha256:[a-f0-9]{64}$/)
+    expect(JSON.stringify(body)).not.toContain('"content"')
+    expect(JSON.stringify(body)).not.toContain('# proposal')
+
+    const empty = await reqGet(h.port, previewPath(h.root, h.name, 'open'))
+    expect(empty.status).toBe(200)
+    expect(empty.json()).toMatchObject({
+      ok: true,
+      preview: {
+        schemaVersion: 'context-bundle-preview/v1',
+        sideEffects: 'none',
+        documentCount: 0,
+        inputs: [],
+        budget: { maxBytes: 120000, usedBytes: 0, fits: true },
+      },
+    })
+
+    expect(await h.store.read(h.changeDir)).toEqual(stateBefore)
+    expect(await readFile(ledgerPath, 'utf8')).toBe(ledgerBefore)
+  })
+
+  it.runIf(process.platform === 'linux')('API 与 CLI 一样保留合法 UTF-8 BOM，不误报 stale 或少算 source bytes', async () => {
+    const h = await start()
+    const proposalPath = join(h.changeDir, 'proposal.md')
+    const content = `\uFEFF${await readFile(proposalPath, 'utf8')}`
+    await writeFile(proposalPath, content, 'utf8')
+    const ledgerPath = join(h.changeDir, '.pipeline-documents.json')
+    const ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as {
+      records: Array<{ kind: string; sha256: string }>
+    }
+    const proposal = ledger.records.find((record) => record.kind === 'proposal')
+    if (!proposal) throw new Error('proposal record missing from fixture')
+    proposal.sha256 = createHash('sha256').update(content, 'utf8').digest('hex')
+    await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
+
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(200)
+    const proposalInput = response.json<{
+      preview: { inputs: Array<{ kind: string; sourceBytes: number }> }
+    }>().preview.inputs.find((input) => input.kind === 'proposal')
+    expect(proposalInput?.sourceBytes).toBe(Buffer.byteLength(content, 'utf8'))
+  })
+
+  it('在读取前拒绝非法请求和未注册 root，返回稳定机器码', async () => {
+    const h = await start()
+    const unknownRoot = await makeProject()
+    const invalidPaths = [
+      '/api/context-bundle/preview',
+      previewPath(h.root, '../escape'),
+      previewPath(h.root, h.name, 'not-a-canonical-phase'),
+      previewPath(h.root, h.name, 'explore', '0'),
+      previewPath(h.root, h.name, 'explore', '1.5'),
+      previewPath(h.root, h.name, 'explore', String(Number.MAX_SAFE_INTEGER + 1)),
+    ]
+    for (const path of invalidPaths) {
+      const response = await reqGet(h.port, path)
+      expect(response.status, path).toBe(400)
+      expect(response.json(), path).toMatchObject({
+        ok: false,
+        code: 'CONTEXT_BUNDLE_INVALID_REQUEST',
+      })
+    }
+
+    const unregistered = await reqGet(h.port, previewPath(unknownRoot))
+    expect(unregistered.status).toBe(404)
+    expect(unregistered.json()).toMatchObject({ ok: false })
+  })
+
+  it.runIf(process.platform !== 'linux')('无 fd-relative traversal 时在读取 Change 内容前返回安全 capability error', async () => {
+    const h = await start()
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(501)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_TRUSTED_READER_UNAVAILABLE',
+      error: 'Context Bundle trusted reader is unavailable on this platform',
+      repairAction: 'Run the Dashboard on a platform with fd-relative directory traversal.',
+    })
+    expect(JSON.stringify(response.json())).not.toContain(h.root)
+  })
+
+  it.runIf(process.platform === 'linux')('canonical state 损坏返回安全 409 机器码且不继续读取 ledger', async () => {
+    const h = await start()
+    await writeFile(join(h.changeDir, '.pipeline-run', 'current.json'), Buffer.from([0xff]))
+    await unlink(join(h.changeDir, '.pipeline-documents.json'))
+
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(409)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+      error: 'Context Bundle canonical state is corrupt',
+      repairAction: 'Restore a valid canonical Change state, then retry.',
+      detail: {},
+    })
+    expect(JSON.stringify(response.json())).not.toContain(h.root)
+  })
+
+  it.runIf(process.platform === 'linux')('把 missing/stale 映射为 409，并给出可执行恢复动作而不返回部分预览', async () => {
+    const missingLedger = await start({ seedGovernedEvidence: false })
+    await unlink(join(missingLedger.changeDir, '.pipeline-documents.json'))
+    const noLedger = await reqGet(missingLedger.port, previewPath(missingLedger.root))
+    expect(noLedger.status).toBe(409)
+    expect(noLedger.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_LEDGER_MISSING',
+    })
+    expect(noLedger.json<{ repairAction?: string }>().repairAction).toBeTruthy()
+
+    const missingDocument = await start()
+    await unlink(join(missingDocument.changeDir, 'proposal.md'))
+    const noDocument = await reqGet(missingDocument.port, previewPath(missingDocument.root))
+    expect(noDocument.status).toBe(409)
+    expect(noDocument.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_DOCUMENT_MISSING',
+    })
+    expect(noDocument.json<{ repairAction?: string }>().repairAction).toBeTruthy()
+    expect(noDocument.json()).not.toHaveProperty('preview')
+
+    const staleDocument = await start()
+    await writeFile(join(staleDocument.changeDir, 'proposal.md'), '# drifted proposal\n', 'utf8')
+    const stale = await reqGet(staleDocument.port, previewPath(staleDocument.root))
+    expect(stale.status).toBe(409)
+    expect(stale.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_DOCUMENT_STALE',
+    })
+    expect(stale.json<{ repairAction?: string }>().repairAction).toBeTruthy()
+    expect(stale.json()).not.toHaveProperty('preview')
+
+    const linkedDocument = await start()
+    const linkedProposal = join(linkedDocument.changeDir, 'proposal.md')
+    const outsideDir = await makeProject()
+    const outsideProposal = join(outsideDir, 'proposal.md')
+    await writeFile(outsideProposal, await readFile(linkedProposal, 'utf8'), 'utf8')
+    await unlink(linkedProposal)
+    await symlink(outsideProposal, linkedProposal, 'file')
+    const linked = await reqGet(linkedDocument.port, previewPath(linkedDocument.root))
+    expect(linked.status).toBe(409)
+    expect(linked.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_DOCUMENT_MISSING',
+    })
+    expect(JSON.stringify(linked.json())).not.toContain('# proposal')
+  })
+
+  it.runIf(process.platform === 'linux')('预算不足返回 422 safe preview，但不返回正文或有效 aggregate digest', async () => {
+    const h = await start()
+    const response = await reqGet(h.port, previewPath(h.root, h.name, 'explore', '1'))
+    expect(response.status).toBe(422)
+    const body = response.json<{
+      ok: false
+      code: string
+      repairAction?: string
+      preview: {
+        aggregateDigest?: string
+        documentCount: number
+        inputs: Array<Record<string, unknown>>
+        budget: { maxBytes: number; usedBytes: number; fits: boolean }
+      }
+    }>()
+    expect(body).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_BUDGET_EXCEEDED',
+      preview: {
+        documentCount: 3,
+        budget: { maxBytes: 1, fits: false },
+      },
+    })
+    expect(body.preview.budget.usedBytes).toBeGreaterThan(1)
+    expect(body.preview.aggregateDigest).toBeUndefined()
+    expect(body.repairAction).toBeTruthy()
+    expect(JSON.stringify(body)).not.toContain('"content"')
+    expect(JSON.stringify(body)).not.toContain('# proposal')
+  })
+
+  it.runIf(process.platform === 'linux')('低预算也会在读取超大源文档前返回 413，且响应不泄露绝对路径', async () => {
+    const h = await start()
+    const proposalPath = join(h.changeDir, 'proposal.md')
+    const content = 'x'.repeat(
+      DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS.maxSourceBytesPerDocument + 1,
+    )
+    await writeFile(proposalPath, content, 'utf8')
+    const ledgerPath = join(h.changeDir, '.pipeline-documents.json')
+    const ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as {
+      records: Array<{ kind: string; sha256: string }>
+    }
+    const proposal = ledger.records.find((record) => record.kind === 'proposal')
+    if (!proposal) throw new Error('proposal record missing from fixture')
+    proposal.sha256 = createHash('sha256').update(content, 'utf8').digest('hex')
+    await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
+
+    const response = await reqGet(h.port, previewPath(h.root, h.name, 'explore', '1'))
+    expect(response.status).toBe(413)
+    expect(response.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED',
+      detail: {
+        metric: 'sourceBytesPerDocument',
+        limit: DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS.maxSourceBytesPerDocument,
+        actual: content.length,
+        path: `openspec/changes/${h.name}/proposal.md`,
+      },
+    })
+    expect(response.json()).not.toHaveProperty('preview')
+    expect(JSON.stringify(response.json())).not.toContain(h.root)
+  })
+
+  it('注册 root inode 被换位后 fail closed，绝不读取替换目录', async () => {
+    const h = await start()
+    const parked = `${h.root}.context-bundle-registered-inode`
+    const outside = await makeProject()
+    await rename(h.root, parked)
+    await symlink(outside, h.root, 'dir')
+
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(403)
+    expect(response.json()).toMatchObject({ ok: false })
+  })
+
+  it.runIf(process.platform === 'linux')('Change 目录被换为 symlink 时按 root guard fail closed', async () => {
+    const h = await start()
+    const parked = `${h.changeDir}.registered-inode`
+    const outside = await makeProject()
+    await rename(h.changeDir, parked)
+    await symlink(outside, h.changeDir, 'dir')
+
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(403)
+    expect(response.json()).toMatchObject({ ok: false })
   })
 })
 

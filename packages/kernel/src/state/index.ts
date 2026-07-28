@@ -24,7 +24,7 @@ export {
 } from './workflow-plan-snapshot.js'
 export {
   DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger, initialDocumentLedgerContent,
-  migrateLegacyDeltaDocument, readDocumentLedger, recordDocument, recordDocumentReads,
+  migrateLegacyDeltaDocument, parseDocumentLedger, readDocumentLedger, recordDocument, recordDocumentReads,
 } from './document-ledger.js'
 export type {
   DocumentLedger, DocumentReadReceipt, DocumentRecord, MigrateLegacyDeltaDocumentInput,

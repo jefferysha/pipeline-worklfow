@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
 import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname13, join as join52 } from "node:path";
+import { dirname as dirname14, join as join53 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -1838,9 +1838,9 @@ async function hydratePreVerifyReview(changeDir, revision) {
   return attach(revision, parseRecord(await readFile4(target, "utf8"), target));
 }
 function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
-  const relative6 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
-  const raw = readText(relative6);
-  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative6)));
+  const relative7 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
+  const raw = readText(relative7);
+  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative7)));
 }
 
 // packages/kernel/dist/state/run-revision-continuity.js
@@ -5829,7 +5829,7 @@ async function currentDocumentStepVisitId(changeDir) {
     throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
   return JSON.stringify([metadata.runId, metadata.transitionSequence]);
 }
-function parseLedger(raw) {
+function parseDocumentLedger(raw) {
   let value;
   try {
     value = JSON.parse(raw);
@@ -5874,7 +5874,7 @@ async function ledgerText(changeDir) {
 }
 async function readDocumentLedger(changeDir) {
   const raw = await ledgerText(changeDir);
-  return raw === void 0 ? void 0 : parseLedger(raw);
+  return raw === void 0 ? void 0 : parseDocumentLedger(raw);
 }
 function initialDocumentLedgerContent(createdAt) {
   const ledger = { version: 1, contract: "openspec-v1", createdAt, records: [] };
@@ -7526,6 +7526,17 @@ async function deleteSecretKey(path7, key) {
     delete keys[key];
     await atomicWriteSecrets(path7, { version: 1, keys });
   });
+}
+
+// packages/kernel/dist/state/session.js
+function validateChangeName(name) {
+  if (name === void 0 || name === "") {
+    return { ok: false, error: "ERROR: change-name \u4E0D\u80FD\u4E3A\u7A7A" };
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    return { ok: false, error: `ERROR: change-name \u975E\u6CD5\u5B57\u7B26: '${name}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)` };
+  }
+  return { ok: true };
 }
 
 // packages/kernel/dist/flow/manifest.js
@@ -12875,6 +12886,551 @@ function compileAutomationPolicyTemplate(id, override = {}, version = AUTOMATION
 var encoder = new TextEncoder();
 var decoder = new TextDecoder();
 
+// packages/kernel/dist/compress/markdown.js
+function isHeading(line) {
+  const m = /^(#{1,6}) +(\S.*?) *$/.exec(line);
+  if (!m)
+    return null;
+  return { level: (m[1] ?? "").length, text: (m[2] ?? "").trim() };
+}
+var DECISION_RE = [
+  /\bdecision\b/i,
+  /\bdecided\b/i,
+  /\bwe (?:will|chose|decided|adopt|use|opt for|are going with)\b/i,
+  /\bchosen\b/i,
+  /\bconclusion\b/i,
+  /\brationale\b/i,
+  /\btrade[- ]?off/i,
+  /决策|决定|结论|选定|采用|取舍|因此采/
+];
+function isDecision(line) {
+  return DECISION_RE.some((re) => re.test(line));
+}
+var CONSTRAINT_RE = [
+  /\bMUST(?:\s+NOT)?\b/,
+  /\bSHALL(?:\s+NOT)?\b/,
+  /\bREQUIRED\b/,
+  /\bconstraint\b/i,
+  /\bforbidden\b/i,
+  /必须|禁止|不允许|不得|约束|强制|严禁/
+];
+function isConstraint(line) {
+  return CONSTRAINT_RE.some((re) => re.test(line));
+}
+var OPEN_CHECKBOX = /^\s*[-*+]\s+\[ \]\s+(.*\S)\s*$/;
+var DONE_CHECKBOX = /^\s*[-*+]\s+\[[xX]\]\s+/;
+var TODO_KEYWORD = /\bTODO\b|\bFIXME\b|待办|待做|待完成/;
+function isDoneTodo(line) {
+  return DONE_CHECKBOX.test(line);
+}
+function openTodoText(line) {
+  const m = OPEN_CHECKBOX.exec(line);
+  if (m)
+    return (m[1] ?? "").trim();
+  if (!DONE_CHECKBOX.test(line) && TODO_KEYWORD.test(line))
+    return stripLeadMarkers(line);
+  return null;
+}
+function stripLeadMarkers(line) {
+  let s = line.trim();
+  for (; ; ) {
+    const next = s.replace(/^(?:>\s*|[-*+]\s+)/, "");
+    if (next === s)
+      break;
+    s = next.trim();
+  }
+  return s;
+}
+function parseFrontMatter(lines) {
+  if (lines[0] !== "---")
+    return { keyFields: [], bodyStart: 0 };
+  let close = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] === "---") {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1)
+    return { keyFields: [], bodyStart: 0 };
+  const keyFields = [];
+  for (let i = 1; i < close; i++) {
+    const m = /^([A-Za-z_][\w -]*):\s*(.*)$/.exec(lines[i] ?? "");
+    if (m)
+      keyFields.push({ key: (m[1] ?? "").trim(), value: (m[2] ?? "").trim() });
+  }
+  return { keyFields, bodyStart: close + 1 };
+}
+
+// packages/kernel/dist/compress/compress.js
+function ratioOf(originalChars, compressedChars) {
+  if (originalChars <= 0)
+    return 0;
+  return Math.round((1 - compressedChars / originalChars) * 1e4) / 1e4;
+}
+function dedup(items) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const raw of items) {
+    const key = raw.trim();
+    if (key === "" || seen.has(key))
+      continue;
+    seen.add(key);
+    out.push(raw);
+  }
+  return out;
+}
+function compressDocument(text2, opts = {}) {
+  const maxDepth = opts.maxHeadingDepth ?? 6;
+  const rawLines = text2.split("\n");
+  const fm = parseFrontMatter(rawLines);
+  let title = null;
+  const headings = [];
+  const decisions = [];
+  const constraints = [];
+  const openTodos = [];
+  let doneTodoCount = 0;
+  let inCode = false;
+  for (let i = fm.bodyStart; i < rawLines.length; i++) {
+    const line = rawLines[i] ?? "";
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode)
+      continue;
+    const h = isHeading(line);
+    if (h) {
+      if (h.level === 1 && title === null)
+        title = h.text;
+      if (h.level <= maxDepth)
+        headings.push("#".repeat(h.level) + " " + h.text);
+      continue;
+    }
+    if (isDoneTodo(line)) {
+      doneTodoCount += 1;
+      continue;
+    }
+    const todo = openTodoText(line);
+    if (todo !== null) {
+      openTodos.push(todo);
+      continue;
+    }
+    if (isConstraint(line)) {
+      constraints.push(stripLeadMarkers(line));
+      continue;
+    }
+    if (isDecision(line)) {
+      decisions.push(stripLeadMarkers(line));
+      continue;
+    }
+  }
+  const doc = {
+    title,
+    headings: dedup(headings),
+    decisions: dedup(decisions),
+    constraints: dedup(constraints),
+    openTodos: dedup(openTodos),
+    doneTodoCount,
+    keyFields: fm.keyFields,
+    stats: emptyStats()
+  };
+  doc.stats = statsFor(text2, rawLines.length, renderHandoffSummary(doc, void 0, opts.documentLocale ?? "zh-CN"), doc);
+  return doc;
+}
+function emptyStats() {
+  return {
+    originalChars: 0,
+    originalLines: 0,
+    compressedChars: 0,
+    compressedLines: 0,
+    keptLines: 0,
+    droppedLines: 0,
+    ratio: 0
+  };
+}
+function statsFor(originalText, originalLines, rendered, doc) {
+  const originalChars = originalText.length;
+  const compressedChars = rendered.length;
+  const compressedLines = rendered === "" ? 0 : rendered.split("\n").length;
+  const keptLines = doc.headings.length + doc.decisions.length + doc.constraints.length + doc.openTodos.length + doc.keyFields.length;
+  return {
+    originalChars,
+    originalLines,
+    compressedChars,
+    compressedLines,
+    keptLines,
+    droppedLines: Math.max(0, originalLines - keptLines),
+    ratio: ratioOf(originalChars, compressedChars)
+  };
+}
+function renderHandoffSummary(doc, label, locale = "zh-CN") {
+  const text2 = locale === "zh-CN" ? {
+    handoff: "\u4EA4\u63A5\u6458\u8981",
+    summary: "\u6458\u8981",
+    structure: "\u7ED3\u6784",
+    decisions: "\u51B3\u7B56",
+    constraints: "\u7EA6\u675F",
+    todos: "\u5F85\u529E",
+    fields: "\u5173\u952E\u5B57\u6BB5"
+  } : {
+    handoff: "Handoff",
+    summary: "summary",
+    structure: "Structure",
+    decisions: "Decisions",
+    constraints: "Constraints",
+    todos: "Open TODOs",
+    fields: "Key Fields"
+  };
+  const out = [];
+  out.push(`# ${text2.handoff}: ${label ?? doc.title ?? text2.summary}`);
+  if (doc.headings.length > 0) {
+    out.push("", `## ${text2.structure}`);
+    for (const h of doc.headings)
+      out.push(`- ${h}`);
+  }
+  if (doc.decisions.length > 0) {
+    out.push("", `## ${text2.decisions} (${doc.decisions.length})`);
+    for (const d of doc.decisions)
+      out.push(`- ${d}`);
+  }
+  if (doc.constraints.length > 0) {
+    out.push("", `## ${text2.constraints} (${doc.constraints.length})`);
+    for (const c of doc.constraints)
+      out.push(`- ${c}`);
+  }
+  if (doc.openTodos.length > 0) {
+    out.push("", `## ${text2.todos} (${doc.openTodos.length})`);
+    for (const t of doc.openTodos)
+      out.push(`- [ ] ${t}`);
+  }
+  if (doc.keyFields.length > 0) {
+    out.push("", `## ${text2.fields}`);
+    for (const k of doc.keyFields)
+      out.push(`- ${k.key}: ${k.value}`);
+  }
+  return out.join("\n");
+}
+
+// packages/kernel/dist/compress/context-bundle.js
+import { createHash as createHash11 } from "node:crypto";
+import { isAbsolute as isAbsolute4 } from "node:path";
+var ContextBundleError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ContextBundleError";
+  }
+};
+var SAFE_ID = /^[A-Za-z0-9_-]+$/;
+var SHA256 = /^sha256:[a-f0-9]{64}$/;
+function contentBytes(input) {
+  return input.content === void 0 ? 0 : Buffer.byteLength(input.content, "utf8");
+}
+function validRelativePath(path7) {
+  if (path7 === "" || isAbsolute4(path7) || path7.includes("\\"))
+    return false;
+  const parts = path7.split("/");
+  return !parts.some((part) => part === "" || part === "." || part === "..");
+}
+function unsignedPayload(input) {
+  return input;
+}
+function contextBundleAggregateDigest(bundle) {
+  return `sha256:${createHash11("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
+}
+function compileContextBundle(input) {
+  if (!SAFE_ID.test(input.change))
+    throw new ContextBundleError(`Context Bundle change \u975E\u6CD5: ${input.change}`);
+  if (!SAFE_ID.test(input.from) || !SAFE_ID.test(input.to)) {
+    throw new ContextBundleError(`Context Bundle phase/role \u975E\u6CD5: ${input.from} -> ${input.to}`);
+  }
+  if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0) {
+    throw new ContextBundleError(`Context Bundle maxBytes \u5FC5\u987B\u662F\u6B63\u6574\u6570: ${input.maxBytes}`);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const item2 of input.inputs) {
+    if (item2.kind.trim() === "")
+      throw new ContextBundleError("Context Bundle input kind \u4E0D\u80FD\u4E3A\u7A7A");
+    if (!validRelativePath(item2.path))
+      throw new ContextBundleError(`Context Bundle input path \u975E\u6CD5: ${item2.path}`);
+    if (!SHA256.test(item2.digest))
+      throw new ContextBundleError(`Context Bundle input digest \u975E\u6CD5: ${item2.path}`);
+    if (item2.reason.trim() === "")
+      throw new ContextBundleError(`Context Bundle input reason \u4E0D\u80FD\u4E3A\u7A7A: ${item2.path}`);
+    if (item2.mode === "reference" && item2.content !== void 0) {
+      throw new ContextBundleError(`reference input \u4E0D\u5F97\u5185\u5D4C content: ${item2.path}`);
+    }
+    if (item2.mode !== "reference" && item2.content === void 0) {
+      throw new ContextBundleError(`${item2.mode} input \u5FC5\u987B\u5185\u5D4C content: ${item2.path}`);
+    }
+    const key = `${item2.kind}\0${item2.path}`;
+    if (seen.has(key))
+      throw new ContextBundleError(`Context Bundle input \u91CD\u590D: ${item2.kind} ${item2.path}`);
+    seen.add(key);
+  }
+  const usedBytes = input.inputs.reduce((total, item2) => total + contentBytes(item2), 0);
+  if (usedBytes > input.maxBytes) {
+    throw new ContextBundleError(`Context Bundle \u8D85\u9884\u7B97: required=${usedBytes} bytes, available=${input.maxBytes} bytes`);
+  }
+  const unsigned = {
+    schemaVersion: "context-bundle/v1",
+    change: input.change,
+    from: input.from,
+    to: input.to,
+    tier: input.tier,
+    inputs: input.inputs.map((item2) => ({ ...item2 })),
+    budget: { maxBytes: input.maxBytes, usedBytes }
+  };
+  return { ...unsigned, aggregateDigest: contextBundleAggregateDigest(unsigned) };
+}
+
+// packages/kernel/dist/compress/ledger-context-bundle.js
+import { createHash as createHash12 } from "node:crypto";
+import { isAbsolute as isAbsolute5, join as join23 } from "node:path";
+
+// packages/kernel/dist/compress/ledger-context-bundle-contract.js
+var DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES = 12e4;
+var DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS = {
+  maxRecords: 64,
+  maxSourceBytesPerDocument: 262144,
+  maxTotalSourceBytes: 1048576
+};
+var LedgerContextBundleError = class extends Error {
+  code;
+  repairAction;
+  kind;
+  path;
+  requiredBytes;
+  availableBytes;
+  preview;
+  metric;
+  limit;
+  actual;
+  constructor(code, message, details) {
+    super(message);
+    this.name = "LedgerContextBundleError";
+    this.code = code;
+    this.repairAction = details.repairAction;
+    if (details.kind !== void 0)
+      this.kind = details.kind;
+    if (details.path !== void 0)
+      this.path = details.path;
+    if (details.requiredBytes !== void 0)
+      this.requiredBytes = details.requiredBytes;
+    if (details.availableBytes !== void 0)
+      this.availableBytes = details.availableBytes;
+    if (details.preview !== void 0)
+      this.preview = details.preview;
+    if (details.metric !== void 0)
+      this.metric = details.metric;
+    if (details.limit !== void 0)
+      this.limit = details.limit;
+    if (details.actual !== void 0)
+      this.actual = details.actual;
+  }
+};
+
+// packages/kernel/dist/compress/ledger-context-bundle.js
+var SAFE_ID2 = /^[A-Za-z0-9_-]+$/;
+var DOCUMENT_REASONS = {
+  proposal: "\u5B9A\u4E49\u76EE\u6807\u3001\u8303\u56F4\u3001\u975E\u76EE\u6807\u4E0E\u9A8C\u6536\u4FE1\u53F7",
+  "openspec-design": "\u51BB\u7ED3 OpenSpec \u8BBE\u8BA1\u51B3\u7B56\u3001\u98CE\u9669\u548C\u8FB9\u754C",
+  tasks: "\u63D0\u4F9B\u5F53\u524D\u4E03\u9636\u6BB5\u53EF\u6267\u884C\u4EFB\u52A1\u548C\u5B8C\u6210\u72B6\u6001",
+  "superpower-design": "\u63D0\u4F9B\u6DF1\u5C42\u67B6\u6784\u89C4\u5219\u3001\u4E0D\u53D8\u91CF\u4E0E\u65B9\u6848\u53D6\u820D",
+  adr: "\u63D0\u4F9B\u5DF2\u63A5\u53D7\u7684\u957F\u671F\u67B6\u6784\u51B3\u7B56",
+  "delta-spec": "\u63D0\u4F9B\u80FD\u529B\u7EA7\u65B0\u589E\u3001\u4FEE\u6539\u548C\u5220\u9664\u9700\u6C42",
+  "superpower-plan": "\u63D0\u4F9B\u9010\u6587\u4EF6\u5B9E\u65BD\u987A\u5E8F\u3001\u6D4B\u8BD5\u548C\u56DE\u6EDA\u7B56\u7565",
+  plan: "\u63D0\u4F9B\u5F53\u524D Build \u6267\u884C\u8BA1\u5212\u5165\u53E3",
+  "verification-report": "\u63D0\u4F9B\u51BB\u7ED3\u57FA\u7EBF\u4E0A\u7684\u9A8C\u8BC1\u7ED3\u679C\u548C\u5931\u8D25\u5206\u7C7B",
+  "applied-spec": "\u8BC1\u660E delta spec \u5DF2\u5E94\u7528\u5230\u4E3B\u89C4\u683C"
+};
+var DOCUMENT_REASON_CODES = {
+  proposal: "context-bundle.reason.proposal",
+  "openspec-design": "context-bundle.reason.openspec-design",
+  tasks: "context-bundle.reason.tasks",
+  "superpower-design": "context-bundle.reason.superpower-design",
+  adr: "context-bundle.reason.adr",
+  "delta-spec": "context-bundle.reason.delta-spec",
+  "superpower-plan": "context-bundle.reason.superpower-plan",
+  plan: "context-bundle.reason.plan",
+  "verification-report": "context-bundle.reason.verification-report",
+  "applied-spec": "context-bundle.reason.applied-spec"
+};
+function sourceDigest(text2) {
+  return createHash12("sha256").update(text2, "utf8").digest("hex");
+}
+function materializationMode(kind) {
+  return kind === "proposal" || kind === "tasks" || kind === "delta-spec" ? "full" : "summary";
+}
+function validRelativePath2(path7) {
+  if (path7 === "" || isAbsolute5(path7) || path7.includes("\\"))
+    return false;
+  return !path7.split("/").some((part) => part === "" || part === "." || part === "..");
+}
+function invalidRequest(message) {
+  return new LedgerContextBundleError("CONTEXT_BUNDLE_INVALID_REQUEST", message, { repairAction: "\u4F7F\u7528 registered root\u3001\u5B89\u5168 Change \u540D\u3001canonical target \u548C\u6B63\u5B89\u5168\u6574\u6570\u9884\u7B97\u540E\u91CD\u8BD5" });
+}
+function previewOf(input, maxBytes, inputs) {
+  const usedBytes = inputs.reduce((total, item2) => total + item2.materializedBytes, 0);
+  return {
+    change: input.change,
+    from: input.from,
+    to: input.target,
+    tier: "strong",
+    budget: { maxBytes, usedBytes },
+    documentCount: inputs.length,
+    inputs
+  };
+}
+function resourceLimitError(metric, limit, actual, details = {}) {
+  return new LedgerContextBundleError("CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED", `Context Bundle resource limit exceeded: ${metric}=${actual}, limit=${limit}`, {
+    ...details,
+    metric,
+    limit,
+    actual,
+    repairAction: "\u51CF\u5C11\u5DF2\u767B\u8BB0\u8F93\u5165\u6216\u62C6\u5206\u8FC7\u5927\u7684\u6CBB\u7406\u6587\u6863\u540E\u91CD\u8BD5"
+  });
+}
+async function compileLedgerContextBundleWithPorts(input) {
+  const maxBytes = input.budgetBytes ?? DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES;
+  if (!isAbsolute5(input.root) || !SAFE_ID2.test(input.change) || !SAFE_ID2.test(input.from)) {
+    throw invalidRequest("Context Bundle root/change/from \u975E\u6CD5");
+  }
+  if (!isDocumentContractPhase(input.target)) {
+    throw invalidRequest(`Context Bundle target \u5FC5\u987B\u662F canonical phase: ${input.target}`);
+  }
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw invalidRequest(`Context Bundle budgetBytes \u5FC5\u987B\u662F\u6B63\u5B89\u5168\u6574\u6570: ${maxBytes}`);
+  }
+  const requiredKinds = readsRequiredForPhase(input.target);
+  const bundleInputs = [];
+  const summaries = [];
+  if (requiredKinds.length > 0) {
+    let ledger;
+    try {
+      ledger = await input.ledgerRepository.read();
+    } catch {
+      throw new LedgerContextBundleError("CONTEXT_BUNDLE_LEDGER_MISSING", "Context Bundle document ledger \u4E0D\u53EF\u8BFB\u53D6", {
+        path: join23("openspec", "changes", input.change, ".pipeline-documents.json"),
+        repairAction: `\u8FD0\u884C tenon document init ${input.change} \u5E76\u91CD\u65B0\u767B\u8BB0/\u8BFB\u53D6\u6587\u6863`
+      });
+    }
+    if (ledger === void 0) {
+      throw new LedgerContextBundleError("CONTEXT_BUNDLE_LEDGER_MISSING", "Context Bundle missing document ledger; run tenon document init", {
+        path: join23("openspec", "changes", input.change, ".pipeline-documents.json"),
+        repairAction: `\u8FD0\u884C tenon document init ${input.change} \u540E\u91CD\u8BD5`
+      });
+    }
+    const limits = input.resourceLimits;
+    const requiredRecords = ledger.records.filter((record2) => requiredKinds.includes(record2.kind));
+    if (limits && requiredRecords.length > limits.maxRecords) {
+      throw resourceLimitError("records", limits.maxRecords, requiredRecords.length);
+    }
+    let totalSourceBytes = 0;
+    const materializedPaths = /* @__PURE__ */ new Set();
+    for (const kind of requiredKinds) {
+      const records = ledger.records.filter((record2) => record2.kind === kind).sort((left, right) => left.path.localeCompare(right.path, "en"));
+      if (records.length === 0) {
+        throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}'; run tenon document record ${input.change} ${kind} <path> --producer <skill>`, {
+          kind,
+          repairAction: `\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} <path> --producer <skill>\uFF0C\u7136\u540E tenon document read ${input.change} all`
+        });
+      }
+      for (const record2 of records) {
+        if (!validRelativePath2(record2.path)) {
+          throw invalidRequest(`Context Bundle ledger path \u975E\u6CD5: ${record2.path}`);
+        }
+        let text2;
+        let sourceBytes;
+        const remainingTotalBytes = limits ? Math.max(0, limits.maxTotalSourceBytes - totalSourceBytes) : void 0;
+        const sourceReadLimit = limits && remainingTotalBytes !== void 0 ? {
+          maxBytes: Math.min(limits.maxSourceBytesPerDocument, remainingTotalBytes),
+          metric: remainingTotalBytes < limits.maxSourceBytesPerDocument ? "totalSourceBytes" : "sourceBytesPerDocument",
+          limit: remainingTotalBytes < limits.maxSourceBytesPerDocument ? limits.maxTotalSourceBytes : limits.maxSourceBytesPerDocument,
+          actualOffset: remainingTotalBytes < limits.maxSourceBytesPerDocument ? totalSourceBytes : 0
+        } : void 0;
+        try {
+          const source = await input.sourceReader.read(record2.path, sourceReadLimit);
+          text2 = source.text;
+          sourceBytes = source.sourceBytes;
+        } catch (error) {
+          if (error instanceof LedgerContextBundleError)
+            throw error;
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle source reader failed for '${kind}': ${record2.path}; ${error instanceof Error ? error.message : String(error)}`, {
+            kind,
+            path: record2.path,
+            repairAction: `\u6062\u590D root \u5185\u7A33\u5B9A\u7684\u975E symlink \u666E\u901A\u6587\u4EF6 ${record2.path}\uFF0C\u5E76\u91CD\u65B0 record/read`
+          });
+        }
+        if (text2 === void 0) {
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}': ${record2.path}; restore or re-record it`, {
+            kind,
+            path: record2.path,
+            repairAction: `\u6062\u590D ${record2.path}\uFF0C\u6216\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record2.path} --producer <skill>`
+          });
+        }
+        if (limits && sourceBytes > limits.maxSourceBytesPerDocument) {
+          throw resourceLimitError("sourceBytesPerDocument", limits.maxSourceBytesPerDocument, sourceBytes, { kind, path: record2.path });
+        }
+        totalSourceBytes += sourceBytes;
+        if (limits && totalSourceBytes > limits.maxTotalSourceBytes) {
+          throw resourceLimitError("totalSourceBytes", limits.maxTotalSourceBytes, totalSourceBytes, { kind, path: record2.path });
+        }
+        const actual = sourceDigest(text2);
+        if (actual !== record2.sha256) {
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_STALE", `Context Bundle stale document '${kind}': ${record2.path}; run tenon document record ${input.change} ${kind} ${record2.path} --producer <skill>, then tenon document read ${input.change} all`, {
+            kind,
+            path: record2.path,
+            repairAction: `\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record2.path} --producer <skill>\uFF0C\u7136\u540E tenon document read ${input.change} all`
+          });
+        }
+        const duplicatePath = materializedPaths.has(record2.path);
+        const mode = duplicatePath ? "reference" : materializationMode(kind);
+        if (!duplicatePath)
+          materializedPaths.add(record2.path);
+        const content = mode === "reference" ? void 0 : mode === "full" ? text2 : renderHandoffSummary(compressDocument(text2), `${input.change}/${kind}`);
+        const digestValue = `sha256:${record2.sha256}`;
+        bundleInputs.push({
+          kind,
+          path: record2.path,
+          digest: digestValue,
+          reason: DOCUMENT_REASONS[kind],
+          mode,
+          ...content === void 0 ? {} : { content }
+        });
+        summaries.push({
+          kind,
+          path: record2.path,
+          digest: digestValue,
+          reason: DOCUMENT_REASONS[kind],
+          reasonCode: DOCUMENT_REASON_CODES[kind],
+          mode,
+          sourceBytes,
+          materializedBytes: content === void 0 ? 0 : Buffer.byteLength(content, "utf8")
+        });
+      }
+    }
+  }
+  const preview = previewOf(input, maxBytes, summaries);
+  if (preview.budget.usedBytes > maxBytes) {
+    throw new LedgerContextBundleError("CONTEXT_BUNDLE_BUDGET_EXCEEDED", `Context Bundle \u8D85\u9884\u7B97: required=${preview.budget.usedBytes} bytes, available=${maxBytes} bytes`, {
+      requiredBytes: preview.budget.usedBytes,
+      availableBytes: maxBytes,
+      preview,
+      repairAction: `\u628A budgetBytes \u8C03\u6574\u5230\u81F3\u5C11 ${preview.budget.usedBytes} \u540E\u91CD\u8BD5`
+    });
+  }
+  const bundle = compileContextBundle({
+    change: input.change,
+    from: input.from,
+    to: input.target,
+    tier: "strong",
+    maxBytes,
+    inputs: bundleInputs
+  });
+  return { bundle, preview };
+}
+
 // packages/kernel/dist/triage/types.js
 var OBSERVE_ACTION_KINDS = ["git-commits", "loop-run-terminals"];
 
@@ -12908,7 +13464,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep7) {
+function splitTopLevel(s, sep9) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -12920,7 +13476,7 @@ function splitTopLevel(s, sep7) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep7) {
+    } else if (ch === sep9) {
       out.push(cur);
       cur = "";
     } else {
@@ -13727,7 +14283,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join51 } from "node:path";
+import { join as join52 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -13834,10 +14390,10 @@ var DEFAULT_VERIFIER_ISSUER_KIND = DEFAULT_VERIFIER_ISSUER_IDENTITY.kind;
 var DEFAULT_TTL_MS = 10 * 60 * 1e3;
 
 // packages/automation/dist/skills/snapshot-manifest.js
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat12, mkdir as mkdir13, open as open3, readdir as readdir3, realpath as realpath4, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname5, join as join23, relative as relative4, sep as sep5 } from "node:path";
+import { dirname as dirname5, join as join24, relative as relative4, sep as sep5 } from "node:path";
 
 // packages/automation/dist/skills/types.js
 function isPathSafeSkillId(skillId) {
@@ -13851,7 +14407,7 @@ var SkillContentInvalidError = class extends Error {
 };
 var EXEC_BITS = 73;
 function sha256Hex2(data) {
-  return createHash11("sha256").update(data).digest("hex");
+  return createHash13("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex2(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -13892,7 +14448,7 @@ async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFai
   let cursor = realRoot;
   if (fromRoot !== "") {
     for (const segment of fromRoot.split(sep5)) {
-      cursor = join23(cursor, segment);
+      cursor = join24(cursor, segment);
       paths.push(cursor);
     }
   }
@@ -13981,7 +14537,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
     }
     for (const d of dirents) {
       const relPath = relDir ? `${relDir}/${d.name}` : d.name;
-      const absPath = join23(realDir, d.name);
+      const absPath = join24(realDir, d.name);
       if (d.isSymbolicLink()) {
         let real;
         try {
@@ -14072,11 +14628,11 @@ var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
 });
 
 // packages/automation/dist/lifecycle/spec-complete.js
-import { join as join25 } from "node:path";
+import { join as join26 } from "node:path";
 
 // packages/automation/dist/config/automationJson.js
 import { readFileSync as readFileSync12 } from "node:fs";
-import { join as join24 } from "node:path";
+import { join as join25 } from "node:path";
 var AUTOMATION_JSON_LIMITS = {
   maxParallel: { min: 1, max: 8 },
   maxRetries: { min: 0, max: 3 },
@@ -14084,7 +14640,7 @@ var AUTOMATION_JSON_LIMITS = {
 };
 var AUTOMATION_IMAGE_RE = /^[a-zA-Z0-9._/:@-]+$/;
 function automationJsonPath(root) {
-  return join24(root, ".pipeline", "automation.json");
+  return join25(root, ".pipeline", "automation.json");
 }
 var intIn = (v, min, max) => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 function isValidImageRef(v) {
@@ -14131,7 +14687,7 @@ async function enqueueAfterSpecComplete(deps, transition) {
     return { kind: "not-applicable" };
   }
   const config = resolveAutomationConfig(deps);
-  const changeDir = join25(deps.repoRoot, "openspec", "changes", transition.changeName);
+  const changeDir = join26(deps.repoRoot, "openspec", "changes", transition.changeName);
   return deps.store.withLock(changeDir, async () => {
     const state = await deps.store.read(changeDir);
     if (scalar3(state.fields.phase) !== "build")
@@ -14164,7 +14720,7 @@ var DEFAULT_COMPLETION_TIMEOUT_MS = 60 * 1e3;
 
 // packages/automation/dist/skills/content-locator.js
 import { lstat as lstat13, realpath as realpath5, stat as stat4 } from "node:fs/promises";
-import { join as join26 } from "node:path";
+import { join as join27 } from "node:path";
 var SkillContentNotFoundError = class extends Error {
   name = "SkillContentNotFoundError";
   _tag = "SkillContentNotFoundError";
@@ -14191,7 +14747,7 @@ function createFsSkillContentLocator(roots) {
       }
       const candidates = [];
       for (const root of roots) {
-        const candidate = join26(root, skillId);
+        const candidate = join27(root, skillId);
         try {
           await lstat13(candidate);
         } catch (err) {
@@ -14241,7 +14797,7 @@ function createFsSkillContentLocator(roots) {
 
 // packages/automation/dist/skills/production-content-locator.js
 import { readdirSync as readdirSync3, readFileSync as readFileSync13 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join27 } from "node:path";
+import { isAbsolute as isAbsolute6, join as join28 } from "node:path";
 var SkillRootRegistryError = class extends Error {
   name = "SkillRootRegistryError";
   _tag = "SkillRootRegistryError";
@@ -14282,13 +14838,13 @@ function append(map, key, value) {
 }
 function codexPluginRoots(home, read) {
   const result = /* @__PURE__ */ new Map();
-  const cache = join27(home, ".codex", "plugins", "cache");
+  const cache = join28(home, ".codex", "plugins", "cache");
   for (const authority of checkedNames(read, cache)) {
-    const authorityDir = join27(cache, authority);
+    const authorityDir = join28(cache, authority);
     for (const plugin of checkedNames(read, authorityDir)) {
-      const pluginDir = join27(authorityDir, plugin);
+      const pluginDir = join28(authorityDir, plugin);
       for (const version of checkedNames(read, pluginDir)) {
-        append(result, plugin, join27(pluginDir, version, "skills"));
+        append(result, plugin, join28(pluginDir, version, "skills"));
       }
     }
   }
@@ -14331,10 +14887,10 @@ function claudeInstalledRoots(raw) {
         throw new SkillRootRegistryError(`Claude plugins.${key}[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
       }
       const installPath = entry.installPath;
-      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute4(installPath)) {
+      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute6(installPath)) {
         throw new SkillRootRegistryError(`Claude plugins.${key}[${index}].installPath \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84`);
       }
-      append(result, plugin, join27(installPath, "skills"));
+      append(result, plugin, join28(installPath, "skills"));
     }
   }
   return result;
@@ -14359,28 +14915,28 @@ function createRunnerSkillContentLocator(options) {
   };
   const getCodexFlat = () => {
     codexFlat ??= createFsSkillContentLocator([
-      join27(options.home, ".codex", "skills"),
-      join27(options.home, ".codex", "skills", ".system"),
+      join28(options.home, ".codex", "skills"),
+      join28(options.home, ".codex", "skills", ".system"),
       // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
       // Claude 私有面，Codex runner 必须可读，否则 setup/doctor 绿而 H10 readiness 必红。
-      join27(options.home, ".agents", "skills"),
+      join28(options.home, ".agents", "skills"),
       ...flatten(getCodexPlugins())
     ]);
     return codexFlat;
   };
   const getClaudePlugins = () => {
-    claudePlugins ??= claudeInstalledRoots((options.readInstalledPluginsJson ?? realInstalledJson)(join27(options.home, ".claude", "plugins", "installed_plugins.json")));
+    claudePlugins ??= claudeInstalledRoots((options.readInstalledPluginsJson ?? realInstalledJson)(join28(options.home, ".claude", "plugins", "installed_plugins.json")));
     return claudePlugins;
   };
   const getClaudeFlat = () => {
     if (claudeFlat !== void 0)
       return claudeFlat;
-    const roots = [join27(options.home, ".claude", "skills"), join27(options.home, ".agents", "skills")];
-    const cache = join27(options.home, ".claude", "plugins", "cache");
+    const roots = [join28(options.home, ".claude", "skills"), join28(options.home, ".agents", "skills")];
+    const cache = join28(options.home, ".claude", "plugins", "cache");
     for (const marketplace of checkedNames(readDirs, cache)) {
-      const marketplaceDir = join27(cache, marketplace);
+      const marketplaceDir = join28(cache, marketplace);
       for (const plugin of checkedNames(readDirs, marketplaceDir)) {
-        roots.push(join27(marketplaceDir, plugin, "skills"));
+        roots.push(join28(marketplaceDir, plugin, "skills"));
       }
     }
     roots.push(...flatten(getClaudePlugins()));
@@ -14752,7 +15308,7 @@ import {
   realpathSync as realpathSync2,
   unlinkSync
 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep6 } from "node:path";
+import { isAbsolute as isAbsolute7, join as join29, relative as relative5, sep as sep7 } from "node:path";
 
 // packages/server/src/workflowRootAnchor.ts
 import {
@@ -14763,7 +15319,7 @@ import {
   openSync,
   realpathSync
 } from "node:fs";
-import { join as join28, resolve as resolvePath2 } from "node:path";
+import { resolve as resolvePath2, sep as sep6 } from "node:path";
 function sameIdentity(current, expected) {
   return current.dev === expected.dev && current.ino === expected.ino;
 }
@@ -14783,9 +15339,12 @@ function lstatIfExists(path7) {
 }
 function traversableDirectoryFdPath(fd, expected) {
   const candidates = process.platform === "linux" ? [`/proc/self/fd/${fd}`, `/dev/fd/${fd}`] : [`/dev/fd/${fd}`, `/proc/self/fd/${fd}`];
+  return traversableDirectoryFdPathFromCandidates(expected, candidates);
+}
+function traversableDirectoryFdPathFromCandidates(expected, candidates) {
   for (const candidate of candidates) {
     try {
-      const current = lstatSync2(join28(candidate, "."));
+      const current = lstatSync2(`${candidate}${sep6}.`);
       if (current.isDirectory() && sameIdentity(current, expected)) return candidate;
     } catch {
     }
@@ -14847,7 +15406,7 @@ var WorkflowDeleteConflictError = class extends Error {
 // packages/server/src/workflowTrustedFs.ts
 function assertInsideRoot(realRoot, realPath, label) {
   const fromRoot = relative5(realRoot, realPath);
-  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep6}`) || isAbsolute5(fromRoot)) {
+  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep7}`) || isAbsolute7(fromRoot)) {
     throw new Error(`${label} \u5DF2\u9003\u9038 registered root: ${realPath}`);
   }
 }
@@ -14920,13 +15479,17 @@ function openTrustedChildDirectory(root, parent, name, create) {
     throw e;
   }
 }
-function withTrustedDirectoryChain(root, names, create, onMissing, use) {
+function withTrustedDirectoryChain(root, names, create, onMissing, use, expected) {
   const opened = [];
   try {
     let parent = rootDirectory(root);
-    for (const name of names) {
+    for (const [depth, name] of names.entries()) {
       const child = openTrustedChildDirectory(root, parent, name, create);
       if (!child) return onMissing();
+      if (expected?.depth === depth && !sameIdentity(child, expected.identity)) {
+        safeClose(child.fd);
+        throw new Error(`workflow \u76EE\u5F55\u4E0E\u8BF7\u6C42\u6355\u83B7\u8EAB\u4EFD\u4E0D\u4E00\u81F4: ${child.lexicalPath}`);
+      }
       opened.push(child);
       parent = child;
     }
@@ -15917,8 +16480,8 @@ function createCadenceScheduler(options) {
 }
 
 // packages/server/src/serverGetRoutes.ts
-import { lstatSync as lstatSync5 } from "node:fs";
-import { dirname as dirname9, join as join42 } from "node:path";
+import { lstatSync as lstatSync6 } from "node:fs";
+import { dirname as dirname10, join as join43 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -17210,7 +17773,7 @@ function readTraceRecords(store, session, clock) {
 }
 
 // packages/server/src/serverGetActivityRoutes.ts
-import { join as join41, resolve as resolvePath4 } from "node:path";
+import { join as join42, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
 import { execFile as execFile3 } from "node:child_process";
@@ -17398,6 +17961,518 @@ async function readAfkRunLog(changeDir) {
   }
 }
 
+// packages/server/src/contextBundlePreview.ts
+import { lstatSync as lstatSync5, realpathSync as realpathSync3 } from "node:fs";
+import { isAbsolute as isAbsolute8, join as join39, relative as relative6, sep as sep8 } from "node:path";
+
+// packages/server/src/contextBundleTrustedReader.ts
+import { constants as constants7, fstatSync as fstatSync5, openSync as openSync5, readSync } from "node:fs";
+import { dirname as dirname9, posix as posix2 } from "node:path";
+function safeParts(path7) {
+  if (path7 === "" || path7.startsWith("/") || path7.includes("\\")) throw new Error("unsafe relative path");
+  const parts = path7.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) {
+    throw new Error("unsafe relative path");
+  }
+  return parts;
+}
+function decodeUtf8(bytes) {
+  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+}
+function isInvalidUtf8(error) {
+  return error instanceof TypeError && "code" in error && error.code === "ERR_ENCODING_INVALID_ENCODED_DATA";
+}
+function isMissing(error) {
+  return typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
+}
+function readBounded(fd, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const bytesRead = readSync(fd, chunk, 0, chunk.byteLength, null);
+    if (bytesRead === 0) break;
+    chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  return Buffer.concat(chunks, total);
+}
+var ContextBundleTrustedFileError = class extends Error {
+  constructor() {
+    super("Context Bundle trusted file integrity check failed");
+    this.name = "ContextBundleTrustedFileError";
+  }
+};
+function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity) {
+  const parts = safeParts(relativePath);
+  const name = parts.at(-1);
+  if (name === void 0) throw new Error("missing file name");
+  const directories = parts.slice(0, -1);
+  const expectedChange = changeIdentity && parts[0] === "openspec" && parts[1] === "changes" ? { depth: 2, identity: changeIdentity } : void 0;
+  try {
+    return withTrustedDirectoryChain(root, directories, false, () => {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_DOCUMENT_MISSING",
+        `Context Bundle document directory is missing: ${dirname9(relativePath)}`,
+        { path: relativePath, repairAction: "\u6062\u590D\u9879\u76EE\u5185\u53EF\u4FE1\u666E\u901A\u6587\u4EF6\u5E76\u91CD\u65B0 record/read" }
+      );
+    }, (directory) => {
+      const paths = childEntry(directory, name);
+      assertDirectoryStillTrusted(directory, root);
+      let fd;
+      try {
+        fd = openSync5(
+          paths.operation,
+          constants7.O_RDONLY | constants7.O_NOFOLLOW | constants7.O_NONBLOCK
+        );
+      } catch (error) {
+        if (isMissing(error)) {
+          throw new LedgerContextBundleError(
+            "CONTEXT_BUNDLE_DOCUMENT_MISSING",
+            `Context Bundle document is missing: ${relativePath}`,
+            { path: relativePath, repairAction: "\u6062\u590D\u9879\u76EE\u5185\u53EF\u4FE1\u666E\u901A\u6587\u4EF6\u5E76\u91CD\u65B0 record/read" }
+          );
+        }
+        throw new ContextBundleTrustedFileError();
+      }
+      try {
+        const opened = fstatSync5(fd);
+        if (!opened.isFile()) throw new ContextBundleTrustedFileError();
+        const identity = { dev: opened.dev, ino: opened.ino };
+        assertEntryMatches(paths, identity, "Context Bundle source");
+        assertDirectoryStillTrusted(directory, root);
+        if (opened.size > maxBytes) {
+          const metric = readLimit?.metric ?? "sourceBytesPerDocument";
+          const limit = readLimit?.limit ?? maxBytes;
+          const actual = (readLimit?.actualOffset ?? 0) + opened.size;
+          throw new LedgerContextBundleError(
+            "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED",
+            `Context Bundle resource limit exceeded: ${metric}=${actual}, limit=${limit}`,
+            {
+              path: relativePath,
+              metric,
+              limit,
+              actual,
+              repairAction: "\u62C6\u5206\u8FC7\u5927\u7684\u6CBB\u7406\u6587\u6863\u540E\u91CD\u8BD5"
+            }
+          );
+        }
+        const bytes = readBounded(fd, maxBytes);
+        if (bytes.byteLength > maxBytes) {
+          const metric = readLimit?.metric ?? "sourceBytesPerDocument";
+          const limit = readLimit?.limit ?? maxBytes;
+          const actual = (readLimit?.actualOffset ?? 0) + bytes.byteLength;
+          throw new LedgerContextBundleError(
+            "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED",
+            `Context Bundle resource limit exceeded: ${metric}>${limit}`,
+            {
+              path: relativePath,
+              metric,
+              limit,
+              actual,
+              repairAction: "\u62C6\u5206\u8FC7\u5927\u7684\u6CBB\u7406\u6587\u6863\u540E\u91CD\u8BD5"
+            }
+          );
+        }
+        assertEntryMatches(paths, identity, "Context Bundle source");
+        assertDirectoryStillTrusted(directory, root);
+        return { text: decodeUtf8(bytes), sourceBytes: bytes.byteLength };
+      } finally {
+        safeClose(fd);
+      }
+    }, expectedChange);
+  } catch (error) {
+    if (error instanceof LedgerContextBundleError || error instanceof ContextBundleTrustedFileError) {
+      throw error;
+    }
+    throw new ContextBundleTrustedFileError();
+  }
+}
+function trustedContextBundleCurrentPhase(root, change, changeIdentity) {
+  const prefix = posix2.join("openspec", "changes", change);
+  let current;
+  try {
+    current = readCurrentRunRevisionFromSync((relativePath) => {
+      try {
+        return readTrustedFile(
+          root,
+          posix2.join(prefix, relativePath),
+          1048576,
+          void 0,
+          changeIdentity
+        ).text;
+      } catch (error) {
+        if (error instanceof LedgerContextBundleError && error.code === "CONTEXT_BUNDLE_DOCUMENT_MISSING") return void 0;
+        throw error;
+      }
+    });
+  } catch (error) {
+    if (error instanceof RunStateCorruptError || error instanceof ContextBundleTrustedFileError || isInvalidUtf8(error)) {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_STATE_CORRUPT",
+        "Context Bundle canonical state is corrupt",
+        { repairAction: "\u6062\u590D\u6709\u6548\u7684 canonical Change state \u540E\u91CD\u8BD5" }
+      );
+    }
+    throw error;
+  }
+  const phase = current?.state.fields.phase;
+  return typeof phase === "string" ? phase : void 0;
+}
+function trustedContextBundleInputs(root, change, changeIdentity, limits) {
+  const ledgerPath = posix2.join("openspec", "changes", change, ".pipeline-documents.json");
+  let ledgerSource;
+  try {
+    ledgerSource = readTrustedFile(root, ledgerPath, 16 * 1024 * 1024, void 0, changeIdentity);
+  } catch (error) {
+    if (error instanceof LedgerContextBundleError && error.code === "CONTEXT_BUNDLE_DOCUMENT_MISSING") {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_LEDGER_MISSING",
+        "Context Bundle document ledger is unavailable",
+        { path: ledgerPath, repairAction: "\u521D\u59CB\u5316\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+      );
+    }
+    if (error instanceof LedgerContextBundleError && error.code === "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED") {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_LEDGER_MISSING",
+        "Context Bundle document ledger exceeds the trusted transport cap",
+        { path: ledgerPath, repairAction: "\u7CBE\u7B80\u6216\u4FEE\u590D document ledger \u540E\u91CD\u8BD5" }
+      );
+    }
+    if (isInvalidUtf8(error)) {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_LEDGER_MISSING",
+        "Context Bundle document ledger is malformed",
+        { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+      );
+    }
+    if (error instanceof ContextBundleTrustedFileError) {
+      throw new LedgerContextBundleError(
+        "CONTEXT_BUNDLE_LEDGER_MISSING",
+        "Context Bundle document ledger failed integrity checks",
+        { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+      );
+    }
+    throw error;
+  }
+  let ledger;
+  try {
+    ledger = parseDocumentLedger(ledgerSource.text);
+  } catch {
+    throw new LedgerContextBundleError(
+      "CONTEXT_BUNDLE_LEDGER_MISSING",
+      "Context Bundle document ledger is malformed",
+      { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+    );
+  }
+  return {
+    ledger,
+    sourceReader: {
+      read: async (path7, readLimit) => readTrustedFile(
+        root,
+        path7,
+        readLimit?.maxBytes ?? limits.maxSourceBytesPerDocument,
+        readLimit,
+        changeIdentity
+      )
+    }
+  };
+}
+
+// packages/server/src/contextBundlePreview.ts
+var SCHEMA_VERSION = "context-bundle-preview/v1";
+var SIDE_EFFECTS = "none";
+var ContextBundlePathError = class extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+    this.name = "ContextBundlePathError";
+  }
+  status;
+};
+function missingCode(error) {
+  return typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
+}
+function inside2(base, candidate) {
+  const fromBase = relative6(base, candidate);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute8(fromBase);
+}
+function captureChangePathAnchor(root, change) {
+  const chainPaths = [
+    join39(root.path, "openspec"),
+    join39(root.path, "openspec", "changes"),
+    join39(root.path, "openspec", "changes", change)
+  ];
+  const chain = [];
+  for (const path7 of chainPaths) {
+    let info;
+    try {
+      info = lstatSync5(path7);
+    } catch (error) {
+      if (missingCode(error)) {
+        throw new ContextBundlePathError(400, "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state");
+      }
+      throw error;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
+    }
+    chain.push({ path: path7, dev: info.dev, ino: info.ino });
+  }
+  const changeDir = chainPaths[2];
+  let realPath;
+  try {
+    realPath = realpathSync3(changeDir);
+  } catch {
+    throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`);
+  }
+  if (!inside2(root.realPath, realPath)) {
+    throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u9003\u9038 registered root: ${realPath}`);
+  }
+  return { changeDir, realPath, chain };
+}
+function assertChangePathAnchor(anchor) {
+  for (const expected of anchor.chain) {
+    let actual;
+    try {
+      actual = lstatSync5(expected.path);
+    } catch {
+      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u6D88\u5931: ${expected.path}`);
+    }
+    if (actual.isSymbolicLink() || !actual.isDirectory() || actual.dev !== expected.dev || actual.ino !== expected.ino) {
+      throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u88AB\u66FF\u6362: ${expected.path}`);
+    }
+  }
+  if (realpathSync3(anchor.changeDir) !== anchor.realPath) {
+    throw new ContextBundlePathError(403, `Context Bundle Change realpath \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${anchor.changeDir}`);
+  }
+}
+function invalidRequest2(res, sendJson, error) {
+  sendJson(res, 400, {
+    ok: false,
+    code: "CONTEXT_BUNDLE_INVALID_REQUEST",
+    error,
+    repairAction: "\u8BF7\u63D0\u4F9B\u5DF2\u6CE8\u518C root\u3001\u5B89\u5168 change\u3001canonical target \u548C\u6B63\u5B89\u5168\u6574\u6570 budgetBytes\u3002"
+  });
+}
+function safePreview(preview, fits, aggregateDigest) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    sideEffects: SIDE_EFFECTS,
+    change: preview.change,
+    from: preview.from,
+    to: preview.to,
+    tier: preview.tier,
+    documentCount: preview.documentCount,
+    budget: {
+      maxBytes: preview.budget.maxBytes,
+      usedBytes: preview.budget.usedBytes,
+      fits
+    },
+    inputs: preview.inputs.map((input) => ({
+      kind: input.kind,
+      path: input.path,
+      digest: input.digest,
+      reason: input.reason,
+      reasonCode: input.reasonCode,
+      mode: input.mode,
+      sourceBytes: input.sourceBytes,
+      materializedBytes: input.materializedBytes
+    })),
+    ...aggregateDigest === void 0 ? {} : { aggregateDigest }
+  };
+}
+function statusFor(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return 400;
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return 409;
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return 413;
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return 422;
+  }
+  const unreachable = error.code;
+  return unreachable;
+}
+function safeErrorText3(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return "Context Bundle request is invalid";
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+      return "Context Bundle canonical state is corrupt";
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+      return "Context Bundle document ledger is unavailable";
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+      return "A required Context Bundle document is unavailable";
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return "A required Context Bundle document has changed";
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return "Context Bundle source resource limit exceeded";
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return "Context Bundle materialized budget exceeded";
+  }
+}
+function safeRepairAction(error) {
+  switch (error.code) {
+    case "CONTEXT_BUNDLE_INVALID_REQUEST":
+      return "Use a registered root, safe identifiers, canonical target, and positive budget.";
+    case "CONTEXT_BUNDLE_STATE_CORRUPT":
+      return "Restore a valid canonical Change state, then retry.";
+    case "CONTEXT_BUNDLE_LEDGER_MISSING":
+      return "Initialize and record the document ledger, then retry.";
+    case "CONTEXT_BUNDLE_DOCUMENT_MISSING":
+      return "Restore or record the required project document, then retry.";
+    case "CONTEXT_BUNDLE_DOCUMENT_STALE":
+      return "Record and read the changed project document again, then retry.";
+    case "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return "Reduce the number or source size of recorded documents, then retry.";
+    case "CONTEXT_BUNDLE_BUDGET_EXCEEDED":
+      return "Increase budgetBytes to the required materialized size, then retry.";
+  }
+}
+async function handleContextBundlePreview(req, res, deps) {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const root = url.searchParams.get("root");
+  const change = url.searchParams.get("change");
+  const target = url.searchParams.get("target");
+  const budgetText = url.searchParams.get("budgetBytes");
+  if (root === null || root === "" || change === null || target === null || budgetText === null) {
+    return invalidRequest2(res, deps.sendJson, "\u7F3A\u5C11 root\u3001change\u3001target \u6216 budgetBytes \u67E5\u8BE2\u53C2\u6570");
+  }
+  if (!validateChangeName(change).ok) {
+    return invalidRequest2(res, deps.sendJson, "change \u540D\u975E\u6CD5\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
+  }
+  if (!isDocumentContractPhase(target)) {
+    return invalidRequest2(res, deps.sendJson, "target \u5FC5\u987B\u662F canonical phase");
+  }
+  if (!/^[1-9][0-9]*$/.test(budgetText)) {
+    return invalidRequest2(res, deps.sendJson, "budgetBytes \u5FC5\u987B\u662F\u6B63\u5B89\u5168\u6574\u6570");
+  }
+  const budgetBytes = Number(budgetText);
+  if (!Number.isSafeInteger(budgetBytes)) {
+    return invalidRequest2(res, deps.sendJson, "budgetBytes \u5FC5\u987B\u662F\u6B63\u5B89\u5168\u6574\u6570");
+  }
+  const rootCheck = deps.workflowRootForRequest(root);
+  if (!rootCheck.ok) {
+    return deps.sendJson(res, rootCheck.code, {
+      ok: false,
+      error: rootCheck.code === 403 ? "Context Bundle root trust check failed" : "Context Bundle registered root is unavailable"
+    });
+  }
+  const anchor = rootCheck.anchor;
+  if (anchor.fdPath === void 0) {
+    return deps.sendJson(res, 501, {
+      ok: false,
+      code: "CONTEXT_BUNDLE_TRUSTED_READER_UNAVAILABLE",
+      error: "Context Bundle trusted reader is unavailable on this platform",
+      repairAction: "Run the Dashboard on a platform with fd-relative directory traversal."
+    });
+  }
+  let changeAnchor;
+  try {
+    assertWorkflowRootAnchor(anchor);
+    changeAnchor = captureChangePathAnchor(anchor, change);
+    const capturedChange = changeAnchor.chain[2];
+    if (capturedChange === void 0) {
+      throw new ContextBundlePathError(403, "Context Bundle Change identity capture failed");
+    }
+    const changeIdentity = {
+      dev: capturedChange.dev,
+      ino: capturedChange.ino
+    };
+    const from = trustedContextBundleCurrentPhase(anchor, change, changeIdentity);
+    assertChangePathAnchor(changeAnchor);
+    assertWorkflowRootAnchor(anchor);
+    if (typeof from !== "string" || !/^[A-Za-z0-9_-]+$/.test(from)) {
+      return invalidRequest2(
+        res,
+        deps.sendJson,
+        "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state\uFF0C\u6216\u5F53\u524D step id \u4E0D\u5B89\u5168"
+      );
+    }
+    const trustedInputs = readsRequiredForPhase(target).length === 0 ? {
+      ledger: void 0,
+      sourceReader: {
+        read: async () => {
+          throw new Error("policy-empty preview must not read a source document");
+        }
+      }
+    } : trustedContextBundleInputs(
+      anchor,
+      change,
+      changeIdentity,
+      DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS
+    );
+    const result = await compileLedgerContextBundleWithPorts({
+      root: anchor.path,
+      change,
+      from,
+      target,
+      budgetBytes,
+      ledgerRepository: {
+        read: async () => trustedInputs.ledger
+      },
+      sourceReader: trustedInputs.sourceReader,
+      resourceLimits: DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS
+    });
+    assertChangePathAnchor(changeAnchor);
+    assertWorkflowRootAnchor(anchor);
+    return deps.sendJson(res, 200, {
+      ok: true,
+      preview: safePreview(result.preview, true, result.bundle.aggregateDigest)
+    });
+  } catch (error) {
+    try {
+      assertWorkflowRootAnchor(anchor);
+    } catch (anchorError) {
+      void anchorError;
+      return deps.sendJson(res, 403, { ok: false, error: "Context Bundle root trust check failed" });
+    }
+    if (changeAnchor !== void 0) {
+      try {
+        assertChangePathAnchor(changeAnchor);
+      } catch (pathError) {
+        void pathError;
+        return deps.sendJson(res, 403, { ok: false, error: "Context Bundle path trust check failed" });
+      }
+    }
+    if (error instanceof ContextBundlePathError) {
+      return deps.sendJson(res, error.status, {
+        ok: false,
+        ...error.status === 400 ? { code: "CONTEXT_BUNDLE_INVALID_REQUEST" } : {},
+        error: error.status === 400 ? "Context Bundle Change state is unavailable" : "Context Bundle path trust check failed",
+        ...error.status === 400 ? { repairAction: "\u786E\u8BA4 Change \u5DF2\u521B\u5EFA canonical workflow state \u540E\u91CD\u8BD5\u3002" } : {}
+      });
+    }
+    if (error instanceof LedgerContextBundleError) {
+      return deps.sendJson(res, statusFor(error), {
+        ok: false,
+        code: error.code,
+        error: safeErrorText3(error),
+        repairAction: safeRepairAction(error),
+        detail: {
+          ...error.kind === void 0 ? {} : { kind: error.kind },
+          ...error.path === void 0 ? {} : { path: error.path },
+          ...error.requiredBytes === void 0 ? {} : { requiredBytes: error.requiredBytes },
+          ...error.availableBytes === void 0 ? {} : { availableBytes: error.availableBytes },
+          ...error.metric === void 0 ? {} : { metric: error.metric },
+          ...error.limit === void 0 ? {} : { limit: error.limit },
+          ...error.actual === void 0 ? {} : { actual: error.actual }
+        },
+        ...error.code === "CONTEXT_BUNDLE_BUDGET_EXCEEDED" && error.preview !== void 0 ? { preview: safePreview(error.preview, false) } : {}
+      });
+    }
+    void error;
+    return deps.sendJson(res, 500, { ok: false, error: "Context Bundle preview failed" });
+  }
+}
+
 // packages/server/src/runDetail.ts
 function scalar4(value) {
   return Array.isArray(value) ? value.join(",") : value ?? "";
@@ -17547,11 +18622,11 @@ async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
 
 // packages/server/src/transition.ts
 import { readFile as readFile21 } from "node:fs/promises";
-import { join as join40 } from "node:path";
+import { join as join41 } from "node:path";
 
 // packages/server/src/transitionHistory.ts
 import { readFile as readFile20 } from "node:fs/promises";
-import { join as join39 } from "node:path";
+import { join as join40 } from "node:path";
 function decodeHistoryEntry(value) {
   if (typeof value !== "object" || value === null) return null;
   const record2 = value;
@@ -17580,7 +18655,7 @@ function decodeHistoryEntry(value) {
 async function readJsonlHistory(changeDir) {
   let text2;
   try {
-    text2 = await readFile20(join39(changeDir, HISTORY_FILE), "utf8");
+    text2 = await readFile20(join40(changeDir, HISTORY_FILE), "utf8");
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -17737,7 +18812,7 @@ async function performTransition(deps, root, name, event) {
   if (!name || !CHANGE_NAME_RE2.test(name) || name.includes("..")) {
     return { code: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
   }
-  const dir = join40(root, "openspec", "changes", name);
+  const dir = join41(root, "openspec", "changes", name);
   if (!stateStorageExistsSync(dir)) {
     return { code: 404, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
   }
@@ -17761,7 +18836,7 @@ async function performTransition(deps, root, name, event) {
       const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId);
       let historyRaw = "";
       try {
-        historyRaw = await readFile21(join40(targetDir, HISTORY_FILE), "utf8");
+        historyRaw = await readFile21(join41(targetDir, HISTORY_FILE), "utf8");
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }
@@ -17876,6 +18951,9 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   if (!isLocalHost2(req.headers.host, boundPort)) {
     return sendJson(res, 403, { ok: false, error: "Host header \u4E0D\u5408\u6CD5\uFF08\u7591\u4F3C DNS \u91CD\u7ED1\u5B9A\u653B\u51FB\uFF09" });
   }
+  if (path7 === "/api/context-bundle/preview") {
+    return handleContextBundlePreview(req, res, deps);
+  }
   if (path7 === "/api/snapshot") {
     try {
       return sendJson(res, 200, await buildSnapshot(snapshotDeps()));
@@ -17921,7 +18999,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join41(root, "openspec", "changes", name);
+    const dir = join42(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -17939,7 +19017,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join41(root, "openspec", "changes", name);
+    const dir = join42(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -17957,7 +19035,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join41(root, "openspec", "changes", name);
+    const dir = join42(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -17975,7 +19053,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join42(dirname9(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join43(dirname10(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
@@ -18050,7 +19128,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync5(join42(rootCheck.anchor.path, ".pipeline"));
+        lstatSync6(join43(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -18073,7 +19151,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync5(join42(rootCheck.anchor.path, ".pipeline"));
+        lstatSync6(join43(rootCheck.anchor.path, ".pipeline"));
       } catch (e) {
         if (e.code === "ENOENT") pipelineExists = false;
         else throw e;
@@ -18093,7 +19171,7 @@ async function handleGet(req, res, path7, deps) {
   }
   if (path7 === "/api/skills/registry") {
     try {
-      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join42(hostHome, ".claude")) });
+      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join43(hostHome, ".claude")) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -18202,7 +19280,7 @@ async function handleGet(req, res, path7, deps) {
       image,
       secretsPath: paths.secretsPath,
       exec: options.execDocker,
-      defaultCodexHome: join42(hostHome, ".codex")
+      defaultCodexHome: join43(hostHome, ".codex")
     });
     return sendJson(res, 200, r);
   }
@@ -18217,7 +19295,7 @@ async function handleGet(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const changeDir = join42(root, "openspec", "changes", name);
+    const changeDir = join43(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(changeDir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -18238,7 +19316,7 @@ async function handleGet(req, res, path7, deps) {
       roots.map(async (root, i) => {
         const name = names[i] ?? "";
         const key = `${name}@${root}`;
-        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join42(root, "openspec", "changes", name));
+        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join43(root, "openspec", "changes", name));
         links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: "invalid" };
       })
     );
@@ -18498,13 +19576,13 @@ async function handleDeleteRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostChangesRoutes.ts
-import { lstatSync as lstatSync6 } from "node:fs";
+import { lstatSync as lstatSync7 } from "node:fs";
 import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 import { lstat as lstat15, readFile as readFile22, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
-import { join as join43 } from "node:path";
+import { join as join44 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
 function errorCode7(error) {
@@ -18535,7 +19613,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
   if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     throw new Error("Change \u76EE\u5F55\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF0C\u62D2\u7EDD\u4FDD\u5B58\u4EFB\u52A1\u63D0\u793A\u8BCD");
   }
-  const target = join43(changeDir, CHANGE_TASK_FILE);
+  const target = join44(changeDir, CHANGE_TASK_FILE);
   let targetExists = false;
   try {
     await lstat15(target);
@@ -18544,7 +19622,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
     if (errorCode7(error) !== "ENOENT") throw error;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join43(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID7()}.tmp`);
+  const temporary = join44(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID7()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -18576,7 +19654,7 @@ async function activateChangeSession(input) {
   if (result.exitCode !== 0) {
     return { requested: true, active: false, status: "failed", exit_code: result.exitCode };
   }
-  const pointer = join43(input.repoRoot, ".pipeline-active");
+  const pointer = join44(input.repoRoot, ".pipeline-active");
   try {
     const pointerStat = await lstat15(pointer);
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
@@ -18634,7 +19712,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
         pendingAnchor = captureWorkflowRootAnchor(rawRoot);
       } catch (e) {
         try {
-          if (lstatSync6(resolvePath8(rawRoot)).isSymbolicLink()) {
+          if (lstatSync7(resolvePath8(rawRoot)).isSymbolicLink()) {
             return sendJson(res, 400, { ok: false, error: `registered root \u4E0D\u5F97\u662F symlink\uFF1A${resolvePath8(rawRoot)}` });
           }
         } catch {
@@ -18789,7 +19867,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostExecutionRoutes.ts
-import { join as join45 } from "node:path";
+import { join as join46 } from "node:path";
 async function handlePostExecutionRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -18841,7 +19919,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root2, "openspec", "changes", name2);
+    const dir = join46(root2, "openspec", "changes", name2);
     const result = await cancelAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -18861,7 +19939,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root2, "openspec", "changes", name2);
+    const dir = join46(root2, "openspec", "changes", name2);
     const result = await retryAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -18881,7 +19959,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root2, "openspec", "changes", name2);
+    const dir = join46(root2, "openspec", "changes", name2);
     const result = await dismissAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -18901,7 +19979,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root2, "openspec", "changes", name2);
+    const dir = join46(root2, "openspec", "changes", name2);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -19202,8 +20280,8 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostOperationsRoutes.ts
-import { lstatSync as lstatSync7 } from "node:fs";
-import { join as join46 } from "node:path";
+import { lstatSync as lstatSync8 } from "node:fs";
+import { join as join47 } from "node:path";
 async function handlePostOperationsRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -19254,7 +20332,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync7(join46(rootCheck.anchor.path, ".pipeline"));
+        lstatSync8(join47(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -19441,7 +20519,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join46(root, "openspec", "changes", name);
+    const dir = join47(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -19527,20 +20605,20 @@ async function handlePostRoute(req, res, path7, deps) {
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync22 } from "node:fs";
-import { dirname as dirname10, join as join47 } from "node:path";
+import { dirname as dirname11, join as join48 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync22(join48(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join47(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync22(join48(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -19555,7 +20633,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join47(dirname10(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join48(dirname11(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -19595,7 +20673,7 @@ function indexHtml(token) {
 
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { join as join48 } from "node:path";
+import { join as join49 } from "node:path";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
   const { registry, snapshotDeps, heartbeatMs, pollIntervalMs, token } = options;
@@ -19744,7 +20822,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join48(webRoot, "index.html"), "utf8");
+      let html = readFileSync23(join49(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -19758,8 +20836,8 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
-    const abs = join48(webRoot, rel);
-    if (!abs.startsWith(join48(webRoot, "assets"))) return false;
+    const abs = join49(webRoot, rel);
+    if (!abs.startsWith(join49(webRoot, "assets"))) return false;
     try {
       const body = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
@@ -19788,7 +20866,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
 
 // packages/server/src/serverGovernance.ts
 import { readdir as readdir5 } from "node:fs/promises";
-import { join as join49, resolve as resolvePath11 } from "node:path";
+import { join as join50, resolve as resolvePath11 } from "node:path";
 function createServerGovernance(options) {
   const { registry, store, sendJson, trackSkillProfiles, operationsAvailable, operationRunner } = options;
   function trackRegistryBody(trackRegistry) {
@@ -19800,7 +20878,7 @@ function createServerGovernance(options) {
     };
   }
   async function scanActiveTrackChanges(root) {
-    const changesRoot = join49(root, "openspec", "changes");
+    const changesRoot = join50(root, "openspec", "changes");
     let entries;
     try {
       entries = await readdir5(changesRoot, { withFileTypes: true });
@@ -19813,7 +20891,7 @@ function createServerGovernance(options) {
     const unreadable = [];
     for (const name of names) {
       try {
-        const state = await store.read(join49(changesRoot, name));
+        const state = await store.read(join50(changesRoot, name));
         const track = state.fields.track;
         const workflow = state.fields.workflow;
         refs.push({
@@ -19960,16 +21038,16 @@ function createServerGovernance(options) {
 
 // packages/server/src/version.ts
 import { readFileSync as readFileSync24 } from "node:fs";
-import { basename as basename4, dirname as dirname11, join as join50 } from "node:path";
+import { basename as basename4, dirname as dirname12, join as join51 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function resolveReleaseVersion(pluginRoot2) {
-  for (const relative6 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
+  for (const relative7 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join50(pluginRoot2, relative6), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join51(pluginRoot2, relative7), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -19980,7 +21058,7 @@ function resolveReleaseVersion(pluginRoot2) {
 }
 function resolvePayloadReleaseId(pluginRoot2) {
   if (basename4(pluginRoot2) !== "payload") return void 0;
-  const releaseId = basename4(dirname11(pluginRoot2));
+  const releaseId = basename4(dirname12(pluginRoot2));
   return RELEASE_ID.test(releaseId) ? releaseId : void 0;
 }
 
@@ -20037,7 +21115,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join51(repoRootForSkills2(), "skills")
+        bundledRoot: join52(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -20121,7 +21199,7 @@ function createDashboardServer(options) {
   });
   let boundPort = 0;
   async function resolveSessionLink(root, name) {
-    const changeDir = join51(root, "openspec", "changes", name);
+    const changeDir = join52(root, "openspec", "changes", name);
     try {
       const wtRaw = await store.get(changeDir, "automation_worktree");
       const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
@@ -20517,10 +21595,10 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join52(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join53(dirname14(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join52(pluginRoot(), "templates", "manifest.yaml");
+  return join53(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve12) => {
@@ -20583,7 +21661,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join52(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join53(dirname14(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

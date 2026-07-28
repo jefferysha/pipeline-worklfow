@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from 'react'
 import { TaskDetail } from '../shared/TaskDetail'
 import { fieldStr, type FlatRow } from './progressViewModel'
+import { ContextBundlePreview } from './ContextBundlePreview'
 import { RunLogPane } from './RunLogPane'
 
 export interface ProgressDrawerProps {
@@ -41,6 +42,13 @@ export function ProgressDrawer({
             rules={row.rules}
             badge={badge}
             actions={actions}
+            curStageExtra={(
+              <ContextBundlePreview
+                root={row.row.root}
+                change={row.row.change.name}
+                currentPhase={row.row.change.phase}
+              />
+            )}
             collapseTechnical
             onClose={onClose}
             onToast={onToast}
