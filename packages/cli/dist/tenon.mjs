@@ -15843,7 +15843,8 @@ function searchMemSessions(fs, options) {
   const candidatesTruncated = candidateLimit !== null && listedCandidates.length > candidateLimit;
   const candidates = candidateLimit === null ? listedCandidates : listedCandidates.slice(0, candidateLimit);
   const searchableKeys = new Set(candidates.map((session) => sessionKey(session.platform, session.id)));
-  const supportSessions = includeChildren && candidateLimit !== null ? opencodeResolveParentSessions(fs, candidates, f, candidateLimit) : [];
+  const hasOpenCodeCandidate = candidates.some((session) => session.platform === "opencode");
+  const supportSessions = includeChildren && candidateLimit !== null && hasOpenCodeCandidate ? opencodeResolveParentSessions(fs, candidates, f, candidateLimit) : [];
   const graphSessions = [...candidates, ...supportSessions];
   const childIndex = includeChildren ? buildChildIndex(graphSessions) : /* @__PURE__ */ new Map();
   const absorbedChildKeys = includeChildren ? buildAbsorbedChildKeys(graphSessions) : /* @__PURE__ */ new Set();
