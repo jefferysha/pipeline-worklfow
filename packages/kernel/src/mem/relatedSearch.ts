@@ -257,6 +257,8 @@ function budgetedFs(
 
       return readWithinBudget(path, maxBytes, false)
     },
+    realPath: source.realPath ? (path) => source.realPath?.(path) : undefined,
+    enforcePhysicalProjectScope: true,
     mtimeMs: (path) => source.mtimeMs(path),
     env: sourceEnv ? (name) => sourceEnv(name) : undefined,
     contentReadBudget: {
@@ -277,6 +279,10 @@ function budgetedFs(
       noteTotalExhausted: () => addWarning(state, {
         code: 'total-read-budget-exhausted',
         message: 'The total session-read budget was exhausted.',
+      }),
+      noteProjectScopeUnavailable: () => addWarning(state, {
+        code: 'project-scope-unavailable',
+        message: 'At least one session cwd could not be resolved inside the physical project scope.',
       }),
       remainingDiscoveryEntries: (source) => (
         (discoveryEntryLimits.get(source) ?? 0) - (discoveryEntries.get(source) ?? 0)

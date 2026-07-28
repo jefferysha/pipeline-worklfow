@@ -3032,7 +3032,7 @@ var require_commander = __commonJS({
 // packages/cli/src/main.ts
 import { execFile as execFile5, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
-import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync10 } from "node:fs";
+import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync11 } from "node:fs";
 import { readFile as readFile38, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
 import { dirname as dirname25, join as join84 } from "node:path";
@@ -13506,7 +13506,7 @@ function encodeRouterDataCache(input) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { closeSync, existsSync as existsSync3, fstatSync, openSync, opendirSync, readFileSync as readFileSync8, readSync, readdirSync, statSync } from "node:fs";
+import { closeSync, existsSync as existsSync3, fstatSync, openSync, opendirSync, readFileSync as readFileSync8, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
 function readMemSessionMetadataChecked(fs, path9) {
@@ -13619,6 +13619,13 @@ function nodeMemFs(homeOverride) {
     },
     readTextBounded: (p, maxBytes) => readTextRange(p, 0, maxBytes),
     readTextRangeBounded: readTextRange,
+    realPath: (p) => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return void 0;
+      }
+    },
     mtimeMs: (p) => {
       try {
         return statSync(p).mtimeMs;
@@ -13635,8 +13642,10 @@ function mtimeIso(fs, path9) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode.js
+import { statSync as statSync2 } from "node:fs";
 import { createRequire } from "node:module";
 import { join as join13 } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // packages/kernel/dist/mem/dialogue.js
 var HOST_SUMMARY_TURN = /* @__PURE__ */ Symbol("tenon.mem.host-summary");
@@ -13725,6 +13734,23 @@ function sameProject(sessionCwd, target) {
   const a = resolve5(sessionCwd);
   const b = resolve5(target);
   return a === b || a.startsWith(b + sep4);
+}
+function sameProjectForMemFs(fs, sessionCwd, target) {
+  if (!fs.enforcePhysicalProjectScope)
+    return sameProject(sessionCwd, target);
+  if (!target)
+    return true;
+  if (!sessionCwd || !fs.realPath) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.();
+    return false;
+  }
+  const physicalSession = fs.realPath(sessionCwd);
+  const physicalTarget = fs.realPath(target);
+  if (!physicalSession || !physicalTarget) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.();
+    return false;
+  }
+  return sameProject(physicalSession, physicalTarget);
 }
 
 // packages/kernel/dist/mem/search.js
@@ -13943,7 +13969,7 @@ function sessionFieldTruncated(row, field2) {
   const fullBytes = row[`${field2}_full_bytes`];
   return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field2];
 }
-function accountSessionRow(row, f, source, budget) {
+function accountSessionRow(fs, row, f, source, budget) {
   const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
   budget.consume(returnedBytes);
   source.bytesRead += returnedBytes;
@@ -13957,7 +13983,7 @@ function accountSessionRow(row, f, source, budget) {
     return null;
   if (truncatedFields.includes("parent_id"))
     row.parent_id = null;
-  if (f.cwd && !sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
+  if (f.cwd && !sameProjectForMemFs(fs, typeof row.directory === "string" ? row.directory : null, f.cwd)) {
     return null;
   }
   return row;
@@ -14005,7 +14031,7 @@ function boundedProjectRows(db, table, source, budget) {
     return null;
   }
 }
-function projectIdsForFilter(db, f, source, budget) {
+function projectIdsForFilter(fs, db, f, source, budget) {
   const projects = boundedProjectRows(db, "project", source, budget);
   if (projects === null)
     return null;
@@ -14015,7 +14041,7 @@ function projectIdsForFilter(db, f, source, budget) {
   for (const row of [...projects, ...directories]) {
     if (typeof row.project_id !== "string" || typeof row.directory !== "string")
       continue;
-    if (!target || sameProject(row.directory, target))
+    if (!target || sameProjectForMemFs(fs, row.directory, target))
       ids.add(row.project_id);
   }
   return [...ids].sort();
@@ -14025,7 +14051,7 @@ function readBoundedSessionRows(fs, db, f, source) {
   if (!budget)
     return [];
   const requestedLimit = Math.max(0, Math.trunc(f.limit));
-  const projectIds = projectIdsForFilter(db, f, source, budget);
+  const projectIds = projectIdsForFilter(fs, db, f, source, budget);
   if (projectIds === null) {
     budget.noteSourceUnavailable("opencode");
     source.truncated = true;
@@ -14073,7 +14099,7 @@ function readBoundedSessionRows(fs, db, f, source) {
   }
   const safeRows = [];
   for (const row of rows) {
-    const safe = accountSessionRow(row, f, source, budget);
+    const safe = accountSessionRow(fs, row, f, source, budget);
     if (safe)
       safeRows.push(safe);
   }
@@ -14151,7 +14177,7 @@ function readBoundedSessionRowById(fs, db, f, source, id) {
     return null;
   }
   const row = db.prepare(sql).get(...params);
-  return row ? accountSessionRow(row, f, source, budget) : null;
+  return row ? accountSessionRow(fs, row, f, source, budget) : null;
 }
 var boundedPlanCache = /* @__PURE__ */ new WeakMap();
 function hasBoundedQueryPlan(db, sql, params) {
@@ -14304,6 +14330,34 @@ function opencodeDbPath(fs) {
   const dataHome = xdgData && xdgData.trim() ? xdgData : join13(fs.home, ".local", "share");
   return join13(dataHome, "opencode", "opencode.db");
 }
+function createRelatedImmutableTarget(fs, dbPath) {
+  const walPath = `${dbPath}-wal`;
+  const shmPath = `${dbPath}-shm`;
+  const journalPath = `${dbPath}-journal`;
+  const hasSidecar = () => fs.exists(walPath) || fs.exists(shmPath) || fs.exists(journalPath);
+  if (hasSidecar())
+    return null;
+  try {
+    const before = statSync2(dbPath, { bigint: true });
+    const uri = pathToFileURL(dbPath);
+    uri.searchParams.set("immutable", "1");
+    return {
+      path: uri.href,
+      unchanged: () => {
+        if (hasSidecar())
+          return false;
+        try {
+          const after = statSync2(dbPath, { bigint: true });
+          return before.dev === after.dev && before.ino === after.ino && before.size === after.size && before.mtimeNs === after.mtimeNs && before.ctimeNs === after.ctimeNs;
+        } catch {
+          return false;
+        }
+      }
+    };
+  } catch {
+    return null;
+  }
+}
 function withOpenCodeDb(fs, fallback, fn) {
   const dbPath = opencodeDbPath(fs);
   if (!fs.exists(dbPath))
@@ -14313,10 +14367,16 @@ function withOpenCodeDb(fs, fallback, fn) {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
   }
+  const immutableTarget = fs.contentReadBudget ? createRelatedImmutableTarget(fs, dbPath) : null;
+  if (fs.contentReadBudget && !immutableTarget) {
+    fs.contentReadBudget.noteSourceUnavailable("opencode");
+    return fallback;
+  }
   let db;
+  let result;
   try {
-    db = new sqlite.DatabaseSync(dbPath, { readOnly: true });
-    return fn(db);
+    db = new sqlite.DatabaseSync(immutableTarget?.path ?? dbPath, { readOnly: true });
+    result = fn(db);
   } catch {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
@@ -14328,6 +14388,11 @@ function withOpenCodeDb(fs, fallback, fn) {
       }
     }
   }
+  if (immutableTarget && !immutableTarget.unchanged()) {
+    fs.contentReadBudget?.noteSourceUnavailable("opencode");
+    return fallback;
+  }
+  return result;
 }
 function parseJson2(raw) {
   if (typeof raw !== "string")
@@ -14360,7 +14425,7 @@ function opencodeListSessions(fs, f) {
     const out = [];
     for (const row of rows) {
       const cwd = typeof row.directory === "string" && row.directory ? row.directory : null;
-      if (f.cwd && !sameProject(cwd, f.cwd))
+      if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd))
         continue;
       const created = msToIso(row.time_created);
       const updated = msToIso(row.time_updated);
@@ -14986,7 +15051,7 @@ function claudeListSessions(fs, f) {
       continue;
     if (!inRangeOverlap(created, updated, f))
       continue;
-    if (f.cwd && cwd && !sameProject(cwd, f.cwd))
+    if (f.cwd && cwd && !sameProjectForMemFs(fs, cwd, f.cwd))
       continue;
     if (f.cwd && !cwd && fs.contentReadBudget)
       continue;
@@ -15174,7 +15239,7 @@ function codexListSessions(fs, f) {
     const sid = (meta?.id ?? null) || (m ? m[2] : null) || base;
     const cwd = meta?.cwd ?? null;
     const created = (first?.timestamp ?? null) || tsFromName || "";
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated)
         fs.contentReadBudget?.noteSourceTruncated();
       continue;
@@ -15328,7 +15393,7 @@ function piListSessions(fs, f) {
     }
     const sid = typeof header.id === "string" ? header.id : idFromFile(filePath);
     const cwd = typeof header.cwd === "string" ? header.cwd : null;
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated)
         fs.contentReadBudget?.noteSourceTruncated();
       continue;
@@ -31773,7 +31838,7 @@ import { X509Certificate as X509Certificate2, createPublicKey, createPrivateKey 
 
 // packages/tap/dist/certificate-store.js
 import { X509Certificate, createPrivateKey, randomBytes as randomBytes5 } from "node:crypto";
-import { chmodSync, closeSync as closeSync2, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { chmodSync, closeSync as closeSync2, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync3, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import { join as join41 } from "node:path";
 function resolveCaDir(opts = {}) {
@@ -31822,7 +31887,7 @@ function waitForPair(caCertPath, caKeyPath, timeoutMs) {
 }
 function stealLock(lockPath2) {
   try {
-    const state = statSync2(lockPath2);
+    const state = statSync3(lockPath2);
     if (Date.now() - state.mtimeMs < LOCK_WAIT_MS)
       return null;
   } catch {
@@ -32543,7 +32608,7 @@ async function launchTap(opts) {
 
 // packages/cli/src/afkReadiness.ts
 import { execFile as execFile2 } from "node:child_process";
-import { accessSync, constants as fsConstants, statSync as statSync3 } from "node:fs";
+import { accessSync, constants as fsConstants, statSync as statSync4 } from "node:fs";
 import { join as join43 } from "node:path";
 var nodeExecDocker = (args) => new Promise((resolve37) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
@@ -32574,7 +32639,7 @@ function credLight(key, hostEnv, secretsEnv) {
 }
 function canReadFile(path9) {
   try {
-    if (!statSync3(path9).isFile()) return false;
+    if (!statSync4(path9).isFile()) return false;
     accessSync(path9, fsConstants.R_OK);
     return true;
   } catch {
@@ -33096,7 +33161,7 @@ import { spawn as spawn3 } from "node:child_process";
 import { posix as posix3, win32 as win323 } from "node:path";
 
 // packages/cli/src/commands/commandExists.ts
-import { accessSync as accessSync2, constants as fsConstants2, statSync as statSync4 } from "node:fs";
+import { accessSync as accessSync2, constants as fsConstants2, statSync as statSync5 } from "node:fs";
 import { posix as posix2, win32 as win322 } from "node:path";
 function resolveCommandOnPath(name2, options = {}) {
   const platform = options.platform ?? process.platform;
@@ -33113,7 +33178,7 @@ function resolveCommandOnPath(name2, options = {}) {
     for (const candidate of candidates) {
       const path9 = pathApi2.resolve(dir === "" ? "." : dir, candidate);
       try {
-        if (!statSync4(path9).isFile()) continue;
+        if (!statSync5(path9).isFile()) continue;
         accessSync2(path9, fsConstants2.X_OK);
         return path9;
       } catch {
@@ -36083,7 +36148,7 @@ import { homedir as homedir11 } from "node:os";
 import { join as join54 } from "node:path";
 
 // packages/cli/src/skillBundleAssembly.ts
-import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
+import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
 import { isAbsolute as isAbsolute12, join as join53 } from "node:path";
 
 // packages/cli/src/executionCoordinatePort.ts
@@ -36229,7 +36294,7 @@ function realReaddirDirNames(absDir) {
       if (!entry.isSymbolicLink()) continue;
       let target;
       try {
-        target = statSync5(join53(absDir, entry.name));
+        target = statSync6(join53(absDir, entry.name));
       } catch (error) {
         const code = nodeErrorCode2(error);
         if (code === "ENOENT" || code === "ELOOP") {
@@ -37835,7 +37900,7 @@ function formatBudgetOverflowError(projectKey3, live, limit) {
 }
 
 // packages/channel/dist/fs.js
-import { appendFileSync as appendFileSync2, closeSync as closeSync3, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync3, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync6, writeFileSync as writeFileSync4, writeSync } from "node:fs";
+import { appendFileSync as appendFileSync2, closeSync as closeSync3, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync3, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync7, writeFileSync as writeFileSync4, writeSync } from "node:fs";
 function nodeChannelFs() {
   return {
     pid: process.pid,
@@ -37878,7 +37943,7 @@ function nodeChannelFs() {
     },
     mtimeMs: (p) => {
       try {
-        return statSync6(p).mtimeMs;
+        return statSync7(p).mtimeMs;
       } catch {
         return void 0;
       }
@@ -38226,12 +38291,12 @@ function nodeSpawnWorker(command, args, opts) {
 }
 
 // packages/channel/dist/watcher.js
-import { closeSync as closeSync4, openSync as openSync4, readSync as readSync2, statSync as statSync7 } from "node:fs";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync2, statSync as statSync8 } from "node:fs";
 function nodeTailFs() {
   return {
     size: (p) => {
       try {
-        return statSync7(p).size;
+        return statSync8(p).size;
       } catch {
         return void 0;
       }
@@ -39736,7 +39801,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 // packages/cli/src/commands/gen-router.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { createHash as createHash27 } from "node:crypto";
-import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync } from "node:fs";
+import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync as realpathSync2 } from "node:fs";
 import { join as join57 } from "node:path";
 function assertTargetGrepPatterns(projection) {
   for (const track of projection.tracks) {
@@ -39767,8 +39832,8 @@ async function cmdGenRouterSh(deps, manifestPath2, repoRoot) {
     return 2;
   }
   try {
-    const canonicalRoot = realpathSync(repoRoot);
-    const depsRoot = realpathSync(deps.cwd);
+    const canonicalRoot = realpathSync2(repoRoot);
+    const depsRoot = realpathSync2(deps.cwd);
     if (canonicalRoot !== depsRoot) {
       throw new Error(`\u9879\u76EE\u6839\u4E0E CLI effective registry \u4E0A\u4E0B\u6587\u4E0D\u4E00\u81F4\uFF1A${canonicalRoot} != ${depsRoot}`);
     }
@@ -44424,7 +44489,7 @@ var stripNl = (value) => value.replace(/\n$/, "");
 
 // packages/cli/src/commands/dashboard.ts
 import { spawn as spawn7 } from "node:child_process";
-import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync2 } from "node:fs";
+import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync3 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
 import { basename as basename7, dirname as dirname15, join as join65, resolve as resolve30 } from "node:path";
 
@@ -44728,7 +44793,7 @@ function resolveDashboardRoot() {
   if (declared !== void 0 && declared.trim() !== "") return declared;
   const candidate = resolve30(process.argv[1] ?? "");
   try {
-    return resolve30(dirname15(realpathSync2(candidate)), "..", "..", "..");
+    return resolve30(dirname15(realpathSync3(candidate)), "..", "..", "..");
   } catch {
     return resolve30(dirname15(candidate), "..", "..", "..");
   }
@@ -46408,7 +46473,7 @@ import {
   readFileSync as readFileSync25,
   readdirSync as readdirSync7,
   readSync as readSync3,
-  realpathSync as realpathSync3,
+  realpathSync as realpathSync4,
   renameSync as renameSync5,
   unlinkSync,
   writeFileSync as writeFileSync5
@@ -46424,7 +46489,7 @@ var REAL_SETUP_ENV = {
   selfPath: () => {
     const candidate = resolve32(process.argv[1] ?? "");
     try {
-      return realpathSync3(candidate);
+      return realpathSync4(candidate);
     } catch {
       return candidate;
     }
@@ -47737,7 +47802,7 @@ async function runManagedHostCommand(transaction, stepId, env, command) {
 }
 
 // packages/cli/src/migration/legacy-project-registry.ts
-import { statSync as statSync8 } from "node:fs";
+import { statSync as statSync9 } from "node:fs";
 import { mkdir as mkdir28, readFile as readFile37 } from "node:fs/promises";
 import { isAbsolute as isAbsolute22, join as join76, posix as posix6, resolve as resolve33, win32 as win325 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
@@ -47866,7 +47931,7 @@ async function migrateLegacyProjectRegistry(input) {
         for (const item2 of value) {
           const isDirectory = typeof item2 === "string" && (input.pathIsDirectory?.(item2) ?? (() => {
             try {
-              return statSync8(item2).isDirectory();
+              return statSync9(item2).isDirectory();
             } catch {
               return false;
             }
@@ -49716,7 +49781,7 @@ function buildProgram(deps, runtimes = {}) {
 }
 
 // packages/cli/src/guardContext.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync9 } from "node:fs";
+import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync10 } from "node:fs";
 import { readdir as readdir14 } from "node:fs/promises";
 import { join as join83 } from "node:path";
 async function listChanges(changesRoot2) {
@@ -49759,14 +49824,14 @@ function makeGuardCtx(cwd) {
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
     fileExists: (path9) => {
       try {
-        return statSync9(abs(path9)).isFile();
+        return statSync10(abs(path9)).isFile();
       } catch {
         return false;
       }
     },
     fileNonempty: (path9) => {
       try {
-        const state = statSync9(abs(path9));
+        const state = statSync10(abs(path9));
         return state.isFile() && state.size > 0;
       } catch {
         return false;
@@ -49781,7 +49846,7 @@ function makeGuardCtx(cwd) {
     },
     dirExists: (path9) => {
       try {
-        return statSync9(abs(path9)).isDirectory();
+        return statSync10(abs(path9)).isDirectory();
       } catch {
         return false;
       }
@@ -49917,7 +49982,7 @@ function scanCodexProjectSkillNames(cwd, root) {
   for (const skillsRoot of [join84(root, "skills"), join84(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync10(join84(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync11(join84(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -49929,7 +49994,7 @@ function scanSkillDigests(skillsRoot) {
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
       const skillPath = join84(skillsRoot, name2, "SKILL.md");
-      if (!statSync10(skillPath).isFile()) continue;
+      if (!statSync11(skillPath).isFile()) continue;
       digests.set(name2, createHash31("sha256").update(readFileSync27(skillPath)).digest("hex"));
     } catch {
     }
@@ -49954,7 +50019,7 @@ function makeDoctorProbes(runtimeScope2) {
     },
     fileExists: (p) => {
       try {
-        return statSync10(p).isFile();
+        return statSync11(p).isFile();
       } catch {
         return false;
       }
@@ -49969,7 +50034,7 @@ function makeDoctorProbes(runtimeScope2) {
     },
     dirExists: (p) => {
       try {
-        return statSync10(p).isDirectory();
+        return statSync11(p).isDirectory();
       } catch {
         return false;
       }

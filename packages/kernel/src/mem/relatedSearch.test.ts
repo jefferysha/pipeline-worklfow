@@ -1,6 +1,14 @@
-import { basename, dirname } from 'node:path'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { MEM_SESSION_METADATA_BYTES, type BoundedTextRead, type MemDirent, type MemFs } from './fs.js'
+import {
+  MEM_SESSION_METADATA_BYTES,
+  nodeMemFs,
+  type BoundedTextRead,
+  type MemDirent,
+  type MemFs,
+} from './fs.js'
 import {
   RELATED_SESSION_SEARCH_BUDGETS,
   RelatedSessionSearchInputError,
@@ -170,6 +178,7 @@ function boundedFakeFs(
         rawBytes: selected,
       }
     },
+    realPath: (p) => p,
     mtimeMs: (p) => options.mtimes?.[p] ?? (fileSet.has(p) ? Date.parse('2026-07-28T12:00:00Z') : undefined),
     env: (name) => options.env?.[name],
   }
@@ -202,6 +211,105 @@ describe('searchRelatedSessions input contract', () => {
 })
 
 describe('searchRelatedSessions bounded privacy contract', () => {
+  test('admits a session cwd through a symlinked ancestor when its physical path is inside the root', async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'tenon-related-physical-inside-'))
+    try {
+      const home = join(fixture, 'home')
+      const physicalParent = join(fixture, 'physical')
+      const project = join(physicalParent, 'project')
+      const aliasParent = join(fixture, 'alias-parent')
+      const lexicalProject = join(aliasParent, 'project')
+      const sessionPath = join(
+        home,
+        '.codex',
+        'sessions',
+        '2026',
+        '07',
+        'rollout-2026-07-28T12-00-00-physical-inside.jsonl',
+      )
+      await mkdir(project, { recursive: true })
+      await mkdir(dirname(sessionPath), { recursive: true })
+      await symlink(physicalParent, aliasParent, 'dir')
+      await writeFile(sessionPath, codexSession(
+        'physical-inside',
+        [{ role: 'user', text: 'physical scope needle' }],
+        lexicalProject,
+      ))
+
+      const result = searchRelatedSessions(nodeMemFs(home), {
+        root: await realpath(project),
+        query: 'scope needle',
+        platform: 'codex',
+      })
+
+      expect(result.matches.map((match) => match.sessionId)).toEqual(['physical-inside'])
+      expect(result.partial).toBe(false)
+    } finally {
+      await rm(fixture, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a symlinked descendant cwd that physically escapes the project root', async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'tenon-related-physical-escape-'))
+    try {
+      const home = join(fixture, 'home')
+      const project = join(fixture, 'project')
+      const outside = join(fixture, 'outside')
+      const escapedCwd = join(project, 'alias-outside')
+      const sessionPath = join(
+        home,
+        '.codex',
+        'sessions',
+        '2026',
+        '07',
+        'rollout-2026-07-28T12-00-00-physical-escape.jsonl',
+      )
+      await mkdir(project, { recursive: true })
+      await mkdir(outside, { recursive: true })
+      await mkdir(dirname(sessionPath), { recursive: true })
+      await symlink(outside, escapedCwd, 'dir')
+      await writeFile(sessionPath, codexSession(
+        'physical-escape',
+        [{ role: 'user', text: 'secret outside needle' }],
+        escapedCwd,
+      ))
+
+      const result = searchRelatedSessions(nodeMemFs(home), {
+        root: project,
+        query: 'outside needle',
+        platform: 'codex',
+      })
+
+      expect(result.matches).toEqual([])
+      expect(result.partial).toBe(false)
+    } finally {
+      await rm(fixture, { recursive: true, force: true })
+    }
+  })
+
+  test('fails closed and reports partial when a historical cwd cannot be canonicalized', () => {
+    const path = codexFile('missing-physical-cwd')
+    const base = boundedFakeFs({
+      [path]: codexSession(
+        'missing-physical-cwd',
+        [{ role: 'user', text: 'unresolved scope needle' }],
+        '/home/u/work/deleted-project',
+      ),
+    })
+    const result = searchRelatedSessions({
+      ...base,
+      realPath: (candidate) => candidate === PROJECT ? PROJECT : undefined,
+    }, {
+      root: PROJECT,
+      query: 'scope needle',
+      platform: 'codex',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('project-scope-unavailable')
+  })
+
   test('uses bounded Claude fallback discovery when the derived project directory is absent', () => {
     const fallback = '/home/u/.claude/projects/-legacy-alias/fallback.jsonl'
     const base = boundedFakeFs({

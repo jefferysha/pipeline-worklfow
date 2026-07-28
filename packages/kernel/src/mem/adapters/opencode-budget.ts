@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import type { MemContentReadBudget, MemFs } from '../fs.js'
-import { sameProject } from '../filter.js'
+import { sameProjectForMemFs } from '../filter.js'
 import type { MemFilter } from '../types.js'
 
 type Json = Record<string, unknown>
@@ -104,6 +104,7 @@ function sessionFieldTruncated(
 }
 
 function accountSessionRow(
+  fs: MemFs,
   row: Json,
   f: MemFilter,
   source: SqliteSourceBudget,
@@ -126,7 +127,10 @@ function accountSessionRow(
   }
   if (truncatedFields.includes('id')) return null
   if (truncatedFields.includes('parent_id')) row.parent_id = null
-  if (f.cwd && !sameProject(typeof row.directory === 'string' ? row.directory : null, f.cwd)) {
+  if (
+    f.cwd
+    && !sameProjectForMemFs(fs, typeof row.directory === 'string' ? row.directory : null, f.cwd)
+  ) {
     return null
   }
   return row
@@ -190,6 +194,7 @@ function boundedProjectRows(
 }
 
 function projectIdsForFilter(
+  fs: MemFs,
   db: SqliteDb,
   f: MemFilter,
   source: SqliteSourceBudget,
@@ -202,7 +207,7 @@ function projectIdsForFilter(
   const ids = new Set<string>()
   for (const row of [...projects, ...directories]) {
     if (typeof row.project_id !== 'string' || typeof row.directory !== 'string') continue
-    if (!target || sameProject(row.directory, target)) ids.add(row.project_id)
+    if (!target || sameProjectForMemFs(fs, row.directory, target)) ids.add(row.project_id)
   }
   return [...ids].sort()
 }
@@ -216,7 +221,7 @@ export function readBoundedSessionRows(
   const budget = fs.contentReadBudget
   if (!budget) return []
   const requestedLimit = Math.max(0, Math.trunc(f.limit))
-  const projectIds = projectIdsForFilter(db, f, source, budget)
+  const projectIds = projectIdsForFilter(fs, db, f, source, budget)
   if (projectIds === null) {
     budget.noteSourceUnavailable('opencode')
     source.truncated = true
@@ -276,7 +281,7 @@ export function readBoundedSessionRows(
   }
   const safeRows: Json[] = []
   for (const row of rows) {
-    const safe = accountSessionRow(row, f, source, budget)
+    const safe = accountSessionRow(fs, row, f, source, budget)
     if (safe) safeRows.push(safe)
   }
   // An index-order prefix cannot truthfully stand in for the most-recent candidate set. Once the
@@ -355,7 +360,7 @@ export function readBoundedSessionRowById(
     return null
   }
   const row = db.prepare(sql).get(...params) as Json | undefined
-  return row ? accountSessionRow(row, f, source, budget) : null
+  return row ? accountSessionRow(fs, row, f, source, budget) : null
 }
 
 const boundedPlanCache = new WeakMap<object, Map<string, boolean>>()

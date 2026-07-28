@@ -194,6 +194,7 @@ describe('RelatedSessionsSection', () => {
     'directory-read-unavailable',
     'file-read-unavailable',
     'opencode-reader-unavailable',
+    'project-scope-unavailable',
   ])('describes %s partial results without falsely claiming a budget limit', async (warningCode) => {
     const user = userEvent.setup()
     searchMock.mockResolvedValueOnce(response({

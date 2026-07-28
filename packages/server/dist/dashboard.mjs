@@ -9370,7 +9370,7 @@ async function assertUpdatePreservesReferences(next, id, scan) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { closeSync, existsSync as existsSync4, fstatSync, openSync, opendirSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, statSync } from "node:fs";
+import { closeSync, existsSync as existsSync4, fstatSync, openSync, opendirSync, readFileSync as readFileSync9, readSync, readdirSync as readdirSync2, realpathSync, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
 function readMemSessionMetadataChecked(fs, path7) {
@@ -9483,6 +9483,13 @@ function nodeMemFs(homeOverride) {
     },
     readTextBounded: (p, maxBytes) => readTextRange(p, 0, maxBytes),
     readTextRangeBounded: readTextRange,
+    realPath: (p) => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return void 0;
+      }
+    },
     mtimeMs: (p) => {
       try {
         return statSync(p).mtimeMs;
@@ -9499,8 +9506,10 @@ function mtimeIso(fs, path7) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode.js
+import { statSync as statSync2 } from "node:fs";
 import { createRequire } from "node:module";
 import { join as join15 } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // packages/kernel/dist/mem/dialogue.js
 var HOST_SUMMARY_TURN = /* @__PURE__ */ Symbol("tenon.mem.host-summary");
@@ -9589,6 +9598,23 @@ function sameProject(sessionCwd, target) {
   const a = resolve6(sessionCwd);
   const b = resolve6(target);
   return a === b || a.startsWith(b + sep4);
+}
+function sameProjectForMemFs(fs, sessionCwd, target) {
+  if (!fs.enforcePhysicalProjectScope)
+    return sameProject(sessionCwd, target);
+  if (!target)
+    return true;
+  if (!sessionCwd || !fs.realPath) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.();
+    return false;
+  }
+  const physicalSession = fs.realPath(sessionCwd);
+  const physicalTarget = fs.realPath(target);
+  if (!physicalSession || !physicalTarget) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.();
+    return false;
+  }
+  return sameProject(physicalSession, physicalTarget);
 }
 
 // packages/kernel/dist/mem/search.js
@@ -9807,7 +9833,7 @@ function sessionFieldTruncated(row, field) {
   const fullBytes = row[`${field}_full_bytes`];
   return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field];
 }
-function accountSessionRow(row, f, source, budget) {
+function accountSessionRow(fs, row, f, source, budget) {
   const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
   budget.consume(returnedBytes);
   source.bytesRead += returnedBytes;
@@ -9821,7 +9847,7 @@ function accountSessionRow(row, f, source, budget) {
     return null;
   if (truncatedFields.includes("parent_id"))
     row.parent_id = null;
-  if (f.cwd && !sameProject(typeof row.directory === "string" ? row.directory : null, f.cwd)) {
+  if (f.cwd && !sameProjectForMemFs(fs, typeof row.directory === "string" ? row.directory : null, f.cwd)) {
     return null;
   }
   return row;
@@ -9869,7 +9895,7 @@ function boundedProjectRows(db, table, source, budget) {
     return null;
   }
 }
-function projectIdsForFilter(db, f, source, budget) {
+function projectIdsForFilter(fs, db, f, source, budget) {
   const projects = boundedProjectRows(db, "project", source, budget);
   if (projects === null)
     return null;
@@ -9879,7 +9905,7 @@ function projectIdsForFilter(db, f, source, budget) {
   for (const row of [...projects, ...directories]) {
     if (typeof row.project_id !== "string" || typeof row.directory !== "string")
       continue;
-    if (!target || sameProject(row.directory, target))
+    if (!target || sameProjectForMemFs(fs, row.directory, target))
       ids.add(row.project_id);
   }
   return [...ids].sort();
@@ -9889,7 +9915,7 @@ function readBoundedSessionRows(fs, db, f, source) {
   if (!budget)
     return [];
   const requestedLimit = Math.max(0, Math.trunc(f.limit));
-  const projectIds = projectIdsForFilter(db, f, source, budget);
+  const projectIds = projectIdsForFilter(fs, db, f, source, budget);
   if (projectIds === null) {
     budget.noteSourceUnavailable("opencode");
     source.truncated = true;
@@ -9937,7 +9963,7 @@ function readBoundedSessionRows(fs, db, f, source) {
   }
   const safeRows = [];
   for (const row of rows) {
-    const safe = accountSessionRow(row, f, source, budget);
+    const safe = accountSessionRow(fs, row, f, source, budget);
     if (safe)
       safeRows.push(safe);
   }
@@ -10015,7 +10041,7 @@ function readBoundedSessionRowById(fs, db, f, source, id) {
     return null;
   }
   const row = db.prepare(sql).get(...params);
-  return row ? accountSessionRow(row, f, source, budget) : null;
+  return row ? accountSessionRow(fs, row, f, source, budget) : null;
 }
 var boundedPlanCache = /* @__PURE__ */ new WeakMap();
 function hasBoundedQueryPlan(db, sql, params) {
@@ -10165,6 +10191,34 @@ function opencodeDbPath(fs) {
   const dataHome = xdgData && xdgData.trim() ? xdgData : join15(fs.home, ".local", "share");
   return join15(dataHome, "opencode", "opencode.db");
 }
+function createRelatedImmutableTarget(fs, dbPath) {
+  const walPath = `${dbPath}-wal`;
+  const shmPath = `${dbPath}-shm`;
+  const journalPath = `${dbPath}-journal`;
+  const hasSidecar = () => fs.exists(walPath) || fs.exists(shmPath) || fs.exists(journalPath);
+  if (hasSidecar())
+    return null;
+  try {
+    const before = statSync2(dbPath, { bigint: true });
+    const uri = pathToFileURL(dbPath);
+    uri.searchParams.set("immutable", "1");
+    return {
+      path: uri.href,
+      unchanged: () => {
+        if (hasSidecar())
+          return false;
+        try {
+          const after = statSync2(dbPath, { bigint: true });
+          return before.dev === after.dev && before.ino === after.ino && before.size === after.size && before.mtimeNs === after.mtimeNs && before.ctimeNs === after.ctimeNs;
+        } catch {
+          return false;
+        }
+      }
+    };
+  } catch {
+    return null;
+  }
+}
 function withOpenCodeDb(fs, fallback, fn) {
   const dbPath = opencodeDbPath(fs);
   if (!fs.exists(dbPath))
@@ -10174,10 +10228,16 @@ function withOpenCodeDb(fs, fallback, fn) {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
   }
+  const immutableTarget = fs.contentReadBudget ? createRelatedImmutableTarget(fs, dbPath) : null;
+  if (fs.contentReadBudget && !immutableTarget) {
+    fs.contentReadBudget.noteSourceUnavailable("opencode");
+    return fallback;
+  }
   let db;
+  let result;
   try {
-    db = new sqlite.DatabaseSync(dbPath, { readOnly: true });
-    return fn(db);
+    db = new sqlite.DatabaseSync(immutableTarget?.path ?? dbPath, { readOnly: true });
+    result = fn(db);
   } catch {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
@@ -10189,6 +10249,11 @@ function withOpenCodeDb(fs, fallback, fn) {
       }
     }
   }
+  if (immutableTarget && !immutableTarget.unchanged()) {
+    fs.contentReadBudget?.noteSourceUnavailable("opencode");
+    return fallback;
+  }
+  return result;
 }
 function parseJson2(raw) {
   if (typeof raw !== "string")
@@ -10221,7 +10286,7 @@ function opencodeListSessions(fs, f) {
     const out = [];
     for (const row of rows) {
       const cwd = typeof row.directory === "string" && row.directory ? row.directory : null;
-      if (f.cwd && !sameProject(cwd, f.cwd))
+      if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd))
         continue;
       const created = msToIso(row.time_created);
       const updated = msToIso(row.time_updated);
@@ -10775,7 +10840,7 @@ function claudeListSessions(fs, f) {
       continue;
     if (!inRangeOverlap(created, updated, f))
       continue;
-    if (f.cwd && cwd && !sameProject(cwd, f.cwd))
+    if (f.cwd && cwd && !sameProjectForMemFs(fs, cwd, f.cwd))
       continue;
     if (f.cwd && !cwd && fs.contentReadBudget)
       continue;
@@ -10878,7 +10943,7 @@ function codexListSessions(fs, f) {
     const sid = (meta?.id ?? null) || (m ? m[2] : null) || base;
     const cwd = meta?.cwd ?? null;
     const created = (first?.timestamp ?? null) || tsFromName || "";
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated)
         fs.contentReadBudget?.noteSourceTruncated();
       continue;
@@ -10989,7 +11054,7 @@ function piListSessions(fs, f) {
     }
     const sid = typeof header.id === "string" ? header.id : idFromFile(filePath);
     const cwd = typeof header.cwd === "string" ? header.cwd : null;
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated)
         fs.contentReadBudget?.noteSourceTruncated();
       continue;
@@ -11651,6 +11716,8 @@ function budgetedFs(source, state, platform) {
       }
       return readWithinBudget(path7, maxBytes, false);
     },
+    realPath: source.realPath ? (path7) => source.realPath?.(path7) : void 0,
+    enforcePhysicalProjectScope: true,
     mtimeMs: (path7) => source.mtimeMs(path7),
     env: sourceEnv ? (name) => sourceEnv(name) : void 0,
     contentReadBudget: {
@@ -11671,6 +11738,10 @@ function budgetedFs(source, state, platform) {
       noteTotalExhausted: () => addWarning(state, {
         code: "total-read-budget-exhausted",
         message: "The total session-read budget was exhausted."
+      }),
+      noteProjectScopeUnavailable: () => addWarning(state, {
+        code: "project-scope-unavailable",
+        message: "At least one session cwd could not be resolved inside the physical project scope."
       }),
       remainingDiscoveryEntries: (source2) => (discoveryEntryLimits.get(source2) ?? 0) - (discoveryEntries.get(source2) ?? 0),
       consumeDiscoveryEntries: (source2, entries) => {
@@ -16630,7 +16701,7 @@ import {
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync3,
   openSync as openSync3,
-  realpathSync as realpathSync2,
+  realpathSync as realpathSync3,
   unlinkSync
 } from "node:fs";
 import { isAbsolute as isAbsolute5, join as join29, relative as relative5, sep as sep6 } from "node:path";
@@ -16642,7 +16713,7 @@ import {
   fstatSync as fstatSync2,
   lstatSync as lstatSync2,
   openSync as openSync2,
-  realpathSync
+  realpathSync as realpathSync2
 } from "node:fs";
 import { join as join28, resolve as resolvePath2 } from "node:path";
 function sameIdentity(current, expected) {
@@ -16685,7 +16756,7 @@ function captureWorkflowRootAnchor(root) {
     if (!opened.isDirectory() || !sameIdentity(opened, lexical)) {
       throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path7}`);
     }
-    const realPath = realpathSync(path7);
+    const realPath = realpathSync2(path7);
     const fresh = lstatSync2(path7);
     if (fresh.isSymbolicLink() || !fresh.isDirectory() || !sameIdentity(fresh, opened)) {
       throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path7}`);
@@ -16706,7 +16777,7 @@ function assertWorkflowRootAnchor(anchor) {
   if (!opened.isDirectory() || !sameIdentity(opened, anchor)) {
     throw new Error(`registered root \u76EE\u5F55 fd \u8EAB\u4EFD\u5DF2\u5931\u6548: ${anchor.path}`);
   }
-  if (realpathSync(anchor.path) !== anchor.realPath) {
+  if (realpathSync2(anchor.path) !== anchor.realPath) {
     throw new Error(`registered root canonical realpath \u5DF2\u53D8\u5316: ${anchor.path}`);
   }
 }
@@ -16757,7 +16828,7 @@ function assertDirectoryStillTrusted(directory, root) {
   if (lexicalEntry.isSymbolicLink() || !lexicalEntry.isDirectory() || !sameIdentity(lexicalEntry, directory)) {
     throw new Error(`workflow \u76EE\u5F55\u8BCD\u6CD5\u8DEF\u5F84\u5DF2\u88AB\u66FF\u6362\uFF08TOCTOU\uFF09: ${directory.lexicalPath}`);
   }
-  const freshRealPath = realpathSync2(directory.operationPath);
+  const freshRealPath = realpathSync3(directory.operationPath);
   if (freshRealPath !== directory.realPath) {
     throw new Error(`workflow \u76EE\u5F55 canonical realpath \u5DF2\u53D8\u5316\uFF08TOCTOU\uFF09: ${directory.lexicalPath}`);
   }
@@ -16788,7 +16859,7 @@ function openTrustedChildDirectory(root, parent, name, create) {
     if (!opened.isDirectory() || !sameIdentity(opened, before)) {
       throw new Error(`workflow \u76EE\u5F55\u5728\u6253\u5F00\u671F\u95F4\u88AB\u66FF\u6362\uFF08TOCTOU\uFF09: ${lexicalPath}`);
     }
-    const realPath = realpathSync2(operationPath);
+    const realPath = realpathSync3(operationPath);
     assertInsideRoot(root.realPath, realPath, "workflow \u76EE\u5F55");
     const fdPath = traversableDirectoryFdPath(fd, opened);
     const directory = fdPath ? { lexicalPath, operationPath, realPath, dev: opened.dev, ino: opened.ino, fd, fdPath } : { lexicalPath, operationPath, realPath, dev: opened.dev, ino: opened.ino, fd };
@@ -17803,7 +17874,7 @@ import { dirname as dirname10, join as join42 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
-import { accessSync, constants as fsConstants, statSync as statSync2 } from "node:fs";
+import { accessSync, constants as fsConstants, statSync as statSync3 } from "node:fs";
 import { join as join31 } from "node:path";
 
 // packages/server/src/dockerImages.ts
@@ -17852,7 +17923,7 @@ function credLight(key, hostEnv, fileKeys) {
 }
 function canReadFile(path7) {
   try {
-    if (!statSync2(path7).isFile()) return false;
+    if (!statSync3(path7).isFile()) return false;
     accessSync(path7, fsConstants.R_OK);
     return true;
   } catch {
@@ -18491,7 +18562,7 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync3 } from "node:fs";
+import { accessSync as accessSync2, constants as constants6, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync4 } from "node:fs";
 import { delimiter, dirname as dirname9, join as join35 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
@@ -18561,7 +18632,7 @@ function skillDirsIn(dir) {
     return readdirSync8(dir).filter((name) => {
       const p = join35(dir, name);
       try {
-        return statSync3(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
+        return statSync4(p).isDirectory() && existsSync7(join35(p, "SKILL.md"));
       } catch {
         return false;
       }
@@ -18575,7 +18646,7 @@ function childDirsIn(dir) {
   try {
     return readdirSync8(dir).filter((name) => {
       try {
-        return statSync3(join35(dir, name)).isDirectory();
+        return statSync4(join35(dir, name)).isDirectory();
       } catch {
         return false;
       }
@@ -18735,11 +18806,11 @@ import { lstat as lstat14, readFile as readFile18, readdir as readdir4, stat as 
 import { join as join37, resolve as resolve12 } from "node:path";
 
 // packages/server/src/projectCapabilities.ts
-import { statSync as statSync4 } from "node:fs";
+import { statSync as statSync5 } from "node:fs";
 import { join as join36 } from "node:path";
 function projectFileExists(root, repoRelativePath) {
   try {
-    return statSync4(join36(root, repoRelativePath)).isFile();
+    return statSync5(join36(root, repoRelativePath)).isFile();
   } catch {
     return false;
   }
@@ -20132,7 +20203,7 @@ async function handleGet(req, res, path7, deps) {
 import { resolve as resolvePath7 } from "node:path";
 
 // packages/server/src/projects.ts
-import { statSync as statSync5 } from "node:fs";
+import { statSync as statSync6 } from "node:fs";
 import { resolve as resolvePath6 } from "node:path";
 async function addProjectToRegistry(registryPath, rawRoot) {
   if (typeof rawRoot !== "string" || !rawRoot) {
@@ -20140,7 +20211,7 @@ async function addProjectToRegistry(registryPath, rawRoot) {
   }
   let isDir;
   try {
-    isDir = statSync5(rawRoot).isDirectory();
+    isDir = statSync6(rawRoot).isDirectory();
   } catch {
     return { ok: false, code: 404, error: `\u8DEF\u5F84\u4E0D\u5B58\u5728\uFF1A${rawRoot}` };
   }

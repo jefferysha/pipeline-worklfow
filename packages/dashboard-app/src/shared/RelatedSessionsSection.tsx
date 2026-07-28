@@ -47,6 +47,7 @@ const sourceWarningCodes = new Set([
   'directory-read-unavailable',
   'file-read-unavailable',
   'opencode-reader-unavailable',
+  'project-scope-unavailable',
 ])
 
 function readableChangeName(name: string): string {

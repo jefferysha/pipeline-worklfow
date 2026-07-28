@@ -283,6 +283,27 @@ track remain mandatory after the next final independent full-diff review.
 The focused kernel set passes 79/79 and kernel typecheck passes. Because the protocol output changed after the
 last review, the next independent review and all frozen Verify evidence must be newly generated.
 
+### Iteration 14 — physical project scope and side-effect-free OpenCode reads
+
+1. **Medium — lexical cwd containment admitted a symlink escape.**
+   Related Sessions now injects canonical path lookup through `MemFs` and applies physical containment in
+   Claude, Codex, OpenCode, and Pi only for the privacy-reduced request wrapper. A symlinked ancestor that
+   resolves inside the registered root remains valid; a descendant symlink that resolves outside is rejected.
+   Historical cwd values that cannot be canonicalized fail closed with the stable
+   `project-scope-unavailable` source-partial state. The legacy CLI retains its lexical compatibility behavior.
+2. **Medium — read-only live SQLite still wrote OpenCode WAL coordination files.**
+   The bounded OpenCode path now refuses live `-wal`, `-shm`, or rollback-journal sidecars, opens only a
+   sidecar-free checkpointed main database through an `immutable=1` URI, and compares device, inode, size,
+   mtime, ctime, and sidecar absence after the bounded indexed query. A concurrent drift discards the result
+   and returns the existing `opencode-reader-unavailable` partial warning. The adapter neither copies the
+   database nor joins the host WAL protocol, so it adds no unbounded snapshot I/O and creates no host sidecar.
+   The unbudgeted legacy CLI continues to use its existing direct reader.
+
+Focused red tests failed on both the valid-alias and escaping-symlink cases, and on checkpointed/live-WAL
+sidecar behavior. The green set passes 99/99 across the focused kernel/server suites plus 15/15 Dashboard
+component tests; kernel and Dashboard typechecks pass. Generated bundles, the full repository gates, and every
+frozen Verify track must be rerun from the next commit.
+
 ## Frontend design and browser review
 
 - Reused existing semantic tokens and detail-section rhythm; no new visual system or raw palette was introduced.

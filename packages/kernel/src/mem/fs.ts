@@ -12,6 +12,7 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  realpathSync,
   statSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -55,6 +56,8 @@ export interface MemContentReadBudget {
   noteSourceUnavailable(source: string): void
   noteSourceTruncated(): void
   noteTotalExhausted(): void
+  /** Related Sessions could not canonicalize a historical cwd and therefore excluded it. */
+  noteProjectScopeUnavailable?(): void
   /** Related Sessions filesystem-discovery guard; absent on legacy injected budgets. */
   remainingDiscoveryEntries?(source: DiscoveryFileSource): number
   consumeDiscoveryEntries?(source: DiscoveryFileSource, entries: number): void
@@ -92,6 +95,10 @@ export interface MemFs {
   readTextRangeBounded?(path: string, offset: number, maxBytes: number): BoundedTextRead | undefined
   /** Optional request budget consumed by non-text storage adapters. */
   contentReadBudget?: MemContentReadBudget
+  /** Canonical path lookup used only by privacy-scoped Related Sessions admission. */
+  realPath?(path: string): string | undefined
+  /** Marks a request-local wrapper that requires physical rather than lexical project scope. */
+  enforcePhysicalProjectScope?: boolean
   /** 文件 mtime 毫秒（缺失 → undefined），作 updated 时间源 */
   mtimeMs(path: string): number | undefined
   /** 进程环境变量（Pi 自定义会话目录用；fake 可省 → undefined） */
@@ -234,6 +241,13 @@ export function nodeMemFs(homeOverride?: string): MemFs {
     },
     readTextBounded: (p, maxBytes) => readTextRange(p, 0, maxBytes),
     readTextRangeBounded: readTextRange,
+    realPath: (p) => {
+      try {
+        return realpathSync(p)
+      } catch {
+        return undefined
+      }
+    },
     mtimeMs: (p) => {
       try {
         return statSync(p).mtimeMs

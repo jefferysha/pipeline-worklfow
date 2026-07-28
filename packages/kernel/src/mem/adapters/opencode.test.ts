@@ -10,10 +10,12 @@
  * 真跑一条 `opencode run` 产生真会话、`sqlite3 .schema` 逐字核对），列裁到本适配器实际用到的
  * 子集（略去 cost/tokens/revert 等本适配器不读的列——省略不影响真实性，SELECT 语句不引用它们）。
  */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { utimesSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { nodeMemFs } from '../fs.js'
 import type { MemContentReadBudget, MemFs } from '../fs.js'
@@ -42,6 +44,12 @@ let fs: MemFs
 
 /** env 全 undefined——不让真跑这套测试的宿主 shell 的 XDG_DATA_HOME 泄进来，保持临时目录隔离。 */
 function realFs(home: string): MemFs {
+  const base = nodeMemFs(home)
+  return { ...base, env: () => undefined, realPath: (path) => path }
+}
+
+/** Production-path fs: unlike realFs(), preserve nodeMemFs' real canonicalization. */
+function canonicalFs(home: string): MemFs {
   const base = nodeMemFs(home)
   return { ...base, env: () => undefined }
 }
@@ -108,6 +116,41 @@ async function openDbAt(path: string): Promise<DatabaseSyncInstance> {
 
 async function openFixtureDb(home: string): Promise<DatabaseSyncInstance> {
   return openDbAt(dbFile(home))
+}
+
+interface SqliteFileFingerprint {
+  name: string
+  size: number
+  sha256: string
+}
+
+async function sqliteFamilyFingerprint(path: string): Promise<SqliteFileFingerprint[]> {
+  const directory = dirname(path)
+  const prefix = basename(path)
+  const names = (await readdir(directory))
+    .filter((name) => name === prefix || name.startsWith(`${prefix}-`))
+    .sort()
+  return Promise.all(names.map(async (name) => {
+    const file = join(directory, name)
+    const [bytes, metadata] = await Promise.all([readFile(file), stat(file)])
+    return {
+      name,
+      size: metadata.size,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }
+  }))
+}
+
+function relatedBudget(onUnavailable: () => void): MemContentReadBudget {
+  let bytesRead = 0
+  return {
+    perSourceBytes: 256 * 1024,
+    remainingBytes: () => 512 * 1024 - bytesRead,
+    consume: (bytes) => { bytesRead += bytes },
+    noteSourceUnavailable: onUnavailable,
+    noteSourceTruncated: () => undefined,
+    noteTotalExhausted: () => undefined,
+  }
 }
 
 function insertSession(
@@ -317,6 +360,114 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
     expect(bytesRead).toBeGreaterThan(0)
     expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
     expect(truncatedSources).toBeGreaterThan(0)
+  })
+
+  test('Related Sessions 读取已 checkpoint 的 WAL-mode 数据库不创建或改写宿主 sidecar', async () => {
+    const db = await openFixtureDb(root)
+    db.exec('PRAGMA journal_mode=WAL')
+    insertSession(db, {
+      id: 'ses_checkpointed',
+      directory: root,
+      title: 'Checkpointed session',
+      created: '2026-07-28T05:00:00Z',
+      updated: '2026-07-28T05:01:00Z',
+    })
+    db.close()
+
+    const path = dbFile(root)
+    const before = await sqliteFamilyFingerprint(path)
+    expect(before.map((entry) => entry.name)).toEqual(['opencode.db'])
+
+    let unavailable = 0
+    const budgetedFs = {
+      ...canonicalFs(root),
+      contentReadBudget: relatedBudget(() => { unavailable += 1 }),
+    }
+    expect(opencodeListSessions(budgetedFs, filter({ cwd: root }))).toEqual([
+      expect.objectContaining({ id: 'ses_checkpointed' }),
+    ])
+    expect(unavailable).toBe(0)
+    expect(await sqliteFamilyFingerprint(path)).toEqual(before)
+  })
+
+  test('Related Sessions 查询期间主库 stat 漂移时丢弃结果并报告 unavailable', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_drifted',
+      directory: root,
+      title: 'Drifted session',
+      created: '2026-07-28T05:00:00Z',
+      updated: '2026-07-28T05:01:00Z',
+    })
+    db.close()
+
+    const path = dbFile(root)
+    let bytesRead = 0
+    let unavailable = 0
+    let touched = false
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 256 * 1024,
+      remainingBytes: () => 512 * 1024 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+        if (!touched) {
+          touched = true
+          const changed = new Date(Date.now() + 60_000)
+          utimesSync(path, changed, changed)
+        }
+      },
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeListSessions({
+      ...canonicalFs(root),
+      contentReadBudget: budget,
+    }, filter({ cwd: root }))).toEqual([])
+    expect(touched).toBe(true)
+    expect(unavailable).toBe(1)
+  })
+
+  test('Related Sessions 遇到 live WAL fail closed 且不改变宿主数据库，legacy CLI 仍可读', async () => {
+    const db = await openFixtureDb(root)
+    try {
+      db.exec('PRAGMA journal_mode=WAL')
+      db.exec('PRAGMA wal_autocheckpoint=0')
+      insertSession(db, {
+        id: 'ses_live_wal',
+        directory: root,
+        title: 'Live WAL session',
+        created: '2026-07-28T05:00:00Z',
+        updated: '2026-07-28T05:01:00Z',
+      })
+
+      const path = dbFile(root)
+      const before = await sqliteFamilyFingerprint(path)
+      expect(before.map((entry) => entry.name)).toEqual([
+        'opencode.db',
+        'opencode.db-shm',
+        'opencode.db-wal',
+      ])
+
+      const productionFs = canonicalFs(root)
+      const result = searchRelatedSessions(productionFs, {
+        root,
+        query: 'live WAL session',
+        platform: 'opencode',
+      })
+      expect(result.matches).toEqual([])
+      expect(result.partial).toBe(true)
+      expect(result.warnings.map((warning) => warning.code))
+        .toContain('opencode-reader-unavailable')
+      expect(await sqliteFamilyFingerprint(path)).toEqual(before)
+
+      expect(opencodeListSessions(productionFs, filter({ cwd: root }))).toEqual([
+        expect.objectContaining({ id: 'ses_live_wal' }),
+      ])
+    } finally {
+      db.close()
+    }
   })
 })
 

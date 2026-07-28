@@ -9,7 +9,7 @@ import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from 
 import type { MemFs } from '../fs.js'
 import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
@@ -94,7 +94,7 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     const cwd: string | null = meta?.cwd ?? null
     const created: string = (first?.timestamp ?? null) || tsFromName || ''
 
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
       continue
     }

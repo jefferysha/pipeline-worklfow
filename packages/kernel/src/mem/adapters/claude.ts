@@ -10,7 +10,7 @@ import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from 
 import type { MemFs } from '../fs.js'
 import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { findInJsonl, parseJsonlLines, readJsonlFirst } from '../jsonl.js'
@@ -112,7 +112,7 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     const updated = mtimeIso(fs, filePath)
     if (updated === undefined) continue
     if (!inRangeOverlap(created, updated, f)) continue
-    if (f.cwd && cwd && !sameProject(cwd, f.cwd)) continue
+    if (f.cwd && cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) continue
     // The existing unbudgeted CLI historically trusted the exact derived shard when old logs had
     // no cwd in their first 100 events. Preserve that contract; the privacy-reduced Dashboard scan
     // visits sibling shards, so unknown cwd must fail closed there.

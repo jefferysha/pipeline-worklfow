@@ -10,7 +10,7 @@ import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from 
 import type { MemFs } from '../fs.js'
 import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
 import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
@@ -43,7 +43,7 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
 
     const sid: string = typeof header.id === 'string' ? header.id : idFromFile(filePath)
     const cwd: string | null = typeof header.cwd === 'string' ? header.cwd : null
-    if (f.cwd && !sameProject(cwd, f.cwd)) {
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
       continue
     }
