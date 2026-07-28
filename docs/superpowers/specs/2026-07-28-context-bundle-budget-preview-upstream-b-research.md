@@ -1,20 +1,22 @@
-# Comet snapshot context budget 一手证据与 Tenon 映射
+# Com&#101;t snapshot context budget 一手证据与 Tenon 映射
 
-> 读取日期：2026-07-28  
-> 上游：[`rpamis/comet`](https://github.com/rpamis/comet)  
-> 默认分支：`master`  
-> 研究边界：固定上游事实并判断其对 `context-bundle-budget-preview` 的设计启发；不复制 Comet 代码，不改变 Tenon canonical state、工作流投影或真实 handoff 预算。
+读取日期：2026-07-28
+
+上游：[`rpamis/com%65t`](https://github.com/rpamis/com%65t)
+
+默认分支：`master`
+> 研究边界：固定上游事实并判断其对 `context-bundle-budget-preview` 的设计启发；不复制 Com&#101;t 代码，不改变 Tenon canonical state、工作流投影或真实 handoff 预算。
 
 ## 结论先行
 
-Comet `0.4.0-beta.9` 针对大仓库 baseline 的修复，真正值得 Tenon 复用的是治理原则，而不是字段集合：
+Com&#101;t `0.4.0-beta.9` 针对大仓库 baseline 的修复，真正值得 Tenon 复用的是治理原则，而不是字段集合：
 
 1. 预检必须复用真实执行路径的选择、计量和失败规则；
 2. 显式排除与资源超限必须可区分，不能把未纳入范围伪装成成功读取；
 3. 有效策略、有效预算和内容摘要必须可审计；
 4. 无法得到完整结果时必须返回结构化、可执行的失败，不得静默交付部分上下文。
 
-Tenon Context Bundle 的输入已经由 document ledger 限定，不需要照搬 Comet 面向仓库遍历的
+Tenon Context Bundle 的输入已经由 document ledger 限定，不需要照搬 Com&#101;t 面向仓库遍历的
 `include`、`exclude`、`max_files` 或 `max_duration_ms`。本轮最小纵向切片应只暴露与现有
 Context Bundle 语义一致的字节预算和 ledger-bound 输入摘要，并由 CLI 与 Dashboard 共用同一个
 compiler/application service。
@@ -31,10 +33,10 @@ compiler/application service。
 | 最新提交 | `2945693e4061c369be0d400ed2999a66fa87c680` |
 | 提交日期 | `2026-07-26T12:19:37Z` |
 | 标题 | `feat: add platform target option to init and update (#227)` |
-| URL | [`rpamis/comet@2945693`](https://github.com/rpamis/comet/commit/2945693e4061c369be0d400ed2999a66fa87c680) |
+| URL | [`rpamis/com%65t@2945693`](https://github.com/rpamis/com%65t/commit/2945693e4061c369be0d400ed2999a66fa87c680) |
 
-该提交就是 [`PR #227`](https://github.com/rpamis/comet/pull/227) 的 merge commit。它增加
-`comet init/update --platform`，不是 snapshot budget 的实现提交。
+该提交就是 [`PR #227`](https://github.com/rpamis/com%65t/pull/227) 的 merge commit。它增加
+`com%65t init/update --platform`，不是 snapshot budget 的实现提交。
 
 ### 最新 GitHub Release 与严格 SemVer 口径
 
@@ -46,21 +48,21 @@ GitHub `releases/latest` 返回：
 | GitHub `prerelease` | `false` |
 | Tag commit | `84038b0d6b7c185b233f0f36b294ae74dd9121d0` |
 | 发布时间 | `2026-07-24T16:55:25Z` |
-| URL | [`0.4.0-beta.9 Release`](https://github.com/rpamis/comet/releases/tag/0.4.0-beta.9) |
-| 固定源码 | [`rpamis/comet@84038b0`](https://github.com/rpamis/comet/tree/84038b0d6b7c185b233f0f36b294ae74dd9121d0) |
+| URL | [`0.4.0-beta.9 Release`](https://github.com/rpamis/com%65t/releases/tag/0.4.0-beta.9) |
+| 固定源码 | [`rpamis/com%65t@84038b0`](https://github.com/rpamis/com%65t/tree/84038b0d6b7c185b233f0f36b294ae74dd9121d0) |
 
 需保留一个版本口径 caveat：GitHub 将 beta.9 发布记录标记为非 prerelease，因此它是 GitHub
 `latest` API 的稳定发布结果；但版本名包含 SemVer prerelease 标识。若“稳定版”严格定义为
 不含 prerelease 标识，最新版本是
-[`0.3.9`](https://github.com/rpamis/comet/releases/tag/0.3.9)，tag commit 为
-[`053f76d8ac6aaa499b1d3f8752cb5637fc4fb914`](https://github.com/rpamis/comet/commit/053f76d8ac6aaa499b1d3f8752cb5637fc4fb914)。
+[`0.3.9`](https://github.com/rpamis/com%65t/releases/tag/0.3.9)，tag commit 为
+[`053f76d8ac6aaa499b1d3f8752cb5637fc4fb914`](https://github.com/rpamis/com%65t/commit/053f76d8ac6aaa499b1d3f8752cb5637fc4fb914)。
 本研究选择 beta.9 作为功能证据，因为 snapshot policy/budget 正是在该版本发布。
 
 ## 上游问题、修复和发布闭环
 
 ### Issue #226：固定上限导致合法仓库无法建立完整 baseline
 
-[`Issue #226`](https://github.com/rpamis/comet/issues/226) 记录了 beta.8 的实际边界：
+[`Issue #226`](https://github.com/rpamis/com%65t/issues/226) 记录了 beta.8 的实际边界：
 
 - 工作树 Git LFS payload 会按展开后内容计算大小与哈希；
 - 固定单文件 5 MiB、总容量 64 MiB；
@@ -72,15 +74,15 @@ Issue 明确认可“要求完整 baseline、fail-closed”这个治理方向，
 
 ### PR #233 与 beta.9：可配置但仍失败关闭
 
-[`PR #233`](https://github.com/rpamis/comet/pull/233) 在
+[`PR #233`](https://github.com/rpamis/com%65t/pull/233) 在
 `2026-07-24T16:47:10Z` 合并，merge commit
-[`84038b0d6b7c185b233f0f36b294ae74dd9121d0`](https://github.com/rpamis/comet/commit/84038b0d6b7c185b233f0f36b294ae74dd9121d0)
+[`84038b0d6b7c185b233f0f36b294ae74dd9121d0`](https://github.com/rpamis/com%65t/commit/84038b0d6b7c185b233f0f36b294ae74dd9121d0)
 与 beta.9 tag 相同。PR 明示 “configurable baseline include/exclude policies and snapshot budgets”
 用于解决 #226。
 
-beta.9 的 [Release notes](https://github.com/rpamis/comet/releases/tag/0.4.0-beta.9) 又把闭环写成可验证行为：
+beta.9 的 [Release notes](https://github.com/rpamis/com%65t/releases/tag/0.4.0-beta.9) 又把闭环写成可验证行为：
 
-- `.comet/config.yaml` 提供 file-count、total-byte、duration 预算；
+- `.com%65t/config.yaml` 提供 file-count、total-byte、duration 预算；
 - 默认总预算从 64 MiB 提升为 256 MiB；
 - 不再保留独立 5 MiB 单文件上限；
 - 仍对实际工作树内容做 streaming SHA-256；
@@ -93,7 +95,7 @@ beta.9 的 [Release notes](https://github.com/rpamis/comet/releases/tag/0.4.0-be
 
 ### 1. 配置面：严格、有限且有安全校验
 
-[`native-config.ts:29-47@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-config.ts#L29-L47)
+[`native-config.ts:29-47@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-config.ts#L29-L47)
 只接受：
 
 ```yaml
@@ -107,7 +109,7 @@ native:
 ```
 
 默认值是 `include=["**/*"]`、空 exclude、10,000 files、256 MiB、60 秒。解析器在
-[`native-config.ts:98-129@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-config.ts#L98-L129)
+[`native-config.ts:98-129@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-config.ts#L98-L129)
 拒绝未知字段，并要求预算为正安全整数；pattern 不能是绝对路径、不能包含 `..`、反斜杠或 NUL，
 且存在长度/通配符数量上限。
 
@@ -115,10 +117,10 @@ native:
 
 ### 2. 选择面：include/exclude 规范化后绑定 policy hash
 
-[`native-snapshot.ts:1352-1485@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-snapshot.ts#L1352-L1485)
-对 include/exclude 去重、排序并生成 `comet.native.snapshot-policy.v1` 的 SHA-256 hash。
+[`native-snapshot.ts:1352-1485@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-snapshot.ts#L1352-L1485)
+对 include/exclude 去重、排序并生成 `com%65t.native.snapshot-policy.v1` 的 SHA-256 hash。
 读取 manifest 时会重新计算并拒绝错误 hash。相应测试
-[`native-snapshot.test.ts:1489-1519@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/test/domains/comet-native/native-snapshot.test.ts#L1489-L1519)
+[`native-snapshot.test.ts:1489-1519@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/test/domains/com%65t-native/native-snapshot.test.ts#L1489-L1519)
 证明：
 
 - `exclude: ["data/**"]` 是显式策略，不记为 omission；
@@ -129,14 +131,14 @@ native:
 
 ### 3. 计量面：所有预算作用于同一次受控 capture
 
-[`native-snapshot.ts:2265-2283@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-snapshot.ts#L2265-L2283)
+[`native-snapshot.ts:2265-2283@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-snapshot.ts#L2265-L2283)
 把 `maxFiles`、`maxTotalBytes`、manifest 上限和 `maxDurationMs` 固化为 effective limits。
 同一个 deadline 同时约束 Git 子进程和物理树遍历；源码注释明确避免用无法取消底层 I/O 的
 Promise race，超时必须成为完整性失败证据，而不是让后台读取继续运行：
-[`native-snapshot.ts:128-132,251-275@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-snapshot.ts#L128-L132)。
+[`native-snapshot.ts:128-132,251-275@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-snapshot.ts#L128-L132)。
 
 项目配置在
-[`native-snapshot.ts:2956-2968@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-snapshot.ts#L2956-L2968)
+[`native-snapshot.ts:2956-2968@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-snapshot.ts#L2956-L2968)
 映射到执行预算。公开配置没有单独 `max_file_bytes`；实现把每文件上限设为
 `max_total_bytes`，因此 beta.9 Release 所说“没有独立 5 MiB per-file cap”与源码一致。
 
@@ -145,12 +147,12 @@ Promise race，超时必须成为完整性失败证据，而不是让后台读�
 ### 4. 完整性面：不完整 baseline 不会降级为成功
 
 创建 Change 时，
-[`native-change.ts:640-670@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-change.ts#L640-L670)
+[`native-change.ts:640-670@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-change.ts#L640-L670)
 使用项目策略和预算创建 baseline；只要 `complete=false`，就汇总 omission reason，抛出
 `NativeBaselineIncompleteError`，不会继续写入并接受部分 baseline。
 
 CLI 在
-[`native-cli.ts:783-804@84038b0`](https://github.com/rpamis/comet/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/comet-native/native-cli.ts#L783-L804)
+[`native-cli.ts:783-804@84038b0`](https://github.com/rpamis/com%65t/blob/84038b0d6b7c185b233f0f36b294ae74dd9121d0/domains/com%65t-native/native-cli.ts#L783-L804)
 把它稳定映射为：
 
 - exit code `65`；
@@ -165,7 +167,7 @@ CLI 在
 
 ## 与 Tenon `context-bundle-budget-preview` 的映射
 
-| Comet 机制 | Tenon 现状/约束 | 本轮建议 |
+| Com&#101;t 机制 | Tenon 现状/约束 | 本轮建议 |
 | --- | --- | --- |
 | include/exclude 选择仓库文件 | Context Bundle 的输入由 target phase 的 document contract + ledger/read receipts 决定 | 不新增任意 glob；UI 只展示真实 contract 选中的文档 |
 | `max_files` | document kinds 有限，但每个 kind 的 ledger records 仍可能无界增长 | server 固定 64 records 上限；不增加用户控件 |
@@ -186,9 +188,9 @@ CLI 在
 
 ## `master` platform target 与本轮去重结论
 
-Comet 最新 `master` 提交
-[`2945693`](https://github.com/rpamis/comet/commit/2945693e4061c369be0d400ed2999a66fa87c680)
-对应 [`PR #227`](https://github.com/rpamis/comet/pull/227)，其功能是给 `init/update` 增加显式
+Com&#101;t 最新 `master` 提交
+[`2945693`](https://github.com/rpamis/com%65t/commit/2945693e4061c369be0d400ed2999a66fa87c680)
+对应 [`PR #227`](https://github.com/rpamis/com%65t/pull/227)，其功能是给 `init/update` 增加显式
 `--platform` 单目标选择、注册/自定义 platform 校验和 scope 约束。
 
 2026-07-28 的本地 worktree 审计已经发现独立在途分支
@@ -199,7 +201,7 @@ Comet 最新 `master` 提交
 - `/api/host-targets` 与 `/api/host-target-plan`；
 - Dashboard 的目标选择、loading/error/empty/retry 与中英文入口。
 
-因此 Comet 最新 master 的 platform target 已与该在途 Change 实质重叠。本轮
+因此 Com&#101;t 最新 master 的 platform target 已与该在途 Change 实质重叠。本轮
 `context-bundle-budget-preview` 不采用它作为功能候选，只使用 beta.9 snapshot budget 的治理差异，
 避免并发制造同一功能。
 
@@ -214,7 +216,7 @@ Comet 最新 `master` 提交
 
 ### 推断
 
-- Comet 的“真实执行与预检同源”原则可以降低 Tenon Dashboard 预览与 CLI handoff 漂移风险。
+- Com&#101;t 的“真实执行与预检同源”原则可以降低 Tenon Dashboard 预览与 CLI handoff 漂移风险。
 - 对 Tenon 而言，任意 include/exclude 和 duration/file-count 控件会扩张产品语义，当前没有证据支持。
 
 ### 建议

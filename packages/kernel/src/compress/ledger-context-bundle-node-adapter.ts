@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { isAbsolute, join, posix } from 'node:path'
 import { readDocumentLedger } from '../state/document-ledger.js'
 import { nodeHandoffFs } from './handoff.js'
 import {
@@ -12,6 +13,18 @@ import {
   type LedgerContextBundleSourceAnchor,
 } from './ledger-context-bundle-node-source.js'
 import { compileLedgerContextBundleWithPorts } from './ledger-context-bundle.js'
+
+export const nodeLedgerContextBundlePrimitives = {
+  isAbsoluteRoot: isAbsolute,
+  ledgerPath: (change: string): string => posix.join(
+    'openspec',
+    'changes',
+    change,
+    '.pipeline-documents.json',
+  ),
+  sha256: (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex'),
+  utf8ByteLength: (text: string): number => Buffer.byteLength(text, 'utf8'),
+}
 
 /**
  * Trusted-local CLI adapter. The port-based compiler remains storage-agnostic; this adapter owns
@@ -61,5 +74,6 @@ export async function compileLedgerContextBundle(
         return { text, sourceBytes: Buffer.byteLength(text, 'utf8') }
       },
     },
+    primitives: nodeLedgerContextBundlePrimitives,
   })
 }

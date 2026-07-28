@@ -58,8 +58,16 @@ const ERROR_KEYS: Readonly<Record<string, string>> = {
 }
 
 const REPAIR_KEYS: Readonly<Record<string, string>> = {
+  CONTEXT_BUNDLE_INVALID_REQUEST: 'progress.bundle_repair_invalid',
   CONTEXT_BUNDLE_STATE_CORRUPT: 'progress.bundle_repair_state_corrupt',
+  CONTEXT_BUNDLE_LEDGER_MISSING: 'progress.bundle_repair_ledger_missing',
+  CONTEXT_BUNDLE_DOCUMENT_MISSING: 'progress.bundle_repair_document_missing',
+  CONTEXT_BUNDLE_DOCUMENT_STALE: 'progress.bundle_repair_document_stale',
+  CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED: 'progress.bundle_repair_resource_limit',
   CONTEXT_BUNDLE_TRUSTED_READER_UNAVAILABLE: 'progress.bundle_repair_trusted_reader_unavailable',
+  CONTEXT_BUNDLE_NETWORK_ERROR: 'progress.bundle_repair_network',
+  CONTEXT_BUNDLE_INVALID_RESPONSE: 'progress.bundle_repair_invalid_response',
+  CONTEXT_BUNDLE_REQUEST_FAILED: 'progress.bundle_repair_request_failed',
 }
 
 const REASON_I18N_KEYS: Readonly<Record<ContextBundleReasonCode, string>> = {
@@ -122,7 +130,7 @@ function PreviewInputs({
   )
 }
 
-function CanonicalContextBundlePreview({
+export function ContextBundlePreview({
   root,
   change,
   currentPhase,
@@ -264,7 +272,7 @@ function CanonicalContextBundlePreview({
         <label className="grid gap-1 text-xs font-medium text-text-2">
           {t('progress.bundle_target_label')}
           <select
-            className="h-9 rounded-lg border border-border bg-fill px-2 text-sm text-text outline-none focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)"
+            className="h-9 rounded-lg border border-border bg-fill px-2 text-sm text-text outline-none transition-colors hover:border-border-2 focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             value={target}
             onChange={(event) => onTargetChange(event.currentTarget.value)}
           >
@@ -276,7 +284,7 @@ function CanonicalContextBundlePreview({
         <label className="grid gap-1 text-xs font-medium text-text-2">
           {t('progress.bundle_budget_label')}
           <input
-            className="h-9 rounded-lg border border-border bg-fill px-2 font-mono text-sm text-text outline-none focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--ring-blue)"
+            className="h-9 rounded-lg border border-border bg-fill px-2 font-mono text-sm text-text outline-none transition-colors hover:border-border-2 focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             type="number"
             min="1"
             step="1"
@@ -286,7 +294,7 @@ function CanonicalContextBundlePreview({
           />
         </label>
         <button
-          className="h-9 rounded-lg bg-btn-bg px-3 text-xs font-semibold text-btn-fg outline-none hover:bg-btn-hover focus-visible:ring-2 focus-visible:ring-(--ring-blue) disabled:opacity-50"
+          className="h-9 rounded-lg bg-btn-hover px-3 text-xs font-semibold text-btn-fg outline-none transition-[filter,transform] hover:brightness-90 active:translate-y-px active:brightness-75 focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transform-none disabled:cursor-wait disabled:opacity-50"
           type="submit"
           disabled={state.kind === 'loading'}
         >
@@ -358,8 +366,4 @@ function CanonicalContextBundlePreview({
       </div>
     </section>
   )
-}
-
-export function ContextBundlePreview(props: ContextBundlePreviewProps): JSX.Element | null {
-  return <CanonicalContextBundlePreview {...props} />
 }

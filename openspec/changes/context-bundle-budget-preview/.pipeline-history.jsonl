@@ -87,3 +87,40 @@
 {"ts":"2026-07-28T04:17:41Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"dbb4f9fa-7b0a-46c4-8f78-3a1c910bbf18"}
 {"ts":"2026-07-28T04:39:21Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T04:57:53Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T04:58:22Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T04:58:22Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T04:58:22Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T04:58:22Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T04:58:22Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-28T04:58:22Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"1cc44659-4568-4dfe-a638-062a8cb0040d"}
+{"ts":"2026-07-28T05:13:17Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-context-bundle-budget-preview-verify.md"}
+{"ts":"2026-07-28T05:14:02Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-context-bundle-budget-preview-verify.md"}
+{"ts":"2026-07-28T05:15:09Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-context-bundle-budget-preview-verify.md"}
+{"ts":"2026-07-28T05:15:09Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T05:15:09Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T05:15:17Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T05:15:17Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T02:17:52Z authority_host_session=019fa67b-9afe-7501-92c6-5455be9659bd"}
+{"ts":"2026-07-28T05:15:18Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T05:15:18Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T05:15:18Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:15:18Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:15:18Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"22b94ad5-780e-4c9c-b816-d851ed00e941"}
+{"ts":"2026-07-28T05:15:53Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-28T05:15:54Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-28T05:15:54Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-28T05:36:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T05:36:36Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T05:36:36Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T05:36:36Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T05:36:36Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"f227aa00-de54-4c45-bf00-67d947d1cbb7"}
+{"ts":"2026-07-28T05:38:09Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T05:38:20Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T05:38:20Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T02:17:52Z authority_host_session=019fa67b-9afe-7501-92c6-5455be9659bd"}
+{"ts":"2026-07-28T05:38:21Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T05:38:21Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T05:38:21Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"f52a057c-d3fa-40e8-b806-fc27334882b0"}
+{"ts":"2026-07-28T05:38:44Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-28T05:38:44Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-28T05:38:44Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-28T05:39:30Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T05:48:28Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

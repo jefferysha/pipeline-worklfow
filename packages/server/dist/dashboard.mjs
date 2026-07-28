@@ -1955,6 +1955,25 @@ async function assertTransitionRecordFile(changeDir, revision, previous) {
   assertTransitionRevisionLink(revision, transition, transitionRaw, previous);
   return transition;
 }
+function assertTransitionRecordFromSync(readText, revision, sourceRoot, previous) {
+  if (revision.mutation.kind !== "transition")
+    return;
+  const metadata = revision.state.runMetadata;
+  if (!metadata?.transitionHead || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  const transitionRel = join7(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
+  const transitionRaw = readText(transitionRel);
+  if (transitionRaw === void 0)
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+  try {
+    assertTransitionRevisionLink(revision, JSON.parse(transitionRaw), transitionRaw, previous);
+  } catch (error) {
+    if (error instanceof RunStateCorruptError)
+      throw error;
+    throw new RunStateCorruptError(`${join7(sourceRoot, transitionRel)}: TransitionRecord \u635F\u574F: ${String(error)}`);
+  }
+}
 function projectionMetadataFor(revision) {
   return {
     stateRevision: revision.revision,
@@ -2050,6 +2069,8 @@ async function readCurrentRunRevision(changeDir) {
     assertMutationEffects(current, previous);
   }
   await assertTransitionRecordFile(changeDir, current, previous);
+  if (previous?.mutation.kind === "transition")
+    await assertTransitionRecordFile(changeDir, previous);
   return current;
 }
 async function validateCanonicalRevisionHistory(changeDir) {
@@ -2120,24 +2141,9 @@ function readCurrentRunRevisionFromSync(readText, sourceRoot = "canonical state"
     }
     assertMutationEffects(current, previous);
   }
-  if (current.mutation.kind === "transition") {
-    const metadata = current.state.runMetadata;
-    if (metadata === void 0) {
-      throw new RunStateCorruptError("transition revision \u7F3A canonical run metadata");
-    }
-    const transitionRel = join7(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${current.mutation.transitionRecordId}.json`);
-    const transitionRaw = readText(transitionRel);
-    if (transitionRaw === void 0) {
-      throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-    }
-    let transition;
-    try {
-      transition = JSON.parse(transitionRaw);
-    } catch (error) {
-      throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error)}`);
-    }
-    assertTransitionRevisionLink(current, transition, transitionRaw, previous);
-  }
+  assertTransitionRecordFromSync(readText, current, sourceRoot, previous);
+  if (previous?.mutation.kind === "transition")
+    assertTransitionRecordFromSync(readText, previous, sourceRoot);
   return current;
 }
 async function readImmutableRunRevision(changeDir, revision, revisionId) {
@@ -13184,10 +13190,6 @@ function compileContextBundle(input) {
   return { ...unsigned, aggregateDigest: contextBundleAggregateDigest(unsigned) };
 }
 
-// packages/kernel/dist/compress/ledger-context-bundle.js
-import { createHash as createHash12 } from "node:crypto";
-import { isAbsolute as isAbsolute5, join as join23 } from "node:path";
-
 // packages/kernel/dist/compress/ledger-context-bundle-contract.js
 var DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES = 12e4;
 var DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS = {
@@ -13196,6 +13198,7 @@ var DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS = {
   maxTotalSourceBytes: 1048576
 };
 var LedgerContextBundleError = class extends Error {
+  cause;
   code;
   repairAction;
   kind;
@@ -13207,10 +13210,12 @@ var LedgerContextBundleError = class extends Error {
   limit;
   actual;
   constructor(code, message, details) {
-    super(message);
+    super(message, details.cause === void 0 ? void 0 : { cause: details.cause });
     this.name = "LedgerContextBundleError";
     this.code = code;
     this.repairAction = details.repairAction;
+    if (details.cause !== void 0)
+      this.cause = details.cause;
     if (details.kind !== void 0)
       this.kind = details.kind;
     if (details.path !== void 0)
@@ -13256,14 +13261,11 @@ var DOCUMENT_REASON_CODES = {
   "verification-report": "context-bundle.reason.verification-report",
   "applied-spec": "context-bundle.reason.applied-spec"
 };
-function sourceDigest(text2) {
-  return createHash12("sha256").update(text2, "utf8").digest("hex");
-}
 function materializationMode(kind) {
   return kind === "proposal" || kind === "tasks" || kind === "delta-spec" ? "full" : "summary";
 }
 function validRelativePath2(path7) {
-  if (path7 === "" || isAbsolute5(path7) || path7.includes("\\"))
+  if (path7 === "" || path7.startsWith("/") || /^[A-Za-z]:/.test(path7) || path7.includes("\\"))
     return false;
   return !path7.split("/").some((part) => part === "" || part === "." || part === "..");
 }
@@ -13293,7 +13295,7 @@ function resourceLimitError(metric, limit, actual, details = {}) {
 }
 async function compileLedgerContextBundleWithPorts(input) {
   const maxBytes = input.budgetBytes ?? DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES;
-  if (!isAbsolute5(input.root) || !SAFE_ID2.test(input.change) || !SAFE_ID2.test(input.from)) {
+  if (!input.primitives.isAbsoluteRoot(input.root) || !SAFE_ID2.test(input.change) || !SAFE_ID2.test(input.from)) {
     throw invalidRequest("Context Bundle root/change/from \u975E\u6CD5");
   }
   if (!isDocumentContractPhase(input.target)) {
@@ -13309,15 +13311,16 @@ async function compileLedgerContextBundleWithPorts(input) {
     let ledger;
     try {
       ledger = await input.ledgerRepository.read();
-    } catch {
+    } catch (cause) {
       throw new LedgerContextBundleError("CONTEXT_BUNDLE_LEDGER_MISSING", "Context Bundle document ledger \u4E0D\u53EF\u8BFB\u53D6", {
-        path: join23("openspec", "changes", input.change, ".pipeline-documents.json"),
-        repairAction: `\u8FD0\u884C tenon document init ${input.change} \u5E76\u91CD\u65B0\u767B\u8BB0/\u8BFB\u53D6\u6587\u6863`
+        path: input.primitives.ledgerPath(input.change),
+        repairAction: `\u8FD0\u884C tenon document init ${input.change} \u5E76\u91CD\u65B0\u767B\u8BB0/\u8BFB\u53D6\u6587\u6863`,
+        cause
       });
     }
     if (ledger === void 0) {
       throw new LedgerContextBundleError("CONTEXT_BUNDLE_LEDGER_MISSING", "Context Bundle missing document ledger; run tenon document init", {
-        path: join23("openspec", "changes", input.change, ".pipeline-documents.json"),
+        path: input.primitives.ledgerPath(input.change),
         repairAction: `\u8FD0\u884C tenon document init ${input.change} \u540E\u91CD\u8BD5`
       });
     }
@@ -13354,9 +13357,24 @@ async function compileLedgerContextBundleWithPorts(input) {
           text2 = source.text;
           sourceBytes = source.sourceBytes;
         } catch (error) {
-          if (error instanceof LedgerContextBundleError)
-            throw error;
+          if (error instanceof LedgerContextBundleError) {
+            if (error.kind !== void 0)
+              throw error;
+            throw new LedgerContextBundleError(error.code, error.message, {
+              cause: error,
+              kind,
+              path: error.path ?? record2.path,
+              repairAction: error.repairAction,
+              ...error.requiredBytes === void 0 ? {} : { requiredBytes: error.requiredBytes },
+              ...error.availableBytes === void 0 ? {} : { availableBytes: error.availableBytes },
+              ...error.preview === void 0 ? {} : { preview: error.preview },
+              ...error.metric === void 0 ? {} : { metric: error.metric },
+              ...error.limit === void 0 ? {} : { limit: error.limit },
+              ...error.actual === void 0 ? {} : { actual: error.actual }
+            });
+          }
           throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle source reader failed for '${kind}': ${record2.path}; ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
             kind,
             path: record2.path,
             repairAction: `\u6062\u590D root \u5185\u7A33\u5B9A\u7684\u975E symlink \u666E\u901A\u6587\u4EF6 ${record2.path}\uFF0C\u5E76\u91CD\u65B0 record/read`
@@ -13376,7 +13394,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         if (limits && totalSourceBytes > limits.maxTotalSourceBytes) {
           throw resourceLimitError("totalSourceBytes", limits.maxTotalSourceBytes, totalSourceBytes, { kind, path: record2.path });
         }
-        const actual = sourceDigest(text2);
+        const actual = input.primitives.sha256(text2);
         if (actual !== record2.sha256) {
           throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_STALE", `Context Bundle stale document '${kind}': ${record2.path}; run tenon document record ${input.change} ${kind} ${record2.path} --producer <skill>, then tenon document read ${input.change} all`, {
             kind,
@@ -13406,7 +13424,7 @@ async function compileLedgerContextBundleWithPorts(input) {
           reasonCode: DOCUMENT_REASON_CODES[kind],
           mode,
           sourceBytes,
-          materializedBytes: content === void 0 ? 0 : Buffer.byteLength(content, "utf8")
+          materializedBytes: content === void 0 ? 0 : input.primitives.utf8ByteLength(content)
         });
       }
     }
@@ -13430,6 +13448,16 @@ async function compileLedgerContextBundleWithPorts(input) {
   });
   return { bundle, preview };
 }
+
+// packages/kernel/dist/compress/ledger-context-bundle-node-adapter.js
+import { createHash as createHash12 } from "node:crypto";
+import { isAbsolute as isAbsolute5, join as join23, posix as posix2 } from "node:path";
+var nodeLedgerContextBundlePrimitives = {
+  isAbsoluteRoot: isAbsolute5,
+  ledgerPath: (change) => posix2.join("openspec", "changes", change, ".pipeline-documents.json"),
+  sha256: (text2) => createHash12("sha256").update(text2, "utf8").digest("hex"),
+  utf8ByteLength: (text2) => Buffer.byteLength(text2, "utf8")
+};
 
 // packages/kernel/dist/triage/types.js
 var OBSERVE_ACTION_KINDS = ["git-commits", "loop-run-terminals"];
@@ -17967,7 +17995,7 @@ import { isAbsolute as isAbsolute8, join as join39, relative as relative6, sep a
 
 // packages/server/src/contextBundleTrustedReader.ts
 import { constants as constants7, fstatSync as fstatSync5, openSync as openSync5, readSync } from "node:fs";
-import { dirname as dirname9, posix as posix2 } from "node:path";
+import { dirname as dirname9, posix as posix3 } from "node:path";
 function safeParts(path7) {
   if (path7 === "" || path7.startsWith("/") || path7.includes("\\")) throw new Error("unsafe relative path");
   const parts = path7.split("/");
@@ -17999,8 +18027,11 @@ function readBounded(fd, maxBytes) {
   return Buffer.concat(chunks, total);
 }
 var ContextBundleTrustedFileError = class extends Error {
-  constructor() {
-    super("Context Bundle trusted file integrity check failed");
+  constructor(cause) {
+    super(
+      "Context Bundle trusted file integrity check failed",
+      cause === void 0 ? void 0 : { cause }
+    );
     this.name = "ContextBundleTrustedFileError";
   }
 };
@@ -18034,7 +18065,7 @@ function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity
             { path: relativePath, repairAction: "\u6062\u590D\u9879\u76EE\u5185\u53EF\u4FE1\u666E\u901A\u6587\u4EF6\u5E76\u91CD\u65B0 record/read" }
           );
         }
-        throw new ContextBundleTrustedFileError();
+        throw new ContextBundleTrustedFileError(error);
       }
       try {
         const opened = fstatSync5(fd);
@@ -18086,18 +18117,18 @@ function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity
     if (error instanceof LedgerContextBundleError || error instanceof ContextBundleTrustedFileError) {
       throw error;
     }
-    throw new ContextBundleTrustedFileError();
+    throw new ContextBundleTrustedFileError(error);
   }
 }
 function trustedContextBundleCurrentPhase(root, change, changeIdentity) {
-  const prefix = posix2.join("openspec", "changes", change);
+  const prefix = posix3.join("openspec", "changes", change);
   let current;
   try {
     current = readCurrentRunRevisionFromSync((relativePath) => {
       try {
         return readTrustedFile(
           root,
-          posix2.join(prefix, relativePath),
+          posix3.join(prefix, relativePath),
           1048576,
           void 0,
           changeIdentity
@@ -18112,16 +18143,23 @@ function trustedContextBundleCurrentPhase(root, change, changeIdentity) {
       throw new LedgerContextBundleError(
         "CONTEXT_BUNDLE_STATE_CORRUPT",
         "Context Bundle canonical state is corrupt",
-        { repairAction: "\u6062\u590D\u6709\u6548\u7684 canonical Change state \u540E\u91CD\u8BD5" }
+        { cause: error, repairAction: "\u6062\u590D\u6709\u6548\u7684 canonical Change state \u540E\u91CD\u8BD5" }
       );
     }
     throw error;
   }
   const phase = current?.state.fields.phase;
-  return typeof phase === "string" ? phase : void 0;
+  if (typeof phase !== "string" || !/^[A-Za-z0-9_-]+$/.test(phase)) {
+    throw new LedgerContextBundleError(
+      "CONTEXT_BUNDLE_STATE_CORRUPT",
+      "Context Bundle canonical state has no safe current phase",
+      { repairAction: "\u6062\u590D\u6709\u6548\u7684 canonical Change state \u540E\u91CD\u8BD5" }
+    );
+  }
+  return phase;
 }
 function trustedContextBundleInputs(root, change, changeIdentity, limits) {
-  const ledgerPath = posix2.join("openspec", "changes", change, ".pipeline-documents.json");
+  const ledgerPath = posix3.join("openspec", "changes", change, ".pipeline-documents.json");
   let ledgerSource;
   try {
     ledgerSource = readTrustedFile(root, ledgerPath, 16 * 1024 * 1024, void 0, changeIdentity);
@@ -18130,28 +18168,32 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
       throw new LedgerContextBundleError(
         "CONTEXT_BUNDLE_LEDGER_MISSING",
         "Context Bundle document ledger is unavailable",
-        { path: ledgerPath, repairAction: "\u521D\u59CB\u5316\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+        {
+          cause: error,
+          path: ledgerPath,
+          repairAction: "\u521D\u59CB\u5316\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5"
+        }
       );
     }
     if (error instanceof LedgerContextBundleError && error.code === "CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED") {
       throw new LedgerContextBundleError(
         "CONTEXT_BUNDLE_LEDGER_MISSING",
         "Context Bundle document ledger exceeds the trusted transport cap",
-        { path: ledgerPath, repairAction: "\u7CBE\u7B80\u6216\u4FEE\u590D document ledger \u540E\u91CD\u8BD5" }
+        { cause: error, path: ledgerPath, repairAction: "\u7CBE\u7B80\u6216\u4FEE\u590D document ledger \u540E\u91CD\u8BD5" }
       );
     }
     if (isInvalidUtf8(error)) {
       throw new LedgerContextBundleError(
         "CONTEXT_BUNDLE_LEDGER_MISSING",
         "Context Bundle document ledger is malformed",
-        { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+        { cause: error, path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
       );
     }
     if (error instanceof ContextBundleTrustedFileError) {
       throw new LedgerContextBundleError(
         "CONTEXT_BUNDLE_LEDGER_MISSING",
         "Context Bundle document ledger failed integrity checks",
-        { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+        { cause: error, path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
       );
     }
     throw error;
@@ -18159,11 +18201,11 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
   let ledger;
   try {
     ledger = parseDocumentLedger(ledgerSource.text);
-  } catch {
+  } catch (cause) {
     throw new LedgerContextBundleError(
       "CONTEXT_BUNDLE_LEDGER_MISSING",
       "Context Bundle document ledger is malformed",
-      { path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
+      { cause, path: ledgerPath, repairAction: "\u4FEE\u590D\u5E76\u91CD\u65B0\u767B\u8BB0 document ledger \u540E\u91CD\u8BD5" }
     );
   }
   return {
@@ -18184,8 +18226,8 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
 var SCHEMA_VERSION = "context-bundle-preview/v1";
 var SIDE_EFFECTS = "none";
 var ContextBundlePathError = class extends Error {
-  constructor(status, message) {
-    super(message);
+  constructor(status, message, cause) {
+    super(message, cause === void 0 ? void 0 : { cause });
     this.status = status;
     this.name = "ContextBundlePathError";
   }
@@ -18220,12 +18262,19 @@ function captureChangePathAnchor(root, change) {
     }
     chain.push({ path: path7, dev: info.dev, ino: info.ino });
   }
-  const changeDir = chainPaths[2];
+  const changeDir = chainPaths.at(2);
+  if (changeDir === void 0) {
+    throw new ContextBundlePathError(403, "Context Bundle Change path capture failed");
+  }
   let realPath;
   try {
     realPath = realpathSync3(changeDir);
-  } catch {
-    throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`);
+  } catch (cause) {
+    throw new ContextBundlePathError(
+      403,
+      `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`,
+      cause
+    );
   }
   if (!inside2(root.realPath, realPath)) {
     throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u9003\u9038 registered root: ${realPath}`);
@@ -18255,6 +18304,10 @@ function invalidRequest2(res, sendJson, error) {
     error,
     repairAction: "\u8BF7\u63D0\u4F9B\u5DF2\u6CE8\u518C root\u3001\u5B89\u5168 change\u3001canonical target \u548C\u6B63\u5B89\u5168\u6574\u6570 budgetBytes\u3002"
   });
+}
+function reportInternalFailure(deps, context, error) {
+  process.stderr.write(`[context-bundle-preview] ${context}: ${deps.errMsg(error)}
+`);
 }
 function safePreview(preview, fits, aggregateDigest) {
   return {
@@ -18389,13 +18442,6 @@ async function handleContextBundlePreview(req, res, deps) {
     const from = trustedContextBundleCurrentPhase(anchor, change, changeIdentity);
     assertChangePathAnchor(changeAnchor);
     assertWorkflowRootAnchor(anchor);
-    if (typeof from !== "string" || !/^[A-Za-z0-9_-]+$/.test(from)) {
-      return invalidRequest2(
-        res,
-        deps.sendJson,
-        "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state\uFF0C\u6216\u5F53\u524D step id \u4E0D\u5B89\u5168"
-      );
-    }
     const trustedInputs = readsRequiredForPhase(target).length === 0 ? {
       ledger: void 0,
       sourceReader: {
@@ -18419,6 +18465,7 @@ async function handleContextBundlePreview(req, res, deps) {
         read: async () => trustedInputs.ledger
       },
       sourceReader: trustedInputs.sourceReader,
+      primitives: nodeLedgerContextBundlePrimitives,
       resourceLimits: DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS
     });
     assertChangePathAnchor(changeAnchor);
@@ -18431,14 +18478,14 @@ async function handleContextBundlePreview(req, res, deps) {
     try {
       assertWorkflowRootAnchor(anchor);
     } catch (anchorError) {
-      void anchorError;
+      reportInternalFailure(deps, "root anchor validation failed", anchorError);
       return deps.sendJson(res, 403, { ok: false, error: "Context Bundle root trust check failed" });
     }
     if (changeAnchor !== void 0) {
       try {
         assertChangePathAnchor(changeAnchor);
       } catch (pathError) {
-        void pathError;
+        reportInternalFailure(deps, "change anchor validation failed", pathError);
         return deps.sendJson(res, 403, { ok: false, error: "Context Bundle path trust check failed" });
       }
     }
@@ -18451,6 +18498,9 @@ async function handleContextBundlePreview(req, res, deps) {
       });
     }
     if (error instanceof LedgerContextBundleError) {
+      if (error.cause !== void 0) {
+        reportInternalFailure(deps, `${error.code} cause`, error.cause);
+      }
       return deps.sendJson(res, statusFor(error), {
         ok: false,
         code: error.code,
@@ -18468,7 +18518,7 @@ async function handleContextBundlePreview(req, res, deps) {
         ...error.code === "CONTEXT_BUNDLE_BUDGET_EXCEEDED" && error.preview !== void 0 ? { preview: safePreview(error.preview, false) } : {}
       });
     }
-    void error;
+    reportInternalFailure(deps, "unexpected preview failure", error);
     return deps.sendJson(res, 500, { ok: false, error: "Context Bundle preview failed" });
   }
 }

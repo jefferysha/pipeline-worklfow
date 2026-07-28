@@ -47,12 +47,16 @@ export {
   type LedgerContextBundleInputSummary,
   type LedgerContextBundleLedgerRepository,
   type LedgerContextBundlePreview,
+  type LedgerContextBundlePrimitives,
   type LedgerContextBundleResourceLimits,
   type LedgerContextBundleSource,
   type LedgerContextBundleSourceReadLimit,
   type LedgerContextBundleSourceReader,
 } from './ledger-context-bundle.js'
-export { compileLedgerContextBundle } from './ledger-context-bundle-node-adapter.js'
+export {
+  compileLedgerContextBundle,
+  nodeLedgerContextBundlePrimitives,
+} from './ledger-context-bundle-node-adapter.js'
 export {
   buildHandoff,
   nodeHandoffFs,

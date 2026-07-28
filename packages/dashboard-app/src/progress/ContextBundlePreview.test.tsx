@@ -140,7 +140,7 @@ describe('ContextBundlePreview', () => {
     renderPreview()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('必读文档已变化：openspec/changes/demo/proposal.md')
-    expect(screen.getByRole('alert')).toHaveTextContent('修复或重新登记相关治理文档后')
+    expect(screen.getByRole('alert')).toHaveTextContent('重新 record/read 已变化的文档后重试')
     expect(screen.getByText('CONTEXT_BUNDLE_DOCUMENT_STALE')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重试预览' }))
     expect(await screen.findByText('640 / 120,000 bytes')).toBeInTheDocument()
@@ -192,6 +192,31 @@ describe('ContextBundlePreview', () => {
     await user.type(budget, '5000{Enter}')
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
     expect(String(vi.mocked(fetch).mock.calls[1]?.[0])).toContain('budgetBytes=5000')
+  })
+
+  it('表单控件提供可辨认 hover、active 与高对比 focus-visible 状态', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(responseBody()), { status: 200 }),
+    ))
+    renderPreview()
+    await screen.findByText('640 / 120,000 bytes')
+
+    expect(screen.getByLabelText('目标阶段')).toHaveClass(
+      'hover:border-border-2',
+      'focus-visible:ring-(--accent)',
+      'focus-visible:ring-offset-2',
+    )
+    expect(screen.getByLabelText('预算（bytes）')).toHaveClass(
+      'hover:border-border-2',
+      'focus-visible:ring-(--accent)',
+      'focus-visible:ring-offset-2',
+    )
+    expect(screen.getByRole('button', { name: '重新预检' })).toHaveClass(
+      'bg-btn-hover',
+      'active:translate-y-px',
+      'focus-visible:ring-(--accent)',
+      'focus-visible:ring-offset-2',
+    )
   })
 
   it('unmount 会 abort 当前请求', () => {
@@ -272,7 +297,7 @@ describe('ContextBundlePreview', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('A required document is unavailable: openspec/changes/demo/proposal.md')
-    expect(alert).toHaveTextContent('Fix or record the affected governance document')
+    expect(alert).toHaveTextContent('Restore the missing document and record/read it again.')
     expect(alert).not.toHaveTextContent('中文')
     expect(alert).not.toHaveTextContent('/Users/private')
   })
@@ -319,5 +344,17 @@ describe('ContextBundlePreview', () => {
     expect(alert).not.toHaveTextContent(
       'Fix or record the affected governance document, then retry here.',
     )
+  })
+
+  it('网络错误使用连接恢复动作，不误导用户重新登记治理文档', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')))
+
+    renderPreview()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The local Tenon server could not be reached.')
+    expect(alert).toHaveTextContent('Confirm the local Dashboard server is running, then retry.')
+    expect(alert).not.toHaveTextContent('record the affected governance document')
   })
 })

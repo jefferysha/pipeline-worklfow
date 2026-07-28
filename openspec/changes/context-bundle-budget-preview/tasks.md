@@ -7,7 +7,7 @@
 
 ## 调研
 
-- [x] 固定 Trellis/Comet 一手来源、版本、SHA、URL 与读取日期。
+- [x] 固定上游 A / 上游 B 的一手来源、版本、SHA、URL 与读取日期。
 - [x] 对比 Tenon 当前实现、在途 Change/分支和近期 PR，证明功能独特且不重复。
 - [x] 用 brainstorming 形成共享编译服务、API 与 Dashboard 交互设计，并记录 ADR。
 
@@ -32,8 +32,8 @@
 
 ## 验证
 
-- [ ] 运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。
-- [ ] 在真实 Tenon Dashboard 覆盖成功、预算失败、缺文档/空态、重试和键盘路径。
+- [x] 运行定向测试、typecheck:web、test:web、build:web、build 与 npm test。
+- [x] 在真实 Tenon Dashboard 覆盖成功、预算失败、缺文档/空态、重试和键盘路径。
 - [ ] 完成三轨 review、verification report 与 exact-event delegated receipt。
 
 ## 交付

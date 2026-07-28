@@ -65,8 +65,11 @@ export function readBounded(fd: number, maxBytes: number): Buffer {
 }
 
 class ContextBundleTrustedFileError extends Error {
-  constructor() {
-    super('Context Bundle trusted file integrity check failed')
+  constructor(cause?: unknown) {
+    super(
+      'Context Bundle trusted file integrity check failed',
+      cause === undefined ? undefined : { cause },
+    )
     this.name = 'ContextBundleTrustedFileError'
   }
 }
@@ -113,7 +116,7 @@ function readTrustedFile(
             { path: relativePath, repairAction: '恢复项目内可信普通文件并重新 record/read' },
           )
         }
-        throw new ContextBundleTrustedFileError()
+        throw new ContextBundleTrustedFileError(error)
       }
       try {
         const opened = fstatSync(fd)
@@ -165,7 +168,7 @@ function readTrustedFile(
     if (error instanceof LedgerContextBundleError || error instanceof ContextBundleTrustedFileError) {
       throw error
     }
-    throw new ContextBundleTrustedFileError()
+    throw new ContextBundleTrustedFileError(error)
   }
 }
 
@@ -173,7 +176,7 @@ export function trustedContextBundleCurrentPhase(
   root: WorkflowRootAnchor,
   change: string,
   changeIdentity: TrustedChangeIdentity,
-): string | undefined {
+): string {
   const prefix = posix.join('openspec', 'changes', change)
   let current
   try {
@@ -203,13 +206,20 @@ export function trustedContextBundleCurrentPhase(
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_STATE_CORRUPT',
         'Context Bundle canonical state is corrupt',
-        { repairAction: '恢复有效的 canonical Change state 后重试' },
+        { cause: error, repairAction: '恢复有效的 canonical Change state 后重试' },
       )
     }
     throw error
   }
   const phase = current?.state.fields.phase
-  return typeof phase === 'string' ? phase : undefined
+  if (typeof phase !== 'string' || !/^[A-Za-z0-9_-]+$/.test(phase)) {
+    throw new LedgerContextBundleError(
+      'CONTEXT_BUNDLE_STATE_CORRUPT',
+      'Context Bundle canonical state has no safe current phase',
+      { repairAction: '恢复有效的 canonical Change state 后重试' },
+    )
+  }
+  return phase
 }
 
 export function trustedContextBundleInputs(
@@ -230,7 +240,11 @@ export function trustedContextBundleInputs(
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle document ledger is unavailable',
-        { path: ledgerPath, repairAction: '初始化并重新登记 document ledger 后重试' },
+        {
+          cause: error,
+          path: ledgerPath,
+          repairAction: '初始化并重新登记 document ledger 后重试',
+        },
       )
     }
     if (
@@ -240,21 +254,21 @@ export function trustedContextBundleInputs(
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle document ledger exceeds the trusted transport cap',
-        { path: ledgerPath, repairAction: '精简或修复 document ledger 后重试' },
+        { cause: error, path: ledgerPath, repairAction: '精简或修复 document ledger 后重试' },
       )
     }
     if (isInvalidUtf8(error)) {
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle document ledger is malformed',
-        { path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
+        { cause: error, path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
       )
     }
     if (error instanceof ContextBundleTrustedFileError) {
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle document ledger failed integrity checks',
-        { path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
+        { cause: error, path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
       )
     }
     throw error
@@ -262,11 +276,11 @@ export function trustedContextBundleInputs(
   let ledger: DocumentLedger
   try {
     ledger = parseDocumentLedger(ledgerSource.text)
-  } catch {
+  } catch (cause) {
     throw new LedgerContextBundleError(
       'CONTEXT_BUNDLE_LEDGER_MISSING',
       'Context Bundle document ledger is malformed',
-      { path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
+      { cause, path: ledgerPath, repairAction: '修复并重新登记 document ledger 后重试' },
     )
   }
   return {

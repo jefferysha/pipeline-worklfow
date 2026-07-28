@@ -158,6 +158,28 @@ async function assertTransitionRecordFile(
   return transition as TransitionRecord
 }
 
+function assertTransitionRecordFromSync(
+  readText: RunRevisionTextReader, revision: RunRevision, sourceRoot: string, previous?: RunRevision,
+): void {
+  if (revision.mutation.kind !== 'transition') return
+  const metadata = revision.state.runMetadata
+  if (!metadata?.transitionHead || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError('transition revision 缺 canonical run head/sequence')
+  }
+  const transitionRel = join(TRANSITION_RECORDS_DIR,
+    `${String(metadata.transitionSequence).padStart(6, '0')}-${revision.mutation.transitionRecordId}.json`)
+  const transitionRaw = readText(transitionRel)
+  if (transitionRaw === undefined) throw new RunStateCorruptError('transition revision 引用的 TransitionRecord 缺失')
+  try {
+    assertTransitionRevisionLink(revision, JSON.parse(transitionRaw), transitionRaw, previous)
+  } catch (error) {
+    if (error instanceof RunStateCorruptError) throw error
+    throw new RunStateCorruptError(
+      `${join(sourceRoot, transitionRel)}: TransitionRecord 损坏: ${String(error)}`,
+    )
+  }
+}
+
 export function projectionMetadataFor(revision: RunRevision): StateProjectionMetadata {
   return {
     stateRevision: revision.revision,
@@ -288,6 +310,7 @@ export async function readCurrentRunRevision(changeDir: string): Promise<RunRevi
     assertMutationEffects(current, previous)
   }
   await assertTransitionRecordFile(changeDir, current, previous)
+  if (previous?.mutation.kind === 'transition') await assertTransitionRecordFile(changeDir, previous)
   return current
 }
 
@@ -448,27 +471,8 @@ export function readCurrentRunRevisionFromSync(
     }
     assertMutationEffects(current, previous)
   }
-  if (current.mutation.kind === 'transition') {
-    const metadata = current.state.runMetadata
-    if (metadata === undefined) {
-      throw new RunStateCorruptError('transition revision 缺 canonical run metadata')
-    }
-    const transitionRel = join(
-      TRANSITION_RECORDS_DIR,
-      `${String(metadata.transitionSequence).padStart(6, '0')}-${current.mutation.transitionRecordId}.json`,
-    )
-    const transitionRaw = readText(transitionRel)
-    if (transitionRaw === undefined) {
-      throw new RunStateCorruptError('transition revision 引用的 TransitionRecord 缺失')
-    }
-    let transition: unknown
-    try {
-      transition = JSON.parse(transitionRaw)
-    } catch (error) {
-      throw new RunStateCorruptError(`TransitionRecord 损坏: ${String(error)}`)
-    }
-    assertTransitionRevisionLink(current, transition, transitionRaw, previous)
-  }
+  assertTransitionRecordFromSync(readText, current, sourceRoot, previous)
+  if (previous?.mutation.kind === 'transition') assertTransitionRecordFromSync(readText, previous, sourceRoot)
   return current
 }
 

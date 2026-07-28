@@ -22,7 +22,9 @@
   身份与 effects 真实 diff 校验；声明 companion anchor 且 companion 存在时，还必须验证精确
   revision/revisionId 与 payload digest，错配或篡改均 fail-loud。companion 缺失统一降为
   `pending` 失败关闭，绝不继承旧 `pass`。transition mutation 还必须绑定 `transitionRecordId`
-  与该 record 精确字节的 `transitionRecordDigest`；history 冷路径遍历全部 immutable revisions，
+  与该 record 精确字节的 `transitionRecordDigest`；当前 revision 即使是普通 set/cas，也必须验证
+  直接 previous revision 若为 transition 时所绑定的 record，后续 mutation 不能让损坏的审计 head
+  重新变得可读。history 冷路径遍历全部 immutable revisions，
   任一祖先 revision/record 损坏或 companion 身份/摘要不符均 fail-loud，不用 JSONL/YAML 补洞。
 - **兼容断代**：只有 `current.json` 目录项完全不存在时才读取 legacy `.pipeline.yaml`。current 一旦出现，
   即使损坏、不可读、是 symlink 或读取中消失，也绝不授权 YAML fallback。首次官方写把 legacy YAML
@@ -250,6 +252,32 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 > `auto_enqueue_on_spec_complete` 策略将 automation 从 `off` 原子置为 `queued`，并记录入队时间；不启动
 > runner。golden-oracle 的 `pm-history` fixture 用逐步 sidecar 先验证这条精确状态演进，再只忽略该步的
 > `automation` 与 `automation_queued_at` 旧新投影差异；未声明的 automation 差异仍是失败。
+
+### 3.1 Dashboard Context Bundle 预算预览 API
+
+- **入口**：`GET /api/context-bundle/preview`。查询参数必须同时包含 registered `root`、安全
+  `change`、canonical `target` 与正安全整数 `budgetBytes`；该端点只读，成功与失败都不得修改
+  canonical state、document ledger、handoff 默认预算或项目配置。
+- **成功**：HTTP 200，`{ ok: true, preview }`；`preview.schemaVersion` 固定为
+  `context-bundle-preview/v1`，`sideEffects` 固定为 `none`。输入摘要只返回 kind、项目相对 path、
+  digest、兼容 reason、稳定 reasonCode、mode、sourceBytes 与 materializedBytes，不返回正文；
+  预算足够时才返回有效 `aggregateDigest`。
+- **错误**：请求无效 400、state/ledger/document 完整性错误 409、固定资源上限 413、预算不足
+  422、平台缺少 fd-relative trusted reader 501。机器码分别为
+  `CONTEXT_BUNDLE_INVALID_REQUEST`、`CONTEXT_BUNDLE_STATE_CORRUPT`、
+  `CONTEXT_BUNDLE_LEDGER_MISSING`、`CONTEXT_BUNDLE_DOCUMENT_MISSING`、
+  `CONTEXT_BUNDLE_DOCUMENT_STALE`、`CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED`、
+  `CONTEXT_BUNDLE_BUDGET_EXCEEDED` 与 `CONTEXT_BUNDLE_TRUSTED_READER_UNAVAILABLE`。
+  预算错误可返回无正文且无 aggregate digest 的 safe preview；其他错误只返回稳定 code、安全
+  相对 path/kind/metric/limit/actual 与恢复提示，不暴露底层异常或绝对路径。
+- **可信读取**：server 仅在运行平台能从已打开 registered root 目录 fd 做相对遍历时读取 Change；
+  当前 Darwin/Node 在任何 canonical state、ledger 或正文读取前 fail closed 为 501，Linux 保留
+  完整预览。canonical current/twin/direct previous、上一 transition record、ledger SHA 与源文件
+  inode/regular-file/resource-limit 均须验证后才可返回成功。
+- **共享规则**：CLI `handoff --bundle` 与 Dashboard API 调用同一个 port-based ledger compiler；
+  Node path、SHA-256 与 UTF-8 byte 计算由 adapter primitives 注入，kernel 应用服务不绑定持久化
+  路径实现。Dashboard 按稳定 code/reasonCode 做中英文映射，并覆盖 loading、empty、budget error、
+  integrity error、retry、Abort/竞态及键盘路径。
 
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 

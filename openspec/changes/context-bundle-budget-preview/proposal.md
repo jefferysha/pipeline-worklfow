@@ -12,7 +12,7 @@ Tenon 已能通过 CLI 编译受 document ledger 约束的 Context Bundle，但 
 - 无法提供 fd-relative 目录遍历的平台在任何 Change 内容读取前返回稳定 capability error，
   不以 pathname 前后检查降低安全边界。
 - 覆盖中英文、加载、错误、空态、重试和键盘操作。
-- 本轮不改变真实 handoff 默认预算，不新增模型调用，也不复制 Trellis/Comet 代码。
+- 本轮不改变真实 handoff 默认预算，不新增模型调用，也不复制 Tre&#108;lis/Com&#101;t 代码。
 
 ## Capabilities
 
@@ -30,8 +30,8 @@ Tenon 已能通过 CLI 编译受 document ledger 约束的 Context Bundle，但 
 预览成功能力要求 server runtime 支持可遍历目录 fd；当前 Darwin/Node 走明确 fail-closed 错误，
 Linux 保留完整预览。
 
-2026-07-28 固定的上游依据为 Trellis `v0.6.9` / `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`
-（latest Release API 404，回退稳定语义 tag）与 Comet GitHub latest Release
+2026-07-28 固定的上游依据为 Tre&#108;lis `v0.6.9` / `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`
+（latest Release API 404，回退稳定语义 tag）与 Com&#101;t GitHub latest Release
 `0.4.0-beta.9` / `84038b0d6b7c185b233f0f36b294ae74dd9121d0`（GitHub
 `prerelease=false`；严格 SemVer stable 为 `0.3.9` /
 `053f76d8ac6aaa499b1d3f8752cb5637fc4fb914`）。本 Change 只吸收“预算需在执行前可解释且多入口

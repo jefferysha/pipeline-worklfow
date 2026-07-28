@@ -410,6 +410,23 @@ describe('G1 canonical revision 对抗校验', () => {
     await expect(store.read(dir)).rejects.toThrow(/TransitionRecord|record.*缺失/i)
   })
 
+  test('current 是 set 时也校验直接 previous transition 的 record，缺失即 fail-loud', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-previous' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+    await unlink(join(dir, '.pipeline-transitions', '000001-record-previous.json'))
+
+    await expect(readCurrentRunRevision(dir)).rejects.toThrow(/TransitionRecord|record.*缺失/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/TransitionRecord|record.*缺失/i)
+  })
+
   test('transition revision 必须绑定 TransitionRecord 精确字节；只篡改 event 也 fail-loud', async () => {
     const { dir } = await fresh()
     const store = createStateStore()

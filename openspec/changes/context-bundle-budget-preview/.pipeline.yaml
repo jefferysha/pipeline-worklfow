@@ -6,13 +6,13 @@ phase: build
 phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-28-context-bundle-budget-preview-design.md
 plan: docs/superpowers/plans/2026-07-28-context-bundle-budget-preview.md
-verification_report: null
+verification_report: docs/superpowers/reports/2026-07-28-context-bundle-budget-preview-verify.md
 build_mode: direct
 isolation: worktree
 build_sha: null
 agent_review_result: pending
 codex_review_result: pending
-verify_result: pending
+verify_result: fail
 branch_status: pending
 direct_override: true
 prd_path: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T02:17:52Z
-updated_at: 2026-07-28T04:17:40Z
+updated_at: 2026-07-28T05:38:21Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 4d3a69ba-fc87-49ff-8a3a-80e3f5d86f52
-pipeline_transition_sequence: 13
-pipeline_transition_head: dbb4f9fa-7b0a-46c4-8f78-3a1c910bbf18
-pipeline_state_revision: 40
-pipeline_state_revision_id: 82b66a44-0fd7-47b4-8042-ef594a7f63d7
-pipeline_state_digest: 2ec553e37e100d43a83a227fae981d49cb4ca026e68e4d57d0024bbcd60f1a46
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDAsInJldmlzaW9uSWQiOiI4MmI2NmE0NC0wZmQ3LTQ3YjQtODA0Mi1lZjU5NGE3ZjYzZDciLCJwYXlsb2FkRGlnZXN0IjoiZTRkMTMyZDFhYmYyZjQxMGIyZjQxYzAzOWFhOGFkNGY4MGI2NzlhMGYxMTAwZGU2ZDNmZTJlNzllMDJmNTFiZCJ9
+pipeline_transition_sequence: 17
+pipeline_transition_head: f52a057c-d3fa-40e8-b806-fc27334882b0
+pipeline_state_revision: 58
+pipeline_state_revision_id: c608a933-6562-47d1-9d09-53a537896fdc
+pipeline_state_digest: 186837fe9ec3f7f2e5db5e8588043d11ce8dc2d27ed4c9c28dbfc897ccfa6857
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTgsInJldmlzaW9uSWQiOiJjNjA4YTkzMy02NTYyLTQ3ZDEtOWQwOS01M2E1Mzc4OTZmZGMiLCJwYXlsb2FkRGlnZXN0IjoiNGNlMWZkMjdiMmZlMDdkZWIyMmZmNzEzMzQyMzdlZDkyOTFiMTJmNzNhZTQ0Njk4MmFlNjM4NDhmNmZlMzIxZSJ9

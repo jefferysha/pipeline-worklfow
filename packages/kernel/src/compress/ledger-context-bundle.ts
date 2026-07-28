@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-import { isAbsolute, join } from 'node:path'
 import {
   isDocumentContractPhase,
   readsRequiredForPhase,
@@ -50,16 +48,12 @@ const DOCUMENT_REASON_CODES: Readonly<Record<DocumentKind, LedgerContextBundleRe
   'applied-spec': 'context-bundle.reason.applied-spec',
 }
 
-function sourceDigest(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex')
-}
-
 function materializationMode(kind: DocumentKind): Exclude<ContextBundleMode, 'reference'> {
   return kind === 'proposal' || kind === 'tasks' || kind === 'delta-spec' ? 'full' : 'summary'
 }
 
 function validRelativePath(path: string): boolean {
-  if (path === '' || isAbsolute(path) || path.includes('\\')) return false
+  if (path === '' || path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.includes('\\')) return false
   return !path.split('/').some((part) => part === '' || part === '.' || part === '..')
 }
 
@@ -117,7 +111,7 @@ export async function compileLedgerContextBundleWithPorts(
   input: CompileLedgerContextBundleWithPortsInput,
 ): Promise<CompiledLedgerContextBundle> {
   const maxBytes = input.budgetBytes ?? DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES
-  if (!isAbsolute(input.root) || !SAFE_ID.test(input.change) || !SAFE_ID.test(input.from)) {
+  if (!input.primitives.isAbsoluteRoot(input.root) || !SAFE_ID.test(input.change) || !SAFE_ID.test(input.from)) {
     throw invalidRequest('Context Bundle root/change/from 非法')
   }
   if (!isDocumentContractPhase(input.target)) {
@@ -142,13 +136,14 @@ export async function compileLedgerContextBundleWithPorts(
     let ledger
     try {
       ledger = await input.ledgerRepository.read()
-    } catch {
+    } catch (cause) {
       throw new LedgerContextBundleError(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle document ledger 不可读取',
         {
-          path: join('openspec', 'changes', input.change, '.pipeline-documents.json'),
+          path: input.primitives.ledgerPath(input.change),
           repairAction: `运行 tenon document init ${input.change} 并重新登记/读取文档`,
+          cause,
         },
       )
     }
@@ -157,7 +152,7 @@ export async function compileLedgerContextBundleWithPorts(
         'CONTEXT_BUNDLE_LEDGER_MISSING',
         'Context Bundle missing document ledger; run tenon document init',
         {
-          path: join('openspec', 'changes', input.change, '.pipeline-documents.json'),
+          path: input.primitives.ledgerPath(input.change),
           repairAction: `运行 tenon document init ${input.change} 后重试`,
         },
       )
@@ -212,13 +207,28 @@ export async function compileLedgerContextBundleWithPorts(
           text = source.text
           sourceBytes = source.sourceBytes
         } catch (error) {
-          if (error instanceof LedgerContextBundleError) throw error
+          if (error instanceof LedgerContextBundleError) {
+            if (error.kind !== undefined) throw error
+            throw new LedgerContextBundleError(error.code, error.message, {
+              cause: error,
+              kind,
+              path: error.path ?? record.path,
+              repairAction: error.repairAction,
+              ...(error.requiredBytes === undefined ? {} : { requiredBytes: error.requiredBytes }),
+              ...(error.availableBytes === undefined ? {} : { availableBytes: error.availableBytes }),
+              ...(error.preview === undefined ? {} : { preview: error.preview }),
+              ...(error.metric === undefined ? {} : { metric: error.metric }),
+              ...(error.limit === undefined ? {} : { limit: error.limit }),
+              ...(error.actual === undefined ? {} : { actual: error.actual }),
+            })
+          }
           throw new LedgerContextBundleError(
             'CONTEXT_BUNDLE_DOCUMENT_MISSING',
             `Context Bundle source reader failed for '${kind}': ${record.path}; ${
               error instanceof Error ? error.message : String(error)
             }`,
             {
+              cause: error,
               kind,
               path: record.path,
               repairAction: `恢复 root 内稳定的非 symlink 普通文件 ${record.path}，并重新 record/read`,
@@ -253,7 +263,7 @@ export async function compileLedgerContextBundleWithPorts(
             { kind, path: record.path },
           )
         }
-        const actual = sourceDigest(text)
+        const actual = input.primitives.sha256(text)
         if (actual !== record.sha256) {
           throw new LedgerContextBundleError(
             'CONTEXT_BUNDLE_DOCUMENT_STALE',
@@ -291,7 +301,7 @@ export async function compileLedgerContextBundleWithPorts(
           reasonCode: DOCUMENT_REASON_CODES[kind],
           mode,
           sourceBytes,
-          materializedBytes: content === undefined ? 0 : Buffer.byteLength(content, 'utf8'),
+          materializedBytes: content === undefined ? 0 : input.primitives.utf8ByteLength(content),
         })
       }
     }

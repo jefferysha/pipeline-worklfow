@@ -17,18 +17,18 @@ document ledger、默认预算或任何配置，也不把受治理文档正文�
 
 ### 固定上游证据
 
-- Trellis 默认分支 `main` 和最新稳定语义 tag `v0.6.9` 同指
+- Tre&#108;lis 默认分支 `main` 和最新稳定语义 tag `v0.6.9` 同指
   `12e279a8af00456b1d0d4e3d0f7f59e7b702202e`。GitHub latest Release API 在
   2026-07-28 返回 404，因此本轮明确回退 tag。Issue #441 和 PR #456 证明：上下文预算若分散
   在多个宿主入口，会出现平台漂移；超限后保留 path/size/reason 能显著提高可解释性。
-- Comet 默认分支 `master` 固定为 `2945693e4061c369be0d400ed2999a66fa87c680`；GitHub
+- Com&#101;t 默认分支 `master` 固定为 `2945693e4061c369be0d400ed2999a66fa87c680`；GitHub
   `releases/latest` 返回并标记 `prerelease=false` 的 `0.4.0-beta.9` 固定为
   `84038b0d6b7c185b233f0f36b294ae74dd9121d0`，而严格 SemVer 不含 prerelease 的最新版本是
   `0.3.9` / `053f76d8ac6aaa499b1d3f8752cb5637fc4fb914`。beta.9 的 snapshot include/exclude 与
   `max_files`、`max_total_bytes`、`max_duration_ms` 表明预算应在任务启动前可审计并 fail closed。
 
-详细来源分别记录在同日 Trellis 与 Comet research 文档。本 Change 不复制上游代码，也不引入
-Trellis 的自动索引降级或 Comet 的 snapshot 文件选择配置。
+详细来源分别记录在同日 Tre&#108;lis 与 Com&#101;t research 文档。本 Change 不复制上游代码，也不引入
+Tre&#108;lis 的自动索引降级或 Com&#101;t 的 snapshot 文件选择配置。
 
 ### Tenon 当前基线
 
@@ -39,7 +39,7 @@ Trellis 的自动索引降级或 Comet 的 snapshot 文件选择配置。
 - `openspec/specs/context-bundle-handoff/spec.md` 已冻结硬预算、缺失/漂移 fail-closed 与 CLI
   向后兼容语义。
 - 开放 PR、远端 `codex/*`、本机 worktree、活跃 Change、BACKLOG、GOAL 和近期提交中没有
-  Context Bundle Dashboard 预览。正在进行的 `host-target-plan-dashboard` 覆盖 Comet 最新
+  Context Bundle Dashboard 预览。正在进行的 `host-target-plan-dashboard` 覆盖 Com&#101;t 最新
   `platform target` 方向，本轮明确避开；安装鉴权和 Dashboard 视觉改造也不在本轮范围。
 
 因此新增的是“把已有可信编译事实变成共享应用服务与可操作的 Dashboard 预检闭环”，不是第二套
@@ -59,7 +59,7 @@ bundle 格式或重复的视觉面板。
 | 方案 | 优点 | 缺点 | 结论 |
 | --- | --- | --- | --- |
 | server 调 CLI 子进程并解析 JSON | 改动少 | 文本错误不稳定、进程开销、root/cwd 边界隐式、难返回安全摘要 | 拒绝 |
-| server 复制 CLI 的 ledger→bundle 逻辑 | 快速 | 策略分叉，重现 Trellis 多入口漂移问题 | 拒绝 |
+| server 复制 CLI 的 ledger→bundle 逻辑 | 快速 | 策略分叉，重现 Tre&#108;lis 多入口漂移问题 | 拒绝 |
 | kernel 提取共享 ledger compiler，CLI/server 适配 | 单一规则源、可注入 fs、typed error、CLI 兼容 | 需要迁移测试和明确 DTO | 采用 |
 
 ## 决策
@@ -182,7 +182,7 @@ success | empty | budget-error | error
 
 | 质疑 | 证据与失败后果 | 决策 |
 | --- | --- | --- |
-| 谁保证 Dashboard 和 CLI 一致？ | Trellis PR #456 表明多入口复制会漂移 | 共享 kernel service；测试同 fixture 比较 CLI/API |
+| 谁保证 Dashboard 和 CLI 一致？ | Tre&#108;lis PR #456 表明多入口复制会漂移 | 共享 kernel service；测试同 fixture 比较 CLI/API |
 | 预算错误为什么还能带 preview？ | 无摘要时用户只能盲调；但不能把失败伪装 200 | 422 且 `ok:false`，只附安全 metadata |
 | root 被替换或 Change 穿越怎么办？ | server 已有 inode/realpath anchor 契约 | 复用 anchor，Change 严格 safe id，读前后复核 |
 | API 是否泄露文档？ | CLI bundle 含正文，直接透传会扩大读取面 | DTO 明确丢弃 content，只回 digest/path/bytes/reason |

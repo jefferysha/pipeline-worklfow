@@ -10,6 +10,7 @@ import {
   type LedgerContextBundleErrorCode,
 } from './ledger-context-bundle.js'
 import { compileLedgerContextBundle } from './ledger-context-bundle-node-adapter.js'
+import { nodeLedgerContextBundlePrimitives } from './ledger-context-bundle-node-adapter.js'
 import { compileLedgerContextBundleWithPorts } from './ledger-context-bundle.js'
 import type { DocumentLedger } from '../state/document-ledger.js'
 
@@ -218,6 +219,7 @@ describe('ledger-bound Context Bundle compiler', () => {
             return { text: '', sourceBytes: 0 }
           },
         },
+        primitives: nodeLedgerContextBundlePrimitives,
         resourceLimits: DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
       }),
       'CONTEXT_BUNDLE_RESOURCE_LIMIT_EXCEEDED',
@@ -280,6 +282,7 @@ describe('ledger-bound Context Bundle compiler', () => {
             return { text, sourceBytes }
           },
         },
+        primitives: nodeLedgerContextBundlePrimitives,
         resourceLimits: {
           maxRecords: 64,
           maxSourceBytesPerDocument: 10,
@@ -397,7 +400,9 @@ describe('ledger-bound Context Bundle compiler', () => {
       }),
       'CONTEXT_BUNDLE_DOCUMENT_MISSING',
     )
+    expect(missingFile.kind).toBe('openspec-design')
     expect(missingFile.path).toBe(absent[1]!.path)
+    expect(missingFile.cause).toBeInstanceOf(Error)
   })
 
   test('SHA 漂移使用 DOCUMENT_STALE，绝不接受旧 digest', async () => {

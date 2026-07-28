@@ -26,6 +26,26 @@ afterEach(async () => {
 })
 
 describe('Context Bundle trusted reader', () => {
+  it('canonical current 缺失时返回 STATE_CORRUPT，而不是把持久化损坏分类成请求错误', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tenon-context-state-missing-'))
+    roots.push(root)
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(changeDir, { recursive: true })
+    const captured = lstatSync(changeDir)
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      expect(() => trustedContextBundleCurrentPhase(
+        anchor,
+        'demo',
+        { dev: captured.dev, ino: captured.ino },
+      )).toThrow(expect.objectContaining({
+        code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+      }) as LedgerContextBundleError)
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
   it('把每次 Change lookup 绑定到请求开始捕获的 inode，普通目录换位也 fail closed', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tenon-context-reader-'))
     roots.push(root)

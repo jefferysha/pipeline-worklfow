@@ -6,6 +6,7 @@ import {
   DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
   isDocumentContractPhase,
   LedgerContextBundleError,
+  nodeLedgerContextBundlePrimitives,
   readsRequiredForPhase,
   validateChangeName,
   type LedgerContextBundlePreview,
@@ -42,8 +43,9 @@ class ContextBundlePathError extends Error {
   constructor(
     readonly status: 400 | 403,
     message: string,
+    cause?: unknown,
   ) {
-    super(message)
+    super(message, cause === undefined ? undefined : { cause })
     this.name = 'ContextBundlePathError'
   }
 }
@@ -86,12 +88,19 @@ function captureChangePathAnchor(
     }
     chain.push({ path, dev: info.dev, ino: info.ino })
   }
-  const changeDir = chainPaths[2]!
+  const changeDir = chainPaths.at(2)
+  if (changeDir === undefined) {
+    throw new ContextBundlePathError(403, 'Context Bundle Change path capture failed')
+  }
   let realPath: string
   try {
     realPath = realpathSync(changeDir)
-  } catch {
-    throw new ContextBundlePathError(403, `Context Bundle Change 路径在读取前被替换: ${changeDir}`)
+  } catch (cause) {
+    throw new ContextBundlePathError(
+      403,
+      `Context Bundle Change 路径在读取前被替换: ${changeDir}`,
+      cause,
+    )
   }
   if (!inside(root.realPath, realPath)) {
     throw new ContextBundlePathError(403, `Context Bundle Change 路径逃逸 registered root: ${realPath}`)
@@ -132,6 +141,14 @@ function invalidRequest(
     error,
     repairAction: '请提供已注册 root、安全 change、canonical target 和正安全整数 budgetBytes。',
   })
+}
+
+function reportInternalFailure(
+  deps: ContextBundlePreviewDeps,
+  context: string,
+  error: unknown,
+): void {
+  process.stderr.write(`[context-bundle-preview] ${context}: ${deps.errMsg(error)}\n`)
 }
 
 function safePreview(
@@ -287,14 +304,6 @@ export async function handleContextBundlePreview(
     const from = trustedContextBundleCurrentPhase(anchor, change, changeIdentity)
     assertChangePathAnchor(changeAnchor)
     assertWorkflowRootAnchor(anchor)
-    if (typeof from !== 'string' || !/^[A-Za-z0-9_-]+$/.test(from)) {
-      return invalidRequest(
-        res,
-        deps.sendJson,
-        '找不到该 Change 的 canonical workflow state，或当前 step id 不安全',
-      )
-    }
-
     const trustedInputs = readsRequiredForPhase(target).length === 0
       ? {
           ledger: undefined,
@@ -320,6 +329,7 @@ export async function handleContextBundlePreview(
         read: async () => trustedInputs.ledger,
       },
       sourceReader: trustedInputs.sourceReader,
+      primitives: nodeLedgerContextBundlePrimitives,
       resourceLimits: DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
     })
     assertChangePathAnchor(changeAnchor)
@@ -334,14 +344,14 @@ export async function handleContextBundlePreview(
     try {
       assertWorkflowRootAnchor(anchor)
     } catch (anchorError) {
-      void anchorError
+      reportInternalFailure(deps, 'root anchor validation failed', anchorError)
       return deps.sendJson(res, 403, { ok: false, error: 'Context Bundle root trust check failed' })
     }
     if (changeAnchor !== undefined) {
       try {
         assertChangePathAnchor(changeAnchor)
       } catch (pathError) {
-        void pathError
+        reportInternalFailure(deps, 'change anchor validation failed', pathError)
         return deps.sendJson(res, 403, { ok: false, error: 'Context Bundle path trust check failed' })
       }
     }
@@ -358,6 +368,9 @@ export async function handleContextBundlePreview(
       })
     }
     if (error instanceof LedgerContextBundleError) {
+      if (error.cause !== undefined) {
+        reportInternalFailure(deps, `${error.code} cause`, error.cause)
+      }
       return deps.sendJson(res, statusFor(error), {
         ok: false,
         code: error.code,
@@ -377,7 +390,7 @@ export async function handleContextBundlePreview(
           : {}),
       })
     }
-    void error
+    reportInternalFailure(deps, 'unexpected preview failure', error)
     return deps.sendJson(res, 500, { ok: false, error: 'Context Bundle preview failed' })
   }
 }

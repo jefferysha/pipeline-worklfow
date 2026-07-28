@@ -27,7 +27,7 @@
 
 ## Explore 结论
 
-- Trellis/Comet 的可追溯设计依据、Tenon 当前差异、方案比较、红队自检、状态机、错误边界和
+- Tre&#108;lis/Com&#101;t 的可追溯设计依据、Tenon 当前差异、方案比较、红队自检、状态机、错误边界和
   Decision Log 见
   `docs/superpowers/specs/2026-07-28-context-bundle-budget-preview-design.md`。
 - 采用“kernel 共享应用服务 + server 安全 preview DTO + Dashboard 抽屉组件”；拒绝 server

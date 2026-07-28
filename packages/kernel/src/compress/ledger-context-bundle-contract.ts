@@ -86,7 +86,15 @@ export interface CompileLedgerContextBundleWithPortsInput {
   readonly budgetBytes?: number
   readonly ledgerRepository: LedgerContextBundleLedgerRepository
   readonly sourceReader: LedgerContextBundleSourceReader
+  readonly primitives: LedgerContextBundlePrimitives
   readonly resourceLimits?: LedgerContextBundleResourceLimits
+}
+
+export interface LedgerContextBundlePrimitives {
+  isAbsoluteRoot(root: string): boolean
+  ledgerPath(change: string): string
+  sha256(text: string): string
+  utf8ByteLength(text: string): number
 }
 
 export interface LedgerContextBundleSource {
@@ -116,6 +124,7 @@ export interface LedgerContextBundleResourceLimits {
 
 export interface LedgerContextBundleErrorDetails {
   readonly repairAction: string
+  readonly cause?: unknown
   readonly kind?: DocumentKind
   readonly path?: string
   readonly requiredBytes?: number
@@ -127,6 +136,7 @@ export interface LedgerContextBundleErrorDetails {
 }
 
 export class LedgerContextBundleError extends Error {
+  override readonly cause?: unknown
   readonly code: LedgerContextBundleErrorCode
   readonly repairAction: string
   readonly kind?: DocumentKind
@@ -143,10 +153,11 @@ export class LedgerContextBundleError extends Error {
     message: string,
     details: LedgerContextBundleErrorDetails,
   ) {
-    super(message)
+    super(message, details.cause === undefined ? undefined : { cause: details.cause })
     this.name = 'LedgerContextBundleError'
     this.code = code
     this.repairAction = details.repairAction
+    if (details.cause !== undefined) this.cause = details.cause
     if (details.kind !== undefined) this.kind = details.kind
     if (details.path !== undefined) this.path = details.path
     if (details.requiredBytes !== undefined) this.requiredBytes = details.requiredBytes
