@@ -93,6 +93,25 @@ policy；安全负面路径和第二次视觉审查通过。
 
 **子阶段边界：此处建议 /clear**
 
+## 子阶段 4.5：Verify-fail 规格与 UI 修复
+
+1. 将已存在的五条 `context-bundle-budget-preview` requirement 按 OpenSpec 完整
+   `MODIFIED Requirements` 语义重写，只把 Verify evidence 共存保留为 `ADDED Requirements`；
+   在无 hardlink 的隔离 clone 中验证 archive/apply 成功。
+2. 修正文档事实：`ContextBundlePreview.test.tsx` 为 16 例，
+   `contextBundleTrustedReader.ts` 为 323 行并记录超过 300 建议线、低于 500 硬上限的凝聚性理由。
+3. 对默认 workflow 的英文阶段/前进/回退标签先增加失败测试；实现必须显式区分 default 与 custom，
+   默认使用 `phases.*`，custom 保留作者标签，不允许语言启发式。
+4. 串行复跑 Dashboard 聚焦测试与全套 Web 测试，确认先前并行执行时的 focus timing 观察不再复现；
+   若仍可确定复现则作为可靠性缺陷修复。
+5. 重跑全量 Build、架构/安全/视觉审查、生成物与精确 head CI，再冻结新的 Verify SHA；旧冻结 SHA
+   和旧 Verify 报告只作为失败证据，不得复用为通过结论。
+
+验收：OpenSpec 隔离 archive/apply 通过；英文默认 workflow 不再出现中文阶段名；custom label
+保持原样；文档计数与源码一致；所有受影响及全量门禁通过。
+
+**子阶段边界：此处建议 /clear**
+
 ## 子阶段 5：冻结 Verify、交付和归档
 
 1. 在冻结 SHA 上并行完成 Reviewer、真实 E2E/API/浏览器、Codex CLI（允许 Skill 声明的诚实降级）和

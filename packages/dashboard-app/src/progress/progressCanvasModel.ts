@@ -83,7 +83,7 @@ export function buildCanvasGroups({
       })
       return {
         id,
-        label: stepLabel(id, rules?.labelByStep, t),
+        label: stepLabel(id, rules, t),
         gate: rules?.gateByStep[id] ?? null,
         archived: archivedChanges.length,
         archivedChanges,

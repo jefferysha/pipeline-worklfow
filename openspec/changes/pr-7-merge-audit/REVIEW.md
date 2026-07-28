@@ -161,3 +161,74 @@ CRITICAL / HIGH / MEDIUM；两个 MEDIUM 均已修复并由真实运行态复核
 完整 diff 的 Standards、Spec、Rules、Architecture、Security 与 Dashboard visual
 Critical/High/Medium 已全部清零。生成物已稳定，未运行 writer 已退出，Build 可登记
 `pre_verify_review_result=pass`；登记后若产品源码、配置、迁移或生成物再变化，必须重置并重跑本节。
+
+## Verify-fail 修复后的 Build 收敛审查
+
+### 失败项修复
+
+- OpenSpec delta 已把 canonical spec 中五条既有 Requirement 改为完整
+  `MODIFIED Requirements`，只把 Context Bundle preview 与 Verify Evidence 共存声明为
+  `ADDED Requirements`。
+- 无 hardlink 隔离 archive/apply 成功，真实结果为 `1 ADDED + 5 MODIFIED`；应用后的
+  `context-bundle-budget-preview` strict validation 通过，六个 Requirement 标题唯一。
+- `docs/TEST-REALITY.md` 的 `ContextBundlePreview.test.tsx` 计数已由 15 修正为 16；
+  Superpowers design 已把 trusted reader 的真实行数修正为 323，并记录信任边界保持单文件凝聚的
+  理由。
+- TDD 红测先证明英文 default workflow 仍显示 `05 · 验证`、`Approve into 交付` 等混合标签；
+  最小实现仅以 `executionModel === 'phase-manifest'` 选择 `phases.*`，不使用语言、字符或 workflow
+  名启发式；`step-graph` 继续保留作者 `labelByStep`。
+- 节点、前进动作、回退动作与运行中徽章统一传递同一个 rules 对象；回归测试同时覆盖 default 的
+  `Verify` / `Approve into Ship` / `Build` / `Running Build` 和 custom 的 `人工复核` /
+  `Approve into 发布`。
+
+### 修复后独立全量审查
+
+| Track | 结论 | 证据 |
+| --- | --- | --- |
+| Spec / correctness | `0 Critical / 0 High / 0 Medium / 0 Low` | 首轮发现 proposal 仍把 audit delta 分类为 New、Modified 无；Change 以 `requirements-changed` 回 Spec，修正为 New 无、Modified `context-bundle-budget-preview`，重新登记/读取 proposal 与 tasks，取得新的 exact `spec-complete` delegated receipt 后复审全零。 |
+| Rules / architecture / security | `0 Critical / 0 High / 0 Medium / 0 Low` | 完整复核 Host/root/change、fd-relative `O_NOFOLLOW`、资源上限、canonical snapshot barrier、ledger/compiler、前端 DTO 拒绝与请求身份；后端重点 7 files / 359 passed / 9 条平台条件 skip。 |
+| Dashboard `frontend-design` + `design-taste-frontend` | `0 Critical / 0 High / 0 Medium / 0 Low` | 上一轮唯一英文混入中文 Low 已关闭；本轮修复没有改变 CSS、布局、焦点或动画，上一轮 1440/1024/768/390、亮暗主题、键盘、reduced-motion 的完整浏览器矩阵仍适用。 |
+
+依赖安全观察：`npm audit` 在未变更的仓库依赖基线中仍报告 5 moderate、1 high、1 critical；
+本 PR 相对 `origin/main` 没有 `package.json` 或 lockfile 变化，审查未把它伪装成本 PR 引入的
+finding。批量 release 前仍须在最新 main 上重新执行依赖安全审计；若基线仍存在，必须以独立
+Change 修复或形成明确阻塞，不得静默发布。
+
+### 修复后机器门禁
+
+| Gate | 结果 |
+| --- | --- |
+| TDD focused red → green | 红测按预期因 default 英文阶段标签混合失败；最小实现后 focused 通过。 |
+| 相关 Dashboard 测试 | 73/73 通过；独立复审扩展定向集合 4 files / 142 tests 通过。 |
+| Web 串行全量 | 59 files / 1053 tests 通过。 |
+| Web 默认并行全量 | 59 files / 1053 tests 通过；上一轮 focus 时序观察未复现。 |
+| `npm run typecheck:web` | PASS。 |
+| `npm run build` | PASS；最终 Dashboard 为 `index-BALST8TZ.js` / `index-vq5iwRxt.css`。 |
+| `npm test` | 320 files / 5520 passed / 14 honest conditional skips / 0 failed。 |
+| 架构、注释、workflow freshness、hygiene | 全部 PASS；architecture 为 639 production files / 5 个既有 size-only exceptions。 |
+| hooks / adapters / skills / N-1 bundle | 482 / 272 / 62 skill dirs / 31 全部通过。 |
+| oracle | 五组 fixture 0 inconsistencies；兼容演进说明保持可判定。 |
+| docs | `check:docs`、`docs:check`、`docs:build`、`docs:smoke` 全部 PASS。 |
+| OpenSpec | Change strict PASS；隔离 archive/apply `+1 / ~5`；应用后 capability strict PASS。 |
+| 生成物 | `index.html` 与 `index-BALST8TZ.js` 独立重建逐字一致；旧 hash 删除与新 hash/HTML 原子纳入待提交集合。 |
+| `git diff origin/main --check` | PASS。 |
+
+### 真实生产 Dashboard 复核
+
+- 入口：`http://127.0.0.1:19768/`，确认服务来自当前
+  `/Users/a1234/.codex/worktrees/fc73/pipeline-worklfow` 的 production build。
+- 1280×720、英文、light/dark 两主题均显示
+  `Open / Explore / Spec / Build / Verify / Ship / Archive`，页面不存在中文 default phase
+  标签。
+- `documentElement.scrollWidth === innerWidth === 1280`，页面无横向溢出。
+- PR #7 抽屉打开时焦点在 `Close details`；关闭后焦点返回原 PR #7 卡片。
+- Context Bundle 与 Verify Evidence 在抽屉内保持共存；Darwin 可信 reader 仍按合同显示安全 501。
+- 最终浏览器 console 日志为空；无新增 warning/error。
+
+### 新 Build 决策
+
+完整待冻结 diff 当前为 296 个路径，互斥分类为 docs 11、Change/governance 231、canonical
+spec 1、tests 12、dist 5、source/tools 36。产品、配置、生成物与 release asset 已稳定；本节
+通过后先提交并普通推送，只有该精确 head CI 成功后才完成最后 Build task、登记
+`pre_verify_review_result=pass`，并对随后生成的治理 head 再取得一轮精确 CI，之后才能冻结新的
+Verify SHA。

@@ -59,10 +59,12 @@ export function rootBasename(root: string): string {
 
 export function stepLabel(
   step: string,
-  labelByStep: Record<string, string> | undefined,
+  rules: Pick<ProgressRules, 'executionModel' | 'labelByStep'> | undefined,
   t: Tr,
 ): string {
-  const custom = labelByStep?.[step]
+  const custom = rules?.executionModel === 'phase-manifest'
+    ? undefined
+    : rules?.labelByStep?.[step]
   if (custom) return custom
   return isPhase(step) ? t(`phases.${step}`) : step
 }

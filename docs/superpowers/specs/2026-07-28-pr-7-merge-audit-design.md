@@ -87,6 +87,8 @@ ContextBundlePreview
    不互相破坏。
 10. `packages/cli/dist/tenon.mjs`、`packages/server/dist/dashboard.mjs` 和 Dashboard `dist/`
     只能从最终源码生成。
+11. 默认七阶段 workflow 的当前阶段、前进和回退标签必须通过 `phases.*` 按 Dashboard locale
+    显示；custom workflow 必须保留作者标签，不能用中文/英文字符启发式判断。
 
 ## 状态机
 
@@ -128,8 +130,9 @@ failure 为 501。所有响应都不含文档正文或绝对路径。
 - kernel `ledger-context-bundle.ts` 为 333 行，超过 application use case 300 行建议线但低于 500
   硬上限；其循环是一个原子 policy→read→verify→materialize 用例。Build 先用审查与测试判断；
   若拆分会导致预算/顺序规则分散，则保留单文件并在交付说明凝聚性理由。
-- `contextBundleTrustedReader.ts` 为 298 行，仍低于 storage adapter 300 行建议线；它集中维护
-  fd-relative file/ledger/state 完整性，暂不横向拆散信任边界。
+- `contextBundleTrustedReader.ts` 当前为 323 行，超过 storage adapter 300 行建议线但低于 500 行
+  硬上限；新增行用于同一 fd-relative file/ledger/state 完整性边界。继续保留单文件，避免把
+  `O_NOFOLLOW`、有界读取和 canonical continuity 拆到多个可漂移适配器。
 - Dashboard `contextBundleClient.ts` 是单一协议 decoder + request facade。若无需修改其公共 contract，
   不为行数做无收益重构。
 

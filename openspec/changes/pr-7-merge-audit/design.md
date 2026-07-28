@@ -29,6 +29,8 @@
   fatal UTF-8、资源上限和 safe error DTO；不支持 fd-relative traversal 的平台在读 Change 前 501。
 - Dashboard 必须同时保留 Context Bundle preview 与最新 main 的 Verify evidence composer；
   `client.ts` 同时导出两组 facade/type，dist 由最终源码生成。
+- 默认七阶段 workflow 的阶段/前进/回退标签必须通过 `phases.*` 随 Dashboard locale 切换；
+  custom workflow 继续原样显示作者标签，不做语言启发式改写。
 - `ContextBundlePreview.tsx` 和 `contextBundlePreview.ts` 在 Build 按职责拆分，并增加组合、负面和
   真实浏览器证据；不新增依赖或全局状态。
 - 完整设计与红队结果见

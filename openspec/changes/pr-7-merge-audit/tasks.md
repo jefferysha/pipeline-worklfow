@@ -16,6 +16,9 @@
 - [x] 固定 capability、需求/场景、兼容与安全约束，生成 delta spec。
 - [x] 生成可执行实施计划，包含 tracer bullet、子阶段、最新 main 集成、TDD、全量验证、浏览器/E2E、CI、合并与回滚。
 - [x] 补齐 coverage 并完成 Spec 文档与出口检查准备；确切 `spec-complete` 回执由 canonical review 历史记录。
+- [x] 将五条既有 requirement 改为完整 `MODIFIED`、共存能力保留 `ADDED`，并通过隔离 archive/apply。
+- [x] 把默认阶段标签 i18n、custom 作者标签保留及修订后的架构/测试事实同步到 design、proposal 与 plan。
+- [x] 重新登记并全文读取所有变更的 Spec 文档，完成本次 `requirements-changed` 的确切 review 门禁。
 
 ## 实现
 
@@ -27,6 +30,8 @@
 - [x] 运行全部定向、前后端全仓、生成物、hooks/adapters/skills/bundle/CAS/oracle/OpenSpec/hygiene 门禁。
 - [x] 完成 pre-Verify Spec、Rules/Architecture/Security、Dashboard visual 复审，修复所有 C/H/M。
 - [x] 提交、普通推送并取得精确 head CI；登记 `pre_verify_review_result=pass`。
+- [x] 以红测固定默认 workflow 英文阶段/动作标签，保持 custom 作者标签，并完成最小实现。
+- [ ] 串行复跑 focus 相关 Web 测试、全量门禁、生成物、独立复审与精确 head CI，冻结新的 Verify SHA。
 
 ## 验证
 
