@@ -97,6 +97,26 @@ describe('VerificationEvidenceComposer', () => {
     expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
   })
 
+  it.each([
+    ['zh', '请求体'],
+    ['en', 'request body'],
+  ] as const)('localizes a root-level structured validation path in %s', async (locale, localizedPath) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: false,
+      code: 'verification_evidence_invalid',
+      error: 'do not render me',
+      details: [{ code: 'output_too_large', path: '' }],
+      overflow: false,
+    }), { status: 400 })))
+    renderComposer(locale)
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+
+    await waitFor(() => expect(screen.getByTestId('evidence-error')).toHaveTextContent(localizedPath))
+    expect(screen.getByTestId('evidence-error')).not.toHaveTextContent('do not render me')
+  })
+
   it('preserves evidence body whitespace in the request while using trimmed views for validation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       ok: true,
@@ -158,5 +178,21 @@ describe('VerificationEvidenceComposer', () => {
     await waitFor(() => expect(screen.getByTestId('evidence-copy-error')).toHaveTextContent('复制失败'))
     fireEvent.click(screen.getByTestId('evidence-copy'))
     await waitFor(() => expect(onToast).toHaveBeenCalledWith('验证证据草稿已复制'))
+  })
+
+  it('keeps the readonly Markdown fallback visibly focusable for manual keyboard copy', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# Verification evidence draft',
+      entryCount: 1,
+    }), { status: 200 })))
+    renderComposer('en')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+
+    const output = await screen.findByTestId('evidence-output')
+    expect(output.className).toContain('focus-visible:ring-2')
+    expect(output.className).toContain('focus-visible:ring-accent-t')
   })
 })

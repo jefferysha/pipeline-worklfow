@@ -130,10 +130,16 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
         const focusable = getFocusableElements(container)
         if (focusable.length === 0) {
           e.preventDefault()
+          container.focus()
           return
         }
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
+        if (!container.contains(document.activeElement)) {
+          e.preventDefault()
+          ;(e.shiftKey ? last : first).focus()
+          return
+        }
         if (e.shiftKey) {
           if (document.activeElement === first) {
             e.preventDefault()

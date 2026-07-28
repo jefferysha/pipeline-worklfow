@@ -245,6 +245,25 @@ describe('Dialog（共享组件，Task 3）', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('焦点因子节点卸载落到 body 时，正反向 Tab 都会被顶层 Dialog 拉回困笼', async () => {
+    const user = userEvent.setup()
+    render(<Host />)
+    await user.click(screen.getByText('打开'))
+
+    const input = screen.getByTestId('dlg-input')
+    const confirmBtn = screen.getByText('确认')
+
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(confirmBtn)
+  })
+
   it('两层 Dialog 叠加：按一次 Esc 只关最上层，外层 onClose 不被调用', async () => {
     const user = userEvent.setup()
     render(<HostTwoLayers />)

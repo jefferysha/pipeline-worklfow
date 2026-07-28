@@ -113,7 +113,7 @@ export function VerificationEvidenceComposer({
       setMarkdown(result.markdown)
     } catch (caught) {
       if (caught instanceof VerificationEvidenceApiError) {
-        const path = caught.details[0]?.path || 'request'
+        const path = caught.details[0]?.path || t('detail.evidence_error_request_path')
         setError(t('detail.evidence_error_invalid', { path }))
       } else {
         setError(t('detail.evidence_error_request'))
@@ -221,7 +221,7 @@ export function VerificationEvidenceComposer({
                 </button>
               </div>
               <textarea
-                className="min-h-48 w-full resize-y rounded-lg border border-border bg-bg p-3 font-mono text-xs leading-5 text-text outline-none"
+                className="min-h-48 w-full resize-y rounded-lg border border-border bg-bg p-3 font-mono text-xs leading-5 text-text outline-none focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-accent-t"
                 data-testid="evidence-output"
                 id="verification-evidence-output"
                 readOnly

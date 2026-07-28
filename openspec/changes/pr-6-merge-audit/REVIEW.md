@@ -29,6 +29,33 @@
    - The official root `npm run build` rebuilt packages in dependency order and passed; all generated
      artifacts now derive from the merged source.
 
+4. **Medium — tracked Dashboard dist was not reproducible from the merged source.**
+   - Independent Rules/Architecture review rebuilt the exact commit in isolation and found the
+     tracked CSS retained a stale `--tracking-tight` token, so the asset hashes and HTML references
+     differed from a fresh build.
+   - Reproduced in the primary worktree with `npm run build:web`, then ran the official root
+     `npm run build`. The tracked Dashboard assets now use the reproducible
+     `index-CsOnyT-V.js` / `index-De9VVOJA.css` pair after the keyboard and localization fixes;
+     server and CLI bundles remained byte-identical.
+
+5. **Medium — topmost Dialog could lose its Tab boundary after a focused child disappeared.**
+   - Independent Spec and Visual reviews confirmed that removing or disabling the active control
+     can move focus to `body`; the previous trap only wrapped when focus exactly matched the first
+     or last focusable element.
+   - Added a red forward/reverse regression, then changed the shared Dialog to pull out-of-container
+     focus back to its first/last focusable element (or the container when none exist). The exact
+     test now passes.
+
+6. **Medium — readonly Markdown manual-copy fallback lacked a visible focus indicator.**
+   - Added a red class contract for the output textarea, then supplied a visible
+     `focus-visible` accent border and ring while retaining the selectable readonly value.
+   - The focused Dialog/composer suite passes 21/21; full Web passes 56 files / 1005 tests.
+
+7. **Low — root-level structured API errors used a literal English fallback in Chinese.**
+   - Added a red localization regression for an empty error path, then introduced localized
+     `request body` / `请求体` labels instead of falling back to the English word `request`.
+   - The regression now passes in both locales.
+
 ### Open findings
 
 - Critical: 0
@@ -53,8 +80,8 @@ new correctness or UX defects in this delta.
 ## Build verification
 
 - `npm run typecheck:web`
-- `npm run test:web` — 56 files, 1001 tests
-- `npm test` — 317 files, 5465 passed, 5 credential-gated skips
+- `npm run test:web` — 56 files, 1005 tests after review regressions
+- `npm test` — 317 files, 5465 passed, 5 credential-gated skips on the exact final source
 - `npm run build`
 - architecture, comments, repository hygiene, docs, identity, npx package, and default-workflow
   freshness checks
