@@ -4,14 +4,6 @@
   "createdAt": "2026-07-28T03:19:49Z",
   "records": [
     {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-1.md",
-      "sha256": "9482ae32b6db58c7e539baf1be43fd4050bea27b55809d537e367eef0a344f22",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-28T08:20:10Z",
-      "reads": []
-    },
-    {
       "kind": "proposal",
       "path": "openspec/changes/dashboard-ui-ux-overhaul-automation/proposal.md",
       "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
@@ -29,6 +21,12 @@
           "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a65cf44550ec61837cd509d4c540245c9ba9dcec30d4603831827830fe0f5327",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -50,6 +48,12 @@
           "sha256": "416047988abb8c5ee6219aeb01ba5610031e58fdfca791197958b7b3e71135e3",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "416047988abb8c5ee6219aeb01ba5610031e58fdfca791197958b7b3e71135e3",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -65,6 +69,12 @@
           "sha256": "494dffeebea746b80d2f1d44612e9aa518050acef76f774954c89a422e42599b",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "494dffeebea746b80d2f1d44612e9aa518050acef76f774954c89a422e42599b",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -80,6 +90,12 @@
           "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -95,6 +111,12 @@
           "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "32cfb7410a8282c571ee7fcf66965b0a48883f37f8133094fc48c5873f9417b4",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -116,6 +138,12 @@
           "sha256": "a3db295463bd2c103c2cd12a5be423230fc9ed69c68b34567cd3466f6f9f8ea1",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a3db295463bd2c103c2cd12a5be423230fc9ed69c68b34567cd3466f6f9f8ea1",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -137,6 +165,12 @@
           "sha256": "49ecfa5c91356c8fc11ddb3930e2d544843f99b3fbd82ae515d748f016f3ce6b",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "49ecfa5c91356c8fc11ddb3930e2d544843f99b3fbd82ae515d748f016f3ce6b",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
     },
@@ -152,8 +186,22 @@
           "sha256": "a837461c3609c76277a5ec17d2669acc9eb0123e669baac6a708b0531b1a0ec4",
           "readAt": "2026-07-28T09:11:06Z",
           "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a837461c3609c76277a5ec17d2669acc9eb0123e669baac6a708b0531b1a0ec4",
+          "readAt": "2026-07-28T09:24:02Z",
+          "visitId": "[\"f1a268c0-e5b7-437d-8b73-558d24813d2b\",12]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-2.md",
+      "sha256": "55bbfa94967bd90d08251becd6ec320ea891fe8c328c3325c527e44db2bc05e5",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-28T09:23:47Z",
+      "reads": []
     }
   ]
 }

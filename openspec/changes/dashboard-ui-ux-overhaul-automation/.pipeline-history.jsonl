@@ -78,3 +78,23 @@
 {"ts":"2026-07-28T09:00:12Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"13be3209-f8f2-41de-b440-00ad65403236"}
 {"ts":"2026-07-28T09:11:06Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T09:14:03Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T09:14:12Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T09:14:12Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T09:14:12Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T09:14:12Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T09:14:12Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-28T09:14:12Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"1de648c3-2242-4522-a9f6-69ebd5f686e9"}
+{"ts":"2026-07-28T09:23:47Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-28T09:23:47Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T09:23:47Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-2.md"}
+{"ts":"2026-07-28T09:23:47Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T07:57:23Z authority_host_session=019fa798-cf7b-7b72-866e-2bc7b2ddba70"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T09:23:48Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-28T09:24:38Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T09:24:38Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T09:24:38Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"cb8b7b55-8a7c-4fc8-b8f8-0ed40e5d7439"}
