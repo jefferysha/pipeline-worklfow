@@ -124,27 +124,6 @@
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/pr-7-merge-audit/tasks.md",
-      "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T17:21:50Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
-          "readAt": "2026-07-28T17:21:51Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "4321b4b50b88861f23ad5ae1711d86e4e22950df383507a6f1d02c9957fb7ec1",
-          "readAt": "2026-07-28T17:22:29Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
-        }
-      ]
-    },
-    {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/2026-07-28-pr-7-merge-audit-design.md",
       "sha256": "215df97e5ae502e695f720f7a8672430e92ee86252d87d6540886e88eaf0c7ce",
@@ -161,6 +140,21 @@
           "phase": "build",
           "sha256": "215df97e5ae502e695f720f7a8672430e92ee86252d87d6540886e88eaf0c7ce",
           "readAt": "2026-07-28T17:22:29Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/pr-7-merge-audit/tasks.md",
+      "sha256": "0a0ccab9470ee14a2277a25ab04fb1822d5c059cca7df4bf48dbd1592f728abc",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T18:31:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "0a0ccab9470ee14a2277a25ab04fb1822d5c059cca7df4bf48dbd1592f728abc",
+          "readAt": "2026-07-28T18:31:50Z",
           "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",3]"
         }
       ]

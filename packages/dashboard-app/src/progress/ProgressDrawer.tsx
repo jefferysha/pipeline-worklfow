@@ -47,6 +47,7 @@ export function ProgressDrawer({
             actions={actions}
             curStageExtra={(
               <ContextBundlePreview
+                key={`${row.row.root}\u0000${row.row.change.name}\u0000${row.row.change.phase}`}
                 root={row.row.root}
                 change={row.row.change.name}
                 currentPhase={row.row.change.phase}

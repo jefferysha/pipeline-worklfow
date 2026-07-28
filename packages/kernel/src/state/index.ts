@@ -60,10 +60,13 @@ export { createWorkflowRunRepository } from './workflow-run-repository.js'
 export type { WorkflowRunRepositoryDeps } from './workflow-run-repository.js'
 export {
   projectionMetadataFor, readCurrentRunRevision, readCurrentRunRevisionFromSync,
-  readCurrentRunRevisionSync, readImmutableRunRevision, readValidatedTransitionHead,
+  readCurrentRunRevisionSync, readImmutableRunRevision,
   RunStateCorruptError, RUN_CURRENT_FILE, RUN_REVISIONS_DIR, RUN_STATE_DIR,
   stateStorageExistsSync, stateStorageSourcePathSync, validateCanonicalRevisionHistory,
 } from './run-revision-store.js'
+export {
+  readValidatedTransitionHead, readValidatedTransitionHeadFromSync,
+} from './run-revision-head-reader.js'
 export type { RunHookState, RunRevision, RunRevisionTextReader, RunStateMutation } from './run-revision-store.js'
 // 机器级项目注册表（v5 T2 决策 D）——init 自动登记 + server 项目发现同源
 export {

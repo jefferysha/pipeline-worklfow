@@ -62,6 +62,16 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     expect(workflow?.commands.find((command) => command.name() === 'plan')).toBeDefined()
   })
 
+  test('handoff --budget-bytes 严格拒绝小数、尾随字符和超出安全整数的值', async () => {
+    for (const value of ['1.5', '12bytes', '0', String(Number.MAX_SAFE_INTEGER + 1)]) {
+      const deps = makeDeps()
+      await expect(buildProgram(deps).parseAsync(
+        ['handoff', 'demo', '--bundle', '--budget-bytes', value],
+        { from: 'user' },
+      )).rejects.toThrow(/budget-bytes 必须是正安全整数/)
+    }
+  })
+
   test('get 走通：stdout 裸值，code 0', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'build' }) })
     const code = await run(deps, ['get', 'demo', 'phase'])

@@ -19,7 +19,7 @@ import {
   type ChangePathAnchor,
 } from './contextBundlePreviewSupport.js'
 import {
-  trustedContextBundleCurrentPhase,
+  trustedContextBundleCurrentSnapshot,
   trustedContextBundleInputs,
 } from './contextBundleTrustedReader.js'
 import { assertWorkflowRootAnchor } from './workflows.js'
@@ -27,7 +27,7 @@ import type { GetRouteDeps } from './serverGetRoutes.js'
 
 type ContextBundlePreviewDeps = Pick<
   GetRouteDeps,
-  'sendJson' | 'workflowRootForRequest' | 'errMsg'
+  'sendJson' | 'workflowRootForRequest'
 >
 
 function invalidRequest(
@@ -44,11 +44,17 @@ function invalidRequest(
 }
 
 function reportInternalFailure(
-  deps: ContextBundlePreviewDeps,
+  _deps: ContextBundlePreviewDeps,
   context: string,
   error: unknown,
 ): void {
-  process.stderr.write(`[context-bundle-preview] ${context}: ${deps.errMsg(error)}\n`)
+  const candidate = typeof error === 'object' && error !== null
+    ? Reflect.get(error, 'code')
+    : undefined
+  const code = typeof candidate === 'string' && /^[A-Z0-9_-]{1,64}$/.test(candidate)
+    ? candidate
+    : 'REDACTED'
+  process.stderr.write(`[context-bundle-preview] ${context}; code=${code}\n`)
 }
 
 /**
@@ -102,6 +108,8 @@ export async function handleContextBundlePreview(
     })
   }
   let changeAnchor: ChangePathAnchor | undefined
+  let changeIdentity: { readonly dev: number; readonly ino: number } | undefined
+  let stateBefore: ReturnType<typeof trustedContextBundleCurrentSnapshot> | undefined
   try {
     assertWorkflowRootAnchor(anchor)
     changeAnchor = captureChangePathAnchor(anchor, change)
@@ -109,11 +117,12 @@ export async function handleContextBundlePreview(
     if (capturedChange === undefined) {
       throw new ContextBundlePathError(403, 'Context Bundle Change identity capture failed')
     }
-    const changeIdentity = {
+    changeIdentity = {
       dev: capturedChange.dev,
       ino: capturedChange.ino,
     }
-    const from = trustedContextBundleCurrentPhase(anchor, change, changeIdentity)
+    stateBefore = trustedContextBundleCurrentSnapshot(anchor, change, changeIdentity)
+    const from = stateBefore.phase
     assertChangePathAnchor(changeAnchor)
     assertWorkflowRootAnchor(anchor)
     const trustedInputs = readsRequiredForPhase(target).length === 0
@@ -146,6 +155,16 @@ export async function handleContextBundlePreview(
     })
     assertChangePathAnchor(changeAnchor)
     assertWorkflowRootAnchor(anchor)
+    const stateAfter = trustedContextBundleCurrentSnapshot(anchor, change, changeIdentity)
+    if (stateAfter.revisionId !== stateBefore.revisionId
+      || stateAfter.stateDigest !== stateBefore.stateDigest) {
+      return deps.sendJson(res, 409, {
+        ok: false,
+        code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+        error: 'Context Bundle canonical state changed during preview',
+        repairAction: 'Retry after the canonical Change state is stable.',
+      })
+    }
     return deps.sendJson(res, 200, {
       ok: true,
       preview: safeContextBundlePreview(result.preview, true, result.bundle.aggregateDigest),
@@ -165,6 +184,28 @@ export async function handleContextBundlePreview(
       } catch (pathError) {
         reportInternalFailure(deps, 'change anchor validation failed', pathError)
         return deps.sendJson(res, 403, { ok: false, error: 'Context Bundle path trust check failed' })
+      }
+    }
+    if (stateBefore !== undefined && changeIdentity !== undefined) {
+      try {
+        const stateAfter = trustedContextBundleCurrentSnapshot(anchor, change, changeIdentity)
+        if (stateAfter.revisionId !== stateBefore.revisionId
+          || stateAfter.stateDigest !== stateBefore.stateDigest) {
+          return deps.sendJson(res, 409, {
+            ok: false,
+            code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+            error: 'Context Bundle canonical state changed during preview',
+            repairAction: 'Retry after the canonical Change state is stable.',
+          })
+        }
+      } catch (snapshotError) {
+        reportInternalFailure(deps, 'state snapshot revalidation failed', snapshotError)
+        return deps.sendJson(res, 409, {
+          ok: false,
+          code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+          error: 'Context Bundle canonical state changed during preview',
+          repairAction: 'Retry after the canonical Change state is stable.',
+        })
       }
     }
     if (error instanceof ContextBundlePathError) {

@@ -169,6 +169,55 @@ describe('ContextBundlePreview', () => {
     })
   })
 
+  it('Change identity 切换会同步清空旧结果、恢复默认值并 abort 旧请求', async () => {
+    const first = deferred<Response>()
+    const second = deferred<Response>()
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    vi.stubGlobal('fetch', fetchMock)
+    const rendered = render(
+      <I18nProvider>
+        <ContextBundlePreview
+          key={'/repo-a\u0000change-a\u0000build'}
+          root="/repo-a"
+          change="change-a"
+          currentPhase="build"
+        />
+      </I18nProvider>,
+    )
+    const firstSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit).signal as AbortSignal
+    const firstBody = responseBody()
+    firstBody.preview.change = 'change-a'
+    first.resolve(new Response(JSON.stringify(firstBody), { status: 200 }))
+    expect(await screen.findByText('openspec/changes/demo/proposal.md')).toBeInTheDocument()
+
+    rendered.rerender(
+      <I18nProvider>
+        <ContextBundlePreview
+          key={'/repo-b\u0000change-b\u0000explore'}
+          root="/repo-b"
+          change="change-b"
+          currentPhase="explore"
+        />
+      </I18nProvider>,
+    )
+
+    expect(firstSignal.aborted).toBe(true)
+    expect(screen.queryByText('openspec/changes/demo/proposal.md')).not.toBeInTheDocument()
+    expect(screen.getByText('正在预检 Context Bundle…')).toBeInTheDocument()
+    expect(screen.getByLabelText('目标阶段')).toHaveValue('spec')
+    expect(screen.getByLabelText('预算（bytes）')).toHaveValue(120000)
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      'root=%2Frepo-b&change=change-b&target=spec&budgetBytes=120000',
+    )
+    const secondBody = responseBody('spec', [])
+    secondBody.preview.change = 'change-b'
+    secondBody.preview.from = 'explore'
+    second.resolve(new Response(JSON.stringify(secondBody), { status: 200 }))
+    expect(await screen.findByText('该目标阶段不要求读取文档。')).toBeInTheDocument()
+  })
+
   it('可见 labels 提供 Tab 顺序，预算输入 Enter 与按钮走同一提交', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify(responseBody()), { status: 200 }),
@@ -212,7 +261,8 @@ describe('ContextBundlePreview', () => {
       'focus-visible:ring-offset-2',
     )
     expect(screen.getByRole('button', { name: '重新预检' })).toHaveClass(
-      'bg-btn-hover',
+      'bg-btn-bg',
+      'hover:bg-btn-hover',
       'active:translate-y-px',
       'focus-visible:ring-(--accent)',
       'focus-visible:ring-offset-2',

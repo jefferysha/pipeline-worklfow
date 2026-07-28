@@ -24,6 +24,7 @@ import {
   deltaSpecSlot,
   documentSlot,
   DocumentLedgerError,
+  isSafeProjectRelativePath,
   resolveDocument,
 } from './document-path.js'
 import { HISTORY_FILE } from './history.js'
@@ -110,7 +111,11 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
   const producer = string(item.producer)
   const recordedAt = string(item.recordedAt)
   if (!kind || !isDocumentKind(kind)) throw new DocumentLedgerError(`document ledger records[${index}].kind 非法`)
-  if (!path) throw new DocumentLedgerError(`document ledger records[${index}].path 必须是非空字符串`)
+  if (!path || !isSafeProjectRelativePath(path)) {
+    throw new DocumentLedgerError(
+      `document ledger records[${index}].path 必须是安全的项目相对路径`,
+    )
+  }
   if (!digest || !validDigest(digest)) throw new DocumentLedgerError(`document ledger records[${index}].sha256 非法`)
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer 非法`)

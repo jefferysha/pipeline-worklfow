@@ -3,7 +3,7 @@ import { dirname, posix } from 'node:path'
 import {
   LedgerContextBundleError,
   parseDocumentLedger,
-  readCurrentRunRevisionFromSync,
+  readValidatedTransitionHeadFromSync,
   RunStateCorruptError,
   type DocumentLedger,
   type LedgerContextBundleResourceLimits,
@@ -172,15 +172,21 @@ function readTrustedFile(
   }
 }
 
-export function trustedContextBundleCurrentPhase(
+export interface TrustedContextBundleStateSnapshot {
+  readonly phase: string
+  readonly revisionId: string
+  readonly stateDigest: string
+}
+
+export function trustedContextBundleCurrentSnapshot(
   root: WorkflowRootAnchor,
   change: string,
   changeIdentity: TrustedChangeIdentity,
-): string {
+): TrustedContextBundleStateSnapshot {
   const prefix = posix.join('openspec', 'changes', change)
   let current
   try {
-    current = readCurrentRunRevisionFromSync((relativePath) => {
+    current = readValidatedTransitionHeadFromSync((relativePath) => {
       try {
         return readTrustedFile(
           root,
@@ -196,7 +202,7 @@ export function trustedContextBundleCurrentPhase(
         ) return undefined
         throw error
       }
-    })
+    })?.current
   } catch (error) {
     if (
       error instanceof RunStateCorruptError
@@ -219,7 +225,26 @@ export function trustedContextBundleCurrentPhase(
       { repairAction: '恢复有效的 canonical Change state 后重试' },
     )
   }
-  return phase
+  if (current === undefined) {
+    throw new LedgerContextBundleError(
+      'CONTEXT_BUNDLE_STATE_CORRUPT',
+      'Context Bundle canonical state is unavailable',
+      { repairAction: '恢复有效的 canonical Change state 后重试' },
+    )
+  }
+  return {
+    phase,
+    revisionId: current.revisionId,
+    stateDigest: current.stateDigest,
+  }
+}
+
+export function trustedContextBundleCurrentPhase(
+  root: WorkflowRootAnchor,
+  change: string,
+  changeIdentity: TrustedChangeIdentity,
+): string {
+  return trustedContextBundleCurrentSnapshot(root, change, changeIdentity).phase
 }
 
 export function trustedContextBundleInputs(

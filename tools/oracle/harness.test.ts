@@ -65,6 +65,32 @@ describe('双跑模式（oracle = 老仓 pipeline-state.sh 实跑）', () => {
     expect(existsSync(join(r.workdir, 'report.txt'))).toBe(true)
   })
 
+  it('合法 canonical transition-head anchor 只作为内部元数据归一，业务投影仍全量对比', () => {
+    const r = runHarness(
+      { ...stubEnv('mirror'), STUB_TRANSITION_HEAD: 'valid' },
+      ['backend-full'],
+    )
+    expect(r.out).toContain('汇总')
+    expect(r.out).not.toMatch(/\bFAIL\b/)
+    expect(r.status).toBe(0)
+  })
+
+  it.each([
+    ['closed schema 损坏', { STUB_TRANSITION_HEAD: 'malformed' }],
+    ['不在 logical opaque tail 首行', { STUB_TRANSITION_HEAD: 'misplaced' }],
+    ['anchor 合法但业务字段漂移', {
+      STUB_TRANSITION_HEAD: 'valid',
+      STUB_BUSINESS_TAMPER: '1',
+    }],
+  ])('%s 的 transition-head fixture 必须被 YAML 面抓红', (_label, extraEnv) => {
+    const r = runHarness(
+      { ...stubEnv('mirror'), ...extraEnv },
+      ['backend-full'],
+    )
+    expect(r.status).toBe(1)
+    expect(r.out).toMatch(/\bFAIL\b/)
+  })
+
   it('corrupt stub 被三面 diff 抓红：exit 1，含 FAIL 行 + 历史区 PRESERVE 抓红', () => {
     const r = runHarness(stubEnv('corrupt'), ['backend-full', 'pm-history'])
     expect(r.status).toBe(1)
@@ -101,12 +127,12 @@ describe('降级模式（契约测试模式）', () => {
 
 describe('fixtures 生成脚本', () => {
   const cases = [
-    ['backend-full', 't6-be'],
-    ['frontend-quotegate', 't6-fe'],
-    ['pm-history', 't6-pm'],
+    ['backend-full', 't6-be', ['.oracle-post-init', 't6-be']],
+    ['frontend-quotegate', 't6-fe', ['.oracle-post-init', 't6-fe']],
+    ['pm-history', 't6-pm', ['openspec', 'changes', 't6-pm']],
   ] as const
 
-  for (const [name, change] of cases) {
+  for (const [name, change, fixturePath] of cases) {
     it(`${name}.sh 独立可跑：生成项目骨架 + .oracle-plan`, () => {
       const target = mkdtempSync(join(tmpdir(), `oracle-fx-${name}-`))
       try {
@@ -114,7 +140,7 @@ describe('fixtures 生成脚本', () => {
           encoding: 'utf8',
         })
         expect(res.status).toBe(0)
-        expect(existsSync(join(target, 'openspec', 'changes'))).toBe(true)
+        expect(existsSync(join(target, ...fixturePath))).toBe(true)
         const plan = readFileSync(join(target, '.oracle-plan'), 'utf8')
         expect(plan).toContain(change)
         // 计划行格式：<expected_new_exit>\t<cmd>\t<args...>

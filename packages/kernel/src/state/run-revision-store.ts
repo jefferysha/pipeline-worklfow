@@ -36,6 +36,11 @@ import {
   assertMutationEffects,
   assertTransitionRevisionLink,
 } from './run-revision-continuity.js'
+import {
+  validateAnchoredTransitionHead,
+  validateAnchoredTransitionHeadFromSync,
+  withTransitionHeadAnchor,
+} from './transition-head-anchor.js'
 
 export {
   RunStateCorruptError,
@@ -124,8 +129,8 @@ async function assertTransitionRecordFile(
 
 function assertTransitionRecordFromSync(
   readText: RunRevisionTextReader, revision: RunRevision, sourceRoot: string, previous?: RunRevision,
-): void {
-  if (revision.mutation.kind !== 'transition') return
+): TransitionRecord | undefined {
+  if (revision.mutation.kind !== 'transition') return undefined
   const metadata = revision.state.runMetadata
   if (!metadata?.transitionHead || metadata.transitionSequence < 1) {
     throw new RunStateCorruptError('transition revision 缺 canonical run head/sequence')
@@ -135,7 +140,9 @@ function assertTransitionRecordFromSync(
   const transitionRaw = readText(transitionRel)
   if (transitionRaw === undefined) throw new RunStateCorruptError('transition revision 引用的 TransitionRecord 缺失')
   try {
-    assertTransitionRevisionLink(revision, JSON.parse(transitionRaw), transitionRaw, previous)
+    const transition: unknown = JSON.parse(transitionRaw)
+    assertTransitionRevisionLink(revision, transition, transitionRaw, previous)
+    return transition as TransitionRecord
   } catch (error) {
     if (error instanceof RunStateCorruptError) throw error
     throw new RunStateCorruptError(
@@ -189,6 +196,7 @@ export async function publishRunRevision(
   await mkdir(revisionsDir, { recursive: true })
   let transitionRaw: string | undefined
   let transition: unknown
+  let revisionState = state
   let mutationWithDigest: Omit<RunStateMutation, 'effects'> = mutation
   if (mutation.kind === 'transition') {
     const metadata = state.runMetadata
@@ -213,9 +221,18 @@ export async function publishRunRevision(
       ...mutation,
       transitionRecordDigest: createHash('sha256').update(transitionRaw).digest('hex'),
     }
+    const transitionRecordDigest = mutationWithDigest.transitionRecordDigest
+    if (transitionRecordDigest === undefined) {
+      throw new RunStateCorruptError('transition publish 缺 TransitionRecord digest')
+    }
+    revisionState = withTransitionHeadAnchor(
+      state,
+      metadata,
+      transitionRecordDigest,
+    )
   }
   const revision = createRunRevision({
-    state,
+    state: revisionState,
     revision: current.revision + 1,
     previousRevisionId: current.revisionId,
     mutation: {
@@ -229,7 +246,7 @@ export async function publishRunRevision(
   if (transitionRaw !== undefined) {
     assertTransitionRevisionLink(revision, transition, transitionRaw, current)
   }
-  await publishPreVerifyReviewRecord(changeDir, revision, state)
+  await publishPreVerifyReviewRecord(changeDir, revision, revisionState)
   const raw = serializeRunRevision(revision)
   await atomicLinkPublish(
     revisionsDir,
@@ -274,6 +291,11 @@ export async function readCurrentRunRevision(changeDir: string): Promise<RunRevi
     assertMutationEffects(current, previous)
   }
   await assertTransitionRecordFile(changeDir, current, previous)
+  await validateAnchoredTransitionHead(
+    current,
+    (relativePath) => readRegularTextIfExists(join(changeDir, relativePath)),
+    changeDir,
+  )
   if (previous?.mutation.kind === 'transition') {
     const predecessor = assertDirectPredecessor(
       previous,
@@ -310,42 +332,6 @@ export async function validateCanonicalRevisionHistory(changeDir: string): Promi
     }
     assertMutationEffects(cursor, previous)
     await assertTransitionRecordFile(changeDir, cursor, previous)
-    cursor = previous
-  }
-}
-
-/**
- * Resolve the current metadata head through the immutable revision that committed it, validating
- * the TransitionRecord bytes against that revision's anchored digest. Later set revisions may
- * preserve the head but can never make an unbound/mutated record authoritative.
- */
-export async function readValidatedTransitionHead(
-  changeDir: string,
-): Promise<{ readonly current: RunRevision; readonly record: TransitionRecord } | undefined> {
-  const current = await readCurrentRunRevision(changeDir)
-  const metadata = current?.state.runMetadata
-  if (current === undefined || metadata?.transitionHead === undefined
-    || metadata.transitionSequence < 1) return undefined
-  let cursor = current
-  while (true) {
-    if (cursor.revision === 0) {
-      throw new RunStateCorruptError('canonical transition head 缺提交 revision')
-    }
-    const previousId = previousRevisionIdFor(cursor)
-    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousId)
-    if (previous === undefined || previous.revisionId !== previousId) {
-      throw new RunStateCorruptError('canonical transition head 回溯链损坏')
-    }
-    assertMutationEffects(cursor, previous)
-    if (cursor.mutation.kind === 'transition'
-      && cursor.mutation.transitionRecordId === metadata.transitionHead) {
-      const record = await assertTransitionRecordFile(changeDir, cursor, previous)
-      if (record === undefined || record.sequence !== metadata.transitionSequence
-        || record.runId !== metadata.runId) {
-        throw new RunStateCorruptError('canonical transition head 与提交 revision 不一致')
-      }
-      return { current, record }
-    }
     cursor = previous
   }
 }
@@ -446,6 +432,7 @@ export function readCurrentRunRevisionFromSync(
     assertMutationEffects(current, previous)
   }
   assertTransitionRecordFromSync(readText, current, sourceRoot, previous)
+  validateAnchoredTransitionHeadFromSync(current, readText, sourceRoot)
   if (previous?.mutation.kind === 'transition') {
     const predecessorId = previousRevisionIdFor(previous)
     const predecessorRel = join(

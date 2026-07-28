@@ -156,7 +156,7 @@ export function ContextBundlePreview({
           />
         </label>
         <button
-          className="h-9 rounded-lg bg-btn-hover px-3 text-xs font-semibold text-btn-fg outline-none transition-[filter,transform] hover:brightness-90 active:translate-y-px active:brightness-75 focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transform-none disabled:cursor-wait disabled:opacity-50"
+          className="h-9 rounded-lg bg-btn-bg px-3 text-xs font-semibold text-btn-fg outline-none transition-[background-color,transform] hover:bg-btn-hover active:translate-y-px focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transform-none disabled:cursor-wait disabled:opacity-50"
           type="submit"
           disabled={state.kind === 'loading'}
         >
@@ -201,7 +201,7 @@ export function ContextBundlePreview({
                   available: formatNumber(state.preview.budget.maxBytes),
                 })}
               </p>
-              <code className="mt-1 block text-[10px]">{state.code}</code>
+              <code className="mt-1 block break-all text-[10px]">{state.code}</code>
               <p className="mt-1">{t('progress.bundle_budget_repair')}</p>
             </div>
             <PreviewInputs inputs={state.preview.inputs} formatNumber={formatNumber} />
@@ -211,7 +211,7 @@ export function ContextBundlePreview({
         {state.kind === 'error' && (
           <div className="rounded-lg border border-red-b bg-red-t px-3 py-2.5 text-xs text-red-d" role="alert">
             <p className="font-semibold">{t('progress.bundle_error_title')}</p>
-            <code className="mt-1 block text-[10px]">{state.code}</code>
+            <code className="mt-1 block break-all text-[10px]">{state.code}</code>
             <p className="mt-1">
               {t(ERROR_KEYS[state.code] ?? 'progress.bundle_error_unknown', {
                 path: state.path ?? '—',

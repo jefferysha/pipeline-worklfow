@@ -19,13 +19,13 @@
 
 ## 实现
 
-- [ ] 普通合并最新 `origin/main`，显式保留 context bundle 与 verification evidence 两组 API/抽屉能力，并从最终源码重生成 dist。
-- [ ] 增加 Verify 抽屉两工具共存组合红测并完成 tracer bullet 定向链路。
-- [ ] 按职责拆分超建议线 Dashboard 组件和接近硬上限 server handler，保持 public contract。
-- [ ] 完成 Host/root/Change/canonical/ledger/source/预算/DTO 的安全负面测试与架构自检。
-- [ ] 完成 Dashboard 第一次 `design-taste-frontend`、修复和第二次复审，覆盖主题/语言/三视口/键盘/focus/reduced-motion。
-- [ ] 运行全部定向、前后端全仓、生成物、hooks/adapters/skills/bundle/CAS/oracle/OpenSpec/hygiene 门禁。
-- [ ] 完成 pre-Verify Spec、Rules/Architecture/Security、Dashboard visual 复审，修复所有 C/H/M。
+- [x] 普通合并最新 `origin/main`，显式保留 context bundle 与 verification evidence 两组 API/抽屉能力，并从最终源码重生成 dist。
+- [x] 增加 Verify 抽屉两工具共存组合红测并完成 tracer bullet 定向链路。
+- [x] 按职责拆分超建议线 Dashboard 组件和接近硬上限 server handler，保持 public contract。
+- [x] 完成 Host/root/Change/canonical/ledger/source/预算/DTO 的安全负面测试与架构自检。
+- [x] 完成 Dashboard 第一次 `design-taste-frontend`、修复和第二次复审，覆盖主题/语言/三视口/键盘/focus/reduced-motion。
+- [x] 运行全部定向、前后端全仓、生成物、hooks/adapters/skills/bundle/CAS/oracle/OpenSpec/hygiene 门禁。
+- [x] 完成 pre-Verify Spec、Rules/Architecture/Security、Dashboard visual 复审，修复所有 C/H/M。
 - [ ] 提交、普通推送并取得精确 head CI；登记 `pre_verify_review_result=pass`。
 
 ## 验证

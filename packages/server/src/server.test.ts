@@ -19,6 +19,7 @@ import {
 import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
   createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
+  createTransitionRecordStore, createWorkflowRunRepository,
   DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
   machineStateScopeId,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
@@ -330,6 +331,36 @@ describe('GET /api/context-bundle/preview —— ledger-bound 只读预算预览
     expect(JSON.stringify(response.json())).not.toContain(h.root)
   })
 
+  it.runIf(process.platform === 'linux')('连续两次 set 后 head record 缺失仍返回 409，且不读取 ledger', async () => {
+    const h = await start()
+    const repo = createWorkflowRunRepository({
+      store: h.store,
+      recordStore: createTransitionRecordStore(),
+      clock: () => '2026-07-28T00:00:00Z',
+      newId: () => 'context-head-after-two-sets',
+    })
+    await repo.transact(h.changeDir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await h.store.set(h.changeDir, 'scope', 'first-set')
+    await h.store.set(h.changeDir, 'assignee', 'second-set')
+    await unlink(join(
+      h.changeDir,
+      '.pipeline-transitions',
+      '000001-context-head-after-two-sets.json',
+    ))
+    await unlink(join(h.changeDir, '.pipeline-documents.json'))
+
+    const response = await reqGet(h.port, previewPath(h.root))
+    expect(response.status).toBe(409)
+    expect(response.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_STATE_CORRUPT',
+    })
+  })
+
   it.runIf(process.platform === 'linux')('把 missing/stale 映射为 409，并给出可执行恢复动作而不返回部分预览', async () => {
     const missingLedger = await start({ seedGovernedEvidence: false })
     await unlink(join(missingLedger.changeDir, '.pipeline-documents.json'))
@@ -377,6 +408,33 @@ describe('GET /api/context-bundle/preview —— ledger-bound 只读预算预览
       code: 'CONTEXT_BUNDLE_DOCUMENT_MISSING',
     })
     expect(JSON.stringify(linked.json())).not.toContain('# proposal')
+  })
+
+  it.runIf(process.platform === 'linux')('非法持久化 ledger path 映射为 409 且安全日志不泄露 path/root', async () => {
+    const h = await start()
+    const ledgerPath = join(h.changeDir, '.pipeline-documents.json')
+    const ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as {
+      records: Array<{ path: string }>
+    }
+    const hostilePath = `/Users/private/${'hostile-ledger-value'}`
+    if (!ledger.records[0]) throw new Error('ledger fixture has no records')
+    ledger.records[0].path = hostilePath
+    await writeFile(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`, 'utf8')
+    await unlink(join(h.changeDir, 'proposal.md'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    const response = await reqGet(h.port, previewPath(h.root))
+
+    expect(response.status).toBe(409)
+    expect(response.json()).toMatchObject({
+      ok: false,
+      code: 'CONTEXT_BUNDLE_LEDGER_MISSING',
+    })
+    const logged = stderr.mock.calls.map((call) => String(call[0])).join('')
+    expect(logged).toContain('CONTEXT_BUNDLE_LEDGER_MISSING cause')
+    expect(logged).not.toContain(hostilePath)
+    expect(logged).not.toContain(h.root)
+    expect(response.json()).not.toHaveProperty('preview')
   })
 
   it.runIf(process.platform === 'linux')('预算不足返回 422 safe preview，但不返回正文或有效 aggregate digest', async () => {

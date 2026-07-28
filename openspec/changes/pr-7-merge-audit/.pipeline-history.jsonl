@@ -20,3 +20,6 @@
 {"ts":"2026-07-28T17:22:28Z","kind":"set","field":"build_mode","to":"direct"}
 {"ts":"2026-07-28T17:22:28Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-28T17:22:29Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-28T17:30:55Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T17:32:33Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T18:45:45Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
