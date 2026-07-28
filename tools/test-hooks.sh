@@ -712,6 +712,93 @@ if command -v node >/dev/null 2>&1; then
   [ "$READONLY_KEYWORD" = skip-tenon ] \
     && ok "router: 只读 hooks config 仍读取 custom keyword" \
     || bad "router: 只读 hooks config 仍读取 custom keyword" "实际 ${READONLY_KEYWORD:-<empty>}"
+  BLOCKING_STAT_DIR="$TMP/blocking-stat"
+  BLOCKING_STAT_PID_FILE="$TMP/blocking-stat.pid"
+  BLOCKING_READER_PID_FILE="$TMP/blocking-reader.pid"
+  mkdir -p "$BLOCKING_STAT_DIR"
+  cat > "$BLOCKING_STAT_DIR/stat" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$$" > "$BLOCKING_STAT_PID_FILE"
+while :; do sleep 1; done
+EOF
+  chmod +x "$BLOCKING_STAT_DIR/stat"
+  BLOCKING_STAT_RESULT="$(
+    BLOCKING_STAT_PID_FILE="$BLOCKING_STAT_PID_FILE" \
+      BLOCKING_READER_PID_FILE="$BLOCKING_READER_PID_FILE" \
+      PATH="$BLOCKING_STAT_DIR:$PATH" \
+      bash -c '
+        . "$1"
+        definition="$(declare -f pipeline_hooks_config_kill_tree)"
+        eval "${definition/pipeline_hooks_config_kill_tree/pipeline_hooks_config_kill_tree_original}"
+        pipeline_hooks_config_kill_tree() {
+          printf "%s\n" "$1" > "$BLOCKING_READER_PID_FILE"
+          pipeline_hooks_config_kill_tree_original "$@"
+        }
+        pipeline_hooks_config_snapshot "$2"
+        printf "%s" "$?"
+      ' _ \
+        "$ROOT/hooks/prompt-intent.sh" "$rproj" 2>/dev/null
+  )"
+  BLOCKING_STAT_PID="$(cat "$BLOCKING_STAT_PID_FILE" 2>/dev/null || true)"
+  BLOCKING_READER_PID="$(cat "$BLOCKING_READER_PID_FILE" 2>/dev/null || true)"
+  BLOCKING_STAT_STATE="$(
+    [ -z "$BLOCKING_STAT_PID" ] || ps -o pid=,ppid=,state=,comm= -p "$BLOCKING_STAT_PID" 2>/dev/null
+  )"
+  if [ "$BLOCKING_STAT_RESULT" = 1 ] \
+    && { [ -z "$BLOCKING_STAT_PID" ] || ! kill -0 "$BLOCKING_STAT_PID" 2>/dev/null; }; then
+    ok "router: 只读 hooks config 超时会终止并回收阻塞的外部读取后代"
+  else
+    bad "router: 只读 hooks config 超时会终止并回收阻塞的外部读取后代" \
+      "result=${BLOCKING_STAT_RESULT:-<empty>} reader=${BLOCKING_READER_PID:-<empty>} pid=${BLOCKING_STAT_PID:-<empty>} state=${BLOCKING_STAT_STATE:-<empty>} 仍存活"
+    [ -z "$BLOCKING_STAT_PID" ] || kill "$BLOCKING_STAT_PID" 2>/dev/null || true
+  fi
+  STALE_PID_RESULT="$(
+    PS_COUNT_FILE="$TMP/kill-tree-ps-count" KILL_LOG_FILE="$TMP/kill-tree-kill-log" \
+      bash -c '
+        . "$1"
+        ps() {
+          if [ "$1" = "-eo" ]; then
+            count="$(cat "$PS_COUNT_FILE" 2>/dev/null || printf 0)"
+            count=$((count + 1))
+            printf "%s" "$count" > "$PS_COUNT_FILE"
+            if [ "$count" -eq 1 ]; then
+              printf "401 400\n402 999\n"
+            else
+              printf "401 999\n402 999\n"
+            fi
+          else
+            printf "%s\n" "$$"
+          fi
+        }
+        kill() {
+          [ "$1" = "-0" ] && return 1
+          printf "%s\n" "$1" >> "$KILL_LOG_FILE"
+          return 0
+        }
+        wait() { return 0; }
+        sleep() { return 0; }
+        pipeline_hooks_config_kill_tree 400
+        printf "%s|%s|%s" \
+          "$(grep -c "^401$" "$KILL_LOG_FILE" 2>/dev/null || true)" \
+          "$(grep -c "^402$" "$KILL_LOG_FILE" 2>/dev/null || true)" \
+          "$(grep -c "^400$" "$KILL_LOG_FILE" 2>/dev/null || true)"
+      ' _ "$ROOT/hooks/prompt-intent.sh"
+  )"
+  [ "$STALE_PID_RESULT" = "1|0|1" ] \
+    && ok "router: 超时清理只 signal fresh 后代一次且不触及 sibling" \
+    || bad "router: 超时清理只 signal fresh 后代一次且不触及 sibling" "实际 $STALE_PID_RESULT"
+  ln -s "$rproj/.pipeline/hooks.json" "$TMP/readonly-eof-link"
+  EOF_CLEANUP_RESULT="$(
+    bash -c '
+      . "$1"
+      pipeline_hooks_config_kill_tree() { printf "kill-tree-called"; }
+      pipeline_hooks_config_snapshot_readonly "$2" >/dev/null
+      printf "|%s" "$?"
+    ' _ "$ROOT/hooks/prompt-intent.sh" "$TMP/readonly-eof-link" 2>/dev/null
+  )"
+  [ "$EOF_CLEANUP_RESULT" = "|1" ] \
+    && ok "router: 只读 worker EOF 不终止可能已复用的 PID" \
+    || bad "router: 只读 worker EOF 不终止可能已复用的 PID" "实际 $EOF_CLEANUP_RESULT"
   chmod 0644 "$rproj/.pipeline/hooks.json"
   printf '{\n  "version": 1,\n  "prompt_skip_keyword": "",\n  "matrix": {}\n}\n' > "$rproj/.pipeline/hooks.json"
   chmod 0444 "$rproj/.pipeline/hooks.json"

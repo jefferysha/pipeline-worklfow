@@ -151,3 +151,24 @@ Critical 0 / High 0 / Medium 0 / Low 0；确认持续增长有硬上限，FIFO �
 server 309/309、frontend 36/36，共 853/853，Critical / High / Medium / Low 均为 0。
 独立视觉轨复验中英文、1440/375、主要状态与键盘路径为 PASS，Critical / High / Medium / Low
 均为 0；视觉 baseline 不存在，像素回归项继续如实记为 INCONCLUSIVE。
+
+## 第六次冻结前审查修复
+
+第四轮冻结后的嵌套 Standards 轨发现一个 MEDIUM：异常文件系统若让已启动的 `stat`、`dd` 或
+`od` 自身阻塞，只终止 process-substitution 外壳可能遗留被重新托管的后代。该轮按
+`verify-fail` exact review receipt 返回 Build，未接受偏差。
+
+TDD 红态用 PATH 注入的伪 `stat` 创建真实阻塞后代，完整 hooks 为 508 pass / 1 fail；
+修复新增 Bash 3.2 兼容的超时清理：保留外壳、由 `ps -eo pid=,ppid=` 求后代闭包，三轮先终止
+后代，再终止并最佳努力 `wait` 外壳，最后最多 1 秒做 `kill -0` 有界存活轮询。绿态完整 hooks
+为 509/509，阻塞后代在 hook 返回前已不再存活。
+
+第一版进程树清理的独立全量复审又发现 PID 复用 HIGH：跨三轮保存并重复 signal 陈旧 PID，
+以及把 Bash 3.2 的 `read -t` 返回 1 一律当 timeout，可能在 EOF 后误杀复用 PID。修复后在
+reader 启动时固定 `ppid + lstart + comm` identity；失败时只有当前 identity 仍精确一致才执行清理，
+否则按 EOF 最佳努力 `wait`。每轮只从 fresh parent-child 快照求闭包，同一 PID 最多 signal 一次，
+根进程也仅在 identity 再次一致时终止。新增陈旧 descendant / sibling 与 EOF 回归，完整 hooks
+为 511/511。独立 E2E 在隔离副本复验 hooks 511、server 309、frontend 36，共 856/856；
+独立 Standards + Spec 对 SHA-256
+`9cd1bc6866cc182c232801b2e8fddae40b458d523a56ae5be022a4badca99789` 全量复审为 PASS，
+Critical 0 / High 0 / Medium 0 / Low 0，确认先前 PID reuse HIGH 已关闭。

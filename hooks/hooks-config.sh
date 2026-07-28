@@ -50,19 +50,94 @@ pipeline_hooks_config_snapshot_from_fd() { # $1=path，fd 9 已打开
   PIPELINE_HOOKS_CONFIG_SNAPSHOT="$snapshot"
 }
 
+pipeline_hooks_config_kill_tree() { # $1=pid $2=启动 identity；超时路径的有界后代清理
+  local root_pid="${1:-}" process_table='' current signaled=' ' pid ppid
+  local root_identity="${2:-}" current_root_identity
+  local changed round=0 poll=0 alive
+  case "$root_pid" in ''|*[!0-9]*) return 1 ;; esac
+  if [ -z "$root_identity" ]; then
+    root_identity="$(ps -o ppid=,lstart=,comm= -p "$root_pid" 2>/dev/null)" || return 0
+  fi
+  [ -n "$root_identity" ] || return 0
+
+  # 先保留外壳；每轮只对 fresh parent-child 快照求闭包，且同一 PID 最多 signal 一次，避免
+  # 已退出后代的 PID 被复用后遭重复误杀。异常路径才调用 ps，正常 hot path 无额外进程。
+  while [ "$round" -lt 3 ]; do
+    current_root_identity="$(ps -o ppid=,lstart=,comm= -p "$root_pid" 2>/dev/null)" || break
+    [ "$current_root_identity" = "$root_identity" ] || break
+    process_table="$(ps -eo pid=,ppid= 2>/dev/null)" || process_table=''
+    current=" $root_pid "
+    changed=1
+    while [ "$changed" -eq 1 ]; do
+      changed=0
+      while read -r pid ppid; do
+        case "$pid:$ppid" in
+          *[!0-9:]*|:*) continue ;;
+        esac
+        case "$current" in
+          *" $ppid "*)
+            case "$current" in
+              *" $pid "*) ;;
+              *) current="${current}${pid} "; changed=1 ;;
+            esac
+            ;;
+        esac
+      done <<< "$process_table"
+    done
+    for pid in $current; do
+      [ "$pid" = "$root_pid" ] && continue
+      case "$signaled" in *" $pid "*) continue ;; esac
+      if kill "$pid" 2>/dev/null; then
+        signaled="${signaled}${pid} "
+      fi
+    done
+    round=$((round + 1))
+  done
+
+  # 给仍存活的 reader 外壳一个短窗口回收刚终止的直接子进程；之后才验证所有权并终止外壳。
+  sleep 0.1
+  current_root_identity="$(ps -o ppid=,lstart=,comm= -p "$root_pid" 2>/dev/null)" \
+    || current_root_identity=''
+  [ "$current_root_identity" = "$root_identity" ] && kill "$root_pid" 2>/dev/null || true
+  wait "$root_pid" 2>/dev/null || true
+  while [ "$poll" -lt 20 ]; do
+    alive=0
+    for pid in $root_pid $signaled; do
+      if kill -0 "$pid" 2>/dev/null; then
+        alive=1
+        break
+      fi
+    done
+    [ "$alive" -eq 1 ] || return 0
+    sleep 0.1
+    poll=$((poll + 1))
+  done
+  return 1
+}
+
 pipeline_hooks_config_snapshot_readonly() { # $1=path；父进程限时等待子进程的 NUL 结尾快照
-  local file="${1:-}" snapshot='' reader_pid read_rc
+  local file="${1:-}" snapshot='' reader_pid reader_identity current_reader_identity read_rc
   exec 8< <(
     exec 9< "$file" 2>/dev/null || exit 1
     pipeline_hooks_config_snapshot_from_fd "$file" || exit 1
     printf '%s\0' "$PIPELINE_HOOKS_CONFIG_SNAPSHOT"
   )
   reader_pid=$!
+  reader_identity="$(ps -o ppid=,lstart=,comm= -p "$reader_pid" 2>/dev/null)" \
+    || reader_identity=''
   IFS= read -r -d '' -t 1 snapshot <&8
   read_rc=$?
   exec 8<&-
   if [ "$read_rc" -ne 0 ]; then
-    kill "$reader_pid" 2>/dev/null || true
+    # Bash 3.2 的 timeout 与 EOF 都可能返回 1，不能靠状态码区分。只有当前 PID 的启动 identity
+    # 仍与创建 reader 时完全一致，才按 timeout 清理；worker 已退出的 EOF 不触碰可能复用的 PID。
+    current_reader_identity="$(ps -o ppid=,lstart=,comm= -p "$reader_pid" 2>/dev/null)" \
+      || current_reader_identity=''
+    if [ -n "$reader_identity" ] && [ "$current_reader_identity" = "$reader_identity" ]; then
+      pipeline_hooks_config_kill_tree "$reader_pid" "$reader_identity" || true
+    else
+      wait "$reader_pid" 2>/dev/null || true
+    fi
     return 1
   fi
   PIPELINE_HOOKS_CONFIG_SNAPSHOT="$snapshot"
