@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Bot, FolderKanban, GitBranch, Moon, ScanLine, Settings, SlidersHorizontal, Sun, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bot, FolderKanban, GitBranch, Monitor, Moon, ScanLine, Settings, SlidersHorizontal, Sun, type LucideIcon } from 'lucide-react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
 import { Icon } from './Icon'
@@ -16,6 +16,7 @@ import { Icon } from './Icon'
  * 窄屏（<720px）收为纯图标窄列。
  */
 export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
+export type ThemePreference = 'system' | 'light' | 'dark'
 
 /** rail 竖排渲染的一级导航项——显式枚举白名单，顺序=项目/进度/AFK/工作台/机器。 */
 export type RailView = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
@@ -35,8 +36,8 @@ interface NavProps {
   onView: (v: View) => void
   lang: Lang
   onLang: (l: Lang) => void
-  theme: 'light' | 'dark'
-  onTheme: (t: 'light' | 'dark') => void
+  theme: ThemePreference
+  onTheme: (t: ThemePreference) => void
   connected: boolean
   /** 待拍板徽标数（在等你决定的 change 数，currentRoot 语境）——收件箱退役后挂在「进度」导航项上。 */
   decisionCount: number
@@ -47,14 +48,46 @@ interface NavProps {
 // ── tailwind 类串（状态经 aria-current / data-* 属性挂 aria-*/data-* 变体，测试不断言视觉类名）──
 /** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏收为纯图标。 */
 const RAIL_BTN_CLS =
-  'group relative flex w-[72px] cursor-pointer flex-col items-center gap-[3px] rounded-[10px] border border-transparent px-0.5 pb-1.5 pt-2 text-text-3 transition-colors hover:bg-fill hover:text-text max-[720px]:w-10 max-[720px]:px-0'
+  'group relative flex w-[72px] cursor-pointer flex-col items-center gap-[3px] rounded-[10px] border border-transparent px-0.5 pb-1.5 pt-2 text-text-3 outline-none transition-colors motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:size-11 max-[720px]:justify-center max-[720px]:p-0'
 /** rail 按钮小字标签（demo .railbtn .lb 对位）；窄屏隐藏（textContent 仍在，仅视觉收起）。 */
 const RAIL_LB_CLS = 'max-w-full truncate text-[11px] leading-[1.2] max-[720px]:hidden'
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null)
+  const settingsPanelRef = useRef<HTMLElement>(null)
   // 在线/离线 短标签：title 走既有 common.connected/common.offline 键；短标签内联双语。
   const connLabel = connected ? (lang === 'zh' ? '在线' : 'Live') : lang === 'zh' ? '离线' : 'Offline'
+  const nextTheme: ThemePreference = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system'
+  const themeLabel = theme === 'system' ? t('common.theme_system') : theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const panel = settingsPanelRef.current
+    const focusable = panel?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')
+    focusable?.[0]?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSettingsOpen(false)
+        settingsTriggerRef.current?.focus()
+        return
+      }
+      if (event.key !== 'Tab' || !focusable || focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [settingsOpen])
 
   return (
     <header
@@ -67,7 +100,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
         data-testid="nav-overview"
         aria-label={t('solution.nav_label')}
         aria-current={view === 'overview' ? 'page' : undefined}
-        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-[11px] border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent)"
+        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-[11px] border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) max-[720px]:size-11"
         title={t('solution.nav_label')}
         onClick={() => {
           setSettingsOpen(false)
@@ -87,6 +120,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
               key={v}
               type="button"
               data-testid={`nav-${v}`}
+              aria-label={t(`nav.${v}`)}
               aria-current={view === v ? 'page' : undefined}
               title={t(`nav.${v}`)}
               className={`${RAIL_BTN_CLS} aria-[current=page]:border-border-2 aria-[current=page]:bg-fill aria-[current=page]:font-bold aria-[current=page]:text-text`}
@@ -124,7 +158,9 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
       <div className="relative flex flex-none flex-col items-center">
         <button
           type="button"
+          ref={settingsTriggerRef}
           data-testid="nav-settings"
+          aria-label={t('common.settings')}
           aria-expanded={settingsOpen}
           aria-haspopup="dialog"
           className={`${RAIL_BTN_CLS} aria-[expanded=true]:border-border-2 aria-[expanded=true]:bg-fill aria-[expanded=true]:font-bold aria-[expanded=true]:text-text`}
@@ -136,7 +172,9 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
         {settingsOpen && (
           <section
+            ref={settingsPanelRef}
             role="dialog"
+            aria-modal="false"
             aria-label={t('common.settings')}
             data-testid="nav-settings-panel"
             className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/95 p-3.5 text-left shadow-[0_18px_55px_rgba(15,23,42,.2)] backdrop-blur-2xl"
@@ -156,17 +194,17 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:min-h-11"
                 data-testid="theme-toggle"
                 aria-label={t('common.theme_toggle')}
-                onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
+                onClick={() => onTheme(nextTheme)}
               >
-                {theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
-                {theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')}
+                {theme === 'system' ? <Monitor className="h-4 w-4" aria-hidden="true" /> : theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+                {themeLabel}
               </button>
               <button
                 type="button"
-                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) max-[720px]:min-h-11"
                 data-testid="lang-toggle"
                 onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
               >

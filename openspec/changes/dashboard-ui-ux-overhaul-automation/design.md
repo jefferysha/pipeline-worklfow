@@ -7,6 +7,11 @@
 - 动画仅服务空间关系、因果与反馈，并统一遵守 `prefers-reduced-motion`。
 - 原首个实现候选 `shell/AppHeader.tsx` 经生产调用链复核为不可达死代码，已通过 `requirements-changed` 回退 Spec。
 - 修订后的首个切片选择生产可达且不与 PR #5–#8 重叠的 `solution/SolutionView.tsx`，为七章节长页面增加页内定位、键盘焦点和移动触控体验。
+- 第一次 Verify 证明首切片不足以满足 Dashboard-wide MUST，并发现移动 rail 34px、设置入口无
+  accessible name、Button 消费者矩阵证据不足和设计文档生命周期漂移；Change 已按
+  `verify-fail → build → requirements-changed → spec` 路径返回修订。
+- 第二批以系统基线闭环：accent 主动作 token、system/light/dark 主题、Nav 与设置焦点语义、
+  共享交互原语、空态/错误恢复触控目标和全局 reduced-motion 终态。
 - 浏览器基线、方案比较和红队自检记录在 `docs/research/2026-07-28-dashboard-ui-ux-overhaul-automation-audit.md` 与 `docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automation-design.md`。
 
 ## 风险
@@ -16,9 +21,12 @@
 - PR #5–#8 已触及 App、Nav、i18n、progress、workbench、shared 与 API 等大量文件，存在合并冲突风险。
 - 动效若缺少清理或降级可能影响性能与可访问性。
 - SolutionView 在移动视口形成接近九千像素的长页面；导航若不保持横向可滚动、44px 目标和明确焦点，可能把定位问题转化为新的可用性问题。
+- system theme、hash 与 dialog keydown 各有一个受条件约束的 listener，必须在偏好变化、关闭或卸载时清理。
 
 ## 待验证问题
 
 - PR #5–#8 的 review/CI/合并状态；后续每轮必须复核。
-- SolutionView 首切片完成后，下一组无冲突 primitive/状态组件应由新的 overlap 与浏览器证据选择。
-- `/api/stream` 在一次 reload 中出现瞬时连接拒绝，需在 Verify 复核是否为生命周期噪声或真实缺陷。
+- PR #5 与 App/Nav/i18n/Solution 存在已知文件重叠；本 Change 不复用其 state 或提交、不 force push，
+  并以独立整改提交保留可选合并/回滚边界。
+- 第二次 Verify 必须重新覆盖完整 diff、真实 zero-project 空态、受控 snapshot/stream 故障恢复、
+  system 主题变化、设置焦点圈定和 reduced-motion。

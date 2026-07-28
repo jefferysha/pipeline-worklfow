@@ -36,22 +36,23 @@ design-doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automatio
 
 ## Build 子阶段 2：共享交互原语
 
-1. 重新检查并行分支文件重叠与子阶段 1 浏览器结果。
-2. 审计 `packages/dashboard-app/src/components/ui/{button,input,card,badge}.tsx` 的真实消费者，并排除已被其他 PR 修改的调用方。
-3. 只对已有两个以上消费者的原语统一 focus、disabled、loading、invalid、touch target 与 reduced-motion。
-4. 为每个修改原语补相邻测试或消费者组件测试。
-5. 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web`、`npm run build:web` 与浏览器视觉回归。
-6. 回滚时按 primitive 独立提交回退。
+1. 已重新检查 PR #5–#9；PR #5 与 App/Nav/i18n/Solution 有文件重叠，其余开放 PR 无本批核心
+   UI 实现重叠。重叠作为合并风险记录，不复用其 Change 或提交。
+2. 已审计 `components/ui` 的 Button、Input、Select、Dialog、DropdownMenu、Tabs、Badge、Table
+   与 Tooltip，并统一移动触控和 reduced-motion 基线。
+3. 已补 Button 全尺寸矩阵和设计系统源码契约测试；明确 `xs` 是紧凑例外。
+4. 已用 390×844 reduced-motion 真实浏览器验证 Nav、设置弹层、Onboarding 与错误恢复目标。
 
 **此处建议 /clear**
 
 ## Build 子阶段 3：功能域状态与视觉层级
 
-1. 根据最新 overlap 选择一个未冲突功能域，不跨域批量重写。
-2. 补齐 loading/error/empty/disabled/success、Lucide 图标、响应式与键盘路径。
-3. 新增可见文本时同步 `src/i18n/translations.ts` 中英文。
-4. 补组件测试与真实浏览器成功/失败/空态证据。
-5. 每个域单独提交并更新同一 PR，直至 OpenSpec 范围满足。
+1. 已将主动作从 success green 分离为 accent blue，并以 CSS 契约测试锁定浅/深主题语义。
+2. 已增加显式 system 主题偏好和系统主题实时响应；新增文案同步中英文。
+3. 已补 Nav 设置弹层的初始焦点、Tab/Shift+Tab 圈定、Escape 关闭与焦点返回。
+4. 已补移动 rail、离线恢复、快照错误重试和 Onboarding 的 44px、焦点与 reduced-motion 状态。
+5. 已通过真实零项目 API 验收 empty 状态，并通过受控中断 snapshot/stream 验收 error 与恢复路径；
+   UI fault injection 明确标注，不伪装为生产故障。
 
 **此处建议 /clear**
 

@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Button } from './button'
+import { Button, buttonVariants } from './button'
 
 afterEach(cleanup)
 
@@ -23,5 +23,16 @@ describe('Button 共享交互原语', () => {
       'disabled:cursor-not-allowed',
       'disabled:opacity-60',
     )
+  })
+
+  it('所有常规与图标尺寸在移动视口提供 44px 目标，明确紧凑尺寸保持例外', () => {
+    for (const size of ['default', 'sm', 'lg'] as const) {
+      expect(buttonVariants({ size })).toContain('max-[720px]:min-h-11')
+    }
+    for (const size of ['icon', 'icon-sm', 'icon-lg'] as const) {
+      expect(buttonVariants({ size })).toContain('max-[720px]:size-11')
+    }
+    expect(buttonVariants({ size: 'xs' })).not.toMatch(/max-\[720px\]:(?:min-h|size)-11/)
+    expect(buttonVariants({ size: 'icon-xs' })).not.toMatch(/max-\[720px\]:(?:min-h|size)-11/)
   })
 })

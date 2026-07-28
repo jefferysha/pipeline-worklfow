@@ -26,6 +26,10 @@
 - [x] SolutionView：完成桌面/移动、明暗主题、键盘与 reduced-motion 浏览器验收。
 - [x] 复核 PR #5–#8 overlap，并为多消费者 Button 原语补齐移动触控、disabled 与 reduced-motion 状态。
 - [x] 为 SolutionView 页内导航增加 URL hash 驱动的当前章节反馈与 `aria-current`。
+- [x] 修复第一次 Verify：移动 rail/设置 44×44、双语 accessible name、设置焦点圈定/Escape/返回。
+- [x] 将主动作与 success 语义分离，并支持 system/light/dark 三态主题及系统偏好实时变化。
+- [x] 统一高频共享原语、空态与恢复操作的 focus、disabled、touch target 和 reduced-motion 基线。
+- [x] 补齐 Button 尺寸矩阵、主题/导航生命周期与设计系统契约测试。
 
 ## 验证
 

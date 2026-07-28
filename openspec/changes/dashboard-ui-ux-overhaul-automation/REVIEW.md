@@ -113,3 +113,24 @@ dist、OpenSpec/Tenon 证据与浏览器截图，而不是只看最近一次 fin
   GSAP target warnings；本 diff 未修改对应文件或引入新失败。
 
 全量审查结论：Critical / High / Medium = 0 / 0 / 0；没有需要带入 Verify 的已知偏差。
+
+## Verify 第 1 轮失败与 Build 整改
+
+第一次 Verify 对冻结 SHA `a101dddcb79c2263fe691c1661b0be5316571d14` 给出 High 1 / Medium 3：
+Dashboard-wide 规格覆盖不足、设计文档与 hash listener 漂移、Button 尺寸矩阵证据不足、移动 rail
+为 34px 且设置入口无 accessible name。失败报告见
+`docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-1.md`。
+
+整改后逐项闭环：
+
+- Nav 品牌、五个主入口、设置入口在 390px 均为 44×44 且均有可访问名称。
+- 设置弹层具备初始焦点、Tab/Shift+Tab 圈定、Escape 关闭和触发器焦点返回。
+- Button 常规/图标尺寸矩阵均有测试；Input、Select、Tabs、Dialog、DropdownMenu 等共享原语补齐
+  移动触控与 reduced-motion 契约。
+- 主动作 token 使用 accent blue，不复用 success green；system 主题具备实时 media listener 和清理。
+- 设计、ADR 与计划准确描述 hash、media-query 和 dialog keydown listener 的生命周期。
+- 真实零项目 Dashboard 空态的全部可见操作均为 44px 且有名称；受控阻断 snapshot/stream 后，
+  `role=alert`、`aria-live=assertive` 和 44px 重试路径均可达。
+
+本轮 Build 复评：已知 Critical / High / Medium = 0 / 0 / 0；进入第二次 pre-Verify 前仍需完成
+全量测试、生产构建、截图与 Standards + Spec 审查。

@@ -37,3 +37,13 @@ reduced-motion 仍有缺口。并行 PR 已触及这些具体文件。原先选�
 - 优点：低冲突、可回滚、浏览器与测试证据边界清楚。
 - 代价：首批只解决概览长页面的定位与导航，需要后续自动运行持续扩展同一个 Change/PR。
 - 后续每轮必须重查远端 PR、并行 worktree 与当前文件 overlap，再选下一批。
+
+## 第一次 Verify 后的修订
+
+冻结的 OpenSpec 使用 Dashboard-wide MUST，而首批只覆盖 SolutionView 与 Button，Reviewer 因此给出
+High failure；E2E 同时发现移动 rail 34px 和无名设置按钮。Change 已按规则 Verify→Build 回退。
+
+本轮决定在同一 Change 内增加最小系统基线：accent 主动作 token、system 主题、Nav/设置键盘语义、
+共享交互原语、空态/错误恢复触控目标和全局 reduced-motion 终态。该修订不改变 API、业务规则或
+依赖。它与 PR #5 存在已知文件重叠，但不复用对方 Change/state、不 force push，并保持整改为独立
+提交，供合并时选择或回滚。

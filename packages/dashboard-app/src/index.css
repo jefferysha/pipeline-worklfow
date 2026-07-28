@@ -1,10 +1,9 @@
 /*
- * Tailwind v4 + shadcn 基座（全量迁移的真相源入口）。
- * 配色 token 三段式与 src/styles.ts GLOBAL_CSS 保持等值——一个色值都不许改：
+ * Tailwind v4 + shadcn 基座（Dashboard token 的单一真相源入口）。
+ * 配色 token 三段式：
  *   · 默认浅色（:root）；
  *   · @media (prefers-color-scheme: dark) 跟随系统（:root:not([data-theme="light"]) 令显式亮色仍胜系统暗色）；
  *   · :root[data-theme="light"] / :root[data-theme="dark"] 用户显式切换覆盖系统（两向皆胜）。
- * 迁移期与 styles.ts GLOBAL_CSS 共存（token 双写等值，视图迁完后 GLOBAL_CSS 退役）。
  */
 @import "tailwindcss";
 /* shadcn v4 惯例动效基座：animate-in/out、fade/zoom/slide-*（dialog/select/popover/tooltip/dropdown 进出场用）。 */
@@ -26,14 +25,14 @@
   --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
   /* v8 无 ink token——取 --text 同族近黑蓝对位；hover 提亮一档（旧 v4 #0d0d0d→#2e2e2c 同款步进） */
   --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
-  /* v8 主按钮=绿实底（demo .btn.solid-green）；hover 取 green-d（demo 暗一档 brightness(.94) 对位） */
-  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  /* 主动作使用 accent；green 只保留给 success/健康状态，避免动作与结果语义混用。 */
+  --btn-bg: var(--accent); --btn-fg: #ffffff; --btn-hover: var(--accent-d);
   --solid-fg: var(--btn-fg); /* 同义引用：--btn-fg 既有=「彩色实底上的前景」，即 demo --solid-fg */
   --code-bg: #f6f8fa; --code-border: #e5e8ec;
   --scrim: rgba(16,24,40,.34);
   --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
   --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
-  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
+  --ring: rgba(37,99,235,.12); --ring-blue: rgba(37,99,235,.12);
   --radius: 12px; --radius-sm: 8px;
   --nav-offset: 20px; /* v10b 外壳改左侧图标 rail 后无顶栏遮挡，仅留 20px 呼吸——WorkbenchView 右栏 sticky top 对齐用（外壳 agent 获准的唯一改动） */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -51,14 +50,13 @@
     --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
     --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
     --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
-    /* 暗态实底前景=近黑蓝（demo --solid-fg #0c111c）；hover 提亮（demo brightness(1.08) 对位） */
-    --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+    --btn-bg: var(--accent); --btn-fg: #0c111c; --btn-hover: var(--accent-d);
     --solid-fg: var(--btn-fg);
     --code-bg: #10151f; --code-border: #28303f;
     --scrim: rgba(0,0,0,.55);
     --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
     --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
-    --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
+    --ring: rgba(109,155,251,.16); --ring-blue: rgba(109,155,251,.16);
   }
 }
 :root[data-theme="light"] {
@@ -72,13 +70,13 @@
   --purple: #8b5cf6; --purple-d: #6d28d9; --purple-t: #f2edfe; --purple-b: #ded2fb;
   --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
   --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
-  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  --btn-bg: var(--accent); --btn-fg: #ffffff; --btn-hover: var(--accent-d);
   --solid-fg: var(--btn-fg);
   --code-bg: #f6f8fa; --code-border: #e5e8ec;
   --scrim: rgba(16,24,40,.34);
   --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
   --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
-  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
+  --ring: rgba(37,99,235,.12); --ring-blue: rgba(37,99,235,.12);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -91,13 +89,13 @@
   --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
   --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
   --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
-  --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+  --btn-bg: var(--accent); --btn-fg: #0c111c; --btn-hover: var(--accent-d);
   --solid-fg: var(--btn-fg);
   --code-bg: #10151f; --code-border: #28303f;
   --scrim: rgba(0,0,0,.55);
   --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
   --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
-  --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
+  --ring: rgba(109,155,251,.16); --ring-blue: rgba(109,155,251,.16);
 }
 
 /*
@@ -154,7 +152,7 @@
   --color-card-foreground: var(--text);
   --color-popover: var(--card);
   --color-popover-foreground: var(--text);
-  --color-primary: var(--green);
+  --color-primary: var(--btn-bg);
   --color-primary-foreground: var(--btn-fg);
   --color-secondary: var(--fill);
   --color-secondary-foreground: var(--text-2);
@@ -182,4 +180,25 @@
   --shadow-md: var(--shadow-2);
   --shadow-lg: var(--shadow-3);
   --shadow-xl: var(--shadow-3);
+}
+
+/*
+ * CSS 级 reduced-motion 兜底覆盖所有 Tailwind/tw-animate 与历史自定义 transition。
+ * GSAP 仍由 shared/motion 与各 useGSAP matchMedia 分支负责直达终态和 context 清理。
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0s !important;
+  }
 }

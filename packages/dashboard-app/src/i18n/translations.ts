@@ -191,6 +191,7 @@ export const zh: Dict = {
   },
   common: {
     settings: '设置',
+    theme_system: '系统',
     theme_dark: '深色',
     theme_light: '浅色',
     switch_to_english: 'English',
@@ -1446,6 +1447,7 @@ export const en: Dict = {
   },
   common: {
     settings: 'Settings',
+    theme_system: 'System',
     theme_dark: 'Dark',
     theme_light: 'Light',
     switch_to_english: 'English',

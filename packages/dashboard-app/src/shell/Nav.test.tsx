@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { Nav, PRIMARY_VIEWS } from './Nav'
 
@@ -61,6 +61,16 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     expect(nav.textContent).toContain('工作台')
     expect(nav.textContent).toContain('机器')
     expect(nav.textContent).not.toContain('收件箱')
+  })
+
+  it('移动 rail 的品牌、五个主入口与设置入口都声明 44px 目标和可见焦点', () => {
+    renderNav()
+    for (const id of ['nav-overview', ...PRIMARY_VIEWS.map((view) => `nav-${view}`), 'nav-settings']) {
+      const control = screen.getByTestId(id)
+      expect(control).toHaveClass('max-[720px]:size-11')
+      expect(control).toHaveClass('focus-visible:ring-[3px]', 'motion-reduce:transition-none')
+      expect(control).toHaveAccessibleName()
+    }
   })
 
   it('「项目」是 rail 首枚入口：nav-projects 渲染，点击触发 onView(projects)', () => {
@@ -157,6 +167,14 @@ describe('Nav 交互 + 徽标', () => {
     expect(props.onTheme).toHaveBeenCalledWith('dark')
   })
 
+  it('主题切换 system→light，并以双语可见文本呈现系统主题', () => {
+    const props = renderNav({ theme: 'system' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByTestId('theme-toggle')).toHaveTextContent('系统')
+    fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(props.onTheme).toHaveBeenCalledWith('light')
+  })
+
   it('decisionCount>0 徽标挂在「进度」项内显示计数（progress-badge）', () => {
     renderNav({ decisionCount: 4 })
     const badge = screen.getByTestId('progress-badge')
@@ -202,6 +220,26 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(conn).toHaveAttribute('title', '实时已连接')
     expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
     expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
+  })
+
+  it('设置 dialog 打开后聚焦首控件，Tab 困笼，Escape 关闭并归还触发器焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+    const theme = screen.getByTestId('theme-toggle')
+    const language = screen.getByTestId('lang-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    language.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(theme).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(language).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
   })
 
   it('离线状态只在设置浮层内呈现', () => {

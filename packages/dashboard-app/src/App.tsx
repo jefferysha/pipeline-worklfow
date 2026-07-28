@@ -6,7 +6,7 @@ import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
 import { ProgressView } from './progress/ProgressView'
 import { AfkView } from './afk/AfkView'
-import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
+import { Nav, PRIMARY_VIEWS, type ThemePreference, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
@@ -20,7 +20,6 @@ import { useProjectSelection } from './state/useProjectSelection'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
-type Theme = 'light' | 'dark'
 const THEME_KEY = 'tenon-dashboard-theme'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
@@ -29,19 +28,14 @@ const VIEW_KEY = 'tenon-dashboard-view'
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
 
-function initialTheme(): Theme {
+function initialTheme(): ThemePreference {
   try {
     const stored = localStorage.getItem(THEME_KEY)
-    if (stored === 'light' || stored === 'dark') return stored
+    if (stored === 'system' || stored === 'light' || stored === 'dark') return stored
   } catch {
     /* ignore */
   }
-  try {
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
-  } catch {
-    /* ignore */
-  }
-  return 'light'
+  return 'system'
 }
 
 function initialView(): View {
@@ -71,7 +65,7 @@ function AppShell(): JSX.Element {
   const [selectedChange, setSelectedChange] = useState<string | null>(() => {
     try { return parseDashboardLocation(window.location.search).change ?? null } catch { return null }
   })
-  const [theme, setThemeState] = useState<Theme>(initialTheme)
+  const [theme, setThemeState] = useState<ThemePreference>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
   const flashRef = useRef<HTMLDivElement>(null)
 
@@ -105,14 +99,24 @@ function AppShell(): JSX.Element {
   const rulesByKey = useMemo(() => workflowRulesFromSnapshot(snapshot), [snapshot])
 
   useEffect(() => {
-    try {
-      document.documentElement.dataset.theme = theme
-    } catch {
-      /* ignore */
+    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : undefined
+    const applyTheme = (): void => {
+      try {
+        document.documentElement.dataset.themePreference = theme
+        document.documentElement.dataset.theme = theme === 'system' ? (media?.matches ? 'dark' : 'light') : theme
+      } catch {
+        /* ignore */
+      }
     }
+    applyTheme()
+    if (theme !== 'system' || !media) return
+    media.addEventListener?.('change', applyTheme)
+    return () => media.removeEventListener?.('change', applyTheme)
   }, [theme])
 
-  const setTheme = useCallback((next: Theme) => {
+  const setTheme = useCallback((next: ThemePreference) => {
     setThemeState(next)
     try {
       localStorage.setItem(THEME_KEY, next)
@@ -184,7 +188,7 @@ function AppShell(): JSX.Element {
           <span className="flex-1">{t('common.offline')}</span>
           <button
             type="button"
-            className="cursor-pointer rounded-[7px] border border-red-b px-[11px] py-1 text-xs font-bold text-red-d transition-colors hover:bg-red-t"
+            className="touch-manipulation cursor-pointer rounded-[7px] border border-red-b px-[11px] py-1 text-xs font-bold text-red-d transition-colors hover:bg-red-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
             data-testid="offline-reconnect"
             onClick={reconnect}
           >
@@ -224,7 +228,7 @@ function AppShell(): JSX.Element {
             <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
             <button
               type="button"
-              className="mt-4 cursor-pointer rounded-lg border border-red-b bg-card px-3.5 py-2 text-[13px] font-bold text-red-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+              className="mt-4 touch-manipulation cursor-pointer rounded-lg border border-red-b bg-card px-3.5 py-2 text-[13px] font-bold text-red-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
               onClick={refresh}
             >
               {t('common.snapshot_retry')}

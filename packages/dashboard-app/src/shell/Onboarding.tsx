@@ -42,7 +42,7 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
       <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-text" data-testid={testid}>{cmd}</code>
       <button
         type="button"
-        className="inline-flex flex-none cursor-pointer items-center gap-1 whitespace-nowrap text-[11px] font-bold text-green hover:text-green-d"
+        className="inline-flex flex-none touch-manipulation cursor-pointer items-center gap-1 rounded-md px-2 whitespace-nowrap text-[11px] font-bold text-green transition-colors hover:text-green-d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
         data-testid={copyTestid}
         onClick={copy}
       >
@@ -79,7 +79,7 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
         <p className={EMPTY_DESC_CLS}>{t('onboard.no_change_desc')}</p>
         <button
           type="button"
-          className="mb-4 inline-flex items-center justify-center rounded-lg bg-btn-bg px-4 py-2 text-xs font-bold text-btn-fg hover:bg-btn-hover"
+          className="mb-4 inline-flex touch-manipulation items-center justify-center rounded-lg bg-btn-bg px-4 py-2 text-xs font-bold text-btn-fg transition-colors hover:bg-btn-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none max-[720px]:min-h-11"
           data-testid="onboard-new-change"
           onClick={() => setCreateOpen(true)}
         >

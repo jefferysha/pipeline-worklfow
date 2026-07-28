@@ -14,8 +14,8 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
 - 沿用 React 18、Vite 5、Radix、Tailwind 4、CVA、Lucide 和 GSAP。
 - 不修改服务端契约、业务规则、生产状态或真实用户数据。
 - 新可见文案必须中英文同步；首切片不新增文案。
-- 不与 `/Users/a1234/.codex/worktrees/pipeline-worklfow-dashboard-ui-ux` 的在途文件制造直接冲突。
-- 本 Change 不在一次 Build 中重写整个 Dashboard。
+- 不复用其他 automation 的 Change、分支、worktree 或 canonical state；发现重叠时记录并保持提交可独立回滚。
+- 不升级依赖、不改业务规则，也不以一次性组件重写替换现有 Dashboard。
 
 ## 方案比较
 
@@ -62,6 +62,23 @@ Dashboard 需要在高密度治理信息中保持清晰、稳定、可操作。�
 章节定位不引入平滑滚动或 GSAP。默认和 `prefers-reduced-motion: reduce` 都使用浏览器原生
 即时锚点行为；hover/focus 只使用既有颜色反馈，并提供 `motion-reduce:transition-none`。
 
+## Verify-fail 后的系统基线修复
+
+第一次 Verify 证明仅交付 SolutionView 与 Button 无法满足已冻结的 Dashboard-wide MUST。返回 Build
+后采用有限、可验证的系统基线，而非继续增加装饰：
+
+- `index.css` 保持唯一 token 真相源：主动作使用 accent blue，success green 只表达成功；浅色、深色
+  和 system 主题保持同一语义映射。
+- App 将主题偏好明确建模为 `system | light | dark`。system 使用
+  `matchMedia('(prefers-color-scheme: dark)')` 解析，并在系统主题变化时更新；离开 system 或卸载时清理 listener。
+- Nav 的品牌、五个主入口与设置入口在移动端均为 44×44px，并具有双语 accessible name；
+  设置弹层在打开时聚焦首控件，Tab/Shift+Tab 圈定焦点，Escape 关闭并把焦点返回触发器。
+- Button、Input、Select、Tabs、Dialog、DropdownMenu 等共享交互原语统一可见焦点、禁用辨识、
+  移动触控基线和 reduced-motion 终态；明确紧凑的 `xs` Button 仍作为例外变体保留。
+- App 的离线恢复、快照错误重试和 Onboarding 复制/创建操作使用相同触控与焦点基线。
+- 全局 reduced-motion 媒体查询把 CSS animation/transition 和平滑滚动直接置于终态；
+  已有 GSAP 继续由各组件的 context/revert 生命周期负责清理。
+
 ## 状态与边界
 
 ```mermaid
@@ -74,7 +91,8 @@ stateDiagram-v2
 
 - SolutionView 仍为纯展示域，不读取 API、snapshot 或运营功能域状态。
 - 原生锚点即使 CSS/backdrop 不可用仍可完成定位。
-- App、Nav、API、model、state 和 i18n 边界不变。
+- App 只负责外壳主题偏好、快照状态和功能域路由；Nav 只负责导航与设置交互；model/state/API
+  边界和业务规则不变。
 
 ## 错误语义
 
@@ -84,8 +102,11 @@ stateDiagram-v2
 
 ## 性能与清理
 
-- 不新增监听器、observer、常驻状态或动画。
-- 章节配置为静态域内数据；导航不触发 React 状态更新。
+- Solution 章节配置仍为静态域内数据；`SolutionSectionNav` 只维护 URL hash 派生的
+  `currentSection`，注册一个 `hashchange` listener 并在卸载时移除。
+- system 主题只在偏好为 system 时注册一个 media-query `change` listener，并在偏好变化或卸载时移除。
+- 设置弹层的 keydown listener 只在打开期间存在，关闭或卸载时清理。
+- 不新增 observer、定时动画或常驻 GSAP timeline。
 - 根容器使用横向裁剪而非双轴 `overflow-hidden`，保留 sticky 的纵向滚动语义。
 
 ## 依赖与安全
@@ -105,7 +126,10 @@ stateDiagram-v2
 2. AppHeader 因无生产消费者被否决，不以“文件无冲突”替代“用户可见”证据。
 3. 修订首切片选 SolutionView，原因是生产可达、无直接文件冲突，并有 8,981px 长页面定位问题。
 4. 章节导航使用原生锚点与 reduced-motion 即时终态，不为简单因果引入 GSAP。
-5. 全局 primitive 统一留到后续切片，需先统计消费者和建立视觉回归基线。
+5. 第一次 Verify 的 High/Medium 结果要求在同一 Change 内补齐系统基线；因此第二批覆盖 token、
+   system 主题、Nav/设置键盘语义、共享交互原语和可恢复状态。
+6. 与 PR #5 的文件重叠被记录为集成风险；本分支不复用其 Change/state、不强推覆盖，所有修复保持
+   独立提交并在 PR 中声明可按提交回滚。
 
 ## 红队自检
 
