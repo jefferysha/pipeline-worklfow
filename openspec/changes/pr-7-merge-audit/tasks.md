@@ -26,7 +26,7 @@
 - [x] 完成 Dashboard 第一次 `design-taste-frontend`、修复和第二次复审，覆盖主题/语言/三视口/键盘/focus/reduced-motion。
 - [x] 运行全部定向、前后端全仓、生成物、hooks/adapters/skills/bundle/CAS/oracle/OpenSpec/hygiene 门禁。
 - [x] 完成 pre-Verify Spec、Rules/Architecture/Security、Dashboard visual 复审，修复所有 C/H/M。
-- [ ] 提交、普通推送并取得精确 head CI；登记 `pre_verify_review_result=pass`。
+- [x] 提交、普通推送并取得精确 head CI；登记 `pre_verify_review_result=pass`。
 
 ## 验证
 
