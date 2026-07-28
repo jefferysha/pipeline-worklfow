@@ -260,7 +260,7 @@ export function OrchestrationSkillZone({
                                   )
                                 })
                               ) : (
-                                <span className="mx-0.5 text-[13px] text-text-3">{t('workbench.board_skills_empty')}</span>
+                                <span className="mx-0.5 text-[13px] text-text-3" role="status" aria-live="polite">{t('workbench.board_skills_empty')}</span>
                               )}
                             </div>
                             {dupWarn === lane.id && (

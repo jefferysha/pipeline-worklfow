@@ -245,7 +245,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
       />
 
       {snapshot === null ? (
-        <p className="text-[14px] text-text-3">{t('common.loading')}</p>
+        <p className="text-[14px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
       ) : (
         <div className="flex flex-col gap-7">
           {needRows.length > 0 && (

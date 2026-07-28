@@ -193,7 +193,7 @@ export function ExecutionTimelineComposer({
             <TimelineHookNodes events={EVENT_ORDER.slice(0, 2)} stageId={selected.id} config={hooks} readonly={readonly} />
 
             <div className="relative mb-2 rounded-2xl border border-accent-b bg-accent-t/35 p-4 shadow-[0_8px_28px_-24px_var(--accent)]" data-testid="wb-timeline-node-codex">
-              <span className="absolute top-4 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-(--accent) bg-(--accent) text-white">
+              <span className="absolute top-4 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-(--accent) bg-(--accent) text-btn-fg">
                 <Braces className="h-4 w-4" aria-hidden="true" />
               </span>
               <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -247,7 +247,7 @@ export function ExecutionTimelineComposer({
                     />
                   )}
                   <div className="rounded-xl bg-card px-3 shadow-sm ring-1 ring-border">
-                  {skills.length === 0 && <p className="py-5 text-center text-sm text-text-3">此阶段尚未配置 Skill</p>}
+                  {skills.length === 0 && <p className="py-5 text-center text-sm text-text-3" role="status" aria-live="polite">此阶段尚未配置 Skill</p>}
                   {skills.map((skillId) => {
                     const entry = registryByName.get(skillId)
                     const presentation = skillPresentation(skillId, skillRegistry)
@@ -275,7 +275,7 @@ export function ExecutionTimelineComposer({
                         onDragEnd={() => { setDraggingSkill(null); setSkillDrop(null) }}
                       >
                         {!readonly && onSkillMove && <GripVertical className="h-5 w-5 flex-none cursor-grab text-text-3 active:cursor-grabbing" aria-hidden="true" />}
-                        <span className={`h-2.5 w-2.5 flex-none rounded-full ${deps.length > 0 ? 'bg-(--accent)' : 'bg-green'}`} aria-hidden="true" />
+                        <span className={`h-2.5 w-2.5 flex-none rounded-full ${deps.length > 0 ? 'bg-(--accent)' : 'bg-border-2'}`} aria-hidden="true" />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span data-testid={`wb-lane-sk-${selected.id}-${skillId}`} className="text-[13px] font-semibold text-text" title={presentation.technicalTitle}>{presentation.name}</span>
@@ -316,7 +316,7 @@ export function ExecutionTimelineComposer({
               <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
                 <h3 className="w-32 flex-none text-sm font-semibold text-text">检查结果</h3>
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-t px-2.5 py-1.5 text-xs font-semibold text-green-d"><ShieldCheck className="h-4 w-4" aria-hidden="true" />安全边界 · 已启用</span>
-                <span className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${selected.nonemptyGuard ? 'bg-green-t text-green-d' : 'bg-fill text-text-3'}`}><Check className="h-4 w-4" aria-hidden="true" />产出检查 · {selected.nonemptyGuard ? '按运行结果校验' : '由 Agent 判断'}</span>
+                <span className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${selected.nonemptyGuard ? 'bg-accent-t text-accent-d' : 'bg-fill text-text-3'}`}><Check className="h-4 w-4" aria-hidden="true" />产出检查 · {selected.nonemptyGuard ? '按运行结果校验' : '由 Agent 判断'}</span>
               </div>
               <div data-testid={`wb-lane-outs-${selected.id}`} className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
                 <span className="mr-1 text-xs font-semibold text-text-2">运行时产出</span>
@@ -329,7 +329,7 @@ export function ExecutionTimelineComposer({
                   </span>
                   )
                 })}
-                {selected.outputs.length === 0 && <span className="rounded-lg bg-fill px-2.5 py-1.5 text-xs text-text-3">当前没有预设类型</span>}
+                {selected.outputs.length === 0 && <span className="rounded-lg bg-fill px-2.5 py-1.5 text-xs text-text-3" role="status" aria-live="polite">当前没有预设类型</span>}
               </div>
             </div>
 

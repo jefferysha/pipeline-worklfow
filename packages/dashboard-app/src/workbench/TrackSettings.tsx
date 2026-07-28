@@ -56,7 +56,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   const [routePreview, setRoutePreview] = useState<WbRouterPreview | null>(null)
   const [routePreviewBusy, setRoutePreviewBusy] = useState(false)
   const [routePreviewError, setRoutePreviewError] = useState('')
-  const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-green focus-visible:outline-none disabled:opacity-60'
+  const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
 
   function openCreate(): void {
     const template = state.tracks.find((track) => track.id === 'frontend') ?? state.tracks[0]
@@ -224,7 +224,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
           </div>
           {editor && (
             <form
-              className="mb-3 rounded-xl border border-green-b bg-green-t/35 p-3"
+              className="mb-3 rounded-xl border border-accent-b bg-accent-t/35 p-3"
               data-testid="wb-track-editor"
               onSubmit={(event) => { event.preventDefault(); void saveTrack() }}
             >

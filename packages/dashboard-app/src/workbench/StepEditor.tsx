@@ -172,7 +172,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
         </div>
         <div className="flex flex-wrap items-center gap-2" data-testid="wb-ed-outputs">
           {step.outputs.length === 0 && !adding && (
-            <span className="text-[12.5px] text-text-3">{t('workbench.ed_outputs_empty')}</span>
+            <span className="text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.ed_outputs_empty')}</span>
           )}
           {step.outputs.map((o) => (
             <span
@@ -225,7 +225,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
             </button>
           ))}
         </div>
-        {addError && <p className="mt-1.5 p-5 text-[13px] text-red">{addError}</p>}
+        {addError && <p className="mt-1.5 p-5 text-[13px] text-red" role="alert">{addError}</p>}
         <div className={`${SWITCHROW} mt-2.5`}>
           <button
             type="button"

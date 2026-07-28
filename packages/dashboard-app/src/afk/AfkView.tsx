@@ -345,6 +345,8 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
           className="rounded-xl border border-dashed border-border bg-card px-5 py-10 text-center text-[13px] text-text-3"
           data-anim="afk-card"
           data-testid="afk-empty"
+          role="status"
+          aria-live="polite"
         >
           当前没有自动运行任务
         </p>
@@ -436,7 +438,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                     return (
                       <div key={step} className="flex min-w-0 flex-1 items-start">
                         <div className="min-w-[56px] flex-none text-center">
-                          <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${done ? 'border-green bg-green text-white' : here && selectedState === 'failed' ? 'border-red bg-card text-red' : here ? 'border-(--accent) bg-(--accent) text-white' : 'border-border-2 bg-card text-text-3'}`}>
+                          <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${done ? 'border-green bg-green text-btn-fg' : here && selectedState === 'failed' ? 'border-red bg-card text-red-d' : here ? 'border-(--accent) bg-(--accent) text-btn-fg' : 'border-border-2 bg-card text-text-3'}`}>
                             {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
                           </span>
                           <span className="mt-2 block text-xs font-semibold text-text">{phaseLabel(step, selectedRules?.labelByStep, t)}</span>
@@ -455,7 +457,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                   <div className="flex gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-red" aria-hidden="true" />
                     <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-text">验证未通过：{selectedFailure}</h3><p className="mt-1 text-xs leading-5 text-text-3">修复问题后，先查看本次重试会做什么，再重新运行验证。</p></div>
-                    <button type="button" className="min-h-9 flex-none rounded-lg bg-(--accent) px-3 text-xs font-semibold text-white shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>查看重试预览</button>
+                    <button type="button" className="min-h-9 flex-none rounded-lg bg-(--accent) px-3 text-xs font-semibold text-btn-fg shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>查看重试预览</button>
                   </div>
                 </section>
               )}
@@ -537,7 +539,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                 type="button"
                 data-testid={`afk-retry-confirm-${retryPreviewName}`}
                 disabled={actionBusy !== null}
-                className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-white disabled:opacity-50 max-[760px]:flex-1"
+                className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-btn-fg disabled:opacity-50 max-[760px]:flex-1"
                 onClick={() => {
                   const name = retryPreviewName
                   void runAction(`retry:${name}`, name, () => postAfkRetry(name, currentRoot), 'afk.retry_ok')

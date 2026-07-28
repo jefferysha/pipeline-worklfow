@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, Circle, CircleDot, Clock3, X, type LucideIcon } from 'lucide-react'
+import { Check, ChevronRight, Circle, CircleDot, Clock3, X, type LucideIcon } from 'lucide-react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
@@ -190,7 +190,8 @@ export function TaskDetail({
             )}
             {lastError !== '' && (
               <details className="group mt-[11px]" data-testid="dt8-rawfold">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-[12.5px] font-semibold text-text-2 outline-none before:text-[10px] before:text-text-3 before:transition-transform before:content-['▸'] group-open:before:rotate-90 focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-[12.5px] font-semibold text-text-2 outline-none focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3 flex-none text-text-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" strokeWidth={1.75} aria-hidden="true" />
                   {t('detail.raw_error_summary')}
                 </summary>
                 <pre
@@ -245,7 +246,7 @@ export function TaskDetail({
           data-tone={v.bad ? 'bad' : 'ok'}
           data-testid="dt-verdict"
         >
-          <VerdictIcon className={`size-3.5 flex-none ${v.icon === Check ? 'text-green' : ''}`} strokeWidth={1.75} aria-hidden="true" />
+          <VerdictIcon className={`size-3.5 flex-none ${v.icon === Check ? 'text-green-d' : ''}`} strokeWidth={1.75} aria-hidden="true" />
           {v.text}
         </div>
         {chips.length > 0 ? (
@@ -302,7 +303,7 @@ export function TaskDetail({
                   key={st.step}
                 >
                   <span className={`${nodeBaseCls} ${nodeToneCls[status]}`} aria-hidden="true">
-                    {status === 'done' ? <Check className="size-2.5" strokeWidth={2} /> : status === 'fail' ? <X className="size-2.5" strokeWidth={2} /> : null}
+                    {status === 'done' ? <Check className="size-2.5" strokeWidth={1.75} /> : status === 'fail' ? <X className="size-2.5" strokeWidth={1.75} /> : null}
                   </span>
                   <div className={chipRowCls}>
                     <span className={`text-[13px] ${stageNameCls[status]}`}>{stageLabel(st.step)}</span>
@@ -335,7 +336,7 @@ export function TaskDetail({
                           data-testid={`dtl-todo-${st.step}-${taskIndex}`}
                           key={`${taskIndex}-${task.text}`}
                         >
-                          {task.completed ? <Check className="mt-0.5 size-3 flex-none" aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" aria-hidden="true" />}
+                          {task.completed ? <Check className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" />}
                           <span>{task.text}</span>
                         </li>
                       ))}

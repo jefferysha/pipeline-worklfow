@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+import { Check } from 'lucide-react'
 import { useT } from '../i18n'
 import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
@@ -57,7 +58,7 @@ gsap.registerPlugin(useGSAP)
  *     机器人 Bot / 终端 Terminal）+ AFK/沙箱极轻 accent tint 区分；小卡点击=openDrawer。归档不
  *     失联：带归档的相位小站点开 = 站台线下方只读列出该相位归档 change。
  *
- * 判定徽章语义（rowSemantics 同源，抽屉徽章消费）：gate=「✓ 可以放行」绿 /「等你判断」红；
+ * 判定徽章语义（rowSemantics 同源，抽屉徽章消费）：gate=结构化 Check 图标 +「可以放行」绿 /「等你判断」红；
  * failed=「失败 ×N · 等你决定」红（cause=cancelled → 琥珀「已取消」）；running=蓝「{phase}
  * 运行中」；排队/等产出=中性。状态一律 data-*（data-state/data-pulse/data-sbx），测试断言
  * data/aria/testid 不断言视觉类名。
@@ -449,6 +450,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         {(b.tone === 'red' || b.tone === 'blue' || b.tone === 'amb') && (
           <span className="h-1.5 w-1.5 rounded-full bg-current" data-pulse={b.tone === 'blue' || undefined} aria-hidden="true" />
         )}
+        {b.tone === 'green' && <Check className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
         {b.text}
       </span>
     )
@@ -502,15 +504,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         onCreate={() => setCreateOpen(true)}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" data-testid="prg-error">{error}</p>}
-      {loading && !snapshot && <p className="py-2 text-[13px] text-text-3">{t('common.loading')}</p>}
+      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
       {snapshot && flatRows.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" data-testid="prg-empty">
+        <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>
       )}

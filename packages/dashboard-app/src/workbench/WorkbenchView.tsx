@@ -514,7 +514,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
           />
         </>
       )}
-      {!def && !defError && <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>}
+      {!def && !defError && <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
       {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} />}
       {skillEditorOpen && selectedLane && (
         <SkillOrchestrationDialog

@@ -120,9 +120,9 @@ export function SkillOrchestrationDialog({
           </label>
           <div className="mt-3 max-h-[505px] space-y-2 overflow-y-auto pr-1">
             {registry === null || registry === undefined ? (
-              <p className="rounded-xl bg-fill p-4 text-sm text-text-3">技能库正在读取，暂时不能添加。</p>
+              <p className="rounded-xl bg-fill p-4 text-sm text-text-3" role="status" aria-live="polite">技能库正在读取，暂时不能添加。</p>
             ) : library.length === 0 ? (
-              <p className="rounded-xl bg-fill p-4 text-sm text-text-3">没有符合条件的可用技能。</p>
+              <p className="rounded-xl bg-fill p-4 text-sm text-text-3" role="status" aria-live="polite">没有符合条件的可用技能。</p>
             ) : library.map((entry) => {
               const presentation = skillPresentation(entry.name, registry)
               const canDrag = !readonly && entry.installed && Boolean(onAdd)
@@ -154,7 +154,7 @@ export function SkillOrchestrationDialog({
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-text">{presentation.name}</h3>
                       <p className="mt-1 text-xs leading-5 text-text-3">{presentation.description}</p>
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-text-3"><span>{sourceName(entry.source)}</span><span>·</span><span className={entry.installed ? 'text-green' : 'text-amb-d'}>{entry.installed ? '已安装' : '未安装'}</span></div>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-text-3"><span>{sourceName(entry.source)}</span><span>·</span><span className={entry.installed ? 'text-green-d' : 'text-amb-d'}>{entry.installed ? '已安装' : '未安装'}</span></div>
                     </div>
                     {canDrag && <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-accent-d opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">拖入计划 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>}
                   </div>
@@ -222,7 +222,7 @@ export function SkillOrchestrationDialog({
                   >
                     <div className="flex items-center gap-3">
                       <GripVertical className="h-5 w-5 flex-none cursor-grab text-text-3 active:cursor-grabbing" aria-hidden="true" />
-                      <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-(--accent) font-mono text-xs font-bold text-white shadow-sm">{index + 1}</span>
+                      <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-(--accent) font-mono text-xs font-bold text-btn-fg shadow-sm">{index + 1}</span>
                       <div className="min-w-0 flex-1"><h3 className="font-semibold text-text">{presentation.name}</h3><p className="mt-0.5 text-xs text-text-3">{presentation.description}</p></div>
                       <div className="inline-flex rounded-xl bg-fill p-1" role="group" aria-label={`${skillId} 的执行方式`}>
                         <button type="button" aria-label={`${skillId} 与其他技能并行`} aria-pressed={mode === 'parallel'} disabled={readonly || !onDependencyChange} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-text-3 transition aria-pressed:bg-card aria-pressed:text-accent-d aria-pressed:shadow-sm" onClick={() => setExecutionMode(skillId, index, 'parallel')}>并行</button>
@@ -251,7 +251,7 @@ export function SkillOrchestrationDialog({
           </ol>
         </section>
       </div>
-      <div className="mt-4 flex justify-end"><button type="button" className="min-h-10 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-white hover:brightness-95" onClick={onClose}>完成</button></div>
+      <div className="mt-4 flex justify-end"><button type="button" className="min-h-10 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-btn-fg hover:brightness-95" onClick={onClose}>完成</button></div>
     </Dialog>
   )
 }

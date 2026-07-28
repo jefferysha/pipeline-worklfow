@@ -70,7 +70,7 @@ export function ProgressToolbar({
                   onClick={() => onDeckTab(tab)}
                 >
                   {t(`progress.tab_${tab}`)}
-                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tab}`}>
+                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-btn-fg" data-testid={`prg9t-n-${tab}`}>
                     {deckCounts[tab]}
                   </span>
                 </button>

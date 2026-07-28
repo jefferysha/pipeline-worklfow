@@ -308,7 +308,7 @@ export function OrchestrationBoard({
           </div>
           {onAddStage && <button
             type="button"
-            className="mt-1.5 grid min-h-[190px] w-max flex-none cursor-pointer place-items-center self-start rounded-2xl border-[1.5px] border-dashed border-border-2 px-6 text-[14px] font-bold whitespace-nowrap text-text-3 transition-colors duration-150 enabled:hover:border-green-b enabled:hover:bg-card enabled:hover:text-green-d disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1.5 grid min-h-[190px] w-max flex-none cursor-pointer place-items-center self-start rounded-2xl border-[1.5px] border-dashed border-border-2 px-6 text-[14px] font-bold whitespace-nowrap text-text-3 transition-colors duration-150 enabled:hover:border-accent-b enabled:hover:bg-accent-t enabled:hover:text-accent-d disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onAddStage}
           >
             {t('workbench.add_stage')}

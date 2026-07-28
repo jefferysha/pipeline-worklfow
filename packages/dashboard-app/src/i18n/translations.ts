@@ -190,6 +190,7 @@ export const zh: Dict = {
     risk_skill_bundle_missing: '未配置技能包',
   },
   common: {
+    skip_to_main: '跳到主要内容',
     settings: '设置',
     theme_dark: '深色',
     theme_light: '浅色',
@@ -226,7 +227,7 @@ export const zh: Dict = {
     },
     // ── T9 v5 master-detail：结论式 badge 三态 + 人话 lead（demo 三情形口径）+ 动作条文案
     //    （决议 #13：以 demo v5 为唯一口径；「阶段」（旧措辞已废））──
-    badge_pass: '✓ 可以放行',
+    badge_pass: '可以放行',
     badge_judge: '等你判断',
     badge_failed: '失败 ×{n} · 等你决定',
     badge_failed_plain: '失败 · 等你决定',
@@ -238,8 +239,8 @@ export const zh: Dict = {
     // （{to}=事件名）、act_backward 全部回退边（{to}=目标相位）——消费方 ProgressView.actionsFor。
     // act_approve 键随旧 InboxView 退役后零引用，zh/en 对称删（同批登记）；
     // act_reject 同命运——进度页打回文案走 progress.act_reject，Phase 3 对称删。
-    act_forward: '→ {to}',
-    act_backward: '↩ {to}',
+    act_forward: '{to}',
+    act_backward: '{to}',
     // 真机验收 G 退役登记：act_retry/act_dismiss 及 afk_retry_ok/afk_dismiss_ok/afk_fail 随
     // 「重试/放弃回终端做」删除——全仓 grep 零引用（排除 design-demos），zh/en 对称。
   },
@@ -505,7 +506,7 @@ export const zh: Dict = {
     step_init: '建一个 change（tenon init 会把项目自动登记进来，不用单独注册）',
     step_doctor: '确认环境就绪，然后刷新本页',
     copy: '复制',
-    copied: '已复制 ✓',
+    copied: '已复制',
     no_change_title: '这个项目还没有 change',
     no_change_desc: '从这里描述意图、确认 Track 与 Workflow，一次创建并锁定路线。',
     cli_fallback: '也可以在终端创建',
@@ -1023,7 +1024,7 @@ export const zh: Dict = {
     lp_rel_sec_hint: 'loop 是 root 级配置，不属于任何单个 workflow',
     lp_rel_root_note: 'root 级 · 不专属任何 workflow',
     lp_rel_prefix_unset: '(未设置前缀)',
-    lp_rel_match_btn: '{prefix} → {n} 个匹配变更',
+    lp_rel_match_btn: '{prefix} · {n} 个匹配变更',
     lp_rel_phases_label: '涉及阶段(phases)',
     lp_rel_phases_empty: '未声明阶段',
     lp_rel_note: '一个 loop 不属于任何单个 workflow：change_prefix 靠前缀匹配变更，phases 只是给人看的阶段标签，全仓没有任何运行时消费者读取它。',
@@ -1179,7 +1180,7 @@ export const zh: Dict = {
     cmd_rerun_cxl: '重新跑的命令',
     // v9-J：查到该 change 现场真实终端会话（session-link 命中）→ 优先给真恢复命令，
     // 比静态 cd/重跑更直接（直接可拷贝执行接回原会话）。
-    cmd_resume: '↻ 恢复会话',
+    cmd_resume: '恢复会话',
     // ── 状态页签（全部/等你动手/运行中/等待中；计数=各分类总数不随筛选变；v10b §4.1：
     //    等待中=queued+agent）+ 行 workflow/调度标识（▦ 沙箱=自动化三桶;⌨ 终端=活在终端）。──
     tabs_label: '按状态筛选',
@@ -1450,6 +1451,7 @@ export const en: Dict = {
     risk_skill_bundle_missing: 'Skill bundle is not configured',
   },
   common: {
+    skip_to_main: 'Skip to main content',
     settings: 'Settings',
     theme_dark: 'Dark',
     theme_light: 'Light',
@@ -1477,7 +1479,7 @@ export const en: Dict = {
       verify: 'Verification done — review to ship',
       other: 'Awaiting your decision',
     },
-    badge_pass: '✓ Ready to approve',
+    badge_pass: 'Ready to approve',
     badge_judge: 'Your call',
     badge_failed: 'Failed ×{n} · your call',
     badge_failed_plain: 'Failed · your call',
@@ -1485,8 +1487,8 @@ export const en: Dict = {
     lead_judge: 'Human review: {wf} has no automated checks — approving is entirely your judgement',
     lead_failed: 'Automation failed: {err} — retried {n} times automatically. Copy the command below to take over in your terminal, or re-queue a rerun.',
     lead_failed_plain: 'Automation failed: {err} — copy the command below to take over in your terminal, or re-queue a rerun.',
-    act_forward: '→ {to}',
-    act_backward: '↩ {to}',
+    act_forward: '{to}',
+    act_backward: '{to}',
     // Acceptance-G retirement: act_retry/act_dismiss and afk_retry_ok/afk_dismiss_ok/afk_fail
     // removed with "retry/dismiss go back to the terminal" — zero references repo-wide, zh/en symmetric.
   },
@@ -1743,7 +1745,7 @@ export const en: Dict = {
     step_init: 'Create a change (tenon init auto-registers the project — no separate registration needed)',
     step_doctor: 'Confirm the environment is ready, then refresh this page',
     copy: 'Copy',
-    copied: 'Copied ✓',
+    copied: 'Copied',
     no_change_title: 'No changes in this project yet',
     no_change_desc: 'Describe the intent here, confirm the Track and Workflow, then create the locked route in one step.',
     cli_fallback: 'Or create it in your terminal',
@@ -2256,7 +2258,7 @@ export const en: Dict = {
     lp_rel_sec_hint: 'A loop is a root-level setting — it does not belong to any single workflow',
     lp_rel_root_note: 'root-level · not tied to any single workflow',
     lp_rel_prefix_unset: '(no prefix set)',
-    lp_rel_match_btn: '{prefix} → {n} matching changes',
+    lp_rel_match_btn: '{prefix} · {n} matching changes',
     lp_rel_phases_label: 'Stages involved (phases)',
     lp_rel_phases_empty: 'No stages declared',
     lp_rel_note: 'A loop does not belong to any single workflow: change_prefix claims changes by prefix match, and phases is just a human-facing label — nothing in the repo consumes it at runtime.',
@@ -2375,7 +2377,7 @@ export const en: Dict = {
     //    rail aria / archived fold suffix. Old group/filter/chevron keys removed (zh/en symmetric). ──
     badge_running: 'Running {phase}',
     badge_cancelled: 'Cancelled (stopped by hand)',
-    act_pass_to: 'Approve → {to}',
+    act_pass_to: 'Approve into {to}',
     fold_archived: '{n} archived',
     // #2 archived-row expand/collapse toggle suffix.
     fold_expand: 'Expand',
@@ -2390,7 +2392,7 @@ export const en: Dict = {
     cmd_rerun_cxl: 'Command to run again',
     // v9-J: session-link found a real terminal session for this change's worktree — prefer the
     // real resume command (paste-and-run, reconnects to the original session).
-    cmd_resume: '↻ Resume session',
+    cmd_resume: 'Resume session',
     // ── Status tabs (all / needs you / running / waiting; counts are per-category totals,
     //    unaffected by the active filter; v10b §4.1: waiting = queued + agent) + per-row
     //    workflow / scheduling chips (sandbox = the three automation buckets). ──

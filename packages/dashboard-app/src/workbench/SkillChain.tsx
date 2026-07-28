@@ -236,7 +236,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
       <div data-testid="wb-sk-chains" ref={chainsRef} className="divide-y divide-dashed divide-border">
         {step.skills.length === 0 && (
           <div className={CHAIN_CLS}>
-            <span className={EMPTY_CLS}>{t('workbench.sk_empty_custom')}</span>
+            <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_empty_custom')}</span>
           </div>
         )}
         {chains.map((c) => (
@@ -286,10 +286,10 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
             <span className={cn(HINT_CLS, 'ml-1.5')}>{t('workbench.sk_panel_hint')}</span>
           </div>
           <div className="mb-[11px] flex flex-wrap gap-1.5">
-            {regError && <span className={ERR_CLS}>{regError}</span>}
-            {!regError && registry === null && <span className={EMPTY_CLS}>{t('common.loading')}</span>}
+            {regError && <span className={ERR_CLS} role="alert">{regError}</span>}
+            {!regError && registry === null && <span className={EMPTY_CLS} role="status" aria-live="polite">{t('common.loading')}</span>}
             {!regError && registry !== null && candidates.length === 0 && (
-              <span className={EMPTY_CLS}>{t('workbench.sk_panel_empty')}</span>
+              <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_panel_empty')}</span>
             )}
             {/* 候选选中态用 aria-pressed 承载（原 .on 类）、未安装用 data-uninstalled（原修饰符类）。 */}
             {candidates.map((id) => {

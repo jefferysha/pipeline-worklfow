@@ -31,13 +31,13 @@ export function LoopCardActions({
   return <>
     {pendingReview && (
       <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-border pt-3.5" data-testid="lp-draft-actions">
-        <Button size="sm" className="border border-green-b bg-green-t px-4 text-[12.5px] font-bold text-green-d" data-testid="lp-draft-approve" disabled={reviewBusy} onClick={() => onReview('active')}>
+        <Button size="sm" className="border border-accent-b bg-accent-t px-4 text-[12.5px] font-bold text-accent-d" data-testid="lp-draft-approve" disabled={reviewBusy} onClick={() => onReview('active')}>
           <Check className="size-3.5" aria-hidden="true" /> {t('workbench.lp_draft_approve')}
         </Button>
         <Button size="sm" className="border border-red-b bg-red-t px-4 text-[12.5px] font-bold text-red-d" data-testid="lp-draft-reject" disabled={reviewBusy} onClick={() => onReview('paused')}>
           <X className="size-3.5" aria-hidden="true" /> {t('workbench.lp_draft_reject')}
         </Button>
-        {reviewError && <p className={cn(ERR_BLOCK_TW, 'mt-0.5 basis-full')} data-tone="error" data-testid="lp-draft-error"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{reviewError}</p>}
+        {reviewError && <p className={cn(ERR_BLOCK_TW, 'mt-0.5 basis-full')} data-tone="error" data-testid="lp-draft-error" role="alert"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{reviewError}</p>}
       </div>
     )}
     {confirmLevel !== null && (

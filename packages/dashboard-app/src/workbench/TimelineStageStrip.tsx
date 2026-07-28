@@ -64,7 +64,7 @@ export function TimelineStageStrip({
                 }}
               >
                 {!readonly && onStageReorder && <GripVertical data-testid={`wb-lane-grip-${lane.id}`} className="h-4 w-4 flex-none cursor-grab text-text-3" aria-hidden="true" />}
-                <span className="grid h-7 w-7 flex-none place-items-center rounded-full border border-border-2 bg-card font-mono text-xs font-semibold text-text-3 group-aria-[current=step]:border-(--accent) group-aria-[current=step]:bg-(--accent) group-aria-[current=step]:text-white">{index + 1}</span>
+                <span className="grid h-7 w-7 flex-none place-items-center rounded-full border border-border-2 bg-card font-mono text-xs font-semibold text-text-3 group-aria-[current=step]:border-(--accent) group-aria-[current=step]:bg-(--accent) group-aria-[current=step]:text-btn-fg">{index + 1}</span>
                 <span className="whitespace-nowrap text-sm font-semibold text-text group-aria-[current=step]:text-accent-d">{lane.name}</span>
                 {lane.running && <span className="size-1.5 flex-none animate-pulse rounded-full bg-green motion-reduce:animate-none" data-testid={`wb-flow-gloss-${lane.id}`} aria-hidden="true" />}
               </button>

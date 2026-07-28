@@ -137,7 +137,7 @@ export function StepperRail({
           return (
             <Fragment key={s.id}>
               <div
-                className="relative flex min-w-[178px] flex-1 rounded-[13px] border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-border-2 hover:shadow-md aria-[current=step]:border-green aria-[current=step]:bg-[color-mix(in_srgb,var(--green)_7%,var(--card))] aria-[current=step]:shadow-[0_0_0_3px_var(--ring),var(--shadow)]"
+                className="relative flex min-w-[178px] flex-1 rounded-[13px] border border-border bg-card shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-border-2 hover:shadow-md aria-[current=step]:border-(--accent) aria-[current=step]:bg-accent-t aria-[current=step]:shadow-[0_0_0_3px_var(--ring-blue),var(--shadow)]"
                 data-anim="wb-stage"
                 data-testid={`wb-step-${s.id}`}
                 aria-current={on ? 'step' : undefined}
@@ -153,7 +153,7 @@ export function StepperRail({
                   type="button"
                   className="relative flex min-w-0 flex-1 cursor-pointer items-start gap-[11px] overflow-hidden rounded-[inherit] px-3.5 pt-[13px] pb-[11px] text-left"
                 >
-                  <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full border border-green-b bg-green-t font-mono text-[12.5px] font-bold text-green-d">
+                  <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full border border-accent-b bg-accent-t font-mono text-[12.5px] font-bold text-accent-d">
                     {i + 1}
                   </span>
                   {s.running && (
@@ -268,7 +268,7 @@ export function StepperRail({
           )
         })}
         <button
-          className="ml-2.5 flex min-w-[104px] flex-none cursor-pointer items-center justify-center self-stretch rounded-[13px] border border-dashed border-border-2 p-3 text-[13px] font-semibold text-text-3 transition-colors enabled:hover:border-green-b enabled:hover:bg-card enabled:hover:text-text-2 disabled:cursor-not-allowed disabled:opacity-55"
+          className="ml-2.5 flex min-w-[104px] flex-none cursor-pointer items-center justify-center self-stretch rounded-[13px] border border-dashed border-border-2 p-3 text-[13px] font-semibold text-text-3 transition-colors enabled:hover:border-accent-b enabled:hover:bg-accent-t enabled:hover:text-accent-d disabled:cursor-not-allowed disabled:opacity-55"
           onClick={onAddStage}
           disabled={!onAddStage}
           title={onAddStage ? undefined : t('workbench.add_stage_pending')}

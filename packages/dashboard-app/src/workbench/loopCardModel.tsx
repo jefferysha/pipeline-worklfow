@@ -37,7 +37,7 @@ export const WB_TW = {
   /** 旧 .wb-status--dirty / --ok 状态 pill。 */
   statusDirty:
     'inline-flex items-center gap-1.5 rounded-full border border-dashed border-border-2 bg-fill px-2.5 py-1 text-[11px] font-bold text-text-2',
-  statusOk: 'inline-flex items-center gap-1.5 rounded-full bg-green-t px-2.5 py-1 text-[11px] font-bold text-green',
+  statusOk: 'inline-flex items-center gap-1.5 rounded-full bg-green-t px-2.5 py-1 text-[11px] font-bold text-green-d',
   /** 旧 .wb-save-errors + .lp-errors（li 单列）。 */
   saveErrors: 'mt-3 mb-3.5 list-none rounded-md border border-red-b bg-red-t px-3 py-2.5',
   saveErrorsLi: 'font-mono text-[12.5px] leading-[1.6] text-red-d',

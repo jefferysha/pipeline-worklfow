@@ -162,6 +162,13 @@ function AppShell(): JSX.Element {
   // flash toast 仍 fixed 悬浮，机制不变。右栏 sticky 依赖的 --nav-offset 已随无顶栏调至 20px（index.css）。
   return (
     <div className="flex min-h-screen bg-bg font-sans text-[14px] leading-[1.45] text-text-2">
+      <a
+        href="#main-content"
+        onClick={() => document.getElementById('main-content')?.focus()}
+        className="fixed top-3 left-3 z-[100] -translate-y-[200%] rounded-lg bg-ink px-4 py-2 font-bold whitespace-nowrap text-ink-fg shadow-lg transition-transform motion-reduce:transition-none focus:translate-y-0 focus:outline-none focus:ring-3 focus:ring-(--ring-blue)"
+      >
+        {t('common.skip_to_main')}
+      </a>
       <Nav
         view={view}
         onView={setView}
@@ -174,7 +181,7 @@ function AppShell(): JSX.Element {
         afkCount={afkCount}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col max-[720px]:pt-14">
       {!connected && (
         <div
           className="flex items-center gap-2.5 border-b border-red-b bg-red-t px-5 py-2 text-[12.5px] font-semibold text-red-d"
@@ -197,7 +204,7 @@ function AppShell(): JSX.Element {
         <div
           ref={flashRef}
           className={`pointer-events-none fixed bottom-[26px] left-1/2 z-60 flex max-w-[70vw] -translate-x-1/2 items-center gap-[7px] rounded-full px-3.5 py-2 text-[12.5px] font-semibold shadow-md max-[720px]:bottom-[calc(84px+env(safe-area-inset-bottom))] max-[720px]:max-w-[calc(100vw-32px)] ${
-            flash.kind === 'error' ? 'bg-red text-white' : 'bg-ink text-ink-fg'
+            flash.kind === 'error' ? 'bg-red text-solid-fg' : 'bg-ink text-ink-fg'
           }`}
           role="status"
           data-tone={flash.kind}
@@ -209,6 +216,8 @@ function AppShell(): JSX.Element {
 
       {/* 修点5：内容左对齐紧挨 rail——去掉 mx-auto/max-w 造成的居中大空隙，全宽 + 合理 padding。 */}
       <main
+        id="main-content"
+        tabIndex={-1}
         className="w-full flex-1 px-6 pb-6 pt-3 max-[720px]:px-4 max-[720px]:pb-[calc(88px+env(safe-area-inset-bottom))] max-[720px]:pt-2"
         data-testid="app-main"
       >
@@ -274,7 +283,7 @@ function AppShell(): JSX.Element {
               onSelectedChange={setSelectedChange}
             />
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'afk' && (
@@ -292,7 +301,7 @@ function AppShell(): JSX.Element {
               onToast={(m) => showFlash('toast', m)}
             />
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'workbench' && (
@@ -304,9 +313,9 @@ function AppShell(): JSX.Element {
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。
-            <p className="p-5 text-[13px] text-red" data-testid="wb-no-root">{t('workbench.no_reachable_root')}</p>
+            <p className="p-5 text-[13px] text-red-d" role="alert" data-testid="wb-no-root">{t('workbench.no_reachable_root')}</p>
           ) : (
-            <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'machine' && (

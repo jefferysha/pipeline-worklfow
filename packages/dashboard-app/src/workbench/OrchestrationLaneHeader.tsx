@@ -61,7 +61,7 @@ export function OrchestrationLaneHeader({
       <div className="relative z-[2] flex w-full items-center gap-[9px]">
         {canDrag && <span className={GRIP_LANE} data-testid={`wb-lane-grip-${lane.id}`} draggable aria-hidden="true" title={t('workbench.board_drag_lane')}><GripVertical className="size-4" aria-hidden="true" /></span>}
         <button type="button" className="flex flex-none cursor-pointer items-center gap-[9px] rounded-lg text-left" aria-label={t('workbench.board_lane_select', { name: lane.name })}>
-          <span className="grid h-[27px] w-[27px] flex-none place-items-center rounded-full border border-green-b bg-green-t font-mono text-[14px] font-extrabold text-green-d group-data-[locked]:border-border-2 group-data-[locked]:bg-fill group-data-[locked]:text-text-3">{index + 1}</span>
+          <span className="grid h-[27px] w-[27px] flex-none place-items-center rounded-full border border-accent-b bg-accent-t font-mono text-[14px] font-extrabold text-accent-d group-data-[locked]:border-border-2 group-data-[locked]:bg-fill group-data-[locked]:text-text-3">{index + 1}</span>
           {!canEdit && <span className="flex-none font-mono text-[16.5px] font-[750] tracking-[-0.01em] whitespace-nowrap text-text">{lane.name}</span>}
         </button>
         {canEdit && (editing ? (

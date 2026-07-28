@@ -66,6 +66,8 @@ describe('TrafficPanel（#34d 真消费 /api/traces/*）', () => {
     const a = screen.getByTestId('traffic-session-sess-A')
     expect(a.textContent).toContain('claude')
     expect(a.textContent).toContain('2')
+    expect(screen.getByRole('button', { name: /claude/ })).not.toHaveClass('hover:border-green')
+    expect(screen.getByRole('button', { name: /claude/ })).toHaveClass('aria-pressed:border-(--accent)')
   })
 
   it('#34e 护栏提示：显式标注本地捕获 / 不外发（local-only）', async () => {
@@ -89,6 +91,6 @@ describe('TrafficPanel（#34d 真消费 /api/traces/*）', () => {
     stubFetch({ sessionsOk: false })
     renderTraffic()
     expect(await screen.findByTestId('traffic-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-error')).toBeInTheDocument()
+    expect(screen.getByTestId('traffic-error')).toHaveAttribute('role', 'alert')
   })
 })

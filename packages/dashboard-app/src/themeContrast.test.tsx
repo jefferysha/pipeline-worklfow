@@ -1,0 +1,50 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+const cssPath = existsSync('src/index.css') ? 'src/index.css' : 'packages/dashboard-app/src/index.css'
+const css = readFileSync(cssPath, 'utf8')
+
+function block(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\n\\}`))
+  if (!match?.[1]) throw new Error(`missing CSS block: ${selector}`)
+  return match[1]
+}
+
+function hexToken(source: string, name: string): string {
+  const match = source.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))
+  if (!match?.[1]) throw new Error(`missing hex token: --${name}`)
+  return match[1]
+}
+
+function rgb(hex: string): [number, number, number] {
+  return [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)) as [number, number, number]
+}
+
+function luminance(hex: string): number {
+  const channels = rgb(hex).map((channel) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+
+function contrast(a: string, b: string): number {
+  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+describe('theme semantic foreground contrast', () => {
+  const light = block(':root')
+  const dark = block(':root[data-theme="dark"]')
+
+  it.each([
+    ['light primary', hexToken(light, 'btn-fg'), hexToken(light, 'accent')],
+    ['dark primary', hexToken(dark, 'btn-fg'), hexToken(dark, 'accent')],
+    ['light success on card', hexToken(light, 'green-d'), hexToken(light, 'card')],
+    ['light success on code', hexToken(light, 'green-d'), hexToken(light, 'code-bg')],
+    ['dark success on card', hexToken(dark, 'green-d'), hexToken(dark, 'card')],
+  ])('%s stays at WCAG AA for normal text', (_label, foreground, background) => {
+    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+})

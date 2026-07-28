@@ -107,7 +107,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
         <GovernanceRailHead />
         <div className={GCARD_TW}>
-          <p className={WB_TW.loadError} data-tone="error" data-testid="wb-gov-load-error">
+          <p className={WB_TW.loadError} data-tone="error" data-testid="wb-gov-load-error" role="alert">
             {loops.loadError}
           </p>
         </div>
@@ -119,7 +119,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
         <GovernanceRailHead />
         <div className={GCARD_TW}>
-          <p className={WB_TW.loading}>{t('common.loading')}</p>
+          <p className={WB_TW.loading} role="status" aria-live="polite">{t('common.loading')}</p>
         </div>
       </aside>
     )
@@ -130,7 +130,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     return (
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
         <GovernanceRailHead />
-        <div className={GCARD_TW} data-testid="wb-gov-empty">
+        <div className={GCARD_TW} data-testid="wb-gov-empty" role="status" aria-live="polite">
           <p className="mb-1 text-[14px] font-bold text-text">{t('workbench.lp_empty_title')}</p>
           <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
         </div>
@@ -186,7 +186,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
                 type="button"
                 className={cn(
                   'flex-1 cursor-pointer rounded-[10px] border px-1.5 py-2 text-center transition-[border-color,background-color] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60',
-                  on ? 'border-green bg-green-t' : 'border-border-2 bg-fill hover:border-text-3',
+                  on ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border-2 bg-fill hover:border-text-3',
                 )}
                 role="radio"
                 aria-checked={on}
@@ -195,7 +195,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
                 disabled={levelBusy}
                 onClick={() => requestLevel(lv)}
               >
-                <b className={cn('block font-mono text-base font-extrabold', on ? 'text-green-d' : 'text-text-2')}>{lv}</b>
+                <b className={cn('block font-mono text-base font-extrabold', on ? 'text-accent-d' : 'text-text-2')}>{lv}</b>
                 <small className="mt-0.5 block text-[11.5px] whitespace-nowrap text-text-3">{t(LEVEL_SHORT_KEY[lv])}</small>
               </button>
             )
@@ -229,7 +229,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
           </p>
         )}
         {levelError !== null && (
-          <p className={GNOTE_ERR_TW} data-tone="error" data-testid="wb-gov-level-error">
+          <p className={GNOTE_ERR_TW} data-tone="error" data-testid="wb-gov-level-error" role="alert">
             <CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{levelError}
           </p>
         )}
@@ -285,7 +285,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
           onValue={onTokens}
         />
         {budgetError !== null && (
-          <p className={GNOTE_ERR_TW} data-tone="error" data-testid="wb-gov-budget-error">
+          <p className={GNOTE_ERR_TW} data-tone="error" data-testid="wb-gov-budget-error" role="alert">
             <CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{budgetError}
           </p>
         )}

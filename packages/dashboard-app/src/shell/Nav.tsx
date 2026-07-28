@@ -58,18 +58,24 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
   return (
     <header
-      className="sticky top-0 z-40 flex h-screen w-[88px] flex-none flex-col items-center gap-1 border-r border-border bg-card/96 px-2 py-3 backdrop-blur-xl max-[720px]:fixed max-[720px]:bottom-0 max-[720px]:top-auto max-[720px]:h-[calc(72px+env(safe-area-inset-bottom))] max-[720px]:w-full max-[720px]:flex-row max-[720px]:items-start max-[720px]:gap-1 max-[720px]:border-r-0 max-[720px]:border-t max-[720px]:px-2 max-[720px]:pb-[env(safe-area-inset-bottom)] max-[720px]:pt-1.5"
+      className="sticky top-0 z-40 flex h-screen w-[88px] flex-none flex-col items-center gap-1 border-r border-border bg-card/96 px-2 py-3 backdrop-blur-xl max-[720px]:fixed max-[720px]:bottom-0 max-[720px]:top-auto max-[720px]:h-[calc(72px+env(safe-area-inset-bottom))] max-[720px]:w-full max-[720px]:flex-row max-[720px]:items-start max-[720px]:gap-1 max-[720px]:border-r-0 max-[720px]:border-t max-[720px]:px-2 max-[720px]:pb-[env(safe-area-inset-bottom)] max-[720px]:pt-1.5 max-[720px]:backdrop-blur-none"
       role="banner"
       data-testid="app-navigation"
       data-responsive="rail-to-bottom"
     >
+      <div
+        className="hidden max-[720px]:fixed max-[720px]:inset-x-0 max-[720px]:top-0 max-[720px]:z-0 max-[720px]:flex max-[720px]:h-14 max-[720px]:items-center max-[720px]:border-b max-[720px]:border-border max-[720px]:bg-card/96 max-[720px]:pl-16 max-[720px]:text-sm max-[720px]:font-bold max-[720px]:text-text max-[720px]:backdrop-blur-xl"
+        aria-hidden="true"
+      >
+        Tenon
+      </div>
       {/* 品牌 logo 标（demo .rail .logo 对位）：品牌名收成图标，全名走 title 悬浮。 */}
       <button
         type="button"
         data-testid="nav-overview"
         aria-label={t('solution.nav_label')}
         aria-current={view === 'overview' ? 'page' : undefined}
-        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-xl border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) max-[720px]:mb-0 max-[720px]:mt-1 max-[720px]:h-11 max-[720px]:w-11 max-[360px]:hidden"
+        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-xl border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent) max-[720px]:fixed max-[720px]:top-1.5 max-[720px]:left-3 max-[720px]:z-10 max-[720px]:mb-0 max-[720px]:h-11 max-[720px]:min-w-11 max-[720px]:w-11"
         title={t('solution.nav_label')}
         onClick={() => {
           setSettingsOpen(false)

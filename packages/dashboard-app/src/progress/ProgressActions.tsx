@@ -1,4 +1,4 @@
-import { Square } from 'lucide-react'
+import { ArrowRight, Copy, Square, Undo2 } from 'lucide-react'
 import type { PlannedTransition } from '../model/events'
 import { plannedTransition } from '../model/events'
 import { missingGateArtifacts } from '../model/progressModel'
@@ -54,8 +54,9 @@ export function ProgressActions({
             disabled={busy}
             onClick={() => onTransition(row.row.root, name, transition)}
           >
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             {index === 0
-              ? <>→ {t('progress.act_pass_to', { to: stepLabel(transition.to, rules.labelByStep, t) })}</>
+              ? t('progress.act_pass_to', { to: stepLabel(transition.to, rules.labelByStep, t) })
               : t('inbox.act_forward', { to: transition.event })}
           </button>
         ))}
@@ -68,6 +69,7 @@ export function ProgressActions({
             disabled={busy}
             onClick={() => onTransition(row.row.root, name, transition)}
           >
+            <Undo2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             {t('inbox.act_backward', { to: stepLabel(transition.to, rules.labelByStep, t) })}
           </button>
         ))}
@@ -97,6 +99,7 @@ export function ProgressActions({
           })
         }}
       >
+        <Copy className="h-3.5 w-3.5 flex-none" strokeWidth={1.75} aria-hidden="true" />
         {chip.label}
         <span className="truncate font-mono">{chip.command}</span>
       </button>

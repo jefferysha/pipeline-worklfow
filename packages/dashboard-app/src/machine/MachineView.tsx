@@ -36,7 +36,7 @@ function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCa
   const { t } = useT()
   const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amb-d bg-amb-t border-amb-b'
   return (
-    <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
+    <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId} role="status" aria-live="polite">
       <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
       <div className="min-w-0 flex-1">
         <h3 className="font-bold text-text">{label}</h3>
@@ -202,7 +202,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
-          {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d">{t('machine.blockers_empty')}</p> : (
+          {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
             <ul className="mt-3 space-y-2 p-0">
               {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
             </ul>
@@ -213,16 +213,16 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
             <div><h2 className="font-bold text-text">{t('machine.risks')}</h2><p className="mt-0.5 text-xs text-text-3">{t('machine.risks_note')}</p></div>
             <span className="rounded-full bg-fill px-2.5 py-1 font-mono text-xs font-bold text-text">{risks.length}</span>
           </div>
-          {loops === null ? <p className="mt-4 text-xs text-text-3">{t('machine.loading_signal')}</p> : risks.length === 0 ? <p className="mt-4 text-xs text-green-d">{t('machine.risks_empty')}</p> : (
+          {loops === null ? <p className="mt-4 text-xs text-text-3" role="status" aria-live="polite">{t('machine.loading_signal')}</p> : risks.length === 0 ? <p className="mt-4 text-xs text-green-d" role="status" aria-live="polite">{t('machine.risks_empty')}</p> : (
             <ul className="mt-3 divide-y divide-border p-0">
               {risks.map((risk) => (
-                <li key={risk.key} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0">
+                <li key={risk.key} data-testid={`machine-risk-row-${risk.key.startsWith('loop:') ? risk.key.split(':').at(-1) : risk.title}`} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0 max-[480px]:flex-col max-[480px]:items-stretch">
                   <span className="h-8 w-1 flex-none rounded-full bg-red" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-bold text-text">{risk.title}</div>
-                    <div className="mt-0.5 text-xs text-text-3">{risk.details.join(' · ')}</div>
+                    <div className="break-words font-bold text-text [overflow-wrap:anywhere]">{risk.title}</div>
+                    <div className="mt-0.5 break-words text-xs text-text-3 [overflow-wrap:anywhere]">{risk.details.join(' · ')}</div>
                   </div>
-                  <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
+                  <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
                 </li>
               ))}
             </ul>

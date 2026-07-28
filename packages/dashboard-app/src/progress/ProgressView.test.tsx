@@ -334,8 +334,23 @@ describe('ProgressView 状态页签（默认全部/计数=分类总数/等待中
     expect(screen.queryByTestId('prg9t-tabs')).toBeNull()
     expect(screen.queryByTestId('prg-wfpills')).toBeNull()
     expect(screen.queryByTestId('prg-canvas')).toBeNull()
-    expect(screen.getByTestId('prg-empty')).toBeInTheDocument()
+    expect(screen.getByTestId('prg-empty')).toHaveAttribute('role', 'status')
     await act(async () => {})
+  })
+
+  it('加载、错误与空态都公开给辅助技术', () => {
+    const { rerender } = render(
+      <I18nProvider>
+        <ProgressView snapshot={null} loading error={null} currentRoot={ROOT_A} rulesByKey={makeRules()} />
+      </I18nProvider>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('加载中')
+    rerender(
+      <I18nProvider>
+        <ProgressView snapshot={null} loading={false} error="连接失败" currentRoot={ROOT_A} rulesByKey={makeRules()} />
+      </I18nProvider>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('连接失败')
   })
 })
 
@@ -508,11 +523,13 @@ describe('ProgressView workflow 筛选下拉', () => {
 })
 
 describe('ProgressView 判定徽章（抽屉 dw-badge；rowSemantics 同源不漂移）', () => {
-  it('gate 证据齐 → 绿「✓ 可以放行」（data-tone）', async () => {
+  it('gate 证据齐 → 绿「可以放行」且用结构化图标表达（data-tone）', async () => {
     renderView()
     await openDrawer('gate-demo')
     const badge = screen.getByTestId('prg9-dw-badge')
-    expect(badge.textContent).toContain('✓ 可以放行')
+    expect(badge.textContent).toContain('可以放行')
+    expect(badge.textContent).not.toContain('✓')
+    expect(badge.querySelector('svg')).not.toBeNull()
     expect(badge).toHaveAttribute('data-tone', 'green')
   })
 
@@ -624,7 +641,7 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
     await waitFor(() => {
       expect(onToast).toHaveBeenCalledWith(expect.stringContaining('guard 拒绝'))
     })
-    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('✓ 可以放行')
+    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('可以放行')
     expect(onRefresh).not.toHaveBeenCalled()
   })
 })
@@ -794,7 +811,7 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
     expect(screen.getByTestId('prg9-scrim')).toBeInTheDocument()
     expect(screen.getByTestId('task-detail')).toBeInTheDocument()
-    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('✓ 可以放行')
+    expect(screen.getByTestId('prg9-dw-badge').textContent).toContain('可以放行')
     expect(screen.getByTestId('prg9-dw-pass-gate-demo').textContent).toContain('放行进入 交付')
     expect(screen.getByTestId('prg9-dw-reject-gate-demo')).toBeInTheDocument()
     expect(screen.getByTestId('detail-technical')).not.toHaveAttribute('open')

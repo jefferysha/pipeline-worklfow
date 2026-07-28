@@ -8,7 +8,7 @@ export interface StepPolicyEditorProps {
   onChange: (step: WbStepDef) => void
 }
 
-const INPUT = 'min-h-9 w-full rounded-md border border-border bg-bg px-2.5 py-2 text-[12.5px] text-text outline-none focus:border-green focus:ring-2 focus:ring-green-t disabled:cursor-not-allowed disabled:bg-fill disabled:text-text-3'
+const INPUT = 'min-h-9 w-full rounded-md border border-border bg-bg px-2.5 py-2 text-[12.5px] text-text outline-none focus:border-(--accent) focus:ring-2 focus:ring-accent-t disabled:cursor-not-allowed disabled:bg-fill disabled:text-text-3'
 const SELECT = `${INPUT} cursor-pointer disabled:cursor-not-allowed`
 const MINI = 'rounded-md border border-border bg-card px-2 py-1.5 text-[11.5px] font-semibold text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-50'
 const DANGER = 'rounded-md border border-red-b bg-transparent px-2 py-1.5 text-[11.5px] font-semibold text-red-d hover:bg-red-t disabled:cursor-not-allowed disabled:opacity-50'
@@ -139,7 +139,7 @@ function GuardList({ guards, readonly, addLabel, onChange }: {
   const { t } = useT()
   return (
     <div className="grid gap-2">
-      {guards.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_none')}</p>}
+      {guards.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
       {guards.map((guard, index) => (
         <GuardRow
           key={`${guard.type}-${index}`}
@@ -233,7 +233,7 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
         <div className={`${CARD} mt-3`}>
           <h4 className="mb-2 text-[12.5px] font-bold">落盘文件</h4>
           <div className="grid gap-2">
-            {artifacts.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_none')}</p>}
+            {artifacts.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
             {artifacts.map((artifact, index) => (
               <div key={`${artifact.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_190px_140px_minmax(0,1fr)_auto] gap-2 max-[1000px]:grid-cols-2 max-[720px]:grid-cols-1">
                 <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={`${artifact.field} artifact`} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
@@ -266,7 +266,7 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
       <details className="border-t border-border">
         <summary className={SUMMARY}>{t('workbench.step_transitions_title', { n: step.transitions.length })}</summary>
         <div className="grid gap-3">
-          {step.transitions.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_terminal')}</p>}
+          {step.transitions.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_terminal')}</p>}
           {step.transitions.map((transition, index) => {
             const update = (patch: Partial<typeof transition>): void => onChange({ ...step, transitions: step.transitions.map((item, i) => i === index ? { ...item, ...patch } : item) })
             return (

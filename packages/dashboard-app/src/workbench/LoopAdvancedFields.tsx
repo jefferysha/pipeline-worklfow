@@ -83,7 +83,7 @@ export function LoopAdvancedFields({
             </button>
           })}
         </div>
-        {levelError && <p className={cn(ERR_BLOCK_TW, 'mt-2')} data-tone="error" data-testid="lp-level-error"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{levelError}</p>}
+        {levelError && <p className={cn(ERR_BLOCK_TW, 'mt-2')} data-tone="error" data-testid="lp-level-error" role="alert"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{levelError}</p>}
         <LpChipRow label={t('workbench.lp_gates')} values={draft.human_gates} addAria={t('workbench.lp_add_gate_aria')} prov={<ProvBadge field="human_gates" />} onChange={(next) => onEdit({ human_gates: next })} />
         <LpChipRow label={t('workbench.lp_kill')} values={draft.kill_criteria} addAria={t('workbench.lp_add_kill_aria')} descKeys={KILL_DESC_KEYS} prov={<ProvBadge field="kill_criteria" />} onChange={(next) => onEdit({ kill_criteria: next })} />
         <LpChipRow label={t('workbench.lp_allow')} values={draft.allowlist} addAria={t('workbench.lp_add_allow_aria')} prov={<span className={PROV_ENFORCED_TW} data-kind="enforced" data-testid="lp-prov-allowlist">{t('workbench.lp_prov_reserved')}</span>} note={<><b>{t('workbench.lp_allow_note_lead')}</b>{t('workbench.lp_allow_note_body')}</>} onChange={(next) => onEdit({ allowlist: next })} />
