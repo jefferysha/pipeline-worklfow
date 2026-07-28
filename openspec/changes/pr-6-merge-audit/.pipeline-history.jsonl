@@ -1,0 +1,23 @@
+{"ts":"2026-07-28T11:06:58Z","kind":"init"}
+{"ts":"2026-07-28T11:06:58Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T11:08:36Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T11:08:37Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"9142283d-a3b8-45f1-9632-7547c5365f4b"}
+{"ts":"2026-07-28T11:13:39Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-28-pr-6-merge-audit-design.md"}
+{"ts":"2026-07-28T11:13:39Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-28T11:13:40Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-28T11:13:46Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-28T11:13:47Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-28T11:06:58Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T11:13:47Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-28T11:13:47Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-28T11:13:47Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"c0bbf955-512e-4e14-afba-75850c8bf675"}
+{"ts":"2026-07-28T11:15:43Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-28-pr-6-merge-audit.md"}
+{"ts":"2026-07-28T11:15:43Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-28T11:15:43Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-28T11:15:44Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-28T11:15:59Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-28T11:15:59Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-28T11:06:58Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-28T11:15:59Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"2861d445-9bfa-4c3d-b389-233b0f85fe13"}
+{"ts":"2026-07-28T11:16:32Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-28T11:16:32Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-28T11:16:32Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-28T11:19:25Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
