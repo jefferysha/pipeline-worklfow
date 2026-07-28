@@ -269,3 +269,63 @@ Critical / High / Medium = 0 / 0 / 0。
 
 最终冻结前审查结论：Critical / High / Medium = 0 / 0 / 0；没有需要带入第三次 Verify 的
 已知可修复偏差。
+
+## 第三次 Verify 失败后的 Build 修复
+
+第三次 Verify 对冻结 SHA `d308742ca660fd974f8c856c2b8cd5c24b9463a7` 发现两个 Medium，
+均属于既有桌面交互的生命周期边界，不改变产品范围或视觉方向：
+
+- 设置浮层与真实共享模态 Dialog 叠层时，Nav 的 document listener 可能先消费同一个 Escape，
+  导致两层同时关闭。先用实际 `shared/Dialog` 组件写出失败测试，再让 Nav 在存在
+  `[role="dialog"][aria-modal="true"]` 时把 Escape 留给顶层模态框；顶层关闭后设置浮层仍保留。
+- `toastIn` 仅在创建时读取 reduced-motion，运行中切换偏好不会立即清理旧 tween。先用可控媒体
+  上下文写出失败测试，再改为 `gsap.matchMedia()` handle：分支切换会 kill 旧 tween，reduce
+  分支直接设置可见终态，React effect 仍通过统一 `kill()` 撤销整个媒体上下文。
+
+### TDD 与构建证据
+
+- 红：`Nav.test.tsx` 与 `motion.test.tsx` 各产生一个预期失败，分别复现双关闭和运行中偏好切换。
+- 绿：2 文件 / 32 tests 通过；`npm run typecheck:web` 通过。
+- `npm run test:web`：52 文件 / 996 tests 通过。
+- `npm run build`：通过；当前源码生成 `index-CT2X1EJx.js` /
+  `index-DnZ1mCZ2.css`、server bundle 与 CLI bundle。
+- `git diff --check`：通过；只保留既有 `act(...)`、GSAP target 与 Vite >500kB 提示。
+
+### 真实电脑端浏览器复验
+
+当前 worktree 服务 `http://127.0.0.1:18836` 加载新资产 `index-CT2X1EJx.js`，页面标题为
+`Tenon Dashboard`，H1 为“让 coding agents 按可验证流程交付”。
+
+- 1024×768 浅色、1200×870 深色 + reduced-motion、1440×900 浅色均无根级横向溢出、
+  console error 或 page error。
+- 三个视口的设置浮层均把初始焦点放在主题控件；Escape 关闭后焦点返回设置触发器。
+- 1200 场景确认 `prefers-reduced-motion: reduce` 为真，其余两个场景为假。
+- 三个场景都确认唯一 H1 和当前发布资产，截图写入 `/private/tmp`，不污染待冻结基线。
+
+第一次第四轮 pre-Verify 独立全量审查确认第三次 Verify 的两个 Medium 已闭环，但另发现同型
+Medium：`revealList` / `revealDialog` 仍只在创建时读取 reduced-motion，与 delta spec 的
+“媒体条件改变时清理”不一致。Build 没有把它作为偏差带入 Verify，而是继续 TDD 修复：
+
+- 红：`motion.test.tsx` 新增列表与 Dialog 的 motion→reduce 用例后产生 2 个预期失败。
+- 绿：两个 helper 统一通过 `gsap.matchMedia()` 双分支运行；媒体变化时 kill 旧 tween，
+  reduce 分支直达终态，极老内核与无条件命中继续使用可见终态兜底。
+- 同时补齐 toast 的无 `matchMedia` 和无条件命中测试，并修正文档注释：列表/Dialog/stages
+  由 `useGSAP` context 管理，toast 则允许普通 React effect 显式 `kill()`。
+- 定向 3 文件 / 81 tests 与 `npm run typecheck:web` 通过；全量前端第一次运行出现一个既有
+  App/Workbench 异步测试瞬时失败，单独复现通过，随后完整重跑 52 文件 / 996 tests 全部通过。
+- 全仓 build、`git diff --check` 与新资产 `index-CT2X1EJx.js` 的 1024/1200/1440
+  真实浏览器复验通过。
+
+修复后的第二次独立全量复审覆盖 `origin/main...当前候选` 的全部 capability、规格、调用方、
+测试与发布资产，结论为 PASS：Critical / High / Medium = 0 / 0 / 0，Low = 2。独立定向
+5 文件 / 94 tests、`npm run typecheck:web` 与 `git diff --check` 均通过，前后 HEAD/status
+指纹一致且零写入。两个 Low 为既有 App/Workbench `act(...)` 测试噪音和 Overview 长页面节奏，
+均不阻断当前规格。
+
+此外，1200×870 浅色 + reduced-motion 的受控恢复分支重新阻断首次 `/api/snapshot` 为 500
+并中断 `/api/stream`：页面出现 `role=alert`、“快照获取失败（500）”和“重试加载”；解除故障
+并重试后第二次 snapshot 成功，alert 消失并恢复“还没有注册任何项目”H1，根宽保持
+`1200/1200`。
+
+第四次 pre-Verify 最终结论：Critical / High / Medium = 0 / 0 / 0。视觉仍为既定“安静的操作台”，
+没有增加手机端专项、新依赖、API、数据模型或业务规则。

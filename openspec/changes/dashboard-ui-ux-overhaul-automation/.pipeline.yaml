@@ -3,10 +3,10 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-28-dashboard-ui-ux-overhaul-automation-design.md
 plan: docs/superpowers/plans/2026-07-28-dashboard-ui-ux-overhaul-automation.md
-verification_report: docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-2.md
+verification_report: docs/superpowers/reports/2026-07-28-dashboard-ui-ux-overhaul-automation-verify-fail-3.md
 build_mode: direct
 isolation: worktree
 build_sha: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T03:19:49Z
-updated_at: 2026-07-28T09:28:54Z
+updated_at: 2026-07-28T10:02:34Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: f1a268c0-e5b7-437d-8b73-558d24813d2b
-pipeline_transition_sequence: 15
-pipeline_transition_head: 343b6d45-964d-497a-839d-fa3400b6d9d8
-pipeline_state_revision: 46
-pipeline_state_revision_id: 11512817-a438-4842-9301-62b673e9b412
-pipeline_state_digest: f54b6b5e1bd983bc1a3b496d58b53be3471789c24543c9817e4c6e7f0d6621bc
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDYsInJldmlzaW9uSWQiOiIxMTUxMjgxNy1hNDM4LTQ4NDItOTMwMS02MmI2NzNlOWI0MTIiLCJwYXlsb2FkRGlnZXN0IjoiNjU5ZDdiYjczMzYyYTJhM2M4MWE4OTUzN2U3OTc5Y2RhOGJmMTM1ZmZkMDA0MGFkOGZhNTQ3NzcwYTFjNGJhMSJ9
+pipeline_transition_sequence: 17
+pipeline_transition_head: 427f9bd7-7e6d-4b6d-9412-f82946ec9255
+pipeline_state_revision: 53
+pipeline_state_revision_id: b03a4bcd-12a9-46eb-95eb-a9446e2a08f7
+pipeline_state_digest: b2f6331d7f6521cc36f9788fbfc5b134a1ef89dbd6893375087174b35f0dbd6f
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTMsInJldmlzaW9uSWQiOiJiMDNhNGJjZC0xMmE5LTQ2ZWItOTVlYi1hOTQ0NmUyYTA4ZjciLCJwYXlsb2FkRGlnZXN0IjoiNDJjNjM0ZGM5YjhhNTRhZmZiNjg3ZTRhMTIyOTdkZGQ1YmI0OTMzY2IxOWM4NTEzNTU2NmY4YTk1YWYzZWMxNyJ9

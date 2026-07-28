@@ -37,6 +37,9 @@
 - [x] 将非模态设置浮层改为自然 Tab 顺序，保留初始焦点、Escape 与焦点返回，避免嵌套 Escape 双关闭。
 - [x] 为 App 的 GSAP flash tween 增加卸载/更新清理，并补主题 listener 清理测试。
 - [x] 为零项目 Onboarding 增加唯一 H1，为复制命令提供可区分名称和至少 24px 的桌面点击高度。
+- [x] 修复第三次 Verify：真实共享模态 Dialog 的 Escape 不再穿透关闭非模态设置浮层。
+- [x] 修复第三次 Verify：toast 在运行中切换 reduced-motion 时清理旧 tween 并直达终态。
+- [x] 修复全量 pre-Verify：列表与 Dialog 入场动画在运行中切换 reduced-motion 时同步清理。
 
 ## 验证
 

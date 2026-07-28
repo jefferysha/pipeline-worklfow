@@ -70,6 +70,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return
       if (event.key === 'Escape') {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
         event.preventDefault()
         setSettingsOpen(false)
         settingsTriggerRef.current?.focus()

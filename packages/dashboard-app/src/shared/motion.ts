@@ -5,39 +5,89 @@ import gsap from 'gsap'
  * 现消费方：App toast / shared/TaskDetail / WorkbenchView。Phase 3 收尾：stampConfirm/
  * slideInPanel/crossfadeStage/foldOpen 四个导出随旧视图退役后全包零消费，已删）：同一套
  * reduced-motion 判断 + 时长/缓动惯例，抽成一份而非各自重复 gsap.matchMedia 判断逻辑。
- * 必须在各组件的 `useGSAP(() => { ... }, { scope })` 回调内同步调用——GSAP 的 context
- * 追踪按调用栈生效，不按函数定义所在文件生效，这里的调用一样会被自动纳入清理范围。
+ * revealList/revealDialog/revealStages 必须在各组件的 `useGSAP(() => { ... }, { scope })`
+ * 回调内同步调用——GSAP 的 context 追踪按调用栈生效。toastIn 也支持普通 React effect，
+ * 调用方必须在 effect cleanup 中调用它返回 handle 的 kill()。
  */
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
+function withMotionPreference(
+  reduce: () => gsap.core.Tween[],
+  motion: () => gsap.core.Tween[],
+): void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    reduce()
+    return
+  }
+
+  let handled = false
+  gsap.matchMedia().add(
+    { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+    (ctx) => {
+      handled = true
+      const shouldReduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
+      const tweens = shouldReduce ? reduce() : motion()
+      return () => {
+        for (const tween of tweens) tween.kill()
+      }
+    },
+  )
+  if (!handled) reduce()
 }
 
 /** 列表/网格项入场：轻微上浮 + 淡入，按顺序错开。reduced-motion 时瞬时可见。 */
 export function revealList(targets: gsap.TweenTarget, stagger = 0.035): void {
-  if (prefersReducedMotion()) {
-    gsap.set(targets, { opacity: 1, y: 0 })
-    return
-  }
-  gsap.fromTo(targets, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger })
+  withMotionPreference(
+    () => [gsap.set(targets, { opacity: 1, y: 0 })],
+    () => [gsap.fromTo(targets, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger })],
+  )
 }
 
 /** 弹窗：backdrop 淡入 + 内容轻微放大淡入。 */
 export function revealDialog(backdrop: gsap.TweenTarget, content: gsap.TweenTarget): void {
-  if (prefersReducedMotion()) {
-    gsap.set(backdrop, { opacity: 1 })
-    gsap.set(content, { opacity: 1, scale: 1, y: 0 })
-    return
-  }
-  gsap.fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: 'power1.out' })
-  gsap.fromTo(content, { opacity: 0, scale: 0.96, y: 4 }, { opacity: 1, scale: 1, y: 0, duration: 0.2, ease: 'power2.out', delay: 0.02 })
+  withMotionPreference(
+    () => [
+      gsap.set(backdrop, { opacity: 1 }),
+      gsap.set(content, { opacity: 1, scale: 1, y: 0 }),
+    ],
+    () => [
+      gsap.fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: 'power1.out' }),
+      gsap.fromTo(content, { opacity: 0, scale: 0.96, y: 4 }, { opacity: 1, scale: 1, y: 0, duration: 0.2, ease: 'power2.out', delay: 0.02 }),
+    ],
+  )
 }
 
-/** toast 底部滑入：y 14→0 + fade，200ms power2.out。 */
-export function toastIn(el: gsap.TweenTarget): gsap.core.Tween {
-  if (prefersReducedMotion()) {
-    return gsap.set(el, { opacity: 1, y: 0 })
+export interface MotionHandle {
+  kill: () => void
+}
+
+/** toast 底部滑入：y 14→0 + fade，200ms power2.out；偏好变化时立即切换到对应终态。 */
+export function toastIn(el: gsap.TweenTarget): MotionHandle {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    const fallbackTween = gsap.set(el, { opacity: 1, y: 0 })
+    return { kill: () => fallbackTween.kill() }
   }
-  return gsap.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' })
+
+  const mediaContext = gsap.matchMedia()
+  let handled = false
+  let fallbackTween: gsap.core.Tween | undefined
+  mediaContext.add(
+    { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+    (ctx) => {
+      handled = true
+      const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
+      const tween = reduce
+        ? gsap.set(el, { opacity: 1, y: 0 })
+        : gsap.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' })
+      return () => tween.kill()
+    },
+  )
+
+  if (!handled) fallbackTween = gsap.set(el, { opacity: 1, y: 0 })
+  return {
+    kill: () => {
+      fallbackTween?.kill()
+      mediaContext.revert()
+    },
+  }
 }
 
 /* ==== T8 ==== */

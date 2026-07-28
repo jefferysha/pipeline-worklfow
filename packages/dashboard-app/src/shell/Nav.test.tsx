@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
+import { Dialog } from '../shared/Dialog'
 import { Nav, PRIMARY_VIEWS } from './Nav'
 
 beforeEach(() => {
@@ -242,12 +244,42 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(trigger).toHaveFocus()
   })
 
-  it('已被嵌套交互处理的 Escape 不会穿透关闭设置浮层', () => {
-    renderNav()
+  it('共享模态 Dialog 的 Escape 只关闭顶层，不穿透关闭设置浮层', () => {
+    function SettingsWithModal(): JSX.Element {
+      const [modalOpen, setModalOpen] = useState(false)
+      return (
+        <I18nProvider>
+          <Nav
+            view="progress"
+            onView={vi.fn()}
+            lang="zh"
+            onLang={vi.fn()}
+            theme="light"
+            onTheme={vi.fn()}
+            connected
+            decisionCount={0}
+            afkCount={0}
+          />
+          <button type="button" data-testid="open-modal" onClick={() => setModalOpen(true)}>
+            打开确认
+          </button>
+          {modalOpen && (
+            <Dialog title="确认操作" testid="nested-modal" onClose={() => setModalOpen(false)}>
+              <button type="button">确认</button>
+            </Dialog>
+          )}
+        </I18nProvider>
+      )
+    }
+
+    render(<SettingsWithModal />)
     fireEvent.click(screen.getByTestId('nav-settings'))
-    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-    event.preventDefault()
-    document.dispatchEvent(event)
+    fireEvent.click(screen.getByTestId('open-modal'))
+    expect(screen.getByTestId('nested-modal')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('nested-modal')).toBeNull()
     expect(screen.getByTestId('nav-settings-panel')).toBeInTheDocument()
   })
 
