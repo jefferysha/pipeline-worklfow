@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import {
@@ -78,15 +78,18 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
   const [promptSkipKeyword, setPromptSkipKeyword] = useState<string | null>(null)
   const [promptSkipBusy, setPromptSkipBusy] = useState(false)
   const [promptSkipError, setPromptSkipError] = useState<string | null>(null)
+  const promptSkipGeneration = useRef(0)
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
+    promptSkipGeneration.current += 1
     setHooks(null)
     setMatrix({})
     setLoadError(null)
     setToggleError(null)
     setPromptSkipKeyword(null)
+    setPromptSkipBusy(false)
     setPromptSkipError(null)
     fetchHooksConfig(root)
       .then((body) => {
@@ -143,19 +146,22 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
 
   async function savePromptSkipKeyword(keyword: string): Promise<boolean> {
     if (promptSkipBusy) return false
+    const generation = promptSkipGeneration.current
     setPromptSkipBusy(true)
     setPromptSkipError(null)
     try {
       const saved = await postPromptRoutingBypass(root, keyword)
+      if (generation !== promptSkipGeneration.current) return false
       setPromptSkipKeyword(saved)
       return true
     } catch (err: unknown) {
+      if (generation !== promptSkipGeneration.current) return false
       setPromptSkipError(t('workbench.hk_bypass_save_error', {
         msg: err instanceof Error ? err.message : t('workbench.network_error'),
       }))
       return false
     } finally {
-      setPromptSkipBusy(false)
+      if (generation === promptSkipGeneration.current) setPromptSkipBusy(false)
     }
   }
 

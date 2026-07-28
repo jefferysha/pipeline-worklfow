@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { invalidateWorkflowRules } from '../model/workflowModel'
 import { invalidateMandatoryConfig } from './mandatorySkills'
+import { useHooksConfig } from './HookTimeline'
 import { WorkbenchView } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
@@ -39,6 +41,7 @@ let hooksMatrix: Record<string, false>
 let postHooksResponse: () => Response
 let promptSkipKeyword: string
 let postPromptBypassResponse: () => Response
+let hooksGetResponse: () => Response | Promise<Response>
 
 function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
   render(
@@ -65,6 +68,12 @@ beforeEach(() => {
     ok: true,
     prompt_skip_keyword: promptSkipKeyword,
   }), { status: 200 })
+  hooksGetResponse = () => new Response(JSON.stringify({
+    ok: true,
+    hooks: HOOKS,
+    matrix: hooksMatrix,
+    prompt_skip_keyword: promptSkipKeyword,
+  }), { status: 200 })
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
@@ -73,12 +82,7 @@ beforeEach(() => {
       return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
     }
     if (url === `/api/hooks?root=${encodeURIComponent(ROOT)}`) {
-      return new Response(JSON.stringify({
-        ok: true,
-        hooks: HOOKS,
-        matrix: hooksMatrix,
-        prompt_skip_keyword: promptSkipKeyword,
-      }), { status: 200 })
+      return hooksGetResponse()
     }
     if (url === '/api/hooks' && opts?.method === 'POST') return postHooksResponse()
     if (url === '/api/hooks/prompt-routing-bypass' && opts?.method === 'POST') {
@@ -230,6 +234,34 @@ describe('纵向阶段编辑器 Hook 写回', () => {
 })
 
 describe('UserPromptSubmit 单轮旁路词', () => {
+  it('英文 locale 的加载状态不泄漏中文', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    hooksGetResponse = () => new Promise<Response>(() => {})
+    renderView()
+    const zone = await selectStage('draft')
+    expect(within(zone).getAllByText('Reading Hook configuration…')).toHaveLength(4)
+    expect(within(zone).queryByText('Hook 配置读取中…')).toBeNull()
+  })
+
+  it('读取失败显示 alert，不把失败谎报为持续 loading', async () => {
+    hooksGetResponse = () => new Response(JSON.stringify({ ok: false, error: '配置损坏' }), { status: 500 })
+    renderView()
+    const zone = await selectStage('draft')
+    expect(await within(zone).findByRole('alert')).toHaveTextContent('配置损坏')
+    expect(within(zone).queryByText('Hook 配置读取中…')).toBeNull()
+  })
+
+  it('初始加载空字符串时持续显示已禁用状态，且使用高对比文本 token', async () => {
+    promptSkipKeyword = ''
+    renderView()
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    const status = within(editor).getByRole('status')
+    expect(status).toHaveTextContent('已禁用')
+    expect(status).toHaveClass('text-green-d')
+    expect(status).not.toHaveClass('text-green')
+  })
+
   it('加载真实值并可用 Enter 保存，成功状态以 server 返回值为准', async () => {
     renderView()
     const zone = await selectStage('draft')
@@ -279,5 +311,58 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     }), { status: 200 })
     fireEvent.click(within(editor).getByRole('button', { name: '重试保存' }))
     expect(await within(editor).findByRole('status')).toHaveTextContent('已禁用')
+  })
+
+  it.each([
+    {
+      label: '旧 root 的迟到成功',
+      response: () => new Response(JSON.stringify({ ok: true, prompt_skip_keyword: 'root-a-value' }), { status: 200 }),
+    },
+    {
+      label: '旧 root 的迟到失败',
+      response: () => new Response(JSON.stringify({ ok: false, error: 'root A 磁盘只读' }), { status: 500 }),
+    },
+  ])('$label 不覆盖新 root 的 keyword/error/busy', async ({ response }) => {
+    const rootB = '/tmp/proj-b'
+    let resolveSave: ((value: Response) => void) | undefined
+    global.fetch = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === `/api/hooks?root=${encodeURIComponent(ROOT)}`) {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true, hooks: HOOKS, matrix: {}, prompt_skip_keyword: 'root-a',
+        }), { status: 200 }))
+      }
+      if (url === `/api/hooks?root=${encodeURIComponent(rootB)}`) {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true, hooks: HOOKS, matrix: {}, prompt_skip_keyword: 'root-b',
+        }), { status: 200 }))
+      }
+      if (url === '/api/hooks/prompt-routing-bypass' && opts?.method === 'POST') {
+        return new Promise<Response>((resolve) => {
+          resolveSave = resolve
+        })
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`))
+    }) as unknown as typeof fetch
+    const wrapper = ({ children }: { children: ReactNode }) => <I18nProvider>{children}</I18nProvider>
+    const hook = renderHook(({ root }) => useHooksConfig(root), {
+      initialProps: { root: ROOT },
+      wrapper,
+    })
+    await waitFor(() => expect(hook.result.current.promptSkipKeyword).toBe('root-a'))
+
+    let saveResult: Promise<boolean> | undefined
+    act(() => {
+      saveResult = hook.result.current.savePromptSkipKeyword('root-a-value')
+    })
+    expect(hook.result.current.promptSkipBusy).toBe(true)
+    hook.rerender({ root: rootB })
+    await waitFor(() => expect(hook.result.current.promptSkipKeyword).toBe('root-b'))
+    await act(async () => {
+      resolveSave?.(response())
+      await saveResult
+    })
+    expect(hook.result.current.promptSkipKeyword).toBe('root-b')
+    expect(hook.result.current.promptSkipError).toBeNull()
+    expect(hook.result.current.promptSkipBusy).toBe(false)
   })
 })

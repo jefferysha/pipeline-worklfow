@@ -23,3 +23,23 @@
 {"ts":"2026-07-28T03:30:28Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-07-28T03:48:13Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T03:53:02Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T03:53:08Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T03:53:08Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T03:53:08Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T03:53:08Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T03:53:08Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"bbdcdc4d-476b-42bc-9424-f6cbbbcb1108"}
+{"ts":"2026-07-28T04:06:44Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-28T04:06:44Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-28T04:06:44Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-prompt-routing-bypass-verify.md"}
+{"ts":"2026-07-28T04:06:45Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-28T04:07:54Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-28T04:08:07Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-28T04:08:08Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-28T03:16:02Z authority_host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T04:08:08Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-28T04:08:08Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-28T04:08:08Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T04:08:08Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T04:08:08Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"7adab9e7-0a36-4d14-a86b-161f637a7ebb"}
+{"ts":"2026-07-28T04:26:00Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa6b3-751c-7ee3-a173-32281422b82e"}
+{"ts":"2026-07-28T04:33:42Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-28T04:53:49Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

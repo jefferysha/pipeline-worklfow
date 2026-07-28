@@ -39,7 +39,16 @@ export function HookRows({
 }): JSX.Element {
   const { t } = useT()
   const hooks = config.hooks?.filter((hook) => hook.event === event) ?? []
-  if (config.hooks === null) return <span className="text-xs text-text-3">Hook 配置读取中…</span>
+  if (config.hooks === null) {
+    if (config.loadError && event === 'UserPromptSubmit') {
+      return <p className="text-xs leading-5 text-red-d" role="alert">{config.loadError}</p>
+    }
+    return (
+      <span className="text-xs text-text-3">
+        {config.loadError ? '—' : t('workbench.hk_config_loading')}
+      </span>
+    )
+  }
   if (hooks.length === 0) return <span className="text-xs text-text-3">此时点没有已注册 Hook</span>
   return (
     <div className="flex min-w-0 flex-1 flex-col divide-y divide-border max-[720px]:w-full">
@@ -185,9 +194,9 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
           {validationError ?? config.promptSkipError}
         </p>
       )}
-      {saved && (
-        <p className="mt-2 text-[11px] leading-4 text-green" role="status">
-          {draft === ''
+      {(saved || config.promptSkipKeyword === '') && (
+        <p className="mt-2 text-[11px] leading-4 text-green-d" role="status">
+          {config.promptSkipKeyword === ''
             ? t('workbench.hk_bypass_disabled')
             : t('workbench.hk_bypass_saved', { keyword: draft })}
         </p>
