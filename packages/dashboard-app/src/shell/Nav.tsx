@@ -13,7 +13,7 @@ import { Icon } from './Icon'
  * 结构（自上而下）：logo 标（品牌名收进 title 悬浮）→ 分隔线 → 竖排导航项 项目/进度/AFK/工作台
  * （lucide 图标 + 小字，激活态沿 aria-current 变体，进度项挂待拍板红徽标、AFK 项挂待处置失败红
  * 徽标）→ 弹性空档 → 分隔线 → 底部单一「设置」入口；连接、主题和语言收进锚定浮层。
- * 窄屏（<720px）切为底部导航并保留短标签，释放横向阅读空间。
+ * 窄屏（≤720px）切为底部导航并保留短标签，释放横向阅读空间。
  */
 export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
 
@@ -45,7 +45,7 @@ interface NavProps {
 }
 
 // ── tailwind 类串（状态经 aria-current / data-* 属性挂 aria-*/data-* 变体，测试不断言视觉类名）──
-/** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏收为纯图标。 */
+/** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏改为保留短标签的底部入口。 */
 const RAIL_BTN_CLS =
   'group relative flex min-h-11 w-[72px] cursor-pointer flex-col items-center justify-center gap-[3px] rounded-xl border border-transparent px-1 py-1.5 text-text-3 outline-none transition-[background-color,border-color,color,transform] duration-150 motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) active:scale-[.98] motion-reduce:active:scale-100 mobile:h-14 mobile:min-w-11 mobile:flex-1 mobile:rounded-lg mobile:px-0.5 mobile:py-1'
 /** rail / bottom-nav 按钮短标签；移动端也可见，避免纯图标入口依赖记忆。 */

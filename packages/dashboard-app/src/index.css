@@ -108,6 +108,9 @@
  * inline 令生成的工具类直接引用 var(--xx)，随三段式主题实时切换。
  */
 @theme inline {
+  /* 所有 Tailwind transition utility 共用规范的短时 ease-out，不要求每个组件重复声明。 */
+  --default-transition-timing-function: var(--ease-out);
+
   /* ── 项目原生 token → tailwind 颜色 ── */
   --color-bg: var(--bg);
   --color-card: var(--card);

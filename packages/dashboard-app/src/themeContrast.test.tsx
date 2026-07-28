@@ -36,15 +36,25 @@ function contrast(a: string, b: string): number {
 
 describe('theme semantic foreground contrast', () => {
   const light = block(':root')
+  const systemDark = block(':root:not([data-theme="light"])')
+  const explicitLight = block(':root[data-theme="light"]')
   const dark = block(':root[data-theme="dark"]')
 
   it.each([
-    ['light primary', hexToken(light, 'btn-fg'), hexToken(light, 'accent')],
-    ['dark primary', hexToken(dark, 'btn-fg'), hexToken(dark, 'accent')],
+    ['default light primary', hexToken(light, 'btn-fg'), hexToken(light, 'btn-bg')],
+    ['system dark primary', hexToken(systemDark, 'btn-fg'), hexToken(systemDark, 'btn-bg')],
+    ['explicit light primary', hexToken(explicitLight, 'btn-fg'), hexToken(explicitLight, 'btn-bg')],
+    ['explicit dark primary', hexToken(dark, 'btn-fg'), hexToken(dark, 'btn-bg')],
     ['light success on card', hexToken(light, 'green-d'), hexToken(light, 'card')],
+    ['system dark success on card', hexToken(systemDark, 'green-d'), hexToken(systemDark, 'card')],
+    ['explicit light success on card', hexToken(explicitLight, 'green-d'), hexToken(explicitLight, 'card')],
     ['light success on code', hexToken(light, 'green-d'), hexToken(light, 'code-bg')],
-    ['dark success on card', hexToken(dark, 'green-d'), hexToken(dark, 'card')],
+    ['explicit dark success on card', hexToken(dark, 'green-d'), hexToken(dark, 'card')],
   ])('%s stays at WCAG AA for normal text', (_label, foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('uses the shared ease-out token for Tailwind transitions', () => {
+    expect(css).toContain('--default-transition-timing-function: var(--ease-out);')
   })
 })

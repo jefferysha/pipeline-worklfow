@@ -1036,6 +1036,7 @@ export const zh: Dict = {
     //    不要与本文件其它命名空间（如 progress.* 里孤立出现的「T11」注释）混淆，那是上一轮
     //    v5 计划的编号，跟本轮 v6 计划的 T1-T13 是两套体系。 ──
     flow_count_title: '{n} 个真实任务当前在此阶段',
+    stage_scroll_hint: '横向滚动查看全部阶段',
     gate_pop_title: '此阶段由以下钩子强制拦截',
     // ── v6 计划 T12：编辑区瘦身——Hook 时序挪右栏 + 安全门说明卡 + manifest 矩阵入口卡。──
     sg_title: '安全门说明',
@@ -2269,6 +2270,7 @@ export const en: Dict = {
     lp_rel_dialog_close: 'Close',
     // ── v6 plan T11: flow band (StepperRail rewrite) — real count bubble + gate badge popover. ──
     flow_count_title: '{n} real task(s) currently at this stage',
+    stage_scroll_hint: 'Scroll horizontally to view every stage',
     gate_pop_title: 'This stage is enforced by these hooks',
     // ── v6 plan T12: editor slim-down — hook timeline moved to right rail + safety-gate card + manifest matrix entry. ──
     sg_title: 'Safety gates',

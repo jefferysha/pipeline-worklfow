@@ -12,51 +12,6 @@
       "reads": []
     },
     {
-      "kind": "delta-spec",
-      "path": "openspec/changes/pr-5-merge-audit/specs/dashboard-ui-ux-system/spec.md",
-      "sha256": "f2447cb358b68e03d6126eb3f48d58e385304e641f566dd365d1479f64865505",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-28T08:59:43Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "f2447cb358b68e03d6126eb3f48d58e385304e641f566dd365d1479f64865505",
-          "readAt": "2026-07-28T09:00:13Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-plan",
-      "path": "docs/superpowers/plans/2026-07-28-pr-5-merge-audit.md",
-      "sha256": "9bbfd5e3a34b87c30e291538aefa14e04e78882cf8b745fd9fce394a09faf114",
-      "producer": "writing-plans",
-      "recordedAt": "2026-07-28T08:59:43Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "9bbfd5e3a34b87c30e291538aefa14e04e78882cf8b745fd9fce394a09faf114",
-          "readAt": "2026-07-28T09:00:13Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
-        }
-      ]
-    },
-    {
-      "kind": "plan",
-      "path": "docs/superpowers/plans/2026-07-28-pr-5-merge-audit.md",
-      "sha256": "9bbfd5e3a34b87c30e291538aefa14e04e78882cf8b745fd9fce394a09faf114",
-      "producer": "writing-plans",
-      "recordedAt": "2026-07-28T08:59:43Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "9bbfd5e3a34b87c30e291538aefa14e04e78882cf8b745fd9fce394a09faf114",
-          "readAt": "2026-07-28T09:00:13Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
-        }
-      ]
-    },
-    {
       "kind": "proposal",
       "path": "openspec/changes/pr-5-merge-audit/proposal.md",
       "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
@@ -74,6 +29,42 @@
           "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
           "readAt": "2026-07-28T09:00:13Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:06:35Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:12:20Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",15]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:16:02Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:16:32Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",17]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:52:12Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "23511ceeb6a74898babe8b587fad4770476df08eee6311064761b0e05e76ca3b",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
         }
       ]
     },
@@ -95,48 +86,42 @@
           "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
           "readAt": "2026-07-28T09:00:13Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/pr-5-merge-audit/tasks.md",
-      "sha256": "d7598f89599481ed07ec62e49b85c591ef720e518dcd43b6131034434ef069cc",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:59:44Z",
-      "reads": [
+        },
         {
           "phase": "spec",
-          "sha256": "d7598f89599481ed07ec62e49b85c591ef720e518dcd43b6131034434ef069cc",
-          "readAt": "2026-07-28T08:59:45Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",12]"
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:06:35Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",14]"
         },
         {
           "phase": "build",
-          "sha256": "d7598f89599481ed07ec62e49b85c591ef720e518dcd43b6131034434ef069cc",
-          "readAt": "2026-07-28T09:00:13Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-design",
-      "path": "docs/superpowers/specs/2026-07-28-pr-5-merge-audit-design.md",
-      "sha256": "81e09defdd54a9a44b381522995ad924072ca9eae4647934603bcebcec3aea9f",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-28T08:59:45Z",
-      "reads": [
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:12:20Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",15]"
+        },
         {
           "phase": "spec",
-          "sha256": "81e09defdd54a9a44b381522995ad924072ca9eae4647934603bcebcec3aea9f",
-          "readAt": "2026-07-28T08:59:45Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",12]"
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:16:02Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",16]"
         },
         {
           "phase": "build",
-          "sha256": "81e09defdd54a9a44b381522995ad924072ca9eae4647934603bcebcec3aea9f",
-          "readAt": "2026-07-28T09:00:13Z",
-          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:16:32Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",17]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:52:12Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "28bdd2a17388adfc1c9f9fd010e66fc11124069c3daf1807ead1a49b3f859817",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
         }
       ]
     },
@@ -158,6 +143,123 @@
           "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
           "readAt": "2026-07-28T09:00:13Z",
           "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",13]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:06:35Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:12:21Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",15]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:16:02Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:16:32Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",17]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:52:12Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b76b48204a68022a3a6867ec396ab0c708e5c8c59095b7a2fb32ee1febff4437",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/pr-5-merge-audit/specs/dashboard-ui-ux-system/spec.md",
+      "sha256": "81ae89660db21b4781d42354ecbee185a4d60c3ec0eb374ed9b1492ac47e3b30",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T09:51:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "81ae89660db21b4781d42354ecbee185a4d60c3ec0eb374ed9b1492ac47e3b30",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-pr-5-merge-audit.md",
+      "sha256": "035d59a31d7c301d0ac649cd82b6603ea4d3135b83035c85586c6b49f16635a1",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T09:51:58Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "035d59a31d7c301d0ac649cd82b6603ea4d3135b83035c85586c6b49f16635a1",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-28-pr-5-merge-audit.md",
+      "sha256": "035d59a31d7c301d0ac649cd82b6603ea4d3135b83035c85586c6b49f16635a1",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T09:51:58Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "035d59a31d7c301d0ac649cd82b6603ea4d3135b83035c85586c6b49f16635a1",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-28-pr-5-merge-audit-design.md",
+      "sha256": "741fa21f84ae07c08e64844b34a455ef0e4048e37640aa6d948960cf92cedd91",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-28T09:52:11Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "741fa21f84ae07c08e64844b34a455ef0e4048e37640aa6d948960cf92cedd91",
+          "readAt": "2026-07-28T09:52:12Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "741fa21f84ae07c08e64844b34a455ef0e4048e37640aa6d948960cf92cedd91",
+          "readAt": "2026-07-28T09:52:45Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/pr-5-merge-audit/tasks.md",
+      "sha256": "05df7cd4889534e4789446ece0fbc4b44d611afbd47f1fe283dd99aefd4b2c5e",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-28T09:55:44Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "05df7cd4889534e4789446ece0fbc4b44d611afbd47f1fe283dd99aefd4b2c5e",
+          "readAt": "2026-07-28T09:55:44Z",
+          "visitId": "[\"4de636d4-2e10-4f14-ada3-b534e90e39a0\",19]"
         }
       ]
     }

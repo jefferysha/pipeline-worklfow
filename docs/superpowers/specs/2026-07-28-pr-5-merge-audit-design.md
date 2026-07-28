@@ -37,7 +37,8 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 
 1. 为 Tailwind 增加边界互补的 `mobile` / `desktop` custom variant，并统一替换 Dashboard 源码与测试中 `max-[720px]` / `min-[720px]` 的旧变体。
 2. 为 `TrafficPanel` 加成对的中英文 key，并保持空闲、加载、成功、失败四态可辨。
-3. 将进度抽屉关闭缓动改成 `power1.out` / `power3.out`，在单元测试中锁定。
+3. 将 Tailwind 默认 transition timing token 统一为 ease-out，并让项目切换 popover 与进度抽屉
+   的关闭缓动使用 ease-out；通过源码测试和生产 CSS 守卫锁定。
 4. 修复 Markdown 空白；在真实 Dashboard 的验收状态下刷新进度页 WebP。
 5. 为 Workbench 阶段带增加中等宽度可见的横向滚动提示，并把提示作为滚动容器的
    `aria-describedby`。
@@ -50,9 +51,9 @@ Lucide 图标的 1.75 线宽由全局 `svg.lucide` 规则统一提供，源码�
 | --- | --- | --- |
 | 720px 临界点 | 构建 CSS 的移动/桌面 media 互补；class 测试使用共享 `mobile:` / `desktop:` | 精确 720px 的 shell 和 Overview 内容均为移动布局 |
 | i18n | zh/en key 对称测试与 TrafficPanel 测试 | 切换语言时加载态无硬编码中文 |
-| motion | hook 测试断言 ease-out | 打开/关闭抽屉且 reduced-motion 可用 |
+| motion | 共享 Tailwind token、AppHeader popover 与 drawer 测试断言 ease-out；生产 CSS 守卫 | 打开/关闭项目切换 popover 与抽屉且 reduced-motion 可用 |
 | 视觉与可访问性 | 主题对比度、组件测试、类型检查 | 桌面/移动、亮/暗、键盘焦点 |
-| 1024px 阶段发现性 | StepperRail 提示与 `aria-describedby` 测试 | Workbench 可见滚动提示，滚动后 Ship/Archive 可操作 |
+| 1024px 阶段发现性 | `TimelineStageStrip` 提示与 `aria-describedby` 测试 | Workbench 可见滚动提示，滚动后 Ship/Archive 可操作 |
 | 文档 | docs、repository hygiene、diff check | 官方截图与真实页面一致 |
 
 ## 回滚与停止条件

@@ -41,6 +41,12 @@ Dashboard MUST 将 hover/press、列表进入、dialog/popover、drawer 和 toas
 - **THEN** 元素使用对应的短时 ease-out 淡入/位移动效
 - **AND** 动效不延迟主要操作可用性
 
+#### Scenario: 共享交互动效基线
+
+- **WHEN** Dashboard 使用 Tailwind transition utility 呈现 hover 或 press 状态
+- **THEN** 默认 transition timing token 使用 ease-out
+- **AND** 项目切换 popover 的打开与关闭补间均使用 120–280ms 的 ease-out
+
 #### Scenario: reduced motion
 
 - **WHEN** `prefers-reduced-motion: reduce` 生效

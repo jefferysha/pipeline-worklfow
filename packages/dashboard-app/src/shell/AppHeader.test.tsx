@@ -3,8 +3,23 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { AppHeader } from './AppHeader'
 
+const { gsapTo } = vi.hoisted(() => ({ gsapTo: vi.fn() }))
+
+vi.mock('gsap', () => ({
+  default: {
+    registerPlugin: vi.fn(),
+    to: gsapTo,
+  },
+}))
+
+vi.mock('@gsap/react', () => ({
+  useGSAP: vi.fn(),
+}))
+
 beforeEach(() => {
   localStorage.clear()
+  gsapTo.mockReset()
+  vi.unstubAllGlobals()
 })
 
 function renderHeader(over: Partial<Parameters<typeof AppHeader>[0]> = {}) {
@@ -92,6 +107,28 @@ describe('AppHeader 项目切换器（沿用原 Nav 切换/注销 testid）', ()
     fireEvent.click(btn)
     expect(btn).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByTestId('project-menu')).toBeNull()
+  })
+
+  it('允许动效时以 120ms ease-out 关闭项目切换 popover', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true,
+      media: '(prefers-reduced-motion: no-preference)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+    renderHeader({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    const btn = screen.getByTestId('project-switcher')
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+
+    expect(gsapTo).toHaveBeenCalledWith(
+      expect.any(HTMLDivElement),
+      expect.objectContaining({ duration: 0.12, ease: 'power1.out' }),
+    )
   })
 
   it('菜单底部渲染脚注说明（nav.project_menu_hint）', () => {

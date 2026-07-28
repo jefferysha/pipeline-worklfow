@@ -73,7 +73,7 @@ export function AppHeader({ view, onView, projects, currentRoot, onRoot, onUnreg
       setProjectOpen(false)
       return
     }
-    gsap.to(el, { autoAlpha: 0, y: -4, duration: 0.12, ease: 'power1.in', onComplete: () => setProjectOpen(false) })
+    gsap.to(el, { autoAlpha: 0, y: -4, duration: 0.12, ease: 'power1.out', onComplete: () => setProjectOpen(false) })
   }, [])
 
   // 开=下滑淡入 + 行 stagger（header 下拉从触发钮正下方落下）；gsap.matchMedia 全包，reduce 直显终态。

@@ -55,19 +55,19 @@ git diff --check origin/main...
 
 ## Build 子阶段 3：1024px 工作台发现性与主题测试
 
-1. 先在 `packages/dashboard-app/src/workbench/StepperRail.test.tsx` 增加失败断言，要求中等宽度提示
+1. 先在 `packages/dashboard-app/src/workbench/TimelineStageStrip.test.tsx` 增加失败断言，要求中等宽度提示
    存在且通过 `aria-describedby` 关联阶段滚动容器。
-2. 在 `StepperRail.tsx` 添加只在中等/窄视口可见的简洁横向滚动提示，不改变阶段选择、gate 或
+2. 在 `TimelineStageStrip.tsx` 添加只在中等/窄视口可见的简洁横向滚动提示，不改变阶段选择、gate 或
    overflow 行为。
-3. 先扩展 `themeContrast.test.tsx`，让 system dark、explicit light 和 explicit dark 三条解析
-   路径以及 `--btn-bg` 在旧实现上按预期失败，再做最小测试解析修复。
+3. 扩展 `themeContrast.test.tsx`，让 system dark、explicit light 和 explicit dark 三条解析
+   路径都使用真实 `--btn-bg` 验证；若现有 token 不能通过，则先保留失败证据，再做最小修复。
 4. 更新 `Nav.tsx` 的移动底栏注释并同步 ADR 的 Lucide 线宽说明。
-5. 运行 StepperRail、主题、Workbench 定向测试和前端 typecheck。
+5. 运行 TimelineStageStrip、主题、Workbench 定向测试和前端 typecheck。
 
 验证：
 
 ```bash
-./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/workbench/StepperRail.test.tsx packages/dashboard-app/src/themeContrast.test.tsx packages/dashboard-app/src/workbench/WorkbenchView.test.tsx
+./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/workbench/TimelineStageStrip.test.tsx packages/dashboard-app/src/themeContrast.test.tsx packages/dashboard-app/src/workbench/WorkbenchView.test.tsx
 npm run typecheck:web
 ```
 
@@ -75,7 +75,30 @@ npm run typecheck:web
 
 **此处建议 /clear**
 
-## Build 子阶段 4：真实截图与生成产物
+## Build 子阶段 4：共享动效基线
+
+1. 先在 `packages/dashboard-app/src/shell/AppHeader.test.tsx` 增加项目切换 popover 关闭补间的失败
+   断言，要求 120ms ease-out。
+2. 在 `packages/dashboard-app/src/themeContrast.test.tsx` 增加源码守卫，要求 Tailwind
+   `--default-transition-timing-function` 映射到 `--ease-out`。
+3. 在 `packages/dashboard-app/src/index.css` 设置共享 Tailwind 默认 transition timing token，
+   并将 `AppHeader.tsx` 的关闭补间从 `power1.in` 改为 `power1.out`。
+4. 运行 AppHeader、主题与既有 drawer 动效定向测试；构建生产 CSS，确认默认 transition timing
+   为 `cubic-bezier(0,0,.2,1)` 或等价的 `--ease-out` 引用。
+
+验证：
+
+```bash
+./node_modules/.bin/vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/shell/AppHeader.test.tsx packages/dashboard-app/src/themeContrast.test.tsx packages/dashboard-app/src/progress/useProgressDrawer.test.tsx
+npm run build:web
+rg -n -- "--default-transition-timing-function" packages/dashboard-app/dist/assets
+```
+
+回滚：恢复单个共享 token、AppHeader easing 和对应断言；不涉及数据、API 或状态持久化。
+
+**此处建议 /clear**
+
+## Build 子阶段 5：真实截图与生成产物
 
 1. 先构建内部 workspace 和 Dashboard，启动唯一可识别的生产 Dashboard。
 2. 核对页面标题、目标 URL、注册项目 root 与 `pr-5-merge-audit`。
