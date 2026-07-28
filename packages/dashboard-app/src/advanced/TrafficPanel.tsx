@@ -6,6 +6,7 @@ import {
   type TraceRecordsResponse,
   type TraceSessionRow,
 } from './trafficData'
+import { useT } from '../i18n'
 
 /**
  * TrafficPanel（#34d）—— tap 流量查看器：真消费 /api/traces/sessions + /api/traces/records。
@@ -14,6 +15,7 @@ import {
  * 会话状态徽标 data-state 承载（active=绿 tint），颜色全走 token 语义类。
  */
 export function TrafficPanel(): JSX.Element {
+  const { t } = useT()
   const [sessions, setSessions] = useState<TraceSessionRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -49,7 +51,7 @@ export function TrafficPanel(): JSX.Element {
   if (error) {
     return (
       <div className={rootCls} data-testid="traffic-panel">
-        <p className={errorCls} data-testid="traffic-error">
+        <p className={errorCls} data-testid="traffic-error" role="alert">
           traces 数据端不可达：{error}
         </p>
       </div>
@@ -58,7 +60,7 @@ export function TrafficPanel(): JSX.Element {
   if (!sessions) {
     return (
       <div className={rootCls} data-testid="traffic-panel">
-        <p className="m-0 text-xs text-text-3">加载捕获会话…</p>
+        <p className="m-0 text-xs text-text-3" role="status" aria-live="polite">加载捕获会话…</p>
       </div>
     )
   }
@@ -69,7 +71,7 @@ export function TrafficPanel(): JSX.Element {
         本地捕获 · 不外发（local-only）
       </p>
       {sessions.length === 0 ? (
-        <p className="m-0 text-xs text-text-3 opacity-75" data-testid="traffic-empty">
+        <p className="m-0 text-xs text-text-3 opacity-75" data-testid="traffic-empty" role="status" aria-live="polite">
           暂无捕获会话（tap 默认 OFF）
         </p>
       ) : (
@@ -78,14 +80,14 @@ export function TrafficPanel(): JSX.Element {
             <li data-testid={`traffic-session-${s.id}`} key={s.id}>
               <button
                 type="button"
-                className="flex w-full cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-[7px] text-left text-text transition-[border-color,box-shadow] hover:border-green aria-pressed:border-[1.5px] aria-pressed:border-green aria-pressed:shadow-[0_0_0_3px_var(--green-t)]"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-[7px] text-left text-text transition-[border-color,box-shadow] hover:border-accent-b aria-pressed:border-[1.5px] aria-pressed:border-(--accent) aria-pressed:bg-accent-t aria-pressed:shadow-[0_0_0_3px_var(--ring-blue)]"
                 aria-pressed={selected === s.id}
                 onClick={() => openSession(s.id)}
               >
                 <span className="font-mono text-xs font-semibold text-text">{s.client || '(unknown)'}</span>
                 <span className="font-mono text-[11px] text-text-3">{s.record_count} 条</span>
                 <span
-                  className="ml-auto rounded-full bg-fill px-[7px] py-0.5 text-[10.5px] font-bold text-text-3 data-[state=active]:bg-green-t data-[state=active]:text-green"
+                  className="ml-auto rounded-full bg-fill px-[7px] py-0.5 text-[10.5px] font-bold text-text-3 data-[state=active]:bg-green-t data-[state=active]:text-green-d"
                   data-state={s.status}
                 >
                   {s.status}
@@ -95,8 +97,13 @@ export function TrafficPanel(): JSX.Element {
           ))}
         </ul>
       )}
+      {selected && !records && !recError && (
+        <p className="m-0 text-xs text-text-3" data-testid="traffic-records-loading" role="status" aria-live="polite">
+          {t('advanced.traffic_records_loading')}
+        </p>
+      )}
       {selected && recError && (
-        <p className={errorCls} data-testid="traffic-rec-error">
+        <p className={errorCls} data-testid="traffic-rec-error" role="alert">
           记录读取失败：{recError}
         </p>
       )}

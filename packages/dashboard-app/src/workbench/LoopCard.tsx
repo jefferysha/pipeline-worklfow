@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ArrowRight, TriangleAlert } from 'lucide-react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
@@ -98,7 +99,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     return (
       <section className={WB_TW.card} data-testid="wb-loop-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
-        <p className={WB_TW.loadError} data-tone="error" data-testid="lp-load-error">{loops.loadError}</p>
+        <p className={WB_TW.loadError} data-tone="error" data-testid="lp-load-error" role="alert">{loops.loadError}</p>
       </section>
     )
   }
@@ -106,7 +107,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     return (
       <section className={WB_TW.card} data-testid="wb-loop-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
-        <p className={WB_TW.loading}>{t('common.loading')}</p>
+        <p className={WB_TW.loading} role="status" aria-live="polite">{t('common.loading')}</p>
       </section>
     )
   }
@@ -115,7 +116,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     return (
       <section className={WB_TW.card} data-testid="wb-loop-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
-        <div className="pt-2.5 pb-1" data-testid="lp-empty">
+        <div className="pt-2.5 pb-1" data-testid="lp-empty" role="status" aria-live="polite">
           <p className="mb-1 text-[13px] font-bold">{t('workbench.lp_empty_title')}</p>
           <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
           <div className="my-3 rounded-md border border-dashed border-border-2 bg-fill px-3.5 py-3" data-testid="lp-empty-prompt">
@@ -132,6 +133,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             >
               {promptCopied ? t('workbench.lp_empty_copied') : t('workbench.lp_empty_copy')}
             </Button>
+            {promptCopied && <span className="sr-only" role="status" aria-live="polite">{t('workbench.lp_empty_copied')}</span>}
           </div>
           <p className={cn(WB_TW.note, 'mt-2')}>{t('workbench.lp_empty_note')}</p>
         </div>
@@ -153,7 +155,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           onCheckedChange={() => edit({ status: active ? 'paused' : 'active' })}
         />
         <span
-          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green' : 'bg-fill text-text-3')}
+          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green-d' : 'bg-fill text-text-3')}
           data-state={active ? 'run' : 'paused'}
           data-testid="lp-pill"
         >
@@ -186,15 +188,15 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           </select>
         )}
         <span className="flex-1" />
-        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="lp-dirty">{t('workbench.lp_dirty')}</span>}
-        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="lp-save-ok">{t('workbench.lp_save_ok')}</span>}
+        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="lp-dirty" role="status" aria-live="polite">{t('workbench.lp_dirty')}</span>}
+        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="lp-save-ok" role="status" aria-live="polite">{t('workbench.lp_save_ok')}</span>}
         <Button size="sm" className={WB_TW.btnSolid} data-testid="lp-save" onClick={() => void save()} disabled={!dirty || saving}>
           {t('workbench.lp_save')}
         </Button>
         <span className={WB_TW.headSub}>{t('workbench.lp_head_sub')}</span>
       </div>
       {saveErrors && (
-        <ul className={WB_TW.saveErrors} data-testid="lp-save-errors">
+        <ul className={WB_TW.saveErrors} data-testid="lp-save-errors" role="alert">
           {saveErrors.map((e) => (
             <li key={e} className={WB_TW.saveErrorsLi}>{e}</li>
           ))}
@@ -219,7 +221,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             {row.root}
           </span>
           <span className="text-[11.5px] text-text-3">{t('workbench.lp_rel_root_note')}</span>
-          <span className="text-[13px] text-text-3" aria-hidden="true">➝</span>
+          <ArrowRight className="size-3.5 flex-none text-text-3" strokeWidth={1.75} aria-hidden="true" />
           <button
             type="button"
             className="h-[26px] cursor-pointer rounded-full border border-border bg-fill px-2.5 font-mono text-xs text-text-2 transition-colors duration-[120ms] hover:border-(--accent) hover:bg-accent-t hover:text-accent-d"
@@ -234,7 +236,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           <span className="text-border-2" aria-hidden="true">·</span>
           <span className="text-xs font-semibold text-text-3">{t('workbench.lp_rel_phases_label')}</span>
           {row.phases.length === 0 ? (
-            <span className={WB_TW.note}>{t('workbench.lp_rel_phases_empty')}</span>
+            <span className={WB_TW.note} role="status" aria-live="polite">{t('workbench.lp_rel_phases_empty')}</span>
           ) : (
             row.phases.map((p) => (
               <span key={p} className={CHIP_TW} data-testid="lp-rel-phase-chip">{p}</span>
@@ -255,7 +257,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           }
         >
           {row.matched_changes.length === 0 ? (
-            <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2">{t('workbench.lp_rel_dialog_empty')}</p>
+            <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2" role="status" aria-live="polite">{t('workbench.lp_rel_dialog_empty')}</p>
           ) : (
             <ul className="flex max-h-80 list-none flex-col gap-1.5 overflow-y-auto p-0 text-[12.5px]" data-testid="lp-rel-dialog-list">
               {row.matched_changes.map((c) => (
@@ -285,7 +287,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮
           }}
         />
-        <div className="mt-3 grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
+        <div className="mt-3 grid grid-cols-3 gap-3.5 mobile:grid-cols-1">
           <div>
             <div className="mb-[5px] flex items-center gap-2">
               <label className={WB_TW.flabel} htmlFor="lp-doc">{t('workbench.lp_doc')}</label>
@@ -360,8 +362,9 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
                 其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。警示色
                 color-mix 从既有 --red/--text-2 派生（决议#9，禁新原色）。 */}
             {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-              <p className="mt-[5px] text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
-                ⚠ {t('workbench.lp_runner_warn', { runner: draft.runner })}
+              <p className="mt-[5px] flex items-start gap-1.5 text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
+                <TriangleAlert className="mt-0.5 size-3.5 flex-none" aria-hidden="true" />
+                {t('workbench.lp_runner_warn', { runner: draft.runner })}
               </p>
             )}
           </div>

@@ -56,6 +56,8 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     renderOb()
     fireEvent.click(screen.getByTestId('onboard-copy'))
     await waitFor(() => expect(screen.getByTestId('onboard-copy').textContent).toContain('已复制'))
+    expect(screen.getByTestId('onboard-copy')).not.toHaveTextContent('✓')
+    expect(screen.getByTestId('onboard-copy').querySelector('svg')).not.toBeNull()
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('tenon init'))
     fireEvent.click(screen.getByTestId('onboard-copy-doctor'))
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('tenon doctor'))

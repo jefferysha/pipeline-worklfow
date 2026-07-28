@@ -158,7 +158,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
     return (
       <section className={WB_TW.card} data-testid="wb-afk-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.afk_title')}</b></div>
-        <p className={WB_TW.loadError} data-tone="error" data-testid="afk-load-error">{loadError}</p>
+        <p className={WB_TW.loadError} data-tone="error" data-testid="afk-load-error" role="alert">{loadError}</p>
       </section>
     )
   }
@@ -166,7 +166,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
     return (
       <section className={WB_TW.card} data-testid="wb-afk-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.afk_title')}</b></div>
-        <p className={WB_TW.loading}>{t('common.loading')}</p>
+        <p className={WB_TW.loading} role="status" aria-live="polite">{t('common.loading')}</p>
       </section>
     )
   }
@@ -176,8 +176,8 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
       <div className={WB_TW.head}>
         <b className={WB_TW.headB}>{t('workbench.afk_title')}</b>
         <span className="flex-1" />
-        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="afk-dirty">{t('workbench.afk_dirty')}</span>}
-        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="afk-save-ok">{t('workbench.afk_save_ok')}</span>}
+        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="afk-dirty" role="status" aria-live="polite">{t('workbench.afk_dirty')}</span>}
+        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="afk-save-ok" role="status" aria-live="polite">{t('workbench.afk_save_ok')}</span>}
         <Button size="sm" className={WB_TW.btnSolid} data-testid="afk-save" onClick={() => void save()} disabled={!dirty || saving}>
           {t('workbench.afk_save')}
         </Button>
@@ -185,7 +185,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
       </div>
 
       {saveError && (
-        <ul className={WB_TW.saveErrors} data-testid="afk-save-error">
+        <ul className={WB_TW.saveErrors} data-testid="afk-save-error" role="alert">
           <li className={WB_TW.saveErrorsLi}>{saveError}</li>
         </ul>
       )}
@@ -195,7 +195,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
           {t('workbench.afk_sec')}
           <span className={WB_TW.hint}>{t('workbench.afk_sec_hint')}</span>
         </div>
-        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 max-[720px]:grid-cols-1">
+        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 mobile:grid-cols-1">
           <div>
             <LpSlider
               id="afk-sld-parallel"
@@ -324,8 +324,8 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
             <span
               data-testid="afk-rd-cred-codex"
               title={t('workbench.afk_rd_codex_hint', {
-                o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
-                c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
+                o: readiness.credentials.codex.OPENAI_API_KEY.set ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_unset'),
+                c: readiness.credentials.codex.CODEX_HOME.set ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_unset'),
               })}
             >
               {t('workbench.afk_rd_cred_codex')}:

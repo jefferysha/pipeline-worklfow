@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbStepDef } from './WorkbenchView'
 
@@ -121,7 +122,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
 
       <div className="pt-3.5 pb-1">
         <div className={SEC_H}>{t('workbench.ed_sec_basic')}</div>
-        <div className="grid grid-cols-[230px_170px_minmax(0,1fr)] gap-3.5 max-[720px]:grid-cols-1">
+        <div className="grid grid-cols-[230px_170px_minmax(0,1fr)] gap-3.5 mobile:grid-cols-1">
           <div>
             <label className={FLABEL} htmlFor={`wb-ed-label-${step.id}`}>{t('workbench.ed_label')}</label>
             <input
@@ -171,7 +172,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
         </div>
         <div className="flex flex-wrap items-center gap-2" data-testid="wb-ed-outputs">
           {step.outputs.length === 0 && !adding && (
-            <span className="text-[12.5px] text-text-3">{t('workbench.ed_outputs_empty')}</span>
+            <span className="text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.ed_outputs_empty')}</span>
           )}
           {step.outputs.map((o) => (
             <span
@@ -187,7 +188,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
                   aria-label={t('workbench.ed_output_remove', { field: o.field })}
                   onClick={() => removeOutput(o.field)}
                 >
-                  ×
+                  <X className="size-3" aria-hidden="true" />
                 </button>
               )}
             </span>
@@ -224,7 +225,7 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
             </button>
           ))}
         </div>
-        {addError && <p className="mt-1.5 p-5 text-[13px] text-red">{addError}</p>}
+        {addError && <p className="mt-1.5 p-5 text-[13px] text-red" role="alert">{addError}</p>}
         <div className={`${SWITCHROW} mt-2.5`}>
           <button
             type="button"

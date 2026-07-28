@@ -142,8 +142,8 @@ export function DefaultSkillChain({
   return (
     <div className="wb-ed-sec pt-3.5 pb-1" data-testid="wb-sk-sec">
       <div className={SEC_H_CLS}>{t('workbench.sk_sec')}<span className={HINT_CLS}>{t('workbench.sk_hint_default', { phase })}</span></div>
-      {cfg === null ? <p className={NOTE_CLS}>{t('common.loading')}</p> : <>
-        {matrixTracks.length === 0 ? <p className={NOTE_CLS}>{t('workbench.track_empty')}</p> : (
+      {cfg === null ? <p className={NOTE_CLS} role="status" aria-live="polite">{t('common.loading')}</p> : <>
+        {matrixTracks.length === 0 ? <p className={NOTE_CLS} role="status" aria-live="polite">{t('workbench.track_empty')}</p> : (
           <div className="mb-2.5 flex gap-1" data-testid="wb-sk-tracks">
             {matrixTracks.map((definition) => (
               <button
@@ -168,7 +168,7 @@ export function DefaultSkillChain({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2" data-testid="wb-sk-mand">
-          {skills.length === 0 && <span className={EMPTY_CLS}>{t('workbench.sk_empty_default')}</span>}
+          {skills.length === 0 && <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_empty_default')}</span>}
           {skills.map((skill) => (
             <span key={skill} data-chip="" data-uninstalled={installed.get(skill)?.installed === false ? '' : undefined} className={CHIP_CLS} title={skill}>
               {skill}
@@ -180,7 +180,7 @@ export function DefaultSkillChain({
           {canEdit && <button type="button" className={ADDCHIP_CLS} data-testid="wb-sk-edit" onClick={() => { setEditing(true); setSaveError(null) }}>{t('workbench.sk_edit')}</button>}
           {cfg.capable === false && <p className={NOTE_CLS} data-testid="wb-sk-cfg-ro">{t('workbench.sk_cfg_readonly')}</p>}
         </div>
-        {saveError && <p className="mt-2 text-[13px] text-red" data-testid="wb-sk-save-error">{saveError}</p>}
+        {saveError && <p className="mt-2 text-[13px] text-red" data-testid="wb-sk-save-error" role="alert">{saveError}</p>}
         {editing && <SkillTransferModal selected={skills} onSave={(next) => { if (!busy) void saveMandatory(next) }} onCancel={() => { if (!busy) { setEditing(false); setSaveError(null) } }} />}
       </>}
       <p className={cn(NOTE_CLS, 'mt-2.5')}>{t('workbench.sk_mand_note')}</p>

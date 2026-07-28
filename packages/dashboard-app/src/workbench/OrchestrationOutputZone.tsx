@@ -62,14 +62,14 @@ export function OrchestrationOutputZone({ lane, readonly, canEdit, canGuard, out
                                   removeOutput(lane, o)
                                 }}
                               >
-                                ×
+                                <Icon name="x" size={12} />
                               </button>
                             )}
                           </span>
                           )
                         })}
                         {lane.outputs.length === 0 && !addingOut && (
-                          <span className="mx-0.5 text-[13px] text-text-3" data-testid={`wb-lane-outs-empty-${lane.id}`}>
+                          <span className="mx-0.5 text-[13px] text-text-3" data-testid={`wb-lane-outs-empty-${lane.id}`} role="status" aria-live="polite">
                             {t('workbench.board_outs_empty')}
                           </span>
                         )}
@@ -112,7 +112,7 @@ export function OrchestrationOutputZone({ lane, readonly, canEdit, canGuard, out
                           ))}
                       </div>
                       {outError !== null && (
-                        <p className="mt-1.5 text-[12.5px] text-red" data-testid={`wb-lane-out-err-${lane.id}`}>
+                        <p className="mt-1.5 text-[12.5px] text-red" data-testid={`wb-lane-out-err-${lane.id}`} role="alert">
                           {outError}
                         </p>
                       )}

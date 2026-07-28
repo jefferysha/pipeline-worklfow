@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { useT } from '../i18n'
+import { PageHeader } from '../shared/PageHeader'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { View } from '../shell/Nav'
@@ -308,29 +309,30 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
 
   return (
     <section ref={rootRef} data-testid="afk-view" data-page-frame="standard" className="mx-auto min-w-0 w-full max-w-[1088px] pt-7 pb-5">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-4" data-anim="afk-card">
-        <div>
-          <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">自动运行</h1>
-          <p className="mt-2 text-[13px] leading-5 text-text-3">无人值守推进任务，出现异常时再接管</p>
-        </div>
-        <div className="flex flex-1 items-center justify-end gap-3 max-[900px]:basis-full max-[900px]:justify-start">
+      <div data-anim="afk-card">
+        <PageHeader
+          title={t('afk.title')}
+          description={t('afk.subtitle')}
+          className="mb-5"
+          actions={<div className="flex w-full flex-wrap items-center justify-end gap-3 max-[900px]:justify-start">
           <label className="relative w-full max-w-[350px]">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
-            <span className="sr-only">搜索运行</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索任务或定时任务…" className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-10 text-sm text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t" />
+            <span className="sr-only">{t('afk.search_label')}</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('afk.search_placeholder')} className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-10 text-sm text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t" />
           </label>
           <button
             type="button"
             data-testid="afk-new-run"
-            className="inline-flex min-h-11 flex-none items-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white shadow-sm transition-transform active:scale-[.97] disabled:cursor-not-allowed disabled:bg-text-3 disabled:opacity-60 disabled:active:scale-100 motion-reduce:transform-none"
+            className="inline-flex min-h-11 flex-none items-center gap-2 rounded-xl bg-btn-bg px-4 text-sm font-semibold text-btn-fg shadow-sm transition-[background-color,transform] duration-150 hover:bg-btn-hover active:scale-[.98] disabled:cursor-not-allowed disabled:bg-text-3 disabled:opacity-60 disabled:active:scale-100 motion-reduce:transform-none"
             disabled={enqueueCandidates.length === 0 && snapshot?.capabilities.operations !== true}
-            title={enqueueCandidates.length > 0 || snapshot?.capabilities.operations === true ? undefined : '当前没有可开启自动运行的任务，服务也未接通定时任务能力'}
+            title={enqueueCandidates.length > 0 || snapshot?.capabilities.operations === true ? undefined : t('afk.new_unavailable')}
             onClick={() => setActiveTool(enqueueCandidates.length > 0 ? 'enqueue' : 'starter')}
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />{enqueueCandidates.length > 0 ? '开启自动运行' : '新建定时任务'}
+            <Plus className="h-4 w-4" aria-hidden="true" />{enqueueCandidates.length > 0 ? t('afk.new_run') : t('afk.new_schedule')}
           </button>
-        </div>
-      </header>
+          </div>}
+        />
+      </div>
 
       {actionError !== '' && (
         <p className="mb-4 rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-xs text-red" role="alert">
@@ -343,6 +345,8 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
           className="rounded-xl border border-dashed border-border bg-card px-5 py-10 text-center text-[13px] text-text-3"
           data-anim="afk-card"
           data-testid="afk-empty"
+          role="status"
+          aria-live="polite"
         >
           当前没有自动运行任务
         </p>
@@ -434,7 +438,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                     return (
                       <div key={step} className="flex min-w-0 flex-1 items-start">
                         <div className="min-w-[56px] flex-none text-center">
-                          <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${done ? 'border-green bg-green text-white' : here && selectedState === 'failed' ? 'border-red bg-card text-red' : here ? 'border-(--accent) bg-(--accent) text-white' : 'border-border-2 bg-card text-text-3'}`}>
+                          <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${done ? 'border-green bg-green text-btn-fg' : here && selectedState === 'failed' ? 'border-red bg-card text-red-d' : here ? 'border-(--accent) bg-(--accent) text-btn-fg' : 'border-border-2 bg-card text-text-3'}`}>
                             {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
                           </span>
                           <span className="mt-2 block text-xs font-semibold text-text">{phaseLabel(step, selectedRules?.labelByStep, t)}</span>
@@ -453,7 +457,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                   <div className="flex gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-red" aria-hidden="true" />
                     <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-text">验证未通过：{selectedFailure}</h3><p className="mt-1 text-xs leading-5 text-text-3">修复问题后，先查看本次重试会做什么，再重新运行验证。</p></div>
-                    <button type="button" className="min-h-9 flex-none rounded-lg bg-(--accent) px-3 text-xs font-semibold text-white shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>查看重试预览</button>
+                    <button type="button" className="min-h-9 flex-none rounded-lg bg-(--accent) px-3 text-xs font-semibold text-btn-fg shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>查看重试预览</button>
                   </div>
                 </section>
               )}
@@ -535,7 +539,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                 type="button"
                 data-testid={`afk-retry-confirm-${retryPreviewName}`}
                 disabled={actionBusy !== null}
-                className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-white disabled:opacity-50 max-[760px]:flex-1"
+                className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-btn-fg disabled:opacity-50 max-[760px]:flex-1"
                 onClick={() => {
                   const name = retryPreviewName
                   void runAction(`retry:${name}`, name, () => postAfkRetry(name, currentRoot), 'afk.retry_ok')
