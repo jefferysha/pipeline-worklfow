@@ -38,11 +38,11 @@
 
 ## 交付
 
-- [ ] 应用 delta spec，提交并推送范围内变更。
-- [ ] 创建非草稿 PR，写明上游证据、前后端影响、验证、风险和回滚。
-- [ ] 检查 PR URL、标签与 CI，修复可控失败或记录外部阻塞。
+- [x] 应用 delta spec，提交并推送范围内变更。
+- [x] 创建非草稿 PR，写明上游证据、前后端影响、验证、风险和回滚。
+- [x] 检查 PR URL、标签与 CI，修复可控失败或记录外部阻塞。
 
 ## 归档
 
-- [ ] 读取全部治理文档，完成最终 tasks/ledger 登记并归档 Change。
-- [ ] 将本轮时间、候选、选择、Change、分支、worktree、PR、SHA、验证和阻塞写入 automation memory。
+- [x] 读取全部治理文档，完成最终 tasks/ledger 登记并归档 Change。
+- [x] 将本轮时间、候选、选择、Change、分支、worktree、PR、SHA、验证和阻塞写入 automation memory。
