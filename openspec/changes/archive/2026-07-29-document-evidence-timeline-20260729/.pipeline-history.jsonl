@@ -40,3 +40,8 @@
 {"ts":"2026-07-29T10:48:57Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"14e34c9e-ac30-4df3-a0dc-97af5390cd9a"}
 {"ts":"2026-07-29T10:49:42Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-29T10:49:42Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-29T10:50:32Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/16"}
+{"ts":"2026-07-29T10:50:33Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-29T10:50:33Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"fc20ee19-ba09-45ef-b989-f2501e21b64b"}
+{"ts":"2026-07-29T10:50:53Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-29T10:51:06Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"9f6976da-c463-47df-84a8-a731016b84a5"}

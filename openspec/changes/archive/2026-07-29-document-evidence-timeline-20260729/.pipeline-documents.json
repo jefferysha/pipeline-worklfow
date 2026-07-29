@@ -37,8 +37,14 @@
         {
           "phase": "ship",
           "sha256": "90367f78edd89a2ea41e0e395cef7fcb09021427158951605daa215d93fd4845",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "90367f78edd89a2ea41e0e395cef7fcb09021427158951605daa215d93fd4845",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -76,8 +82,14 @@
         {
           "phase": "ship",
           "sha256": "c5f214b3fd24778192f814aa77d95c12d2813b000082cebb51d6013aab2442b1",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c5f214b3fd24778192f814aa77d95c12d2813b000082cebb51d6013aab2442b1",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -109,8 +121,14 @@
         {
           "phase": "ship",
           "sha256": "87fc58c9ea024d03ef1becf2327712a445629f81a22caa7abc92600d73bc0427",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "87fc58c9ea024d03ef1becf2327712a445629f81a22caa7abc92600d73bc0427",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -136,8 +154,14 @@
         {
           "phase": "ship",
           "sha256": "1b5c39265239f79cd4f2c77f594169ec50404119acad56f709e1324f69c639e9",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1b5c39265239f79cd4f2c77f594169ec50404119acad56f709e1324f69c639e9",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -163,8 +187,14 @@
         {
           "phase": "ship",
           "sha256": "3aa2925cb21464d35988616e263934c62488ddda1f6fc4c182b2c7138c96f1a6",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "3aa2925cb21464d35988616e263934c62488ddda1f6fc4c182b2c7138c96f1a6",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -190,8 +220,14 @@
         {
           "phase": "ship",
           "sha256": "3aa2925cb21464d35988616e263934c62488ddda1f6fc4c182b2c7138c96f1a6",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "3aa2925cb21464d35988616e263934c62488ddda1f6fc4c182b2c7138c96f1a6",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -223,8 +259,14 @@
         {
           "phase": "ship",
           "sha256": "bd72f5b521da11657c7d949a8b1702f9117ca200ec80014646866950932e52e3",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "bd72f5b521da11657c7d949a8b1702f9117ca200ec80014646866950932e52e3",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -238,8 +280,14 @@
         {
           "phase": "ship",
           "sha256": "9bc20f43acc62dde8c064bdf2d156e8bad558810b6cf3c15b9e2d9cd7d5bdf1e",
-          "readAt": "2026-07-29T10:49:56Z",
+          "readAt": "2026-07-29T10:50:32Z",
           "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9bc20f43acc62dde8c064bdf2d156e8bad558810b6cf3c15b9e2d9cd7d5bdf1e",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     },
@@ -249,20 +297,27 @@
       "sha256": "f8f00e9f89e841e575be06ac8ba2fce32e01a9a362fed8710a9b003cb51f2760",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-29T10:49:42Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "f8f00e9f89e841e575be06ac8ba2fce32e01a9a362fed8710a9b003cb51f2760",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
+        }
+      ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/document-evidence-timeline-20260729/tasks.md",
-      "sha256": "562fdfbba4a658c0c019910efaf1d5775304685c20d0c1518e46019a002f2a8e",
-      "producer": "tenon-ship",
-      "recordedAt": "2026-07-29T10:49:56Z",
+      "sha256": "b7ee902c301d864409ae899cbd0ffaff6cf4be6a4e7598205a76266c7224d399",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-29T10:50:53Z",
       "reads": [
         {
-          "phase": "ship",
-          "sha256": "562fdfbba4a658c0c019910efaf1d5775304685c20d0c1518e46019a002f2a8e",
-          "readAt": "2026-07-29T10:49:56Z",
-          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",5]"
+          "phase": "archive",
+          "sha256": "b7ee902c301d864409ae899cbd0ffaff6cf4be6a4e7598205a76266c7224d399",
+          "readAt": "2026-07-29T10:50:53Z",
+          "visitId": "[\"322e857e-da2e-486f-8641-c519e8b01eef\",6]"
         }
       ]
     }
