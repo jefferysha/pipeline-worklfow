@@ -10,6 +10,7 @@ import {
 import type { CodexSkillEvidenceInput, CodexSkillEvidenceResult } from './codexSkillReceipt.js'
 import { trustedCodexSkillPath } from './codexSkillTrust.js'
 import type { CodexSkillTrustRoots } from './codexSkillTrust.js'
+import { transcriptExecInvocations } from './codexToolProgram.js'
 import { makeDeps } from './test-support.js'
 
 let root = ''
@@ -62,7 +63,7 @@ function eventLines(
         status: 'completed',
         call_id: callId,
         name: 'exec',
-        input: `const r = await tools.exec_command({"cmd":"${command}"});`,
+        input: `const r = await tools.exec_command({"cmd":"${command}"}); text(r);`,
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -114,7 +115,7 @@ function multilineSessionScopedEventLines(sessionCwd: string): string {
         status: 'completed',
         call_id: 'call-multiline-skill-read',
         name: 'exec',
-        input: `const result = await tools.exec_command(${JSON.stringify({ cmd: command })});`,
+        input: `const result = await tools.exec_command(${JSON.stringify({ cmd: command })}); text(result);`,
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -149,7 +150,7 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
         status: 'completed',
         call_id: 'call-unquoted-object-skill-read',
         name: 'exec',
-        input: `const result = await tools.exec_command({cmd:${JSON.stringify(command)},workdir:${JSON.stringify(sessionCwd)}});`,
+        input: `const result = await tools.exec_command({cmd:${JSON.stringify(command)},workdir:${JSON.stringify(sessionCwd)}}); text(result);`,
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -201,8 +202,57 @@ function functionCallSessionScopedEventLines(sessionCwd: string, workdir?: strin
   return `${events.map((event) => JSON.stringify(event)).join('\n')}\n`
 }
 
-async function recordPendingReceipt(receiptToolUseId = toolUseId): Promise<void> {
-  const deps = { ...makeDeps({ cwd: root }), clock: (): string => '2026-07-24T00:02:00Z' }
+/** Current Codex custom exec ABI: JavaScript source wraps an explicit exec_command workdir. */
+function customCallSessionScopedEventLines(sessionCwd: string, workdir?: string): string {
+  const command = `sed -n '1,120p' ${skillPath}`
+  const events: unknown[] = [
+    {
+      type: 'session_meta',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: { cwd: sessionCwd, session_id: sessionId, id: sessionId },
+    },
+    {
+      type: 'response_item',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: {
+        type: 'custom_tool_call',
+        status: 'completed',
+        call_id: 'call-custom-skill-read',
+        name: 'exec',
+        input: `const r = await tools.exec_command(${JSON.stringify({
+          cmd: command,
+          ...(workdir === undefined ? {} : { workdir }),
+          yield_time_ms: 10000,
+        })}); text(r);`,
+        internal_chat_message_metadata_passthrough: { turn_id: turnId },
+      },
+    },
+    {
+      type: 'response_item',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: {
+        type: 'custom_tool_call_output',
+        call_id: 'call-custom-skill-read',
+        output: [
+          { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+          { type: 'input_text', text: '# OpenSpec Propose\n' },
+          { type: 'execution_result', exit_code: 0 },
+        ],
+        internal_chat_message_metadata_passthrough: { turn_id: turnId },
+      },
+    },
+  ]
+  return `${events.map((event) => JSON.stringify(event)).join('\n')}\n`
+}
+
+async function recordPendingReceipt(
+  receiptToolUseId = toolUseId,
+  receiptRepoRoot = root,
+): Promise<void> {
+  const deps = {
+    ...makeDeps({ cwd: receiptRepoRoot }),
+    clock: (): string => '2026-07-24T00:02:00Z',
+  }
   expect(await cmdInternalCodexSkillReceipt(
     deps,
     'receipt-proof',
@@ -267,6 +317,37 @@ describe('Codex transcript skill receipt', () => {
       home,
       join(home, '.codex'),
     )).resolves.toBe(skillPath)
+  })
+
+  it('decodes literal workdir values without evaluating dynamic tool-program expressions', () => {
+    expect(transcriptExecInvocations(
+      `const r = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo",yield_time_ms:10000}); text(r);`,
+    )).toEqual([{ command: "sed -n '1,20p' /trusted/SKILL.md", workdir: '/repo' }])
+    expect(transcriptExecInvocations(
+      `const r = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:targetRoot}); text(r);`,
+    )).toEqual([])
+    expect(transcriptExecInvocations([
+      'const first = await tools.exec_command({cmd:dynamicCommand}); text(first);',
+      `const second = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"}); text(second);`,
+    ].join('\n'))).toEqual([])
+    expect(transcriptExecInvocations(
+      `const r = await tools.exec_command(${JSON.stringify({
+        cmd: "sed -n '1,20p' /trusted/SKILL.md",
+        workdir: '/repo',
+        prefix_rule: ['sed', '-n'],
+      })}); text(r);`,
+    )).toEqual([{ command: "sed -n '1,20p' /trusted/SKILL.md", workdir: '/repo' }])
+  })
+
+  it.each([
+    `// tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"})\ntext("Script completed");`,
+    `const spoof = 'tools.exec_command({cmd:"sed -n \\'1,20p\\' /trusted/SKILL.md",workdir:"/repo"})'; text("Script completed");`,
+    `if (false) { const r = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"}); text(r.output); }`,
+    `const r = tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"}); text(r.output);`,
+    `const r = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"}); text("Script completed");`,
+    `const r = await tools.exec_command({cmd:"sed -n '1,20p' /trusted/SKILL.md",workdir:"/repo"}); text(r.output);`,
+  ])('rejects a non-canonical or spoofable custom exec wrapper', (program) => {
+    expect(transcriptExecInvocations(program)).toEqual([])
   })
 
   it.each(['active-release', 'direct-development'] as const)(
@@ -403,6 +484,7 @@ describe('Codex transcript skill receipt', () => {
     await writeFile(transcript, eventLines([
       { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
       { type: 'input_text', text: '# skill body\n' },
+      { type: 'execution_result', exit_code: 0 },
     ]), 'utf8')
     await recordPendingReceipt()
 
@@ -416,6 +498,25 @@ describe('Codex transcript skill receipt', () => {
       codexHomeDir: join(home, '.codex'),
     })
     expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects outer Script completed when the complete nested result has no exit code', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'input_text', text: '# skill body\n' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('rejects Script failed even when a later content block contains exit=0', async () => {
@@ -720,7 +821,7 @@ describe('Codex transcript skill receipt', () => {
           status: 'completed',
           call_id: toolUseId,
           name: 'exec',
-          input: `const r = await tools.exec_command({cmd:(globalThis.__pipelinePwned=true, ${JSON.stringify(`sed -n '1,40p' ${skillPath}`)})});`,
+          input: `const r = await tools.exec_command({cmd:(globalThis.__pipelinePwned=true, ${JSON.stringify(`sed -n '1,40p' ${skillPath}`)})}); text(r.output);`,
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),
@@ -1017,7 +1118,68 @@ describe('Codex transcript skill receipt', () => {
       .toContain('CodexSkillRead: openspec-propose')
   })
 
-  it('rejects a sibling-worktree session when the skill read omits the target workdir', async () => {
+  it('accepts a custom exec read explicitly targeted at a sibling worktree', async () => {
+    const linkedRoot = join(root, 'linked-custom-worktree')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-worktree')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, customCallSessionScopedEventLines(root, linkedRoot), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('confirms an exact custom exec receipt explicitly targeted at a sibling worktree', async () => {
+    const linkedRoot = join(root, 'linked-custom-receipt-worktree')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-receipt-worktree')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, customCallSessionScopedEventLines(root, linkedRoot), 'utf8')
+    await recordPendingReceipt('call-custom-skill-read', linkedRoot)
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('rejects a custom exec sibling-worktree session when the skill read omits the target workdir', async () => {
     const linkedRoot = join(root, 'linked-worktree-no-target')
     const linkedGitDir = join(root, '.git', 'worktrees', 'linked-worktree-no-target')
     const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
@@ -1025,7 +1187,122 @@ describe('Codex transcript skill receipt', () => {
     await mkdir(linkedChangeDir, { recursive: true })
     await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
     await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, customCallSessionScopedEventLines(root), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects a relative custom exec workdir for sibling-worktree identity', async () => {
+    const linkedRoot = join(root, 'linked-custom-relative-target')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-relative-target')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, customCallSessionScopedEventLines(root, '.'), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const previousCwd = process.cwd()
+    let result: CodexSkillEvidenceResult
+    try {
+      process.chdir(linkedRoot)
+      result = await reconcileCodexSkillEvidence({
+        repoRoot: linkedRoot,
+        changeDir: linkedChangeDir,
+        producer: 'openspec-propose',
+        recordedAt: '2026-07-24T00:03:00Z',
+        history: historyWriter,
+        homeDir: home,
+        codexHomeDir: join(home, '.codex'),
+        selectedPluginRoot,
+      })
+    } finally {
+      process.chdir(previousCwd)
+    }
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects a function-call sibling-worktree session when the skill read omits the target workdir', async () => {
+    const linkedRoot = join(root, 'linked-function-worktree-no-target')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-function-worktree-no-target')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
     await writeFile(transcript, functionCallSessionScopedEventLines(root), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects a custom exec workdir from a different Git common directory', async () => {
+    const linkedRoot = join(root, 'linked-custom-other-repo')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-other-repo')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    const unrelatedRoot = join(root, 'unrelated-session-repo')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await mkdir(join(unrelatedRoot, '.git'), { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(
+      transcript,
+      customCallSessionScopedEventLines(unrelatedRoot, linkedRoot),
+      'utf8',
+    )
     const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
     await mkdir(bindingsDir, { recursive: true })
     await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({

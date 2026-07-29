@@ -67,7 +67,7 @@ export async function explicitSiblingWorktreeTarget(
   commandWorkdir: string | undefined,
   targetRoot: string,
 ): Promise<boolean> {
-  if (!sessionRoot || !commandWorkdir) return false
+  if (!sessionRoot || !commandWorkdir || !isAbsolute(commandWorkdir)) return false
   if (!await samePhysicalDirectory(commandWorkdir, targetRoot)) return false
   const [sessionGit, targetGit] = await Promise.all([
     gitCommonDirectory(sessionRoot),

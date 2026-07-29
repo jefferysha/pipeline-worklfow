@@ -196,7 +196,7 @@ describe('stable host-hook ABI', () => {
           status: 'completed',
           call_id: 'call-skill-read',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,120p' ${skillPath}"});`,
+          input: `const r = await tools.exec_command({"cmd":"sed -n '1,120p' ${skillPath}"}); text(r);`,
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),

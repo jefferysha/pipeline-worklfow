@@ -251,7 +251,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           status: 'completed',
           call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })});`,
+          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })}); text(r);`,
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
@@ -326,7 +326,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           status: 'completed',
           call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"});`,
+          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"}); text(r);`,
         },
       }),
       JSON.stringify({

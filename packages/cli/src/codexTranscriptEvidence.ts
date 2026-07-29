@@ -17,7 +17,7 @@ import {
   trustedCodexSkillPath,
   type CodexSkillTrustRoots,
 } from './codexSkillTrust.js'
-import { transcriptExecCommands } from './codexToolProgram.js'
+import { transcriptExecInvocations, type TranscriptExecInvocation } from './codexToolProgram.js'
 import { explicitSiblingWorktreeTarget } from './codexProjectIdentity.js'
 
 // Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
@@ -96,7 +96,6 @@ function successfulOutput(value: unknown): boolean {
   const exitCodes = [...explicitExitCodes(value), ...textExitCodes]
   if (exitCodes.some((status) => status !== 0)) return false
   if (new Set(exitCodes).size > 1) return false
-  if (scriptStates.includes('completed')) return true
   return exitCodes.length > 0
 }
 interface FunctionExecInvocation {
@@ -196,18 +195,22 @@ export async function transcriptConfirmsReceipt(
         ) return await matchingSuccessfulOutput(lines, receipt)
         continue
       }
-      if (!matchesProject) continue
       if (payload.type === 'custom_tool_call') {
         const callId = asString(payload.call_id)
         const name = asString(payload.name)
         const status = asString(payload.status)
         const command = asString(payload.input)
+        const invocation = command === undefined ? undefined
+          : transcriptInputTrustedSkillInvocation(command, receipt.skillPath)
         if (
           callId === receipt.toolUseId
           && name === 'exec'
           && status === 'completed'
-          && command !== undefined
-          && transcriptInputReadsTrustedSkill(command, receipt.skillPath)
+          && invocation !== undefined
+          && (
+            matchesProject
+            || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
+          )
         ) return await matchingSuccessfulOutput(lines, receipt)
         continue
       }
@@ -289,9 +292,10 @@ function commandReadsTrustedSkill(command: string, skillPath: string): boolean {
 }
 
 /** The transcript stores tool-program source, so inspect only its decoded, executed command values. */
-function transcriptInputReadsTrustedSkill(input: string, skillPath: string): boolean {
-  const commands = transcriptExecCommands(input)
-  return commands.length === 1 && commandReadsTrustedSkill(commands[0] ?? '', skillPath)
+function transcriptInputTrustedSkillInvocation(input: string, skillPath: string): TranscriptExecInvocation | undefined {
+  const invocations = transcriptExecInvocations(input)
+  const invocation = invocations.length === 1 ? invocations[0] : undefined
+  return invocation && commandReadsTrustedSkill(invocation.command, skillPath) ? invocation : undefined
 }
 
 function skillAliases(id: string): readonly string[] {
@@ -456,15 +460,23 @@ export async function discoverCompletedCodexSkillReads(
           continue
         }
         if (payload.type === 'custom_tool_call') {
-          if (!matchesRepo) continue
           const callId = asString(payload.call_id)
           const name = asString(payload.name)
           const status = asString(payload.status)
           const toolInput = asString(payload.input)
           if (!callId || name !== 'exec' || status !== 'completed' || !toolInput) continue
+          const invocations = transcriptExecInvocations(toolInput)
+          const invocation = invocations.length === 1 ? invocations[0] : undefined
+          if (
+            invocation === undefined
+            || (
+              !matchesRepo
+              && !await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
+            )
+          ) continue
           const readIds = aliases.filter((id) => {
             const path = selectedSkillPaths.get(id)
-            return path !== undefined && transcriptInputReadsTrustedSkill(toolInput, path)
+            return path !== undefined && commandReadsTrustedSkill(invocation.command, path)
           })
           if (readIds.length > 0) readsByCall.set(callId, readIds)
           continue

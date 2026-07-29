@@ -35018,10 +35018,16 @@ function jsonStringAt(source, start) {
   }
   return void 0;
 }
-function commandFromSafeObjectLiteral(source) {
+function safePrimitiveEnd(source, start) {
+  const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/.exec(source.slice(start));
+  return match ? start + match[0].length : void 0;
+}
+function invocationFromSafeObjectLiteral(source) {
   let cursor = 1;
+  let command2;
+  let workdir;
   while (cursor < source.length - 1) {
-    while (/[\s,]/.test(source[cursor] ?? "")) cursor += 1;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
     const quotedKey = jsonStringAt(source, cursor);
     let key;
     if (quotedKey) {
@@ -35038,68 +35044,79 @@ function commandFromSafeObjectLiteral(source) {
     cursor += 1;
     while (/\s/.test(source[cursor] ?? "")) cursor += 1;
     const stringValue3 = jsonStringAt(source, cursor);
-    if (key === "cmd" || key === "command") return stringValue3?.value;
-    if (!stringValue3) return void 0;
-    cursor = stringValue3.end;
+    if (key === "cmd" || key === "command") {
+      if (command2 !== void 0 || !stringValue3) return void 0;
+      command2 = stringValue3.value;
+    } else if (key === "workdir") {
+      if (workdir !== void 0 || !stringValue3) return void 0;
+      workdir = stringValue3.value;
+    }
+    const valueEnd = stringValue3?.end ?? safePrimitiveEnd(source, cursor);
+    if (valueEnd === void 0) return void 0;
+    cursor = valueEnd;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+    if (cursor >= source.length - 1) break;
+    if (source[cursor] !== ",") return void 0;
+    cursor += 1;
   }
-  return void 0;
+  return command2 === void 0 ? void 0 : { command: command2, ...workdir === void 0 ? {} : { workdir } };
 }
-function commandFromObjectLiteral(source) {
+function invocationFromObjectLiteral(source) {
   try {
     const parsed = JSON.parse(source);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
     const record2 = parsed;
+    if (record2.cmd !== void 0 && record2.command !== void 0) return void 0;
     const command2 = record2.cmd ?? record2.command;
-    return typeof command2 === "string" ? command2 : void 0;
+    if (typeof command2 !== "string") return void 0;
+    if (record2.workdir !== void 0 && typeof record2.workdir !== "string") return void 0;
+    return {
+      command: command2,
+      ...typeof record2.workdir === "string" ? { workdir: record2.workdir } : {}
+    };
   } catch {
-    return commandFromSafeObjectLiteral(source);
+    return invocationFromSafeObjectLiteral(source);
   }
 }
-function transcriptExecCommands(input) {
-  const marker = "tools.exec_command(";
-  const commands = [];
-  let cursor = 0;
-  while (cursor < input.length) {
-    const markerAt = input.indexOf(marker, cursor);
-    if (markerAt < 0) break;
-    let objectStart = markerAt + marker.length;
-    while (/\s/.test(input[objectStart] ?? "")) objectStart += 1;
-    if (input[objectStart] !== "{") {
-      cursor = markerAt + marker.length;
+function transcriptExecInvocations(input) {
+  const prefix = /^\s*(?:(?:\/\/ @exec:[^\r\n]*\r?\n)\s*)?(?:const|let|var)\s+([$A-Z_a-z][$\w]*)\s*=\s*await\s+tools\.exec_command\s*\(/.exec(input);
+  if (!prefix) return [];
+  const resultName = prefix[1];
+  if (!resultName) return [];
+  let objectStart = prefix[0].length;
+  while (/\s/.test(input[objectStart] ?? "")) objectStart += 1;
+  if (input[objectStart] !== "{") return [];
+  let depth = 0;
+  let inString = false;
+  let escaped3 = false;
+  let objectEnd;
+  for (let index = objectStart; index < input.length; index += 1) {
+    const char = input[index];
+    if (inString) {
+      if (escaped3) escaped3 = false;
+      else if (char === "\\") escaped3 = true;
+      else if (char === '"') inString = false;
       continue;
     }
-    let depth = 0;
-    let inString = false;
-    let escaped3 = false;
-    let objectEnd;
-    for (let index = objectStart; index < input.length; index += 1) {
-      const char = input[index];
-      if (inString) {
-        if (escaped3) escaped3 = false;
-        else if (char === "\\") escaped3 = true;
-        else if (char === '"') inString = false;
-        continue;
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        objectEnd = index + 1;
+        break;
       }
-      if (char === '"') inString = true;
-      else if (char === "{") depth += 1;
-      else if (char === "}") {
-        depth -= 1;
-        if (depth === 0) {
-          objectEnd = index + 1;
-          break;
-        }
-        if (depth < 0) break;
-      }
+      if (depth < 0) break;
     }
-    if (objectEnd === void 0) {
-      cursor = markerAt + marker.length;
-      continue;
-    }
-    const command2 = commandFromObjectLiteral(input.slice(objectStart, objectEnd));
-    if (command2) commands.push(command2);
-    cursor = objectEnd;
   }
-  return commands;
+  if (objectEnd === void 0) return [];
+  const invocation = invocationFromObjectLiteral(input.slice(objectStart, objectEnd));
+  if (!invocation) return [];
+  const escapedResultName = resultName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const suffix = new RegExp(
+    `^\\s*\\)\\s*;\\s*text\\s*\\(\\s*${escapedResultName}\\s*\\)\\s*;?\\s*$`
+  );
+  return suffix.test(input.slice(objectEnd)) ? [invocation] : [];
 }
 
 // packages/cli/src/codexProjectIdentity.ts
@@ -35153,7 +35170,7 @@ async function samePhysicalDirectory2(left, right) {
   }
 }
 async function explicitSiblingWorktreeTarget(sessionRoot, commandWorkdir, targetRoot) {
-  if (!sessionRoot || !commandWorkdir) return false;
+  if (!sessionRoot || !commandWorkdir || !isAbsolute10(commandWorkdir)) return false;
   if (!await samePhysicalDirectory2(commandWorkdir, targetRoot)) return false;
   const [sessionGit, targetGit] = await Promise.all([
     gitCommonDirectory(sessionRoot),
@@ -35225,7 +35242,6 @@ function successfulOutput(value) {
   const exitCodes = [...explicitExitCodes(value), ...textExitCodes];
   if (exitCodes.some((status) => status !== 0)) return false;
   if (new Set(exitCodes).size > 1) return false;
-  if (scriptStates.includes("completed")) return true;
   return exitCodes.length > 0;
 }
 function functionExecInvocation(payload) {
@@ -35299,13 +35315,13 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt);
         continue;
       }
-      if (!matchesProject) continue;
       if (payload.type === "custom_tool_call") {
         const callId = asString(payload.call_id);
         const name2 = asString(payload.name);
         const status = asString(payload.status);
         const command2 = asString(payload.input);
-        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && command2 !== void 0 && transcriptInputReadsTrustedSkill(command2, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt);
+        const invocation = command2 === void 0 ? void 0 : transcriptInputTrustedSkillInvocation(command2, receipt.skillPath);
+        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && invocation !== void 0 && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot))) return await matchingSuccessfulOutput(lines, receipt);
         continue;
       }
     }
@@ -35370,9 +35386,10 @@ function commandReadsTrustedSkill(command2, skillPath) {
   }
   return observedRead;
 }
-function transcriptInputReadsTrustedSkill(input, skillPath) {
-  const commands = transcriptExecCommands(input);
-  return commands.length === 1 && commandReadsTrustedSkill(commands[0] ?? "", skillPath);
+function transcriptInputTrustedSkillInvocation(input, skillPath) {
+  const invocations = transcriptExecInvocations(input);
+  const invocation = invocations.length === 1 ? invocations[0] : void 0;
+  return invocation && commandReadsTrustedSkill(invocation.command, skillPath) ? invocation : void 0;
 }
 function skillAliases(id) {
   const aliases = /* @__PURE__ */ new Set([id]);
@@ -35499,15 +35516,17 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           continue;
         }
         if (payload.type === "custom_tool_call") {
-          if (!matchesRepo) continue;
           const callId2 = asString(payload.call_id);
           const name2 = asString(payload.name);
           const status = asString(payload.status);
           const toolInput = asString(payload.input);
           if (!callId2 || name2 !== "exec" || status !== "completed" || !toolInput) continue;
+          const invocations = transcriptExecInvocations(toolInput);
+          const invocation = invocations.length === 1 ? invocations[0] : void 0;
+          if (invocation === void 0 || !matchesRepo && !await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)) continue;
           const readIds = aliases.filter((id) => {
             const path9 = selectedSkillPaths.get(id);
-            return path9 !== void 0 && transcriptInputReadsTrustedSkill(toolInput, path9);
+            return path9 !== void 0 && commandReadsTrustedSkill(invocation.command, path9);
           });
           if (readIds.length > 0) readsByCall.set(callId2, readIds);
           continue;
