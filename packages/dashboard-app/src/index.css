@@ -6,7 +6,7 @@
  *   · :root[data-theme="light"] / :root[data-theme="dark"] 用户显式切换覆盖系统（两向皆胜）。
  * 迁移期与 styles.ts GLOBAL_CSS 共存（token 双写等值，视图迁完后 GLOBAL_CSS 退役）。
  */
-@import "tailwindcss";
+@import "tailwindcss" source(".");
 /* shadcn v4 惯例动效基座：animate-in/out、fade/zoom/slide-*（dialog/select/popover/tooltip/dropdown 进出场用）。 */
 @import "tw-animate-css";
 

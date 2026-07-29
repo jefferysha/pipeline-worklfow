@@ -23,6 +23,12 @@
           "sha256": "0c00d0ef1b5347893822dba3c5f633daeb83dda0abcb13de07521168e64fdcd5",
           "readAt": "2026-07-29T13:15:11Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0c00d0ef1b5347893822dba3c5f633daeb83dda0abcb13de07521168e64fdcd5",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -38,6 +44,12 @@
           "sha256": "eb6e2a1d32c5ad8df5ffba20166d6f92a04a4707012fb170d4165fcf60c46587",
           "readAt": "2026-07-29T13:15:11Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "eb6e2a1d32c5ad8df5ffba20166d6f92a04a4707012fb170d4165fcf60c46587",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -53,6 +65,12 @@
           "sha256": "147fc626d80c6fe19a492cfcd83c5702260f7162b08f9a5ee521942e74dfdf54",
           "readAt": "2026-07-29T13:15:11Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "147fc626d80c6fe19a492cfcd83c5702260f7162b08f9a5ee521942e74dfdf54",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -68,6 +86,12 @@
           "sha256": "3e4813dadbd665500523a39700d59904525284564b374fc4e8e8d77db0a4c881",
           "readAt": "2026-07-29T13:15:11Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3e4813dadbd665500523a39700d59904525284564b374fc4e8e8d77db0a4c881",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -83,6 +107,12 @@
           "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
           "readAt": "2026-07-29T13:15:11Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",14]"
+        },
+        {
+          "phase": "build",
+          "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -92,7 +122,14 @@
       "sha256": "8efd0e29b71475d69cd4495a7eb5b0697ca918f7c29f0ff77301f83f518ba465",
       "producer": "writing-plans",
       "recordedAt": "2026-07-29T13:15:11Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8efd0e29b71475d69cd4495a7eb5b0697ca918f7c29f0ff77301f83f518ba465",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
+        }
+      ]
     },
     {
       "kind": "plan",
@@ -100,7 +137,14 @@
       "sha256": "8efd0e29b71475d69cd4495a7eb5b0697ca918f7c29f0ff77301f83f518ba465",
       "producer": "writing-plans",
       "recordedAt": "2026-07-29T13:15:11Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8efd0e29b71475d69cd4495a7eb5b0697ca918f7c29f0ff77301f83f518ba465",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
+        }
+      ]
     },
     {
       "kind": "delta-spec",
@@ -150,6 +194,12 @@
           "sha256": "046cc59e4dbbd82fe8df8c20101a48f2f609673709e4612275be3aceba308c94",
           "readAt": "2026-07-29T12:20:20Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "046cc59e4dbbd82fe8df8c20101a48f2f609673709e4612275be3aceba308c94",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     },
@@ -195,6 +245,12 @@
           "sha256": "94eb8ee988364f9247b19e0db45b6b33ce8fd43b9e3054940c64c86f6c0a66ca",
           "readAt": "2026-07-29T12:20:20Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "94eb8ee988364f9247b19e0db45b6b33ce8fd43b9e3054940c64c86f6c0a66ca",
+          "readAt": "2026-07-29T13:16:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",15]"
         }
       ]
     }

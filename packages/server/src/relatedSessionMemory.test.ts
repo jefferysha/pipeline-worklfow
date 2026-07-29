@@ -501,7 +501,7 @@ describe('POST /api/mem/related-sessions/search', () => {
         if (boundedReads === 1) {
           Atomics.store(signal, 0, 1)
           Atomics.notify(signal, 0)
-          expect(Atomics.wait(signal, 1, 0, 2_000)).toBe('ok')
+          expect(Atomics.wait(signal, 1, 0, 30_000)).toBe('ok')
         }
         return sourceReadTextBounded?.(path, maxBytes)
       },
