@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-29T04:47:35Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-reconcile-20260729/proposal.md",
+      "sha256": "d9b807bb930870a17a0c046c9feefe31e51caa509698f9454c3d5d4cb6310266",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T04:55:36Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "d9b807bb930870a17a0c046c9feefe31e51caa509698f9454c3d5d4cb6310266",
+          "readAt": "2026-07-29T04:55:37Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d9b807bb930870a17a0c046c9feefe31e51caa509698f9454c3d5d4cb6310266",
+          "readAt": "2026-07-29T04:58:13Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d9b807bb930870a17a0c046c9feefe31e51caa509698f9454c3d5d4cb6310266",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-reconcile-20260729/design.md",
+      "sha256": "fda364c6c995b4838be9f873a117be71343956f760be73c86a41340ac5dd3bd0",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T04:55:36Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "fda364c6c995b4838be9f873a117be71343956f760be73c86a41340ac5dd3bd0",
+          "readAt": "2026-07-29T04:55:37Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fda364c6c995b4838be9f873a117be71343956f760be73c86a41340ac5dd3bd0",
+          "readAt": "2026-07-29T04:58:13Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fda364c6c995b4838be9f873a117be71343956f760be73c86a41340ac5dd3bd0",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-29-dashboard-ui-ux-overhaul-reconcile-design.md",
+      "sha256": "62b4361dcb22d23d11490f69abb221f8f5088f41ac7183161168896a547cb3a5",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-29T04:55:37Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "62b4361dcb22d23d11490f69abb221f8f5088f41ac7183161168896a547cb3a5",
+          "readAt": "2026-07-29T04:58:13Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "62b4361dcb22d23d11490f69abb221f8f5088f41ac7183161168896a547cb3a5",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-29-dashboard-ui-ux-overhaul-reconcile-explore.md",
+      "sha256": "2f29fe70ed9c892a6e6e9a15ece5e1b5fc52d40c9fa24d8c15cab6015f260897",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-29T04:55:37Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "2f29fe70ed9c892a6e6e9a15ece5e1b5fc52d40c9fa24d8c15cab6015f260897",
+          "readAt": "2026-07-29T04:58:13Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2f29fe70ed9c892a6e6e9a15ece5e1b5fc52d40c9fa24d8c15cab6015f260897",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-reconcile-20260729/specs/dashboard-ui-ux-system/spec.md",
+      "sha256": "f6cecf54cb89f66319e8b8007db695e5831aa731ec90543e4d88a82cf1d51b5f",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-29T04:58:12Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f6cecf54cb89f66319e8b8007db695e5831aa731ec90543e4d88a82cf1d51b5f",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-29-dashboard-ui-ux-overhaul-reconcile.md",
+      "sha256": "831be644663e081959fcf83afd29ff9128da149e2d8eb841cd36e9645a7fbd16",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T04:58:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "831be644663e081959fcf83afd29ff9128da149e2d8eb841cd36e9645a7fbd16",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-29-dashboard-ui-ux-overhaul-reconcile.md",
+      "sha256": "831be644663e081959fcf83afd29ff9128da149e2d8eb841cd36e9645a7fbd16",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T04:58:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "831be644663e081959fcf83afd29ff9128da149e2d8eb841cd36e9645a7fbd16",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-ui-ux-overhaul-reconcile-20260729/tasks.md",
+      "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-29T04:58:13Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
+          "readAt": "2026-07-29T04:58:13Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
+          "readAt": "2026-07-29T05:00:38Z",
+          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
+        }
+      ]
+    }
+  ]
+}

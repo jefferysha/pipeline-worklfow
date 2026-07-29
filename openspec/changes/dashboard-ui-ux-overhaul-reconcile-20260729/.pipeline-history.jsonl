@@ -1,0 +1,22 @@
+{"ts":"2026-07-29T04:47:35Z","kind":"init"}
+{"ts":"2026-07-29T04:47:36Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T04:48:24Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T04:48:25Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"bf802bfb-8ff3-466a-af9d-ce875d8a9bc6"}
+{"ts":"2026-07-29T04:55:35Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-29-dashboard-ui-ux-overhaul-reconcile-design.md"}
+{"ts":"2026-07-29T04:55:36Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-29T04:55:36Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-29T04:55:51Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-29T04:55:51Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-29T04:47:36Z authority_host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T04:55:52Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-29T04:55:52Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-29T04:55:52Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"b20cf671-513a-4074-99f5-45702bc4a35b"}
+{"ts":"2026-07-29T04:58:12Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-29-dashboard-ui-ux-overhaul-reconcile.md"}
+{"ts":"2026-07-29T04:58:12Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T04:58:13Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T04:58:13Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T04:58:20Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T04:58:20Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T04:47:36Z authority_host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T04:58:21Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"45391e6e-f237-422d-bc2b-a2ed32168053"}
+{"ts":"2026-07-29T05:00:37Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-29T05:00:37Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-29T05:00:37Z","kind":"set","field":"direct_override","to":"true"}
