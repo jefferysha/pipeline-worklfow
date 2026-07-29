@@ -40,3 +40,9 @@ worktree 读取无法通过项目身份校验。原生 `function_call(exec_comma
 transcript fallback 的 session 身份只来自 `session_meta.payload.id`，不再兼容可能由 fork
 继承的 `payload.session_id`。最新候选一旦出现损坏 JSON 或读取 I/O 失败，整次 discovery
 失败关闭并停止向旧 transcript 回退，避免从不完整的当前轮拼接旧证据。
+
+第七轮安全审查进一步要求 invocation 与 output ABI 严格配对：custom 调用只能消费
+`custom_tool_call_output`，function 调用只能消费 `function_call_output`，相同 `call_id`
+不能跨 ABI 借用成功判定。失败关闭覆盖 transcript 枚举阶段；无法读取元数据、解析物理路径或
+容纳最新候选时，不能跳过它再接受旧文件。项目根与 `workdir` 即使使用相同字面别名，也必须
+证明该路径不含符号链接祖先。

@@ -54,6 +54,11 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
   身份证明力。
 - 最新候选 transcript 的 malformed JSON 或读取 I/O 错误使 discovery 整体失败关闭，
   不向旧 transcript 回退。
+- invocation 与 output ABI 严格配对；custom/function 不能用相同 `call_id` 交叉借用
+  对方的成功判定。
+- discovery 的失败关闭覆盖枚举阶段；候选元数据或物理路径无法读取、最新候选超过预算时
+  返回无 evidence，而不是跳过后接受旧文件。
+- 项目根与 `workdir` 都必须是其物理字面路径；二者使用相同的祖先 symlink 别名仍拒绝。
 
 ## 备选方案
 
@@ -80,6 +85,8 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
   workdir 符号链接、output-only wrapper、nested 非零 exit、failed/pending output。
 - 拒绝：只有 `{output, wall_time_seconds, exit_code}` 的 stdout JSON、任意未标型对象、
   缺少 `payload.id` 但继承 `session_id` 的 fork、malformed JSON 与读取 I/O 失败。
+- 拒绝：custom/function 调用与 output 错型配对、枚举阶段超预算后回退旧文件、目标与
+  `workdir` 同时使用相同祖先 symlink 别名。
 - 兼容：JSON `prefix_rule` 数组等非信任纯数据选项不影响 command/workdir 解码。
 - 集成：全新 Change 在同一自动化首轮用 custom ABI 读取后，第一次文档登记成功。
 
@@ -95,13 +102,15 @@ result 转发；其他工具程序返回零个 invocation。
 错误。output-only wrapper、nested non-zero exit、`Script failed`、call/output identity
 不同继续拒绝。当前 custom ABI 只接受包含 `chunk_id`、`wall_time_seconds`、`exit_code`、
 `original_token_count` 与 `output` 的完整结果信封；旧格式必须明确标型为
-`execution_result`。损坏 JSON 或 I/O 失败会终止本次 discovery，而不是尝试更旧文件。
+`execution_result`。调用 ABI 与 output ABI 必须同型。损坏 JSON、流式 I/O 或枚举阶段
+无法证明候选完整都会终止本次 discovery，而不是尝试更旧文件。
 
 ## 安全边界
 
-目标身份必须同时满足显式物理目录相等与同一 canonical Git common directory；不跟随项目内
-symlink、不接受动态 workdir、不扫描 host sessions root 之外的 transcript，也不扩大文件和
-总字节预算。session 绑定只认 host 自有 `payload.id`，不把 fork 继承字段当作主身份。
+目标身份必须同时满足字面路径等于物理路径、显式物理目录相等与同一 canonical Git common
+directory；不跟随最终组件或祖先 symlink、不接受动态 workdir、不扫描 host sessions root
+之外的 transcript，也不扩大文件和总字节预算。session 绑定只认 host 自有 `payload.id`，
+不把 fork 继承字段当作主身份。
 
 ## 术语
 

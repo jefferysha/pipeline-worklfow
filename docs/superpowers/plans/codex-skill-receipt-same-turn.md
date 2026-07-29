@@ -54,6 +54,18 @@ fixture 能确定性复现，不需要一次性 prototype；持续授权下采�
 
 **子阶段边界：此处建议 /clear。**
 
+## 子阶段 4：第七轮安全收敛
+
+- [ ] 为 custom/function invocation 与 output ABI 错型配对增加红灯，并在 exact receipt 与
+  fallback 两条路径保存、校验 invocation ABI。
+- [ ] 为带完整公开字段的未标型对象增加红灯，令 custom 完成判定只接受序列化当前信封或
+  明确标型的旧 `execution_result`。
+- [ ] 为枚举阶段超预算后回退旧文件、目标与 `workdir` 同时使用祖先 symlink 别名增加红灯，
+  将两条路径改为失败关闭。
+- [ ] 重新运行定向、hook、bundle、build、全仓测试和完整 pre-Verify 审查。
+
+**子阶段边界：此处建议 /clear。**
+
 ## 验证
 
 - 定向：`npx vitest run packages/cli/src/codexSkillReceipt.test.ts`

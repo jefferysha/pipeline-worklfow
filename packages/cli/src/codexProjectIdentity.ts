@@ -17,7 +17,8 @@ async function physicalDirectory(path: string): Promise<string | undefined> {
   try {
     const info = await lstat(path)
     if (!info.isDirectory() || info.isSymbolicLink()) return undefined
-    return await realpath(path)
+    const physical = await realpath(path)
+    return resolve(path) === physical ? physical : undefined
   } catch {
     return undefined
   }

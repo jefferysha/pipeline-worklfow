@@ -22,6 +22,12 @@ Verify 后进一步固定：当前 custom ABI 的成功 output 必须是包含 `
 整次 discovery 失败关闭且不回退旧文件。字面 `workdir` 必须是普通目录，符号链接即使
 解析到目标也拒绝。
 
+调用与输出的 host ABI 也是身份的一部分：`custom_tool_call` 只匹配
+`custom_tool_call_output`，`function_call` 只匹配 `function_call_output`，不能仅凭
+`call_id` 跨型配对。失败关闭从 transcript 流式读取前移到枚举阶段；目录读取、候选
+`lstat`/`realpath`、单文件预算或总预算无法证明最新候选完整时，不得回退旧文件。
+项目路径检查同时要求字面路径等于其物理路径，从而拒绝最终组件或任一祖先为 symlink 的别名。
+
 ## 备选方案
 
 - 放弃 worktree 隔离：违反自动化并发安全要求。

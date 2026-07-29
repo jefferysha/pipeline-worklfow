@@ -36,6 +36,12 @@
 - **WHEN** custom exec 的绝对 `workdir` 通过符号链接解析后才指向目标目录
 - **THEN** 系统 MUST 不确认该读取；可审计项目身份必须来自普通目录的字面路径
 
+#### Scenario: 目标与 workdir 使用同一祖先符号链接时仍被拒绝
+
+- **WHEN** verifier 的目标项目和 custom exec 的 `workdir` 使用相同字面路径，但该路径任一
+  祖先组件是符号链接
+- **THEN** 系统 MUST 不确认该读取；两边使用同一别名不得绕过普通目录身份要求
+
 ### Requirement: Tool-program decoding MUST remain bounded and literal
 
 系统 MUST 只接受受支持对象字面量中的字符串 `cmd`/`command` 与可选字符串 `workdir`，
@@ -98,6 +104,12 @@
 - **WHEN** transcript 使用 `function_call(exec_command)` 与 `function_call_output`
 - **THEN** 现有同目录和 sibling-worktree 读取行为 MUST 保持不变
 
+#### Scenario: Invocation 与 output ABI 必须严格配对
+
+- **WHEN** `custom_tool_call` 与同一 `call_id` 的 `function_call_output` 配对，或
+  `function_call` 与 `custom_tool_call_output` 配对
+- **THEN** 系统 MUST 不确认 Skill；任一 ABI 的成功校验器不得为另一 ABI 的调用签名
+
 ### Requirement: Transcript fallback MUST bind an exact current session and intact turn
 
 fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身份，并只接受
@@ -119,3 +131,9 @@ fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身
 
 - **WHEN** 最新候选 transcript 在读取期间发生 I/O 失败
 - **THEN** discovery MUST 停止并返回无 evidence，不得继续扫描更旧文件
+
+#### Scenario: 枚举阶段无法证明最新候选完整时失败关闭
+
+- **WHEN** transcript 在枚举阶段发生目录读取、`lstat`、`realpath` 失败，或最新候选超过
+  单文件/总字节预算
+- **THEN** discovery MUST 返回无 evidence，且不得跳过该候选后接受更旧、更小的 transcript

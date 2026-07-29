@@ -98,8 +98,7 @@ export function successfulCustomOutput(value: unknown): boolean {
       const code = topLevelExitCode(item)
       return code === undefined ? [] : [code]
     }
-    const code = completeResultEnvelopeExitCode(item)
-    return code === undefined ? [] : [code]
+    return []
   })
   return exitCodes.length > 0 && exitCodes.every((status) => status === 0)
 }

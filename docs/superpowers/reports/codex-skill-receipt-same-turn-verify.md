@@ -87,6 +87,19 @@
 - 第六轮继续选择安全默认值“修复”：登记本失败报告并走精确 `verify-fail` 回 Build，再以
   `requirements-changed` 回 Spec 固定完整信封、强制 transcript `payload.id`、损坏 transcript
   失败关闭和无 symlink sibling 身份，随后重新实现、冻结并执行全量三轨。
+- **第七轮 Verify — Codex 轨发现 2 High / 2 Medium。** Reviewer 轨对 168 个路径完成全覆盖，
+  Critical/High/Medium/Low 全零通过；真实 managed runtime E2E 轨在冻结基线
+  `workspace:sha256:61113e4d8e989987e3223db8efe300953914ee0db99cd31ff4d872c6f2b04a23`
+  上通过首次同轮推进、101 项定向测试、31 项 bundle、512 项 hooks 与 66/62 项 Skill 校验，
+  且基线前后未漂移。
+- 独立 Codex CLI 轨证明：custom 调用可与同 `call_id` 的 function output 错型配对，从而绕过
+  custom 完整信封要求（High）；带全套公开字段的未标型对象仍可伪造 custom 成功（High）；
+  transcript 枚举阶段的读取、竞态或预算失败可能跳过新文件并回退旧证据（Medium）；当
+  `commandWorkdir` 与 `targetRoot` 同时使用含 symlink 祖先的相同字面路径时仍会被接受
+  （Medium）。
+- 第七轮继续选择安全默认值“修复”：必须把 invocation ABI 与 output ABI 严格绑定，只接受
+  序列化的当前 custom 信封或明确标型的旧 `execution_result`，令枚举阶段无法证明最新性时
+  整体失败关闭，并拒绝目标路径自身含 symlink 祖先。完成红灯测试与实现后重新执行三轨 Verify。
 
 ## 剩余风险
 

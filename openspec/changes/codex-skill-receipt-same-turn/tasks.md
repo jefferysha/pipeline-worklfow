@@ -31,6 +31,9 @@
 - [x] 以红灯固定并实现完整结果信封与 typed legacy result。 (build)
 - [x] 以红灯固定 `payload.id`、malformed/I/O 失败关闭与非 symlink workdir。 (build)
 - [x] 重跑全部定向、hook、bundle、构建、全仓和静态门禁。 (build)
+- [x] 以红灯固定调用/output ABI 同型与完整未标型对象拒绝。 (build)
+- [x] 以红灯固定枚举阶段失败关闭与相同祖先 symlink 别名拒绝。 (build)
+- [x] 重跑第八轮全部定向、hook、bundle、构建、全仓和静态门禁。 (build)
 
 ## 验证
 

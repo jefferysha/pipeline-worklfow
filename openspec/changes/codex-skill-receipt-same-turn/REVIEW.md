@@ -12,7 +12,8 @@
 ## Standards 轴
 
 - 包边界：解析留在 CLI adapter，不向 kernel/domain 引入 host ABI。
-- 复杂度：`codexTranscriptEvidence.ts` 为 497 行，低于 backend service 500 行门限。
+- 复杂度：`codexTranscriptEvidence.ts` 为 457 行；独立的有界枚举模块
+  `codexTranscriptDiscovery.ts` 为 75 行，均低于 backend service 500 行门限。
 - 兼容：保留 `transcriptExecCommands`，新增结构化 invocation 仅供需要 workdir 的调用方。
 - 生成物：`npm run bundle` 已重建 `packages/cli/dist/tenon.mjs`。
 - 第一轮 Verify finding：custom program 的文本扫描可能把注释、字符串、死代码或未等待调用误认成
@@ -42,6 +43,14 @@
   `session_meta.payload.id`；任何 malformed JSON 或 transcript I/O 都使本次发现整体失败关闭；
   command workdir 与目标 root 必须都是非 symlink 的普通目录、字面规范化路径相同且物理路径
   完全相同，因此最终路径或中间祖先含 symlink 都不能作为 sibling 身份证明。
+- 第七轮 Verify finding：custom invocation 可与同 `call_id` 的 function output 错型配对
+  （High）；具备完整公开字段的未标型对象仍可能伪造成功（High）；枚举阶段错误或超预算会
+  跳过新文件后回退旧证据（Medium）；目标与 `workdir` 同时使用同一祖先 symlink 别名时仍
+  被接受（Medium）。
+- 修复：exact receipt 与 fallback 均保存 invocation ABI 并只接受同型 output；custom 完成
+  只接受序列化当前信封或明确标型的 `execution_result`；枚举阶段的目录/候选读取失败及
+  单文件超预算整体失败关闭，总预算只保留连续的最新前缀；项目字面路径必须等于物理路径，
+  所以相同祖先别名也不能成为身份。枚举逻辑拆入 `codexTranscriptDiscovery.ts` 后通过架构门。
 - 复查 Finding：无未处理 Critical / High / Medium。
 
 ## Spec 轴
@@ -57,12 +66,15 @@
 | stdout/跨 turn 防伪 | plain/JSON stdout exact 与 fallback 均拒绝；新/malformed turn、旧 transcript 与 fork evidence 不可复用 |
 | 根 Skill 防回退 | `skillSources.test.ts` 固定 `text(result)`、禁止 output-only 与 exit-code 指导 |
 | 首次调度同轮成功 | 临时 sibling worktree 的全新 Change 第一次 `document record` exit 0 |
+| invocation/output ABI 同型 | exact 与 fallback 均拒绝 custom invocation + function output |
+| 枚举阶段失败关闭 | 新候选超 512 MiB 时不得接受旧 transcript |
+| 祖先 symlink 身份 | 目标与 workdir 同时使用相同别名仍拒绝 |
 
 Finding：无 Critical / High / Medium。
 
 ## 门禁结果
 
-- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts`：67 passed。
+- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts`：72 passed。
 - `npx vitest run packages/cli/src/runtime/stable-hook.integration.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts`：12 passed。
 - `npm run test:hooks`：512 passed。
 - `npm run build`：通过；包含 web、server、CLI bundle。
@@ -73,7 +85,7 @@ Finding：无 Critical / High / Medium。
 - `npm run check:architecture`：通过。
 - `npm run check:comments`：通过。
 - `git diff --check`：通过。
-- 最终 `npm test`：327 files passed；5758 tests passed、26 skipped。本轮 Docker daemon
+- 最终 `npm test`：327 files passed；5763 tests passed、26 skipped。本轮 Docker daemon
   不可用导致 Docker 条件用例诚实跳过；real Codex 与缺少 Claude OAuth 的既有条件跳过同样单列，
   不把外部环境缺失记为代码通过。
 - 第一轮 Verify 的失败报告保留在
