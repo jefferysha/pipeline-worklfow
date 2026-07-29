@@ -7,7 +7,7 @@
 
 ## 调研
 
-- [x] 固定 Trellis 与 Comet 上游版本，检查 ledger、snapshot、decoder 与详情视图的现状。
+- [x] 固定两项上游版本，检查 ledger、snapshot、decoder 与详情视图的现状。
 - [x] 形成最小 DTO、兼容和隐私决策记录。
 
 ## 规格
