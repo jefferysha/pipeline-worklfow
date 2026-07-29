@@ -3,7 +3,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
-import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
+import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
 import { dirname as dirname15, join as join56 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -19714,7 +19714,17 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
 }
 
 // packages/server/src/hooksConfig.ts
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync19, renameSync as renameSync5, writeFileSync as writeFileSync5 } from "node:fs";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import {
+  constants as constants7,
+  fstatSync as fstatSync6,
+  fsyncSync as fsyncSync3,
+  openSync as openSync7,
+  readSync as readSync3,
+  renameSync as renameSync5,
+  unlinkSync as unlinkSync3,
+  writeFileSync as writeFileSync5
+} from "node:fs";
 import { join as join35 } from "node:path";
 var HOOK_METAS = [
   { id: "session-start", event: "SessionStart", matcher: "*", script: "hooks/session-start.sh", configurable: true },
@@ -19729,31 +19739,117 @@ var HOOK_METAS = [
 var HOOK_BY_ID = new Map(HOOK_METAS.map((h) => [h.id, h]));
 var CONFIGURABLE_IDS = HOOK_METAS.filter((h) => h.configurable).map((h) => h.id);
 var PHASE_RE = /^[a-zA-Z0-9_-]+$/;
-function hooksConfigPath(root) {
-  return join35(root, ".pipeline", "hooks.json");
+var PROMPT_SKIP_KEYWORD_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+var HOOKS_CONFIG_MAX_BYTES = 4096;
+var DEFAULT_PROMPT_SKIP_KEYWORD = "no-tenon";
+function readBoundedHooksConfig(root, pipeline) {
+  assertDirectoryStillTrusted(pipeline, root);
+  const file = childEntry(pipeline, "hooks.json");
+  let fd;
+  try {
+    fd = openSync7(
+      file.operation,
+      constants7.O_RDONLY | constants7.O_NONBLOCK | constants7.O_NOFOLLOW
+    );
+    const stat6 = fstatSync6(fd);
+    if (!stat6.isFile() || stat6.size > HOOKS_CONFIG_MAX_BYTES) return null;
+    const buffer = Buffer.alloc(HOOKS_CONFIG_MAX_BYTES + 1);
+    const bytesRead = readSync3(fd, buffer, 0, buffer.byteLength, 0);
+    if (bytesRead > HOOKS_CONFIG_MAX_BYTES) return null;
+    assertDirectoryStillTrusted(pipeline, root);
+    return buffer.toString("utf8", 0, bytesRead);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== void 0) safeClose(fd);
+  }
 }
-function readHooksMatrix(root) {
+function readPromptSkipKeywordHeader(text2) {
+  const lines = text2.replace(/\r\n?/g, "\n").split("\n").map((line2) => line2.trim());
+  if (lines[0] !== "{" || lines[1] !== '"version": 1,') return DEFAULT_PROMPT_SKIP_KEYWORD;
+  const prefix = '"prompt_skip_keyword": ';
+  const line = lines[2];
+  if (line === void 0 || !line.startsWith(prefix) || !line.endsWith(",")) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  const encoded = line.slice(prefix.length, -1);
+  let keyword;
+  if (encoded === '""') {
+    keyword = "";
+  } else if (encoded.length >= 2 && encoded.startsWith('"') && encoded.endsWith('"') && PROMPT_SKIP_KEYWORD_RE.test(encoded.slice(1, -1))) {
+    keyword = encoded.slice(1, -1);
+  } else {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  if (lines.slice(3).some((candidate) => candidate.startsWith(prefix))) {
+    return DEFAULT_PROMPT_SKIP_KEYWORD;
+  }
+  return keyword;
+}
+function hasDuplicateMatrixKey(text2, key) {
+  const encoded = JSON.stringify(key);
+  let count = 0;
+  let from = 0;
+  for (; ; ) {
+    const index = text2.indexOf(encoded, from);
+    if (index < 0) return count > 1;
+    const remainder = text2.slice(index + encoded.length);
+    if (/^\s*:/.test(remainder)) count += 1;
+    from = index + encoded.length;
+  }
+}
+function acquireHooksRoot(root) {
+  if (typeof root !== "string") {
+    assertWorkflowRootAnchor(root);
+    return { anchor: root, owned: false };
+  }
+  return { anchor: captureWorkflowRootAnchor(root), owned: true };
+}
+function withHooksPipeline(rootInput, create, onMissing, use) {
+  const { anchor, owned } = acquireHooksRoot(rootInput);
+  try {
+    return withTrustedDirectoryChain(anchor, [".pipeline"], create, onMissing, (pipeline) => use(anchor, pipeline));
+  } finally {
+    if (owned) closeWorkflowRootAnchor(anchor);
+  }
+}
+function readHooksConfig(root) {
+  const text2 = withHooksPipeline(
+    root,
+    false,
+    () => null,
+    (anchor, pipeline) => readBoundedHooksConfig(anchor, pipeline)
+  );
+  if (text2 === null) {
+    return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
+  }
+  const promptSkipKeyword = readPromptSkipKeywordHeader(text2);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync19(hooksConfigPath(root), "utf8"));
+    parsed = JSON.parse(text2);
   } catch {
-    return {};
+    return { promptSkipKeyword, matrix: {} };
   }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const rawMatrix = parsed.matrix;
-  if (typeof rawMatrix !== "object" || rawMatrix === null || Array.isArray(rawMatrix)) return {};
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { promptSkipKeyword, matrix: {} };
+  }
+  const record2 = parsed;
+  const rawMatrix = record2.matrix;
   const matrix = {};
-  for (const [key, value] of Object.entries(rawMatrix)) {
-    if (value !== false) continue;
-    const dot = key.indexOf(".");
-    if (dot <= 0) continue;
-    const hook = key.slice(0, dot);
-    const phase = key.slice(dot + 1);
-    if (!HOOK_BY_ID.get(hook)?.configurable) continue;
-    if (!PHASE_RE.test(phase)) continue;
-    matrix[key] = false;
+  if (typeof rawMatrix === "object" && rawMatrix !== null && !Array.isArray(rawMatrix)) {
+    for (const [key, value] of Object.entries(rawMatrix)) {
+      if (value !== false) continue;
+      if (hasDuplicateMatrixKey(text2, key)) return { promptSkipKeyword, matrix: {} };
+      const dot = key.indexOf(".");
+      if (dot <= 0) continue;
+      const hook = key.slice(0, dot);
+      const phase = key.slice(dot + 1);
+      if (!HOOK_BY_ID.get(hook)?.configurable) continue;
+      if (!PHASE_RE.test(phase)) continue;
+      matrix[key] = false;
+    }
   }
-  return matrix;
+  return { promptSkipKeyword, matrix };
 }
 function validateHookToggleBody(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -19778,36 +19874,101 @@ function validateHookToggleBody(body) {
   }
   return { ok: true, value: { hook, phase, enabled } };
 }
-function writeHookToggle(root, toggle) {
-  const matrix = readHooksMatrix(root);
-  const key = `${toggle.hook}.${toggle.phase}`;
-  if (toggle.enabled) {
-    delete matrix[key];
-  } else {
-    matrix[key] = false;
+function validatePromptRoutingBypassBody(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" };
   }
-  const dir = join35(root, ".pipeline");
-  mkdirSync5(dir, { recursive: true });
-  const file = hooksConfigPath(root);
-  const tmp = `${file}.tmp.${process.pid}`;
-  writeFileSync5(tmp, `${JSON.stringify({ version: 1, matrix }, null, 2)}
+  const keyword = body.prompt_skip_keyword;
+  if (typeof keyword !== "string" || keyword !== "" && !PROMPT_SKIP_KEYWORD_RE.test(keyword)) {
+    return { ok: false, error: "prompt_skip_keyword \u987B\u4E3A\u7A7A\u6216 1-32 \u5B57\u7B26 ASCII token\uFF08\u5B57\u6BCD/\u6570\u5B57\u5F00\u5934\uFF0C\u53EF\u542B - _\uFF09" };
+  }
+  return { ok: true, value: { promptSkipKeyword: keyword } };
+}
+function writeHooksConfig(root, pipeline, config) {
+  assertDirectoryStillTrusted(pipeline, root);
+  const file = childEntry(pipeline, "hooks.json");
+  const tmp = childEntry(pipeline, `hooks.json.tmp.${process.pid}.${randomUUID7()}`);
+  let fd;
+  try {
+    fd = openSync7(
+      tmp.operation,
+      constants7.O_WRONLY | constants7.O_CREAT | constants7.O_EXCL | constants7.O_NOFOLLOW,
+      384
+    );
+    writeFileSync5(fd, `${JSON.stringify({
+      version: 1,
+      prompt_skip_keyword: config.promptSkipKeyword,
+      matrix: config.matrix
+    }, null, 2)}
 `, "utf8");
-  renameSync5(tmp, file);
+    fsyncSync3(fd);
+    safeClose(fd);
+    fd = void 0;
+    assertDirectoryStillTrusted(pipeline, root);
+    renameSync5(tmp.operation, file.operation);
+    assertDirectoryStillTrusted(pipeline, root);
+  } catch (error) {
+    if (fd !== void 0) safeClose(fd);
+    try {
+      unlinkSync3(tmp.operation);
+    } catch {
+    }
+    throw error;
+  }
+}
+async function withHooksConfigLock(rootInput, operation) {
+  const { anchor, owned } = acquireHooksRoot(rootInput);
+  try {
+    ensureWorkflowProjectCoordinationPath(anchor);
+    await withLock(join35(anchor.path, ".pipeline"), async () => {
+      assertWorkflowRootAnchor(anchor);
+      operation(anchor);
+    });
+  } finally {
+    if (owned) closeWorkflowRootAnchor(anchor);
+  }
+}
+async function writeHookToggle(root, toggle) {
+  await withHooksConfigLock(root, (anchor) => {
+    withHooksPipeline(anchor, true, () => {
+      throw new Error("Hook \u914D\u7F6E\u76EE\u5F55\u521B\u5EFA\u5931\u8D25");
+    }, (trustedRoot, pipeline) => {
+      const config = readHooksConfig(trustedRoot);
+      const key = `${toggle.hook}.${toggle.phase}`;
+      if (toggle.enabled) {
+        delete config.matrix[key];
+      } else {
+        config.matrix[key] = false;
+      }
+      writeHooksConfig(trustedRoot, pipeline, config);
+    });
+  });
+}
+async function writePromptRoutingBypass(root, value) {
+  await withHooksConfigLock(root, (anchor) => {
+    withHooksPipeline(anchor, true, () => {
+      throw new Error("Hook \u914D\u7F6E\u76EE\u5F55\u521B\u5EFA\u5931\u8D25");
+    }, (trustedRoot, pipeline) => {
+      const config = readHooksConfig(trustedRoot);
+      config.promptSkipKeyword = value.promptSkipKeyword;
+      writeHooksConfig(trustedRoot, pipeline, config);
+    });
+  });
 }
 
 // packages/server/src/loops.ts
-import { existsSync as existsSync6, readdirSync as readdirSync7, readFileSync as readFileSync20 } from "node:fs";
+import { existsSync as existsSync6, readdirSync as readdirSync7, readFileSync as readFileSync19 } from "node:fs";
 import { join as join36 } from "node:path";
 function readRunLogText(root) {
   try {
-    return readFileSync20(join36(root, ".superpowers", "loops", "progress.md"), "utf8");
+    return readFileSync19(join36(root, ".superpowers", "loops", "progress.md"), "utf8");
   } catch {
     return null;
   }
 }
 function readLoopDocText(root) {
   try {
-    return readFileSync20(join36(root, "LOOP.md"), "utf8");
+    return readFileSync19(join36(root, "LOOP.md"), "utf8");
   } catch {
     return null;
   }
@@ -20039,12 +20200,12 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants7, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync21, statSync as statSync4 } from "node:fs";
+import { accessSync as accessSync2, constants as constants8, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync20, statSync as statSync4 } from "node:fs";
 import { delimiter, dirname as dirname9, join as join37 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
   try {
-    const text2 = readFileSync21(path7, "utf8");
+    const text2 = readFileSync20(path7, "utf8");
     const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(text2)?.[1];
     if (frontmatter) {
       const line = frontmatter.split("\n").find((candidate) => /^description\s*:/.test(candidate.trim()));
@@ -20060,7 +20221,7 @@ function skillDescriptionFrom(path7) {
 }
 function installedPluginRoots(claudeDir) {
   try {
-    const parsed = JSON.parse(readFileSync21(join37(claudeDir, "plugins", "installed_plugins.json"), "utf8"));
+    const parsed = JSON.parse(readFileSync20(join37(claudeDir, "plugins", "installed_plugins.json"), "utf8"));
     const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
     if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return [];
     return Object.values(plugins).flat().map((entry) => typeof entry === "object" && entry !== null ? Reflect.get(entry, "installPath") : void 0).filter((path7) => typeof path7 === "string" && path7.trim() !== "");
@@ -20140,7 +20301,7 @@ function externalSkillSections(repoRoot) {
   const out = /* @__PURE__ */ new Map();
   if (!existsSync7(p)) return out;
   let section2 = "";
-  for (const raw of readFileSync21(p, "utf8").split("\n")) {
+  for (const raw of readFileSync20(p, "utf8").split("\n")) {
     const line = raw.trim();
     const h = /^\*\*(.+)\*\*$/.exec(line);
     if (h?.[1]) {
@@ -20162,11 +20323,11 @@ function detectInstalled(claudeDir) {
     for (const plugin of childDirsIn(join37(codexCache, marketplace))) codexPluginBases.add(plugin);
   }
   try {
-    const raw = readFileSync21(join37(claudeDir, "plugins", "installed_plugins.json"), "utf8");
+    const raw = readFileSync20(join37(claudeDir, "plugins", "installed_plugins.json"), "utf8");
     const parsed = JSON.parse(raw);
     let disabled = {};
     try {
-      const settings = JSON.parse(readFileSync21(join37(claudeDir, "settings.json"), "utf8"));
+      const settings = JSON.parse(readFileSync20(join37(claudeDir, "settings.json"), "utf8"));
       if (typeof settings === "object" && settings !== null) {
         const candidate = Reflect.get(settings, "enabledPlugins");
         if (typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)) {
@@ -20195,7 +20356,7 @@ function detectInstalled(claudeDir) {
 }
 function sourceRegistry(repoRoot) {
   try {
-    const rows = parseSkillSources(readFileSync21(join37(repoRoot, "templates", "skill-sources.yaml"), "utf8"));
+    const rows = parseSkillSources(readFileSync20(join37(repoRoot, "templates", "skill-sources.yaml"), "utf8"));
     return new Map(rows.map((row) => [row.token, row]));
   } catch {
     return /* @__PURE__ */ new Map();
@@ -20209,7 +20370,7 @@ function executableOnPath(bin) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (dir === "") continue;
     try {
-      accessSync2(join37(dir, bin), constants7.X_OK);
+      accessSync2(join37(dir, bin), constants8.X_OK);
       return true;
     } catch {
     }
@@ -20975,7 +21136,7 @@ function safeContextBundleRepairAction(error) {
 }
 
 // packages/server/src/contextBundleTrustedReader.ts
-import { constants as constants8, fstatSync as fstatSync6, openSync as openSync7, readSync as readSync3 } from "node:fs";
+import { constants as constants9, fstatSync as fstatSync7, openSync as openSync8, readSync as readSync4 } from "node:fs";
 import { dirname as dirname10, posix as posix3 } from "node:path";
 function safeParts(path7) {
   if (path7 === "" || path7.startsWith("/") || path7.includes("\\")) throw new Error("unsafe relative path");
@@ -21000,7 +21161,7 @@ function readBounded(fd, maxBytes) {
   while (total <= maxBytes) {
     const remaining = maxBytes + 1 - total;
     const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
-    const bytesRead = readSync3(fd, chunk, 0, chunk.byteLength, null);
+    const bytesRead = readSync4(fd, chunk, 0, chunk.byteLength, null);
     if (bytesRead === 0) break;
     chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
     total += bytesRead;
@@ -21034,9 +21195,9 @@ function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity
       assertDirectoryStillTrusted(directory, root);
       let fd;
       try {
-        fd = openSync7(
+        fd = openSync8(
           paths.operation,
-          constants8.O_RDONLY | constants8.O_NOFOLLOW | constants8.O_NONBLOCK
+          constants9.O_RDONLY | constants9.O_NOFOLLOW | constants9.O_NONBLOCK
         );
       } catch (error) {
         if (isMissing(error)) {
@@ -21049,7 +21210,7 @@ function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity
         throw new ContextBundleTrustedFileError(error);
       }
       try {
-        const opened = fstatSync6(fd);
+        const opened = fstatSync7(fd);
         if (!opened.isFile()) throw new ContextBundleTrustedFileError();
         const identity = { dev: opened.dev, ino: opened.ino };
         assertEntryMatches(paths, identity, "Context Bundle source");
@@ -22501,11 +22662,11 @@ async function handleGet(req, res, path7, deps) {
   }
   if (path7 === "/api/hooks") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    if (!isRegisteredRoot(root)) {
-      return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
-    }
+    const rootCheck = workflowRootForRequest(root);
+    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
     try {
-      return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix: readHooksMatrix(root) });
+      const { matrix, promptSkipKeyword } = readHooksConfig(rootCheck.anchor);
+      return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -22903,7 +23064,7 @@ import { lstatSync as lstatSync8 } from "node:fs";
 import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID8 } from "node:crypto";
 import { lstat as lstat15, readFile as readFile22, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
 import { join as join46 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
@@ -22945,7 +23106,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
     if (errorCode7(error) !== "ENOENT") throw error;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join46(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID7()}.tmp`);
+  const temporary = join46(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID8()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -23516,15 +23677,32 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     if (!root) {
       return sendJson(res, 400, { ok: false, error: "root \u5FC5\u586B" });
     }
-    if (!isRegisteredRoot(root)) {
-      return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
-    }
+    const rootCheck = workflowRootForRequest(root);
+    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
     try {
-      writeHookToggle(root, validated.value);
+      await writeHookToggle(rootCheck.anchor, validated.value);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     return sendJson(res, 200, { ok: true, ...validated.value });
+  }
+  if (path7 === "/api/hooks/prompt-routing-bypass") {
+    const rawBody = await readJsonBody(req);
+    const validated = validatePromptRoutingBypassBody(rawBody);
+    if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
+    const root = typeof rawBody.root === "string" ? rawBody.root : "";
+    if (!root) return sendJson(res, 400, { ok: false, error: "root \u5FC5\u586B" });
+    const rootCheck = workflowRootForRequest(root);
+    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    try {
+      await writePromptRoutingBypass(rootCheck.anchor, validated.value);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: errMsg2(e) });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      prompt_skip_keyword: validated.value.promptSkipKeyword
+    });
   }
   if (path7 === "/api/automation") {
     const rawBody = await readJsonBody(req);
@@ -23608,10 +23786,10 @@ import { join as join49 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
-  constants as constants9,
-  fstatSync as fstatSync7,
-  openSync as openSync8,
-  readFileSync as readFileSync22
+  constants as constants10,
+  fstatSync as fstatSync8,
+  openSync as openSync9,
+  readFileSync as readFileSync21
 } from "node:fs";
 import { posix as posix4 } from "node:path";
 var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
@@ -23636,7 +23814,7 @@ function registryReadError(error) {
   const detail = error instanceof Error ? error.message : String(error);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync21(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -23663,7 +23841,7 @@ function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd,
             if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
             let fd;
             try {
-              fd = openSync8(paths.operation, constants9.O_RDONLY | constants9.O_NOFOLLOW);
+              fd = openSync9(paths.operation, constants10.O_RDONLY | constants10.O_NOFOLLOW);
             } catch (error) {
               const code = error.code;
               if (code === "ELOOP" || code === "ENOENT") {
@@ -23672,7 +23850,7 @@ function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd,
               throw registryReadError(error);
             }
             try {
-              const opened = fstatSync7(fd);
+              const opened = fstatSync8(fd);
               if (!opened.isFile() || !sameIdentity(opened, before)) {
                 throw new LoopScopePreviewRootUntrustedError(
                   "during-read",
@@ -24297,21 +24475,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync23 } from "node:fs";
+import { readFileSync as readFileSync22 } from "node:fs";
 import { dirname as dirname12, join as join51 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync23(join51(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync22(join51(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync23(join51(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync22(join51(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -24365,7 +24543,7 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync23 } from "node:fs";
 import { join as join52 } from "node:path";
 import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
@@ -24532,7 +24710,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync24(join52(webRoot, "index.html"), "utf8");
+      let html = readFileSync23(join52(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -24549,7 +24727,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     const abs = join52(webRoot, rel);
     if (!abs.startsWith(join52(webRoot, "assets"))) return false;
     try {
-      const source = readFileSync24(abs);
+      const source = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
       const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
@@ -24805,7 +24983,7 @@ function createRelatedSessionSearchExecutor(runner) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync25 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { basename as basename5, dirname as dirname13, join as join54 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
@@ -24815,7 +24993,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative7 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync25(join54(pluginRoot2, relative7), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join54(pluginRoot2, relative7), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -25151,7 +25329,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile4 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync26 } from "node:fs";
+import { readFileSync as readFileSync25 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -25188,7 +25366,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync26(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {
@@ -25400,7 +25578,7 @@ async function main() {
   const releaseId = resolvePayloadReleaseId(root);
   const transactionId = managedTransactionId();
   const stateScopeId = machineStateScopeId(paths.stateRoot);
-  mkdirSync6(paths.stateRoot, { recursive: true, mode: 448 });
+  mkdirSync5(paths.stateRoot, { recursive: true, mode: 448 });
   const existing = await probeHealth(port, host, 400);
   const decision = decidePreemption(existing, version, releaseId, stateScopeId, transactionId);
   if (decision === "reuse") {
@@ -25470,7 +25648,7 @@ async function main() {
   const shutdown = () => {
     void srv.close().finally(() => {
       try {
-        unlinkSync3(paths.pidfilePath);
+        unlinkSync4(paths.pidfilePath);
       } catch {
       }
       process.exit(0);

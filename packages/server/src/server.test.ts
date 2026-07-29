@@ -3,6 +3,7 @@
  * node:http 真发请求、断言真实响应与真实落盘副作用。零 mock。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, rename, stat, symlink, unlink, writeFile } from 'node:fs/promises'
@@ -4293,6 +4294,18 @@ describe('GET /api/hooks —— hook 元数据 + 阶段×hook 开关矩阵（v5 
     expect(r.status).toBe(404)
   })
 
+  it('稳定 FIFO hooks.json 有界回退默认值，HTTP 仍可响应', async () => {
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    execFileSync('mkfifo', [join(h.root, '.pipeline', 'hooks.json')])
+    const r = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ matrix: Record<string, false>; prompt_skip_keyword: string }>()).toMatchObject({
+      matrix: {},
+      prompt_skip_keyword: 'no-tenon',
+    })
+  })
+
   it('手改文件里的强制常开项（gate.*: false）被过滤，不回显给 UI', async () => {
     const { mkdir, writeFile } = await import('node:fs/promises')
     const h = await start()
@@ -4381,6 +4394,56 @@ describe('POST /api/hooks —— 阶段×hook 开关写回（v5 T5 / 决议#2）
       { headers: { Authorization: `Bearer ${h.token}` } },
     )
     expect(r.status).toBe(404)
+  })
+})
+
+describe('POST /api/hooks/prompt-routing-bypass —— 单轮路由旁路词', () => {
+  it('默认值由 GET 暴露，合法值可保存并 round-trip', async () => {
+    const h = await start()
+    const first = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(first.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('no-tenon')
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    const saved = await reqPost(
+      h.port,
+      '/api/hooks/prompt-routing-bypass',
+      { root: h.root, prompt_skip_keyword: 'skip-tenon' },
+      auth,
+    )
+    expect(saved.status).toBe(200)
+    expect(saved.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('skip-tenon')
+    const after = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(after.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('skip-tenon')
+  })
+
+  it('无 token 401；非法 DTO 400；未注册 root 404，均不污染已有配置', async () => {
+    const h = await start()
+    expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+      root: h.root, prompt_skip_keyword: 'skip-tenon',
+    })).status).toBe(401)
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    for (const prompt_skip_keyword of ['has space', 'a'.repeat(33), 42]) {
+      expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+        root: h.root, prompt_skip_keyword,
+      }, auth)).status).toBe(400)
+    }
+    expect((await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+      root: '/tmp/not-registered-root', prompt_skip_keyword: '',
+    }, auth)).status).toBe(404)
+    const current = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(current.json<{ prompt_skip_keyword: string }>().prompt_skip_keyword).toBe('no-tenon')
+  })
+
+  it('拒绝 .pipeline symlink，Dashboard 保存不得写出 registered root', async () => {
+    const { symlink } = await import('node:fs/promises')
+    const h = await start()
+    const outside = await makeWorktreeDir()
+    await symlink(outside, join(h.root, '.pipeline'), 'dir')
+    const r = await reqPost(h.port, '/api/hooks/prompt-routing-bypass', {
+      root: h.root,
+      prompt_skip_keyword: 'skip-tenon',
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(500)
+    expect(existsSync(join(outside, 'hooks.json'))).toBe(false)
   })
 })
 

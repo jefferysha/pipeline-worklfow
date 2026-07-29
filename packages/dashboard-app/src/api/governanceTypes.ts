@@ -11,6 +11,7 @@ export interface WbHookMeta {
 export interface WbHooksConfig {
   hooks: WbHookMeta[]
   matrix: Record<string, false>
+  promptSkipKeyword: string
 }
 
 export interface ChangeHistoryEntry {

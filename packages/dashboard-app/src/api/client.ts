@@ -20,6 +20,7 @@ export {
   patchTrackDefinition,
   postCreateChange,
   postHookToggle,
+  postPromptRoutingBypass,
   postMandatorySkills,
   postRouterPreview,
   postTrackDefinition,
