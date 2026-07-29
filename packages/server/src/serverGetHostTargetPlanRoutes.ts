@@ -30,6 +30,7 @@ export interface HostTargetPlanRuntime {
 export interface HostTargetPlanRuntimeOptions {
   readonly maxConcurrent?: number
   readonly timeoutMs?: number
+  readonly now?: () => number
 }
 
 const MAX_HOST_PLAN_KEYS = 25
@@ -45,6 +46,7 @@ interface QueuedHostPlanLoad {
   readonly load: (signal: AbortSignal) => Promise<HostTargetPlanRouteResult>
   readonly resolve: (result: HostTargetPlanRouteResult) => void
   readonly reject: (error: unknown) => void
+  readonly deadline: number
 }
 
 function parseHostTargetPlanJson(stdout: string): unknown | null {
@@ -62,6 +64,7 @@ export function createHostTargetPlanRuntime(
 ): HostTargetPlanRuntime {
   const maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS
   const timeoutMs = options.timeoutMs ?? DEFAULT_HOST_PLAN_TIMEOUT_MS
+  const now = options.now ?? (() => globalThis.performance.now())
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > MAX_HOST_PLAN_KEYS) {
     throw new Error(`maxConcurrent 必须是 1..${MAX_HOST_PLAN_KEYS} 的整数`)
   }
@@ -78,6 +81,11 @@ export function createHostTargetPlanRuntime(
     while (active < maxConcurrent) {
       const queued = queue.shift()
       if (queued === undefined) return
+      const remainingMs = queued.deadline - now()
+      if (remainingMs <= 0) {
+        queued.resolve(PLAN_UNAVAILABLE)
+        continue
+      }
       active += 1
       const controller = new AbortController()
       let settled = false
@@ -94,7 +102,7 @@ export function createHostTargetPlanRuntime(
       const timer = setTimeout(() => {
         controller.abort()
         finish(() => queued.resolve(PLAN_UNAVAILABLE))
-      }, timeoutMs)
+      }, remainingMs)
       timer.unref?.()
       try {
         void queued.load(controller.signal).then(
@@ -111,7 +119,12 @@ export function createHostTargetPlanRuntime(
     load: (signal: AbortSignal) => Promise<HostTargetPlanRouteResult>,
   ): Promise<HostTargetPlanRouteResult> => {
     const scheduled = new Promise<HostTargetPlanRouteResult>((resolve, reject) => {
-      queue.push({ load, resolve, reject })
+      queue.push({
+        load,
+        resolve,
+        reject,
+        deadline: now() + timeoutMs,
+      })
     })
     drain()
     return scheduled

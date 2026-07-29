@@ -96,6 +96,30 @@ design-doc: docs/superpowers/specs/2026-07-29-pr-8-merge-audit-design.md
 
 此处建议 `/clear`。
 
+## Verify 回退修复：请求 deadline 与可应用 delta
+
+第一轮冻结 Verify 在
+`f4c29f0a0acc82beb3f7e759d4b385b334a4b0c3` 确认两个 Medium，必须完成以下回退
+修复后才能再次执行子阶段 5：
+
+1. 规格先行：在 MODIFIED requirement `稳定且零副作用的宿主目标目录` 中保留 canonical
+   scenario `不接受自定义目标`，再用 OpenSpec 1.6.0 执行 show、strict validate 和第二个
+   隔离 clone 的 archive/apply，证明既有场景无损保留。
+2. RED：在 `packages/server/src/serverGetHostTargetPlanRoutes.test.ts` 添加排队 deadline
+   回归，证明 timeout 从 enqueue 开始、过期 item 不启动 child、同 key 共享不漂移、槽位释放
+   后健康请求可恢复。
+3. GREEN：在 `createHostTargetPlanRuntime` 为每个 schedule item 保存绝对 deadline；
+   drain 时只传递剩余预算，过期 item 直接以稳定 unavailable 结果结算且不占 child slot。
+4. REFACTOR：保持 success-only cache、failure retry、resolve/reject in-flight cleanup 和
+   固定 25-key 有界空间；运行 focused server/API、真实 HTTP
+   `maxConcurrent=4 / timeout=10s` 与短时确定性 runtime。
+5. 从最终源码重建 server/CLI/Dashboard 生成物，重跑 root/Web full、Linux/Darwin、CLI 24、
+   OpenSpec apply、production browser 和全部发布门禁。
+6. 更新本 Change 的 REVIEW/验证记录，完成 Spec、Rules/Architecture/Security、Dashboard
+   三类完整 pre-Verify review，要求 C/H/M/L 全为 0；普通提交、推送并等待新的 exact-head CI。
+
+此处建议 `/clear`。
+
 ## 子阶段 6：冻结 Verify
 
 1. `build-complete` 冻结精确 SHA，记录 base、路径清单、capability mapping 和 repo-zero 指纹。

@@ -19929,6 +19929,7 @@ function parseHostTargetPlanJson(stdout) {
 function createHostTargetPlanRuntime(options = {}) {
   const maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_HOST_PLAN_TIMEOUT_MS;
+  const now = options.now ?? (() => globalThis.performance.now());
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > MAX_HOST_PLAN_KEYS) {
     throw new Error(`maxConcurrent \u5FC5\u987B\u662F 1..${MAX_HOST_PLAN_KEYS} \u7684\u6574\u6570`);
   }
@@ -19943,6 +19944,11 @@ function createHostTargetPlanRuntime(options = {}) {
     while (active < maxConcurrent) {
       const queued = queue.shift();
       if (queued === void 0) return;
+      const remainingMs = queued.deadline - now();
+      if (remainingMs <= 0) {
+        queued.resolve(PLAN_UNAVAILABLE);
+        continue;
+      }
       active += 1;
       const controller = new AbortController();
       let settled = false;
@@ -19957,7 +19963,7 @@ function createHostTargetPlanRuntime(options = {}) {
       const timer = setTimeout(() => {
         controller.abort();
         finish(() => queued.resolve(PLAN_UNAVAILABLE));
-      }, timeoutMs);
+      }, remainingMs);
       timer.unref?.();
       try {
         void queued.load(controller.signal).then(
@@ -19971,7 +19977,12 @@ function createHostTargetPlanRuntime(options = {}) {
   };
   const schedule = (load) => {
     const scheduled = new Promise((resolve12, reject) => {
-      queue.push({ load, resolve: resolve12, reject });
+      queue.push({
+        load,
+        resolve: resolve12,
+        reject,
+        deadline: now() + timeoutMs
+      });
     });
     drain();
     return scheduled;

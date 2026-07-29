@@ -149,3 +149,95 @@ repository secret was unavailable. The Vite informational warning refers to
 the uncompressed aggregate chunk; the production server transfers the
 immutable JavaScript asset as a 257,888-byte gzip response and the exact
 production browser path was accepted.
+
+## Verify return loop 1
+
+The first frozen Verify at
+`f4c29f0a0acc82beb3f7e759d4b385b334a4b0c3` supersedes the earlier final
+disposition and failed with C0/H0/M2/L0. The canonical report is
+`docs/superpowers/reports/2026-07-29-pr-8-merge-audit-verify-fail.md`.
+
+### Spec correction
+
+- Medium: the MODIFIED delta initially omitted canonical scenarios. OpenSpec
+  1.6.0 stopped at `不接受自定义目标`, then exposed six additional missing plan
+  scenarios after the first correction.
+- Fix: compare every MODIFIED requirement and scenario title against the
+  canonical `host-target-plan` spec, keep the five exact requirement names and
+  every existing scenario, then add the new current-main constraints as
+  additive scenarios or strengthened bodies.
+- Evidence: Change strict validation passes. A second isolated clone completed
+  `openspec archive pr-8-merge-audit --yes --json` with exit 0,
+  `specsUpdated=true`, `modified=5`, and the generated canonical spec retained
+  every prior scenario plus the new bounded-runtime, copy-only and visual
+  acceptance scenarios.
+
+### Completed Build correction
+
+- Medium fixed: every scheduled load now records an absolute deadline from
+  enqueue time. Drain rejects an expired item without starting its child, and a
+  queued item with time remaining receives only that remaining budget.
+- RED/GREEN evidence: the two new deterministic fake-timer regressions first
+  timed out against the old implementation, then passed after the minimal
+  runtime change. They prove expired-child call count zero, remaining-budget
+  abort, slot recovery, and a subsequent healthy request.
+- Focused server validation is 79/79. The full server source suite is 676/676
+  with 9 declared skips; server typecheck passes.
+- Real built runtime evidence: `maxConcurrent=1 / timeout=100ms` resolves the
+  active and expired queued items near 101 ms, with the expired loaders never
+  called. Default production HTTP `maxConcurrent=4 / timeout=10s` resolves all
+  five distinct keys near 10 seconds instead of the former 20-second fifth
+  response.
+
+### Return-loop full validation
+
+- Root full: 322/322 files, 5,616 pass and 14 declared external-token skips.
+  The canonical Web command passes 61/61 files and 1,098/1,098 tests; isolated
+  Workbench/Progress rechecks pass 133/133; Web and server typechecks pass.
+- A deliberately unsupported one-fork Web experiment exposed cross-file jsdom
+  pollution and was stopped with exit 130. It is not the repository gate; the
+  canonical parallel Web command above is green. The initially attempted root
+  `--maxWorkers=1` option was invalid for this Vitest configuration and ran zero
+  tests; the supported root single-fork command is the recorded full PASS.
+- A second isolated OpenSpec 1.6.0 clone archives the Change with exit 0,
+  `specsUpdated=true` and five modified requirements. All 22 canonical
+  scenarios are retained and the applied spec has 30 scenarios. Strict change
+  and post-archive spec validation both pass.
+- CLI black-box coverage passes all 12 hosts by 2 operations plus two hostile
+  inputs. Darwin production API coverage passes catalog 12, plans 24, invalid
+  queries 8, and protected Host routes 5. Linux Node 22 read-only Docker passes
+  catalog 12, plans 24 and four hostile Host routes.
+- Build output is reproducible: rebuilding CLI, server and Dashboard twice
+  leaves the aggregate generated-asset SHA unchanged. Architecture, comments,
+  documentation, repository hygiene, identity, document templates, workflow
+  freshness, migration CAS, hooks 482/482, adapters 272/272, Skill references,
+  bundle 31/31, npm package 39/39 and golden oracle all pass.
+
+### Independent pre-Verify reviews after the fix
+
+- Spec/apply: implementation semantics and all 352 current paths map to the five
+  requirements; focused server 79/79, strict validation and isolated
+  archive/apply pass with zero scenario loss.
+- Rules/Correctness/Architecture/Security: C0/H0/M0/L0. The reviewer
+  independently reproduced expired-child call count zero and five real HTTP
+  responses at about 10.02 seconds, and confirmed fixed argv, strict DTO,
+  Host guard, error redaction, cache/in-flight/retry cleanup, generated
+  artifacts, clean-room and dependency boundaries.
+- Dashboard `design-taste-frontend`, Web guideline, accessibility, Browser QA
+  and performance: C0/H0/M0/L0. The independent run covers
+  390/768/769/900/1024/1440, zh/en, light/dark, all loading/empty/error/ready/
+  retry/copy/race states, keyboard/focus/ARIA/reduced-motion and GET-only
+  traces. It reports zero overflow, console/page errors, contrast failures,
+  mutation controls or long tasks; ready is 71–82 ms and CLS is 0.
+- Primary browser evidence is
+  `/private/tmp/pr8-build-browser-final-hSVTEZ/trace.zip`
+  (`sha256:23077380becef1d18695a4f00b5cbe9c7ffbae471ab9972a273b178db9c3a3d1`);
+  the independent Dashboard trace is
+  `/private/tmp/pr8-dashboard-preverify-uaZI7R/`
+  (`sha256:332334b598d28dac0f23885aff5c0de1de6c86d0b950dd711527cd10c4e705b1`).
+
+The dependency audit remains the unchanged main baseline: production has one
+High and one Moderate, while the full tree has one Critical, one High and five
+Moderate. This PR changes no manifest or lockfile, so it is not a PR regression;
+it remains a hard blocker that the later independent dependency/release Change
+must clear before any tag or GitHub Release.

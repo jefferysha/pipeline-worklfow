@@ -5,6 +5,7 @@ import {
   createHostTargetPlanRuntime,
   resolveHostTargetPlanRoute,
   type HostTargetPlanRouteDeps,
+  type HostTargetPlanRouteResult,
 } from './serverGetHostTargetPlanRoutes.js'
 import {
   makeTempHome,
@@ -678,5 +679,98 @@ describe('Host Target Plan server assembly', () => {
       status: 200,
       body: CATALOG,
     }))).resolves.toEqual({ status: 200, body: CATALOG })
+  })
+
+  it('expires a queued load from its enqueue deadline without starting it', async () => {
+    vi.useFakeTimers()
+    try {
+      let now = 0
+      const runtime = createHostTargetPlanRuntime({
+        maxConcurrent: 1,
+        timeoutMs: 100,
+        now: () => now,
+      })
+      const firstLoad = vi.fn((_signal: AbortSignal) => new Promise<HostTargetPlanRouteResult>(() => {}))
+      const queuedLoad = vi.fn((_signal: AbortSignal) => new Promise<HostTargetPlanRouteResult>(() => {}))
+
+      const first = runtime.resolve('first', firstLoad)
+      const queued = runtime.resolve('queued', queuedLoad)
+      now = 100
+      await vi.advanceTimersByTimeAsync(100)
+
+      await expect(first).resolves.toEqual({
+        status: 503,
+        body: {
+          ok: false,
+          code: 'HOST_TARGET_PLAN_UNAVAILABLE',
+          error: '宿主计划功能当前不可用',
+        },
+      })
+      await expect(queued).resolves.toEqual({
+        status: 503,
+        body: {
+          ok: false,
+          code: 'HOST_TARGET_PLAN_UNAVAILABLE',
+          error: '宿主计划功能当前不可用',
+        },
+      })
+      expect(firstLoad).toHaveBeenCalledTimes(1)
+      expect(queuedLoad).not.toHaveBeenCalled()
+
+      await expect(runtime.resolve('healthy', async () => ({
+        status: 200,
+        body: { key: 'healthy' },
+      }))).resolves.toEqual({
+        status: 200,
+        body: { key: 'healthy' },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives a queued load only the deadline budget remaining after its wait', async () => {
+    vi.useFakeTimers()
+    try {
+      let now = 0
+      const runtime = createHostTargetPlanRuntime({
+        maxConcurrent: 1,
+        timeoutMs: 100,
+        now: () => now,
+      })
+      let releaseFirst: (() => void) | undefined
+      let queuedSignal: AbortSignal | undefined
+      const first = runtime.resolve('first', () => new Promise((resolve) => {
+        releaseFirst = () => resolve({ status: 200, body: { key: 'first' } })
+      }))
+      const queued = runtime.resolve('queued', (signal) => {
+        queuedSignal = signal
+        return new Promise(() => {})
+      })
+
+      now = 60
+      await vi.advanceTimersByTimeAsync(60)
+      releaseFirst?.()
+      await first
+      expect(queuedSignal?.aborted).toBe(false)
+
+      now = 99
+      await vi.advanceTimersByTimeAsync(39)
+      expect(queuedSignal?.aborted).toBe(false)
+      now = 100
+      await vi.advanceTimersByTimeAsync(1)
+
+      await expect(queued).resolves.toEqual({
+        status: 503,
+        body: {
+          ok: false,
+          code: 'HOST_TARGET_PLAN_UNAVAILABLE',
+          error: '宿主计划功能当前不可用',
+        },
+      })
+      expect(queuedSignal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

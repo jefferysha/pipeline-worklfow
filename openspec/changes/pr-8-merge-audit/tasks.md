@@ -16,6 +16,7 @@
 - [x] 固定 capability、完整 requirement/scenario、兼容、安全与视觉验收标准。
 - [x] 生成可执行计划：主线集成、TDD 修复、全量门禁、真实 API/浏览器、独立审查、CI、合并与回滚。
 - [x] 登记 delta spec 与 plan，完成 Spec review 门禁。
+- [x] 第一轮 Verify 回退后补回五项 MODIFIED requirements 的全部 canonical scenarios，并在计划中冻结排队 deadline 的 TDD 修复与完整重验步骤。
 
 ## 实现
 
@@ -27,6 +28,9 @@
 - [x] 同步源码、测试、正式生成物、OpenSpec、README/CONTRACT/TEST-REALITY/用户文档与回滚事实。
 - [x] 运行定向、前端、后端、全仓、分发、OpenSpec、oracle、hygiene、依赖与 repo-zero 门禁。
 - [x] 完成独立 pre-Verify Spec、Rules/Architecture/Security、Dashboard 视觉复审，推送并取得精确 head CI。
+- [x] 以 RED 复现 queue wait 逃逸 10 秒 deadline，最小实现 enqueue 绝对期限、过期 item 不启动 child 与健康槽位恢复。
+- [x] 在第二个隔离 clone 证明 OpenSpec 1.6.0 archive/apply 无场景丢失，并重跑所有 focused/full/generated/API/browser/release gates。
+- [ ] 对完整新 diff 重做 Spec、Rules/Architecture/Security、Dashboard `design-taste-frontend` pre-Verify 复审，提交推送并取得新 exact-head CI。
 
 ## 验证
 
