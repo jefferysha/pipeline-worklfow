@@ -9,6 +9,11 @@ OpenSpec strict 与 absolute-form request target 隐私边界存在 Medium 阻�
 Reviewer 与 API/E2E 通过，OpenSpec 隔离应用演练通过，但真实浏览器视觉轨发现筛选按钮在键盘
 聚焦时没有可见焦点环（P2 Important）。持续自主模式按保守策略再次选择修复，不接受偏差。
 
+第三轮冻结基线 `c0060ba02ff5a7dc76b1ff0d53f6c06c9eecff93` 的最终验证结论为 **PASS**。
+完整 reviewer、API/E2E、真实浏览器/视觉与 OpenSpec 隔离应用演练均通过，Critical/High/Medium
+findings 为 0。Codex CLI 因本机运行时损坏未返回最终摘要，按降级而非绿色记录；独立 reviewer 与
+E2E 轨未降级。
+
 ## 冻结基线与隔离
 
 - base：`origin/main` / `4c242b928b61285561f9cdbc63617db899a18a12`
@@ -179,3 +184,69 @@ focus-visible 样式，补组件断言并重新做真实浏览器键盘复验；
   `rgba(37, 99, 235, 0.12)` ring；Enter、Space、Escape、partial、empty 与 390 px 路径无回归。
 - 该轮仅证明 Build 修复已具备重新冻结条件；最终 Verify 结论仍以后续第三个冻结 SHA 的四轨结果
   为准。
+
+## 第三轮冻结验证（`c0060ba0`）
+
+### 冻结与 reviewer
+
+- 冻结 SHA：`c0060ba02ff5a7dc76b1ff0d53f6c06c9eecff93`；base/merge-base：
+  `4c242b928b61285561f9cdbc63617db899a18a12`。
+- 仓外 reviewer 副本：`/tmp/tenon-trace-review-c006.TZlD6v/repo`。完整覆盖 133 个
+  delivery/canonical/generated 文件；Standards、Spec、correctness、security/privacy、error、
+  compatibility、UI/a11y 与生成物全部 PASS，Critical/High/Medium/Low 均为 0。
+- 完整 binary diff fingerprint 前后均为
+  `a0674512533a4757a4590646b569aeda963f4b39775f41b1015fc506e05de9ce`；隔离副本最终 clean。
+- reviewer 在隔离副本重跑 Trace/Host 定向测试、Web 1068 tests、typecheck、architecture、
+  comments、OpenSpec strict 与 tracked bundle freshness，均通过。
+
+### API / E2E
+
+- 仓外副本：`/tmp/tenon-trace-verify-c006.xz8LtB`；真实仓库 fingerprint 前后均为
+  `2720dd06d89d1de9ad2e6ca3a0f03504e51fad5242a5b5b22ff35de02e83fd3e`。
+- `npm ci`、受影响 TypeScript packages build、`typecheck:web`、`build:server` 与 `build:web`
+  均 exit 0。
+- TraceStore/security/server 定向测试 3 files / 41 tests PASS；真实 HTTP+JSONL E2E 1/1 PASS。
+- success、known empty、malformed partial、symlink generic 500、absolute-form pathname-only 均通过；
+  userinfo、authority、query、headers、prompt、response 与 upstream 哨兵均未跨过 metadata
+  allowlist，外部 symlink target 未变。
+- 非失败观察：依赖安装报告既有 7 项 audit；Vite 保留既有大 chunk warning。本 Change 未改依赖。
+
+### Browser / Visual
+
+- 仓外副本：`/tmp/tenon-trace-c006-verify-4Q0vlV`；真实入口：
+  `http://127.0.0.1:19880/?view=machine`，页面标题 `Tenon Dashboard`，H1 `机器就绪与风险`。
+- loading、3-record success、known empty、partial、真实 500→键盘 retry、快速切换晚响应防覆盖、
+  Tab/Enter/Space/Escape 与 session 焦点恢复全部通过。
+- 未选中 Errors 按钮的计算样式为 `:focus-visible=true`、
+  `border-color=rgb(37, 99, 235)`，并含 3 px `rgba(37, 99, 235, 0.12)` ring。
+- 中文/英文 390 px 下 document/body 均为 390/390、Trace 面板为 324/324，无横向溢出；
+  `pageerror=0`，console error 仅两条预期真实 HTTP 500。
+- local-only/metadata-only 与页面隐私检查通过；视觉 P0/P1/P2 为 0。非阻断 P3：retry 成功后按钮
+  卸载，浏览器把焦点落到 `BODY`；规格没有要求该路径恢复焦点，Escape 的明确焦点恢复契约通过。
+- 11 张截图与日志保存在 `/tmp/tenon-trace-c006-verify-4Q0vlV/qa-output/`。
+
+### Codex CLI
+
+- 在仓外只读副本运行 `codex exec review`。进程实际读取了 Trace delta spec、Store、server、
+  Dashboard/client 与测试，并尝试运行定向测试。
+- 本机 `logs_2.sqlite` 损坏、model-cache schema 过旧；子沙箱又因
+  `connect EPERM 127.0.0.1:7897` 无法按需访问 npm registry。进程未在有界时间输出最终摘要，
+  以 exit 143 终止。
+- 本轨结论为 **degraded**，不得表述为 PASS。相同冻结 SHA 的独立 reviewer、API E2E 与浏览器轨
+  已完整覆盖代码、行为、安全与视觉边界。
+
+### OpenSpec 隔离应用演练
+
+- 真实主规格聚合 digest 前后均为
+  `0e87559624052236a07de18e951e3705d6aa627d09a89b0462f1acce20d46fd1`。
+- 仓外副本 `/tmp/tenon-trace-openspec-third.sFR4LG/repo` 中，
+  `openspec show trace-timeline --json --deltas-only`、strict validate、archive 与归档后
+  `trace-timeline` 主规格 strict validate 全部通过；archive 新增 6 条 requirement。
+- `openspec validate --all --strict` 为 18 passed / 12 failed；12 项均是本 Change 以外的既有
+  change/spec，不表述为全仓绿色。
+
+### 最终决定
+
+第三轮冻结的独立强制轨和隔离 OpenSpec 应用边界全部通过，无 Critical/High/Medium finding。
+Codex CLI 的运行时降级已被如实隔离记录，不掩盖为绿色，也不改变其他三轨的真实 PASS 结论。
+因此本 Change 可请求精确 `verify-pass` 评审并进入 Ship。
