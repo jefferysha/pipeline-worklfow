@@ -265,7 +265,7 @@ export function HostTargetPlanView({
           </div>
           <div
             ref={detailRef}
-            className="min-w-0 scroll-mt-16 outline-none min-[900px]:sticky min-[900px]:top-5"
+            className="min-w-0 scroll-mt-16 outline-none focus-visible:ring-2 focus-visible:ring-(--accent) min-[900px]:sticky min-[900px]:top-5"
             data-testid="host-plan-detail"
             tabIndex={-1}
           >

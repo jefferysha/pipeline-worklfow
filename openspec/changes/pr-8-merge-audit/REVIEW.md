@@ -43,7 +43,7 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
   `Vary: Accept-Encoding`, honor `gzip;q=0`, and cache the bounded set of
   generated asset encodings.
 - Regression: real `node:http` tests cover gzip and identity responses. The
-  final 851,461-byte JavaScript asset transfers as 257,887 bytes with gzip.
+  final 851,512-byte JavaScript asset transfers as 257,888 bytes with gzip.
 
 ### Round 4 — Dashboard tests emitted asynchronous-render warnings
 
@@ -111,6 +111,17 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
   order, and the breakpoint. The exact production asset was rechecked at
   390/769/900/1024/1440 px in Chinese and English, light and dark themes.
 
+### Round 10 — programmatic detail focus had no visible indicator
+
+- Severity: Medium.
+- Evidence: the detail received `:focus-visible` after keyboard selection, but
+  `outline-none` left it with neither an outline nor a box shadow.
+- Fix: retain the programmatic focus target and add an accent
+  `focus-visible:ring-2` indicator around the detail.
+- Regression: the mobile component test requires the focus-visible classes.
+  Real keyboard activation on the exact rebuilt production asset leaves the
+  detail active with `:focus-visible=true` and a computed two-pixel accent ring.
+
 ## Final visual and interaction matrix
 
 - 1440 px and 1024 px desktop: light and dark theme; stable master-detail
@@ -133,5 +144,5 @@ Critical: 0. High: 0. Medium: 0. Low: 0. All findings discovered in this review
 were fixed and rechecked locally; the final independent incremental re-review
 and exact-head CI remain required before Build may complete. The Vite
 informational warning refers to the uncompressed aggregate chunk; the
-production server transfers the immutable JavaScript asset as a 257,887-byte
+production server transfers the immutable JavaScript asset as a 257,888-byte
 gzip response and the exact production browser path was accepted.

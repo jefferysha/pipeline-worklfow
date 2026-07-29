@@ -207,6 +207,8 @@ describe('HostTargetPlanView', () => {
     const detail = screen.getByTestId('host-plan-detail')
     expect(grid.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(detail).toHaveAttribute('tabindex', '-1')
+    expect(detail.className).toContain('focus-visible:ring-2')
+    expect(detail.className).toContain('focus-visible:ring-(--accent)')
     expect(detail).toHaveFocus()
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
     expect(selected).toHaveAttribute('aria-pressed', 'true')

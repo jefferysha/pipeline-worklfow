@@ -16,9 +16,9 @@
 - Dashboard：真实生产同源 server 覆盖 1440/1024/900/769/768/390、明暗主题、中英文、键盘、
   focus、复制、移动端选中定位、无横向溢出与控制台零错误/警告。`design-taste-frontend`
   审查发现的卡片重排、移动端详情位置和未压缩传输均已修复。
-- 静态资产：最终生产 JavaScript 资产原始 851,461 bytes；`Accept-Encoding: gzip`
-  实测返回 257,887 bytes、`Content-Encoding: gzip`、`Vary: Accept-Encoding`；
-  `gzip;q=0` 返回原始 851,461 bytes。
+- 静态资产：最终生产 JavaScript 资产原始 851,512 bytes；`Accept-Encoding: gzip`
+  实测返回 257,888 bytes、`Content-Encoding: gzip`、`Vary: Accept-Encoding`；
+  `gzip;q=0` 返回原始 851,512 bytes。
 - 契约：适配器计划固定使用安全 argv `--target .`，不再输出会被 shell 当作重定向的
   `<project>`；CLI、API、Dashboard、英文/中文文档与生成分发物保持同源。
 
