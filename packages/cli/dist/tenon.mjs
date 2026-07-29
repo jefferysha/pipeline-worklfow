@@ -21328,7 +21328,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep15) {
+function splitTopLevel(s, sep16) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -21340,7 +21340,7 @@ function splitTopLevel(s, sep15) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep15) {
+    } else if (ch === sep16) {
       out.push(cur);
       cur = "";
     } else {
@@ -29857,8 +29857,8 @@ function headerLookup(headers, name2) {
 }
 
 // packages/tap/dist/trace-store.js
-import { appendFileSync, existsSync as existsSync5, mkdirSync as mkdirSync2, readFileSync as readFileSync14, readdirSync as readdirSync3, renameSync, writeFileSync } from "node:fs";
-import { join as join42 } from "node:path";
+import { appendFileSync, closeSync, constants as constants4, existsSync as existsSync5, lstatSync as lstatSync2, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync14, realpathSync, readSync, readdirSync as readdirSync3, renameSync, writeFileSync } from "node:fs";
+import { join as join42, sep as sep7 } from "node:path";
 import { randomUUID as randomUUID8 } from "node:crypto";
 
 // packages/tap/dist/trace-codecs.js
@@ -29895,6 +29895,8 @@ function decodeTraceRecord(value) {
 }
 
 // packages/tap/dist/trace-store.js
+var RECORD_WINDOW_LIMIT = 200;
+var RECORD_WINDOW_BYTE_LIMIT = 8 * 1024 * 1024;
 function resolveTraceDir(opts = {}) {
   return resolveTapDir(opts);
 }
@@ -29920,6 +29922,22 @@ var FileTraceStore = class {
   }
   recordsFile(id) {
     return join42(this.recordsDir, `${encodeURIComponent(id)}.jsonl`);
+  }
+  openRecordsFileForRead(id) {
+    const candidate = this.recordsFile(id);
+    if (!existsSync5(candidate))
+      return null;
+    const root = realpathSync(this.dir);
+    const recordsRoot = realpathSync(this.recordsDir);
+    const candidateStat = lstatSync2(candidate);
+    if (!recordsRoot.startsWith(`${root}${sep7}`) || candidateStat.isSymbolicLink() || !candidateStat.isFile()) {
+      throw new Error("unsafe trace records path");
+    }
+    const resolved = realpathSync(candidate);
+    if (!resolved.startsWith(`${recordsRoot}${sep7}`))
+      throw new Error("unsafe trace records path");
+    const fd = openSync(candidate, constants4.O_RDONLY | constants4.O_NOFOLLOW);
+    return { fd, size: candidateStat.size };
   }
   writeSession(row) {
     const tmp = this.sessionFile(row.id) + ".tmp";
@@ -30023,6 +30041,103 @@ var FileTraceStore = class {
       }
     }
     return records;
+  }
+  readRecordWindow(id) {
+    const row = this.loadSessionRow(id);
+    if (!row) {
+      return {
+        total_count: 0,
+        returned_count: 0,
+        skipped_count: 0,
+        truncated: false,
+        integrity: "complete",
+        warnings: [],
+        records: []
+      };
+    }
+    const opened = this.openRecordsFileForRead(id);
+    if (opened === null) {
+      const countMismatch2 = row.record_count !== 0;
+      return {
+        total_count: row.record_count,
+        returned_count: 0,
+        skipped_count: 0,
+        truncated: false,
+        integrity: countMismatch2 ? "partial" : "complete",
+        warnings: countMismatch2 ? ["count-mismatch"] : [],
+        records: []
+      };
+    }
+    const fileSize = opened.size;
+    const bytesToRead = Math.min(fileSize, RECORD_WINDOW_BYTE_LIMIT);
+    const offset = fileSize - bytesToRead;
+    const buffer = Buffer.allocUnsafe(bytesToRead);
+    const fd = opened.fd;
+    let bytesRead = 0;
+    try {
+      while (bytesRead < bytesToRead) {
+        const n = readSync(fd, buffer, bytesRead, bytesToRead - bytesRead, offset + bytesRead);
+        if (n === 0)
+          break;
+        bytesRead += n;
+      }
+    } finally {
+      closeSync(fd);
+    }
+    const byteLimited = offset > 0;
+    const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
+    if (lines.at(-1) === "")
+      lines.pop();
+    let skippedCount = 0;
+    if (byteLimited && lines.length > 0) {
+      lines.shift();
+      skippedCount += 1;
+    }
+    const recordsNewestFirst = [];
+    let malformed = false;
+    const visibleLines = lines.filter((line) => line.trim().length > 0);
+    const visibleLineCount = skippedCount + visibleLines.length;
+    let recordLimited = false;
+    for (let index = visibleLines.length - 1; index >= 0; index -= 1) {
+      const line = visibleLines[index];
+      try {
+        const record2 = decodeTraceRecord(JSON.parse(line));
+        if (record2) {
+          if (recordsNewestFirst.length === RECORD_WINDOW_LIMIT) {
+            recordLimited = true;
+            break;
+          }
+          recordsNewestFirst.push(record2);
+        } else {
+          malformed = true;
+          skippedCount += 1;
+        }
+      } catch {
+        malformed = true;
+        skippedCount += 1;
+      }
+    }
+    const selected = recordsNewestFirst.reverse();
+    const countMismatch = !byteLimited && visibleLineCount !== row.record_count;
+    const warnings = [];
+    if (recordLimited)
+      warnings.push("record-limit");
+    if (byteLimited)
+      warnings.push("byte-limit");
+    if (malformed)
+      warnings.push("malformed-record");
+    if (countMismatch)
+      warnings.push("count-mismatch");
+    const partial = byteLimited || malformed || countMismatch;
+    return {
+      total_count: Math.max(row.record_count, visibleLineCount),
+      returned_count: selected.length,
+      skipped_count: skippedCount,
+      truncated: recordLimited || byteLimited,
+      integrity: partial ? "partial" : "complete",
+      warnings,
+      records: selected
+    };
   }
   listSessions() {
     if (!existsSync5(this.sessionsDir))
@@ -31449,7 +31564,7 @@ import { X509Certificate as X509Certificate2, createPublicKey, createPrivateKey 
 
 // packages/tap/dist/certificate-store.js
 import { X509Certificate, createPrivateKey, randomBytes as randomBytes5 } from "node:crypto";
-import { chmodSync, closeSync, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { chmodSync, closeSync as closeSync2, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync as openSync2, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync2, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import { join as join44 } from "node:path";
 function resolveCaDir(opts = {}) {
@@ -31515,7 +31630,7 @@ function stealLock(lockPath2) {
   } catch {
   }
   try {
-    return openSync(lockPath2, "wx");
+    return openSync2(lockPath2, "wx");
   } catch (error) {
     if (error.code === "EEXIST")
       return null;
@@ -31540,7 +31655,7 @@ function ensureCa(opts = {}) {
   let lockFd;
   for (let attempt = 0; attempt < STEAL_MAX_ATTEMPTS; attempt++) {
     try {
-      lockFd = openSync(lockPath2, "wx");
+      lockFd = openSync2(lockPath2, "wx");
       break;
     } catch (error) {
       if (error.code !== "EEXIST")
@@ -31569,7 +31684,7 @@ function ensureCa(opts = {}) {
     return { caCertPath, caKeyPath, certPem: ca.certPem, keyPem: ca.keyPem };
   } finally {
     try {
-      closeSync(lockFd);
+      closeSync2(lockFd);
     } catch {
     }
     try {
@@ -33741,22 +33856,22 @@ import { relative as relative10, resolve as resolve21 } from "node:path";
 // packages/cli/src/codexSkillReceipt.ts
 import { appendFile as appendFile2, lstat as lstat22, mkdir as mkdir19, readdir as readdir11, readFile as readFile25 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
-import { basename as basename4, isAbsolute as isAbsolute12, join as join54, relative as relative8, resolve as resolve18, sep as sep9 } from "node:path";
+import { basename as basename4, isAbsolute as isAbsolute12, join as join54, relative as relative8, resolve as resolve18, sep as sep10 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { createReadStream } from "node:fs";
 import { lstat as lstat21, readdir as readdir10, realpath as realpath9, stat as stat10 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
-import { isAbsolute as isAbsolute11, join as join53, relative as relative7, resolve as resolve17, sep as sep8 } from "node:path";
+import { isAbsolute as isAbsolute11, join as join53, relative as relative7, resolve as resolve17, sep as sep9 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
 
 // packages/cli/src/codexSkillTrust.ts
 import { lstat as lstat19, readFile as readFile23, realpath as realpath7 } from "node:fs/promises";
 import { homedir as homedir7 } from "node:os";
-import { dirname as dirname9, isAbsolute as isAbsolute9, join as join51, relative as relative6, resolve as resolve15, sep as sep7 } from "node:path";
+import { dirname as dirname9, isAbsolute as isAbsolute9, join as join51, relative as relative6, resolve as resolve15, sep as sep8 } from "node:path";
 function isInside(base, candidate) {
   const fromBase = relative6(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep7}`) && !isAbsolute9(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute9(fromBase);
 }
 function safeAbsolute(value) {
   return value?.trim() && isAbsolute9(value.trim()) ? resolve15(value.trim()) : void 0;
@@ -33782,7 +33897,7 @@ function productionCodexSkillTrustRoots() {
   };
 }
 async function ordinaryDirectoryChain(base, candidate) {
-  const parts = relative6(base, candidate).split(sep7).filter((part) => part !== "");
+  const parts = relative6(base, candidate).split(sep8).filter((part) => part !== "");
   if (parts.some((part) => part === "..")) return false;
   let current = base;
   for (const part of ["", ...parts]) {
@@ -33809,7 +33924,7 @@ async function selectedCacheRoot(roots, homeDir, configured) {
   if (!logical) return void 0;
   const cacheBase = join51(codexHomeRoot(homeDir, configured), "plugins", "cache", "tenon", "tenon");
   const rel = relative6(cacheBase, logical);
-  if (rel === "" || rel.startsWith("..") || rel.split(sep7).length !== 1) return void 0;
+  if (rel === "" || rel.startsWith("..") || rel.split(sep8).length !== 1) return void 0;
   if (!await ordinaryDirectoryChain(codexHomeRoot(homeDir, configured), logical)) return void 0;
   try {
     return { logical, physical: await realpath7(logical) };
@@ -33822,7 +33937,7 @@ async function activeReleaseRoot(roots) {
   const runtimeData = safeAbsolute(roots.runtimeDataRoot);
   const runtimeState = safeAbsolute(roots.runtimeStateRoot);
   if (!logical || !runtimeData || !runtimeState || !await samePhysicalDirectory(roots.executingPluginRoot, logical)) return void 0;
-  const rel = relative6(join51(runtimeData, "releases"), logical).split(sep7);
+  const rel = relative6(join51(runtimeData, "releases"), logical).split(sep8);
   if (rel.length !== 2 || !/^sha256-[a-f0-9]{64}$/.test(rel[0] ?? "") || rel[1] !== "payload") return void 0;
   if (!await ordinaryDirectoryChain(runtimeData, logical)) return void 0;
   try {
@@ -34063,7 +34178,7 @@ function asString(value) {
 }
 function isInside2(base, candidate) {
   const fromBase = relative7(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep8}`) && !isAbsolute11(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute11(fromBase);
 }
 function codexSessionsRoot2(homeDir, configured) {
   return join53(codexHomeRoot(homeDir, configured), "sessions");
@@ -34247,7 +34362,7 @@ function commandReadsTrustedSkill(command2, skillPath) {
     const commandSegment = unwrapReadCommand(segment) ?? segment.trim();
     const path9 = commandSegment ? finalReadPath(commandSegment) : void 0;
     if (path9 === void 0) return false;
-    const sibling = relative7(skillsRoot, resolve17(path9)).split(sep8);
+    const sibling = relative7(skillsRoot, resolve17(path9)).split(sep9);
     if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return false;
     if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
       if (trustedPath.test(path9)) observedRead = true;
@@ -34436,7 +34551,7 @@ function isSafeOpaqueId(value) {
 }
 function isInside3(base, candidate) {
   const fromBase = relative8(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute12(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute12(fromBase);
 }
 function codexSessionsRoot3(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
@@ -34759,7 +34874,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
 import { lstat as lstat23, realpath as realpath10 } from "node:fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute13, relative as relative9, resolve as resolve20, sep as sep10 } from "node:path";
+import { dirname as dirname10, isAbsolute as isAbsolute13, relative as relative9, resolve as resolve20, sep as sep11 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
 }
@@ -34778,7 +34893,7 @@ function requiredDeltaCapability(requestedCapability) {
 async function assertSafeChangeRoot(repoRoot, changeRoot) {
   const root = resolve20(repoRoot);
   const lexical = relative9(root, resolve20(changeRoot));
-  if (lexical === ".." || lexical.startsWith(`..${sep10}`) || isAbsolute13(lexical)) {
+  if (lexical === ".." || lexical.startsWith(`..${sep11}`) || isAbsolute13(lexical)) {
     throw new Error(`Change \u6839\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
   const rootInfo = await lstat23(root);
@@ -34786,7 +34901,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
     throw new Error(`\u9879\u76EE\u6839\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${root}`);
   }
   let cursor = root;
-  for (const segment of lexical.split(sep10).filter(Boolean)) {
+  for (const segment of lexical.split(sep11).filter(Boolean)) {
     cursor = resolve20(cursor, segment);
     const info = await lstat23(cursor);
     if (!info.isDirectory() || info.isSymbolicLink()) {
@@ -34795,7 +34910,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
   }
   const [rootReal, changeReal] = await Promise.all([realpath10(root), realpath10(changeRoot)]);
   const escaped3 = relative9(rootReal, changeReal);
-  if (escaped3 === ".." || escaped3.startsWith(`..${sep10}`) || isAbsolute13(escaped3)) {
+  if (escaped3 === ".." || escaped3.startsWith(`..${sep11}`) || isAbsolute13(escaped3)) {
     throw new Error(`Change \u6839\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
 }
@@ -35753,7 +35868,7 @@ import { writeFile as writeFile11 } from "node:fs/promises";
 import { join as join58 } from "node:path";
 
 // packages/cli/src/commands/afk-executor.ts
-import { constants as constants4 } from "node:fs";
+import { constants as constants5 } from "node:fs";
 import { access as access2 } from "node:fs/promises";
 import { homedir as homedir11 } from "node:os";
 import { join as join57 } from "node:path";
@@ -36302,7 +36417,7 @@ async function runAfkRound(deps, options, runtime = {}) {
   const currentBranchFn = runtime.currentBranch ?? ((cwd) => branchWith(cwd, exec));
   const resolveCliDistSha256 = runtime.resolveCliDistSha256 ?? (() => resolveBundledCliDistSha256());
   const homeDir = runtime.homeDir ?? homedir11;
-  const canReadFile2 = runtime.canReadFile ?? ((path9) => access2(path9, constants4.R_OK));
+  const canReadFile2 = runtime.canReadFile ?? ((path9) => access2(path9, constants5.R_OK));
   const { level } = options;
   const image = options.image ?? readAutomationJson(deps.cwd).image ?? DEFAULT_SANDCASTLE_IMAGE;
   const targetedLoopIds = options.targets === void 0 ? void 0 : [...new Set(options.targets.map((target) => target.expectedLoopId))];
@@ -37511,7 +37626,7 @@ function formatBudgetOverflowError(projectKey3, live, limit) {
 }
 
 // packages/channel/dist/fs.js
-import { appendFileSync as appendFileSync2, closeSync as closeSync2, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync2, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync6, writeFileSync as writeFileSync4, writeSync } from "node:fs";
+import { appendFileSync as appendFileSync2, closeSync as closeSync3, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync3, readdirSync as readdirSync5, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync6, writeFileSync as writeFileSync4, writeSync } from "node:fs";
 function nodeChannelFs() {
   return {
     pid: process.pid,
@@ -37561,11 +37676,11 @@ function nodeChannelFs() {
     },
     createExclusive: (p, content) => {
       try {
-        const fd = openSync2(p, "wx", 384);
+        const fd = openSync3(p, "wx", 384);
         try {
           writeSync(fd, content);
         } finally {
-          closeSync2(fd);
+          closeSync3(fd);
         }
         return true;
       } catch {
@@ -37902,7 +38017,7 @@ function nodeSpawnWorker(command2, args, opts) {
 }
 
 // packages/channel/dist/watcher.js
-import { closeSync as closeSync3, openSync as openSync3, readSync, statSync as statSync7 } from "node:fs";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync2, statSync as statSync7 } from "node:fs";
 function nodeTailFs() {
   return {
     size: (p) => {
@@ -37917,16 +38032,16 @@ function nodeTailFs() {
         return "";
       let fd;
       try {
-        fd = openSync3(p, "r");
+        fd = openSync4(p, "r");
         const buf = Buffer.allocUnsafe(length);
-        const n = readSync(fd, buf, 0, length, start);
+        const n = readSync2(fd, buf, 0, length, start);
         return buf.toString("utf8", 0, n);
       } catch {
         return void 0;
       } finally {
         if (fd !== void 0) {
           try {
-            closeSync3(fd);
+            closeSync4(fd);
           } catch {
           }
         }
@@ -39412,7 +39527,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 // packages/cli/src/commands/gen-router.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { createHash as createHash30 } from "node:crypto";
-import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync } from "node:fs";
+import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync as realpathSync2 } from "node:fs";
 import { join as join60 } from "node:path";
 function assertTargetGrepPatterns(projection) {
   for (const track of projection.tracks) {
@@ -39443,8 +39558,8 @@ async function cmdGenRouterSh(deps, manifestPath2, repoRoot) {
     return 2;
   }
   try {
-    const canonicalRoot = realpathSync(repoRoot);
-    const depsRoot = realpathSync(deps.cwd);
+    const canonicalRoot = realpathSync2(repoRoot);
+    const depsRoot = realpathSync2(deps.cwd);
     if (canonicalRoot !== depsRoot) {
       throw new Error(`\u9879\u76EE\u6839\u4E0E CLI effective registry \u4E0A\u4E0B\u6587\u4E0D\u4E00\u81F4\uFF1A${canonicalRoot} != ${depsRoot}`);
     }
@@ -40049,7 +40164,7 @@ async function cmdLoopRun(deps, args, fs, projectLedger = ledgerProjections, wir
 }
 
 // packages/cli/src/commands/loop-sync.ts
-import { constants as constants5 } from "node:fs";
+import { constants as constants6 } from "node:fs";
 import { lstat as lstat25, open as open6 } from "node:fs/promises";
 import { join as join61 } from "node:path";
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
@@ -40120,7 +40235,7 @@ async function readRunLog(repoRoot) {
   if (!before.isFile()) throw new Error(`loop-sync run-log read failed (not-regular-file): ${path9}`);
   let handle;
   try {
-    handle = await open6(path9, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+    handle = await open6(path9, constants6.O_RDONLY | constants6.O_NOFOLLOW);
   } catch (error) {
     const code = error.code ?? "IO";
     const reason = code === "ELOOP" ? "symlink" : `io/${code}`;
@@ -41610,12 +41725,12 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 
 // packages/cli/src/commands/scaffold.ts
 import { lstat as lstat29, mkdir as mkdir22, readFile as readFile30, rm as rm8, stat as stat11, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
-import { dirname as dirname13, isAbsolute as isAbsolute19, join as join63, relative as relative14, resolve as resolve27, sep as sep13 } from "node:path";
+import { dirname as dirname13, isAbsolute as isAbsolute19, join as join63, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 import { lstat as lstat28, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname12, isAbsolute as isAbsolute18, relative as relative13, resolve as resolve26, sep as sep12 } from "node:path";
+import { dirname as dirname12, isAbsolute as isAbsolute18, relative as relative13, resolve as resolve26, sep as sep13 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash31 } from "node:crypto";
@@ -41698,7 +41813,7 @@ function ordinaryPathKey(target) {
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
 import { lstat as lstat27, readFile as readFile29, rename as rename7, rm as rm6 } from "node:fs/promises";
-import { basename as basename5, dirname as dirname11, isAbsolute as isAbsolute17, relative as relative12, resolve as resolve25, sep as sep11 } from "node:path";
+import { basename as basename5, dirname as dirname11, isAbsolute as isAbsolute17, relative as relative12, resolve as resolve25, sep as sep12 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
   const code = Reflect.get(error, "code");
@@ -41706,7 +41821,7 @@ function errorCode7(error) {
 }
 function contained2(root, target) {
   const rel = relative12(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep11}`) && !isAbsolute17(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep12}`) && !isAbsolute17(rel);
 }
 async function existingOrdinaryFile(target) {
   try {
@@ -41881,7 +41996,7 @@ async function acquireTransaction(specDirectory, receipt, anchor) {
 // packages/cli/src/commands/specScaffoldTransaction.ts
 function contained3(root, target) {
   const rel = relative13(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep12}`) && !isAbsolute18(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep13}`) && !isAbsolute18(rel);
 }
 async function existingOrdinaryDirectory2(target) {
   try {
@@ -41902,7 +42017,7 @@ async function publishSpecScaffoldTransaction(options) {
     throw new Error(`spec scaffold \u4E8B\u52A1\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${options.specDirectory}`);
   }
   const specRelative = relative13(repoRoot, specDirectory);
-  const topLevelName = specRelative.split(sep12).filter(Boolean)[0];
+  const topLevelName = specRelative.split(sep13).filter(Boolean)[0];
   if (!topLevelName) {
     throw new Error("spec scaffold \u4E8B\u52A1\u76EE\u6807\u4E0D\u80FD\u662F\u9879\u76EE\u6839");
   }
@@ -42053,17 +42168,17 @@ var SPEC_STRATEGY_SIGNAL = "TENON_SPEC_STRATEGY";
 function safeSpecDir(cwd, specDir) {
   if (isAbsolute19(specDir)) return false;
   const rel = relative14(resolve27(cwd), resolve27(cwd, specDir));
-  return rel !== ".." && !rel.startsWith(`..${sep13}`) && !isAbsolute19(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep14}`) && !isAbsolute19(rel);
 }
 async function assertExistingParentsSafe(cwd, target) {
   const root = resolve27(cwd);
   const parent = dirname13(target);
   const rel = relative14(root, parent);
-  if (rel === ".." || rel.startsWith(`..${sep13}`) || isAbsolute19(rel)) {
+  if (rel === ".." || rel.startsWith(`..${sep14}`) || isAbsolute19(rel)) {
     throw new Error(`scaffold \u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${target}`);
   }
   let cursor = root;
-  for (const segment of rel.split(sep13).filter(Boolean)) {
+  for (const segment of rel.split(sep14).filter(Boolean)) {
     cursor = resolve27(cursor, segment);
     try {
       const info = await lstat29(cursor);
@@ -44110,7 +44225,7 @@ var stripNl = (value) => value.replace(/\n$/, "");
 
 // packages/cli/src/commands/dashboard.ts
 import { spawn as spawn7 } from "node:child_process";
-import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync2 } from "node:fs";
+import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync3 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
 import { basename as basename6, dirname as dirname14, join as join68, resolve as resolve29 } from "node:path";
 
@@ -44414,7 +44529,7 @@ function resolveDashboardRoot() {
   if (declared !== void 0 && declared.trim() !== "") return declared;
   const candidate = resolve29(process.argv[1] ?? "");
   try {
-    return resolve29(dirname14(realpathSync2(candidate)), "..", "..", "..");
+    return resolve29(dirname14(realpathSync3(candidate)), "..", "..", "..");
   } catch {
     return resolve29(dirname14(candidate), "..", "..", "..");
   }
@@ -44737,7 +44852,7 @@ import {
   rm as rm12,
   stat as stat12
 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname16, join as join72, relative as relative15, resolve as resolve30, sep as sep14 } from "node:path";
+import { basename as basename7, dirname as dirname16, join as join72, relative as relative15, resolve as resolve30, sep as sep15 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -44935,7 +45050,7 @@ async function compensateActivation(input) {
 // packages/cli/src/runtime/release-store.ts
 function isWithin(root, candidate) {
   const rel = relative15(root, candidate);
-  return rel === "" || !rel.startsWith(`..${sep14}`) && rel !== ".." && !rel.includes(`${sep14}..${sep14}`);
+  return rel === "" || !rel.startsWith(`..${sep15}`) && rel !== ".." && !rel.includes(`${sep15}..${sep15}`);
 }
 function candidatePath(root, entry) {
   const path9 = resolve30(root, entry);
@@ -46238,14 +46353,14 @@ function bindNativeHostCommand(env, host, binding) {
 // packages/cli/src/commands/setupEnvironment.ts
 import { execFileSync } from "node:child_process";
 import {
-  closeSync as closeSync4,
-  lstatSync as lstatSync2,
+  closeSync as closeSync5,
+  lstatSync as lstatSync3,
   mkdirSync as mkdirSync6,
-  openSync as openSync4,
+  openSync as openSync5,
   readFileSync as readFileSync25,
   readdirSync as readdirSync7,
-  readSync as readSync2,
-  realpathSync as realpathSync3,
+  readSync as readSync3,
+  realpathSync as realpathSync4,
   renameSync as renameSync5,
   unlinkSync,
   writeFileSync as writeFileSync5
@@ -46261,14 +46376,14 @@ var REAL_SETUP_ENV = {
   selfPath: () => {
     const candidate = resolve31(process.argv[1] ?? "");
     try {
-      return realpathSync3(candidate);
+      return realpathSync4(candidate);
     } catch {
       return candidate;
     }
   },
   pathExists: (path9) => {
     try {
-      lstatSync2(path9);
+      lstatSync3(path9);
       return true;
     } catch {
       return false;
@@ -46323,7 +46438,7 @@ var REAL_SETUP_ENV = {
     const tempPath = `${path9}.tmp-${process.pid}-${randomUUID12()}`;
     let lockFd;
     try {
-      lockFd = openSync4(lockPath2, "wx", 384);
+      lockFd = openSync5(lockPath2, "wx", 384);
       writeFileSync5(tempPath, text2, { encoding: "utf8", mode: 384, flag: "wx" });
       renameSync5(tempPath, path9);
     } finally {
@@ -46332,7 +46447,7 @@ var REAL_SETUP_ENV = {
       } catch {
       }
       if (lockFd !== void 0) {
-        closeSync4(lockFd);
+        closeSync5(lockFd);
         try {
           unlinkSync(lockPath2);
         } catch {
@@ -46361,7 +46476,7 @@ var REAL_SETUP_ENV = {
     process.stdout.write(question);
     try {
       const buf = Buffer.alloc(64);
-      const n = readSync2(0, buf, 0, 64, null);
+      const n = readSync3(0, buf, 0, 64, null);
       const ans = buf.toString("utf8", 0, n).trim().toLowerCase();
       return ans === "y" || ans === "yes";
     } catch {

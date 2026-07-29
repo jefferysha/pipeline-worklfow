@@ -37,6 +37,21 @@ export function useProgressDrawer({
   const drawerRow = drawerKey === null ? null : (rowByKey.get(drawerKey) ?? null)
   const drawerOpen = drawerRow !== null
 
+  const restoreFocus = useCallback((): void => {
+    const trigger = triggerRef.current
+    const returnKey = returnKeyRef.current ?? trigger?.dataset.drawerTriggerKey ?? null
+    const connectedTrigger = trigger?.isConnected
+      && trigger.dataset.drawerTriggerKey === returnKey
+      ? trigger
+      : null
+    const replacement = returnKey === null || rootRef.current === null
+      ? null
+      : [...rootRef.current.querySelectorAll<HTMLElement>('[data-drawer-trigger-key]')]
+          .find((candidate) => candidate.dataset.drawerTriggerKey === returnKey)
+    const returnTarget = connectedTrigger ?? replacement
+    returnTarget?.focus()
+  }, [rootRef])
+
   useEffect(() => {
     if (selectedChange === undefined) return
     if (selectedChange === null) {
@@ -54,6 +69,7 @@ export function useProgressDrawer({
     const motion = typeof window.matchMedia === 'function'
       && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (!motion || !drawer || !scrim) {
+      restoreFocus()
       setDrawerKey(null)
       onSelectedChange?.(null)
       return
@@ -66,11 +82,12 @@ export function useProgressDrawer({
       ease: 'power3.out',
       onComplete: () => {
         closingRef.current = false
+        restoreFocus()
         setDrawerKey(null)
         onSelectedChange?.(null)
       },
     })
-  }, [onSelectedChange])
+  }, [onSelectedChange, restoreFocus])
 
   const openDrawer = useCallback((key: string, trigger?: HTMLElement | null): void => {
     if (closingRef.current) return
@@ -84,6 +101,16 @@ export function useProgressDrawer({
   useEffect(() => {
     if (drawerOpen) returnKeyRef.current = drawerKey
   }, [drawerKey, drawerOpen])
+
+  useEffect(() => {
+    if (drawerOpen || returnKeyRef.current === null) return
+    if (typeof window.requestAnimationFrame === 'function') {
+      const frame = window.requestAnimationFrame(() => restoreFocus())
+      return () => window.cancelAnimationFrame(frame)
+    }
+    const timeout = window.setTimeout(() => restoreFocus(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [drawerOpen, restoreFocus])
 
   useEffect(() => {
     if (!drawerOpen) return
@@ -123,20 +150,9 @@ export function useProgressDrawer({
       closingRef.current = false
       document.documentElement.classList.remove('prg9-lock')
       document.removeEventListener('keydown', onKey)
-      const trigger = triggerRef.current
-      const returnKey = returnKeyRef.current ?? trigger?.dataset.drawerTriggerKey ?? null
-      const connectedTrigger = trigger?.isConnected
-        && trigger.dataset.drawerTriggerKey === returnKey
-        ? trigger
-        : null
-      const replacement = returnKey === null || rootRef.current === null
-        ? null
-        : [...rootRef.current.querySelectorAll<HTMLElement>('[data-drawer-trigger-key]')]
-            .find((candidate) => candidate.dataset.drawerTriggerKey === returnKey)
-      const returnTarget = connectedTrigger ?? replacement
-      returnTarget?.focus()
+      restoreFocus()
     }
-  }, [closeDrawer, drawerOpen])
+  }, [closeDrawer, drawerOpen, restoreFocus])
 
   useEffect(() => {
     if (!drawerOpen) return

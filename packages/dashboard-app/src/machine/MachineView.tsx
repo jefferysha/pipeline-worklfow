@@ -15,6 +15,7 @@ import {
 import { useT } from '../i18n'
 import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
+import { AdvancedPanel } from '../advanced/AdvancedPanel'
 
 type ReadinessState = 'ready' | 'blocked' | 'unknown'
 
@@ -229,6 +230,10 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
           )}
         </section>
       </div>
+
+      <section className="mt-4 rounded-xl border border-border bg-card p-4" data-testid="machine-diagnostics">
+        <AdvancedPanel snapshot={snapshot} />
+      </section>
     </section>
   )
 }

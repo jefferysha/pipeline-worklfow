@@ -41,6 +41,18 @@ const HOST_TARGET_PLAN_CHANGE_REFERENCE_FILES = new Set([
 ])
 const HOST_TARGET_PLAN_CHANGE_PATH =
   /^openspec\/changes\/(?:host-target-plan-dashboard|archive\/\d{4}-\d{2}-\d{2}-host-target-plan-dashboard)\/(.+)$/
+const TRACE_TIMELINE_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const TRACE_TIMELINE_REFERENCE_DOCS = new Set([
+  'docs/adr/trace-timeline.md',
+  'docs/superpowers/specs/2026-07-29-trace-timeline-tenon-upstreams-research.md',
+  'docs/superpowers/specs/trace-timeline-design.md',
+])
+const TRACE_TIMELINE_CHANGE_REFERENCE_FILES = new Set([
+  'proposal.md',
+  'tasks.md',
+])
+const TRACE_TIMELINE_CHANGE_PATH =
+  /^openspec\/changes\/(?:trace-timeline|archive\/\d{4}-\d{2}-\d{2}-trace-timeline)\/(.+)$/
 const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
   String.fromCharCode(
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
@@ -104,10 +116,28 @@ function allowedHostTargetPlanReference(rel, identity) {
   )
 }
 
+function allowedTraceTimelineReference(rel, identity) {
+  const changeMatch = rel.match(TRACE_TIMELINE_CHANGE_PATH)
+  return (
+    TRACE_TIMELINE_REFERENCE_IDENTITIES.has(identity)
+    && (
+      TRACE_TIMELINE_REFERENCE_DOCS.has(rel)
+      || (
+        changeMatch !== null
+        && TRACE_TIMELINE_CHANGE_REFERENCE_FILES.has(changeMatch[1] ?? '')
+      )
+    )
+  )
+}
+
 function disallowedReferenceIdentity(rel, value) {
   const normalized = value.toLowerCase()
   return FORBIDDEN_REFERENCE_IDENTITIES.find(
-    (identity) => normalized.includes(identity) && !allowedHostTargetPlanReference(rel, identity),
+    (identity) => (
+      normalized.includes(identity)
+      && !allowedHostTargetPlanReference(rel, identity)
+      && !allowedTraceTimelineReference(rel, identity)
+    ),
   )
 }
 

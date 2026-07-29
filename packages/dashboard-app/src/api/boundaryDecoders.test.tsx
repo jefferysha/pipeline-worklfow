@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeSessionLinks } from './auditDecoders'
+import { decodeSessionLinks, decodeTraceTimeline } from './auditDecoders'
 import { decodeRouterPreview } from './governanceDecoders'
 import { decodeLoopsSnapshot } from './loopDecoder'
 import { decodeSnapshot } from './snapshotDecoder'
@@ -7,6 +7,74 @@ import { selectProgress } from '../model/progressModel'
 import { workflowRulesFromSnapshot } from '../model/workflowModel'
 
 describe('API bounded-context response decoders', () => {
+  const validTraceTimeline = () => {
+    const warnings: string[] = []
+    return {
+    generated_at: '2026-07-29T00:00:00.000Z',
+    outbound: 'local-only',
+    content: 'metadata-only',
+    session: {
+      id: 'sess-a',
+      client: 'claude',
+      proxy_mode: 'reverse',
+      status: 'complete',
+      started_at: '2026-07-29T00:00:00.000Z',
+      updated_at: '2026-07-29T00:00:02.000Z',
+    },
+    total_count: 2,
+    returned_count: 2,
+    skipped_count: 0,
+    truncated: false,
+    integrity: 'complete',
+    warnings,
+    summary: {
+      success_count: 1,
+      error_count: 1,
+      unknown_count: 0,
+      total_duration_ms: 1600,
+      input_tokens: 12,
+      output_tokens: 8,
+      cached_input_tokens: 0,
+    },
+    entries: [
+      {
+        sequence: 1,
+        request_id: 'req-1',
+        turn: 1,
+        timestamp: '2026-07-29T00:00:01.000Z',
+        duration_ms: 400,
+        transport: 'sse',
+        method: 'POST',
+        path: '/v1/messages',
+        status_code: 200,
+        outcome: 'success',
+        model: 'claude-sonnet-4',
+        input_tokens: 12,
+        output_tokens: 8,
+        cached_input_tokens: 0,
+        stream_event_count: 3,
+      },
+      {
+        sequence: 2,
+        request_id: null,
+        turn: null,
+        timestamp: null,
+        duration_ms: 1200,
+        transport: null,
+        method: null,
+        path: null,
+        status_code: 429,
+        outcome: 'error',
+        model: null,
+        input_tokens: null,
+        output_tokens: null,
+        cached_input_tokens: null,
+        stream_event_count: null,
+      },
+    ],
+    }
+  }
+
   const validRules = {
     executionModel: 'step-graph',
     steps: ['open', 'done'],
@@ -188,6 +256,68 @@ describe('API bounded-context response decoders', () => {
         'demo@/repo': { found: true, resumeCmd: 42 },
       },
     })).toBeNull()
+  })
+
+  it('accepts the exact metadata-only trace timeline contract', () => {
+    expect(decodeTraceTimeline(validTraceTimeline())).toEqual(validTraceTimeline())
+  })
+
+  it('fails closed when trace disclosure literals, enums, or nullable counters drift', () => {
+    const disclosureDrift = validTraceTimeline()
+    disclosureDrift.content = 'raw'
+    expect(decodeTraceTimeline(disclosureDrift)).toBeNull()
+
+    const invalidOutcome = validTraceTimeline()
+    invalidOutcome.entries[0]!.outcome = 'model-success'
+    expect(decodeTraceTimeline(invalidOutcome)).toBeNull()
+
+    const invalidCounter = validTraceTimeline()
+    invalidCounter.entries[0]!.input_tokens = -1
+    expect(decodeTraceTimeline(invalidCounter)).toBeNull()
+
+    const queryLeak = validTraceTimeline()
+    queryLeak.entries[0]!.path = '/v1/messages?api_key=sentinel'
+    expect(decodeTraceTimeline(queryLeak)).toBeNull()
+  })
+
+  it('rejects inconsistent trace window counts and unknown warning codes', () => {
+    const inconsistent = validTraceTimeline()
+    inconsistent.returned_count = 3
+    expect(decodeTraceTimeline(inconsistent)).toBeNull()
+
+    const unknownWarning = validTraceTimeline()
+    unknownWarning.integrity = 'partial'
+    unknownWarning.warnings = ['secret-leak']
+    expect(decodeTraceTimeline(unknownWarning)).toBeNull()
+  })
+
+  it('rejects trace ordering, outcome, size, and integrity drift', () => {
+    const unordered = validTraceTimeline()
+    unordered.entries[1]!.sequence = 1
+    expect(decodeTraceTimeline(unordered)).toBeNull()
+
+    const mismatchedOutcome = validTraceTimeline()
+    mismatchedOutcome.entries[0]!.outcome = 'error'
+    expect(decodeTraceTimeline(mismatchedOutcome)).toBeNull()
+
+    const informationalOutcome = validTraceTimeline()
+    informationalOutcome.entries[0]!.status_code = 101
+    expect(decodeTraceTimeline(informationalOutcome)).toBeNull()
+
+    const oversized = validTraceTimeline()
+    oversized.entries = Array.from({ length: 201 }, (_, index) => ({
+      ...oversized.entries[0]!,
+      sequence: index + 1,
+    }))
+    oversized.returned_count = 201
+    oversized.total_count = 201
+    oversized.summary.success_count = 201
+    oversized.summary.error_count = 0
+    expect(decodeTraceTimeline(oversized)).toBeNull()
+
+    const impossibleIntegrity = validTraceTimeline()
+    impossibleIntegrity.warnings = ['malformed-record']
+    expect(decodeTraceTimeline(impossibleIntegrity)).toBeNull()
   })
 
   it('rejects frozen workflow graphs whose edge target is outside the step set', () => {

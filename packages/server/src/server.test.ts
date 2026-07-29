@@ -5159,6 +5159,7 @@ describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐
       '/api/loops/snapshot',
       '/api/traces/sessions',
       '/api/traces/records?session=x',
+      '/api/traces/timeline?session=x',
       '/api/config',
       '/api/skills/registry',
       `/api/hooks?${rootQ}`,
