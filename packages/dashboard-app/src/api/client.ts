@@ -31,6 +31,11 @@ export {
 export { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate } from './loopsClient'
 
 export {
+  ContextBundlePreviewApiError,
+  fetchContextBundlePreview,
+} from './contextBundleClient'
+
+export {
   deleteSecret,
   fetchAfkLog,
   fetchAfkReadiness,
@@ -112,6 +117,18 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  ContextBundleMode,
+  ContextBundlePhase,
+  ContextBundlePreviewBudget,
+  ContextBundlePreviewFailure,
+  ContextBundlePreviewInput,
+  ContextBundlePreviewRequest,
+  ContextBundlePreviewSuccess,
+  ContextBundleReasonCode,
+  ContextBundleTier,
+} from './contextBundleTypes'
 
 export type {
   VerificationEvidenceComposeInput,

@@ -1,6 +1,8 @@
 import { useT } from '../i18n'
+import { Check, Circle } from 'lucide-react'
 import type { ChangeHistoryEntry } from '../api/client'
 import type { EvidenceChip } from '../model/evidence'
+import type { PipelineTodoItem } from '../types'
 import { Icon } from './Icon'
 import { outputPresentation, outputValuePresentation } from './outputPresentation'
 
@@ -81,6 +83,61 @@ export function BoxField({ chip, onCopy }: EvidencePartProps): JSX.Element {
         </div>
       )}
     </div>
+  )
+}
+
+export interface StageTaskListProps {
+  stage: string
+  tasks: PipelineTodoItem[]
+  collapseCompleted: boolean
+}
+
+function TaskItems({ stage, tasks, compact }: {
+  stage: string
+  tasks: PipelineTodoItem[]
+  compact: boolean
+}): JSX.Element {
+  return (
+    <>
+      {tasks.map((task, taskIndex) => (
+        <li
+          className={`flex gap-1.5 [overflow-wrap:anywhere] ${task.completed ? 'text-text-3 line-through' : 'text-text-2'}`}
+          data-completed={task.completed ? 'true' : 'false'}
+          data-testid={`dtl-todo-${stage}-${compact ? 'compact-' : ''}${taskIndex}`}
+          key={`${taskIndex}-${task.text}`}
+        >
+          {task.completed ? <Check className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" />}
+          <span>{task.text}</span>
+        </li>
+      ))}
+    </>
+  )
+}
+
+export function StageTaskList({ stage, tasks, collapseCompleted }: StageTaskListProps): JSX.Element {
+  const { t } = useT()
+  return (
+    <>
+      <ul
+        className={`mt-2 mb-0 list-none flex-col gap-1 pl-0 text-xs ${collapseCompleted ? 'flex max-[769px]:hidden' : 'flex'}`}
+        data-testid={`dtl-todo-${stage}`}
+      >
+        <TaskItems stage={stage} tasks={tasks} compact={false} />
+      </ul>
+      {collapseCompleted && (
+        <details
+          className="mt-2 text-xs text-text-3 min-[769px]:hidden"
+          data-testid={`dtl-todo-${stage}-compact`}
+        >
+          <summary className="cursor-pointer select-none font-medium text-text-2">
+            {t('detail.completed_tasks_summary', { n: tasks.length })}
+          </summary>
+          <ul className="mt-1.5 mb-0 flex list-none flex-col gap-1 pl-0">
+            <TaskItems stage={stage} tasks={tasks} compact />
+          </ul>
+        </details>
+      )}
+    </>
   )
 }
 

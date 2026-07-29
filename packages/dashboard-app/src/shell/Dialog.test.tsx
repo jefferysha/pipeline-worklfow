@@ -287,4 +287,14 @@ describe('Dialog（共享组件，Task 3）', () => {
     const closeButton = screen.getByRole('button', { name: 'Close evidence composer' })
     expect(closeButton.querySelector('svg.lucide-x')).not.toBeNull()
   })
+
+  it('workspace 长标题在窄屏允许完整换行，不以省略号截断', async () => {
+    const user = userEvent.setup()
+    render(<HostWorkspace />)
+    await user.click(screen.getByText('Open workspace'))
+
+    const heading = screen.getByRole('heading', { name: 'Evidence composer' })
+    expect(heading).not.toHaveClass('truncate')
+    expect(heading).toHaveClass('break-words', 'whitespace-normal')
+  })
 })

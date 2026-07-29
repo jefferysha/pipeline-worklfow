@@ -84,7 +84,7 @@ function isStringValue(value: unknown): value is string | readonly string[] {
   return typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
 }
 
-function isTransitionRecord(value: unknown): value is TransitionRecord {
+export function isTransitionRecord(value: unknown): value is TransitionRecord {
   if (!isRecord(value) || Object.keys(value).some((key) => !TRANSITION_KEYS.has(key))) return false
   if (value.schemaVersion !== 1 || typeof value.id !== 'string' || typeof value.runId !== 'string'
     || !Number.isSafeInteger(value.sequence) || typeof value.sequence !== 'number' || value.sequence < 1
@@ -100,6 +100,11 @@ function isTransitionRecord(value: unknown): value is TransitionRecord {
     && effect.kind === 'state-field-change'
     && typeof effect.field === 'string' && fields.has(effect.field)
     && isStringValue(effect.from) && isStringValue(effect.to))
+}
+
+export function parseTransitionRecord(value: unknown, source = 'TransitionRecord'): TransitionRecord {
+  if (!isTransitionRecord(value)) throw new SyntaxError(`${source}: TransitionRecord schema invalid`)
+  return value
 }
 
 function assertValidIdentity(sequence: number, recordId: string): void {
@@ -136,8 +141,7 @@ class FsTransitionRecordStore implements TransitionRecordStore {
     try {
       const raw = await readFile(recordPath(changeDir, sequence, recordId), 'utf8')
       const parsed: unknown = JSON.parse(raw)
-      if (!isTransitionRecord(parsed)) throw new SyntaxError('TransitionRecord schema invalid')
-      return parsed
+      return parseTransitionRecord(parsed)
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       throw e
