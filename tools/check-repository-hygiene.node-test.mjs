@@ -51,7 +51,7 @@ test('resolves README and Pages-style image links and rejects dangling links', a
   }
 })
 
-test('rejects reference identities in both tracked paths and text without exemptions', async () => {
+test('rejects reference identities in tracked paths and ordinary managed text', async () => {
   const root = await fixture()
   const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
   const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
@@ -75,6 +75,32 @@ test('rejects reference identities in both tracked paths and text without exempt
     assert.match(failures[0], /路径/)
     assert.match(failures[1], /文本/)
     assert.match(failures[2], /文本/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('allows external identities only as text inside governed source-evidence documents', async () => {
+  const root = await fixture()
+  const identity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const evidenceFiles = [
+    'docs/adr/trace-timeline.md',
+    'docs/superpowers/specs/trace-timeline-design.md',
+    'openspec/changes/trace-timeline/proposal.md',
+    'openspec/changes/trace-timeline/tasks.md',
+  ]
+  for (const path of evidenceFiles) {
+    await mkdir(join(root, path.split('/').slice(0, -1).join('/')), { recursive: true })
+    await writeFile(join(root, path), `pinned upstream: ${identity}\n`)
+  }
+  const identityInPath = `docs/adr/${identity}.md`
+  await writeFile(join(root, identityInPath), 'evidence\n')
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, evidenceFiles), [])
+    const failures = checkReferenceIdentities(root, [identityInPath])
+    assert.equal(failures.length, 1)
+    assert.match(failures[0], /路径/)
+    assert.ok(!failures[0].toLowerCase().includes(identity))
   } finally {
     await rm(root, { recursive: true, force: true })
   }

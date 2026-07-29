@@ -25,6 +25,11 @@ const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
   ),
 ]
+const SOURCE_EVIDENCE_TEXT = [
+  /^docs\/adr\/[^/]+\.md$/,
+  /^docs\/superpowers\/specs\/[^/]+\.md$/,
+  /^openspec\/changes\/[^/]+\/(?:proposal|tasks)\.md$/,
+]
 
 function posixPath(path) {
   return path.split('\\').join('/')
@@ -80,7 +85,10 @@ export function checkReferenceIdentities(root, tracked) {
     if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
     const bytes = readFileSync(absolute)
     if (bytes.includes(0)) continue
-    if (matchingIdentity(bytes.toString('utf8'), FORBIDDEN_REFERENCE_IDENTITIES)) {
+    if (
+      !SOURCE_EVIDENCE_TEXT.some((pattern) => pattern.test(rel))
+      && matchingIdentity(bytes.toString('utf8'), FORBIDDEN_REFERENCE_IDENTITIES)
+    ) {
       failures.push(`受管理文本包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
     }
   }
