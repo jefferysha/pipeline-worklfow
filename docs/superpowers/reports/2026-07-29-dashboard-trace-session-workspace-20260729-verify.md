@@ -87,7 +87,7 @@ All changed files map to the change delta and target `openspec/specs/trace-timel
 | Built artifact | `packages/dashboard-app/dist/**` | exact production bundle used by browser verification |
 | OpenSpec change | `proposal.md`, `design.md`, `tasks.md`, `specs/trace-timeline/spec.md`, `REVIEW.md` | governed intent, requirements, acceptance tasks, review record |
 | Design evidence | `docs/adr/**`, `docs/superpowers/plans/**`, `docs/superpowers/specs/**` | Chorus IA boundary, Tenon visual language, implementation decisions |
-| Browser evidence | `docs/ux/shots/dashboard-trace-session-workspace-20260729/**` | desktop widths, themes, success/empty/error/partial states |
+| Browser evidence | `/tmp/trace-e2e-*`, `/tmp/machine-traffic-*`, `/tmp/traffic-v2-*`, `/tmp/traffic-v3-*` | desktop widths, themes, success/empty/error/partial states; kept outside the repository |
 | Pipeline evidence | `openspec/changes/dashboard-trace-session-workspace-20260729/.pipeline*` | phase, document, review, and transition receipts |
 
 Coverage is complete, but acceptance is blocked by the two Medium findings and the failed archive simulation.
@@ -177,3 +177,88 @@ dist from the corrected source, preserve the pre-1024 presentation while
 applying the new workspace only at desktop breakpoints, correct the proxy-limit
 wording and state-aware unselected presentation, then rerun the complete
 frozen-baseline verification.
+
+## Verify cycle 3
+
+- Frozen build SHA: `d788d9284daecc08a457a39e6e3ef24d5401700f`
+- Base SHA: `907dac067c17ed77fb440b91b20d64fd0f24773b`
+- Scope: desktop Dashboard only, 1024–1920px
+- Result: **FAIL — return to Build**
+
+The third frozen baseline fixes every cycle 2 Medium. The production dist is
+byte-reproducible from independent clean source archives, the new workspace is
+desktop-scoped, and the detail placeholder follows the rail state. One new
+repository-hygiene Medium blocks CI.
+
+### Reviewer track — FAIL
+
+The reviewer covered the full frozen diff and independently ran two production
+builds, the 67-file/1200-test web suite, typechecking, repository checks, and
+strict OpenSpec validation plus archive application.
+
+- Medium: all twelve files under
+  `docs/ux/shots/dashboard-trace-session-workspace-20260729/*.jpg` violate the
+  repository image allowlist enforced by `tools/check-repository-hygiene.mjs`.
+  The CI workflow runs this check, so the branch would fail before merge.
+- Low: the committed sessions-error screenshot predates the state-aware detail
+  placeholder and is stale.
+
+### Codex review track — degraded
+
+The read-only Codex reviewer inspected the complete frozen source, tests, spec,
+governance evidence, dist, and screenshot set. Its attempted Vitest execution
+was correctly blocked when Vite tried to create a temporary file in the
+read-only target; typechecking and strict OpenSpec validation passed. The
+reviewer did not terminate after an extended 260,896-token inspection and was
+interrupted. It did not surface a distinct actionable source or contract
+finding before interruption. The independent reviewer directly reproduced the
+CI-blocking repository-hygiene failure, so the aggregate result remains fail.
+
+### E2E track — PASS
+
+The E2E track ran the production Dashboard and real TraceStore/API servers for
+normal, timeline-error, sessions-empty, and sessions-error paths. It verified
+unselected, loading, empty, known-empty, error, partial, filter-empty, retry,
+rapid-switch stale-response protection, Escape/focus return, and no implicit
+timeline request. At 1024, 1200, 1440, and 1920px, document, body, workspace,
+detail, and entry widths remained overflow-free; the summary grid was 2/2/4/4,
+long metadata retained full titles, and the console had zero messages.
+
+Evidence: `/tmp/trace-e2e-v3-d788/`.
+
+### Visual track — PASS with Low observations
+
+The visual track covered all four desktop widths in light and dark themes plus
+the complete state matrix. It found no Critical, High, or Medium issue.
+Extreme legal metadata can make rows approximately 125px tall at 1024/1200,
+and the dark partial-state amber remains intentionally subtle; both stay
+readable and understandable without color alone.
+
+Evidence: `/tmp/traffic-v3-*`.
+
+### Reproducibility and OpenSpec — PASS
+
+Two clean production builds and the committed Dashboard distribution contained
+the same three files and bytes:
+
+```text
+index-GZnjfiST.css
+index-u6qL8tRF.js
+index.html
+c7e41f6e14bab57c61c7cd2fbf863f786d0d4028fd51973b3a58abe8b9a6ed04
+```
+
+Strict change validation passed. Isolated archive application produced one
+added and one modified requirement, and the resulting main spec passed strict
+validation. The canonical main-spec digest remained unchanged:
+
+```text
+e98d29da83f104399375dbd8cffb6b4843041f7c1816de68db4fae9f9ac143d1
+```
+
+### Cycle 3 conclusion
+
+The third Verify cycle fails on the repository-hygiene Medium. Return to Build,
+remove the reproducible browser screenshots from the repository, retain the
+current `/tmp` evidence paths in this report, run the explicit hygiene check,
+and rerun the full frozen-baseline verification.

@@ -89,3 +89,20 @@ tree build now produce byte-identical `index-u6qL8tRF.js`,
 `c7e41f6e14bab57c61c7cd2fbf863f786d0d4028fd51973b3a58abe8b9a6ed04`.
 
 No Critical, High, or Medium findings remain after the second correction.
+
+## Round 5
+
+The third frozen-baseline reviewer reproduced the repository-hygiene CI gate and
+found that all twelve committed JPEG acceptance screenshots were outside the
+only image allowlist accepted by `tools/check-repository-hygiene.mjs`. One image
+also reflected the pre-correction unavailable-state copy. The screenshots were
+therefore removed from the repository instead of being treated as release
+assets. Current desktop browser evidence remains reproducible and external to
+the repository under `/tmp/trace-e2e-v3-d788/` and `/tmp/traffic-v3-*`, as
+required by the Build→Verify frozen-worktree contract.
+
+`npm run check:repository-hygiene` now passes all seven policy tests and the
+repository scan. This correction changes only evidence storage; the accepted
+desktop UI, interaction, data, and OpenSpec contracts remain unchanged.
+
+No Critical, High, or Medium design findings remain.

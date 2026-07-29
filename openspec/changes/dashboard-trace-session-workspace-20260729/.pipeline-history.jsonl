@@ -70,3 +70,20 @@
 {"ts":"2026-07-29T11:36:11Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"97145220-b62a-48f9-b854-e098d8e90de1"}
 {"ts":"2026-07-29T11:53:07Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-29T11:53:19Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T11:53:30Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T11:53:30Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T11:53:30Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T11:53:30Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T11:53:30Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0454b9fa-b0b7-478a-910c-ba0fe878ef89"}
+{"ts":"2026-07-29T12:10:32Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-29T12:10:32Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-29T12:10:33Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-dashboard-trace-session-workspace-20260729-verify.md"}
+{"ts":"2026-07-29T12:10:33Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T12:10:33Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T12:10:33Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T10:24:16Z authority_host_session=019facd5-50d5-7500-aa18-2c8e717cee00"}
+{"ts":"2026-07-29T12:10:34Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T12:10:34Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T12:10:34Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T12:10:34Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T12:10:34Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"c6b1e01d-0dc1-4ecd-ad91-73357585cb50"}
+{"ts":"2026-07-29T12:13:02Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T10:20:31Z
-updated_at: 2026-07-29T11:36:10Z
+updated_at: 2026-07-29T12:10:34Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 5562b66c-b9d4-49e0-b63c-cc1da18b5546
-pipeline_transition_sequence: 9
-pipeline_transition_head: 97145220-b62a-48f9-b854-e098d8e90de1
-pipeline_state_revision: 33
-pipeline_state_revision_id: 968bc5b7-28d5-4628-8b97-46bfd51cea83
-pipeline_state_digest: a074629e37f3ab509d86afba62284c613480aaecba21cd23c06052ea20fc8bc2
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzMsInJldmlzaW9uSWQiOiI5NjhiYzViNy0yOGQ1LTQ2MjgtOGI5Ny00NmJmZDUxY2VhODMiLCJwYXlsb2FkRGlnZXN0IjoiMjc0YTlkOThkNWJhZjI5ZWZkYmFjZmE4ZjliNmI2ZjM4MmZhYjhlYzU4OTcyNjAwYTJiZjBlOWM1NThkZGE4MSJ9
+pipeline_transition_sequence: 11
+pipeline_transition_head: c6b1e01d-0dc1-4ecd-ad91-73357585cb50
+pipeline_state_revision: 41
+pipeline_state_revision_id: b04a5e42-8e3d-4b19-acdb-757fb39120bc
+pipeline_state_digest: a19b358e476a3394e6ece18d9ef9f6f2350398a6a1d45e3d37385a5b0d25af36
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDEsInJldmlzaW9uSWQiOiJiMDRhNWU0Mi04ZTNkLTRiMTktYWNkYi03NTdmYjM5MTIwYmMiLCJwYXlsb2FkRGlnZXN0IjoiZDI2MzgzMmFhOWEzMjI3ZmQ4MTgwNWE1N2JkYWIzMDg4NTc0YTBiNDUxNzg1ZWZmN2I1NTRhZTdjNzFlZWUwOCJ9

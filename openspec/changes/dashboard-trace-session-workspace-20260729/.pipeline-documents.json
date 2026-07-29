@@ -57,6 +57,18 @@
           "sha256": "54594fd0d0715afa294ba2d5de22201f69638106699a0f5606117acd3611780b",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "54594fd0d0715afa294ba2d5de22201f69638106699a0f5606117acd3611780b",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "54594fd0d0715afa294ba2d5de22201f69638106699a0f5606117acd3611780b",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -114,6 +126,18 @@
           "sha256": "0c6ce38b6f4532e6c48c2f5119f118e77d0aa72046c8763ba97d9c8a3c85f836",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0c6ce38b6f4532e6c48c2f5119f118e77d0aa72046c8763ba97d9c8a3c85f836",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0c6ce38b6f4532e6c48c2f5119f118e77d0aa72046c8763ba97d9c8a3c85f836",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -165,6 +189,18 @@
           "sha256": "a501abff46eda6e1b16c50dab1901ff9b049318da1e12057b9b9bb062ee8ec90",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a501abff46eda6e1b16c50dab1901ff9b049318da1e12057b9b9bb062ee8ec90",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a501abff46eda6e1b16c50dab1901ff9b049318da1e12057b9b9bb062ee8ec90",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -204,6 +240,18 @@
           "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -243,6 +291,18 @@
           "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "27068517ab3ab11f93d197c6a4eb6341ed31c61c148e9a978e3d9dbaf35874cd",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -294,6 +354,18 @@
           "sha256": "d133fbe4ff5256216bc27357f02e406a5799c820b3e0f67ce2594209563b5add",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d133fbe4ff5256216bc27357f02e406a5799c820b3e0f67ce2594209563b5add",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d133fbe4ff5256216bc27357f02e406a5799c820b3e0f67ce2594209563b5add",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -321,6 +393,18 @@
           "sha256": "31237ceee8755b74e071245d248d883c35f4cc45fb04dd298bff63d34b18f4c1",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "31237ceee8755b74e071245d248d883c35f4cc45fb04dd298bff63d34b18f4c1",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "31237ceee8755b74e071245d248d883c35f4cc45fb04dd298bff63d34b18f4c1",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
@@ -366,15 +450,27 @@
           "sha256": "31df932880954001a6d74ab9bb4fdc076b4ef56b8dbdab8113a325e1153718b7",
           "readAt": "2026-07-29T11:53:18Z",
           "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "31df932880954001a6d74ab9bb4fdc076b4ef56b8dbdab8113a325e1153718b7",
+          "readAt": "2026-07-29T12:10:33Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "31df932880954001a6d74ab9bb4fdc076b4ef56b8dbdab8113a325e1153718b7",
+          "readAt": "2026-07-29T12:12:23Z",
+          "visitId": "[\"5562b66c-b9d4-49e0-b63c-cc1da18b5546\",11]"
         }
       ]
     },
     {
       "kind": "verification-report",
       "path": "docs/superpowers/reports/2026-07-29-dashboard-trace-session-workspace-20260729-verify.md",
-      "sha256": "c62ec3de0174f0e39fa471d86eaaa367c471db4ba770b5eefaa0e6c9a1ea3806",
+      "sha256": "0228eca415f353a321b9c64a915d78bf8adcfa4ec126da35ec2066f828942e72",
       "producer": "verification-before-completion",
-      "recordedAt": "2026-07-29T11:36:04Z",
+      "recordedAt": "2026-07-29T12:10:33Z",
       "reads": []
     }
   ]
