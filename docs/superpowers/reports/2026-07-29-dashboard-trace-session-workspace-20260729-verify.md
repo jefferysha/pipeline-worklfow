@@ -327,3 +327,91 @@ Return to Build, change the registered plan to require all screenshots and
 structured measurements under a repository-external `/tmp` directory, then run
 a new complete visual track without interruption. No implementation, API,
 desktop layout, or OpenSpec requirement change is needed.
+
+## Verify cycle 5 — final
+
+- Frozen build SHA: `eb1b8da077458b8f3d82aa04fe3933286154a5c2`
+- Base SHA: `907dac067c17ed77fb440b91b20d64fd0f24773b`
+- Scope: desktop Dashboard only, 1024–1920px
+- Result: **PASS**
+
+All four independent tracks read the same frozen Git baseline. Their source
+worktree fingerprints remained identical before and after execution. No phone
+design, screenshot, or acceptance was performed.
+
+### Reviewer track — PASS
+
+The reviewer covered all 152 changed files: six source files, four dist files,
+five product/design documents, 137 governance files, and zero QA screenshots.
+It found no Critical, High, Medium, or Low issue.
+
+- Two independent `git archive` builds and committed dist were byte-identical.
+- Aggregate dist SHA-256:
+  `c7e41f6e14bab57c61c7cd2fbf863f786d0d4028fd51973b3a58abe8b9a6ed04`.
+- `npm run test:web`: 67 files, 1200 tests passed.
+- Typecheck, comments, architecture, docs, repository hygiene, and frozen-range
+  diff checks passed.
+- The final plan uses only
+  `/tmp/dashboard-trace-session-workspace-20260729-*` for browser evidence,
+  forbids committing reproducible QA images, and forbids phone screenshots or
+  acceptance.
+- All governance JSON/JSONL records parsed and their revision/transition chains
+  were continuous.
+
+### Codex review track — PASS
+
+The read-only Codex reviewer found no Critical, High, or Medium issue across the
+complete frozen range. It independently confirmed that the plan keeps evidence
+under `/tmp` and the frozen tree contains no tracked JPEG/JPG files.
+
+### E2E track — PASS
+
+A fresh archive ran the production Dashboard and four real TraceStore/API
+servers. All severity findings were zero. The track covered sessions and
+timeline loading/error/empty/partial/ready states, retry, all/error/success and
+filter-empty paths, stale-response race protection, Escape/focus return, Space
+selection, and no implicit timeline request.
+
+At 1024/1200/1440/1920px, document, body, workspace, detail, and entry overflow
+were all false; summary columns were 2/2/4/4. Real 64/256/64 proxy/model/
+transport projections retained their full accessible titles. Browser console
+warnings and errors were zero. Evidence: `/tmp/trace-e2e-v5-eb1b/`.
+
+### Visual track — PASS
+
+The visual reviewer completed 1024/1200/1440/1920px in both light and dark
+themes, with panel and full-page captures for sessions loading/error/empty and
+detail unselected/loading/error/known-empty/ready/partial/filter-empty states.
+It also verified Escape/focus, Space selection, long metadata, and zero
+horizontal overflow. Findings were Critical 0, High 0, Medium 0, Low 2:
+
+- extreme metadata makes event rows approximately 124.66px tall at 1024/1200,
+  while remaining readable and overflow-free;
+- the partial-state material is visually restrained, while its text, diagnostic
+  code, and retry action remain clear without relying on color.
+
+Evidence: `/tmp/traffic-v5.8Af60e/` (36 screenshots plus structured matrices,
+console summary, hashes, and before/after fingerprints).
+
+### OpenSpec and file-to-spec gate — PASS
+
+Strict change validation passed. Isolated archive application produced one
+added and one modified `trace-timeline` requirement; the resulting main spec
+passed strict validation and retained the existing retry, Escape, and state
+distinction scenarios. The canonical main-spec digest remained:
+
+```text
+e98d29da83f104399375dbd8cffb6b4843041f7c1816de68db4fae9f9ac143d1
+```
+
+Every frozen changed file was mapped to `trace-timeline` or its governed
+proposal/design/plan/verification evidence: product source and dist implement
+the capability; tests cover its interaction and desktop boundaries; i18n and
+CSS provide its presentation; OpenSpec and design documents define it; pipeline
+records preserve the exact phase evidence.
+
+### Final conclusion
+
+The frozen desktop Trace session workspace satisfies the accepted specification
+and is ready for Ship. The two Low visual observations are recorded, require no
+scope expansion, and do not block release.
