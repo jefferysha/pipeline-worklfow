@@ -30,7 +30,7 @@
 - [x] 完成独立 pre-Verify Spec、Rules/Architecture/Security、Dashboard 视觉复审，推送并取得精确 head CI。
 - [x] 以 RED 复现 queue wait 逃逸 10 秒 deadline，最小实现 enqueue 绝对期限、过期 item 不启动 child 与健康槽位恢复。
 - [x] 在第二个隔离 clone 证明 OpenSpec 1.6.0 archive/apply 无场景丢失，并重跑所有 focused/full/generated/API/browser/release gates。
-- [ ] 对完整新 diff 重做 Spec、Rules/Architecture/Security、Dashboard `design-taste-frontend` pre-Verify 复审，提交推送并取得新 exact-head CI。
+- [x] 对完整新 diff 重做 Spec、Rules/Architecture/Security、Dashboard `design-taste-frontend` pre-Verify 复审，提交推送并取得新 exact-head CI。
 
 ## 验证
 

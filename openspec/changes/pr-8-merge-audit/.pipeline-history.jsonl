@@ -92,3 +92,5 @@
 {"ts":"2026-07-29T05:28:26Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
 {"ts":"2026-07-29T05:28:26Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T04:24:08Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
 {"ts":"2026-07-29T05:28:26Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d648ab54-c55e-4f07-9f20-100b0fd6d315"}
+{"ts":"2026-07-29T05:39:13Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T05:39:13Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

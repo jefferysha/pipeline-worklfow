@@ -215,7 +215,7 @@ disposition and failed with C0/H0/M2/L0. The canonical report is
 
 ### Independent pre-Verify reviews after the fix
 
-- Spec/apply: implementation semantics and all 352 current paths map to the five
+- Spec/apply: implementation semantics and all 362 current paths map to the five
   requirements; focused server 79/79, strict validation and isolated
   archive/apply pass with zero scenario loss.
 - Rules/Correctness/Architecture/Security: C0/H0/M0/L0. The reviewer
@@ -235,6 +235,13 @@ disposition and failed with C0/H0/M2/L0. The canonical report is
   the independent Dashboard trace is
   `/private/tmp/pr8-dashboard-preverify-uaZI7R/`
   (`sha256:332334b598d28dac0f23885aff5c0de1de6c86d0b950dd711527cd10c4e705b1`).
+- The final Spec and Standards re-reviews both report C0/H0/M0/L0. The
+  independently recomputed 362-path mapping has zero unmapped paths
+  (`sha256:0b0a62fae91bed8d0e016809abc23899a84d064edd09f891eae233b70a0b8726`).
+  Exact-head GitHub Actions run `30425286953` passes `CI/verify` and
+  Documentation Pages for
+  `b179309e62b414b6fb622daa9c1b4c7cfc77f650`; the PR-only Pages deployment is
+  correctly skipped.
 
 The dependency audit remains the unchanged main baseline: production has one
 High and one Moderate, while the full tree has one Critical, one High and five
