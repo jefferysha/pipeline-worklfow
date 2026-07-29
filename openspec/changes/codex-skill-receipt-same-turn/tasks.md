@@ -16,6 +16,7 @@
 
 - [x] 编写 current-turn receipt delta spec 与验收场景。 (spec)
 - [x] 固定实现设计、回滚策略、测试矩阵和文档 ledger。 (spec)
+- [x] 将 Verify 发现的完整信封、精确 session、损坏 transcript 和符号链接边界写入规格。 (spec)
 
 ## 实现
 
@@ -27,6 +28,9 @@
 - [x] 以红灯测试固定完整 result wrapper、nested 非零 exit 与 JSON 数组选项兼容。 (build)
 - [x] 只接受 `text(result)` 并忽略 JSON 非信任选项，更新根 Skill 调用指导。 (build)
 - [x] 重新运行定向测试、hook 集成、bundle、全仓与静态门禁。 (build)
+- [x] 以红灯固定并实现完整结果信封与 typed legacy result。 (build)
+- [x] 以红灯固定 `payload.id`、malformed/I/O 失败关闭与非 symlink workdir。 (build)
+- [x] 重跑全部定向、hook、bundle、构建、全仓和静态门禁。 (build)
 
 ## 验证
 

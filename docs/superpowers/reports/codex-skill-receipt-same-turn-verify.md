@@ -75,6 +75,18 @@
   先走 `verify-fail` 回 Build，拆分 custom/function completion ABI，令 custom 路径只接受
   完整 result 信封，并把 fallback 限定在受信当前 turn；新增 exact/fallback 伪造输出与跨 turn
   回归测试后重新执行全量门禁。
+- **第六轮 Verify — Codex 轨发现 2 High / 3 Medium。** Reviewer 轨以 146 个文件全覆盖、
+  Critical/High/Medium/Low 全零通过；真实 managed runtime E2E 轨完成首次同轮推进和 13 类拒绝
+  路径，冻结基线 `workspace:sha256:59c9d64bd8ebbfb8e3a87b7db4029afe7f9daa557b06e4e887bd8e6bd169ef13`
+  前后未漂移；OpenSpec 隔离 archive/apply 演练及主规格 digest 也通过。
+- 独立 Codex CLI 轨发现：custom completion 仍接受未标型顶层 `exit_code` 对象与完整形状 JSON
+  stdout（High）；fallback 在 `payload.id` 缺失时仍回退继承的 `session_id`（High）；损坏 JSON
+  或 `session_meta` 前 I/O 中断仍可能继续旧 transcript（Medium）；sibling `workdir` symlink
+  未被显式拒绝（Medium）；最新 current-turn/fork/I/O 安全语义尚未进入 delta spec，上一轮未走
+  `requirements-changed`（Medium）。
+- 第六轮继续选择安全默认值“修复”：登记本失败报告并走精确 `verify-fail` 回 Build，再以
+  `requirements-changed` 回 Spec 固定完整信封、强制 transcript `payload.id`、损坏 transcript
+  失败关闭和无 symlink sibling 身份，随后重新实现、冻结并执行全量三轨。
 
 ## 剩余风险
 

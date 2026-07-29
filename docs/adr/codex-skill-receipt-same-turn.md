@@ -14,6 +14,14 @@ common directory 相同才接受。只转发 stdout 会丢失 nested `exit_code`
 `text(result.output)` 明确拒绝，规范 wrapper 为 `text(result)`。JSON 旁路字段作为纯数据
 忽略，只验证 `cmd`/`command`/`workdir`。
 
+Verify 后进一步固定：当前 custom ABI 的成功 output 必须是包含 `chunk_id`、
+`wall_time_seconds`、`exit_code`、`original_token_count` 与 `output` 的完整结果信封；
+任意未标型对象和形似结果的 stdout JSON 都拒绝。旧 ABI 仅保留明确标型的
+`execution_result`。session fallback 只匹配 `session_meta.payload.id`，不能使用 fork
+继承的 `payload.session_id`。最新 transcript 一旦出现 malformed JSON 或读取 I/O 错误，
+整次 discovery 失败关闭且不回退旧文件。字面 `workdir` 必须是普通目录，符号链接即使
+解析到目标也拒绝。
+
 ## 备选方案
 
 - 放弃 worktree 隔离：违反自动化并发安全要求。
@@ -25,3 +33,5 @@ common directory 相同才接受。只转发 stdout 会丢失 nested `exit_code`
 定时任务可在首次调度的同一轮完成 Skill evidence 登记；function/custom 两种 ABI 的项目
 身份规则保持一致。解析失败和缺少显式 `workdir` 继续失败关闭。无需迁移状态或回填 ledger。
 外层 custom tool 完成状态不再替代内部执行成功；只有可见的 nested `exit_code=0` 能产生 receipt。
+更严格的完整信封、精确 session id 与损坏 transcript 处理会拒绝先前模糊接受的边缘格式；
+这是有意的安全收紧，不改变持久化格式。

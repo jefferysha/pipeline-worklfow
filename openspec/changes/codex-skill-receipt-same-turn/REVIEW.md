@@ -33,6 +33,15 @@
   `turn_context`，优先用 transcript 自身 `payload.id` 绑定 host session，并在最新匹配 transcript
   结束查找；即使该文件畸形或读取中断，也不回退旧文件，防止旧 turn、fork 或 sibling transcript
   复用 evidence。
+- 第六轮 Verify finding：部分 JSON 信封与任意 untyped 对象仍可能伪造成功（High）；
+  fallback 可从父 session 继承 `payload.session_id`（High）；malformed JSON 与 transcript I/O
+  未统一失败关闭（Medium）；指向 sibling worktree 的符号链接仍可能被接受（Medium）。
+- 修复：current custom ABI 只接受具备非空 `chunk_id`、整数 `exit_code`、非负整数
+  `original_token_count`、字符串 `output` 与有限非负 `wall_time_seconds` 的完整结果信封；
+  legacy 兼容只接受显式 `execution_result`。fallback session 只绑定
+  `session_meta.payload.id`；任何 malformed JSON 或 transcript I/O 都使本次发现整体失败关闭；
+  command workdir 与目标 root 必须都是非 symlink 的普通目录、字面规范化路径相同且物理路径
+  完全相同，因此最终路径或中间祖先含 symlink 都不能作为 sibling 身份证明。
 - 复查 Finding：无未处理 Critical / High / Medium。
 
 ## Spec 轴
@@ -43,7 +52,7 @@
 | 缺 workdir/跨仓失败关闭 | custom ABI 拒绝测试 |
 | 字面量与单 exec 限制 | 动态值、注释/字符串、死代码、未 await、自造 output、多调用拒绝；JSON/safe-object 覆盖 |
 | sibling 项目身份 | 缺失/相对 workdir、跨仓拒绝；绝对目标 + common Git directory 接受 |
-| 既有 trust/completion gate | 60 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
+| 既有 trust/completion gate | 67 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
 | nested exec completion | output-only、无 exit code、非零 exit 均拒绝；完整 result + exit 0 接受 |
 | stdout/跨 turn 防伪 | plain/JSON stdout exact 与 fallback 均拒绝；新/malformed turn、旧 transcript 与 fork evidence 不可复用 |
 | 根 Skill 防回退 | `skillSources.test.ts` 固定 `text(result)`、禁止 output-only 与 exit-code 指导 |
@@ -53,14 +62,18 @@ Finding：无 Critical / High / Medium。
 
 ## 门禁结果
 
-- `npx vitest run packages/cli/src/skillSources.test.ts packages/cli/src/codexSkillReceipt.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts packages/cli/src/runtime/stable-hook.integration.test.ts`：93 passed。
+- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts`：67 passed。
+- `npx vitest run packages/cli/src/runtime/stable-hook.integration.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts`：12 passed。
 - `npm run test:hooks`：512 passed。
 - `npm run build`：通过；包含 web、server、CLI bundle。
 - `bash tools/test-bundle.sh`：31 passed、0 failed；分发 bundle、N-1 兼容与文档 evidence smoke 通过。
+- `bash tools/test-adapters.sh`：272 passed；`npm run test:migration-cas`：13 passed。
+- `bash tools/verify-skills.sh`：66 个路径、62 个 Skills 通过。
+- `npm run check:default-workflow-freshness` 与 `npm run check:interaction-contract`：通过。
 - `npm run check:architecture`：通过。
 - `npm run check:comments`：通过。
 - `git diff --check`：通过。
-- 最终 `npm test`：327 files passed；5751 tests passed、26 skipped。本轮 Docker daemon
+- 最终 `npm test`：327 files passed；5758 tests passed、26 skipped。本轮 Docker daemon
   不可用导致 Docker 条件用例诚实跳过；real Codex 与缺少 Claude OAuth 的既有条件跳过同样单列，
   不把外部环境缺失记为代码通过。
 - 第一轮 Verify 的失败报告保留在

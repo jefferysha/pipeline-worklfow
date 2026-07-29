@@ -213,7 +213,16 @@ describe('stable host-hook ABI', () => {
           call_id: 'call-skill-read',
           output: [
             { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
-            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'stable-hook-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
           ],
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },

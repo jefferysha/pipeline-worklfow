@@ -381,6 +381,7 @@ export async function discoverCompletedCodexSkillReads(
     let matchesHostSession = hostSessionId === undefined
     let sessionRoot: string | undefined
     let latestTurnId: string | undefined
+    let malformedTranscript = false
     try {
       const stream = createReadStream(transcript, { encoding: 'utf8' })
       const lines = createInterface({ input: stream, crlfDelay: Infinity })
@@ -389,7 +390,10 @@ export async function discoverCompletedCodexSkillReads(
         try {
           event = JSON.parse(line) as unknown
         } catch {
-          continue
+          malformedTranscript = true
+          readsByCall.clear()
+          confirmedInLatestTurn.clear()
+          break
         }
         if (!isRecord(event)) continue
         if (event.type === 'session_meta') {
@@ -399,7 +403,7 @@ export async function discoverCompletedCodexSkillReads(
             sessionRoot = cwd
             if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot)
             if (hostSessionId !== undefined) {
-              const sessionId = asString(payload.id) ?? asString(payload.session_id)
+              const sessionId = asString(payload.id)
               matchesHostSession = sessionId === hostSessionId
             }
           }
@@ -472,6 +476,7 @@ export async function discoverCompletedCodexSkillReads(
           for (const id of readsByCall.get(callId) ?? []) confirmedInLatestTurn.add(id)
         }
       }
+      if (malformedTranscript) return []
       if (matchesHostSession) {
         if (latestTurnId !== undefined) {
           for (const id of confirmedInLatestTurn) confirmed.add(id)
@@ -479,8 +484,9 @@ export async function discoverCompletedCodexSkillReads(
         break
       }
     } catch {
-      // A rotated transcript cannot provide evidence. Once it identified the bound host session,
-      // do not fall back to an older file from that session after a later I/O failure.
+      // A transcript I/O failure makes recency and completeness unknowable. Fail closed instead
+      // of accepting evidence from an older file that may belong to a superseded host turn.
+      return []
     }
     if (matchesHostSession) break
   }

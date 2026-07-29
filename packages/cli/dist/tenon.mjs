@@ -35162,16 +35162,14 @@ async function gitCommonDirectory(projectRoot) {
     isAbsolute10(commonPointer) ? commonPointer : resolve17(gitDir, commonPointer)
   );
 }
-async function samePhysicalDirectory2(left, right) {
-  try {
-    return await realpath8(left) === await realpath8(right);
-  } catch {
-    return false;
-  }
-}
 async function explicitSiblingWorktreeTarget(sessionRoot, commandWorkdir, targetRoot) {
   if (!sessionRoot || !commandWorkdir || !isAbsolute10(commandWorkdir)) return false;
-  if (!await samePhysicalDirectory2(commandWorkdir, targetRoot)) return false;
+  if (resolve17(commandWorkdir) !== resolve17(targetRoot)) return false;
+  const [physicalCommandWorkdir, physicalTargetRoot] = await Promise.all([
+    physicalDirectory(commandWorkdir),
+    physicalDirectory(targetRoot)
+  ]);
+  if (physicalCommandWorkdir === void 0 || physicalTargetRoot === void 0 || physicalCommandWorkdir !== physicalTargetRoot) return false;
   const [sessionGit, targetGit] = await Promise.all([
     gitCommonDirectory(sessionRoot),
     gitCommonDirectory(targetRoot)
@@ -35219,11 +35217,14 @@ function topLevelExitCode(value) {
   if (!isRecord10(value)) return void 0;
   return typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : void 0;
 }
+function completeResultEnvelopeExitCode(value) {
+  if (!isRecord10(value) || typeof value.chunk_id !== "string" || value.chunk_id.length === 0 || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0 || typeof value.original_token_count !== "number" || !Number.isInteger(value.original_token_count) || value.original_token_count < 0) return void 0;
+  return topLevelExitCode(value);
+}
 function parsedResultEnvelopeExitCode(text2) {
   try {
     const value = JSON.parse(text2);
-    if (!isRecord10(value) || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0) return void 0;
-    return topLevelExitCode(value);
+    return completeResultEnvelopeExitCode(value);
   } catch {
     return void 0;
   }
@@ -35247,7 +35248,7 @@ function successfulCustomOutput(value) {
       const code2 = topLevelExitCode(item2);
       return code2 === void 0 ? [] : [code2];
     }
-    const code = topLevelExitCode(item2);
+    const code = completeResultEnvelopeExitCode(item2);
     return code === void 0 ? [] : [code];
   });
   return exitCodes.length > 0 && exitCodes.every((status) => status === 0);
@@ -35520,6 +35521,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
     let matchesHostSession = hostSessionId === void 0;
     let sessionRoot;
     let latestTurnId;
+    let malformedTranscript = false;
     try {
       const stream = createReadStream(transcript, { encoding: "utf8" });
       const lines = createInterface2({ input: stream, crlfDelay: Infinity });
@@ -35528,7 +35530,10 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         try {
           event = JSON.parse(line);
         } catch {
-          continue;
+          malformedTranscript = true;
+          readsByCall.clear();
+          confirmedInLatestTurn.clear();
+          break;
         }
         if (!isRecord11(event)) continue;
         if (event.type === "session_meta") {
@@ -35538,7 +35543,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
             sessionRoot = cwd;
             if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot);
             if (hostSessionId !== void 0) {
-              const sessionId = asString2(payload2.id) ?? asString2(payload2.session_id);
+              const sessionId = asString2(payload2.id);
               matchesHostSession = sessionId === hostSessionId;
             }
           }
@@ -35595,6 +35600,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           for (const id of readsByCall.get(callId) ?? []) confirmedInLatestTurn.add(id);
         }
       }
+      if (malformedTranscript) return [];
       if (matchesHostSession) {
         if (latestTurnId !== void 0) {
           for (const id of confirmedInLatestTurn) confirmed.add(id);
@@ -35602,6 +35608,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         break;
       }
     } catch {
+      return [];
     }
     if (matchesHostSession) break;
   }

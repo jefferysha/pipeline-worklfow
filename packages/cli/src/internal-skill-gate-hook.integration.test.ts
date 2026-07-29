@@ -268,7 +268,16 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           call_id: 'call-tenon-open',
           output: [
             { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
-            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'dag-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
           ],
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
@@ -350,7 +359,16 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           call_id: 'call-tenon-open',
           output: [
             { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
-            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'omitted-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
           ],
         },
       }),

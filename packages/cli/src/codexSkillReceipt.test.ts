@@ -1,4 +1,4 @@
-import { appendFile, mkdir, mkdtemp, readFile, rm, symlink, truncate, utimes, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -25,6 +25,14 @@ const turnId = 'turn-verified-1'
 const sessionId = 'session-verified-1'
 const toolUseId = 'call-skill-read'
 const LEGACY_RECEIPT_TRANSCRIPT_LIMIT = 64 * 1024 * 1024
+
+async function appendValidTranscriptPadding(path: string): Promise<void> {
+  const padding = {
+    type: 'event_msg',
+    payload: { type: 'test_padding', text: 'x'.repeat(LEGACY_RECEIPT_TRANSCRIPT_LIMIT) },
+  }
+  await appendFile(path, `${JSON.stringify(padding)}\n`, 'utf8')
+}
 
 function customResultOutput(exitCode = 0, output = ''): readonly unknown[] {
   return [
@@ -560,6 +568,47 @@ describe('Codex transcript skill receipt', () => {
     await writeFile(transcript, eventLines([
       { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
       { type: 'input_text', text: '{"exit_code":0}' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects a partial JSON result envelope without host-owned identity fields', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      {
+        type: 'input_text',
+        text: JSON.stringify({ exit_code: 0, output: '# skill body\n', wall_time_seconds: 0.1 }),
+      },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects an untyped output object that happens to report exit_code zero', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { kind: 'stdout_fragment', exit_code: 0 },
     ]), 'utf8')
     await recordPendingReceipt()
 
@@ -1227,6 +1276,80 @@ describe('Codex transcript skill receipt', () => {
       .toContain('CodexSkillRead: openspec-propose')
   })
 
+  it('rejects a custom exec workdir symlink even when it resolves to the sibling worktree', async () => {
+    const linkedRoot = join(root, 'linked-custom-symlink-worktree')
+    const linkedAlias = join(root, 'linked-custom-symlink-alias')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-symlink-worktree')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await symlink(linkedRoot, linkedAlias)
+    await writeFile(transcript, customCallSessionScopedEventLines(root, linkedAlias), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects a custom exec workdir with a symlinked ancestor', async () => {
+    const realParent = join(root, 'real-custom-parent')
+    const linkedParent = join(root, 'linked-custom-parent')
+    const linkedRoot = join(realParent, 'linked-custom-ancestor-worktree')
+    const linkedAlias = join(linkedParent, 'linked-custom-ancestor-worktree')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-ancestor-worktree')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await symlink(realParent, linkedParent)
+    await writeFile(transcript, customCallSessionScopedEventLines(root, linkedAlias), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('confirms an exact custom exec receipt explicitly targeted at a sibling worktree', async () => {
     const linkedRoot = join(root, 'linked-custom-receipt-worktree')
     const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-receipt-worktree')
@@ -1487,6 +1610,30 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
+  it('does not accept an inherited parent session_id when the fork omits payload.id', async () => {
+    await writeFile(
+      transcript,
+      sessionScopedEventLines(root).replace(
+        `,"id":"${sessionId}"`,
+        '',
+      ),
+      'utf8',
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
   it('does not let stdout forge fallback completion without a complete result envelope', async () => {
     await writeFile(
       transcript,
@@ -1595,6 +1742,46 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
+  it('invalidates current-turn evidence when a later transcript line is malformed JSON', async () => {
+    await writeFile(transcript, `${sessionScopedEventLines(root)}{not-json\n`, 'utf8')
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not fall back to an older transcript after the newest candidate cannot be read', async () => {
+    const unreadable = join(home, '.codex', 'sessions', '2026', '07', '24', 'unreadable.jsonl')
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await writeFile(unreadable, sessionScopedEventLines(root), 'utf8')
+    await chmod(unreadable, 0o000)
+    await utimes(transcript, new Date('2026-07-24T00:02:00Z'), new Date('2026-07-24T00:02:00Z'))
+    await utimes(unreadable, new Date('2026-07-24T00:03:00Z'), new Date('2026-07-24T00:03:00Z'))
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await chmod(unreadable, 0o600)
+  })
+
   it('proves the skill again after a workflow loop re-enters the same phase, then deduplicates within that visit', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     await bindHostSession()
@@ -1636,7 +1823,7 @@ describe('Codex transcript skill receipt', () => {
     await bindHostSession()
     // A long-lived Codex task can legitimately pass the legacy 64 MiB cap. The current exact
     // receipt/discovery routes must still accept its host-owned, completed read within 512 MiB.
-    await truncate(transcript, LEGACY_RECEIPT_TRANSCRIPT_LIMIT + 1)
+    await appendValidTranscriptPadding(transcript)
 
     const result = await reconcileCodexSkillEvidence({
       repoRoot: root,
@@ -1656,7 +1843,7 @@ describe('Codex transcript skill receipt', () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     await bindHostSession()
     await recordPendingReceipt()
-    await truncate(transcript, LEGACY_RECEIPT_TRANSCRIPT_LIMIT + 1)
+    await appendValidTranscriptPadding(transcript)
 
     const result = await reconcileCodexSkillEvidence({
       repoRoot: root,

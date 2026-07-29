@@ -43,6 +43,11 @@ fixture 能确定性复现，不需要一次性 prototype；持续授权下采�
 
 - [ ] 从最新构建的 CLI 建立全新隔离 Change，在 custom ABI 首次读取后立即登记 Open 文档，
   验证无需第二用户轮次。
+- [ ] 以红灯固定完整结果信封、拒绝任意未标型对象与伪造 stdout JSON；只保留明确
+  `execution_result` 的旧 ABI 兼容。
+- [ ] 以红灯固定 `payload.id` 精确 session 绑定、fork 继承 `session_id` 拒绝，以及
+  malformed JSON / I/O 失败不回退旧 transcript。
+- [ ] 以红灯固定普通目录身份，拒绝通过符号链接才解析到目标的 `workdir`。
 - [ ] 运行 `npm test`、`npm run check:architecture`、`npm run check:comments` 及受影响
   集成门禁；记录真实结果。
 - [ ] 完成 review、应用 spec、提交、推送、非草稿 PR 与 CI 检查。

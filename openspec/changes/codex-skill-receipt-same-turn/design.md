@@ -29,3 +29,14 @@ worktree 读取无法通过项目身份校验。原生 `function_call(exec_comma
 失败关闭。JSON 解析仅校验 `cmd`/`command`/`workdir` 三个信任字段，其他纯数据选项不参与
 证据判断。不修改 receipt journal、history schema、review gate 或 session binding。完整依据与测试矩阵见
 `docs/superpowers/specs/codex-skill-receipt-same-turn-design.md` 和对应 ADR。
+
+## Verify 后规格收紧
+
+独立安全审查证明“存在 `exit_code=0`”仍不足以区分真实 exec result 与 stdout 中伪造的 JSON。
+因此 current ABI 仅接受同时含 `chunk_id`、`wall_time_seconds`、`exit_code`、
+`original_token_count` 与 `output` 的完整结果信封；旧 ABI 只接受明确标型的
+`execution_result`。项目身份还要求字面 `workdir` 本身是普通目录，不能依赖符号链接。
+
+transcript fallback 的 session 身份只来自 `session_meta.payload.id`，不再兼容可能由 fork
+继承的 `payload.session_id`。最新候选一旦出现损坏 JSON 或读取 I/O 失败，整次 discovery
+失败关闭并停止向旧 transcript 回退，避免从不完整的当前轮拼接旧证据。

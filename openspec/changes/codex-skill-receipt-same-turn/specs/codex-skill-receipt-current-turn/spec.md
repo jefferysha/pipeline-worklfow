@@ -31,6 +31,11 @@
   canonical Git common directory
 - **THEN** 系统 MUST 不把该调用视为当前项目证据
 
+#### Scenario: 符号链接 workdir 被拒绝
+
+- **WHEN** custom exec 的绝对 `workdir` 通过符号链接解析后才指向目标目录
+- **THEN** 系统 MUST 不确认该读取；可审计项目身份必须来自普通目录的字面路径
+
 ### Requirement: Tool-program decoding MUST remain bounded and literal
 
 系统 MUST 只接受受支持对象字面量中的字符串 `cmd`/`command` 与可选字符串 `workdir`，
@@ -60,6 +65,13 @@
 - **WHEN** tool-program 已 await exec，但只调用 `text(result.output)`
 - **THEN** 解码器 MUST 不产生 invocation，因为 transcript 无法证明内部执行成功
 
+#### Scenario: 伪造的 stdout JSON 不能冒充完整结果
+
+- **WHEN** `input_text` 仅包含形似 `{output, wall_time_seconds, exit_code}` 的 JSON，
+  或 output item 是带 `exit_code=0` 的任意未标型对象
+- **THEN** 系统 MUST 不把它当作 exec 完成信封；只有当前 host 的完整结果信封或明确
+  标型的旧 `execution_result` 才能证明成功
+
 #### Scenario: 动态 workdir 不成为证据
 
 - **WHEN** `workdir` 是变量、函数结果、模板字符串或 computed property
@@ -85,3 +97,25 @@
 
 - **WHEN** transcript 使用 `function_call(exec_command)` 与 `function_call_output`
 - **THEN** 现有同目录和 sibling-worktree 读取行为 MUST 保持不变
+
+### Requirement: Transcript fallback MUST bind an exact current session and intact turn
+
+fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身份，并只接受
+同一 transcript 中完整、可解析的当前 turn。`payload.session_id`、fork 继承字段、损坏 JSON
+或读取失败不得触发旧 transcript 回退。
+
+#### Scenario: Fork 缺少 payload.id 时失败关闭
+
+- **WHEN** fork transcript 缺少 `session_meta.payload.id`，但继承的
+  `payload.session_id` 等于当前绑定 session
+- **THEN** 系统 MUST 不把该 transcript 归属到当前 session
+
+#### Scenario: 当前 turn 含损坏 JSON 时失败关闭
+
+- **WHEN** 候选 transcript 已出现匹配 session/turn 的调用，但后续任一行不是有效 JSON
+- **THEN** 系统 MUST 丢弃该候选的全部 evidence，且不得回退到更旧 transcript
+
+#### Scenario: 候选 transcript 读取失败时失败关闭
+
+- **WHEN** 最新候选 transcript 在读取期间发生 I/O 失败
+- **THEN** discovery MUST 停止并返回无 evidence，不得继续扫描更旧文件

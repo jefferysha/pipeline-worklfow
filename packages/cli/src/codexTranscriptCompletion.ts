@@ -49,17 +49,26 @@ function topLevelExitCode(value: unknown): number | undefined {
     : undefined
 }
 
+function completeResultEnvelopeExitCode(value: unknown): number | undefined {
+  if (
+    !isRecord(value)
+    || typeof value.chunk_id !== 'string'
+    || value.chunk_id.length === 0
+    || typeof value.output !== 'string'
+    || typeof value.wall_time_seconds !== 'number'
+    || !Number.isFinite(value.wall_time_seconds)
+    || value.wall_time_seconds < 0
+    || typeof value.original_token_count !== 'number'
+    || !Number.isInteger(value.original_token_count)
+    || value.original_token_count < 0
+  ) return undefined
+  return topLevelExitCode(value)
+}
+
 function parsedResultEnvelopeExitCode(text: string): number | undefined {
   try {
     const value = JSON.parse(text) as unknown
-    if (
-      !isRecord(value)
-      || typeof value.output !== 'string'
-      || typeof value.wall_time_seconds !== 'number'
-      || !Number.isFinite(value.wall_time_seconds)
-      || value.wall_time_seconds < 0
-    ) return undefined
-    return topLevelExitCode(value)
+    return completeResultEnvelopeExitCode(value)
   } catch {
     return undefined
   }
@@ -89,7 +98,7 @@ export function successfulCustomOutput(value: unknown): boolean {
       const code = topLevelExitCode(item)
       return code === undefined ? [] : [code]
     }
-    const code = topLevelExitCode(item)
+    const code = completeResultEnvelopeExitCode(item)
     return code === undefined ? [] : [code]
   })
   return exitCodes.length > 0 && exitCodes.every((status) => status === 0)

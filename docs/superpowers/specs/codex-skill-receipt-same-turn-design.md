@@ -47,7 +47,13 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
 - exec 必须在顶层被 await，完整 result 必须以同一变量传给 `text`；只转发 `.output` 拒绝。
 - `workdir` 必须是字面字符串；表达式、模板字符串、computed key 不进入证据路径。
 - `workdir` 若存在必须是绝对路径；相对路径不能证明目标身份。
+- 字面 `workdir` 必须由 `lstat` 证明是普通目录；即使 `realpath` 等于目标目录，符号链接
+  也不能成为项目身份。
 - 保留受信 Skill root、host session、visit 时间下界、nested `exit_code=0` 与去重规则。
+- host session 只匹配 `session_meta.payload.id`；fork 继承的 `payload.session_id` 不具有
+  身份证明力。
+- 最新候选 transcript 的 malformed JSON 或读取 I/O 错误使 discovery 整体失败关闭，
+  不向旧 transcript 回退。
 
 ## 备选方案
 
@@ -71,7 +77,9 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
 - 红灯：session 在主 worktree，custom tool 明确以 sibling worktree 为 `workdir`，当前实现拒绝。
 - 绿灯：同一 fixture 修复后确认 `openspec-propose` 并追加 history。
 - 拒绝：省略/相对 workdir、目标非 sibling Git 仓库、workdir 表达式、多个 exec、
-  output-only wrapper、nested 非零 exit、failed/pending output。
+  workdir 符号链接、output-only wrapper、nested 非零 exit、failed/pending output。
+- 拒绝：只有 `{output, wall_time_seconds, exit_code}` 的 stdout JSON、任意未标型对象、
+  缺少 `payload.id` 但继承 `session_id` 的 fork、malformed JSON 与读取 I/O 失败。
 - 兼容：JSON `prefix_rule` 数组等非信任纯数据选项不影响 command/workdir 解码。
 - 集成：全新 Change 在同一自动化首轮用 custom ABI 读取后，第一次文档登记成功。
 
@@ -85,13 +93,15 @@ result 转发；其他工具程序返回零个 invocation。
 
 解析失败不是 CLI 异常：它返回无可确认读取，文档 gate 继续给出既有“缺少 Skill 调用证据”
 错误。output-only wrapper、nested non-zero exit、`Script failed`、call/output identity
-不同继续拒绝。
+不同继续拒绝。当前 custom ABI 只接受包含 `chunk_id`、`wall_time_seconds`、`exit_code`、
+`original_token_count` 与 `output` 的完整结果信封；旧格式必须明确标型为
+`execution_result`。损坏 JSON 或 I/O 失败会终止本次 discovery，而不是尝试更旧文件。
 
 ## 安全边界
 
 目标身份必须同时满足显式物理目录相等与同一 canonical Git common directory；不跟随项目内
 symlink、不接受动态 workdir、不扫描 host sessions root 之外的 transcript，也不扩大文件和
-总字节预算。
+总字节预算。session 绑定只认 host 自有 `payload.id`，不把 fork 继承字段当作主身份。
 
 ## 术语
 
