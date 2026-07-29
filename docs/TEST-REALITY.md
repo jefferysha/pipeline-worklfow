@@ -8,6 +8,20 @@
 > 当时语境；v3 最新 source/dist/live/真实浏览器对照见
 > `docs/ux/2026-07-19-v3-backend-to-frontend-gap-inventory.md`。
 
+## 2026-07-29 · Host Target Plan 当前证据
+
+- CLI/server：12 个固定宿主 × setup/update 真值表、严格 query、Host 守卫、固定 argv、
+  严格 JSON/DTO、错误脱敏、同 key 共享、失败重试、25-key 缓存、4 并发与 10 秒超时均有
+  定向回归；生产 API 实测成功 200、非法/重复/额外参数 400、恶意 Host 403。
+- Dashboard：真实生产同源 server 覆盖 1440/1024/900/769/768/390、明暗主题、中英文、键盘、
+  focus、复制、移动端选中定位、无横向溢出与控制台零错误/警告。`design-taste-frontend`
+  审查发现的卡片重排、移动端详情位置和未压缩传输均已修复。
+- 静态资产：最终生产 JavaScript 资产原始 851,512 bytes；`Accept-Encoding: gzip`
+  实测返回 257,888 bytes、`Content-Encoding: gzip`、`Vary: Accept-Encoding`；
+  `gzip;q=0` 返回原始 851,512 bytes。
+- 契约：适配器计划固定使用安全 argv `--target .`，不再输出会被 shell 当作重定向的
+  `<project>`；CLI、API、Dashboard、英文/中文文档与生成分发物保持同源。
+
 ## 真实证据链（三道，收编门必过）
 
 | 层 | 文件 | 真实性 | 驱动什么 |

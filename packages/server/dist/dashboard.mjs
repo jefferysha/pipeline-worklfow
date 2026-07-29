@@ -16681,7 +16681,7 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
+var runPipelineCli = (repoRoot, args, options) => new Promise((resolve12, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
     reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
@@ -16695,7 +16695,8 @@ var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
       env: process.env,
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
-      timeout: 15 * 60 * 1e3
+      timeout: 15 * 60 * 1e3,
+      signal: options?.signal
     },
     (error, stdout, stderr) => {
       if (error === null) {
@@ -19582,6 +19583,21 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     errMsg: errMsg2
   } = deps;
   const boundPort = deps.boundPort();
+  if (serveAsset(req, res, path7)) return;
+  if (path7 === "/api/health") {
+    return sendJson(res, 200, {
+      ok: true,
+      scope: "global",
+      version,
+      ...releaseId === void 0 ? {} : { releaseId },
+      ...transactionId === void 0 ? {} : { transactionId },
+      stateScopeId,
+      pid: process.pid
+    });
+  }
+  if (!isLocalHost2(req.headers.host, boundPort)) {
+    return sendJson(res, 403, { ok: false, error: "Host header \u4E0D\u5408\u6CD5\uFF08\u7591\u4F3C DNS \u91CD\u7ED1\u5B9A\u653B\u51FB\uFF09" });
+  }
   if (path7 === "/api/cadence/status") {
     if (cadenceScheduler === null) {
       return sendJson(res, 404, { ok: false, error: "cadence scheduler \u672A\u542F\u7528\uFF08capabilities.cadence=false\uFF09" });
@@ -19596,21 +19612,6 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   if (path7 === "/" || path7 === "/index.html") {
     if (serveIndexWithToken(res)) return;
     return sendHtml(res, 200, indexHtml2(token));
-  }
-  if (serveAsset(res, path7)) return;
-  if (path7 === "/api/health") {
-    return sendJson(res, 200, {
-      ok: true,
-      scope: "global",
-      version,
-      ...releaseId === void 0 ? {} : { releaseId },
-      ...transactionId === void 0 ? {} : { transactionId },
-      stateScopeId,
-      pid: process.pid
-    });
-  }
-  if (!isLocalHost2(req.headers.host, boundPort)) {
-    return sendJson(res, 403, { ok: false, error: "Host header \u4E0D\u5408\u6CD5\uFF08\u7591\u4F3C DNS \u91CD\u7ED1\u5B9A\u653B\u51FB\uFF09" });
   }
   if (path7 === "/api/context-bundle/preview") {
     return handleContextBundlePreview(req, res, deps);
@@ -19712,6 +19713,359 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   }
 }
 
+// packages/server/src/hostTargetPlanProtocol.ts
+var HOST_IDS = [
+  "codex",
+  "claude",
+  "cursor",
+  "gemini",
+  "copilot",
+  "pi",
+  "devin",
+  "zed",
+  "aider",
+  "continue",
+  "cline",
+  "amp"
+];
+var CAPABILITIES = [
+  "native-marketplace",
+  "project-adapter",
+  "managed-runtime",
+  "bundled-skills",
+  "automatic-update"
+];
+var STEP_IDS = [
+  "marketplace-register",
+  "plugin-install",
+  "plugin-inventory",
+  "marketplace-refresh",
+  "plugin-update",
+  "package-assets",
+  "adapter-deploy",
+  "managed-runtime",
+  "codex-auth-status",
+  "bundled-skills",
+  "runtime-readiness"
+];
+var NOTICE_IDS = [
+  "host-plan.notice.read-only-generation",
+  "host-plan.notice.manual-command-has-effects",
+  "host-plan.notice.codex-auth-guidance",
+  "host-plan.notice.current-project-target"
+];
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasExactKeys(value, keys) {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+}
+function isNonemptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function isHostId(value) {
+  return typeof value === "string" && HOST_IDS.includes(value);
+}
+function isCapability(value) {
+  return typeof value === "string" && CAPABILITIES.includes(value);
+}
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((item2, index) => item2 === right[index]);
+}
+function decodeCommand(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["executable", "args", "display"])) return null;
+  if (!isNonemptyString(value.executable) || !isNonemptyString(value.display)) return null;
+  if (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string") || value.display !== [value.executable, ...value.args].join(" ")) return null;
+  return { executable: value.executable, args: value.args, display: value.display };
+}
+function planCommand(executable, args) {
+  return { executable, args, display: [executable, ...args].join(" ") };
+}
+function nativeCommandTruth(host, operation) {
+  if (host === "codex") {
+    return operation === "setup" ? [
+      planCommand("codex", ["plugin", "marketplace", "add", "jefferysha/tenon", "--ref", "main"]),
+      planCommand("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      planCommand("codex", ["plugin", "list", "--json"])
+    ] : [
+      planCommand("codex", ["plugin", "marketplace", "upgrade", "tenon", "--json"]),
+      planCommand("codex", ["plugin", "add", "tenon@tenon", "--json"]),
+      planCommand("codex", ["plugin", "list", "--json"])
+    ];
+  }
+  return operation === "setup" ? [
+    planCommand("claude", ["plugin", "marketplace", "add", "jefferysha/tenon"]),
+    planCommand("claude", ["plugin", "install", "tenon@tenon"]),
+    planCommand("claude", ["plugin", "list", "--json"])
+  ] : [
+    planCommand("claude", ["plugin", "marketplace", "update", "tenon"]),
+    planCommand("claude", ["plugin", "update", "tenon@tenon"]),
+    planCommand("claude", ["plugin", "list", "--json"])
+  ];
+}
+function commandsEqual(actual, expected) {
+  if (actual === null || expected === null) return actual === expected;
+  return actual.executable === expected.executable && arraysEqual(actual.args, expected.args) && actual.display === expected.display;
+}
+function decodeTarget(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, [
+    "id",
+    "kind",
+    "cli_flag",
+    "target_scope",
+    "supported_operations",
+    "capabilities"
+  ]) || !isHostId(value.id)) return null;
+  const native = value.id === "codex" || value.id === "claude";
+  if (value.kind !== (native ? "native" : "adapter")) return null;
+  if (value.target_scope !== (native ? "user" : "project")) return null;
+  if (value.cli_flag !== `--${value.id}`) return null;
+  if (!Array.isArray(value.supported_operations) || value.supported_operations.length !== 2 || value.supported_operations[0] !== "setup" || value.supported_operations[1] !== "update") return null;
+  if (!Array.isArray(value.capabilities) || !value.capabilities.every(isCapability) || new Set(value.capabilities).size !== value.capabilities.length) return null;
+  const expectedCapabilities = native ? ["native-marketplace", "managed-runtime", "bundled-skills", "automatic-update"] : ["project-adapter", "managed-runtime", "bundled-skills"];
+  if (!arraysEqual(value.capabilities, expectedCapabilities)) return null;
+  return {
+    id: value.id,
+    kind: native ? "native" : "adapter",
+    cli_flag: `--${value.id}`,
+    target_scope: native ? "user" : "project",
+    supported_operations: ["setup", "update"],
+    capabilities: value.capabilities
+  };
+}
+function decodeHostTargetCatalog(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
+  const targets = [];
+  for (let index = 0; index < value.targets.length; index += 1) {
+    const item2 = value.targets[index];
+    const target = decodeTarget(item2);
+    if (target === null || target.id !== HOST_IDS[index]) return null;
+    targets.push(target);
+  }
+  return { schema_version: "host-target-plan/v1", targets };
+}
+function decodePlanStep(value) {
+  if (!isRecord5(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
+  if (typeof value.id !== "string" || !STEP_IDS.includes(value.id) || value.label !== `host-plan.step.${value.id}`) return null;
+  const command = value.command === null ? null : decodeCommand(value.command);
+  if (value.command !== null && command === null) return null;
+  return { id: value.id, label: value.label, command };
+}
+function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
+  if (!isRecord5(value) || !hasExactKeys(value, [
+    "schema_version",
+    "side_effects",
+    "host",
+    "operation",
+    "command",
+    "steps",
+    "notices"
+  ]) || value.schema_version !== "host-target-plan/v1" || value.side_effects !== "none" || value.operation !== expectedOperation || !Array.isArray(value.steps) || !Array.isArray(value.notices) || !value.notices.every(isNonemptyString)) return null;
+  const host = decodeTarget(value.host);
+  const command = decodeCommand(value.command);
+  if (host === null || host.id !== expectedHost || command === null) return null;
+  const native = host.kind === "native";
+  const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "."];
+  if (command.executable !== "tenon" || !arraysEqual(command.args, expectedCommandArgs) || command.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
+  const steps = [];
+  for (const item2 of value.steps) {
+    const step = decodePlanStep(item2);
+    if (step === null) return null;
+    steps.push(step);
+  }
+  const expectedStepIds = native ? [
+    ...expectedOperation === "setup" ? ["marketplace-register", "plugin-install", "plugin-inventory"] : ["marketplace-refresh", "plugin-update", "plugin-inventory"],
+    "managed-runtime",
+    ...expectedHost === "codex" ? ["codex-auth-status"] : [],
+    ...expectedOperation === "setup" ? ["bundled-skills", "runtime-readiness"] : []
+  ] : expectedOperation === "setup" ? ["package-assets", "managed-runtime", "adapter-deploy", "bundled-skills", "runtime-readiness"] : ["package-assets", "managed-runtime", "adapter-deploy"];
+  if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null;
+  let expectedStepCommands;
+  if (native) {
+    if (expectedHost !== "codex" && expectedHost !== "claude") return null;
+    expectedStepCommands = [
+      ...nativeCommandTruth(expectedHost, expectedOperation),
+      null,
+      ...expectedHost === "codex" ? [planCommand("codex", ["login", "status"])] : [],
+      ...expectedOperation === "setup" ? [null, null] : []
+    ];
+  } else {
+    expectedStepCommands = expectedOperation === "setup" ? [null, null, command, null, null] : [null, null, command];
+  }
+  for (let index = 0; index < steps.length; index += 1) {
+    if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null;
+  }
+  const expectedNotices = expectedHost === "codex" ? NOTICE_IDS.slice(0, 3) : native ? NOTICE_IDS.slice(0, 2) : [...NOTICE_IDS.slice(0, 2), NOTICE_IDS[3]];
+  if (!arraysEqual(value.notices, expectedNotices)) return null;
+  return {
+    schema_version: "host-target-plan/v1",
+    side_effects: "none",
+    host,
+    operation: expectedOperation,
+    command,
+    steps,
+    notices: value.notices
+  };
+}
+
+// packages/server/src/serverGetHostTargetPlanRoutes.ts
+var MAX_HOST_PLAN_KEYS = 25;
+var DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS = 4;
+var DEFAULT_HOST_PLAN_TIMEOUT_MS = 1e4;
+var PLAN_UNAVAILABLE = {
+  status: 503,
+  body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
+};
+function parseHostTargetPlanJson(stdout) {
+  const trimmed = stdout.trim();
+  if (trimmed === "") return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+function createHostTargetPlanRuntime(options = {}) {
+  const maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HOST_PLAN_TIMEOUT_MS;
+  const now = options.now ?? (() => globalThis.performance.now());
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > MAX_HOST_PLAN_KEYS) {
+    throw new Error(`maxConcurrent \u5FC5\u987B\u662F 1..${MAX_HOST_PLAN_KEYS} \u7684\u6574\u6570`);
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("timeoutMs \u5FC5\u987B\u662F\u6B63\u6570");
+  }
+  const cache = /* @__PURE__ */ new Map();
+  const inFlight = /* @__PURE__ */ new Map();
+  const queue = [];
+  let active = 0;
+  const drain = () => {
+    while (active < maxConcurrent) {
+      const queued = queue.shift();
+      if (queued === void 0) return;
+      const remainingMs = queued.deadline - now();
+      if (remainingMs <= 0) {
+        queued.resolve(PLAN_UNAVAILABLE);
+        continue;
+      }
+      active += 1;
+      const controller = new AbortController();
+      let settled = false;
+      const finish = (settle) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        active -= 1;
+        settle();
+        drain();
+      };
+      const timer = setTimeout(() => {
+        controller.abort();
+        finish(() => queued.resolve(PLAN_UNAVAILABLE));
+      }, remainingMs);
+      timer.unref?.();
+      try {
+        void queued.load(controller.signal).then(
+          (result) => finish(() => queued.resolve(result)),
+          (error) => finish(() => queued.reject(error))
+        );
+      } catch (error) {
+        finish(() => queued.reject(error));
+      }
+    }
+  };
+  const schedule = (load) => {
+    const scheduled = new Promise((resolve12, reject) => {
+      queue.push({
+        load,
+        resolve: resolve12,
+        reject,
+        deadline: now() + timeoutMs
+      });
+    });
+    drain();
+    return scheduled;
+  };
+  return {
+    resolve(key, load) {
+      const cached = cache.get(key);
+      if (cached !== void 0) return Promise.resolve(cached);
+      const existing = inFlight.get(key);
+      if (existing !== void 0) return existing;
+      const queued = schedule(load);
+      const shared = queued.then((result) => {
+        if (result.status === 200) {
+          cache.delete(key);
+          cache.set(key, result);
+          while (cache.size > MAX_HOST_PLAN_KEYS) {
+            const oldest = cache.keys().next().value;
+            if (oldest === void 0) break;
+            cache.delete(oldest);
+          }
+        }
+        return result;
+      });
+      inFlight.set(key, shared);
+      const cleanup = () => {
+        if (inFlight.get(key) === shared) inFlight.delete(key);
+      };
+      void shared.then(cleanup, cleanup);
+      return shared;
+    }
+  };
+}
+var QUERY_INVALID = {
+  status: 400,
+  body: { ok: false, code: "HOST_TARGET_QUERY_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u67E5\u8BE2\u53C2\u6570\u65E0\u6548" }
+};
+var PLAN_INVALID = {
+  status: 502,
+  body: { ok: false, code: "HOST_TARGET_PLAN_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u54CD\u5E94\u65E0\u6548" }
+};
+function parsePlanQuery(searchParams) {
+  const entries = [...searchParams.entries()];
+  if (entries.length !== 2 || searchParams.getAll("host").length !== 1 || searchParams.getAll("operation").length !== 1 || entries.some(([key]) => key !== "host" && key !== "operation")) return null;
+  const host = searchParams.get("host");
+  const operation = searchParams.get("operation");
+  if (!isHostId(host) || operation !== "setup" && operation !== "update") return null;
+  return { host, operation };
+}
+async function runAndDecode(args, deps, decode, signal) {
+  try {
+    const result = await deps.operationRunner(deps.hostHome, args, { signal });
+    if (result.exitCode !== 0) return PLAN_INVALID;
+    const decoded = decode(parseHostTargetPlanJson(result.stdout));
+    return decoded === null ? PLAN_INVALID : { status: 200, body: decoded };
+  } catch {
+    return PLAN_INVALID;
+  }
+}
+async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
+  if (path7 !== "/api/host-targets" && path7 !== "/api/host-target-plan") return null;
+  const searchParams = new URL(requestUrl, "http://localhost").searchParams;
+  if (path7 === "/api/host-targets") {
+    if ([...searchParams].length !== 0) return QUERY_INVALID;
+    if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
+    return deps.runtime.resolve(
+      "catalog",
+      (signal) => runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog, signal)
+    );
+  }
+  const query = parsePlanQuery(searchParams);
+  if (query === null) return QUERY_INVALID;
+  if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
+  return deps.runtime.resolve(
+    `plan:${query.host}:${query.operation}`,
+    (signal) => runAndDecode(
+      ["host-target-plan", "--host", query.host, "--operation", query.operation, "--json"],
+      deps,
+      (value) => decodeHostTargetPlan(value, query.host, query.operation),
+      signal
+    )
+  );
+}
+
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
   return join45(dirname10(fileURLToPath2(import.meta.url)), "..", "..", "..");
@@ -19748,13 +20102,18 @@ async function handleGet(req, res, path7, deps) {
     manifestPath: manifestPath2,
     paths,
     hostHome,
+    operationsAvailable,
+    hostTargetPlanRuntime,
     options,
+    operationRunner,
     resolveSessionLink,
     errMsg: errMsg2
   } = deps;
   const boundPort = deps.boundPort();
   await handleGetActivityRoutes(req, res, path7, deps);
   if (res.headersSent) return;
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime });
+  if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body);
   if (path7 === "/api/loops/snapshot") {
     try {
       const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) });
@@ -21396,6 +21755,7 @@ function indexHtml(token) {
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync23 } from "node:fs";
 import { join as join51 } from "node:path";
+import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
   const { registry, snapshotDeps, heartbeatMs, pollIntervalMs, token } = options;
@@ -21541,6 +21901,22 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     ".ico": "image/x-icon",
     ".woff2": "font/woff2"
   };
+  const GZIP_MIN_BYTES = 1024;
+  const GZIP_TYPES = /* @__PURE__ */ new Set([".js", ".css", ".html", ".json", ".svg"]);
+  const gzipCache = /* @__PURE__ */ new Map();
+  function acceptsGzip(header) {
+    if (header === void 0) return false;
+    const accepted = /* @__PURE__ */ new Map();
+    for (const entry of (Array.isArray(header) ? header.join(",") : header).split(",")) {
+      const [rawName, ...params] = entry.trim().toLowerCase().split(";");
+      if (!rawName) continue;
+      const qParam = params.map((param) => param.trim()).find((param) => param.startsWith("q="));
+      const parsed = qParam === void 0 ? 1 : Number(qParam.slice(2));
+      accepted.set(rawName, Number.isFinite(parsed) ? parsed : 0);
+    }
+    const gzip = accepted.get("gzip");
+    return (gzip ?? accepted.get("*") ?? 0) > 0;
+  }
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
@@ -21554,19 +21930,29 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
       return false;
     }
   }
-  function serveAsset(res, path7) {
+  function serveAsset(req, res, path7) {
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
     const abs = join51(webRoot, rel);
     if (!abs.startsWith(join51(webRoot, "assets"))) return false;
     try {
-      const body = readFileSync23(abs);
+      const source = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
+      const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
+      const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
+      let body = source;
+      if (gzip) {
+        const compressed = gzipCache.get(abs) ?? gzipSync(source);
+        gzipCache.set(abs, compressed);
+        body = compressed;
+      }
       res.writeHead(200, {
         "Content-Type": STATIC_TYPES[ext] ?? "application/octet-stream",
         "Content-Length": body.length,
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ...compressible ? { Vary: "Accept-Encoding" } : {},
+        ...gzip ? { "Content-Encoding": "gzip" } : {}
       });
       res.end(body);
       return true;
@@ -21857,6 +22243,7 @@ function createDashboardServer(options) {
   const manifestPath2 = options.manifestPath;
   const operationRunner = options.runPipelineCli ?? runPipelineCli;
   const operationsAvailable = options.runPipelineCli !== void 0 || pipelineCliAvailable();
+  const hostTargetPlanRuntime = createHostTargetPlanRuntime();
   const cadenceScheduler = options.cadence === void 0 || options.cadence === false ? null : createCadenceScheduler({
     ...options.cadence,
     roots: registry,
@@ -21974,7 +22361,10 @@ function createDashboardServer(options) {
     manifestPath: manifestPath2,
     paths,
     hostHome,
+    operationsAvailable,
+    hostTargetPlanRuntime,
     options,
+    operationRunner,
     resolveSessionLink,
     errMsg
   });
