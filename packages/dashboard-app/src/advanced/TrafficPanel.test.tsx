@@ -154,6 +154,34 @@ beforeEach(() => localStorage.clear())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TrafficPanel metadata-only timeline', () => {
+  it('keeps a stable desktop rail and detail without an implicit timeline request', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/traces/sessions') return response(SESSIONS)
+      if (url.includes('/api/traces/timeline')) return response(timeline())
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderTraffic()
+
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    const workspace = screen.getByTestId('traffic-workspace')
+    expect(workspace.className).toContain('min-[1024px]:grid-cols-[clamp(15.5rem,28%,18rem)_minmax(0,1fr)]')
+    expect(screen.getByTestId('traffic-session-rail')).toHaveAccessibleName('捕获会话')
+    expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('选择一个会话')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    expect(sessionButton).toHaveAttribute('title', 'sess-A')
+    expect(sessionButton).toHaveTextContent('sess-A')
+    expect(sessionButton).toHaveTextContent('reverse')
+    await userEvent.click(sessionButton)
+
+    const identity = await screen.findByTestId('traffic-session-identity')
+    expect(identity).toHaveTextContent('claude')
+    expect(identity).toHaveTextContent('sess-A')
+    expect(identity).toHaveTextContent('reverse')
+    expect(screen.getByTestId('traffic-entries').className).toContain('divide-y')
+  })
+
   it('shows session loading, local-only sessions, summary, and ordered metadata without raw query', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/traces/sessions') return response(SESSIONS)
@@ -385,6 +413,38 @@ describe('TrafficPanel metadata-only timeline', () => {
     await waitFor(() => expect(screen.queryByTestId('traffic-entry-1')).not.toBeInTheDocument())
   })
 
+  it('distinguishes same-client sessions and keeps full identity accessible', async () => {
+    const longSessions = {
+      ...SESSIONS,
+      sessions: [
+        {
+          ...SESSIONS.sessions[0],
+          id: '12345678-aaaa-bbbb-cccc-1234567890ab',
+          client: 'claude',
+        },
+        {
+          ...SESSIONS.sessions[1],
+          id: '87654321-dddd-eeee-ffff-ba0987654321',
+          client: 'claude',
+          proxy_mode: '',
+          updated_at: 'invalid',
+        },
+      ],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions' ? response(longSessions) : response(timeline())
+    )))
+    renderTraffic()
+
+    const sessionButtons = await screen.findAllByRole('button', { name: /claude/ })
+    expect(sessionButtons).toHaveLength(2)
+    expect(sessionButtons[0]).toHaveAttribute('title', '12345678-aaaa-bbbb-cccc-1234567890ab')
+    expect(sessionButtons[0]).toHaveTextContent('12345678…7890ab')
+    expect(sessionButtons[1]).toHaveAttribute('title', '87654321-dddd-eeee-ffff-ba0987654321')
+    expect(sessionButtons[1]).toHaveTextContent('未知代理模式')
+    expect(sessionButtons[1]).toHaveTextContent('未知')
+  })
+
   it('Escape closes the timeline and restores focus to the selected session button', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (
       url === '/api/traces/sessions' ? response(SESSIONS) : response(timeline())
@@ -395,6 +455,25 @@ describe('TrafficPanel metadata-only timeline', () => {
     const errorFilter = await screen.findByRole('button', { name: /失败/ })
     errorFilter.focus()
     await userEvent.keyboard('{Escape}')
+    expect(screen.queryByTestId('traffic-timeline')).not.toBeInTheDocument()
+    expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('选择一个会话')
+    expect(sessionButton).toHaveFocus()
+  })
+
+  it('does not reopen detail when a timeline response arrives after Escape', async () => {
+    const pendingTimeline = deferred<Response>()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions' ? response(SESSIONS) : pendingTimeline.promise
+    )))
+    renderTraffic()
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    await userEvent.click(sessionButton)
+    expect(screen.getByTestId('traffic-timeline-loading')).toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    pendingTimeline.resolve(response(timeline()))
+
+    await waitFor(() => expect(screen.getByTestId('traffic-detail-unselected')).toBeInTheDocument())
     expect(screen.queryByTestId('traffic-timeline')).not.toBeInTheDocument()
     expect(sessionButton).toHaveFocus()
   })
@@ -415,6 +494,8 @@ describe('TrafficPanel metadata-only timeline', () => {
     )))
     renderTraffic('en')
     const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    expect(screen.getByTestId('traffic-session-rail')).toHaveAccessibleName('Capture sessions')
+    expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('Select a session')
     expect(sessionButton).toHaveTextContent('1 record')
     expect(sessionButton).not.toHaveTextContent('1 records')
     expect(sessionButton).toHaveTextContent('Complete')
