@@ -48,6 +48,8 @@ const TRUTH_SOURCES = [
   'templates/workflows/simple.yaml',
 ]
 
+const EXPECTED_PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan']
+
 function slash(path) {
   return path.split(sep).join('/')
 }
@@ -379,14 +381,27 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (navSource !== undefined) {
     const primaryViews = extractPrimaryViews(navSource)
     const viewUnion = extractViewUnion(navSource)
-    if (primaryViews.length !== 5) {
-      failures.push(`packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must contain exactly 5 operational views, found ${primaryViews.length}`)
+    if (
+      primaryViews.length !== EXPECTED_PRIMARY_VIEWS.length
+      || !primaryViews.every((view, index) => view === EXPECTED_PRIMARY_VIEWS[index])
+    ) {
+      failures.push(
+        `packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must remain the exact operational set: ${EXPECTED_PRIMARY_VIEWS.join(' -> ')}`,
+      )
+    }
+    if (new Set(primaryViews).size !== primaryViews.length) {
+      failures.push('packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS must not contain duplicate operational views')
     }
     if (primaryViews.includes('overview')) {
       failures.push('packages/dashboard-app/src/shell/Nav.tsx: overview must remain separate from PRIMARY_VIEWS')
     }
     if (!viewUnion.includes('overview')) {
       failures.push('packages/dashboard-app/src/shell/Nav.tsx: View must include the separate overview view')
+    }
+    for (const view of primaryViews) {
+      if (!viewUnion.includes(view)) {
+        failures.push(`packages/dashboard-app/src/shell/Nav.tsx: PRIMARY_VIEWS entry ${view} must be declared in View`)
+      }
     }
     for (const document of ['docs/usage/dashboard-and-local-api.md', 'docs/usage/zh-CN/dashboard-and-local-api.md']) {
       const text = contents.get(document)

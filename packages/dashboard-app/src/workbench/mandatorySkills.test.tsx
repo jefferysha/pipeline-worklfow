@@ -583,7 +583,10 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     // 在途结束后同 cell 可以再写
     act(() => probe.setSkills('build', ['frontend-design', 'improve-codebase-architecture']))
     expect(postCalls()).toHaveLength(2)
-    release(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await act(async () => {
+      release(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    })
+    await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
   })
 
   it('savingKey 命中本 cell → 控件禁用；指向别的 cell → 本列不受影响（纯渲染契约）', () => {

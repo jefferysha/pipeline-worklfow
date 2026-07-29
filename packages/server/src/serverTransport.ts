@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
 
 const MAX_POST_BODY = 64 * 1024
@@ -141,6 +142,23 @@ const STATIC_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
 }
+const GZIP_MIN_BYTES = 1_024
+const GZIP_TYPES = new Set(['.js', '.css', '.html', '.json', '.svg'])
+const gzipCache = new Map<string, Buffer>()
+
+function acceptsGzip(header: string | string[] | undefined): boolean {
+  if (header === undefined) return false
+  const accepted = new Map<string, number>()
+  for (const entry of (Array.isArray(header) ? header.join(',') : header).split(',')) {
+    const [rawName, ...params] = entry.trim().toLowerCase().split(';')
+    if (!rawName) continue
+    const qParam = params.map((param) => param.trim()).find((param) => param.startsWith('q='))
+    const parsed = qParam === undefined ? 1 : Number(qParam.slice(2))
+    accepted.set(rawName, Number.isFinite(parsed) ? parsed : 0)
+  }
+  const gzip = accepted.get('gzip')
+  return (gzip ?? accepted.get('*') ?? 0) > 0
+}
 function serveIndexWithToken(res: ServerResponse): boolean {
   if (!webRoot) return false
   try {
@@ -153,19 +171,29 @@ function serveIndexWithToken(res: ServerResponse): boolean {
   } catch { return false }
 }
 /** /assets/* 静态供给：限 webRoot/assets 子树（防路径穿越），命中返回 true。 */
-function serveAsset(res: ServerResponse, path: string): boolean {
+function serveAsset(req: IncomingMessage, res: ServerResponse, path: string): boolean {
   if (!webRoot || !path.startsWith('/assets/')) return false
   const rel = path.slice(1) // 去前导 /
   if (rel.includes('..')) return false
   const abs = join(webRoot, rel)
   if (!abs.startsWith(join(webRoot, 'assets'))) return false
   try {
-    const body = readFileSync(abs)
+    const source = readFileSync(abs)
     const ext = abs.slice(abs.lastIndexOf('.'))
+    const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES
+    const gzip = compressible && acceptsGzip(req.headers['accept-encoding'])
+    let body: Uint8Array = source
+    if (gzip) {
+      const compressed = gzipCache.get(abs) ?? gzipSync(source)
+      gzipCache.set(abs, compressed)
+      body = compressed
+    }
     res.writeHead(200, {
       'Content-Type': STATIC_TYPES[ext] ?? 'application/octet-stream',
       'Content-Length': body.length,
       'Cache-Control': 'public, max-age=31536000, immutable',
+      ...(compressible ? { Vary: 'Accept-Encoding' } : {}),
+      ...(gzip ? { 'Content-Encoding': 'gzip' } : {}),
     })
     res.end(body)
     return true

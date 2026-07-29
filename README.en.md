@@ -61,6 +61,10 @@ be one line.
 | <img src="docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard workflow workbench" width="1440" height="900" loading="lazy"> |
 | Default, custom, and free modes share one inspectable orchestration model. |
 
+Host Plan lists all 12 supported hosts and provides read-only setup/update
+commands, ordered steps, and notices. It copies but never executes a command;
+project adapters use `--target .`, so enter the intended project first.
+
 [Read the complete Dashboard guide →](docs/usage/dashboard-and-local-api.md)
 
 ## Install

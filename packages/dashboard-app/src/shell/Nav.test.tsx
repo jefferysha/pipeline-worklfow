@@ -28,9 +28,9 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   return props
 }
 
-// 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（四枚 lucide 图标 + 小字）。
+// 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（lucide 图标 + 小字）。
 // 项目页承担自动发现与选择；rail 不重复展示当前项目名或项目切换器。
-describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 / 机器）', () => {
+describe('Nav 一级导航（rail 六视图：项目 / 进度 / AFK / 工作台 / 机器 / 宿主计划）', () => {
   it('声明桌面 rail → 移动底栏的自适应外壳，并始终保留可见短标签', () => {
     renderNav()
     const shell = screen.getByTestId('app-navigation')
@@ -48,7 +48,7 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     }
   })
 
-  it('品牌是独立的可访问 Overview 入口，不计入五个运营导航项', () => {
+  it('品牌是独立的可访问 Overview 入口，不计入六个运营导航项', () => {
     const props = renderNav()
     const brand = screen.getByRole('button', { name: 'Tenon 概览' })
     expect(brand).toHaveAttribute('data-testid', 'nav-overview')
@@ -58,10 +58,10 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     expect(brand).not.toHaveAttribute('aria-current')
     fireEvent.click(brand)
     expect(props.onView).toHaveBeenCalledWith('overview')
-    expect(within(screen.getByTestId('primary-nav')).getAllByRole('button')).toHaveLength(5)
+    expect(within(screen.getByTestId('primary-nav')).getAllByRole('button')).toHaveLength(6)
   })
 
-  it('Overview 激活时只有品牌标记 aria-current=page，五个运营项仍未选中', () => {
+  it('Overview 激活时只有品牌标记 aria-current=page，六个运营项仍未选中', () => {
     renderNav({ view: 'overview' })
     expect(screen.getByTestId('nav-overview')).toHaveAttribute('aria-current', 'page')
     for (const operational of PRIMARY_VIEWS) {
@@ -69,17 +69,27 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     }
   })
 
-  it('一级导航恰 5 个按钮，并包含机器就绪入口', () => {
+  it('一级导航恰 6 个按钮，并包含机器就绪与宿主计划入口', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(6)
     expect(nav.textContent).toContain('项目')
     expect(nav.textContent).toContain('进度')
     expect(nav.textContent).toContain('自动运行')
     expect(nav.textContent).toContain('工作台')
     expect(nav.textContent).toContain('机器')
+    expect(nav.textContent).toContain('宿主计划')
     expect(nav.textContent).not.toContain('收件箱')
+  })
+
+  it('宿主计划是机器级一级入口，点击后进入 hostPlan', () => {
+    const props = renderNav()
+    const nav = screen.getByTestId('primary-nav')
+    expect(within(nav).getAllByRole('button')).toHaveLength(6)
+    const hostPlan = screen.getByRole('button', { name: '宿主计划' })
+    fireEvent.click(hostPlan)
+    expect(props.onView).toHaveBeenCalledWith('hostPlan')
   })
 
   it('「项目」是 rail 首枚入口：nav-projects 渲染，点击触发 onView(projects)', () => {
