@@ -79,6 +79,7 @@ function renderView(over: Partial<Parameters<typeof HostTargetPlanView>[0]> = {}
 afterEach(() => {
   vi.restoreAllMocks()
   localStorage.clear()
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
 })
 
 describe('HostTargetPlanView', () => {
@@ -136,7 +137,7 @@ describe('HostTargetPlanView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
     expect(screen.getByRole('status')).toHaveTextContent('正在加载 Codex 的 Setup 计划')
-    expect(loadPlan).toHaveBeenCalledWith('codex', 'setup')
+    expect(loadPlan).toHaveBeenCalledWith('codex', 'setup', expect.any(AbortSignal))
 
     resolvePlan?.(setupPlan)
     const preview = await screen.findByTestId('host-plan-preview')
@@ -166,19 +167,49 @@ describe('HostTargetPlanView', () => {
     fireEvent.click(await screen.findByRole('button', { name: '选择 Cursor' }))
 
     expect(screen.getByTestId('host-plan-workspace').className).toContain(
-      'min-[769px]:grid-cols-[minmax(240px,0.78fr)_minmax(0,1.22fr)]',
+      'min-[900px]:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]',
     )
-    expect(screen.getByTestId('host-target-grid').className).toContain(
-      'order-2 min-[769px]:order-1',
-    )
-    expect(screen.getByTestId('host-plan-detail').className).toContain(
-      'order-1 min-[769px]:order-2',
-    )
+    expect(screen.getByTestId('host-target-grid').className).not.toContain('order-')
+    expect(screen.getByTestId('host-plan-detail').className).not.toContain('order-')
     const selectedCard = screen.getByRole('heading', { name: 'Cursor' }).closest('article')
     expect(selectedCard?.className).not.toContain('col-span-full')
     expect(within(screen.getByTestId('host-plan-detail')).getByRole('region', {
       name: 'Cursor 操作',
     })).toBeInTheDocument()
+  })
+
+  it('keeps mobile DOM and visual order aligned, preserves the selected host name, and focuses its detail', async () => {
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      media: '(max-width: 899px)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
+    const scrollIntoView = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadPlan: vi.fn().mockResolvedValue(setupPlan),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择 Cursor' }))
+
+    const selected = screen.getByRole('button', { name: 'Cursor，已选择' })
+    const grid = screen.getByTestId('host-target-grid')
+    const detail = screen.getByTestId('host-plan-detail')
+    expect(grid.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(detail).toHaveAttribute('tabindex', '-1')
+    expect(detail).toHaveFocus()
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('shows a plan error and retries the exact selected operation', async () => {
@@ -198,7 +229,7 @@ describe('HostTargetPlanView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重试 Setup 计划' }))
     expect(await screen.findByTestId('host-plan-preview')).toHaveTextContent('tenon setup --codex')
-    expect(loadPlan).toHaveBeenNthCalledWith(2, 'codex', 'setup')
+    expect(loadPlan).toHaveBeenNthCalledWith(2, 'codex', 'setup', expect.any(AbortSignal))
   })
 
   it('copies only the previewed command and announces success', async () => {
@@ -268,6 +299,47 @@ describe('HostTargetPlanView', () => {
       expect(screen.queryByTestId('host-plan-preview')).toBeNull()
       expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
     })
+  })
+
+  it('aborts the active plan request when the user switches targets', async () => {
+    let planSignal: AbortSignal | undefined
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadPlan: vi.fn((
+        _host: string,
+        _operation: 'setup' | 'update',
+        signal?: AbortSignal,
+      ) => {
+        planSignal = signal
+        return new Promise<HostTargetPlan>(() => undefined)
+      }),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择 Cursor' }))
+
+    expect(planSignal).toBeInstanceOf(AbortSignal)
+    expect(planSignal?.aborted).toBe(true)
+  })
+
+  it('aborts the active catalog request when the view unmounts', async () => {
+    let catalogSignal: AbortSignal | undefined
+    const loadTargets = vi.fn((signal?: AbortSignal) => {
+      catalogSignal = signal
+      return new Promise<HostTargetCatalog>(() => undefined)
+    })
+    const rendered = render(
+      <I18nProvider>
+        <HostTargetPlanView loadTargets={loadTargets} />
+      </I18nProvider>,
+    )
+
+    await waitFor(() => expect(loadTargets).toHaveBeenCalledTimes(1))
+    rendered.unmount()
+
+    expect(catalogSignal).toBeInstanceOf(AbortSignal)
+    expect(catalogSignal?.aborted).toBe(true)
   })
 
   it('renders the complete fixed UI in English without leaking Chinese copy', async () => {

@@ -198,7 +198,7 @@ export const zh: Dict = {
     catalog_retry: '重试宿主目录',
     awaiting_host: '请选择一个宿主目标以查看可用操作。',
     select: '选择 {host}',
-    selected: '已选择',
+    selected: '{host}，已选择',
     kind: { native: '原生', adapter: '适配器' },
     scope: { user: '用户范围', project: '项目范围' },
     capability: {
@@ -1612,7 +1612,7 @@ export const en: Dict = {
     catalog_retry: 'Retry host targets',
     awaiting_host: 'Choose a host target to see its available operations.',
     select: 'Select {host}',
-    selected: 'Selected',
+    selected: '{host}, selected',
     kind: { native: 'Native', adapter: 'Adapter' },
     scope: { user: 'User scope', project: 'Project scope' },
     capability: {

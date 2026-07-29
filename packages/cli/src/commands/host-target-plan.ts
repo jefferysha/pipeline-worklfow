@@ -217,11 +217,11 @@ export function cmdHostTargetPlan(
     return 1
   }
   if (!isPipelineHost(opts.host)) {
-    deps.io.err(`ERROR: 未知宿主: ${opts.host}；仅支持 ${TENON_HOSTS.join(', ')}。`)
+    deps.io.err(`ERROR: 未知宿主；仅支持 ${TENON_HOSTS.join(', ')}。`)
     return 1
   }
   if (!isHostTargetOperation(opts.operation)) {
-    deps.io.err(`ERROR: 未知操作: ${opts.operation}；仅支持 setup, update。`)
+    deps.io.err('ERROR: 未知操作；仅支持 setup, update。')
     return 1
   }
   deps.io.out(JSON.stringify(createHostTargetPlan(opts.host, opts.operation)))

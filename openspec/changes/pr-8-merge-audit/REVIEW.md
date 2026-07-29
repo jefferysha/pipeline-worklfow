@@ -27,10 +27,12 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
 - Severity: Medium.
 - Evidence: at 390 px, selecting a host left the detail after all twelve target
   cards, so the result was not visible at the interaction point.
-- Fix: order the detail before the catalog below 769 px and scroll the selected
-  detail into view while preserving desktop position.
-- Regression: component tests assert responsive ordering and the mobile
-  selection scroll path.
+- Fix: preserve the catalog-before-detail DOM order, switch to one column below
+  900 px, and scroll then focus the selected detail. This keeps visual and
+  keyboard order aligned while making the result immediately reachable.
+- Regression: component tests assert DOM ordering, responsive classes, detail
+  focus, and the mobile selection scroll path. Real browser checks confirm that
+  the next Tab after selection reaches Setup instead of the following host.
 
 ### Round 3 — production asset transfer was unnecessarily large
 
@@ -41,7 +43,7 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
   `Vary: Accept-Encoding`, honor `gzip;q=0`, and cache the bounded set of
   generated asset encodings.
 - Regression: real `node:http` tests cover gzip and identity responses. The
-  final production transfer is 259,260 bytes for the same JavaScript asset.
+  final 851,461-byte JavaScript asset transfers as 257,887 bytes with gzip.
 
 ### Round 4 — Dashboard tests emitted asynchronous-render warnings
 
@@ -52,7 +54,7 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
 - Fix: drive asynchronous interactions and microtask settlement inside `act`,
   keep unrelated registry requests pending in projection-only tests, and skip
   animation dispatch when the scoped stage list is empty.
-- Regression: all 1,094 Dashboard tests pass with no React or GSAP warnings.
+- Regression: all 1,098 Dashboard tests pass with no React or GSAP warnings.
 
 ### Round 5 — adapter command was not safe to paste
 
@@ -66,12 +68,56 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
 - Regression: the complete 12-host by 2-operation truth table is covered, and
   every adapter plan returned by the production API uses `--target .`.
 
+### Round 6 — invalid CLI input reflected terminal controls and secrets
+
+- Severity: Medium.
+- Evidence: invalid host and operation values were interpolated into error
+  output, allowing newlines, ANSI controls, or secret-like input to be echoed.
+- Fix: return stable allow-list errors that never include the rejected value.
+- Regression: hostile-input tests and real CLI black-box checks confirm no
+  attacker-controlled text or fake secret is present in stderr.
+
+### Round 7 — Host validation happened after protected routes
+
+- Severity: High.
+- Evidence: `/`, `/index.html`, and `/api/cadence/status` were reachable before
+  the local Host guard; the HTML response could include the injected bearer
+  bootstrap token.
+- Fix: keep only immutable assets and `/api/health` before the guard. All HTML
+  and state-bearing API routes now require an accepted Host header.
+- Regression: real server tests and production HTTP checks return 403 for all
+  three protected routes under `Host: evil.example.com`.
+
+### Round 8 — stale plan requests were ignored but not cancelled
+
+- Severity: Medium.
+- Evidence: sequence checks suppressed stale rendering, but host switches,
+  retries, and unmounts left obsolete requests running.
+- Fix: carry `AbortSignal` through the API client and abort the exact active
+  request on host switch, retry, and unmount while retaining sequence guards.
+- Regression: client and component tests cover signal forwarding, host-switch
+  cancellation, and unmount cancellation.
+
+### Round 9 — selected target name and responsive reading order
+
+- Severity: Medium, with one Low density finding.
+- Evidence: the selected control exposed only the generic accessible name
+  "已选择"; responsive CSS also placed detail before the catalog visually while
+  leaving the opposite DOM order, and the 769 px two-column view was crowded.
+- Fix: expose target-specific selected names in both locales, remove CSS
+  reordering, focus the detail after selection, and move the two-column
+  breakpoint to 900 px.
+- Regression: tests assert `Cursor，已选择` / `Cursor, selected`, DOM and focus
+  order, and the breakpoint. The exact production asset was rechecked at
+  390/769/900/1024/1440 px in Chinese and English, light and dark themes.
+
 ## Final visual and interaction matrix
 
 - 1440 px and 1024 px desktop: light and dark theme; stable master-detail
   layout; no horizontal overflow.
-- 769 px boundary: two columns remain usable without overflow.
-- 768 px and 390 px: single-column layout; detail is reachable at selection;
+- 900 px boundary: two columns remain usable without overflow.
+- 769 px, 768 px, and 390 px: single-column layout; detail is focused at
+  selection and the next Tab reaches Setup;
   no horizontal overflow.
 - Chinese and English copy: host, operation, steps, notices, loading, empty,
   error, retry, and copy feedback remain readable.
@@ -83,7 +129,9 @@ The Dashboard review used `frontend-design`, `web-design-guidelines`, and
 
 ## Final disposition
 
-Critical: 0. High: 0. Medium: 0. All findings discovered in this review were
-fixed and rechecked. The Vite informational warning refers to the uncompressed
-aggregate chunk; the production server now transfers the immutable JavaScript
-asset as a 259,260-byte gzip response and the real browser path was accepted.
+Critical: 0. High: 0. Medium: 0. Low: 0. All findings discovered in this review
+were fixed and rechecked locally; the final independent incremental re-review
+and exact-head CI remain required before Build may complete. The Vite
+informational warning refers to the uncompressed aggregate chunk; the
+production server transfers the immutable JavaScript asset as a 257,887-byte
+gzip response and the exact production browser path was accepted.

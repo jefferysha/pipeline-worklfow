@@ -46124,11 +46124,11 @@ function cmdHostTargetPlan(deps, opts) {
     return 1;
   }
   if (!isPipelineHost(opts.host)) {
-    deps.io.err(`ERROR: \u672A\u77E5\u5BBF\u4E3B: ${opts.host}\uFF1B\u4EC5\u652F\u6301 ${TENON_HOSTS.join(", ")}\u3002`);
+    deps.io.err(`ERROR: \u672A\u77E5\u5BBF\u4E3B\uFF1B\u4EC5\u652F\u6301 ${TENON_HOSTS.join(", ")}\u3002`);
     return 1;
   }
   if (!isHostTargetOperation(opts.operation)) {
-    deps.io.err(`ERROR: \u672A\u77E5\u64CD\u4F5C: ${opts.operation}\uFF1B\u4EC5\u652F\u6301 setup, update\u3002`);
+    deps.io.err("ERROR: \u672A\u77E5\u64CD\u4F5C\uFF1B\u4EC5\u652F\u6301 setup, update\u3002");
     return 1;
   }
   deps.io.out(JSON.stringify(createHostTargetPlan(opts.host, opts.operation)));

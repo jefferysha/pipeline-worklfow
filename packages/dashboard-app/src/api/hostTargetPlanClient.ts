@@ -55,10 +55,14 @@ async function getJson(
     HostTargetPlanErrorCode,
     'HOST_TARGET_CATALOG_RESPONSE_INVALID' | 'HOST_TARGET_PLAN_RESPONSE_INVALID'
   >,
+  signal?: AbortSignal,
 ): Promise<{ response: Response; value: unknown }> {
   let response: Response
   try {
-    response = await fetch(path, { headers: { Accept: 'application/json' } })
+    response = await fetch(path, {
+      headers: { Accept: 'application/json' },
+      ...(signal === undefined ? {} : { signal }),
+    })
   } catch {
     throw new HostTargetPlanClientError('network', 'HOST_TARGET_NETWORK_ERROR')
   }
@@ -78,10 +82,11 @@ async function getJson(
   }
 }
 
-export async function fetchHostTargets(): Promise<HostTargetCatalog> {
+export async function fetchHostTargets(signal?: AbortSignal): Promise<HostTargetCatalog> {
   const { response, value } = await getJson(
     '/api/host-targets',
     'HOST_TARGET_CATALOG_RESPONSE_INVALID',
+    signal,
   )
   const catalog = decodeHostTargetCatalog(value)
   if (!catalog) {
@@ -97,11 +102,13 @@ export async function fetchHostTargets(): Promise<HostTargetCatalog> {
 export async function fetchHostTargetPlan(
   host: HostId,
   operation: HostOperation,
+  signal?: AbortSignal,
 ): Promise<HostTargetPlan> {
   const params = new URLSearchParams({ host, operation })
   const { response, value } = await getJson(
     `/api/host-target-plan?${params}`,
     'HOST_TARGET_PLAN_RESPONSE_INVALID',
+    signal,
   )
   const plan = decodeHostTargetPlan(value)
   if (!plan) {

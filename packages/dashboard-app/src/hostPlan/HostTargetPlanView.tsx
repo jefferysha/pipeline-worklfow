@@ -18,8 +18,12 @@ import {
 } from './HostOperationPlanPanel'
 
 interface HostTargetPlanViewProps {
-  loadTargets?: () => Promise<HostTargetCatalog>
-  loadPlan?: (host: HostId, operation: HostOperation) => Promise<HostTargetPlan>
+  loadTargets?: (signal: AbortSignal) => Promise<HostTargetCatalog>
+  loadPlan?: (
+    host: HostId,
+    operation: HostOperation,
+    signal: AbortSignal,
+  ) => Promise<HostTargetPlan>
   copyText?: (text: string) => Promise<void>
 }
 
@@ -83,16 +87,20 @@ export function HostTargetPlanView({
   const [selectedOperation, setSelectedOperation] = useState<HostOperation | null>(null)
   const [planState, setPlanState] = useState<HostPlanRequestState>({ status: 'idle' })
   const requestSequence = useRef(0)
+  const requestController = useRef<AbortController | null>(null)
   const detailRef = useRef<HTMLDivElement>(null)
 
   const refreshCatalog = useCallback(() => {
+    requestController.current?.abort()
+    const controller = new AbortController()
+    requestController.current = controller
     const sequence = requestSequence.current + 1
     requestSequence.current = sequence
     setSelectedHost(null)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
     setCatalogState({ status: 'loading' })
-    void loadTargets().then(
+    void loadTargets(controller.signal).then(
       (catalog) => {
         if (requestSequence.current === sequence) setCatalogState({ status: 'ready', catalog })
       },
@@ -104,32 +112,44 @@ export function HostTargetPlanView({
           })
         }
       },
-    )
+    ).finally(() => {
+      if (requestController.current === controller) requestController.current = null
+    })
   }, [loadTargets])
 
   useEffect(() => {
     refreshCatalog()
     return () => {
+      requestController.current?.abort()
+      requestController.current = null
       requestSequence.current += 1
     }
   }, [refreshCatalog])
 
   const selectHost = (host: HostId): void => {
+    requestController.current?.abort()
+    requestController.current = null
     requestSequence.current += 1
     setSelectedHost(host)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
-    if (window.matchMedia?.('(max-width: 768px)').matches) {
-      requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'start' }))
+    if (window.matchMedia?.('(max-width: 899px)').matches) {
+      requestAnimationFrame(() => {
+        detailRef.current?.scrollIntoView({ block: 'start' })
+        detailRef.current?.focus({ preventScroll: true })
+      })
     }
   }
 
   const requestPlan = (host: HostId, operation: HostOperation): void => {
+    requestController.current?.abort()
+    const controller = new AbortController()
+    requestController.current = controller
     const sequence = requestSequence.current + 1
     requestSequence.current = sequence
     setSelectedOperation(operation)
     setPlanState({ status: 'loading' })
-    void loadPlan(host, operation).then(
+    void loadPlan(host, operation, controller.signal).then(
       (plan) => {
         if (requestSequence.current === sequence) setPlanState({ status: 'ready', plan })
       },
@@ -141,7 +161,9 @@ export function HostTargetPlanView({
           })
         }
       },
-    )
+    ).finally(() => {
+      if (requestController.current === controller) requestController.current = null
+    })
   }
   const selectedTarget = catalogState.status === 'ready'
     ? catalogState.catalog.targets.find((target) => target.id === selectedHost) ?? null
@@ -187,11 +209,11 @@ export function HostTargetPlanView({
         </div>
       ) : (
         <div
-          className="mt-8 grid items-start gap-5 min-[769px]:grid-cols-[minmax(240px,0.78fr)_minmax(0,1.22fr)]"
+          className="mt-8 grid items-start gap-5 min-[900px]:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]"
           data-testid="host-plan-workspace"
         >
           <div
-            className="grid min-w-0 gap-3 order-2 min-[769px]:order-1 min-[520px]:grid-cols-2 min-[769px]:max-h-[calc(100vh-8rem)] min-[769px]:grid-cols-1 min-[769px]:overflow-y-auto min-[769px]:pr-2 min-[769px]:[scrollbar-gutter:stable]"
+            className="grid min-w-0 gap-3 min-[520px]:grid-cols-2 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:grid-cols-1 min-[900px]:overflow-y-auto min-[900px]:pr-2 min-[900px]:[scrollbar-gutter:stable]"
             data-testid="host-target-grid"
           >
             {catalogState.catalog.targets.map((target) => {
@@ -233,7 +255,9 @@ export function HostTargetPlanView({
                     className="mt-4 w-full rounded-lg border border-border-2 bg-bg px-3.5 py-2 text-sm font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent)"
                     onClick={() => selectHost(target.id)}
                   >
-                    {selected ? t('hostPlan.selected') : t('hostPlan.select', { host: name })}
+                    {selected
+                      ? t('hostPlan.selected', { host: name })
+                      : t('hostPlan.select', { host: name })}
                   </button>
                 </article>
               )
@@ -241,8 +265,9 @@ export function HostTargetPlanView({
           </div>
           <div
             ref={detailRef}
-            className="min-w-0 scroll-mt-16 order-1 min-[769px]:order-2 min-[769px]:sticky min-[769px]:top-5"
+            className="min-w-0 scroll-mt-16 outline-none min-[900px]:sticky min-[900px]:top-5"
             data-testid="host-plan-detail"
+            tabIndex={-1}
           >
             {selectedTarget === null ? (
               <div

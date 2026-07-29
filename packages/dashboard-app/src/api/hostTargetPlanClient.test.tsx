@@ -282,6 +282,20 @@ describe('host target plan read-only client', () => {
     })
   })
 
+  it('forwards an AbortSignal through the shared read-only fetch boundary', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(catalog), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchHostTargets(controller.signal)).resolves.toEqual(catalog)
+    expect(fetchMock).toHaveBeenCalledWith('/api/host-targets', {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+  })
+
   it('preserves only a recognized stable HTTP code and status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({

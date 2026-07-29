@@ -19583,21 +19583,6 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     errMsg: errMsg2
   } = deps;
   const boundPort = deps.boundPort();
-  if (path7 === "/api/cadence/status") {
-    if (cadenceScheduler === null) {
-      return sendJson(res, 404, { ok: false, error: "cadence scheduler \u672A\u542F\u7528\uFF08capabilities.cadence=false\uFF09" });
-    }
-    const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root");
-    const status = cadenceScheduler.snapshot();
-    return sendJson(res, 200, root === null ? status : {
-      ...status,
-      loops: status.loops.filter((row) => row.root === resolvePath4(root))
-    });
-  }
-  if (path7 === "/" || path7 === "/index.html") {
-    if (serveIndexWithToken(res)) return;
-    return sendHtml(res, 200, indexHtml2(token));
-  }
   if (serveAsset(req, res, path7)) return;
   if (path7 === "/api/health") {
     return sendJson(res, 200, {
@@ -19612,6 +19597,21 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   }
   if (!isLocalHost2(req.headers.host, boundPort)) {
     return sendJson(res, 403, { ok: false, error: "Host header \u4E0D\u5408\u6CD5\uFF08\u7591\u4F3C DNS \u91CD\u7ED1\u5B9A\u653B\u51FB\uFF09" });
+  }
+  if (path7 === "/api/cadence/status") {
+    if (cadenceScheduler === null) {
+      return sendJson(res, 404, { ok: false, error: "cadence scheduler \u672A\u542F\u7528\uFF08capabilities.cadence=false\uFF09" });
+    }
+    const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root");
+    const status = cadenceScheduler.snapshot();
+    return sendJson(res, 200, root === null ? status : {
+      ...status,
+      loops: status.loops.filter((row) => row.root === resolvePath4(root))
+    });
+  }
+  if (path7 === "/" || path7 === "/index.html") {
+    if (serveIndexWithToken(res)) return;
+    return sendHtml(res, 200, indexHtml2(token));
   }
   if (path7 === "/api/context-bundle/preview") {
     return handleContextBundlePreview(req, res, deps);

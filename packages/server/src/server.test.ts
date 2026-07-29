@@ -5137,8 +5137,9 @@ describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
  * Bug1：此前只有 secrets/docker/readiness 三个 GET 有 isLocalHost 守卫，其余只读数据端点
  * （snapshot / afk log / change history / workflows / config / loops / traces / hooks / automation
  * / skills）全无 → evil.com DNS 重绑定到 127.0.0.1 后可被受害者浏览器同源读走全部项目路径、
- * 状态、run-log（可能含 token）、yaml。修法：handleGet 顶部统一施加 Host 守卫（landing/静态/health
- * 除外）。这里钉「非本地 Host → 403」在全部此前无守卫的端点上都成立，且本地 Host 不被误伤。
+ * 状态、run-log（可能含 token）、yaml。修法：handleGet 顶部统一施加 Host 守卫（仅无敏感内容的
+ * 静态 assets / health 探针除外）。这里钉「非本地 Host → 403」在全部此前无守卫的端点上都成立，
+ * 且本地 Host 不被误伤；注入 bearer token 的 landing page 也必须受保护。
  */
 describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐）', () => {
   const EVIL = { Host: 'evil.example.com' }
@@ -5147,6 +5148,9 @@ describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐
     const h = await startWithConfig()
     const rootQ = `root=${encodeURIComponent(h.root)}`
     const paths = [
+      '/',
+      '/index.html',
+      '/api/cadence/status',
       '/api/snapshot',
       '/api/afk/snapshot',
       '/api/afk/log',

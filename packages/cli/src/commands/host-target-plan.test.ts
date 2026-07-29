@@ -154,6 +154,36 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     expect(deps.store.cas.calls).toHaveLength(0)
   })
 
+  test('非法 host/operation 的稳定错误不回显控制符或原始敏感输入', () => {
+    const hostDeps = makeDeps()
+    const operationDeps = makeDeps()
+    const hostileHost = 'evil\nTOKEN=topsecret\u001b[31m'
+    const hostileOperation = 'remove\rSECRET=classified\u001b[2J'
+
+    expect(cmdHostTargetPlan(hostDeps, {
+      host: hostileHost,
+      operation: 'setup',
+      json: true,
+    })).toBe(1)
+    expect(cmdHostTargetPlan(operationDeps, {
+      host: 'codex',
+      operation: hostileOperation,
+      json: true,
+    })).toBe(1)
+
+    expect(hostDeps.errLines).toEqual([
+      `ERROR: 未知宿主；仅支持 ${TENON_HOSTS.join(', ')}。`,
+    ])
+    expect(operationDeps.errLines).toEqual([
+      'ERROR: 未知操作；仅支持 setup, update。',
+    ])
+    for (const output of [...hostDeps.errLines, ...operationDeps.errLines]) {
+      expect(output).not.toMatch(/TOKEN|SECRET|topsecret|classified|\r|\n|\u001b/)
+    }
+    expect(hostDeps.outLines).toEqual([])
+    expect(operationDeps.outLines).toEqual([])
+  })
+
   test('每个白名单宿主的 setup/update 都生成确定性、非空且 zero-side-effect 的计划', () => {
     for (const host of TENON_HOSTS) {
       for (const operation of ['setup', 'update'] as const) {
