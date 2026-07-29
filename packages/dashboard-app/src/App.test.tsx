@@ -24,6 +24,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/?root=%2Frepo')
   try {
     delete document.documentElement.dataset.theme
+    delete document.documentElement.dataset.themePreference
   } catch {
     /* ignore */
   }
@@ -462,11 +463,43 @@ describe('App 深浅色自适应 + i18n', () => {
   it('主题切换在 <html data-theme> 落值', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
-    // 初始应用主题（默认 light）
+    // 初始偏好为 system；jsdom 无 matchMedia 时解析为 light。
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
     fireEvent.click(screen.getByTestId('nav-settings'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(document.documentElement.dataset.themePreference).toBe('light')
+    fireEvent.click(screen.getByTestId('theme-toggle'))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
+  })
+
+  it('系统主题作为显式偏好跟随电脑端系统配色，并清理媒体监听', async () => {
+    let dark = true
+    const listeners = new Set<() => void>()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      get matches() { return dark },
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+    localStorage.setItem('tenon-dashboard-theme', 'system')
+
+    const view = render(<App />)
+    await screen.findByTestId('progress-view')
+    await waitFor(() => {
+      expect(document.documentElement.dataset.themePreference).toBe('system')
+      expect(document.documentElement.dataset.theme).toBe('dark')
+    })
+
+    dark = false
+    act(() => listeners.forEach((listener) => listener()))
+    expect(document.documentElement.dataset.theme).toBe('light')
+
+    view.unmount()
+    expect(listeners.size).toBe(0)
   })
 
   it('语言切换 zh→en：一级导航文案真更新', async () => {

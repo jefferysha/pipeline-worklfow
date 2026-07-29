@@ -43,8 +43,9 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
       <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-text" data-testid={testid}>{cmd}</code>
       <button
         type="button"
-        className="inline-flex flex-none cursor-pointer items-center gap-1 whitespace-nowrap text-[11px] font-bold text-accent-d hover:text-(--accent)"
+        className="inline-flex min-h-6 flex-none cursor-pointer items-center gap-1 rounded-md px-2 whitespace-nowrap text-[11px] font-bold text-accent-d transition-colors motion-reduce:transition-none hover:text-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
         data-testid={copyTestid}
+        aria-label={t('onboard.copy_command', { command: cmd })}
         onClick={copy}
       >
         {copied ? <Check size={12} strokeWidth={1.75} aria-hidden="true" /> : <Icon name="copy" size={12} />}
@@ -77,11 +78,11 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
     return (
       <div className={`${EMPTY_CLS} max-w-[460px]`} data-testid="onboard-no-change">
         <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="flow" size={20} /></div>
-        <h2 className={EMPTY_TITLE_CLS}>{t('onboard.no_change_title')}</h2>
+        <h1 className={EMPTY_TITLE_CLS}>{t('onboard.no_change_title')}</h1>
         <p className={EMPTY_DESC_CLS}>{t('onboard.no_change_desc')}</p>
         <button
           type="button"
-          className="mb-4 inline-flex items-center justify-center rounded-lg bg-btn-bg px-4 py-2 text-xs font-bold text-btn-fg hover:bg-btn-hover"
+          className="mb-4 inline-flex items-center justify-center rounded-lg bg-btn-bg px-4 py-2 text-xs font-bold text-btn-fg transition-colors motion-reduce:transition-none hover:bg-btn-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
           data-testid="onboard-new-change"
           onClick={() => setCreateOpen(true)}
         >
@@ -106,7 +107,7 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
   return (
     <div className={`${EMPTY_CLS} max-w-[620px]`} data-testid="onboard-no-project">
       <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="folder" size={20} /></div>
-      <h2 className={EMPTY_TITLE_CLS}>{t('onboard.no_project_title')}</h2>
+      <h1 className={EMPTY_TITLE_CLS}>{t('onboard.no_project_title')}</h1>
       <p className={EMPTY_DESC_CLS}>{t('onboard.no_project_desc')}</p>
       <ol className="mt-1 flex list-none flex-col gap-3.5 p-0 text-left">
         <li className="flex gap-3">

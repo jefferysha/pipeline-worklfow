@@ -136,18 +136,19 @@ function HealthSummary({
 
 /** 单个可达项目行（整行 button，可点钻进）。need 分区高亮 = accent 点 + 极轻 tint（无左边框）。 */
 function ProjectRowButton({
+  rowId,
   row,
   need,
   onOpen,
   t,
 }: {
+  rowId: string
   row: ProjectRow
   /** 是否归「需要你动手」分区（决定高亮）。 */
   need: boolean
   onOpen: (root: string) => void
   t: (k: string, vars?: Record<string, string | number>) => string
 }): JSX.Element {
-  const rowId = `project-row-${row.basename}`
   return (
     <button
       type="button"
@@ -155,7 +156,7 @@ function ProjectRowButton({
       data-testid={rowId}
       data-ok="true"
       data-need={need}
-      aria-label={t('projects.open_aria', { name: row.basename })}
+      aria-label={t('projects.open_aria', { name: row.basename, root: row.root })}
       onClick={() => onOpen(row.root)}
       className={`group grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-[border-color,background-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) active:scale-[.995] motion-reduce:transform-none sm:flex sm:flex-nowrap sm:gap-4 sm:px-5 ${
         need ? 'border-accent-b bg-accent-t hover:border-(--accent)' : 'border-border bg-card hover:border-border-2 hover:bg-fill'
@@ -165,11 +166,13 @@ function ProjectRowButton({
         aria-hidden="true"
         className={`col-start-1 row-start-1 h-2 w-2 flex-none rounded-full ${need ? 'bg-(--accent)' : 'border border-border-2 bg-transparent'}`}
       />
-      <span
-        className="col-start-2 row-start-1 min-w-0 truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent) sm:min-w-[190px] sm:flex-none"
-        title={row.root}
-      >
-        {row.basename}
+      <span className="col-start-2 row-start-1 flex min-w-0 flex-col sm:w-[240px] sm:flex-none">
+        <span className="truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent)">
+          {row.basename}
+        </span>
+        <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
+          {row.root}
+        </span>
       </span>
       <MiniTrack rowId={rowId} cells={row.cells} t={t} />
       <HealthSummary rowId={rowId} wip={row.wip} need={row.need} running={row.running} t={t} />
@@ -201,6 +204,15 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   const [unreachableOpen, setUnreachableOpen] = useState(false)
 
   const rows = useMemo(() => buildProjectRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
+  const duplicateBasenames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of rows) counts.set(row.basename, (counts.get(row.basename) ?? 0) + 1)
+    return new Set([...counts].filter(([, count]) => count > 1).map(([basename]) => basename))
+  }, [rows])
+  const rowId = (row: ProjectRow) =>
+    duplicateBasenames.has(row.basename)
+      ? `project-row-${row.basename}-${encodeURIComponent(row.root)}`
+      : `project-row-${row.basename}`
   const { needRows, restRows, unreachable, needCount } = useMemo(() => {
     const reachable = rows.filter((r) => r.ok)
     const need = reachable.filter((r) => r.need > 0).sort(compareProjectRows)
@@ -210,7 +222,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   }, [rows])
 
   // 入场动画依赖键 = 行/分区成员指纹（增删项目才重放 stagger；展开读不到区不整列重播）。
-  const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.basename}`).sort().join('|')
+  const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.root}`).sort().join('|')
   useGSAP(
     () => {
       const el = rootRef.current
@@ -253,7 +265,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_need')} tone="need" />
               <div className="flex flex-col gap-2.5">
                 {needRows.map((row) => (
-                  <ProjectRowButton key={row.root} row={row} need onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton key={row.root} rowId={rowId(row)} row={row} need onOpen={onOpenProject} t={t} />
                 ))}
               </div>
             </div>
@@ -264,7 +276,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_rest')} tone="quiet" />
               <div className="flex flex-col gap-2.5">
                 {restRows.map((row) => (
-                  <ProjectRowButton key={row.root} row={row} need={false} onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton key={row.root} rowId={rowId(row)} row={row} need={false} onOpen={onOpenProject} t={t} />
                 ))}
               </div>
             </div>
@@ -289,11 +301,11 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               {unreachableOpen && (
                 <div className="mt-2 flex flex-col gap-1">
                   {unreachable.map((row) => {
-                    const rowId = `project-row-${row.basename}`
+                    const id = rowId(row)
                     return (
                       <div
                         key={row.root}
-                        data-testid={rowId}
+                        data-testid={id}
                         data-ok="false"
                         aria-disabled="true"
                         className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5 opacity-70"
@@ -302,8 +314,11 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
                           aria-hidden="true"
                           className="h-2 w-2 flex-none rounded-full border border-border-2 bg-transparent"
                         />
-                        <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-text-3" title={row.root}>
-                          {row.basename}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate font-mono text-[14px] text-text-3">{row.basename}</span>
+                          <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
+                            {row.root}
+                          </span>
                         </span>
                         <span className="flex-none text-[12px] font-semibold text-text-3">{t('projects.unreachable')}</span>
                       </div>

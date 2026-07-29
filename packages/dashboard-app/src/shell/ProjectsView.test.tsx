@@ -57,6 +57,28 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     expect(within(row).getByTitle('/code/repo-a')).toBeInTheDocument()
   })
 
+  it('同 basename 的电脑端 worktree 显示并朗读唯一 root，且行标识不冲突', () => {
+    const firstRoot = '/Users/me/.codex/worktrees/alpha/pipeline-worklfow'
+    const secondRoot = '/Users/me/.codex/worktrees/beta/pipeline-worklfow'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstRoot, [makeChange('alpha-change', 'build')]),
+        makeProject(secondRoot, [makeChange('beta-change', 'build')]),
+      ]),
+      rulesByKey: rulesFor(firstRoot, secondRoot),
+    })
+
+    const first = screen.getByRole('button', {
+      name: `打开项目 pipeline-worklfow（${firstRoot}）的进度`,
+    })
+    const second = screen.getByRole('button', {
+      name: `打开项目 pipeline-worklfow（${secondRoot}）的进度`,
+    })
+    expect(within(first).getByText(firstRoot)).toBeInTheDocument()
+    expect(within(second).getByText(secondRoot)).toBeInTheDocument()
+    expect(first.dataset.testid).not.toBe(second.dataset.testid)
+  })
+
   it('顶部摘要 count_summary：{n} 个项目 · {need} 个需你动手（repo-a 需动手、repo-b 不需 → 2 项/1 需）', () => {
     renderView()
     const summary = screen.getByTestId('projects-summary')
@@ -78,14 +100,15 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     expect(within(row).getByTestId('project-row-repo-a-stat-running')).toHaveAttribute('data-value', '1')
   })
 
-  it('移动端项目行使用收缩安全的三列网格，摘要换行且桌面恢复单行布局', () => {
+  it('电脑端项目行保留稳定的身份列、完整路径提示与单行摘要', () => {
     renderView()
     const row = screen.getByTestId('project-row-repo-a')
     const name = within(row).getByTitle('/code/repo-a')
     const summary = within(row).getByTestId('project-row-repo-a-summary')
 
-    expect(row).toHaveClass('min-w-0', 'grid', 'grid-cols-[auto_minmax(0,1fr)_auto]', 'sm:flex')
-    expect(name).toHaveClass('min-w-0', 'truncate', 'sm:min-w-[190px]')
+    expect(row).toHaveClass('sm:flex', 'sm:flex-nowrap')
+    expect(name).toHaveClass('truncate', 'font-mono')
+    expect(name.parentElement).toHaveClass('sm:w-[240px]', 'sm:flex-none')
     expect(summary).toHaveClass('min-w-0', 'flex-wrap', 'sm:flex-nowrap')
   })
 
