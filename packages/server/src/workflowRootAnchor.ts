@@ -7,7 +7,7 @@ import {
   realpathSync,
   type Stats,
 } from 'node:fs'
-import { join, resolve as resolvePath } from 'node:path'
+import { resolve as resolvePath, sep } from 'node:path'
 
 export interface FileIdentity {
   readonly dev: number
@@ -46,9 +46,18 @@ export function traversableDirectoryFdPath(fd: number, expected: FileIdentity): 
   const candidates = process.platform === 'linux'
     ? [`/proc/self/fd/${fd}`, `/dev/fd/${fd}`]
     : [`/dev/fd/${fd}`, `/proc/self/fd/${fd}`]
+  return traversableDirectoryFdPathFromCandidates(expected, candidates)
+}
+
+export function traversableDirectoryFdPathFromCandidates(
+  expected: FileIdentity,
+  candidates: readonly string[],
+): string | undefined {
   for (const candidate of candidates) {
     try {
-      const current = lstatSync(join(candidate, '.'))
+      // Do not use path.join here: it normalizes away the trailing `/.`, causing lstat to inspect
+      // the procfs/devfs symlink itself instead of traversing it as an opened directory.
+      const current = lstatSync(`${candidate}${sep}.`)
       if (current.isDirectory() && sameIdentity(current, expected)) return candidate
     } catch {
       // Try the next platform-specific fd path.

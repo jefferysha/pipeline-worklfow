@@ -106,6 +106,26 @@ function HostWithInitialFocus() {
   )
 }
 
+/** workspace 冲突回归：关闭控件同时保留本地化标签与共享 Lucide 图标语义。 */
+function HostWorkspace() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOpen(true)}>Open workspace</button>
+      {open && (
+        <Dialog
+          closeLabel="Close evidence composer"
+          onClose={() => setOpen(false)}
+          title="Evidence composer"
+          variant="workspace"
+        >
+          Workspace content
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
 describe('Dialog（共享组件，Task 3）', () => {
   it('挂载时焦点进入对话框：默认落在容器内首个可聚焦元素；提供 initialFocusRef 时优先聚焦它', async () => {
     const user = userEvent.setup()
@@ -225,6 +245,25 @@ describe('Dialog（共享组件，Task 3）', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('焦点因子节点卸载落到 body 时，正反向 Tab 都会被顶层 Dialog 拉回困笼', async () => {
+    const user = userEvent.setup()
+    render(<Host />)
+    await user.click(screen.getByText('打开'))
+
+    const input = screen.getByTestId('dlg-input')
+    const confirmBtn = screen.getByText('确认')
+
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(confirmBtn)
+  })
+
   it('两层 Dialog 叠加：按一次 Esc 只关最上层，外层 onClose 不被调用', async () => {
     const user = userEvent.setup()
     render(<HostTwoLayers />)
@@ -238,5 +277,24 @@ describe('Dialog（共享组件，Task 3）', () => {
 
     expect(screen.queryByTestId('inner')).toBeNull()
     expect(screen.getByTestId('outer')).toBeInTheDocument()
+  })
+
+  it('workspace 关闭控件使用本地化 accessible label 与共享 Lucide X', async () => {
+    const user = userEvent.setup()
+    render(<HostWorkspace />)
+    await user.click(screen.getByText('Open workspace'))
+
+    const closeButton = screen.getByRole('button', { name: 'Close evidence composer' })
+    expect(closeButton.querySelector('svg.lucide-x')).not.toBeNull()
+  })
+
+  it('workspace 长标题在窄屏允许完整换行，不以省略号截断', async () => {
+    const user = userEvent.setup()
+    render(<HostWorkspace />)
+    await user.click(screen.getByText('Open workspace'))
+
+    const heading = screen.getByRole('heading', { name: 'Evidence composer' })
+    expect(heading).not.toHaveClass('truncate')
+    expect(heading).toHaveClass('break-words', 'whitespace-normal')
   })
 })

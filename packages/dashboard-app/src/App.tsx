@@ -6,7 +6,7 @@ import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
 import { ProgressView } from './progress/ProgressView'
 import { AfkView } from './afk/AfkView'
-import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
+import { Nav, PRIMARY_VIEWS, type ThemePreference, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
@@ -17,31 +17,26 @@ import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
 import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
+import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
-type Theme = 'light' | 'dark'
 const THEME_KEY = 'tenon-dashboard-theme'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'tenon-dashboard-view'
-// 可路由的全部视图 = rail 五项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器）。「项目」是 rail
+// 可路由的全部视图 = rail 六项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器/宿主计划）。「项目」是 rail
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
 
-function initialTheme(): Theme {
+function initialTheme(): ThemePreference {
   try {
     const stored = localStorage.getItem(THEME_KEY)
-    if (stored === 'light' || stored === 'dark') return stored
+    if (stored === 'system' || stored === 'light' || stored === 'dark') return stored
   } catch {
     /* ignore */
   }
-  try {
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
-  } catch {
-    /* ignore */
-  }
-  return 'light'
+  return 'system'
 }
 
 function initialView(): View {
@@ -71,9 +66,10 @@ function AppShell(): JSX.Element {
   const [selectedChange, setSelectedChange] = useState<string | null>(() => {
     try { return parseDashboardLocation(window.location.search).change ?? null } catch { return null }
   })
-  const [theme, setThemeState] = useState<Theme>(initialTheme)
+  const [theme, setThemeState] = useState<ThemePreference>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
   const flashRef = useRef<HTMLDivElement>(null)
+  const flashTimerRef = useRef<number | null>(null)
 
   const setView = useCallback((v: View) => {
     setViewState(v)
@@ -88,8 +84,15 @@ function AppShell(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (flash && flashRef.current) toastIn(flashRef.current)
+    if (!flash || !flashRef.current) return
+    const tween = toastIn(flashRef.current)
+    return () => {
+      tween.kill()
+    }
   }, [flash])
+  useEffect(() => () => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
+  }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
   const { currentRoot, selectProject } = useProjectSelection({
     snapshot,
@@ -105,14 +108,24 @@ function AppShell(): JSX.Element {
   const rulesByKey = useMemo(() => workflowRulesFromSnapshot(snapshot), [snapshot])
 
   useEffect(() => {
-    try {
-      document.documentElement.dataset.theme = theme
-    } catch {
-      /* ignore */
+    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : undefined
+    const applyTheme = (): void => {
+      try {
+        document.documentElement.dataset.themePreference = theme
+        document.documentElement.dataset.theme = theme === 'system' ? (media?.matches ? 'dark' : 'light') : theme
+      } catch {
+        /* ignore */
+      }
     }
+    applyTheme()
+    if (theme !== 'system' || !media) return
+    media.addEventListener?.('change', applyTheme)
+    return () => media.removeEventListener?.('change', applyTheme)
   }, [theme])
 
-  const setTheme = useCallback((next: Theme) => {
+  const setTheme = useCallback((next: ThemePreference) => {
     setThemeState(next)
     try {
       localStorage.setItem(THEME_KEY, next)
@@ -150,8 +163,12 @@ function AppShell(): JSX.Element {
   }, [view, snapshot, currentRoot, setView])
 
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
     setFlash({ kind, msg })
-    window.setTimeout(() => setFlash(null), 4000)
+    flashTimerRef.current = window.setTimeout(() => {
+      flashTimerRef.current = null
+      setFlash(null)
+    }, 4000)
   }, [])
 
   // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
@@ -186,6 +203,7 @@ function AppShell(): JSX.Element {
         <div
           className="flex items-center gap-2.5 border-b border-red-b bg-red-t px-5 py-2 text-[12.5px] font-semibold text-red-d"
           role="status"
+          aria-live="polite"
           data-testid="offline-banner"
         >
           <span className="flex-1">{t('common.offline')}</span>
@@ -206,7 +224,8 @@ function AppShell(): JSX.Element {
           className={`pointer-events-none fixed bottom-[26px] left-1/2 z-60 flex max-w-[70vw] -translate-x-1/2 items-center gap-[7px] rounded-full px-3.5 py-2 text-[12.5px] font-semibold shadow-md mobile:bottom-[calc(84px+env(safe-area-inset-bottom))] mobile:max-w-[calc(100vw-32px)] ${
             flash.kind === 'error' ? 'bg-red text-solid-fg' : 'bg-ink text-ink-fg'
           }`}
-          role="status"
+          role={flash.kind === 'error' ? 'alert' : 'status'}
+          aria-live={flash.kind === 'error' ? 'assertive' : 'polite'}
           data-tone={flash.kind}
           data-testid={`flash-${flash.kind}`}
         >
@@ -224,7 +243,7 @@ function AppShell(): JSX.Element {
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {snapshot === null && !loading && error ? (
+        {snapshot === null && !loading && error && view !== 'hostPlan' ? (
           <section
             className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d mobile:mt-4 mobile:p-5"
             role="alert"
@@ -244,7 +263,7 @@ function AppShell(): JSX.Element {
           </section>
         ) : view === 'overview' ? (
           <SolutionView />
-        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' ? (
+        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
           <Onboarding kind="no-project" />
         ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
           <Onboarding
@@ -328,6 +347,7 @@ function AppShell(): JSX.Element {
             }}
           />
         )}
+        {view === 'hostPlan' && <HostTargetPlanView />}
           </>
         )}
       </main>

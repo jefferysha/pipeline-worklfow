@@ -13,6 +13,9 @@
  *   no-pm-auto-enqueue 仅漏掉 PM spec-complete 的已声明产品演进——用于证明 oracle 的
  *            KNOWN 不是静默白名单，而是会对错误状态显式失败。
  *
+ * STUB_TRANSITION_HEAD=1 会在每次写回时附加一个合法形状的 canonical head anchor，
+ * 用于钉住 oracle 只忽略该精确内部元数据行、仍逐字比较业务字段的兼容白名单。
+ *
  * 老内核实测口径（2026-07-06，见 T6 报告）：
  *   init  stdout 空、exit 0 ；get 缺失字段 → 空行 + exit 0 ；set 成功 stdout 空
  *   transition 成功 stdout 空（消息在 stderr）、非法/未知事件 exit 1
@@ -43,7 +46,7 @@ const ALLOWED = new Set([
   'design_doc', 'plan', 'verification_report',
   'build_mode', 'isolation', 'build_sha',
   'agent_review_result', 'codex_review_result', 'verify_result', 'branch_status',
-  'direct_override', 'prd_path', 'pr_url',
+  'direct_override', 'pre_verify_review_result', 'prd_path', 'pr_url',
   'archived', 'archived_at', 'verified_at', 'updated_at',
   'depends_on', 'created_by', 'assignee', 'coverage_confirmed_by',
   'automation', 'automation_queued_at', 'automation_sandbox', 'automation_worktree',
@@ -63,6 +66,7 @@ const ENUMS = {
   verify_result: ['pending', 'pass', 'fail', 'handled', 'skipped'],
   branch_status: ['pending', 'pass', 'fail', 'handled', 'skipped'],
   direct_override: ['true', 'false'],
+  pre_verify_review_result: ['pending', 'pass'],
   archived: ['true', 'false'],
   automation: ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'],
 }
@@ -128,6 +132,44 @@ function corruptDrop(doc) {
 
 function persist(doc) {
   if (MODE === 'corrupt') corruptDrop(doc)
+  if (process.env.STUB_BUSINESS_TAMPER === '1') setLine(doc, 'assignee', 'hostile-oracle-value')
+  if (process.env.STUB_TRANSITION_HEAD) {
+    const reservedPrefixes = [
+      'pipeline_run_id:',
+      'pipeline_transition_sequence:',
+      'pipeline_transition_head:',
+      'pipeline_state_revision:',
+      'pipeline_state_revision_id:',
+      'pipeline_state_digest:',
+      '# oracle-misplaced-anchor:',
+      '# tenon-internal-transition-head-v1:',
+    ]
+    doc.lines = doc.lines.filter(
+      (line) => !reservedPrefixes.some((prefix) => line.startsWith(prefix)),
+    )
+    const runId = 'oracle-stub-run'
+    const sequence = 1
+    const recordId = 'oracle-stub-record'
+    const recordDigest = 'a'.repeat(64)
+    const stateDigest = 'b'.repeat(64)
+    const revisionId = 'oracle-stub-revision'
+    const payload = process.env.STUB_TRANSITION_HEAD === 'malformed'
+      ? { schemaVersion: 1 }
+      : { schemaVersion: 1, runId, sequence, recordId, recordDigest }
+    const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+    doc.lines.push(
+      `pipeline_run_id: ${runId}`,
+      `pipeline_transition_sequence: ${sequence}`,
+      `pipeline_transition_head: ${recordId}`,
+      'pipeline_state_revision: 1',
+      `pipeline_state_revision_id: ${revisionId}`,
+      `pipeline_state_digest: ${stateDigest}`,
+    )
+    if (process.env.STUB_TRANSITION_HEAD === 'misplaced') {
+      doc.lines.push('# oracle-misplaced-anchor: true')
+    }
+    doc.lines.push(`# tenon-internal-transition-head-v1: ${encoded}`)
+  }
   writeDoc(doc)
 }
 

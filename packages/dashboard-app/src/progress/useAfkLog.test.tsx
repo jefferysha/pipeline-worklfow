@@ -51,6 +51,16 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   return { promise, resolve }
 }
 
+async function waitForLog(actual: () => string, expected: string): Promise<void> {
+  for (let attempt = 0; attempt < 20 && actual() !== expected; attempt += 1) {
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+  expect(actual()).toBe(expected)
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
 })
@@ -63,26 +73,26 @@ describe('useAfkLog', () => {
   it('status="running" 时每 AFK_LOG_POLL_INTERVAL_MS 自动再拉一次日志', async () => {
     const calls = stubLogFetch()
     const { result } = renderHook(() => useAfkLog('demo', 'running', '/tmp/a'), { wrapper })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 1\n'))
+    await waitForLog(() => result.current.log, 'line 1\n')
     expect(calls()).toBe(1)
 
     act(() => {
       vi.advanceTimersByTime(AFK_LOG_POLL_INTERVAL_MS)
     })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 2\n'))
+    await waitForLog(() => result.current.log, 'line 2\n')
     expect(calls()).toBe(2)
 
     act(() => {
       vi.advanceTimersByTime(AFK_LOG_POLL_INTERVAL_MS)
     })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 3\n'))
+    await waitForLog(() => result.current.log, 'line 3\n')
     expect(calls()).toBe(3)
   })
 
   it('follow=false 暂停自动轮询（首次选中那一次不受影响——既有行为保持）', async () => {
     const calls = stubLogFetch()
     const { result } = renderHook(() => useAfkLog('demo', 'running', '/tmp/a'), { wrapper })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 1\n'))
+    await waitForLog(() => result.current.log, 'line 1\n')
 
     act(() => {
       result.current.setFollow(false)
@@ -100,7 +110,7 @@ describe('useAfkLog', () => {
   it('refresh() 手动拉一次，不受 follow/status 门禁限制', async () => {
     const calls = stubLogFetch()
     const { result } = renderHook(() => useAfkLog('demo', 'paused', '/tmp/a'), { wrapper })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 1\n'))
+    await waitForLog(() => result.current.log, 'line 1\n')
 
     await act(async () => {
       await result.current.refresh()
@@ -112,7 +122,7 @@ describe('useAfkLog', () => {
   it('status 非 running 时不建立轮询（首次选中仍拉一次，既有行为保持）', async () => {
     const calls = stubLogFetch()
     const { result } = renderHook(() => useAfkLog('demo', 'paused', '/tmp/a'), { wrapper })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 1\n'))
+    await waitForLog(() => result.current.log, 'line 1\n')
 
     act(() => {
       vi.advanceTimersByTime(AFK_LOG_POLL_INTERVAL_MS * 3)
@@ -138,7 +148,7 @@ describe('useAfkLog', () => {
     )
 
     const { result } = renderHook(() => useAfkLog('demo', 'paused', '/tmp/a'), { wrapper })
-    await vi.waitFor(() => expect(result.current.log).toBe('line 0\n'))
+    await waitForLog(() => result.current.log, 'line 0\n')
 
     let pA!: Promise<void>
     let pB!: Promise<void>

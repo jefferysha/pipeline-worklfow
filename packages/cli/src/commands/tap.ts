@@ -67,6 +67,14 @@ function envLines(clients: ClientLaunchInfo[]): string[] {
   return Object.entries(merged).map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
 }
 
+function emitLaunchSummary(deps: CliDeps, clients: ClientLaunchInfo[], json: boolean): void {
+  if (json) {
+    deps.io.out(JSON.stringify({ clients: clients.map(({ client, mode, port, target }) => ({ client, mode, port, target })) }))
+    return
+  }
+  for (const c of clients) deps.io.err(`[tap] ${c.client} (${c.mode}) → 127.0.0.1:${c.port}（真实上游 ${c.target}）`)
+}
+
 export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promise<number> {
   switch (sub) {
     case 'start': {
@@ -91,13 +99,8 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
         return 1
       }
 
-      if (json) {
-        deps.io.out(JSON.stringify({ clients: result.clients.map(({ client, mode, port, target }) => ({ client, mode, port, target })) }))
-      } else {
-        for (const c of result.clients) deps.io.err(`[tap] ${c.client} (${c.mode}) → 127.0.0.1:${c.port}（真实上游 ${c.target}）`)
-      }
-
       if (command.length > 0) {
+        emitLaunchSummary(deps, result.clients, json)
         const executable = command[0]
         if (executable === undefined) {
           await result.daemon.stop()
@@ -117,12 +120,24 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
         return code
       }
 
-      for (const line of envLines(result.clients)) deps.io.out(line)
-      await new Promise<void>((resolve) => {
-        const stop = (): void => { void result.daemon.stop().then(resolve) }
+      const termination = new Promise<void>((resolve, reject) => {
+        const cleanup = (): void => {
+          process.off('SIGINT', stop)
+          process.off('SIGTERM', stop)
+        }
+        const stop = (): void => {
+          cleanup()
+          void result.daemon.stop().then(resolve, reject)
+        }
         process.once('SIGINT', stop)
         process.once('SIGTERM', stop)
       })
+      // Arm signal handling before publishing any readiness output. A caller may react to the
+      // stderr summary, JSON summary, or export line; publishing any of them first leaves a real
+      // window where Node exits by signal without stopping the daemon.
+      emitLaunchSummary(deps, result.clients, json)
+      for (const line of envLines(result.clients)) deps.io.out(line)
+      await termination
       return 0
     }
     default:

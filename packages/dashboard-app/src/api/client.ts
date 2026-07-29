@@ -37,6 +37,11 @@ export type {
 } from './loopScopePreview'
 
 export {
+  ContextBundlePreviewApiError,
+  fetchContextBundlePreview,
+} from './contextBundleClient'
+
+export {
   deleteSecret,
   fetchAfkLog,
   fetchAfkReadiness,
@@ -65,7 +70,13 @@ export {
   fetchSessionLinks,
   fetchTraceRecords,
   fetchTraceSessions,
+  fetchTraceTimeline,
 } from './auditClient'
+
+export {
+  postVerificationEvidenceCompose,
+  VerificationEvidenceApiError,
+} from './verificationEvidenceClient'
 
 export type {
   ChangeHistoryEntry,
@@ -106,6 +117,13 @@ export type {
   TraceRecordsResponse,
   TraceSessionRow,
   TraceSessionsResponse,
+  TraceTimelineEntry,
+  TraceTimelineIntegrity,
+  TraceTimelineOutcome,
+  TraceTimelineResponse,
+  TraceTimelineSession,
+  TraceTimelineSummary,
+  TraceTimelineWarning,
   WbAttemptContext,
   WbLedgerRecord,
   WbRunDetail,
@@ -113,3 +131,25 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  ContextBundleMode,
+  ContextBundlePhase,
+  ContextBundlePreviewBudget,
+  ContextBundlePreviewFailure,
+  ContextBundlePreviewInput,
+  ContextBundlePreviewRequest,
+  ContextBundlePreviewSuccess,
+  ContextBundleReasonCode,
+  ContextBundleTier,
+} from './contextBundleTypes'
+
+export type {
+  VerificationEvidenceComposeInput,
+  VerificationEvidenceComposeResponse,
+  VerificationEvidenceDraftEntry,
+  VerificationEvidenceFieldError,
+  VerificationEvidenceKind,
+  VerificationEvidenceLocale,
+  VerificationEvidenceStatus,
+} from './verificationEvidenceTypes'

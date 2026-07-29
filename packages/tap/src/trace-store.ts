@@ -12,8 +12,22 @@
  * 安全护栏（#34e）：本模块**只**依赖 node:fs / node:path / node:crypto——零 outbound 网络。
  *   捕获数据只写入解析出的本地目录，绝无任何回传。（security.test 源码级扫描守此不变量。）
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  appendFileSync,
+  closeSync,
+  constants,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  readSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs'
+import { join, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { resolveTapDir, type TapDirOptions } from './paths.js'
 import type { TraceRecord } from './record.js'
@@ -35,6 +49,22 @@ export interface SessionRow {
 
 export interface CreateSessionOptions { client?: string; proxyMode?: string; startedAt?: Date }
 
+export type TraceRecordWindowWarning =
+  | 'record-limit'
+  | 'byte-limit'
+  | 'malformed-record'
+  | 'count-mismatch'
+
+export interface TraceRecordWindow {
+  total_count: number
+  returned_count: number
+  skipped_count: number
+  truncated: boolean
+  integrity: 'complete' | 'partial'
+  warnings: TraceRecordWindowWarning[]
+  records: TraceRecord[]
+}
+
 export interface TraceStore {
   readonly dir: string
   createSession(opts?: CreateSessionOptions): string
@@ -43,8 +73,12 @@ export interface TraceStore {
   finalizeSession(id: string, summary?: Record<string, unknown>): void
   loadSessionRow(id: string): SessionRow | null
   readRecords(id: string): TraceRecord[]
+  readRecordWindow(id: string): TraceRecordWindow
   listSessions(): SessionRow[]
 }
+
+const RECORD_WINDOW_LIMIT = 200
+const RECORD_WINDOW_BYTE_LIMIT = 8 * 1024 * 1024
 
 /** 规范本地捕获目录。trace_store.py:53 resolve_db_path（去 sqlite 文件名，改目录）。 */
 export function resolveTraceDir(opts: TapDirOptions = {}): string {
@@ -73,6 +107,21 @@ class FileTraceStore implements TraceStore {
 
   private sessionFile(id: string): string { return join(this.sessionsDir, `${encodeURIComponent(id)}.json`) }
   private recordsFile(id: string): string { return join(this.recordsDir, `${encodeURIComponent(id)}.jsonl`) }
+
+  private openRecordsFileForRead(id: string): { fd: number; size: number } | null {
+    const candidate = this.recordsFile(id)
+    if (!existsSync(candidate)) return null
+    const root = realpathSync(this.dir)
+    const recordsRoot = realpathSync(this.recordsDir)
+    const candidateStat = lstatSync(candidate)
+    if (!recordsRoot.startsWith(`${root}${sep}`) || candidateStat.isSymbolicLink() || !candidateStat.isFile()) {
+      throw new Error('unsafe trace records path')
+    }
+    const resolved = realpathSync(candidate)
+    if (!resolved.startsWith(`${recordsRoot}${sep}`)) throw new Error('unsafe trace records path')
+    const fd = openSync(candidate, constants.O_RDONLY | constants.O_NOFOLLOW)
+    return { fd, size: candidateStat.size }
+  }
 
   private writeSession(row: SessionRow): void {
     const tmp = this.sessionFile(row.id) + '.tmp'
@@ -175,6 +224,108 @@ class FileTraceStore implements TraceStore {
       }
     }
     return records
+  }
+
+  readRecordWindow(id: string): TraceRecordWindow {
+    const row = this.loadSessionRow(id)
+    if (!row) {
+      return {
+        total_count: 0,
+        returned_count: 0,
+        skipped_count: 0,
+        truncated: false,
+        integrity: 'complete',
+        warnings: [],
+        records: [],
+      }
+    }
+
+    const opened = this.openRecordsFileForRead(id)
+    if (opened === null) {
+      const countMismatch = row.record_count !== 0
+      return {
+        total_count: row.record_count,
+        returned_count: 0,
+        skipped_count: 0,
+        truncated: false,
+        integrity: countMismatch ? 'partial' : 'complete',
+        warnings: countMismatch ? ['count-mismatch'] : [],
+        records: [],
+      }
+    }
+
+    const fileSize = opened.size
+    const bytesToRead = Math.min(fileSize, RECORD_WINDOW_BYTE_LIMIT)
+    const offset = fileSize - bytesToRead
+    const buffer = Buffer.allocUnsafe(bytesToRead)
+    const fd = opened.fd
+    let bytesRead = 0
+    try {
+      while (bytesRead < bytesToRead) {
+        const n = readSync(fd, buffer, bytesRead, bytesToRead - bytesRead, offset + bytesRead)
+        if (n === 0) break
+        bytesRead += n
+      }
+    } finally {
+      closeSync(fd)
+    }
+
+    const byteLimited = offset > 0
+    const lines = buffer.subarray(0, bytesRead).toString('utf8').split('\n')
+    if (lines.at(-1) === '') lines.pop()
+
+    let skippedCount = 0
+    if (byteLimited && lines.length > 0) {
+      // The read starts inside an unknown JSONL boundary. Conservatively discard the
+      // first fragment instead of treating a coincidental `{` as a complete record.
+      lines.shift()
+      skippedCount += 1
+    }
+
+    const recordsNewestFirst: TraceRecord[] = []
+    let malformed = false
+    const visibleLines = lines.filter((line) => line.trim().length > 0)
+    const visibleLineCount = skippedCount + visibleLines.length
+    let recordLimited = false
+    for (let index = visibleLines.length - 1; index >= 0; index -= 1) {
+      const line = visibleLines[index]!
+      try {
+        const record = decodeTraceRecord(JSON.parse(line))
+        if (record) {
+          if (recordsNewestFirst.length === RECORD_WINDOW_LIMIT) {
+            recordLimited = true
+            break
+          }
+          recordsNewestFirst.push(record)
+        }
+        else {
+          malformed = true
+          skippedCount += 1
+        }
+      } catch {
+        malformed = true
+        skippedCount += 1
+      }
+    }
+
+    const selected = recordsNewestFirst.reverse()
+    const countMismatch = !byteLimited && visibleLineCount !== row.record_count
+    const warnings: TraceRecordWindowWarning[] = []
+    if (recordLimited) warnings.push('record-limit')
+    if (byteLimited) warnings.push('byte-limit')
+    if (malformed) warnings.push('malformed-record')
+    if (countMismatch) warnings.push('count-mismatch')
+    const partial = byteLimited || malformed || countMismatch
+
+    return {
+      total_count: Math.max(row.record_count, visibleLineCount),
+      returned_count: selected.length,
+      skipped_count: skippedCount,
+      truncated: recordLimited || byteLimited,
+      integrity: partial ? 'partial' : 'complete',
+      warnings,
+      records: selected,
+    }
   }
 
   listSessions(): SessionRow[] {

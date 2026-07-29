@@ -8,6 +8,7 @@ import {
   DEFAULT_RULES,
   rulesFromDef,
   rulesKey,
+  workflowRulesFromSnapshot,
   type StepOutputRules,
   type WorkflowRules,
 } from '../model/workflowModel'
@@ -181,6 +182,7 @@ let automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: fals
 let sessionLinksResponse: { status: number; body: unknown } = { status: 200, body: { links: {} } }
 
 beforeEach(() => {
+  localStorage.setItem('tenon-dashboard-lang', 'zh')
   fetchLog = []
   logSeq = 0
   actionResponse = null
@@ -357,6 +359,33 @@ describe('ProgressView 状态页签（默认全部/计数=分类总数/等待中
 // ── 画布 v3（单项目地铁站台）：一 workflow 一组；有在制的相位=站台卡、空相位=过路小站；
 //    change 小卡=FlatRow 同源判定；sched 图标 lucide；AFK/沙箱区分；连线纯 CSS。──
 describe('ProgressView 相位画布（画布 v3 WorkflowCanvas 集成）', () => {
+  it('英文下 default workflow 使用 phases.*，custom workflow 保留作者标签', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const snapshot = makeFixture()
+    renderView({
+      snapshot,
+      rulesByKey: workflowRulesFromSnapshot(snapshot),
+    })
+    await act(async () => {})
+
+    const verifyNode = screen.getByTestId('prg-cv-node-proj-a-default-verify')
+    expect(verifyNode).toHaveTextContent('Verify')
+    expect(verifyNode).not.toHaveTextContent('验证')
+    expect(screen.getByTestId('prg-cv-node-proj-a-release-train-review')).toHaveTextContent('人工复核')
+
+    await openDrawer('gate-demo')
+    expect(screen.getByTestId('prg9-dw-pass-gate-demo')).toHaveTextContent('Approve into Ship')
+    expect(screen.getByTestId('prg9-dw-reject-gate-demo')).toHaveTextContent('Build')
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await openDrawer('afk-demo')
+    expect(screen.getByTestId('prg9-dw-badge')).toHaveTextContent('Running Build')
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await openDrawer('changelog-cn')
+    expect(screen.getByTestId('prg9-dw-pass-changelog-cn')).toHaveTextContent('Approve into 发布')
+  })
+
   it('分组（default 7 站、release-train 3 站）：相位名走 stepLabel；门徽章来自 rules；空相位收过路小站', async () => {
     renderView()
     await act(async () => {})
@@ -836,6 +865,131 @@ describe('ProgressView 详情抽屉（画布卡点开右滑）', () => {
     expect(document.documentElement.classList.contains('prg9-lock')).toBe(false)
   })
 
+  it('嵌套证据 composer 的 Escape 只关闭内层并把焦点归还入口', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    const opener = screen.getByTestId('evidence-compose-open')
+    fireEvent.click(opener)
+    expect(screen.getByTestId('evidence-compose-dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).toBeNull()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  })
+
+  it('嵌套证据 composer 通过 body portal 覆盖抽屉外区域且关闭后保留草稿', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+
+    expect(dialog.parentElement).toBe(document.body)
+
+    fireEvent.click(screen.getByTestId('evidence-add-entry'))
+    fireEvent.change(screen.getByTestId('evidence-title-1'), {
+      target: { value: 'DRAFT_MUST_SURVIVE' },
+    })
+    fireEvent.click(dialog)
+
+    expect(screen.queryByTestId('evidence-compose-dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('DRAFT_MUST_SURVIVE')
+  })
+
+  it.each([
+    ['build', false],
+    ['verify', true],
+  ] as const)('证据 composer phase gate：%s 阶段可见=%s', async (phase, visible) => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = phase
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    if (visible) {
+      expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    } else {
+      expect(screen.queryByTestId('evidence-compose-open')).not.toBeInTheDocument()
+    }
+  })
+
+  it('非文档治理 workflow 的真实 Verify 阶段仍显示证据 composer', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.phase = 'verify'
+    change.documents = {
+      governed: false,
+      blockers: [],
+      items: [],
+    }
+
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+
+    expect(screen.getByTestId('evidence-compose-open')).toBeVisible()
+    expect(screen.queryByTestId('dt-documents')).not.toBeInTheDocument()
+  })
+
+  it('嵌套证据 composer 的正向 Tab 从末元素回绕到内层首元素', async () => {
+    const snapshot = makeFixture()
+    const change = snapshot.projects[0]?.changes.find((item) => item.name === 'gate-demo')
+    if (!change) throw new Error('gate-demo fixture missing')
+    change.documents = {
+      governed: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }
+    renderView({ snapshot })
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    const dialog = screen.getByTestId('evidence-compose-dialog')
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    expect(first).toBeDefined()
+    expect(last).toBeDefined()
+    last!.focus()
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(document.activeElement).toBe(first)
+    expect(screen.getByTestId('detail-close')).not.toHaveFocus()
+  })
+
   it('running 行抽屉：TaskDetail 之下挂日志区，2.5s 轮询；抽屉关闭即停（组件卸载）', async () => {
     vi.useFakeTimers()
     renderView()
@@ -928,6 +1082,87 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByTestId('prg9-drawer')).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('reduce：路由直接选中并打开抽屉时，Esc 仍把焦点归还对应卡片', async () => {
+    stubMatchMedia(true)
+    function RoutedHarness(): JSX.Element {
+      const [selectedChange, setSelectedChange] = useState<string | null>('gate-demo')
+      return (
+        <I18nProvider>
+          <ProgressView
+            snapshot={makeFixture()}
+            loading={false}
+            error={null}
+            currentRoot={ROOT_A}
+            rulesByKey={makeRules()}
+            selectedChange={selectedChange}
+            onSelectedChange={setSelectedChange}
+          />
+        </I18nProvider>
+      )
+    }
+    render(<RoutedHarness />)
+    const trigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    await waitFor(() => expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('reduce：点击打开 A 后路由切到 B，Esc 把焦点归还 B 而不是仍连接的 A 卡片', async () => {
+    stubMatchMedia(true)
+    function RoutedHarness(): JSX.Element {
+      const [selectedChange, setSelectedChange] = useState<string | null>(null)
+      return (
+        <I18nProvider>
+          <button type="button" data-testid="route-to-afk" onClick={() => setSelectedChange('afk-demo')}>
+            route to afk
+          </button>
+          <ProgressView
+            snapshot={makeFixture()}
+            loading={false}
+            error={null}
+            currentRoot={ROOT_A}
+            rulesByKey={makeRules()}
+            selectedChange={selectedChange}
+            onSelectedChange={setSelectedChange}
+          />
+        </I18nProvider>
+      )
+    }
+    render(<RoutedHarness />)
+    const staleTrigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    const currentTrigger = screen.getByTestId('prg-cv-chg-afk-demo')
+    fireEvent.click(staleTrigger)
+    await waitFor(() => expect(screen.getByTestId('prg9-drawer')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('route-to-afk'))
+    await waitFor(() => expect(currentTrigger).toHaveAttribute('data-on', 'true'))
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(currentTrigger)
+  })
+
+  it('reduce：原触发卡被同 key 新节点替换后，只在当前 ProgressView 内归还焦点', async () => {
+    stubMatchMedia(true)
+    renderView()
+    const staleTrigger = screen.getByTestId('prg-cv-chg-gate-demo')
+    await openDrawer('gate-demo')
+    const currentTrigger = staleTrigger.cloneNode(true) as HTMLElement
+    const outsideOwner = staleTrigger.cloneNode(true) as HTMLElement
+    screen.getByTestId('progress-view').before(outsideOwner)
+    staleTrigger.replaceWith(currentTrigger)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(staleTrigger.isConnected).toBe(false)
+    expect(document.activeElement).toBe(currentTrigger)
+    outsideOwner.remove()
   })
 
   // flaky 余量（#8）：GSAP 退场补间走真实挂钟，系统满载时播放变慢，waitFor 与外层 it() 超时都要

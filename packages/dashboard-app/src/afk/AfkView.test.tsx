@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
 import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
@@ -83,7 +83,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderAfk(over: Partial<Parameters<typeof AfkView>[0]> = {}) {
+async function renderAfk(over: Partial<Parameters<typeof AfkView>[0]> = {}) {
   const props = {
     snapshot: fixture(),
     currentRoot: ROOT,
@@ -97,12 +97,15 @@ function renderAfk(over: Partial<Parameters<typeof AfkView>[0]> = {}) {
       <AfkView {...props} />
     </I18nProvider>,
   )
+  await act(async () => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  })
   return props
 }
 
 describe('AfkView 两栏自动运行工作区', () => {
-  it('打开页面即以待处理任务为主视图，任务事实与动作合并进详情，不再重复展示下一步侧栏', () => {
-    renderAfk()
+  it('打开页面即以待处理任务为主视图，任务事实与动作合并进详情，不再重复展示下一步侧栏', async () => {
+    await renderAfk()
     expect(screen.getByTestId('afk-view')).toHaveAttribute('data-page-frame', 'standard')
     expect(screen.getByRole('heading', { name: '自动运行' })).toBeInTheDocument()
     expect(screen.getByTestId('afk-queue')).toHaveTextContent('需要处理')
@@ -120,16 +123,16 @@ describe('AfkView 两栏自动运行工作区', () => {
     for (const project of within(queue).getAllByText('项目 · afk-proj')) expect(project.className).not.toContain('truncate')
   })
 
-  it('七阶段轨道由独立横向滚动视口承载，窄窗口不会裁掉归档阶段', () => {
-    renderAfk()
+  it('七阶段轨道由独立横向滚动视口承载，窄窗口不会裁掉归档阶段', async () => {
+    await renderAfk()
     const viewport = screen.getByTestId('afk-stage-scroll')
     const track = screen.getByTestId('afk-stage-track')
     expect(viewport).toContainElement(track)
     expect(within(track).getAllByText(/^(立项|调研|规格|实现|验证|交付|归档)$/)).toHaveLength(7)
   })
 
-  it('三栏各列出对应态的 change；非沙箱 change 不进面板', () => {
-    renderAfk()
+  it('三栏各列出对应态的 change；非沙箱 change 不进面板', async () => {
+    await renderAfk()
     expect(within(screen.getByTestId('afk-sec-running')).getByTestId('afk-row-run-a')).toBeInTheDocument()
     expect(within(screen.getByTestId('afk-sec-queued')).getByTestId('afk-row-q-b')).toBeInTheDocument()
     expect(within(screen.getByTestId('afk-sec-failed')).getByTestId('afk-row-fail-c')).toBeInTheDocument()
@@ -142,16 +145,16 @@ describe('AfkView 两栏自动运行工作区', () => {
     expect(screen.getByTestId('afk-health')).toHaveTextContent('需要处理 1')
   })
 
-  it('选择运行中的任务后详情同步切换，不残留失败任务的重试动作', () => {
-    renderAfk()
+  it('选择运行中的任务后详情同步切换，不残留失败任务的重试动作', async () => {
+    await renderAfk()
     fireEvent.click(screen.getByTestId('afk-row-run-a'))
     expect(screen.getByTestId('afk-detail')).toHaveTextContent('run-a')
     expect(screen.getByTestId('afk-detail')).toHaveTextContent('运行中')
     expect(screen.queryByTestId('afk-retry-preview-fail-c')).toBeNull()
   })
 
-  it('行标 data-state 与相位（afk.at_phase：{phase 展示名} · 沙箱）', () => {
-    renderAfk()
+  it('行标 data-state 与相位（afk.at_phase：{phase 展示名} · 沙箱）', async () => {
+    await renderAfk()
     const row = screen.getByTestId('afk-row-fail-c')
     expect(row).toHaveAttribute('data-state', 'failed')
     expect(row.textContent).toContain('验证 · 需要处理')
@@ -160,19 +163,19 @@ describe('AfkView 两栏自动运行工作区', () => {
   })
 
   it('并发上限是可保存的真实设置：修改后 POST 全量 automation 配置', async () => {
-    renderAfk()
+    await renderAfk()
     await waitFor(() => expect(screen.getByTestId('afk-limit-input')).toHaveValue('4'))
     fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
     await waitFor(() => expect(settingsPosts).toEqual([{ root: ROOT, max_parallel: 6, max_retries: 1, default_opt_in: false, image: '' }]))
   })
 
-  it('调度汇总灯：三态齐（有 failed）→ data-status=attention', () => {
-    renderAfk()
+  it('调度汇总灯：三态齐（有 failed）→ data-status=attention', async () => {
+    await renderAfk()
     expect(screen.getByTestId('afk-health')).toHaveAttribute('data-status', 'attention')
   })
 
   it('生产能力开启时只保留“开启自动运行 / 新建定时任务 / 验证定时任务”，全部在居中对话框打开', async () => {
-    renderAfk({ snapshot: fixtureWithOperations() })
+    await renderAfk({ snapshot: fixtureWithOperations() })
     expect(screen.queryByTestId('afk-tool-cadence')).toBeNull()
     expect(screen.queryByTestId('afk-tool-triage')).toBeNull()
     expect(screen.queryByTestId('afk-tool-sync')).toBeNull()
@@ -189,8 +192,8 @@ describe('AfkView 两栏自动运行工作区', () => {
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('模板决定如何发现或生成任务')
   })
 
-  it('生产操作能力未接通时仍可开启现有任务的自动运行，但新建与验证定时任务明确禁用', () => {
-    renderAfk()
+  it('生产操作能力未接通时仍可开启现有任务的自动运行，但新建与验证定时任务明确禁用', async () => {
+    await renderAfk()
     expect(screen.getByTestId('afk-new-run')).not.toBeDisabled()
     expect(screen.getByTestId('afk-tool-enqueue')).not.toBeDisabled()
     expect(screen.getByTestId('afk-tool-starter')).toBeDisabled()
@@ -199,16 +202,16 @@ describe('AfkView 两栏自动运行工作区', () => {
 })
 
 describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
-  it('每行「看它的流水线」→ onView(progress)', () => {
-    const props = renderAfk()
+  it('每行「看它的流水线」→ onView(progress)', async () => {
+    const props = await renderAfk()
     fireEvent.click(screen.getByTestId('afk-row-run-a'))
     fireEvent.click(screen.getByTestId('afk-flow-run-a'))
     expect(props.onView).toHaveBeenCalledWith('progress')
   })
 
-  it('宿主提供精确入口时，「看它的流水线」传出 change 名而非只切换视图', () => {
+  it('宿主提供精确入口时，「看它的流水线」传出 change 名而非只切换视图', async () => {
     const onOpenChange = vi.fn()
-    const props = renderAfk({ onOpenChange })
+    const props = await renderAfk({ onOpenChange })
     fireEvent.click(screen.getByTestId('afk-row-run-a'))
     fireEvent.click(screen.getByTestId('afk-flow-run-a'))
     expect(onOpenChange).toHaveBeenCalledWith('run-a')
@@ -218,7 +221,7 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
   it('失败行给「回终端」命令 chip（有 worktree → cd 接管），点击拷贝 + toast', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     Object.assign(navigator, { clipboard: { writeText } })
-    const props = renderAfk()
+    const props = await renderAfk()
     const chip = screen.getByTestId('afk-cmd-fail-c')
     expect(chip).toHaveAttribute('title', 'cd /wt/fail-c')
     fireEvent.click(chip)
@@ -226,14 +229,14 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
     await waitFor(() => expect(props.onToast).toHaveBeenCalled())
   })
 
-  it('running / queued 行不给命令 chip（只读推进态）', () => {
-    renderAfk()
+  it('running / queued 行不给命令 chip（只读推进态）', async () => {
+    await renderAfk()
     expect(screen.queryByTestId('afk-cmd-run-a')).toBeNull()
     expect(screen.queryByTestId('afk-cmd-q-b')).toBeNull()
   })
 
   it('未入自动化的 change 可直接挂队：POST enqueue 带当前 root，成功反馈', async () => {
-    const props = renderAfk()
+    const props = await renderAfk()
     fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
     fireEvent.click(screen.getByTestId('afk-enqueue-gate-d'))
     await waitFor(() => expect(afkPosts).toHaveLength(1))
@@ -243,7 +246,7 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
   })
 
   it('失败行先展示只读重试预览，确认前不 POST；确认后才调用真实 retry', async () => {
-    renderAfk()
+    await renderAfk()
     fireEvent.click(screen.getByTestId('afk-retry-preview-fail-c'))
     const preview = screen.getByTestId('afk-retry-sheet')
     expect(preview).toHaveTextContent('重新运行验证')
@@ -254,11 +257,11 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
     expect(screen.getByTestId('afk-cmd-fail-c')).toHaveAttribute('title', 'cd /wt/fail-c')
   })
 
-  it('失败行无 worktree 现场 → 只给真实 retry，不再展示会被后端拒绝的 enqueue 命令', () => {
+  it('失败行无 worktree 现场 → 只给真实 retry，不再展示会被后端拒绝的 enqueue 命令', async () => {
     const snap = makeSnapshot([
       makeProject(ROOT, [makeChange('fail-x', 'build', { fields: { automation: 'failed' } })]),
     ])
-    renderAfk({ snapshot: snap })
+    await renderAfk({ snapshot: snap })
     expect(screen.getByTestId('afk-retry-preview-fail-x')).toBeInTheDocument()
     expect(screen.queryByTestId('afk-cmd-fail-x')).toBeNull()
   })
@@ -266,16 +269,16 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
 
 describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的位置）', () => {
   // DEFAULT_RULES.steps 剔 archive = [open, explore, spec, build, verify, ship]（6 节）。
-  it('每行渲染迷你轨；节点数 = steps 去 archive 后长度', () => {
-    renderAfk()
+  it('每行渲染迷你轨；节点数 = steps 去 archive 后长度', async () => {
+    await renderAfk()
     const track = screen.getByTestId('afk-track-run-a')
     expect(track).toBeInTheDocument()
     expect(track).toHaveAttribute('data-phase', 'build')
     expect(track.querySelectorAll('[data-state]')).toHaveLength(6)
   })
 
-  it('change.phase 命中处 = current，之前 = done，之后 = todo', () => {
-    renderAfk()
+  it('change.phase 命中处 = current，之前 = done，之后 = todo', async () => {
+    await renderAfk()
     // run-a 在 build（default 序第 4 步，idx 3）：open/explore/spec = done，build = current，verify/ship = todo
     const track = screen.getByTestId('afk-track-run-a')
     const state = (phase: string) => track.querySelector(`[data-phase="${phase}"]`)?.getAttribute('data-state')
@@ -289,13 +292,13 @@ describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的�
     expect(track.querySelector('[data-phase="archive"]')).toBeNull()
   })
 
-  it('轨纯装饰（aria-hidden）——相位语义由行内 afk.at_phase 文本承载', () => {
-    renderAfk()
+  it('轨纯装饰（aria-hidden）——相位语义由行内 afk.at_phase 文本承载', async () => {
+    await renderAfk()
     expect(screen.getByTestId('afk-track-q-b')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('三态各自当前步命中：queued(spec)/failed(verify)', () => {
-    renderAfk()
+  it('三态各自当前步命中：queued(spec)/failed(verify)', async () => {
+    await renderAfk()
     const qCurrent = screen
       .getByTestId('afk-track-q-b')
       .querySelector('[data-state="current"]')
@@ -307,8 +310,8 @@ describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的�
     expect(fCurrent).toHaveAttribute('data-error', 'true')
   })
 
-  it('详情不重复展示状态和当前阶段；时间统一为中文年月日时分秒', () => {
-    renderAfk()
+  it('详情不重复展示状态和当前阶段；时间统一为中文年月日时分秒', async () => {
+    await renderAfk()
     const detail = screen.getByTestId('afk-detail')
     expect(within(detail).queryByRole('heading', { name: '运行状态' })).toBeNull()
     expect(detail).not.toHaveTextContent('当前阶段')
@@ -317,9 +320,9 @@ describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的�
 })
 
 describe('AfkView 空态', () => {
-  it('无沙箱任务 → afk-empty，三栏都不渲染', () => {
+  it('无沙箱任务 → afk-empty，三栏都不渲染', async () => {
     const snap = makeSnapshot([makeProject(ROOT, [makeChange('gate-only', 'build', {})])])
-    renderAfk({ snapshot: snap })
+    await renderAfk({ snapshot: snap })
     expect(screen.getByTestId('afk-empty').textContent).toContain('当前没有自动运行任务')
     expect(screen.queryByTestId('afk-sec-running')).toBeNull()
     expect(screen.queryByTestId('afk-sec-queued')).toBeNull()

@@ -1,0 +1,553 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-29T04:43:51Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/trace-timeline/proposal.md",
+      "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T04:55:09Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T04:55:10Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T04:57:20Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T04:57:47Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T05:32:39Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/trace-timeline/design.md",
+      "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T04:55:10Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T04:55:10Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T04:57:20Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T04:57:47Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T05:32:39Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/trace-timeline.md",
+      "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-29T04:55:10Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T04:57:20Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T04:57:47Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T05:32:39Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/trace-timeline-design.md",
+      "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-29T04:57:20Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T04:57:20Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T04:57:47Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T05:32:39Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/trace-timeline/specs/trace-timeline/spec.md",
+      "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-29T06:05:07Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/trace-timeline.md",
+      "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T06:05:07Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/trace-timeline.md",
+      "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T06:05:08Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T05:47:44Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:40:53Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:50:07Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",11]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:02:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",12]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-29-trace-timeline-verify.md",
+      "sha256": "20188ab70b04228314efda13e24ad7684124337188bc99b178dd73eaf322cb71",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-29T07:02:05Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "20188ab70b04228314efda13e24ad7684124337188bc99b178dd73eaf322cb71",
+          "readAt": "2026-07-29T07:20:40Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",13]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "20188ab70b04228314efda13e24ad7684124337188bc99b178dd73eaf322cb71",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/trace-timeline/applied-spec.md",
+      "sha256": "f6394c90b30e8c8829bc2911dd7f622920ff703fe648f3d4780608de61e7293d",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-29T07:04:28Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "f6394c90b30e8c8829bc2911dd7f622920ff703fe648f3d4780608de61e7293d",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/trace-timeline/tasks.md",
+      "sha256": "c21fcf6525eb57aad1951dcd3a572b1d36191b9d5657d4f6cbc2683b15567d81",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-29T07:21:56Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "c21fcf6525eb57aad1951dcd3a572b1d36191b9d5657d4f6cbc2683b15567d81",
+          "readAt": "2026-07-29T07:22:05Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",14]"
+        }
+      ]
+    }
+  ]
+}

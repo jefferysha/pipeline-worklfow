@@ -5,8 +5,26 @@ export { readRegistry } from './registry.js'
 export { buildSnapshot, computeFingerprint } from './snapshot.js'
 export { AFK_LANES, buildAfkSnapshot, buildAfkLog, laneOf, cancelAfkRun } from './afk.js'
 export type { AfkLane, AfkCard, AfkSnapshot, AfkLog, AfkLogEntry, SchedulerHealth } from './afk.js'
-export { listTraceSessions, readTraceRecords } from './traces.js'
-export type { TraceStoreReader, TraceSessionRow, TraceSessionsResponse, TraceRecordsResponse } from './traces.js'
+export {
+  hasTraceTimelineReader,
+  listTraceSessions,
+  projectTraceTimeline,
+  readTraceRecords,
+  readTraceTimeline,
+} from './traces.js'
+export type {
+  TraceRecordWindow,
+  TraceRecordsResponse,
+  TraceSessionRow,
+  TraceSessionsResponse,
+  TraceStoreReader,
+  TraceTimelineEntry,
+  TraceTimelineOutcome,
+  TraceTimelineResponse,
+  TraceTimelineStoreReader,
+  TraceTimelineSummary,
+  TraceTimelineWarning,
+} from './traces.js'
 export { generateToken, writeTokenHandshake, tokenFromHeaders, tokensMatch } from './token.js'
 export { TRANSITION_EVENTS, eventEdge, performTransition } from './transition.js'
 export {

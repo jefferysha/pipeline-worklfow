@@ -15,7 +15,7 @@ import { copyBtnCls } from './SessionResumeRow'
 import { revealStages } from './motion'
 import { Icon } from './Icon'
 import { RunAuditPanel } from './RunAuditPanel'
-import { BoxField, StageChip } from './taskDetailParts'
+import { BoxField, StageChip, StageTaskList } from './taskDetailParts'
 import { TaskHistorySection } from './TaskHistorySection'
 import { TaskConnectionCard } from './TaskConnectionCard'
 import { TaskDetailIntro } from './TaskDetailIntro'
@@ -29,6 +29,7 @@ export interface TaskDetailProps {
   badge?: ReactNode
   actions?: ReactNode
   curStageExtra?: ReactNode
+  documentsExtra?: ReactNode
   collapseTechnical?: boolean
   onClose?: () => void
   onToast?: (msg: string) => void
@@ -69,6 +70,7 @@ export function TaskDetail({
   badge,
   actions,
   curStageExtra,
+  documentsExtra,
   collapseTechnical = false,
   onClose,
   onToast,
@@ -92,7 +94,8 @@ export function TaskDetail({
   }, [change.name, change.phase, root])
   useGSAP(
     () => {
-      revealStages('[data-anim="stage"]')
+      const stages = scopeRef.current?.querySelectorAll('[data-anim="stage"]')
+      if (stages && stages.length > 0) revealStages(stages)
     },
     { scope: scopeRef, dependencies: [change.name] },
   )
@@ -325,22 +328,11 @@ export function TaskDetail({
                     </>
                   )}
                   {todo !== undefined && todo.tasks.length > 0 && (
-                    <ul
-                      className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs"
-                      data-testid={`dtl-todo-${st.step}`}
-                    >
-                      {todo.tasks.map((task, taskIndex) => (
-                        <li
-                          className={`flex gap-1.5 [overflow-wrap:anywhere] ${task.completed ? 'text-text-3 line-through' : 'text-text-2'}`}
-                          data-completed={task.completed ? 'true' : 'false'}
-                          data-testid={`dtl-todo-${st.step}-${taskIndex}`}
-                          key={`${taskIndex}-${task.text}`}
-                        >
-                          {task.completed ? <Check className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" /> : <Circle className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" />}
-                          <span>{task.text}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <StageTaskList
+                      stage={st.step}
+                      tasks={todo.tasks}
+                      collapseCompleted={status === 'done' && todo.tasks.every((task) => task.completed)}
+                    />
                   )}
                 </div>
               )
@@ -360,9 +352,19 @@ export function TaskDetail({
           </div>
         )}
       </div>
-      {change.documents?.governed && (
-        <TaskDocumentsSection documents={change.documents} />
-      )}
+      {change.documents?.governed ? (
+        <TaskDocumentsSection
+          documents={change.documents}
+          extra={documentsExtra}
+        />
+      ) : documentsExtra !== undefined ? (
+        <div
+          className="border-b border-border py-[13px] last:border-b-0"
+          data-testid="dt-verification-tools"
+        >
+          {documentsExtra}
+        </div>
+      ) : null}
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
           <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>
