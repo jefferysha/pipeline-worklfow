@@ -4,9 +4,7 @@
 
 让 Tenon 用户在执行 handoff 前，通过 Dashboard 安全、只读地预检 ledger-bound Context Bundle
 的输入组成、物化模式与预算占用，并由 CLI 与 server 共享同一确定性编译规则。
-
 ## Requirements
-
 ### Requirement: CLI 与预览 SHALL 复用同一 ledger-bound 编译服务
 
 系统 SHALL 在 kernel 提供单一共享应用服务，按目标 canonical phase 的有效 document policy
@@ -166,6 +164,10 @@ Tab 导航与 Enter 提交，控件 SHALL 具备可见 label/可访问名称和�
 SHALL 可见，默认 target 为 `open`，请求的 `from` 保留当前安全 step id。只有 target 必须是
 canonical phase。
 
+默认七阶段 workflow 的阶段名 SHALL 始终通过 `phases.*` 使用当前 Dashboard locale 显示，包括
+当前阶段序号、前进动作和回退动作；custom workflow 的作者标签 SHALL 原样保留，不得用语言启发式
+猜测或改写。
+
 #### Scenario: 成功预览
 
 - **WHEN** 用户打开抽屉且默认目标的预览成功
@@ -196,6 +198,21 @@ canonical phase。
 - **THEN** 触发与点击按钮相同的预览请求
 - **AND** 快速切换 target 时最后一次请求结果保持可见，旧响应被忽略。
 
+#### Scenario: 默认阶段标签随语言切换
+
+- **GIVEN** Dashboard 使用默认七阶段 workflow
+- **WHEN** 用户切换到英文
+- **THEN** 当前阶段、前进动作和回退动作显示 `Open`、`Explore`、`Spec`、`Build`、`Verify`、
+  `Ship`、`Archive` 的对应英文标签
+- **AND** 不显示默认 workflow 中固化的中文作者标签。
+
+#### Scenario: custom workflow 保留作者标签
+
+- **GIVEN** Dashboard 使用 custom workflow
+- **WHEN** 当前 step 或 transition 带有作者提供的标签
+- **THEN** 阶段与动作显示作者标签
+- **AND** 不按字符语言或 default phase id 猜测改写该标签。
+
 ### Requirement: 预览 SHALL 支持中英文且不新增持久化
 
 所有新增读者可见文案 SHALL 在 zh/en 字典中键结构对称，并通过 i18n 完整性测试。语言切换 SHALL
@@ -219,3 +236,20 @@ handoff 默认预算或任何项目配置。
 - **WHEN** 用户关闭预览所在抽屉
 - **THEN** 在途请求被取消或其结果被忽略
 - **AND** 不留下项目文件、状态字段或配置变更。
+
+### Requirement: Context Bundle preview 与 Verify evidence SHALL 在 Dashboard 共存
+
+最新 main 的 Verify evidence composer 与 Context Bundle preview SHALL 同时保留。Verify phase
+抽屉 SHALL 同时呈现预算预览和 evidence composer；body portal、父抽屉关闭、Escape、focus restore、
+draft/route 保留和滚动 ownership 不得互相破坏。
+
+`packages/dashboard-app/src/api/client.ts` SHALL 同时导出两组 API facade/type；生成的 Dashboard、
+server 和 CLI 资产 SHALL 来自最终合并源码。
+
+#### Scenario: Verify 抽屉同时使用两个工具
+
+- **GIVEN** 当前 Change 处于 Verify
+- **WHEN** 用户打开进度抽屉
+- **THEN** 预算预览与 evidence composer 均可达
+- **AND** 操作 composer 不关闭或重置父抽屉的预算预览
+- **AND** 操作预算预览不丢失 composer draft、route 或 focus ownership

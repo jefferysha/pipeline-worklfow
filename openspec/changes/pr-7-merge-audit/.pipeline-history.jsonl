@@ -98,3 +98,23 @@
 {"ts":"2026-07-28T23:09:47Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"ae1b4360-0b44-42d9-8211-ca95d79e4c32"}
 {"ts":"2026-07-28T23:12:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-28T23:45:55Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-28T23:53:43Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-28T23:53:43Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-28T23:53:43Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-28T23:53:43Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-28T23:53:44Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"869dc880-528e-41c9-985a-6e75a5ca0230"}
+{"ts":"2026-07-29T00:21:19Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-28-pr-7-merge-audit-verify.md"}
+{"ts":"2026-07-29T00:22:09Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T00:22:24Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-29T00:22:24Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-29T00:22:24Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-29T00:22:45Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-29T00:23:06Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-29T00:23:17Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-28T23:08:42Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T00:23:37Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T00:24:03Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T00:24:03Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T00:24:03Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T00:24:03Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"c92e13a3-83fc-456b-a6ff-3d04edea5c3a"}
+{"ts":"2026-07-29T00:26:17Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-29T00:26:18Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/7"}

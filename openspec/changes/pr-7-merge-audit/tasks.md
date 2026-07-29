@@ -41,13 +41,13 @@
 
 ## 验证
 
-- [ ] 冻结 build SHA，完成 Reviewer、真实 E2E/API/浏览器、Codex 与 Dashboard `design-taste-frontend` 视觉/可访问性验证轨。
-- [ ] 验证 Linux success/empty/422/missing/retry、Darwin 501、Verify composer 共存、OpenSpec 隔离应用、全路径映射与 repo-zero。
-- [ ] 核对精确 head CI 与 GitHub review/comment/thread，登记验证报告并完成 `verify-pass` review 准备。
+- [x] 冻结 build SHA，完成 Reviewer、真实 E2E/API/浏览器、Codex 与 Dashboard `design-taste-frontend` 视觉/可访问性验证轨。
+- [x] 验证 Linux success/empty/422/missing/retry、Darwin 501、Verify composer 共存、OpenSpec 隔离应用、全路径映射与 repo-zero。
+- [x] 核对精确 head CI 与 GitHub review/comment/thread，登记验证报告并完成 `verify-pass` review 准备。
 
 ## 交付
 
-- [ ] 应用主 spec，更新必要 README/CONTRACT/TEST-REALITY/分发与回滚文档。
+- [x] 应用主 spec，更新必要 README/CONTRACT/TEST-REALITY/分发与回滚文档。
 - [ ] 在最终 PR 审计和精确 head CI 通过后合并 #7，等待并确认 main CI 通过。
 - [ ] 登记交付证据并完成 Ship 出口。
 
