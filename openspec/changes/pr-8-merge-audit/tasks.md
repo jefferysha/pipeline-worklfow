@@ -31,6 +31,7 @@
 - [x] 以 RED 复现 queue wait 逃逸 10 秒 deadline，最小实现 enqueue 绝对期限、过期 item 不启动 child 与健康槽位恢复。
 - [x] 在第二个隔离 clone 证明 OpenSpec 1.6.0 archive/apply 无场景丢失，并重跑所有 focused/full/generated/API/browser/release gates。
 - [x] 对完整新 diff 重做 Spec、Rules/Architecture/Security、Dashboard `design-taste-frontend` pre-Verify 复审，提交推送并取得新 exact-head CI。
+- [ ] 恢复归档 design 的 ledger-bound 不可变字节，把 REVIEW 证据改为固定 base/head snapshot 口径，并对完整最终候选重做 pre-Verify 复审与 exact-head CI。
 
 ## 验证
 

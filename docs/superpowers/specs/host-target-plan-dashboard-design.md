@@ -97,7 +97,7 @@ interface HostTargetPlan {
 }
 ```
 
-- `command` 始终是用户可在终端手动执行的 `tenon setup|update --<host>`；adapter 使用 `--target .` 明确作用于终端当前项目目录，Dashboard 提示用户先进入目标项目。
+- `command` 始终是用户可在终端手动执行的 `tenon setup|update --<host>`；adapter 使用 `<project>` 占位提示 project scope。
 - native 的步骤复用现有 `nativeInstallPlan` / `nativeUpdatePlan` 命令数组；setup 再附加 managed runtime、bundled skills 与 readiness，update 只追加真实 managed release 所包含的 managed runtime，不宣称 setup-only skills/readiness。
 - adapter 的步骤按真实命令边界区分操作：setup 为 `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`，update 在 `adapter-deploy` 后结束，不包含 setup-only 的 skills/readiness；两者都不解析或执行 adapter 脚本。
 - `side_effects: 'none'` 是生成器不变量；不是对复制后手动执行命令的承诺。
