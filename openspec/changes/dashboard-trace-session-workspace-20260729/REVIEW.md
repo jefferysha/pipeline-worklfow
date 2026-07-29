@@ -106,3 +106,15 @@ repository scan. This correction changes only evidence storage; the accepted
 desktop UI, interaction, data, and OpenSpec contracts remain unchanged.
 
 No Critical, High, or Medium design findings remain.
+
+## Round 6
+
+The fourth frozen-baseline reviewer found that the registered implementation
+plan still instructed future executors to recreate the deleted screenshot
+directory. The plan now requires every desktop screenshot and structured
+measurement to stay under a repository-external `/tmp` path and explicitly
+forbids committing reproducible QA images. It continues to forbid phone
+screenshots and phone acceptance.
+
+This aligns the plan, review record, Build→Verify zero-output contract, and
+repository-hygiene gate. No product code or accepted UI behavior changed.

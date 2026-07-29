@@ -262,3 +262,68 @@ The third Verify cycle fails on the repository-hygiene Medium. Return to Build,
 remove the reproducible browser screenshots from the repository, retain the
 current `/tmp` evidence paths in this report, run the explicit hygiene check,
 and rerun the full frozen-baseline verification.
+
+## Verify cycle 4
+
+- Frozen build SHA: `f9a3b18b6f1170c14fe684b253cc149d5b0322bb`
+- Base SHA: `907dac067c17ed77fb440b91b20d64fd0f24773b`
+- Scope: desktop Dashboard only, 1024–1920px
+- Result: **FAIL — return to Build**
+
+The screenshot files are absent from the frozen tree and the repository-hygiene
+gate is green. Full review found one remaining instruction that would recreate
+the same CI failure, and the visual track was stopped before its complete
+matrix finished. No product defect was confirmed.
+
+### Reviewer track — FAIL
+
+The reviewer covered all 122 changed files and the complete `trace-timeline`
+capability. Two isolated archives built successfully, the committed and both
+rebuilt distributions were byte-identical, 67 files/1200 tests passed, and
+comments, architecture, docs, repository hygiene, diff checks, strict OpenSpec
+validation, and isolated archive application all passed.
+
+- Medium: `docs/superpowers/plans/2026-07-29-dashboard-trace-session-workspace.md`
+  still instructs future executors to save screenshots under the deleted
+  `docs/ux/shots/dashboard-trace-session-workspace-20260729/` directory. That
+  contradicts the registered review decision and the mandatory image allowlist
+  and would recreate the cycle 3 CI failure.
+
+### Codex review track — PASS
+
+The read-only Codex review covered the frozen diff, source, tests, dist, spec,
+security boundary, accessibility, desktop breakpoint, and repository hygiene.
+It found no Critical, High, or Medium issue. The repository scanner passed and
+the frozen tree contained no tracked JPEG; its seven policy-test fixtures could
+not create temporary directories in the read-only sandbox, while the main
+Build and reviewer tracks ran those same tests successfully.
+
+One Low observation remains: legal maximum metadata increases row height at
+1024/1200 while remaining readable and overflow-free.
+
+### E2E track — PASS
+
+The E2E track used a fresh archive, production Dashboard assets, and four real
+TraceStore/API servers. It passed the complete sessions/timeline state matrix,
+filtering and retries, stale-response race, Escape/focus return, 64/256/64
+metadata stress, console checks, and no implicit timeline request.
+
+At 1024/1200/1440/1920px all measured document, body, workspace, detail, and
+entry overflow checks were false, and summary columns were 2/2/4/4. Findings
+were zero at every severity. Evidence: `/tmp/trace-e2e-v4-f9a3/`.
+
+### Visual track — FAIL because evidence is incomplete
+
+The visual track started a fresh production archive and completed 1440px
+light/dark empty-state screenshots plus DOM checks for sessions loading/error.
+It was stopped before completing 1024/1200/1920, long-metadata partial, detail
+states, keyboard focus, and overflow screenshots. The incomplete track is
+therefore a verification failure, not a confirmed product defect. Evidence:
+`/tmp/traffic-v4.PAEhqr/`.
+
+### Cycle 4 conclusion
+
+Return to Build, change the registered plan to require all screenshots and
+structured measurements under a repository-external `/tmp` directory, then run
+a new complete visual track without interruption. No implementation, API,
+desktop layout, or OpenSpec requirement change is needed.

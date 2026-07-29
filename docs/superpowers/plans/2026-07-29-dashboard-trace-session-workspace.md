@@ -60,8 +60,9 @@ Trace API、decoder、状态机、竞态保护和真实浏览器 fixture 已经�
    - document/workspace 横向溢出为 0，1024 摘要 2×2，宽桌面摘要四列；
    - light/dark 与 reduced-motion；
    - console 无新增 error/warning。
-3. 保存桌面截图与结构化测量到
-   `docs/ux/shots/dashboard-trace-session-workspace-20260729/`，不创建手机截图。
+3. 桌面截图与结构化测量只写入仓库外的
+   `/tmp/dashboard-trace-session-workspace-20260729-*` 临时目录，不提交可再生 QA 图片；
+   不创建或验收手机截图。
 4. 运行 `npm run test:web`、`npm run typecheck:web`、`npm run build:web` 和仓库级必要检查。
 
 验证：测试、真实浏览器状态矩阵和构建产物同时通过。
