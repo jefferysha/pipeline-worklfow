@@ -37,8 +37,14 @@
         {
           "phase": "ship",
           "sha256": "55e2e0d0940795a44b342a418d94f31e47988157d8376dc4085c8a62576fc3a8",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "55e2e0d0940795a44b342a418d94f31e47988157d8376dc4085c8a62576fc3a8",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -76,8 +82,14 @@
         {
           "phase": "ship",
           "sha256": "d358f8da8b7ee0eb3f402a5e46fb85d67876d8b0e404a73b9f271873fab45abf",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d358f8da8b7ee0eb3f402a5e46fb85d67876d8b0e404a73b9f271873fab45abf",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -109,8 +121,14 @@
         {
           "phase": "ship",
           "sha256": "bd64a0c2dc3ab3c511b2034d387b7443e9515334140269cea96b071d38686d2a",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "bd64a0c2dc3ab3c511b2034d387b7443e9515334140269cea96b071d38686d2a",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -136,8 +154,14 @@
         {
           "phase": "ship",
           "sha256": "8d50dfbcb4c610599f17fd2cbb7b0facb99f479ace9d07f400b4f471e9ff072c",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "8d50dfbcb4c610599f17fd2cbb7b0facb99f479ace9d07f400b4f471e9ff072c",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -163,8 +187,14 @@
         {
           "phase": "ship",
           "sha256": "8ae26ce58e60a6029c92c2721d69e27d9ec85a03139cf3d2d199b328ccf6f3c9",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "8ae26ce58e60a6029c92c2721d69e27d9ec85a03139cf3d2d199b328ccf6f3c9",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -190,8 +220,14 @@
         {
           "phase": "ship",
           "sha256": "8ae26ce58e60a6029c92c2721d69e27d9ec85a03139cf3d2d199b328ccf6f3c9",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "8ae26ce58e60a6029c92c2721d69e27d9ec85a03139cf3d2d199b328ccf6f3c9",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -223,8 +259,14 @@
         {
           "phase": "ship",
           "sha256": "b49053a530840c42ad764dac98a2c86ac30f51de99833200cfff813fe49c5207",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b49053a530840c42ad764dac98a2c86ac30f51de99833200cfff813fe49c5207",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -238,29 +280,14 @@
         {
           "phase": "ship",
           "sha256": "eca1b7fff762fc3c470edd093c927f60d644fdeb161940fb36847788f727470b",
-          "readAt": "2026-07-29T08:30:11Z",
+          "readAt": "2026-07-29T08:53:54Z",
           "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-host-plan-clarity-20260729/tasks.md",
-      "sha256": "4f4228949c1af41ee3daf25a55346d1df28d54a570b3d27e22e43534e02e5b75",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-07-29T08:28:24Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "4f4228949c1af41ee3daf25a55346d1df28d54a570b3d27e22e43534e02e5b75",
-          "readAt": "2026-07-29T08:28:25Z",
-          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",4]"
         },
         {
-          "phase": "ship",
-          "sha256": "4f4228949c1af41ee3daf25a55346d1df28d54a570b3d27e22e43534e02e5b75",
-          "readAt": "2026-07-29T08:30:11Z",
-          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+          "phase": "archive",
+          "sha256": "eca1b7fff762fc3c470edd093c927f60d644fdeb161940fb36847788f727470b",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
         }
       ]
     },
@@ -270,7 +297,35 @@
       "sha256": "9aa8e45500bb4a16e66501d445cad2d8b47706dcf7be471464ef95fa732372a6",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-29T08:30:11Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "9aa8e45500bb4a16e66501d445cad2d8b47706dcf7be471464ef95fa732372a6",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-host-plan-clarity-20260729/tasks.md",
+      "sha256": "90c6c8ffccd19975cb69dd1544b41a63da62894e049d1af599f41c75afc130f3",
+      "producer": "tenon-ship",
+      "recordedAt": "2026-07-29T08:53:54Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "90c6c8ffccd19975cb69dd1544b41a63da62894e049d1af599f41c75afc130f3",
+          "readAt": "2026-07-29T08:53:54Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "90c6c8ffccd19975cb69dd1544b41a63da62894e049d1af599f41c75afc130f3",
+          "readAt": "2026-07-29T08:54:55Z",
+          "visitId": "[\"7882fb8a-4ead-4600-b62f-599018880ae1\",6]"
+        }
+      ]
     }
   ]
 }

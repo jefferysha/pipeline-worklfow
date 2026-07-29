@@ -2,7 +2,7 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
+phase: archive
 phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-29-dashboard-host-plan-clarity-design.md
 plan: docs/superpowers/plans/2026-07-29-dashboard-host-plan-clarity.md
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T07:48:00Z
-updated_at: 2026-07-29T08:28:49Z
+updated_at: 2026-07-29T08:54:02Z
 verified_at: 2026-07-29T08:28:49Z
-archived_at: null
-archived: false
+archived_at: 2026-07-29T09:32:17Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 7882fb8a-4ead-4600-b62f-599018880ae1
-pipeline_transition_sequence: 5
-pipeline_transition_head: e7fa15f7-0a50-466b-b258-bacd2b16a042
-pipeline_state_revision: 22
-pipeline_state_revision_id: 9cbbed8d-651e-42c5-a976-69c83204e68e
-pipeline_state_digest: ffe76ec6e1465f073f3f7550a0fdc7342722f42039c2185cc97110fe9287b4be
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjIsInJldmlzaW9uSWQiOiI5Y2JiZWQ4ZC02NTFlLTQyYzUtYTk3Ni02OWM4MzIwNGU2OGUiLCJwYXlsb2FkRGlnZXN0IjoiMGVkMGJhNDNjZTlmZWFkNTYzMmM4MjMwMDczNmZkYTkxZjUwMTI0NGIyYzMwYTZkMTJiN2M1MmI4ZTE3Yjg0NSJ9
+pipeline_transition_sequence: 6
+pipeline_transition_head: fcc5f945-24c3-4aa0-8999-85c26a40c6cf
+pipeline_state_revision: 23
+pipeline_state_revision_id: d5543999-b6b3-494c-a422-50d601990516
+pipeline_state_digest: b8f71640f568f70cdc00bbeb2e0f8fa1488c9dc204499af66568827d131b4ecb
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjMsInJldmlzaW9uSWQiOiJkNTU0Mzk5OS1iNmIzLTQ5NGMtYTQyMi01MGQ2MDE5OTA1MTYiLCJwYXlsb2FkRGlnZXN0IjoiZGNiMjhhYzUzYzMzZGIzNTA2Y2VkZTE3ZTIxZWY0ZmZmMmU5NmFiZjcwMmU5NDc5YmE0ZjJmNTQ4NjdiZDdiNyJ9

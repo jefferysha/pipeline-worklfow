@@ -31,11 +31,11 @@
 
 ## 交付
 
-- [ ] 提交并 push 当前 `codex/` 分支，创建非草稿 PR。
-- [ ] 填写设计前后、可访问性、动效、测试、浏览器、兼容性、风险和回滚证据。
-- [ ] 检查并修复 actionable PR review/CI 失败直至终态。
+- [x] 提交并 push 当前 `codex/` 分支，创建非草稿 PR。
+- [x] 填写设计前后、可访问性、动效、测试、浏览器、兼容性、风险和回滚证据。
+- [x] 检查并修复 actionable PR review/CI 失败直至终态。
 
 ## 归档
 
-- [ ] 应用主 spec，复核全部文档收据并完成 Tenon Archive。
-- [ ] push 归档提交并更新 automation memory 的最终身份、验证、CI 和阻塞。
+- [x] 复核已应用主 spec、全部文档收据、活跃子 Change 与 OpenSpec strict validation。
+- [x] 冻结 Tenon terminal archive、归档提交/push、最终 CI 与 automation memory 收口清单。
