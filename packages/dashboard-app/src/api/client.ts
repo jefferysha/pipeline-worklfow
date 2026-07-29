@@ -29,6 +29,17 @@ export {
 } from './governanceClient'
 
 export { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate } from './loopsClient'
+export { postLoopScopePreview } from './loopScopePreview'
+export type {
+  LoopScopePreviewItem,
+  LoopScopePreviewReason,
+  LoopScopePreviewResponse,
+} from './loopScopePreview'
+
+export {
+  ContextBundlePreviewApiError,
+  fetchContextBundlePreview,
+} from './contextBundleClient'
 
 export {
   deleteSecret,
@@ -59,9 +70,14 @@ export {
   fetchSessionLinks,
   fetchTraceRecords,
   fetchTraceSessions,
+  fetchTraceTimeline,
 } from './auditClient'
 
 export { searchRelatedSessions } from './memoryClient'
+export {
+  postVerificationEvidenceCompose,
+  VerificationEvidenceApiError,
+} from './verificationEvidenceClient'
 
 export type {
   ChangeHistoryEntry,
@@ -102,6 +118,13 @@ export type {
   TraceRecordsResponse,
   TraceSessionRow,
   TraceSessionsResponse,
+  TraceTimelineEntry,
+  TraceTimelineIntegrity,
+  TraceTimelineOutcome,
+  TraceTimelineResponse,
+  TraceTimelineSession,
+  TraceTimelineSummary,
+  TraceTimelineWarning,
   WbAttemptContext,
   WbLedgerRecord,
   WbRunDetail,
@@ -116,3 +139,25 @@ export type {
   RelatedSessionSearchInput,
   RelatedSessionSearchResponse,
 } from './memoryTypes'
+
+export type {
+  ContextBundleMode,
+  ContextBundlePhase,
+  ContextBundlePreviewBudget,
+  ContextBundlePreviewFailure,
+  ContextBundlePreviewInput,
+  ContextBundlePreviewRequest,
+  ContextBundlePreviewSuccess,
+  ContextBundleReasonCode,
+  ContextBundleTier,
+} from './contextBundleTypes'
+
+export type {
+  VerificationEvidenceComposeInput,
+  VerificationEvidenceComposeResponse,
+  VerificationEvidenceDraftEntry,
+  VerificationEvidenceFieldError,
+  VerificationEvidenceKind,
+  VerificationEvidenceLocale,
+  VerificationEvidenceStatus,
+} from './verificationEvidenceTypes'

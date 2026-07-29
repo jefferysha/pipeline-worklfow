@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { Nav, PRIMARY_VIEWS } from './Nav'
 
@@ -28,9 +28,9 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   return props
 }
 
-// 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（四枚 lucide 图标 + 小字）。
+// 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（lucide 图标 + 小字）。
 // 项目页承担自动发现与选择；rail 不重复展示当前项目名或项目切换器。
-describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 / 机器）', () => {
+describe('Nav 一级导航（rail 六视图：项目 / 进度 / AFK / 工作台 / 机器 / 宿主计划）', () => {
   it('声明桌面 rail → 移动底栏的自适应外壳，并始终保留可见短标签', () => {
     renderNav()
     const shell = screen.getByTestId('app-navigation')
@@ -48,7 +48,7 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     }
   })
 
-  it('品牌是独立的可访问 Overview 入口，不计入五个运营导航项', () => {
+  it('品牌是独立的可访问 Overview 入口，不计入六个运营导航项', () => {
     const props = renderNav()
     const brand = screen.getByRole('button', { name: 'Tenon 概览' })
     expect(brand).toHaveAttribute('data-testid', 'nav-overview')
@@ -58,10 +58,10 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     expect(brand).not.toHaveAttribute('aria-current')
     fireEvent.click(brand)
     expect(props.onView).toHaveBeenCalledWith('overview')
-    expect(within(screen.getByTestId('primary-nav')).getAllByRole('button')).toHaveLength(5)
+    expect(within(screen.getByTestId('primary-nav')).getAllByRole('button')).toHaveLength(6)
   })
 
-  it('Overview 激活时只有品牌标记 aria-current=page，五个运营项仍未选中', () => {
+  it('Overview 激活时只有品牌标记 aria-current=page，六个运营项仍未选中', () => {
     renderNav({ view: 'overview' })
     expect(screen.getByTestId('nav-overview')).toHaveAttribute('aria-current', 'page')
     for (const operational of PRIMARY_VIEWS) {
@@ -69,17 +69,27 @@ describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 
     }
   })
 
-  it('一级导航恰 5 个按钮，并包含机器就绪入口', () => {
+  it('一级导航恰 6 个按钮，并包含机器就绪与宿主计划入口', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(6)
     expect(nav.textContent).toContain('项目')
     expect(nav.textContent).toContain('进度')
     expect(nav.textContent).toContain('自动运行')
     expect(nav.textContent).toContain('工作台')
     expect(nav.textContent).toContain('机器')
+    expect(nav.textContent).toContain('宿主计划')
     expect(nav.textContent).not.toContain('收件箱')
+  })
+
+  it('宿主计划是机器级一级入口，点击后进入 hostPlan', () => {
+    const props = renderNav()
+    const nav = screen.getByTestId('primary-nav')
+    expect(within(nav).getAllByRole('button')).toHaveLength(6)
+    const hostPlan = screen.getByRole('button', { name: '宿主计划' })
+    fireEvent.click(hostPlan)
+    expect(props.onView).toHaveBeenCalledWith('hostPlan')
   })
 
   it('「项目」是 rail 首枚入口：nav-projects 渲染，点击触发 onView(projects)', () => {
@@ -172,8 +182,24 @@ describe('Nav 交互 + 徽标', () => {
   it('主题切换 light→dark', () => {
     const props = renderNav({ theme: 'light' })
     fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：浅色' })).toBe(screen.getByTestId('theme-toggle'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
     expect(props.onTheme).toHaveBeenCalledWith('dark')
+  })
+
+  it('主题切换 system→light，并以双语可见文本呈现系统主题', () => {
+    const props = renderNav({ theme: 'system' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByTestId('theme-toggle')).toHaveTextContent('系统')
+    expect(screen.getByRole('button', { name: '主题：系统' })).toBe(screen.getByTestId('theme-toggle'))
+    fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(props.onTheme).toHaveBeenCalledWith('light')
+  })
+
+  it('深色主题在操作前向屏幕阅读器朗读当前值', () => {
+    renderNav({ theme: 'dark' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：深色' })).toBe(screen.getByTestId('theme-toggle'))
   })
 
   it('decisionCount>0 徽标挂在「进度」项内显示计数（progress-badge）', () => {
@@ -221,6 +247,43 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(conn).toHaveAttribute('title', '实时已连接')
     expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
     expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
+  })
+
+  it('电脑端非模态设置浮层聚焦首控件，Escape 关闭并归还入口焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+
+    const theme = screen.getByTestId('theme-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('modal Dialog 位于设置浮层之上时，Escape 不关闭设置或抢走焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+
+    const theme = screen.getByTestId('theme-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    const modal = document.createElement('div')
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    document.body.append(modal)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByTestId('nav-settings-panel')).toBeInTheDocument()
+    expect(theme).toHaveFocus()
+    expect(trigger).not.toHaveFocus()
+
+    modal.remove()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
   })
 
   it('离线状态只在设置浮层内呈现', () => {

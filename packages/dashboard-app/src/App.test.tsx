@@ -24,6 +24,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/?root=%2Frepo')
   try {
     delete document.documentElement.dataset.theme
+    delete document.documentElement.dataset.themePreference
   } catch {
     /* ignore */
   }
@@ -61,11 +62,11 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('主导航只保留项目 / 进度 / AFK / 工作台 / 机器；状态、主题与语言收进设置', async () => {
+  it('主导航只保留项目 / 进度 / AFK / 工作台 / 机器 / 宿主计划；状态、主题与语言收进设置', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(5)
+    expect(within(nav).getAllByRole('button')).toHaveLength(6)
     expect(screen.getByTestId('nav-afk')).toBeInTheDocument()
     // 项目上下文不再占用全局顶栏；项目入口只保留在 rail。
     expect(screen.getByTestId('nav-projects')).toBeInTheDocument()
@@ -107,6 +108,63 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
     expect(screen.queryByTestId('project-register')).toBeNull()
     expect(screen.queryByTestId('project-register-path')).toBeNull()
+  })
+})
+
+describe('App 宿主计划机器级视图', () => {
+  it('零项目时仍可通过 hostPlan 深链加载，不落入项目 Onboarding', async () => {
+    window.history.replaceState({}, '', '/?view=hostPlan')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([]) }
+      }
+      if (url === '/api/host-targets') {
+        return {
+          ok: true,
+          json: async () => ({ schema_version: 'host-target-plan/v1', targets: [] }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('host-plan-view')).toBeInTheDocument()
+    expect(screen.getByTestId('host-plan-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('onboard-no-project')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toContain('/api/host-targets')
+  })
+
+  it('全局 snapshot 首次失败时仍渲染独立 Host Plan，不被 snapshot 错误页遮蔽', async () => {
+    window.history.replaceState({}, '', '/?view=hostPlan')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, error: 'snapshot 暂时不可用' }),
+        }
+      }
+      if (url === '/api/host-targets') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ schema_version: 'host-target-plan/v1', targets: [] }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('host-plan-view')).toBeInTheDocument()
+    expect(screen.getByTestId('host-plan-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('snapshot-error')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(
+      expect.arrayContaining(['/api/snapshot', '/api/host-targets']),
+    )
   })
 })
 
@@ -387,10 +445,19 @@ describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱�
   })
 
   it('切视图写回记忆：点工作台后 localStorage 存 workbench', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<App />)
     await screen.findByTestId('progress-view')
-    fireEvent.click(screen.getByTestId('nav-workbench'))
+    await act(async () => {
+      screen.getByTestId('nav-workbench').click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
     expect(localStorage.getItem('tenon-dashboard-view')).toBe('workbench')
+    expect(consoleError).not.toHaveBeenCalledWith(
+      expect.stringContaining('was not wrapped in act'),
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it('品牌 Overview 不覆盖上一次运营视图记忆', async () => {
@@ -462,11 +529,43 @@ describe('App 深浅色自适应 + i18n', () => {
   it('主题切换在 <html data-theme> 落值', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
-    // 初始应用主题（默认 light）
+    // 初始偏好为 system；jsdom 无 matchMedia 时解析为 light。
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
     fireEvent.click(screen.getByTestId('nav-settings'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(document.documentElement.dataset.themePreference).toBe('light')
+    fireEvent.click(screen.getByTestId('theme-toggle'))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
+  })
+
+  it('系统主题作为显式偏好跟随电脑端系统配色，并清理媒体监听', async () => {
+    let dark = true
+    const listeners = new Set<() => void>()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      get matches() { return dark },
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+    localStorage.setItem('tenon-dashboard-theme', 'system')
+
+    const view = render(<App />)
+    await screen.findByTestId('progress-view')
+    await waitFor(() => {
+      expect(document.documentElement.dataset.themePreference).toBe('system')
+      expect(document.documentElement.dataset.theme).toBe('dark')
+    })
+
+    dark = false
+    act(() => listeners.forEach((listener) => listener()))
+    expect(document.documentElement.dataset.theme).toBe('light')
+
+    view.unmount()
+    expect(listeners.size).toBe(0)
   })
 
   it('语言切换 zh→en：一级导航文案真更新', async () => {

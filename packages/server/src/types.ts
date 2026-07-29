@@ -181,8 +181,9 @@ export interface DashboardServerOptions {
    */
   webRoot?: string
   /**
-   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore（只读 listSessions/
-   * readRecords）则 GET /api/traces/* 供给本地捕获 + capabilities.traffic=true；未注入则占位（不谎报）。
+   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore 后保留旧 sessions/
+   * records API；仅当 adapter 同时支持 timeline reader 时 capabilities.traffic=true，避免新 Dashboard
+   * 对旧 records-only adapter 谎报可用。
    * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
    */
   traceStore?: TraceStoreReader

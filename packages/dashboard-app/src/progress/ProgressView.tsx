@@ -388,7 +388,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
 
   /** 当前相位展示名（自定义步用 labelByStep，default 走 phases.* i18n）——抽屉徽章 running 文案用。 */
   function phaseLabelOf(fr: FlatRow): string {
-    return stepLabel(fr.row.change.phase, fr.rules?.labelByStep, t)
+    return stepLabel(fr.row.change.phase, fr.rules, t)
   }
 
   /** 一枚人话判定徽章（gate/failed 复用 rowSemantics 同源判定；行内导语已退役，§4.5）。 */

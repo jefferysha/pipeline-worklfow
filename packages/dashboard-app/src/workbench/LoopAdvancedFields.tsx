@@ -22,6 +22,7 @@ import {
   WbAdvanced,
   type LoopDraft,
 } from './loopCardModel'
+import { LoopScopePreview } from './LoopScopePreview'
 
 const LEVELS = ['L1', 'L2', 'L3'] as const
 
@@ -43,6 +44,9 @@ export function LoopAdvancedFields({
   onLevel: (level: (typeof LEVELS)[number]) => void
 }): JSX.Element {
   const { t } = useT()
+  const policyDirty =
+    JSON.stringify(draft.allowlist) !== JSON.stringify(row.allowlist) ||
+    JSON.stringify(draft.denylist) !== JSON.stringify(row.denylist)
   return (
     <WbAdvanced testid="lp-adv">
       <div className={WB_TW.sec} data-sec="">
@@ -88,6 +92,12 @@ export function LoopAdvancedFields({
         <LpChipRow label={t('workbench.lp_kill')} values={draft.kill_criteria} addAria={t('workbench.lp_add_kill_aria')} descKeys={KILL_DESC_KEYS} prov={<ProvBadge field="kill_criteria" />} onChange={(next) => onEdit({ kill_criteria: next })} />
         <LpChipRow label={t('workbench.lp_allow')} values={draft.allowlist} addAria={t('workbench.lp_add_allow_aria')} prov={<span className={PROV_ENFORCED_TW} data-kind="enforced" data-testid="lp-prov-allowlist">{t('workbench.lp_prov_reserved')}</span>} note={<><b>{t('workbench.lp_allow_note_lead')}</b>{t('workbench.lp_allow_note_body')}</>} onChange={(next) => onEdit({ allowlist: next })} />
         <LpChipRow label={t('workbench.lp_deny')} values={draft.denylist} addAria={t('workbench.lp_add_deny_aria')} prov={<ProvBadge field="denylist" />} note={<><b>{t('workbench.lp_deny_note_lead')}</b>{t('workbench.lp_deny_note_body')}</>} onChange={(next) => onEdit({ denylist: next })} />
+        <LoopScopePreview
+          key={JSON.stringify([row.root, row.id])}
+          root={row.root}
+          loopId={row.id}
+          policyDirty={policyDirty}
+        />
       </div>
     </WbAdvanced>
   )

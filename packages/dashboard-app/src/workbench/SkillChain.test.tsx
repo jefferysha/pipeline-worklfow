@@ -48,6 +48,10 @@ function renderChain(
 beforeEach(() => {
   localStorage.clear()
   invalidateMandatoryConfig()
+  // Read-only projection cases do not exercise the registry. Keep their
+  // background request pending so it cannot settle outside an assertion's act
+  // boundary; interaction cases below install an explicit response.
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
 })
 afterEach(() => {
   vi.restoreAllMocks()

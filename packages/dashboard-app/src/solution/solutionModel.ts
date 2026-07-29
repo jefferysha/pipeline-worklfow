@@ -3,6 +3,7 @@ export type SolutionPhase = 'open' | 'explore' | 'spec' | 'build' | 'verify' | '
 export type EvidenceStep = 'skill' | 'digest' | 'read' | 'review' | 'transition'
 export type SolutionModule = 'cli' | 'workflow' | 'dashboard' | 'adapters' | 'automation' | 'diagnostics'
 export type HostTier = 'a' | 'b' | 'c'
+export type SolutionSection = 'modes' | 'workflow' | 'evidence' | 'modules' | 'install' | 'safety' | 'community'
 
 export interface CommunityLink {
   id: 'repository' | 'docs' | 'support' | 'security' | 'contributing' | 'license'
@@ -45,6 +46,24 @@ export const solutionModules: readonly SolutionModule[] = [
 ]
 
 export const hostTiers: readonly HostTier[] = ['a', 'b', 'c']
+
+export const solutionSections: readonly SolutionSection[] = [
+  'modes',
+  'workflow',
+  'evidence',
+  'modules',
+  'install',
+  'safety',
+  'community',
+]
+
+export function solutionSectionId(section: SolutionSection): string {
+  return `solution-${section}`
+}
+
+export function solutionSectionHeadingId(section: SolutionSection): string {
+  return `${solutionSectionId(section)}-title`
+}
 
 const repository = 'https://github.com/jefferysha/tenon'
 

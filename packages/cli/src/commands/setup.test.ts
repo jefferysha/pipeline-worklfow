@@ -31,6 +31,8 @@ import type { ExecDockerFn } from '../afkReadiness.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
+import { createHostTargetPlan } from './host-target-plan.js'
+import { cmdUpdate } from './update.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -919,6 +921,109 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
 })
 
 describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry-run 只提示不真探测,R1 concern#1）', () => {
+  test('adapter 计划步骤与真实 setup 编排保持同序', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText })
+    const runtime = fakeRuntimeInstaller()
+    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdSetup(
+      deps,
+      undefined,
+      { cursor: true, yes: true },
+      env,
+      rt,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('cursor', 'setup').steps.map((step) => step.id)).toEqual([
+      'package-assets',
+      'managed-runtime',
+      'adapter-deploy',
+      'bundled-skills',
+      'runtime-readiness',
+    ])
+
+    const output = deps.outLines
+    const actualStepIndexes = [
+      output.findIndex((line) => line.includes('插件资产校验')),
+      output.findIndex((line) => line.includes('已发布已验证 runtime')),
+      output.findIndex((line) => line.includes('/adapters/install.sh --cursor')),
+      output.findIndex((line) => line.includes('[setup skills] 技能安装计划')),
+      output.findIndex((line) => line.includes('[setup runtime] AFK 运行时就绪清单')),
+    ]
+    expect(actualStepIndexes.every((index) => index >= 0)).toBe(true)
+    expect(actualStepIndexes).toEqual([...actualStepIndexes].sort((left, right) => left - right))
+  })
+
+  test('adapter update 计划在真实 update 重新部署后结束，不包含 setup-only 步骤', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText })
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdUpdate(
+      deps,
+      { cursor: true, target: '/workspace' },
+      env,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('cursor', 'update').steps.map((step) => step.id)).toEqual([
+      'package-assets',
+      'managed-runtime',
+      'adapter-deploy',
+    ])
+    expect(deps.outLines.some((line) => line.includes('/adapters/install.sh --cursor'))).toBe(true)
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
+  })
+
+  test('native update 计划在真实 managed runtime 发布后结束，不调用 setup skills/runtime', async () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv(
+      { pathExists: setupPathExists, readText: setupReadText },
+      codexInstallExec,
+    )
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
+
+    const code = await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+    )
+
+    expect(code).toBe(0)
+    expect(createHostTargetPlan('codex', 'update').steps.map((step) => step.id)).toEqual([
+      'marketplace-refresh',
+      'plugin-update',
+      'plugin-inventory',
+      'managed-runtime',
+      'codex-auth-status',
+    ])
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin marketplace upgrade tenon --json'],
+      ['codex', 'plugin add tenon@tenon --json'],
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
+    ])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+    const runtimeIndex = deps.outLines.findIndex((line) => line.includes('已原子切换至已验证 runtime'))
+    const authIndex = deps.outLines.findIndex((line) => line.includes('[Codex 认证] 已登录'))
+    expect(runtimeIndex).toBeGreaterThanOrEqual(0)
+    expect(authIndex).toBeGreaterThan(runtimeIndex)
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
+  })
+
   test('Codex CLI 缺失时在 host/journal mutation 前失败并给出安装与版本检查命令', async () => {
     const deps = makeDeps()
     let authCalls = 0
@@ -1063,6 +1168,23 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(order.indexOf('auth')).toBeGreaterThan(
       Math.max(...order.map((entry, index) => entry.startsWith('host:') ? index : -1)),
     )
+    expect(createHostTargetPlan('codex', 'setup').steps.map((step) => step.id)).toEqual([
+      'marketplace-register',
+      'plugin-install',
+      'plugin-inventory',
+      'managed-runtime',
+      'codex-auth-status',
+      'bundled-skills',
+      'runtime-readiness',
+    ])
+    const outputOrder = [
+      deps.outLines.findIndex((line) => line.includes('已发布已验证 runtime')),
+      deps.outLines.findIndex((line) => line.includes('[Codex 认证] 尚未登录')),
+      deps.outLines.findIndex((line) => line.includes('[setup skills] 技能安装计划')),
+      deps.outLines.findIndex((line) => line.includes('[setup runtime] AFK 运行时就绪清单')),
+    ]
+    expect(outputOrder.every((index) => index >= 0)).toBe(true)
+    expect(outputOrder).toEqual([...outputOrder].sort((left, right) => left - right))
     expect(deps.outLines.join('\n')).toContain('[Codex 认证] 尚未登录')
   })
 

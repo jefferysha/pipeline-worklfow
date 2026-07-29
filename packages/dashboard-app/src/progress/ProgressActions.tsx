@@ -56,7 +56,7 @@ export function ProgressActions({
           >
             <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             {index === 0
-              ? t('progress.act_pass_to', { to: stepLabel(transition.to, rules.labelByStep, t) })
+              ? t('progress.act_pass_to', { to: stepLabel(transition.to, rules, t) })
               : t('inbox.act_forward', { to: transition.event })}
           </button>
         ))}
@@ -70,7 +70,7 @@ export function ProgressActions({
             onClick={() => onTransition(row.row.root, name, transition)}
           >
             <Undo2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-            {t('inbox.act_backward', { to: stepLabel(transition.to, rules.labelByStep, t) })}
+            {t('inbox.act_backward', { to: stepLabel(transition.to, rules, t) })}
           </button>
         ))}
       </>

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { mkdtemp, readFile, readdir, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
@@ -12,6 +13,7 @@ import {
   readCurrentRunRevisionSync,
   stateStorageSourcePathSync,
 } from './run-revision-store.js'
+import { readValidatedTransitionHeadFromSync } from './run-revision-head-reader.js'
 import { hydratePreVerifyReviewFromSync } from './pre-verify-review-store.js'
 import { parseRunRevision } from './run-revision-codec.js'
 import { REVIEW_GATE_FIELDS } from '../types.js'
@@ -36,6 +38,23 @@ afterEach(async () => {
 function rehash(record: Record<string, unknown>): void {
   const { stateDigest: _old, ...body } = record
   record.stateDigest = createHash('sha256').update(JSON.stringify(body)).digest('hex')
+}
+
+function transitionHeadAnchorLine(record: Record<string, unknown>): string | undefined {
+  const state = record.state as { opaqueTail: string }
+  return state.opaqueTail.match(/^# tenon-internal-transition-head-v1: [A-Za-z0-9_-]+\n/m)?.[0]
+}
+
+function replaceTransitionHeadAnchor(
+  record: Record<string, unknown>,
+  replacement = '',
+): void {
+  const state = record.state as { opaqueTail: string }
+  state.opaqueTail = state.opaqueTail.replace(
+    /^# tenon-internal-transition-head-v1: [A-Za-z0-9_-]+\n/m,
+    replacement,
+  )
+  rehash(record)
 }
 
 function companionPath(
@@ -410,6 +429,325 @@ describe('G1 canonical revision 对抗校验', () => {
     await expect(store.read(dir)).rejects.toThrow(/TransitionRecord|record.*缺失/i)
   })
 
+  test('current 是 set 时也校验直接 previous transition 的 record，缺失即 fail-loud', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-previous' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+    await unlink(join(dir, '.pipeline-transitions', '000001-record-previous.json'))
+
+    await expect(readCurrentRunRevision(dir)).rejects.toThrow(/TransitionRecord|record.*缺失/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/TransitionRecord|record.*缺失/i)
+  })
+
+  test('同步可信读取在 transition 后连续两次 set 仍校验 canonical head record，缺失即 fail-loud', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => 'record-two-sets-missing',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'first-set')
+    await store.set(dir, 'assignee', 'second-set')
+    await unlink(join(dir, '.pipeline-transitions', '000001-record-two-sets-missing.json'))
+
+    expect(() => readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)).toThrow(/TransitionRecord|record.*缺失/i)
+  })
+
+  test('同步可信读取在 transition 后连续两次 set 仍以提交 revision digest 拒绝 head 篡改', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => 'record-two-sets-tampered',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'first-set')
+    await store.set(dir, 'assignee', 'second-set')
+    const transitionPath = join(
+      dir, '.pipeline-transitions', '000001-record-two-sets-tampered.json',
+    )
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.event = 'tampered-after-two-sets'
+    await writeFile(transitionPath, JSON.stringify(transition), 'utf8')
+
+    expect(() => readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)).toThrow(/TransitionRecord.*digest|审计.*绑定/i)
+  })
+
+  test('pre-anchor canonical revision 继续由有界 committing-revision fallback 验证', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => 'record-pre-anchor',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'first-set')
+    await store.set(dir, 'assignee', 'second-set')
+
+    const revisionsDir = join(dir, '.pipeline-run', 'revisions')
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const revision2 = JSON.parse(await readFile(join(
+      revisionsDir, `000002-${String(current.previousRevisionId)}.json`,
+    ), 'utf8')) as Record<string, unknown>
+    const revision1 = JSON.parse(await readFile(join(
+      revisionsDir, `000001-${String(revision2.previousRevisionId)}.json`,
+    ), 'utf8')) as Record<string, unknown>
+    for (const [record, pathname] of [
+      [revision1, join(revisionsDir, `000001-${String(revision1.revisionId)}.json`)],
+      [revision2, join(revisionsDir, `000002-${String(revision2.revisionId)}.json`)],
+      [current, join(revisionsDir, `000003-${String(current.revisionId)}.json`)],
+    ] as const) {
+      replaceTransitionHeadAnchor(record)
+      await rebindCompanion(dir, record)
+      await writeFile(pathname, JSON.stringify(record), 'utf8')
+    }
+    await writeFile(currentPath, JSON.stringify(current), 'utf8')
+
+    const validated = readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)
+    expect(validated?.record?.id).toBe('record-pre-anchor')
+  })
+
+  test('legacy head fallback 在 64 revisions 边界 fail-closed，不无界阻塞同步 reader', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => 'record-beyond-legacy-cap',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    for (let index = 0; index < 65; index++) {
+      await store.set(dir, 'assignee', `set-${index}`)
+    }
+    const revisionsDir = join(dir, '.pipeline-run', 'revisions')
+    for (const name of await readdir(revisionsDir)) {
+      if (name.startsWith('000000-')) continue
+      const pathname = join(revisionsDir, name)
+      const record = JSON.parse(await readFile(pathname, 'utf8')) as Record<string, unknown>
+      replaceTransitionHeadAnchor(record)
+      await rebindCompanion(dir, record)
+      await writeFile(pathname, JSON.stringify(record), 'utf8')
+      if (record.revision === 66) {
+        await writeFile(join(dir, '.pipeline-run', 'current.json'), JSON.stringify(record), 'utf8')
+      }
+    }
+
+    expect(() => readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)).toThrow(/64 revisions|兼容校验上限/i)
+  })
+
+  test('同步可信 reader 在解析前执行 8 MiB canonical 总字节上限', async () => {
+    const { dir } = await fresh()
+    expect(() => readValidatedTransitionHeadFromSync((relativePath) => {
+      if (relativePath === join('.pipeline-run', 'current.json')) {
+        return ' '.repeat(8 * 1024 * 1024 + 1)
+      }
+      return undefined
+    }, dir)).toThrow(/8 MiB.*上限/i)
+  })
+
+  test('N-1 保留 stale anchor 后提交新 transition，升级读取走有界 fallback 而不误判损坏', async () => {
+    const { dir } = await fresh()
+    const ids = ['record-anchor-old', 'record-anchor-new']
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => ids.shift() ?? 'unexpected-record',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    const first = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as Record<string, unknown>
+    const oldAnchor = transitionHeadAnchorLine(first)
+    expect(oldAnchor).toBeDefined()
+
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'spec' }, {
+        event: 'explore-complete', from: 'explore', to: 'spec',
+      })
+    })
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    replaceTransitionHeadAnchor(current, oldAnchor)
+    await rebindCompanion(dir, current)
+    const immutablePath = join(
+      dir,
+      '.pipeline-run',
+      'revisions',
+      `000002-${String(current.revisionId)}.json`,
+    )
+    await writeFile(immutablePath, JSON.stringify(current), 'utf8')
+    await writeFile(currentPath, JSON.stringify(current), 'utf8')
+
+    const validated = readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)
+    expect(validated?.record?.id).toBe('record-anchor-new')
+
+    const encoded = oldAnchor
+      ?.slice('# tenon-internal-transition-head-v1: '.length)
+      .trim()
+    const forgedAnchor = JSON.parse(
+      Buffer.from(encoded ?? '', 'base64url').toString('utf8'),
+    ) as Record<string, unknown>
+    forgedAnchor.recordDigest = 'f'.repeat(64)
+    const forgedLine = `# tenon-internal-transition-head-v1: ${
+      Buffer.from(JSON.stringify(forgedAnchor), 'utf8').toString('base64url')
+    }\n`
+    replaceTransitionHeadAnchor(current, forgedLine)
+    await rebindCompanion(dir, current)
+    await writeFile(immutablePath, JSON.stringify(current), 'utf8')
+    await writeFile(currentPath, JSON.stringify(current), 'utf8')
+
+    expect(() => readValidatedTransitionHeadFromSync((relativePath) => {
+      try {
+        return readFileSync(join(dir, relativePath), 'utf8')
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? undefined : (() => { throw error })()
+      }
+    }, dir)).toThrow(/stale transition head anchor|不得改写 transition head anchor/i)
+  })
+
+  test('current 是 set 时拒绝一致篡改 previous transition 与 record 的 predecessor 链', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-forged' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+
+    const transitionPath = join(dir, '.pipeline-transitions', '000001-record-forged.json')
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.previousRecordId = 'forged-predecessor'
+    const transitionRaw = JSON.stringify(transition)
+    await writeFile(transitionPath, transitionRaw, 'utf8')
+
+    const revisionPath = join(dir, '.pipeline-run', 'revisions')
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as { previousRevisionId: string }
+    const previousPath = join(revisionPath, `000001-${current.previousRevisionId}.json`)
+    const previous = JSON.parse(await readFile(previousPath, 'utf8')) as Record<string, unknown>
+    const mutation = previous.mutation as Record<string, unknown>
+    mutation.transitionRecordDigest = createHash('sha256').update(transitionRaw).digest('hex')
+    rehash(previous)
+    await rebindCompanion(dir, previous)
+    await writeFile(previousPath, JSON.stringify(previous), 'utf8')
+
+    await expect(readCurrentRunRevision(dir)).rejects.toThrow(/TransitionRecord|previous|连续|不一致/i)
+    expect(() => readCurrentRunRevisionSync(dir)).toThrow(/TransitionRecord|previous|连续|不一致/i)
+  })
+
+  test('current 是 set 时拒绝同步清空 previous transition 与 record 的 effects', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const records = createTransitionRecordStore()
+    const repo = createWorkflowRunRepository({ store, recordStore: records, clock, newId: () => 'record-effects' })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    await store.set(dir, 'scope', 'post-transition-set')
+
+    const transitionPath = join(dir, '.pipeline-transitions', '000001-record-effects.json')
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.effects = []
+    const transitionRaw = JSON.stringify(transition)
+    await writeFile(transitionPath, transitionRaw, 'utf8')
+
+    const current = JSON.parse(
+      await readFile(join(dir, '.pipeline-run', 'current.json'), 'utf8'),
+    ) as { previousRevisionId: string }
+    const previousPath = join(
+      dir,
+      '.pipeline-run',
+      'revisions',
+      `000001-${current.previousRevisionId}.json`,
+    )
+    const previous = JSON.parse(await readFile(previousPath, 'utf8')) as Record<string, unknown>
+    const mutation = previous.mutation as Record<string, unknown>
+    mutation.effects = []
+    mutation.transitionRecordDigest = createHash('sha256').update(transitionRaw).digest('hex')
+    rehash(previous)
+    await rebindCompanion(dir, previous)
+    await writeFile(previousPath, JSON.stringify(previous), 'utf8')
+
+    await expect(readCurrentRunRevision(dir)).rejects
+      .toThrow(/effects.*diff|真实.*diff|TransitionRecord digest/i)
+    expect(() => readCurrentRunRevisionSync(dir))
+      .toThrow(/effects.*diff|真实.*diff|TransitionRecord digest/i)
+  })
+
   test('transition revision 必须绑定 TransitionRecord 精确字节；只篡改 event 也 fail-loud', async () => {
     const { dir } = await fresh()
     const store = createStateStore()
@@ -426,5 +764,61 @@ describe('G1 canonical revision 对抗校验', () => {
     await writeFile(transitionPath, JSON.stringify(transition), 'utf8')
 
     await expect(store.read(dir)).rejects.toThrow(/TransitionRecord.*digest|record.*摘要|审计.*绑定/i)
+  })
+
+  test('即使同步重算 digest，closed-schema 外的 TransitionRecord 字段仍 fail-loud', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const repo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock,
+      newId: () => 'record-schema-corrupt',
+    })
+    await repo.transact(dir, async (tx) => {
+      await tx.commit({ ...tx.state.fields, phase: 'explore' }, {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+    })
+    const transitionPath = join(
+      dir, '.pipeline-transitions', '000001-record-schema-corrupt.json',
+    )
+    const transition = JSON.parse(await readFile(transitionPath, 'utf8')) as Record<string, unknown>
+    transition.unexpected = 'digest-bound-but-not-canonical'
+    const transitionRaw = JSON.stringify(transition)
+    await writeFile(transitionPath, transitionRaw, 'utf8')
+    const digest = createHash('sha256').update(transitionRaw).digest('hex')
+
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const mutation = current.mutation as Record<string, unknown>
+    mutation.transitionRecordDigest = digest
+    const anchorLine = transitionHeadAnchorLine(current)
+    const encoded = anchorLine
+      ?.slice('# tenon-internal-transition-head-v1: '.length)
+      .trim()
+    const anchor = JSON.parse(
+      Buffer.from(encoded ?? '', 'base64url').toString('utf8'),
+    ) as Record<string, unknown>
+    anchor.recordDigest = digest
+    replaceTransitionHeadAnchor(
+      current,
+      `# tenon-internal-transition-head-v1: ${
+        Buffer.from(JSON.stringify(anchor), 'utf8').toString('base64url')
+      }\n`,
+    )
+    await rebindCompanion(dir, current)
+    await writeFile(join(
+      dir,
+      '.pipeline-run',
+      'revisions',
+      `000001-${String(current.revisionId)}.json`,
+    ), JSON.stringify(current), 'utf8')
+    await writeFile(currentPath, JSON.stringify(current), 'utf8')
+
+    await expect(readCurrentRunRevision(dir)).rejects
+      .toThrow(/TransitionRecord schema|schema invalid/i)
+    expect(() => readCurrentRunRevisionSync(dir))
+      .toThrow(/TransitionRecord schema|schema invalid/i)
   })
 })
