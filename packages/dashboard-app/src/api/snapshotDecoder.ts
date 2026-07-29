@@ -61,6 +61,10 @@ function decodeDocuments(value: unknown): DocumentEvidenceSnapshot | undefined {
       || typeof item.requiredRead !== 'boolean'
       || !stringArray(item.paths)
       || !stringArray(item.producers)) return undefined
+    const timeline = item.timeline === undefined ? undefined : Array.isArray(item.timeline) && item.timeline.every((entry) => isRecord(entry) && typeof entry.producer === 'string' && typeof entry.recordedAt === 'string' && optionalString(entry.readAt))
+      ? item.timeline.map((entry) => ({ producer: entry.producer as string, recordedAt: entry.recordedAt as string, ...(typeof entry.readAt === 'string' ? { readAt: entry.readAt } : {}) }))
+      : undefined
+    if (item.timeline !== undefined && timeline === undefined) return undefined
     const status = item.status
     if (status !== 'recorded' && status !== 'missing' && status !== 'stale' && status !== 'unread') return undefined
     items.push({
@@ -69,6 +73,7 @@ function decodeDocuments(value: unknown): DocumentEvidenceSnapshot | undefined {
       requiredRead: item.requiredRead,
       paths: item.paths,
       producers: item.producers,
+      ...(timeline === undefined ? {} : { timeline }),
     })
   }
   return {
