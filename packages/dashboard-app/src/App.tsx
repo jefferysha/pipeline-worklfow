@@ -72,6 +72,12 @@ function AppShell(): JSX.Element {
   const flashRef = useRef<HTMLDivElement>(null)
   const flashTimerRef = useRef<number | null>(null)
 
+  useEffect(() => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = null
+    setFlash(null)
+  }, [lang])
+
   const setView = useCallback((v: View) => {
     setViewState(v)
     if (v !== 'progress') setSelectedChange(null)
@@ -268,6 +274,7 @@ function AppShell(): JSX.Element {
           <Onboarding kind="no-project" />
         ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
           <Onboarding
+            key={currentRoot}
             kind="no-change"
             root={currentRoot}
             onCreated={refresh}
@@ -292,6 +299,7 @@ function AppShell(): JSX.Element {
           // 落到「项目」总览页。
           currentRoot !== '' ? (
             <ProgressView
+              key={currentRoot}
               snapshot={snapshot}
               loading={loading}
               error={error ? formatApiError(error, t) : null}
@@ -310,6 +318,7 @@ function AppShell(): JSX.Element {
           // 契约同进度页：AfkView 恒吃真实单项目 root（currentRoot 非空）；'' 仅首帧未到，诚实加载态。
           currentRoot !== '' ? (
             <AfkView
+              key={currentRoot}
               snapshot={snapshot}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
@@ -329,7 +338,7 @@ function AppShell(): JSX.Element {
             // v6 计划 T11：流程带真实计数/running 脉冲吃同一份已加载的 snapshot（App 是唯一
             // useSnapshot() 调用点，不在 WorkbenchView 内独立开第二条 SSE 订阅——见
             // WorkbenchViewProps.snapshot 头注释）。
-            <WorkbenchView root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} snapshot={snapshot} />
+            <WorkbenchView key={workbenchRoot} root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} snapshot={snapshot} />
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。

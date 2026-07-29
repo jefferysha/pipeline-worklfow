@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ApiError, fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
-import { readErrorDetail } from './workbenchApiDecoders'
 
 export interface SkillTransferModalProps {
   selected: string[]
@@ -41,27 +40,8 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
     // 语言切换只重渲染错误文案，不重拉 registry，也不打断当前选择与焦点。
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        // r.ok 检查必须在 r.json() 之前（whole-branch review 抓出的真实回归）：server 对错误
-        // 统一返回 JSON 信封（{ok:false,error}），非 2xx 时 r.json() 依然会成功 resolve 而不是
-        // reject，若不先查 r.ok，.catch() 永远不会触发，本组件会静默拿到 undefined 的 skills
-        // 字段，随后 `all.filter(...)` 在下一次 render 直接抛错——无 ErrorBoundary 兜底会白屏。
-        if (!r.ok) {
-          const detail = await readErrorDetail(r)
-          throw new ApiError(
-            detail || `skill registry request failed (${r.status})`,
-            r.status,
-            detail !== '',
-          )
-        }
-        try {
-          return await r.json() as { skills: WbSkillEntry[] }
-        } catch {
-          throw new ApiError('skill registry response is invalid', r.status)
-        }
-      })
-      .then((body) => {
-        if (!cancelled) setAll(body.skills)
+      .then((skills) => {
+        if (!cancelled) setAll(skills)
       })
       .catch((err: unknown) => {
         if (!cancelled) {

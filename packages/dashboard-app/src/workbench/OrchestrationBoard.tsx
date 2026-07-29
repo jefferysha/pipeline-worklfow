@@ -32,7 +32,7 @@ export function OrchestrationBoard({
   hooks,
   toolbarSlot,
 }: OrchestrationBoardProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [hoverGate, setHoverGate] = useState<string | null>(null)
   const [pinnedGate, setPinnedGate] = useState<string | null>(null)
   const [nameEdit, setNameEdit] = useState<{ id: string; draft: string } | null>(null)
@@ -55,6 +55,9 @@ export function OrchestrationBoard({
   const canGuard = onLaneGuard !== undefined && !readonly
   const regReady = skillRegistry !== null && skillRegistry !== undefined
   const removeLane = removeId === null ? undefined : lanes.find((l) => l.id === removeId)
+  useEffect(() => {
+    setOutAdd((current) => current === null ? null : { ...current, error: null })
+  }, [lang])
   useEffect(() => {
     if (pinnedGate === null) return
     function onDocClick(e: MouseEvent): void {

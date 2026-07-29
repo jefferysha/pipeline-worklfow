@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchAfkLog } from '../api/client'
+import { ApiError, formatApiError, isRecord, readJson, throwApiError } from '../api/transport'
 import { useT } from '../i18n'
 
 // T18 自 afk/ 迁入 progress/——旧 AFK 工作台 随 v5 三视图 IA 退役，本 hook 的唯一存活消费方
@@ -10,26 +11,6 @@ import { useT } from '../i18n'
  * 对齐，不在测试里重复硬编码这个数字（一改两处同步，容易漂移）。
  */
 export const AFK_LOG_POLL_INTERVAL_MS = 2500
-
-interface ErrorBody {
-  error?: string
-}
-
-/**
- * 非 2xx 响应尽量读出 server 的 { error } 文案；没有 JSON 体（如纯文本 500）就吞掉，回落调用方
- * 的通用文案。与 旧 AFK 工作台（T18 已退役） 同名私有函数逐字同构的第二份局部拷贝——两个文件各自只用
- * 这一处，故意不跨模块抽取（precedent：旧看板视图（T18 已退役） `rootTail()` 头注"三处都只是这一行，不
- * 值得为此新增跨模块依赖"的既有判断，这里是同一类判断的第二次应用）。
- */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody
-    if (body && typeof body.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
 
 export interface UseAfkLogResult {
   /** 随时可渲染的字符串：真实日志内容 / 空日志占位文案 / 错误文案三态合一——评审"错误全部
@@ -61,8 +42,12 @@ export interface UseAfkLogResult {
  * 不同项目可能有同名 change，仅凭 name 轮询会在切换选中时悄悄拉错项目的日志。
  */
 export function useAfkLog(name: string | null, status: string | undefined, root: string): UseAfkLogResult {
-  const { t } = useT()
-  const [log, setLog] = useState('')
+  const { t, lang } = useT()
+  const [logState, setLogState] = useState<
+    { kind: 'idle' }
+    | { kind: 'data'; value: string | null }
+    | { kind: 'error'; cause: unknown }
+  >({ kind: 'idle' })
   const [follow, setFollow] = useState(true)
   // 竞态防御：每次发起 fetchLog 时递增的请求序号（同 useSnapshot.ts 的 cancelled 标记套路是
   // 同一类"晚发出/晚落地的旧请求不该覆盖新结果"判据，这里换成序号实现）。
@@ -81,16 +66,19 @@ export function useAfkLog(name: string | null, status: string | undefined, root:
     try {
       const res = await fetchAfkLog(name, root)
       if (!res.ok) {
-        throw new Error((await readErrorDetail(res)) || t('afk.log_error_status', { status: res.status }))
+        await throwApiError(res, `AFK log ${res.status}`)
       }
-      const body = (await res.json()) as { log: string | null }
+      const body = await readJson(res)
+      if (!isRecord(body) || (body.log !== null && typeof body.log !== 'string')) {
+        throw new ApiError('', res.status)
+      }
       if (seq !== seqRef.current) return // 不是最新发起的那次请求，这份结果作废
-      setLog(body.log || t('afk.empty_log'))
+      setLogState({ kind: 'data', value: body.log })
     } catch (err) {
       if (seq !== seqRef.current) return
-      setLog(t('afk.log_error', { msg: err instanceof Error ? err.message : t('afk.network_error') }))
+      setLogState({ kind: 'error', cause: err })
     }
-  }, [name, root, t])
+  }, [name, root])
 
   // 选中目标变化（name 或 root 任一变化，含"跨项目同名"边界——fetchLog 的 identity 随两者变化，
   // 已经把 root 变化间接纳入依赖，这里不必再重复列 root）：重置为跟随态 + 立即拉第一次。
@@ -99,7 +87,7 @@ export function useAfkLog(name: string | null, status: string | undefined, root:
   useEffect(() => {
     setFollow(true)
     if (!name) {
-      setLog('')
+      setLogState({ kind: 'idle' })
       return
     }
     void fetchLog()
@@ -119,5 +107,12 @@ export function useAfkLog(name: string | null, status: string | undefined, root:
     await fetchLog()
   }, [fetchLog])
 
+  const log = logState.kind === 'idle'
+    ? ''
+    : logState.kind === 'data'
+      ? logState.value || t('afk.empty_log')
+      : t('afk.log_error', {
+          msg: formatApiError(logState.cause, t, { exposeServerDetail: lang === 'zh' }),
+        })
   return { log, follow, setFollow, refresh }
 }

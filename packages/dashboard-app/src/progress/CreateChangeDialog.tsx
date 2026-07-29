@@ -7,6 +7,7 @@ import {
   type WbRouterPreview,
   type WbRouterPreviewCandidate,
 } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 
@@ -19,20 +20,6 @@ export interface CreateChangeDialogProps {
 
 const NAME_RE = /^[a-zA-Z0-9_-]+$/
 const INPUT = 'w-full rounded-lg border border-border bg-bg px-3 py-2 text-[13px] text-text outline-none focus:border-(--accent) focus:ring-2 focus:ring-accent-t'
-
-function readError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function firstWorkflowStep(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  const steps = Reflect.get(value, 'steps')
-  if (!Array.isArray(steps) || steps.length === 0) return null
-  const first = steps[0]
-  if (typeof first !== 'object' || first === null || Array.isArray(first)) return null
-  const id = Reflect.get(first, 'id')
-  return typeof id === 'string' && id !== '' ? id : null
-}
 
 function workflowOptions(candidate: WbRouterPreviewCandidate | undefined, names: readonly string[]): string[] {
   if (!candidate) return []
@@ -50,20 +37,54 @@ function workflowOptions(candidate: WbRouterPreviewCandidate | undefined, names:
  * 提示词持久化为当前 Change 的会话任务，再由真实 CLI 绑定当前会话。
  */
 export function CreateChangeDialog({ root, onClose, onCreated, onToast }: CreateChangeDialogProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [name, setName] = useState('')
   const [intent, setIntent] = useState('')
   const [workflowNames, setWorkflowNames] = useState<string[]>([])
   const [preview, setPreview] = useState<WbRouterPreview | null>(null)
   const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
-  const [previewError, setPreviewError] = useState('')
+  const [previewError, setPreviewError] = useState<unknown | null>(null)
   const [selectedTrack, setSelectedTrack] = useState('')
   const [selectedWorkflow, setSelectedWorkflow] = useState('')
   const [firstStep, setFirstStep] = useState('')
+  const [firstStepError, setFirstStepError] = useState<unknown | null>(null)
   const [firstStepState, setFirstStepState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [busy, setBusy] = useState(false)
-  const [createError, setCreateError] = useState('')
+  const [createError, setCreateError] = useState<unknown | null>(null)
   const previewSequence = useRef(0)
+  const createSequence = useRef(0)
+  const mounted = useRef(true)
+  const rootIdentity = useRef(root)
+  rootIdentity.current = root
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      ++previewSequence.current
+      ++createSequence.current
+    }
+  }, [])
+
+  useEffect(() => {
+    ++previewSequence.current
+    ++createSequence.current
+    setName('')
+    setIntent('')
+    setWorkflowNames([])
+    setPreview(null)
+    setPreviewState('idle')
+    setPreviewError(null)
+    setSelectedTrack('')
+    setSelectedWorkflow('')
+    setFirstStep('')
+    setFirstStepError(null)
+    setFirstStepState('idle')
+    setBusy(false)
+    setCreateError(null)
+  }, [root])
 
   useEffect(() => {
     let active = true
@@ -76,7 +97,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   useEffect(() => {
     const prompt = intent
     const seq = ++previewSequence.current
-    setPreviewError('')
+    setPreviewError(null)
     if (prompt.trim().length < 3) {
       setPreview(null)
       setPreviewState('idle')
@@ -102,7 +123,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
           if (previewSequence.current !== seq) return
           setPreview(null)
           setPreviewState('error')
-          setPreviewError(readError(error))
+          setPreviewError(error)
           setSelectedTrack('')
         })
     }, 260)
@@ -130,22 +151,22 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     let active = true
     if (selectedWorkflow === '') {
       setFirstStep('')
+      setFirstStepError(null)
       setFirstStepState('idle')
       return () => { active = false }
     }
     if (selectedWorkflow === 'default') {
       setFirstStep('open')
+      setFirstStepError(null)
       setFirstStepState('ready')
       return () => { active = false }
     }
     setFirstStepState('loading')
     setFirstStep('')
+    setFirstStepError(null)
     void fetchWorkflow(selectedWorkflow, root)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Workflow ${selectedWorkflow} ${response.status}`)
-        const body: unknown = await response.json()
-        const first = firstWorkflowStep(body)
-        if (first === null) throw new Error('__workflow_empty__')
+      .then((body) => {
+        const first = body.steps[0]?.id ?? '__workflow_empty__'
         if (active) {
           setFirstStep(first)
           setFirstStepState('ready')
@@ -153,7 +174,8 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       })
       .catch((error) => {
         if (active) {
-          setFirstStep(readError(error))
+          setFirstStep('')
+          setFirstStepError(error)
           setFirstStepState('error')
         }
       })
@@ -169,28 +191,43 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
 
   async function create(): Promise<void> {
     if (!canCreate || !selectedCandidate) return
+    const operation = {
+      root,
+      name,
+      track: selectedCandidate.track.id,
+      workflow: selectedWorkflow,
+      intent: intent.trim(),
+      token: ++createSequence.current,
+    }
     setBusy(true)
-    setCreateError('')
+    setCreateError(null)
     try {
       const result = await postCreateChange({
-        root,
-        name,
-        track: selectedCandidate.track.id,
-        workflow: selectedWorkflow,
-        task_prompt: intent.trim(),
+        root: operation.root,
+        name: operation.name,
+        track: operation.track,
+        workflow: operation.workflow,
+        task_prompt: operation.intent,
         activate_session: true,
       })
-      await onCreated(name)
+      if (!mounted.current || operation.token !== createSequence.current || rootIdentity.current !== operation.root) return
+      await onCreated(operation.name)
+      if (!mounted.current || operation.token !== createSequence.current || rootIdentity.current !== operation.root) return
+      const current = localeIdentity.current
       onToast?.(
         result.session?.active === true
-          ? t('change_create.created_and_activated', { name })
-          : t('change_create.created_session_not_active', { name }),
+          ? current.t('change_create.created_and_activated', { name: operation.name })
+          : current.t('change_create.created_session_not_active', { name: operation.name }),
       )
       onClose()
     } catch (error) {
-      setCreateError(readError(error))
+      if (mounted.current && operation.token === createSequence.current && rootIdentity.current === operation.root) {
+        setCreateError(error)
+      }
     } finally {
-      setBusy(false)
+      if (mounted.current && operation.token === createSequence.current && rootIdentity.current === operation.root) {
+        setBusy(false)
+      }
     }
   }
 
@@ -260,7 +297,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
 
           {previewState === 'idle' && <p className="py-8 text-center text-xs text-text-3" role="status" aria-live="polite">{t('change_create.route_idle')}</p>}
           {previewState === 'loading' && <p className="py-8 text-center text-xs text-text-3" role="status" aria-live="polite">{t('change_create.route_loading')}</p>}
-          {previewState === 'error' && <p className="py-4 text-xs text-red-d" role="alert">{previewError}</p>}
+          {previewState === 'error' && <p className="py-4 text-xs text-red-d" role="alert">{formatApiError(previewError, t, { exposeServerDetail: lang === 'zh' })}</p>}
           {preview && previewState === 'ready' && (
             <>
               {preview.suppressed_reason !== null ? (
@@ -291,7 +328,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                   >
                     <span className="block text-xs font-bold text-text">{candidate.track.label}</span>
                     <span className="mt-0.5 block font-mono text-[10px] text-text-3">
-                      {candidate.routable ? `score ${candidate.score} · p${candidate.priority}` : t('change_create.route_disabled')}
+                      {candidate.routable ? t('change_create.route_score', { score: candidate.score, priority: candidate.priority }) : t('change_create.route_disabled')}
                     </span>
                   </button>
                 ))}
@@ -309,7 +346,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                       <div className="text-[10px] font-bold uppercase tracking-wider text-text-3">{t('change_create.policy')}</div>
                       <div className="mt-1 text-xs leading-5 text-text-2">
                         {selectedCandidate.track.policyProfile.coverageProfile} · {selectedCandidate.track.policyProfile.skills.profile}<br />
-                        {selectedCandidate.track.policyProfile.automationEligible ? t('change_create.afk_yes') : t('change_create.afk_no')} · review {selectedCandidate.track.policyProfile.reviewSeed}
+                        {selectedCandidate.track.policyProfile.automationEligible ? t('change_create.afk_yes') : t('change_create.afk_no')} · {t('change_create.review_seed', { value: selectedCandidate.track.policyProfile.reviewSeed })}
                       </div>
                     </div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-text-3">
@@ -325,7 +362,13 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                       <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step" role="status" aria-live="polite">
                         {firstStepState === 'loading'
                           ? t('change_create.step_loading')
-                          : t('change_create.first_step', { step: firstStep === '__workflow_empty__' ? t('change_create.workflow_empty', { workflow: selectedWorkflow }) : firstStep || '—' })}
+                          : t('change_create.first_step', {
+                              step: firstStep === '__workflow_empty__'
+                                ? t('change_create.workflow_empty', { workflow: selectedWorkflow })
+                                : firstStepError === null
+                                  ? firstStep || '—'
+                                  : formatApiError(firstStepError, t, { exposeServerDetail: lang === 'zh' }),
+                            })}
                       </span>
                     </label>
                   </div>
@@ -336,7 +379,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
         </section>
       </div>
 
-      {createError !== '' && <p className="mt-3 rounded-lg bg-red-t px-3 py-2 text-xs text-red-d" role="alert">{createError}</p>}
+      {createError !== null && <p className="mt-3 rounded-lg bg-red-t px-3 py-2 text-xs text-red-d" role="alert">{formatApiError(createError, t, { exposeServerDetail: lang === 'zh' })}</p>}
     </Dialog>
   )
 }

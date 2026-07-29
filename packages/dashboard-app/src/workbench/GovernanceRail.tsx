@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
-import { LpSlider, WB_TW, type LoopsState } from './LoopCard'
+import { LpSlider, type LoopsState } from './LoopCard'
 import { cn } from '@/lib/utils'
 import { ChartNoAxesColumn, CircleAlert, Pencil } from 'lucide-react'
 import { GovernancePromoteDialog } from './GovernancePromoteDialog'
 import { GovernanceRailHead } from './GovernanceRailHead'
 import { GovernanceGraduation } from './GovernanceGraduation'
+import { GovernanceRailStatus } from './GovernanceRailStatus'
 import {
   BAND_KEY, BAND_TW, BAR_TW, BUDGET_COMMIT_MS, BUDGET_WARN_RATIO, GCARD_TW,
   GH_B_TW, GH_TW, GNOTE_ERR_TW, GNOTE_HINT_TW, GNOTE_TW, LAMP_TW, LEVELS,
@@ -33,6 +34,18 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   /** token 上限草稿（k 单位）；null = 未拖动，跟随 server 真值。 */
   const [tokK, setTokK] = useState<number | null>(null)
   const [budgetError, setBudgetError] = useState<string | null>(null)
+  const levelGeneration = useRef(0)
+  const budgetGeneration = useRef(0)
+  const identity = useRef({ root, rowId: row?.id ?? null })
+  identity.current = { root, rowId: row?.id ?? null }
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+  useEffect(() => {
+    ++levelGeneration.current
+    ++budgetGeneration.current
+    setLevelBusy(false)
+    setConfirmLevel(null)
+  }, [root, row?.id])
   useEffect(() => {
     setLevelError(null)
     setBudgetError(null)
@@ -56,7 +69,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     () => () => {
       if (commitTimer.current !== null) clearTimeout(commitTimer.current)
     },
-    [row],
+    [root, row?.id],
   )
 
   /**
@@ -74,34 +87,50 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
 
   async function applyLevel(target: GovernanceLevel): Promise<void> {
     if (!row || levelBusy || target === row.autonomy_level) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++levelGeneration.current
     setLevelBusy(true)
     setLevelError(null)
     try {
-      await postLoopLevel({ root, id: row.id, target })
+      await postLoopLevel({ root: targetRoot, id: targetId, target })
+      if (generation !== levelGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
-      setLevelError(t('workbench.lp_level_fail', {
-        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
-      }))
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setLevelError(current.t('workbench.lp_level_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     } finally {
-      setLevelBusy(false)
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setLevelBusy(false)
+      }
     }
   }
 
   async function commitTokens(k: number): Promise<void> {
     if (!row) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++budgetGeneration.current
     const next = k * 1000
     // 与 server 真值相同 → 不发（LoopCard computePatch「不夹带未改字段」的同一条纪律）。
     if (next === (row.budget_decl?.max_tokens_per_day ?? null)) return
     setBudgetError(null)
     try {
-      await postLoopUpdate({ root, id: row.id, patch: { max_tokens_per_day: next } })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: { max_tokens_per_day: next } })
+      if (generation !== budgetGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
       // 写回失败必须现形：否则用户以为阈值改了、其实没落盘（静默吞错 = 谎报已保存）。
-      setBudgetError(t('workbench.gov_budget_fail', {
-        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
-      }))
+      if (generation === budgetGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setBudgetError(current.t('workbench.gov_budget_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     }
   }
 
@@ -111,41 +140,8 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     commitTimer.current = setTimeout(() => void commitTokens(v), BUDGET_COMMIT_MS) // 停手落盘
   }
 
-  // ── 加载 / 错误 / 空态三分支（轨头恒在）──
-  if (loops.loadError) {
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW}>
-          <p className={WB_TW.loadError} data-tone="error" data-testid="wb-gov-load-error" role="alert">
-            {loops.loadError}
-          </p>
-        </div>
-      </aside>
-    )
-  }
-  if (loops.rows === null) {
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW}>
-          <p className={WB_TW.loading} role="status" aria-live="polite">{t('common.loading')}</p>
-        </div>
-      </aside>
-    )
-  }
-  if (!row) {
-    // 空态照 LoopCard 既有 lp-empty 的「去终端生成」口径（复用其 i18n 键，不自造文案）：
-    // 配置的生产者是 agent/系统，不是人从空白手填——不渲染任何编辑控件，不谎报可配。
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW} data-testid="wb-gov-empty" role="status" aria-live="polite">
-          <p className="mb-1 text-[14px] font-bold text-text">{t('workbench.lp_empty_title')}</p>
-          <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
-        </div>
-      </aside>
-    )
+  if (loops.loadError || loops.rows === null || !row) {
+    return <GovernanceRailStatus loops={loops} t={t} />
   }
 
   const curIdx = LEVELS.indexOf(row.autonomy_level)

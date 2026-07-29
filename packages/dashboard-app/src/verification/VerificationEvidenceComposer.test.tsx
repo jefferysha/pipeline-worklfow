@@ -30,6 +30,38 @@ afterEach(() => {
 })
 
 describe('VerificationEvidenceComposer', () => {
+  it('locale 切换保留草稿并使旧 locale 的在途结果失效', async () => {
+    let resolveRequest!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>((resolve) => {
+      resolveRequest = resolve
+    })))
+    const { rerender } = render(
+      <I18nProvider>
+        <VerificationEvidenceComposer root="/repo" locale="zh-CN" />
+      </I18nProvider>,
+    )
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    expect(screen.getByTestId('evidence-compose')).toBeDisabled()
+
+    rerender(
+      <I18nProvider>
+        <VerificationEvidenceComposer root="/repo" locale="en" />
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
+    expect(screen.getByTestId('evidence-compose')).toBeEnabled()
+
+    resolveRequest(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# 旧语言结果',
+      entryCount: 1,
+    }), { status: 200 }))
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    expect(screen.queryByTestId('evidence-output')).not.toBeInTheDocument()
+  })
+
   it('renders through the neutral document-section slot', () => {
     const documents = { governed: true, pass: true, blockers: [], items: [] }
     const { rerender } = render(

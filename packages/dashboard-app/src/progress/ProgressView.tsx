@@ -7,6 +7,7 @@ import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import type { PlannedTransition } from '../model/events'
 import { fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
+import { formatApiError, throwApiError } from '../api/transport'
 import { gateEvidence, type EvidenceChip } from '../model/evidence'
 import {
   WorkflowCanvas,
@@ -26,7 +27,6 @@ import {
   fieldStr,
   patchLanded,
   patchMovedFromBase,
-  readErrorDetail,
   rowKeyOf,
   rowSemantics,
   stepLabel,
@@ -88,8 +88,13 @@ export interface ProgressViewProps {
 }
 
 export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const rootRef = useRef<HTMLElement>(null)
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+  const mounted = useRef(true)
+  const rootIdentity = useRef(currentRoot)
+  rootIdentity.current = currentRoot
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
   // 状态页签（默认全部）。
@@ -97,6 +102,16 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   // 工作流筛选保持为单一 select，避免工作流增多后横向堆满筛选栏。
   const [wfFilter, setWfFilter] = useState<string>('all')
   const [createOpen, setCreateOpen] = useState(false)
+
+  useEffect(() => {
+    setCreateOpen(false)
+  }, [currentRoot])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   // Bug4：新 snapshot 到达即按 change **逐条**清乐观 patch——只清「已落地（真值达目标）或已离开
   // 施加基线（server 已推进）」的那条，保留其余项目仍在途、尚未反映的 patch。
@@ -240,19 +255,26 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const key = rowKeyOf(root, name)
     if (busyRows.has(key)) return
     setBusy(key, true)
-    const label = t('progress.act_kill')
+    const labelKey = 'progress.act_kill'
     try {
       const res = await postAfkCommand(name, root, 'cancel')
       if (!res.ok) {
-        throw new Error((await readErrorDetail(res)) || t('progress.act_fail_http', { status: res.status }))
+        await throwApiError(res, localeIdentity.current.t('progress.act_fail_http', { status: res.status }))
       }
-      onToast?.(t('progress.act_ok', { name, label }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_ok', { name, label: current.t(labelKey) }))
       pulseRow(name)
       await onRefresh?.()
     } catch (err) {
-      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_fail', {
+        label: current.t(labelKey),
+        msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+      }))
     } finally {
-      setBusy(key, false)
+      if (mounted.current && rootIdentity.current === root) setBusy(key, false)
     }
   }
 
@@ -261,18 +283,25 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const key = rowKeyOf(root, name)
     if (busyRows.has(key)) return
     setBusy(key, true)
-    const label = planned.backward ? t('progress.act_reject') : t('progress.act_pass')
+    const labelKey = planned.backward ? 'progress.act_reject' : 'progress.act_pass'
     setPatch(key, { base: baseOf(root, name), phase: planned.to })
     try {
       await postTransition(name, root, planned.event)
-      onToast?.(t('progress.act_ok', { name, label }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_ok', { name, label: current.t(labelKey) }))
       pulseRow(name)
       await onRefresh?.()
     } catch (err) {
+      if (!mounted.current || rootIdentity.current !== root) return
       setPatch(key, null)
-      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_fail', {
+        label: current.t(labelKey),
+        msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+      }))
     } finally {
-      setBusy(key, false)
+      if (mounted.current && rootIdentity.current === root) setBusy(key, false)
     }
   }
 

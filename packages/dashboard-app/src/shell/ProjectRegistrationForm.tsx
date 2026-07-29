@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { ApiError, registerProject } from '../api/client'
+import { registerProject } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 
 interface ProjectRegistrationFormProps {
@@ -10,23 +11,23 @@ interface ProjectRegistrationFormProps {
 /** 机器级项目注册的真实产品入口。这里只收路径并调用 server；目录存在性、realpath、重复注册和
  * inode 信任锚都由 `/api/projects` 统一判定，前端不模拟文件系统。 */
 export function ProjectRegistrationForm({ onRegistered, compact = false }: ProjectRegistrationFormProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [root, setRoot] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<unknown | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     const requested = root.trim()
     if (requested === '') return
     setBusy(true)
-    setError('')
+    setError(null)
     try {
       const registered = await registerProject(requested)
       await onRegistered?.(registered.root)
       setRoot('')
     } catch (cause) {
-      setError(cause instanceof ApiError || cause instanceof Error ? cause.message : String(cause))
+      setError(cause)
     } finally {
       setBusy(false)
     }
@@ -76,7 +77,7 @@ export function ProjectRegistrationForm({ onRegistered, compact = false }: Proje
           {busy ? t('onboard.registering') : t('onboard.register')}
         </button>
       )}
-      {error !== '' && <p className="mt-2 w-full text-xs text-red" role="alert">{error}</p>}
+      {error !== null && <p className="mt-2 w-full text-xs text-red" role="alert">{formatApiError(error, t, { exposeServerDetail: lang === 'zh' })}</p>}
     </form>
   )
 }

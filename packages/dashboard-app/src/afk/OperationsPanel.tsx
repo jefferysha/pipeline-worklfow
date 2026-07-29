@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Clock3, Play, RefreshCw, Sparkles } from 'lucide-react'
 import {
   fetchAutomationStarters,
@@ -82,26 +82,71 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<OperationResponse | null>(null)
   const [operationError, setOperationError] = useState<unknown | null>(null)
+  const [loadedRoot, setLoadedRoot] = useState<string | null>(null)
+  const loadGeneration = useRef(0)
+  const operationGeneration = useRef(0)
+  const currentRoot = useRef(root)
+  currentRoot.current = root
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+
+  const clearRootScopedState = (): void => {
+    setTemplates([])
+    setLoops([])
+    setCadence(null)
+    setSelectedTemplate('')
+    setLoopId('')
+    setRunner('codex')
+    setWorkflow('default')
+    setSkillBundle('')
+    setSelector('')
+    setRunLevel('L1')
+    setRunReal(false)
+    setRunCommit(false)
+    setConfirmRun(false)
+    setConfirmL3(false)
+    setSyncMode('dry-run')
+    setConfirmSync(false)
+    setTriageSource('git-commits')
+    setTriageModel('')
+    setConfirmTriage(false)
+    setBusy(null)
+    setResult(null)
+    setOperationError(null)
+    setLoadedRoot(null)
+  }
 
   const reload = (): void => {
+    const targetRoot = root
+    const generation = ++loadGeneration.current
     setLoadError(null)
-    void Promise.all([fetchAutomationStarters(root), fetchLoopsSnapshot(), fetchCadenceStatus(root)])
+    void Promise.all([fetchAutomationStarters(targetRoot), fetchLoopsSnapshot(), fetchCadenceStatus(targetRoot)])
       .then(([nextTemplates, loopSnapshot, cadenceStatus]) => {
-        const nextLoops = loopSnapshot.rows.filter((loop) => loop.root === root)
+        if (generation !== loadGeneration.current || currentRoot.current !== targetRoot) return
+        const nextLoops = loopSnapshot.rows.filter((loop) => loop.root === targetRoot)
         setTemplates(nextTemplates)
         setLoops(nextLoops)
         setCadence(cadenceStatus)
-        setSelectedTemplate((current) => current || nextTemplates[0]?.id || '')
-        setSelector((current) => current || nextLoops[0]?.id || '')
-        if (nextLoops.length > 0) {
-          const chosen = nextLoops.find((loop) => loop.id === selector) ?? nextLoops[0]!
-          setRunLevel(chosen.autonomy_level)
+        setSelectedTemplate((current) => nextTemplates.some((item) => item.id === current) ? current : nextTemplates[0]?.id || '')
+        setSelector((current) => nextLoops.some((item) => item.id === current) ? current : nextLoops[0]?.id || '')
+        setLoadedRoot(targetRoot)
+      })
+      .catch((error: unknown) => {
+        if (generation === loadGeneration.current && currentRoot.current === targetRoot) {
+          setLoadError(error)
         }
       })
-      .catch((error: unknown) => setLoadError(error))
   }
 
-  useEffect(reload, [root])
+  useEffect(() => {
+    ++operationGeneration.current
+    clearRootScopedState()
+    reload()
+    return () => {
+      ++loadGeneration.current
+      ++operationGeneration.current
+    }
+  }, [root])
 
   useEffect(() => {
     const loop = loops.find((item) => item.id === selector)
@@ -114,23 +159,31 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
   )
 
   async function perform(kind: string, action: () => Promise<OperationResponse>, refresh = false): Promise<void> {
+    const targetRoot = root
+    const generation = ++operationGeneration.current
     setBusy(kind)
     setOperationError(null)
     setResult(null)
     try {
       const response = await action()
+      if (generation !== operationGeneration.current || currentRoot.current !== targetRoot) return
       setResult(response)
       if (response.ok) {
-        onToast?.(t('operations.completed'))
+        onToast?.(localeIdentity.current.t('operations.completed'))
         if (refresh) reload()
       }
     } catch (error) {
-      setOperationError(error)
+      if (generation === operationGeneration.current && currentRoot.current === targetRoot) {
+        setOperationError(error)
+      }
     } finally {
-      setBusy(null)
+      if (generation === operationGeneration.current && currentRoot.current === targetRoot) {
+        setBusy(null)
+      }
     }
   }
 
+  const rootReady = loadedRoot === root
   const realRunReady = !runReal || (confirmRun && (runLevel !== 'L3' || confirmL3))
   const syncReady = syncMode === 'dry-run' || confirmSync
   const shows = (tool: OperationTool): boolean => activeTool === undefined || activeTool === tool
@@ -154,7 +207,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2"><Clock3 size={15} aria-hidden="true" /><h3 className="font-bold text-text">{t('operations.cadence_title')}</h3></div>
             <span className="rounded-full border border-border bg-bg px-2 py-1 font-mono text-[10.5px] text-text-3" role="status" aria-live="polite">
-              {cadence === null ? t('operations.cadence_loading') : `${cadence.poll_interval_ms / 1000}s poll · ${cadence.running ? t('operations.cadence_running') : t('operations.cadence_online')}`}
+              {cadence === null ? t('operations.cadence_loading') : `${t('operations.cadence_poll', { seconds: cadence.poll_interval_ms / 1000 })} · ${cadence.running ? t('operations.cadence_running') : t('operations.cadence_online')}`}
             </span>
           </div>
           <p className="mt-1 text-xs text-text-3">{t('operations.cadence_note')}</p>
@@ -213,7 +266,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             type="button"
             className={`${button} mt-3`}
             data-testid="ops-create-loop"
-            disabled={busy !== null || template === null || !/^[a-z][a-z0-9-]{1,63}$/.test(loopId)}
+            disabled={!rootReady || busy !== null || template === null || !/^[a-z][a-z0-9-]{1,63}$/.test(loopId)}
             onClick={() => {
               if (template === null) return
               void perform('init', () => postLoopStarterInit({
@@ -237,7 +290,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             {runReal && runLevel === 'L3' && <label><input type="checkbox" data-testid="ops-confirm-l3" checked={confirmL3} onChange={(event) => setConfirmL3(event.target.checked)} /> {t('operations.confirm_l3')}</label>}
             {runReal && <label><input type="checkbox" checked={runCommit} onChange={(event) => setRunCommit(event.target.checked)} /> {t('operations.commit')}</label>}
           </div>
-          <button type="button" className={`${button} mt-3`} data-testid="ops-run-submit" disabled={busy !== null || selector === '' || !realRunReady} onClick={() => void perform('run', () => postLoopRun({ root, selector, dry_run: !runReal, level: runLevel, commit: runCommit, confirm_run: confirmRun, confirm_l3: confirmL3 }))}>{busy === 'run' ? t('operations.running') : runReal ? t('operations.run_now') : t('operations.preview')}</button>
+          <button type="button" className={`${button} mt-3`} data-testid="ops-run-submit" disabled={!rootReady || busy !== null || selector === '' || !loops.some((loop) => loop.id === selector) || !realRunReady} onClick={() => void perform('run', () => postLoopRun({ root, selector, dry_run: !runReal, level: runLevel, commit: runCommit, confirm_run: confirmRun, confirm_l3: confirmL3 }))}>{busy === 'run' ? t('operations.running') : runReal ? t('operations.run_now') : t('operations.preview')}</button>
         </article>}
 
         {shows('sync') && <article className={card}>
@@ -247,7 +300,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             <select className={input} value={syncMode} onChange={(event) => setSyncMode(event.target.value as 'dry-run' | 'apply')}><option value="dry-run">dry-run</option><option value="apply">apply</option></select>
             {syncMode === 'apply' && <label className="flex items-center gap-1.5 whitespace-nowrap text-xs"><input type="checkbox" checked={confirmSync} onChange={(event) => setConfirmSync(event.target.checked)} />{t('operations.confirm_apply')}</label>}
           </div>
-          <button type="button" className={`${button} mt-3`} data-testid="ops-sync-submit" disabled={busy !== null || selector === '' || !syncReady} onClick={() => void perform('sync', () => postLoopSync({ root, loop_id: selector, mode: syncMode, confirm_apply: confirmSync }))}>{busy === 'sync' ? t('operations.running') : syncMode === 'apply' ? t('operations.apply') : t('operations.preview')}</button>
+          <button type="button" className={`${button} mt-3`} data-testid="ops-sync-submit" disabled={!rootReady || busy !== null || selector === '' || !loops.some((loop) => loop.id === selector) || !syncReady} onClick={() => void perform('sync', () => postLoopSync({ root, loop_id: selector, mode: syncMode, confirm_apply: confirmSync }))}>{busy === 'sync' ? t('operations.running') : syncMode === 'apply' ? t('operations.apply') : t('operations.preview')}</button>
         </article>}
 
         {shows('triage') && <article className={card}>
@@ -258,7 +311,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             <input className={input} value={triageModel} onChange={(event) => setTriageModel(event.target.value)} placeholder={t('operations.model_default')} />
           </div>
           <label className="mt-3 flex items-start gap-2 text-xs text-text-2"><input className="mt-0.5" type="checkbox" data-testid="ops-confirm-triage" checked={confirmTriage} onChange={(event) => setConfirmTriage(event.target.checked)} />{t('operations.triage_confirm')}</label>
-          <button type="button" className={`${button} mt-3`} data-testid="ops-triage-submit" disabled={busy !== null || !confirmTriage} onClick={() => void perform('triage', () => postTriage({ root, source: triageSource, model: triageModel, confirm_apply: confirmTriage }))}>{busy === 'triage' ? t('operations.running') : t('operations.triage_run')}</button>
+          <button type="button" className={`${button} mt-3`} data-testid="ops-triage-submit" disabled={!rootReady || busy !== null || !confirmTriage} onClick={() => void perform('triage', () => postTriage({ root, source: triageSource, model: triageModel, confirm_apply: confirmTriage }))}>{busy === 'triage' ? t('operations.running') : t('operations.triage_run')}</button>
         </article>}
       </div>
 

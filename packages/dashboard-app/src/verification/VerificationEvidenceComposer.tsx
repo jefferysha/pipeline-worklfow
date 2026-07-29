@@ -76,6 +76,16 @@ export function VerificationEvidenceComposer({
   }, [])
 
   useEffect(() => {
+    activeRequestRef.current?.controller.abort()
+    activeRequestRef.current = null
+    setBusy(false)
+    setError('')
+    setInvalidPath('')
+    setMarkdown('')
+    setCopyError('')
+  }, [locale])
+
+  useEffect(() => {
     if (error === '' || invalidPath === '') return
     const target = [...document.querySelectorAll<HTMLElement>('[data-evidence-path]')]
       .find((element) => element.dataset.evidencePath === invalidPath)

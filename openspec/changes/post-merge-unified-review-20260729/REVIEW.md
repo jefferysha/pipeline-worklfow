@@ -75,3 +75,22 @@ Detailed evidence:
 `docs/superpowers/reports/2026-07-29-post-merge-unified-review-pre-verify.md` and
 `docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-1.md` and
 `docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-2.md`.
+
+## Final merged-main scope
+
+The final Build scope is `main@445aa141` after PR #8, #9, #11–#19 and every other open
+non-Draft main PR were merged. The prior frozen SHA is invalidated by design and is not
+used as release evidence.
+
+The final pass also closes cross-root and stale-async defects across Workbench, Loops,
+Machine, Progress/Create Change, AFK and Operations; centralizes locale-aware transport
+classification; and adds complete runtime decoding for Workflow and Skill registry success
+payloads. The architecture gate required five UI modules to be split by stable business
+sections and rejected a double assertion in the decoder. Those findings were fixed, targeted
+regressions pass, and the independent pre-Verify reviewer reports C0/H0/M0.
+
+Clean installation, two byte-identical full builds, root 327/5729 tests with 26 honest
+environment skips, Dashboard 69/1263 tests, OpenSpec 32/32 strict, hooks 512/512,
+adapters 272/272, bundle 31/31, migration CAS 13/13, documentation build/smoke and the
+five-fixture oracle are green. Exact-SHA isolated review, E2E/API, visual browser acceptance
+and canonical GitHub CI remain Verify gates.

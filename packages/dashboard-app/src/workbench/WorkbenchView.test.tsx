@@ -614,6 +614,35 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(body.steps.find((step) => step.id === 'verify')?.skills.map((skill) => skill.id)).toContain('verification-before-completion')
   })
 
+  it('英文界面新建默认七阶段 Workflow 时，写入当前语言标签而不是中文默认值', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    fireEvent.change(within(dialog).getByLabelText('Workflow name'), { target: { value: 'english-flow' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    await screen.findByTestId('wb-step-open')
+    const post = vi.mocked(fetch).mock.calls.find(([url, opts]) => url === '/api/workflows/english-flow' && opts?.method === 'POST')
+    const body = JSON.parse(String(post?.[1]?.body)) as WbWorkflowDef
+    expect(body.steps.map((step) => step.label)).toEqual(['Open', 'Explore', 'Spec', 'Build', 'Verify', 'Ship', 'Archive'])
+    expect(body.steps.map((step) => step.label).join('')).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('结构合法但 name 错配的 Workflow 响应按无效响应拒绝，不加载到请求名下', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && (!opts?.method || opts.method === 'GET')) {
+        return new Response(JSON.stringify({ ...RELEASE_TRAIN, name: 'another-workflow' }), { status: 200 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+    renderView()
+    expect(await screen.findByRole('alert')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.queryByTestId('wb-step-draft')).toBeNull()
+  })
+
   it('新建：Workflow 名称支持中文并按真实名称写入 URL 与定义', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')

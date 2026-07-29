@@ -212,11 +212,11 @@ export function TaskDetail({
             >
               {attempts !== '' && (
                 <span>
-                  attempts <b>{attempts}</b>
+                  {t('detail.attempts')} <b>{attempts}</b>
                 </span>
               )}
               <span>
-                cause <b>{diag.cause}</b>
+                {t('detail.cause')} <b>{diag.cause}</b>
               </span>
             </div>
           </div>

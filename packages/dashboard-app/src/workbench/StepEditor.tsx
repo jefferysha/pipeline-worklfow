@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbStepDef } from './WorkbenchView'
@@ -55,12 +55,13 @@ const SEC_H = 'mb-2.5 flex items-center gap-1.5 text-[13px] font-bold'
 const SWITCHROW = 'flex items-center gap-[9px]'
 
 export function StepEditor({ step, readonly = false, onChange }: StepEditorProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   // 「+ 添加」就地输入态（demo commitChipInput 同款：Enter 提交 / Esc 取消 / 失焦有值即提交）。
   // 组件在 WorkbenchView 侧按 step.id 加 key 挂载——切阶段时输入态随卸载自然复位，不需手动清。
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
+  useEffect(() => setAddError(null), [lang])
 
   const hasNonempty = step.guards.some((g) => g.type === 'nonempty-output')
   const tasksGuard = step.guards.find((g) => g.type === 'tasks-at-least')

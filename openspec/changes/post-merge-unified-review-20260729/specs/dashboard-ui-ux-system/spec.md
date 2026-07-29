@@ -21,12 +21,101 @@ Skill id MAY 保持原值；产品自身硬编码的另一语言文案不得借�
 - **WHEN** Workbench 已显示正常、空、加载、错误、禁用或确认状态，用户切换语言
 - **THEN** 当前状态无需重新载入页面即可使用新语言
 - **AND** 未完成的表单数据、当前阶段、对话框和焦点位置保持不变
+- **AND** Loop snapshot 不因 locale 变化隐式重新请求，未保存的 allowlist、denylist 与 cadence 草稿保持不变
+- **AND** 已存在的加载错误按新语言重新呈现或被安全清除，不显示旧 locale 的产品文案
+
+#### Scenario: Progress 状态筛选切换语言
+
+- **GIVEN** 用户已选择一个 Progress 状态 tab，且画布保留当前 Workflow 的上下文卡片
+- **WHEN** 用户切换 Dashboard 语言
+- **THEN** tab 选择、画布上下文和非匹配卡片的禁用状态保持不变且不触发数据重取
+- **AND** 可见筛选摘要与 tab 可访问名称使用新的当前语言
+- **AND** 摘要按当前 Workflow 计数，状态 badge 继续显示全局计数
 
 #### Scenario: 新增字面量翻译 key
 
 - **WHEN** Dashboard 源码新增 `t('...')` 字面量调用
 - **THEN** i18n 测试验证中文和英文资源都存在该 key
 - **AND** 任一语言缺失时测试失败而不是在 UI 中显示 key 或另一语言文案
+
+#### Scenario: English 错误状态隐藏非当前语言 detail
+
+- **GIVEN** Dashboard 当前语言为 English
+- **WHEN** Machine、Project Registration、Create Change、AFK、Progress 或其他视图收到 network、HTTP、invalid-response 或 server-authored 中文错误
+- **THEN** 用户看到按稳定错误事实选择的英文恢复文案
+- **AND** 非英文 server detail 与 client fallback 不直接显示
+- **AND** production TSX 不直接把 `Error.message` 作为产品文案输出
+
+#### Scenario: 中文错误状态的安全细节
+
+- **GIVEN** Dashboard 当前语言为中文
+- **WHEN** 一个允许暴露服务端细节的错误到达渲染边界
+- **THEN** 视图通过统一格式化策略呈现本地化恢复文案和安全细节
+- **AND** 错误 state 保留结构化原始值，不把旧语言的格式化字符串跨语言保存
+
+#### Scenario: 在途请求期间切换语言
+
+- **GIVEN** Dashboard 的异步读取、写入或证据生成请求仍在进行
+- **WHEN** 用户切换语言后旧 locale 的请求成功或失败
+- **THEN** 结果只按当前 locale 呈现，或被安全失效而不覆盖当前状态
+- **AND** 未提交的表单与编辑草稿保持
+- **AND** 旧 locale 的 toast、error、Markdown 或服务端 prose 不在新语言界面迟到落态
+
+#### Scenario: English 创建或复制 default Workflow
+
+- **WHEN** 用户在 English 界面从系统 default 创建或复制可编辑 Workflow
+- **THEN** 新 Workflow 的 canonical 阶段标签与随后渲染使用英文
+- **AND** 不持久化中文系统标签
+- **AND** 已有用户自定义 Workflow label 保持原值，不被系统自动翻译
+
+#### Scenario: 已到达响应的格式无效
+
+- **WHEN** Dashboard 收到 200 响应但 JSON 或 schema 无效
+- **THEN** UI 显示当前语言的 invalid-response 恢复文案
+- **AND** 不把它报告为网络错误
+- **AND** HTTP 非 2xx、网络不可达与未选择项目分别保持自身稳定事实
+
+### Requirement: Dashboard 项目级危险动作 SHALL 绑定精确上下文
+
+Dashboard 的真实运行、L3、apply、triage、retry、Workflow 删除/创建/保存及其他项目级 mutation
+SHALL 将确认和在途操作绑定到 exact root、目标 entity 与唯一 operation token。root、目标或操作
+identity 任一变化时，旧确认 SHALL 立即失效；旧请求的 response、catch 与 finally SHALL 不得覆盖
+新项目的数据、选择、busy、错误或结果。
+
+#### Scenario: 确认后切换项目
+
+- **GIVEN** 用户在项目 A 为某个 Loop、Change 或 Workflow 打开危险确认
+- **WHEN** Dashboard 切换到项目 B，即使 B 存在同名实体
+- **THEN** A 的确认关闭且不能以 B 的 root 提交
+- **AND** B 的动作保持禁用，直到 B 的 root-scoped 数据完成加载并验证当前选择
+
+#### Scenario: A 慢响应晚于 B 快响应
+
+- **GIVEN** 项目 A 的读取或 mutation 仍在进行
+- **WHEN** 用户切换到 B 且 B 的响应先完成
+- **THEN** A 的迟到 response、error 或 finally 不覆盖 B 的数据、选择、busy、确认、错误或结果
+- **AND** 所有提交 body 只包含发起确认时绑定的 exact root 与 entity
+
+#### Scenario: 项目切换关闭所有危险 surface
+
+- **WHEN** current root 发生变化
+- **THEN** real run、L3、apply、triage、retry 与 Workflow delete/create/save 的确认和 pending state 原子失效
+- **AND** 旧项目的 selector、template、result、toast 与乐观回滚值不在新项目显示
+
+#### Scenario: Progress 创建 Change 草稿不能跨项目复用
+
+- **GIVEN** 用户在项目 A 打开 Create Change 并填写 `name`、`track`、`workflow` 与 `intent`
+- **WHEN** Dashboard 在提交前切换到项目 B
+- **THEN** 对话框立即关闭并清空 A 的草稿、错误、busy 与 preview
+- **AND** A 的 `{root, name, track, workflow, intent, operationToken}` 不得与 B 的 router 或 workflow 重新组合
+- **AND** 用户必须在 B 重新打开并确认完整输入后才能向 B 提交
+
+#### Scenario: AFK 设置与动作交错
+
+- **GIVEN** enqueue/retry action 与 max-parallel settings mutation 可能同时在途
+- **WHEN** 任一请求成功、失败或迟到
+- **THEN** 两类操作使用独立 generation、busy 与 error identity，互不取消对方的 `finally`
+- **AND** settings 失败回滚到服务端已确认值，action 不会因 settings 变化永久保持 busy
 
 ### Requirement: Governance 升档确认 SHALL 抵抗逻辑等价快照刷新
 

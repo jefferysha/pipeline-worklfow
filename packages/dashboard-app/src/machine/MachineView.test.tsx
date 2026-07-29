@@ -7,6 +7,7 @@ import { MachineView } from './MachineView'
 const ROOT = '/repo/current'
 
 beforeEach(() => {
+  localStorage.clear()
   global.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.startsWith('/api/afk/readiness')) return new Response(JSON.stringify({ ok: true, docker: { available: true }, image: { configured: 'sandcastle:local', present: false, build_hint: 'npm run sandcastle:build' }, credentials: { 'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } }, codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' } } } }), { status: 200 })
@@ -19,7 +20,10 @@ beforeEach(() => {
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  localStorage.clear()
+  vi.restoreAllMocks()
+})
 
 describe('MachineView 统一就绪与跨项目风险', () => {
   it('把已接线 Trace timeline 暴露在真实机器页诊断入口', async () => {
@@ -96,5 +100,34 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-skills')).toHaveTextContent('1/3')
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('hallmark')
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('zoom-out')
+  })
+
+  it('Skill registry 的 HTTP 503 保留 HTTP 分类，不误报网络错误', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/skills/registry') return new Response(JSON.stringify({ error: '上游技能库不可用' }), { status: 503 })
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+    const blockers = await screen.findByTestId('machine-blockers')
+    await waitFor(() => expect(blockers).toHaveTextContent('HTTP 503'))
+    expect(blockers).not.toHaveTextContent('Network error')
+  })
+
+  it('Skill registry 的 200 非法 schema 显示服务端响应无效，不崩到 ErrorBoundary', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/skills/registry') return new Response(JSON.stringify({ skills: [{ name: 'bad', installed: true, source: 'builtin', tier: 42 }] }), { status: 200 })
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+    await waitFor(() => expect(screen.getByTestId('machine-blockers')).toHaveTextContent('服务端响应格式无效'))
+  })
+
+  it('未选择项目是明确本地阻断，不制造 readiness 网络错误', async () => {
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([])} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+    await waitFor(() => expect(screen.getByTestId('machine-blockers')).toHaveTextContent('未选择项目'))
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('网络错误')
   })
 })

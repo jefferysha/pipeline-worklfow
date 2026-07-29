@@ -50,14 +50,21 @@
 
 ## 最终 main 范围扩展
 
-- [x] 合入 `main@607c2ed9`，将 PR #15/#16/#17/#18、CI 调度稳定性修复、Trace session workspace 与治理归档纳入统一文件→capability 矩阵。 (build)
-- [ ] 从最终源代码重建 CLI、Server、Dashboard 生成物，并证明连续构建稳定。 (build)
-- [ ] 重跑 Host Plan、document evidence timeline 与 Trace workspace 的 kernel/server/decoder/UI 定向回归及全量门禁。 (build)
-- [ ] 对整个 Dashboard 重做设计质量、可访问性、响应式、主题、语言、状态、键盘和焦点 pre-Verify 审查。 (build)
-- [ ] 更新统一 REVIEW/pre-Verify 报告并冻结覆盖十个合并 PR 的新 Build SHA。 (build)
-- [ ] 修复 Workbench 401、network 与 non-JSON HTTP fallback 的 locale 泄漏并补英文错误回归。 (build)
-- [ ] 补齐 `document-evidence-timeline` Purpose，并通过目标 strict validation。 (build)
-- [ ] 通过 OpenSpec 官方 archive 完整迁移 5 个 state-only 历史目录，使全仓 strict validation 真实全绿。 (build)
+- [x] 合入 `main@445aa141`，将 PR #15/#16/#17/#18/#19、CI 调度稳定性修复、Trace session workspace、治理归档与 Progress triage 纳入统一文件→capability 矩阵。 (build)
+- [x] 从最终源代码重建 CLI、Server、Dashboard 生成物，并证明连续构建稳定。 (build)
+- [x] 重跑 Host Plan、document evidence timeline 与 Trace workspace 的 kernel/server/decoder/UI 定向回归及全量门禁。 (build)
+- [x] 对整个 Dashboard 重做设计质量、可访问性、响应式、主题、语言、状态、键盘和焦点 pre-Verify 审查。 (build)
+- [x] 更新统一 REVIEW/pre-Verify 报告并冻结覆盖十一个合并 PR 的新 Build SHA。 (build)
+- [x] 修复 Workbench 401、network 与 non-JSON HTTP fallback 的 locale 泄漏并补英文错误回归。 (build)
+- [x] 修复 Loop 语言切换隐式 refetch 与 dirty draft 覆盖，并补 GET 次数、草稿和错误本地化回归。 (build)
+- [x] 将 Machine/Project Registration/Create Change/AFK/Progress 的 raw `.message` 收敛到统一 locale error policy，并加静态门禁。 (build)
+- [x] 将 Operations/AFK 与 Workbench 危险确认和 mutation 绑定 exact root+entity+operation token，覆盖 A 慢/B 快与同名实体切换回归。 (build)
+- [x] 将 Progress Create Change 草稿/提交绑定 exact root+name+track+workflow+intent token，root 切换关闭清空，并覆盖 A 草稿切 B 不提交回归。 (build)
+- [x] 分离 AFK settings 与 enqueue/retry 的 generation/busy/error identity，并覆盖交错请求不会永久 busy 或静默保留失败乐观值。 (build)
+- [x] 修复 default Workflow 创建/复制阶段标签、旧 locale 异步结果和编辑器错误重译，保留用户自定义 label 与草稿。 (build)
+- [x] 将 malformed success JSON/schema、HTTP failure、network failure 与 no-project 本地状态准确分类并覆盖 UI 回归。 (build)
+- [x] 补齐 `document-evidence-timeline` Purpose，并通过目标 strict validation。 (build)
+- [x] 通过 OpenSpec 官方 archive 完整迁移 5 个 state-only 历史目录，使全仓 strict validation 真实全绿。 (build)
 
 ## 验证
 

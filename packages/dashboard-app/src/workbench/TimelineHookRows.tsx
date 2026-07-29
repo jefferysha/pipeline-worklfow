@@ -107,12 +107,13 @@ export function HookRows({
 }
 
 function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [draft, setDraft] = useState(config.promptSkipKeyword ?? '')
   const [enabled, setEnabled] = useState(config.promptSkipKeyword !== null && config.promptSkipKeyword !== '')
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const lastEnabledKeyword = useRef('no-tenon')
+  useEffect(() => setValidationError(null), [lang])
 
   useEffect(() => {
     if (config.promptSkipKeyword === null) return

@@ -3,11 +3,12 @@
 ## 审查范围与身份
 
 - Change：`post-merge-unified-review-20260729`
-- 主干基线：`main@907dac067c17ed77fb440b91b20d64fd0f24773b`
-- 审查对象：已串行合并到上述主干的 PR #8、#14、#13、#11、#12、#9，以及统一修复工作树。
+- 主干基线：`main@445aa1411d45a2c112d296a9fc3530db0f62e31e`
+- 审查对象：已串行合并到上述主干的 PR #8、#14、#13、#11、#12、#9、#15、#16、
+  #17、#18、#19，以及统一修复工作树。
 - 生产 Dashboard：`http://127.0.0.1:18819`，项目 root 为当前独立 review worktree。
-- 当前第三次 Build clean production 资产：`assets/index-BwFU9uOX.js`、
-  `assets/index-lJPhasUc.css`，Vite 6.4.3 生产构建。
+- 当前最终主干范围的 clean production 资产：`assets/index-C-VYJj93.js`、
+  `assets/index-tJOew8ws.css`，Vite 6.4.3 生产构建。
 
 ## 规则、架构、安全与代码审查
 
@@ -110,13 +111,38 @@
   连续两次全构建的 HTML/JS/CSS SHA-256 逐字节不变，且与隔离 clean build 完全一致：
   JS `886af287…`、CSS `ad3d668f…`。最终独立代码审查为 C0/H0/M0/L0。
 
+## 最终主干范围 Build
+
+- PR #15–#19 合并后重新冻结 `main@445aa141`；开放非 Draft PR 队列清零。旧
+  `aacba5a8` Verify 证据因范围移动保持作废，没有外推到最终主干。
+- Workbench、Loop、Machine、Project Registration、Progress、Create Change、AFK 与
+  Operations 的 network/HTTP/schema/no-project 错误统一走 locale-aware policy；英文态不再泄漏
+  server-authored 中文，AbortError 保持原生取消语义。
+- 所有危险确认、mutation、草稿和异步结果绑定 exact root、entity 与 generation/operation token。
+  覆盖 A 慢/B 快、同名实体跨 root、StrictMode 重挂载、语言切换和 unmount 后晚到结果。
+- Workflow/Skill registry 的 200 成功体在 API 边界执行完整 runtime decode；非法嵌套字段、
+  错名 Workflow 以及 OpenSpec/document 双契约互斥违例均 fail closed。
+- 架构门发现并修复 6 个问题：AFK、Workbench、Governance、Loop、Track Settings 按业务区块拆分到
+  仓库硬上限内，schema decoder 移除双重断言。独立 pre-Verify reviewer 在最终 dirty diff 上结论
+  C0/H0/M0；exact-SHA 隔离复审和真实浏览器矩阵仍由 Verify 执行。
+- 干净安装后连续两次完整 build 的 CLI/Server/Dashboard 聚合 SHA-256 均为
+  `c93fa1916b6365d637eda2430c004e5b014c218e272b36c950b41368f95ddede`。
+  Dashboard JS 为 `26ff724f…179b`，CSS 为 `2b53918d…2886`。
+- root tests：327 files、5729 passed、26 honest-skip；Dashboard：69 files、1263 passed。
+  Docker/真实容器与 real-Codex 路径只按环境条件诚实跳过，未计作产品通过。
+- OpenSpec target 与全仓 strict validation 为 32/32；hooks 512/512、adapters 272/272、
+  bundle 31/31、migration CAS 13/13，五套 golden oracle 为 0 差异。
+- 本地 clean Codex install 通过并重复确认相同 Dashboard identity。可选 npx payload 的
+  39 项契约测试通过；实际 payload build 需要仓库变量 `TENON_NPM_PACKAGE`，本地未猜测或伪造
+  package ownership。legacy bridge 与双语 docs sync/check/build/smoke 均通过。
+
 ## 自动化验证基线
 
-- 定向 Dashboard：5 files、203 tests 通过。
+- 定向 Dashboard：5 files、273 tests 通过。
 - Dashboard typecheck 与 Vite 6.4.3 production build 通过。
-- root tests：327 files、5741 passed、14 个仓库既有 honest-skip；Dashboard：67 files、
-  1210 passed。
+- root tests：327 files、5729 passed、26 个环境条件 honest-skip；Dashboard：69 files、
+  1263 passed。
 - 干净 `npm ci`、root production build、docs check/build/smoke、architecture、comment honesty、
   repository hygiene、identity、default workflow freshness、dependency audit/tree、document
-  templates、npx package、512 hook tests、13 migration CAS tests、golden oracle 与 legacy bridge
-  全部通过。
+  templates、npx package 契约测试、512 hook tests、272 adapter tests、13 migration CAS tests、
+  golden oracle 与 legacy bridge 全部通过。

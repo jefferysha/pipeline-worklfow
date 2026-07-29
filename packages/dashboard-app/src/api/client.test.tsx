@@ -9,7 +9,7 @@ import {
 } from './client'
 import { lastEventSource, resetEventSources } from '../test-setup'
 import { makeSnapshot } from '../testkit'
-import { formatApiError } from './transport'
+import { formatApiError, formatServerProse } from './transport'
 
 beforeEach(() => {
   resetEventSources()
@@ -44,6 +44,17 @@ describe('formatApiError locale boundary', () => {
       t,
       { exposeServerDetail: true },
     )).toBe('技能注册表暂不可用')
+  })
+})
+
+describe('formatServerProse locale boundary', () => {
+  it('英文隐藏服务端自然语言，中文只在明确允许时展示', () => {
+    const t = (key: string): string => ({
+      'common.request_failed': 'Request failed.',
+    })[key] ?? key
+    expect(formatServerProse('服务端内部原因', t)).toBe('Request failed.')
+    expect(formatServerProse('服务端内部原因', t, { exposeServerDetail: true })).toBe('服务端内部原因')
+    expect(formatServerProse('', t, { exposeServerDetail: true })).toBe('Request failed.')
   })
 })
 

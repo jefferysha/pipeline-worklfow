@@ -277,7 +277,7 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       rules: CN_RULES,
     })
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('boom: sandbox exploded')
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 2')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('尝试次数 2')
   })
 })
 
@@ -299,7 +299,7 @@ describe('TaskDetail 失败态（automation failed）', () => {
     const box = row.querySelector('[data-testid="dtl-box"]')
     expect(box?.getAttribute('data-tone')).toBe('bad')
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('尝试次数 3')
     // build 阶段声明产出 branch/build_sha 均未设 → 合并为一条 miss 占位
     const miss = screen.getByTestId('dt-field-missing')
     expect(miss.getAttribute('data-state')).toBe('miss')
@@ -565,8 +565,8 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
     expect(fold.querySelector('summary')?.textContent).toContain('automation_last_error')
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('docker daemon')
     const meta = screen.getByTestId('dt8-diag-meta')
-    expect(meta.textContent).toContain('attempts 3')
-    expect(meta.textContent).toContain('cause missing-docker')
+    expect(meta.textContent).toContain('尝试次数 3')
+    expect(meta.textContent).toContain('原因 missing-docker')
     // 非 cancelled 不带琥珀修饰（红 tone）
     expect(screen.getByTestId('dt-diag').getAttribute('data-tone')).toBe('red')
   })
@@ -591,7 +591,7 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
       }),
     })
     expect(screen.queryByTestId('dt8-rawfold')).toBeNull()
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('cause cancelled')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('原因 cancelled')
   })
 })
 

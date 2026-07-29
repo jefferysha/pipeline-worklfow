@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   deleteTrackDefinition,
   patchTrackDefinition,
@@ -12,6 +12,7 @@ import { formatApiError } from '../api/transport'
 import { Dialog } from '../shared/Dialog'
 import type { MandatoryState } from './mandatoryState'
 import { TrackSettingsList } from './TrackSettingsList'
+import { TrackRoutePreview } from './TrackRoutePreview'
 
 const ADD_CLS =
   'cursor-pointer rounded-lg border-[1.5px] border-dashed border-border-2 bg-transparent px-[11px] py-[5px] text-[12.5px] font-bold whitespace-nowrap text-text-3 transition-colors enabled:hover:border-purple-b enabled:hover:text-purple-d disabled:cursor-not-allowed disabled:opacity-50'
@@ -56,10 +57,24 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   const [routePreview, setRoutePreview] = useState<WbRouterPreview | null>(null)
   const [routePreviewBusy, setRoutePreviewBusy] = useState(false)
   const [routePreviewError, setRoutePreviewError] = useState('')
+  const routePreviewGeneration = useRef(0)
+  const rootIdentity = useRef(state.root)
+  rootIdentity.current = state.root
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
   useEffect(() => {
     setError(null)
     setRoutePreviewError('')
   }, [lang])
+  useEffect(() => {
+    ++routePreviewGeneration.current
+    setOpen(false)
+    setEditor(null)
+    setBusy(false)
+    setRoutePreview(null)
+    setRoutePreviewBusy(false)
+    setRoutePreviewError('')
+  }, [state.root])
   const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
 
   function openCreate(): void {
@@ -71,21 +86,19 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     })
     setError(null)
     setDeleteConfirm(false)
-    setRoutePreview(null)
-    setRoutePreviewError('')
+    invalidateRoutePreview()
   }
 
   function openEdit(track: WbTrackDefinition): void {
     setEditor({ mode: 'edit', original: track, draft: draftFromTrack(track) })
     setError(null)
     setDeleteConfirm(false)
-    setRoutePreview(null)
-    setRoutePreviewError('')
+    invalidateRoutePreview()
   }
 
   function updateDraft(patch: Partial<TrackEditorDraft>): void {
     setEditor((current) => current ? { ...current, draft: { ...current.draft, ...patch } } : current)
-    setRoutePreview(null)
+    invalidateRoutePreview()
   }
 
   function effectiveDraft(draft: TrackEditorDraft): WbTrackDefinition {
@@ -98,17 +111,45 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     }
   }
 
+  function invalidateRoutePreview(): void {
+    ++routePreviewGeneration.current
+    setRoutePreview(null)
+    setRoutePreviewBusy(false)
+    setRoutePreviewError('')
+  }
+
+  const routeIdentity = editor === null
+    ? ''
+    : JSON.stringify({
+        root: state.root,
+        prompt: routePrompt.trim(),
+        draft: effectiveDraft(editor.draft),
+      })
+  const routeIdentityRef = useRef(routeIdentity)
+  routeIdentityRef.current = routeIdentity
+
   async function previewRoute(): Promise<void> {
     if (!editor || editor.original?.builtin || routePreviewBusy || routePrompt.trim() === '') return
+    const targetRoot = state.root
+    const prompt = routePrompt.trim()
+    const draft = effectiveDraft(editor.draft)
+    const identity = JSON.stringify({ root: targetRoot, prompt, draft })
+    const generation = ++routePreviewGeneration.current
     setRoutePreviewBusy(true)
     setRoutePreviewError('')
     try {
-      setRoutePreview(await postRouterPreview(state.root, routePrompt.trim(), effectiveDraft(editor.draft)))
+      const result = await postRouterPreview(targetRoot, prompt, draft)
+      if (generation !== routePreviewGeneration.current || rootIdentity.current !== targetRoot || routeIdentityRef.current !== identity) return
+      setRoutePreview(result)
     } catch (cause) {
+      if (generation !== routePreviewGeneration.current || rootIdentity.current !== targetRoot || routeIdentityRef.current !== identity) return
       setRoutePreview(null)
-      setRoutePreviewError(formatApiError(cause, t))
+      const current = localeIdentity.current
+      setRoutePreviewError(formatApiError(cause, current.t, { exposeServerDetail: current.lang === 'zh' }))
     } finally {
-      setRoutePreviewBusy(false)
+      if (generation === routePreviewGeneration.current && rootIdentity.current === targetRoot && routeIdentityRef.current === identity) {
+        setRoutePreviewBusy(false)
+      }
     }
   }
 
@@ -120,12 +161,13 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   async function readMutationError(response: Response): Promise<string> {
     let body: { error?: string; references?: string[]; blockers?: string[] } = {}
     try { body = await response.json() as typeof body } catch { /* no JSON */ }
-    const details = lang === 'zh'
+    const current = localeIdentity.current
+    const details = current.lang === 'zh'
       ? [...(Array.isArray(body.references) ? body.references : []), ...(Array.isArray(body.blockers) ? body.blockers : [])]
       : []
-    const summary = lang === 'zh' && body.error
+    const summary = current.lang === 'zh' && body.error
       ? body.error
-      : t('common.request_http_error', { status: response.status })
+      : current.t('common.request_http_error', { status: response.status })
     return [summary, ...details].join(' · ')
   }
 
@@ -173,7 +215,8 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       await state.reloadConfig()
       setEditor(null)
     } catch (mutationError) {
-      setError(formatApiError(mutationError, t))
+      const current = localeIdentity.current
+      setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
     } finally {
       setBusy(false)
     }
@@ -192,7 +235,8 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       await state.reloadConfig()
       setEditor(null)
     } catch (mutationError) {
-      setError(formatApiError(mutationError, t))
+      const current = localeIdentity.current
+      setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
     } finally {
       setBusy(false)
     }
@@ -205,14 +249,20 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
         className="rounded-md border border-border bg-card px-3 py-[6px] text-[12.5px] font-bold text-text-2 transition-colors hover:bg-fill"
         data-testid="wb-track-settings-toggle"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (open) {
+            setEditor(null)
+            invalidateRoutePreview()
+          }
+          setOpen((value) => !value)
+        }}
       >
         {t('workbench.track_settings_toggle')}
       </button>
       {open && (
         <Dialog
           title={t('workbench.track_settings_dialog')}
-          onClose={() => setOpen(false)}
+          onClose={() => { setOpen(false); setEditor(null); invalidateRoutePreview() }}
           testid="wb-track-settings-panel"
           closeLabel={t('workbench.track_settings_close')}
           panelClassName="w-[min(920px,calc(100vw-32px))]"
@@ -230,7 +280,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <b className="text-[13px] text-text">{editor.mode === 'create' ? t('workbench.track_create_title') : t('workbench.track_edit_title')}</b>
-                <button type="button" className="text-xs text-text-3" onClick={() => setEditor(null)}>{t('workbench.track_cancel')}</button>
+                <button type="button" className="text-xs text-text-3" onClick={() => { setEditor(null); invalidateRoutePreview() }}>{t('workbench.track_cancel')}</button>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
@@ -312,53 +362,16 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                 </details>
               )}
               {!editor.original?.builtin && (
-                <section className="mt-3 rounded-md border border-border bg-card/70 p-2" data-testid="wb-track-route-impact">
-                  <div className="mb-2">
-                    <b className="text-xs text-text">{t('workbench.track_route_preview_title')}</b>
-                    <p className="mt-0.5 text-[11px] text-text-3">{t('workbench.track_route_preview_note')}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <label className="min-w-0 flex-1">
-                      <span className="sr-only">{t('workbench.track_route_prompt')}</span>
-                      <input
-                        className={`${fieldClass} w-full`}
-                        data-testid="wb-track-route-prompt"
-                        value={routePrompt}
-                        placeholder={t('workbench.track_route_prompt_placeholder')}
-                        onChange={(event) => { setRoutePrompt(event.target.value); setRoutePreview(null) }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="rounded-md border border-border px-3 py-1.5 text-xs font-bold text-text-2 disabled:opacity-50"
-                      data-testid="wb-track-route-preview"
-                      disabled={routePreviewBusy || routePrompt.trim() === ''}
-                      onClick={() => void previewRoute()}
-                    >
-                      {routePreviewBusy ? t('workbench.track_route_previewing') : t('workbench.track_route_preview')}
-                    </button>
-                  </div>
-                  {routePreviewError !== '' && <p className="mt-2 text-xs text-red" role="alert">{routePreviewError}</p>}
-                  {routePreview && (
-                    <div className="mt-2 text-[11.5px] text-text-2" data-testid="wb-track-route-result">
-                      <p className="font-semibold text-text">
-                        {routePreview.suppressed_reason
-                          ? t('workbench.track_route_suppressed', { reason: routePreview.suppressed_reason })
-                          : routePreview.winner
-                            ? t('workbench.track_route_winner', { label: routePreview.winner.track.label, score: routePreview.winner.score })
-                            : t('workbench.track_route_no_winner')}
-                      </p>
-                      <ul className="mt-1 grid list-none gap-1 p-0 sm:grid-cols-2">
-                        {routePreview.candidates.map((candidate) => (
-                          <li key={candidate.track.id} className="flex justify-between gap-2 rounded bg-fill px-2 py-1">
-                            <span>{candidate.track.label}</span>
-                            <code>{t('workbench.track_route_score', { score: candidate.score, priority: candidate.priority })}</code>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </section>
+                <TrackRoutePreview
+                  prompt={routePrompt}
+                  preview={routePreview}
+                  busy={routePreviewBusy}
+                  error={routePreviewError}
+                  fieldClass={fieldClass}
+                  onPrompt={(value) => { setRoutePrompt(value); invalidateRoutePreview() }}
+                  onPreview={() => void previewRoute()}
+                  t={t}
+                />
               )}
               {error && <p className="mt-3 rounded-md border border-red-b bg-red-t p-2 text-xs text-red-d" role="alert" data-testid="wb-track-editor-error">{error}</p>}
               <div className="mt-3 flex flex-wrap justify-end gap-2">

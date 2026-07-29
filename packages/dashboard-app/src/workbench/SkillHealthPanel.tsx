@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { ApiError, fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { WbAdvanced } from './LoopCard'
-import { readErrorDetail } from './workbenchApiDecoders'
 
 /**
  * SkillHealthPanel（full-install W4，计划 2026-07-12-full-install-experience 批 2 Wave B，
@@ -40,37 +39,18 @@ const ROW_VALUE_CLS = 'flex-none font-mono text-sm font-[750] text-accent-d'
 export function SkillHealthPanel(): JSX.Element {
   const { t, lang } = useT()
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
-  const [regError, setRegError] = useState<string | null>(null)
+  const [regError, setRegError] = useState<unknown | null>(null)
 
   // 挂载拉一次（机器级技能库，与 root/workflow 无关；G22 纪律：不轮询）。失败 fail-soft。
   useEffect(() => {
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) {
-          const detail = await readErrorDetail(r)
-          throw new ApiError(
-            detail || `skill registry request failed (${r.status})`,
-            r.status,
-            detail !== '',
-          )
-        }
-        try {
-          return await r.json() as { skills: WbSkillEntry[] }
-        } catch {
-          throw new ApiError('skill registry response is invalid', r.status)
-        }
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setRegError(
-            t('workbench.skh_error', {
-              msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
-            }),
-          )
+          setRegError(err)
         }
       })
     return () => {
@@ -104,9 +84,11 @@ export function SkillHealthPanel(): JSX.Element {
       </div>
       <div className="side-card__body pt-0.5 pb-1">
         {/* fail-soft：fetch 失败——行内错误，不谎报全绿。 */}
-        {regError && (
+        {regError !== null && (
           <p className="p-5 text-[13px] text-red" data-testid="skh-error" role="alert">
-            {regError}
+            {t('workbench.skh_error', {
+              msg: formatApiError(regError, t, { exposeServerDetail: lang === 'zh' }),
+            })}
           </p>
         )}
 

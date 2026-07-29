@@ -7,8 +7,8 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 ## 前提、边界与停止条件
 
-- 基线：`main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`，十个目标 PR
-  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18）已合并，开放非 Draft PR 再查为空。
+- 基线：`main@445aa1411d45a2c112d296a9fc3530db0f62e31e`，十一个目标 PR
+  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18/#19）已合并，开放非 Draft PR 再查为空。
 - 采用当前独立 worktree、`codex/unified-main-review-20260729`、full Change、TDD 和持续授权。
 - 不改变 CLI/HTTP DTO，不增加无关功能，不修改自动化 schedule，不执行 npm publish 或生产部署。
 - requirement 语义变化执行 `requirements-changed` 回 Spec；任何 Verify finding 默认修复。
@@ -78,13 +78,14 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 此处建议 `/clear`。
 
-## 子阶段 5：requirements-changed 增量——纳入 #15/#16/#17/#18 与最终 main
+## 子阶段 5：requirements-changed 增量——纳入 #15/#16/#17/#18/#19 与最终 main
 
-1. 将 `origin/main@607c2ed9` 合入统一审查分支，冲突只按最终源代码重建生成物解决，禁止手工拼接
+1. 将 `origin/main@445aa141` 合入统一审查分支，冲突只按最终源代码重建生成物解决，禁止手工拼接
    Dashboard hash assets。
-2. 将 #15 的 Host Plan desktop catalog/selected context 和 #16 的 document evidence timeline
+2. 将 #15 的 Host Plan desktop catalog/selected context、#16 的 document evidence timeline
    kernel→server→decoder→Dashboard 链、#17 的 Trace session rail/detail workspace，以及 #18 的
-   canonical archive digest 链纳入文件→capability 覆盖矩阵。
+   canonical archive digest 链、#19 的 Progress 状态 tab roving keyboard/context card 禁用/本地化摘要
+   纳入文件→capability 覆盖矩阵。
 3. 重跑 Host Plan 19 tests、Document timeline kernel/server/UI、Trace workspace 定向测试、全仓测试、Dashboard
    全量测试、build、typecheck、docs、OpenSpec、architecture/comments/hygiene、audit 与 release gates。
 4. 使用 `tenon:design-taste-frontend` 对整个 Dashboard 重跑，不把 #15 的 desktop-only 原 PR
@@ -93,7 +94,7 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
    zh/en、主题、键盘和焦点。
 5. 重做完整 pre-Verify Standards + Spec review；任何 C/H/M finding 修复后从本子阶段重新验证。
 
-验收：新最终主干全部能力组合后 C0/H0/M0，生成物连续构建稳定，repo-zero。
+验收：十一个 PR 的新最终主干全部能力组合后 C0/H0/M0，生成物连续构建稳定，repo-zero。
 
 此处建议 `/clear`。
 
@@ -114,9 +115,27 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
    文件集合和摘要逐字一致。
 5. 运行 `openspec validate --all --strict --no-interactive`，要求零失败；若 archive 改变任一证据
    文件或主规格，立即停止并恢复。
+6. 为 Loop 编辑草稿建立语言切换 RED；使 snapshot GET 只依赖 root/显式 refresh，并把 raw error
+   留到渲染边界按当前 locale 格式化。断言切换 zh/en 不增加 GET 次数、不覆盖 allowlist/denylist/
+   cadence dirty draft，且错误文案使用新 locale 或被安全清除。
+7. 枚举 Machine blockers、Project Registration、Create Change、AFK、Progress 与 AFK log 的
+   production 错误路径；将 state 收敛为 raw `unknown`/`ApiError`，在 render/action 边界使用当前
+   locale 的 `formatApiError`。为英文 4xx/5xx、server 中文 detail、network/invalid response 建立
+   回归，并增加 production TSX 禁止直接输出 `.message` 的静态测试。
+8. 为 Operations/AFK 与 Workbench 建立 A/B 同名实体 RED：A 打开危险确认或发起慢请求后切 B；
+   把确认和 mutation 绑定 exact root+entity+operation token，root 变化原子清空，所有
+   response/catch/finally 只在 identity 匹配时落态，当前 root 加载完成前禁用写动作。
+9. 为 Progress Create Change 建立 A→B RED：A 中填写完整草稿后切换 B，断言对话框关闭、草稿清空且
+   不产生 B 的 POST；提交冻结 exact `{root,name,track,workflow,intent,operationToken}`。为 AFK
+   settings/action 建立交错 RED并分离 generation/busy/error，断言 settings 失败回滚且 action
+   `finally` 不会被另一通道吞掉。
+10. 为 English create/copy default 建立 payload RED；用当前 locale 生成系统 canonical label，
+   不翻译已有用户 label。为 composer/editor/toast 的 pending locale switch 建立迟到结果 RED。
+11. 将 transport 的 success JSON/schema failure 映射为 typed invalid-response；为 no-project、
+    Docker/readiness 503/401、200 malformed JSON 建立准确分类回归。
 
-验收：英文 401/network/non-JSON HTTP 错误无 CJK 产品文案、目标主规格通过、5 个历史目录证据完整、
-全仓 OpenSpec 全绿。
+验收：全 Dashboard 英文错误状态无非技术性 CJK 泄漏，Loop 语言切换不 refetch 或丢草稿，
+目标主规格通过、5 个历史目录证据完整、全仓 OpenSpec 全绿。
 
 此处建议 `/clear`。
 

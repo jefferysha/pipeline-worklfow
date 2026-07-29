@@ -35,6 +35,78 @@ export interface WbSkillEntry {
   version?: string
 }
 
+export interface WbFieldRef {
+  field: string
+  type: 'string' | 'file_path' | 'boolean'
+}
+
+export interface WbSkillRef {
+  id: string
+  depends_on?: string[]
+}
+
+export interface WbTrackPredicate {
+  kind: 'track-in' | 'track-not-in'
+  values: string[]
+}
+
+export type WbGuardConfig = (
+  | { type: 'tasks-at-least'; n: number }
+  | { type: 'nonempty-output' }
+  | { type: 'field-nonempty'; field: string }
+  | { type: 'file-exists'; path: { kind: 'field'; field: string } }
+  | { type: 'field-equals'; field: string; value: string }
+  | { type: 'field-in'; field: string; values: [string, ...string[]] }
+  | { type: 'full-direct-override' }
+  | { type: 'build-head-unchanged'; field: 'build_sha' }
+) & { when?: WbTrackPredicate }
+
+export type WbActionConfig =
+  | { type: 'freeze-build-sha' }
+  | { type: 'mark-verification-passed' }
+  | { type: 'mark-verification-failed' }
+  | { type: 'archive-run' }
+
+export interface WbArtifactConfig {
+  field: string
+  type: 'file_path'
+  producerPolicy: 'effective-step-skills' | 'effective-phase-skills'
+  requiredWhen?: WbTrackPredicate
+}
+
+export interface WbTransition {
+  event: string
+  to: string
+  guards?: WbGuardConfig[]
+  actions?: WbActionConfig[]
+}
+
+export interface WbStepDef {
+  id: string
+  label: string
+  gate: 'review' | 'confirm' | null
+  prompt?: string
+  skills: WbSkillRef[]
+  inputs: WbFieldRef[]
+  outputs: WbFieldRef[]
+  artifacts?: WbArtifactConfig[]
+  guards: WbGuardConfig[]
+  transitions: WbTransition[]
+}
+
+export interface WbDocumentContract {
+  version: 'v1'
+  slots: Array<{ kind: string; ownerStep: string; producers: string[] }>
+  reads: Array<{ step: string; kinds: string[] }>
+}
+
+export interface WbWorkflowDef {
+  name: string
+  openspecContract?: 'required'
+  documentContract?: WbDocumentContract
+  steps: WbStepDef[]
+}
+
 export interface WbTrackDefinition {
   id: string
   label: string

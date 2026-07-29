@@ -8,8 +8,8 @@
 
 ## 约束与非目标
 
-- 基线固定为 `main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`；旧 `907dac06`、`c78426e5`、
-  `7c59eecf` frozen baseline 因后续出现并合并 PR #15/#16/#17/#18 已失效。
+- 基线固定为 `main@445aa1411d45a2c112d296a9fc3530db0f62e31e`；旧 `907dac06`、`c78426e5`、
+  `7c59eecf`、`607c2ed9` frozen baseline 因后续出现并合并 PR #15/#16/#17/#18/#19 已失效。
 - 审查修复只使用当前独立 worktree/Change/`codex/` 分支。
 - 不改变自动化的每四小时配置，不修改 canonical state 或 `.pipeline.yaml`。
 - 不新增无关产品功能，不发布 npm 包或生产部署。
@@ -29,6 +29,7 @@
 | #16 | `document-evidence-timeline` | 文档 disclosure、旧 server unavailable | ledger receipt → snapshot optional DTO、脱敏 | kernel/server/decoder/UI/API/browser |
 | #17 | `trace-timeline` | desktop session rail、selected identity、timeline detail | 复用 metadata-only session/timeline API | concurrency/keyboard/i18n/a11y/full Dashboard |
 | #18 | governed archive | 无 runtime UI 变化 | #17 Change canonical archive ledger | revision/transition/document digest + OpenSpec strict |
+| #19 | `dashboard-ui-ux-system` | Progress 状态 tab、context card 禁用、可见筛选摘要 | 复用 snapshot，无 API 变化 | roving keyboard/a11y/i18n/filter scope/full Dashboard |
 
 `verification-evidence-composer`、`context-bundle-budget-preview`、公开文档和生成物作为相邻组合面纳入
 全量回归。
@@ -46,6 +47,11 @@ PR #18 exact head `fcadf8a35f454290fce68941812c814243cef1ca` 的 CI run `3045542
 通过；独立只读审查对 66 条 revision、19 条 transition、66 个 pre-Verify anchor 与 10 份
 document ledger hash 完成验证，C0/H0/M0/L0。该 PR 仅移动已完成 Change 的治理证据，不改变
 runtime，但它的路径、摘要链和 OpenSpec 完整性属于统一基线的一部分。
+
+PR #19 exact head `bda3b07632786a42da52283518a6875455918a98` 的 GitHub Actions run
+`30462600156` 通过；独立复核其 39 条 revision、11 条 transition 与 10 份 document ledger hash，
+C0/H0/M0/L0。它的 merge commit `445aa1411d45a2c112d296a9fc3530db0f62e31e` 是本统一 Change 的
+新最终主干；原 PR 的通过不替代十一 PR 组合后的完整 Dashboard 验证。
 
 ## 调研结果
 
@@ -66,6 +72,16 @@ runtime，但它的路径、摘要链和 OpenSpec 完整性属于统一基线的
    English locale 泄漏中文，#16 主规格缺少 Purpose。
 5. 5 个 phase 已结束的 state-only 历史目录仍滞留 active OpenSpec tree，使全仓 strict validation
    稳定失败；必须通过官方 archive 完整保留证据，不能删除或伪造 delta。
+6. Loop snapshot GET 仍把 locale 作为 effect 依赖；切换语言会产生新 row 并覆盖用户尚未保存的
+   allowlist/denylist/cadence 草稿，违反运行时切换语言的状态保持要求。
+7. Machine、Project Registration、Create Change、AFK、Progress 等仍有 production TSX/hook
+   直接显示 `Error.message`；client fallback 或 server detail 为中文时会污染英文错误状态。
+8. Operations/AFK 与 Workbench 的危险确认、选择和 mutation 未绑定 exact root；项目 A 的确认或
+   迟到结果可复用/覆盖到项目 B，同名 Loop/Change/Workflow 时可误操作。
+9. default Workflow 系统阶段标签固定中文；async locale 切换和 malformed JSON 分类仍会留下旧
+   locale 文案或把 invalid response 谎报为 network。
+10. Progress Create Change 在 root 切换后保留 A 的草稿并用 B 的 router/workflow/root 提交；
+    AFK settings 与 enqueue/retry 共享 generation 又会在交错请求时留下永久 busy 或失败乐观值。
 
 ### 已验证的依赖候选
 
@@ -83,6 +99,18 @@ override 得到 audit 0、有效依赖树、正式 build、docs check/build 和 
 6. 所有生成物从冻结的最终源码重建，禁止手工拼接 hashed assets 或 bundle。
 7. Active OpenSpec tree 只保留真实可验证 Change；历史 state-only 目录的文件集合与摘要在归档前后
    必须一致。
+8. Progress 状态筛选的 tab/canvas 状态在语言切换时保持；非匹配 context card 不可交互或聚焦，
+   可见摘要使用当前 locale 且按当前 Workflow 计数，状态 badge 保持全局计数。
+9. 语言切换不得成为 Loop 数据重取条件；未保存草稿必须保持，raw load error 在渲染边界按当前
+   locale 格式化或安全清除。
+10. Dashboard 错误 state 保存结构化原始错误，只在当前 locale 的 render/action 边界格式化；
+    英文默认隐藏 server-authored 非英文 detail，production TSX 不得把 `.message` 直接作为产品文案。
+11. 危险确认和 mutation 必须绑定 exact root+entity+operation token；root 变化立即失效，迟到
+    response/catch/finally 不得污染新项目。
+12. Progress Create Change 必须冻结 `{root,name,track,workflow,intent,operationToken}`；root
+    变化关闭并清空旧对话框。AFK settings 与 actions 使用独立 generation/busy/error identity。
+13. 系统 default label 按创建时 locale 生成，已有用户 label 不翻译；网络、HTTP、invalid-response
+    与 no-project 本地状态保持事实准确。
 
 ## 升档确认状态机
 

@@ -107,6 +107,7 @@ describe('OperationsPanel：H11-H14 可操作面', () => {
       root: ROOT, id: 'nightly-ci', template: 'ci-sweeper', workflow: 'default',
       skill_bundle: 'backend', runner: 'codex',
     })
+    expect(await screen.findByTestId('ops-result')).toHaveTextContent('操作成功')
   })
 
   it('Run 与 Sync 均以 dry-run 为默认；真实 L3 必须显式勾选双确认', async () => {

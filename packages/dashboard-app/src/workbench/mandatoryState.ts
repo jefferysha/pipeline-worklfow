@@ -133,12 +133,8 @@ export function useMandatorySkills(root: string): MandatoryState {
     if (registry !== null || regFailed) return
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`(${r.status})`)
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch(() => {
         if (!cancelled) setRegFailed(true)

@@ -2,8 +2,8 @@
 
 ## 审查基线
 
-- 唯一代码基线为 `origin/main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`。
-- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18；冻结前再次查询以 `main`
+- 唯一代码基线为 `origin/main@445aa1411d45a2c112d296a9fc3530db0f62e31e`。
+- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18、#19；冻结前再次查询以 `main`
   为 base 的开放非 Draft PR，结果为空。
 - PR #16 的 exact-head GitHub Actions run `30452978039` 在
   `55b13b50ad8523b33773fe6b23337a2d7afc658a` 成功后才正常合并。最终 `main` push CI
@@ -14,6 +14,10 @@
 - PR #18 的 exact-head GitHub Actions run `30455424146` 在
   `fcadf8a35f454290fce68941812c814243cef1ca` 通过后合并；独立只读审查验证 66 条 revision、
   19 条 transition、66 个 pre-Verify anchor 和 10 份 document ledger hash，结果 C0/H0/M0/L0。
+- PR #19 的 exact-head GitHub Actions run `30462600156` 在
+  `bda3b07632786a42da52283518a6875455918a98` 通过后合并；独立复核验证其 39 条 revision、
+  11 条 transition 与 10 份 document ledger hash，结果 C0/H0/M0/L0。其 merge commit
+  `445aa1411d45a2c112d296a9fc3530db0f62e31e` 是本次统一审查的新最终主干。
 - 干净 worktree 执行 `npm ci` 后，必须先运行仓库正式 `npm run build` 生成
   `@tenon/kernel`/`@tenon/server` 产物；随后 architecture、comments、repository hygiene、
   docs 与 Dashboard typecheck 均通过。
@@ -34,6 +38,7 @@
 | #16 | document evidence timeline / `document-evidence-timeline` | ledger receipt → snapshot DTO → disclosure | digest/路径脱敏、旧 server 降级、键盘、空/错/加载 |
 | #17 | Trace session workspace / `trace-timeline` | session rail → selected identity → metadata timeline | 并发隔离、Escape/焦点、桌面响应式、长内容与状态矩阵 |
 | #18 | 已完成 Trace Change 治理归档 | canonical Change tree → 日期化 archive | revision/transition/document digest、路径迁移、无 runtime drift |
+| #19 | Progress triage / `dashboard-ui-ux-system` | 状态 tab → workflow context cards → 本地化筛选摘要 | 复用现有 snapshot，无 API 变化 | roving keyboard、禁用/可访问性、i18n、筛选范围、全量 Dashboard/browser |
 
 `verification-evidence-composer` 与 `context-bundle-budget-preview` 已在主干上，作为相邻组合能力继续
 执行回归；它们不是本批次新 requirement。
@@ -105,6 +110,31 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
   `openspec/changes/` 会稳定制造假活跃 Change 和严格校验失败。隔离副本已证明
   `openspec archive --yes --skip-specs --no-validate --json` 会完整移动目录到日期化 archive，
   不更新主规格、不丢状态证据。只允许对已枚举的 5 个目录执行，执行前后逐文件计数和摘要必须一致。
+- `useLoops` 的 GET effect 仍依赖 locale 翻译函数与语言；运行时切换语言会重新取得 Loop snapshot，
+  新 row 对象继而触发 `LoopCard` 重置未保存的 allowlist、denylist、cadence 等草稿。修复必须让
+  GET 只依赖 root/显式刷新，把 raw error 保留到渲染边界按当前 locale 格式化；回归测试必须证明
+  切换语言不增加 GET 次数、不覆盖 dirty draft，并让既有错误按新语言呈现或安全清除。
+- Machine blockers、Project Registration、Create Change、AFK、Progress 与 AFK log 仍有 production
+  TSX/hook 直接渲染 `Error.message`，而多个 client fallback 和 server-authored detail 可为中文。
+  统一修复必须保存 raw `unknown`/`ApiError`，只在当前 locale 的 render/action 边界调用
+  `formatApiError`；英文默认不暴露 server detail，语言切换时不能保留旧 locale 的 toast/error 字符串。
+  静态回归门还必须拒绝 production TSX 将 `.message` 直接作为用户文案输出。
+- Operations/AFK 与 Workbench 的危险确认和 mutation state 未绑定 root。A 项目打开真实运行、apply、
+  triage、retry 或 workflow delete/create 确认后切到 B，旧确认可与 B 的当前 root 重新组合；A 的慢
+  response 也可覆盖 B。所有这类 state 必须绑定 `{root, entity, operationToken}`，root 变化原子清空，
+  response/catch/finally 只有 identity 仍匹配时才能落态，按钮只在当前 root 数据完成加载后启用。
+- Progress 的 Create Change 对话框在 root 切换后保留 A 项目的 `name`/`intent` 草稿，却把 router、
+  workflow 和最终 POST root 切到 B，可把未经 B 项目重新确认的旧输入提交到新项目。root 变化必须
+  关闭并重置对话框；提交 token 必须冻结 `{root, name, track, workflow, intent}` 并在每个异步边界
+  复核。AFK settings 与 enqueue/retry 不得共享会互相推进的 generation/busy identity，否则交错操作
+  会留下永久 busy 或未落地的乐观 settings。
+- `buildDefaultDef()` 把 canonical 阶段标签固定为中文，English 下创建/复制 default 会持久化中文；
+  多个 async handler 与 editor 又把旧 locale 的格式化 string 存进 state。系统默认标签必须从当前
+  locale 生成但已有用户自定义 label 保持原值；在途结果用当前 locale 格式化，或在 locale 变化时
+  安全失效且保留用户草稿。
+- 成功响应 JSON 解析失败当前穿透为原生 `SyntaxError`，最终被误报为网络错误。transport 必须把
+  已到达响应的 parse/schema failure 映射为带 status 的结构化 `ApiError`，200 malformed 显示
+  invalid-response，HTTP 非 2xx 仍显示 HTTP 事实；未选择项目使用本地稳定状态而非伪造网络错误。
 
 ## 关键业务规则与不变量
 
@@ -123,6 +153,21 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
    不得删除、补写虚假 delta 或手改 canonical state。
 9. #18 的归档只改变治理证据位置；66 条 revision、19 条 transition、66 个 pre-Verify anchor
    与 10 份 document ledger 的 identity/digest 链必须保持可验证，不能把 rename 当作内容重写。
+10. #19 状态筛选仍显示当前 Workflow 的上下文，但非匹配卡片不得可点击、可聚焦或暴露为可交互控件；
+    可见摘要按当前 Workflow 计数，状态 badge 保持全局计数，语言切换不得触发重取或丢失 tab/canvas 状态。
+11. Dashboard 语言切换是纯表现层状态变化；Loop 的未保存编辑草稿也必须保持，且不得隐式触发
+    snapshot GET。错误信息只能在渲染边界依据当前 locale 格式化，不能把 locale 作为数据获取依赖。
+12. 所有 Dashboard 可达错误状态遵守同一 locale/error policy：状态保存结构化错误，英文隐藏
+    server-authored 非英文 detail，中文仅在明确允许时展示；production TSX 不得直接输出 `.message`。
+13. 危险确认与在途 mutation 的授权范围是 exact root + entity + operation token；root、entity 或
+    operation identity 任一变化都使旧确认失效，迟到的 response/catch/finally 不得污染新上下文。
+14. Progress Create Change 的授权 identity 是
+    `{root, name, track, workflow, intent, operationToken}`；root 变化立即关闭并清空旧草稿，任一字段
+    与冻结 identity 不一致时不得提交或落态。
+15. AFK settings 与 enqueue/retry 使用独立 generation 与 busy/error 状态；一个通道的交错请求不得
+    取消另一个通道的 finally，也不得静默保留服务端未接受的乐观值。
+16. 系统生成的默认 Workflow 标签使用创建时当前 locale；已有用户自定义 label 不自动翻译。
+17. HTTP 已到达、JSON/schema 无效与网络不可达是三个不同事实，错误恢复文案不得互相冒充。
 
 ## 升档确认状态机
 
@@ -157,7 +202,7 @@ key 或显式字段比较，但不得依赖 React row 对象引用。
 
 ## 术语与证据边界
 
-- “最终主干”只指 `607c2ed97f2217b8edf44dd9cd872e7e9cceb545` 及本 Change 后续合并 SHA。
+- “最终主干”只指 `445aa1411d45a2c112d296a9fc3530db0f62e31e` 及本 Change 后续合并 SHA。
 - “逻辑等价快照”指影响当前升档决策的字段完全相同，仅对象身份或非决策展示字段变化。
 - “0 vulnerabilities”只由干净安装后的 `npm audit --json` 元数据证明，不由旧 lockfile 或
   `npm audit fix --force` 声明。

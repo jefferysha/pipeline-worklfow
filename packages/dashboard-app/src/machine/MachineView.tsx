@@ -16,6 +16,7 @@ import { useT } from '../i18n'
 import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { AdvancedPanel } from '../advanced/AdvancedPanel'
+import { formatApiError, formatServerProse } from '../api/transport'
 
 type ReadinessState = 'ready' | 'blocked' | 'unknown'
 
@@ -78,11 +79,22 @@ function credentialSourceLabel(source: string, t: Translate): string {
   return labels[source] ?? source
 }
 
-function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate): ProjectRisk[] {
+function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate, exposeServerDetail: boolean): ProjectRisk[] {
   const rows: ProjectRisk[] = []
   for (const project of snapshot?.projects ?? []) {
     if (!project.ok) {
-      rows.push({ key: `project:${project.root}`, root: project.root, title: rootName(project.root), details: [t('machine.risk_project_unreadable', { error: project.error ?? t('machine.risk_unknown_error') })], testId: `machine-risk-open-project-${rootName(project.root)}` })
+      rows.push({
+        key: `project:${project.root}`,
+        root: project.root,
+        title: rootName(project.root),
+        details: [t('machine.risk_project_unreadable', {
+          error: formatServerProse(project.error, t, {
+            exposeServerDetail,
+            fallback: t('machine.risk_unknown_error'),
+          }),
+        })],
+        testId: `machine-risk-open-project-${rootName(project.root)}`,
+      })
       continue
     }
     for (const change of project.changes) {
@@ -111,14 +123,14 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
  * 所有状态都来自真实端点；请求失败保持 unknown，并进入 blocker 清单，绝不把“没读到”画成 ready。
  */
 export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineViewProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [reloadKey, setReloadKey] = useState(0)
   const [readiness, setReadiness] = useState<WbAfkReadiness | null>(null)
   const [images, setImages] = useState<WbDockerImages | null>(null)
   const [secrets, setSecrets] = useState<WbSecretsKeys | null>(null)
   const [skills, setSkills] = useState<WbSkillEntry[] | null>(null)
   const [loops, setLoops] = useState<WbLoopRow[] | null>(null)
-  const [errors, setErrors] = useState<string[]>([])
+  const [errors, setErrors] = useState<Array<{ source: string; cause: unknown }>>([])
 
   const load = useCallback(() => setReloadKey((value) => value + 1), [])
 
@@ -133,20 +145,16 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
 
     const report = (source: string, error: unknown): void => {
       if (!live) return
-      setErrors((current) => [...current, `${source}: ${error instanceof Error ? error.message : String(error)}`])
+      setErrors((current) => [...current, { source, cause: error }])
     }
 
     if (currentRoot !== '') void fetchAfkReadiness(currentRoot).then((value) => { if (live) setReadiness(value) }, (error) => report('readiness', error))
-    else report('readiness', new Error('no registered project selected'))
 
     void fetchDockerImages().then((value) => { if (live) setImages(value) }, (error) => report('docker images', error))
     void fetchSecrets().then((value) => { if (live) setSecrets(value) }, (error) => report('secrets', error))
-    void fetchSkillsRegistry().then(async (response) => {
-      if (!response.ok) throw new Error(`(${response.status})`)
-      const body = (await response.json()) as { skills?: unknown }
-      if (!Array.isArray(body.skills)) throw new Error('malformed skills payload')
-      if (live) setSkills(body.skills as WbSkillEntry[])
-    }, (error) => report('skills', error)).catch((error) => report('skills', error))
+    void fetchSkillsRegistry().then((body) => {
+      if (live) setSkills(body)
+    }, (error) => report('skills', error))
     void fetchLoopsSnapshot().then((value) => { if (live) setLoops(value.rows) }, (error) => report('loops', error))
 
     return () => { live = false }
@@ -161,15 +169,23 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const operationsState: ReadinessState = snapshot === null ? 'unknown' : snapshot.capabilities.operations === true ? 'ready' : 'blocked'
 
   const blockers = useMemo(() => {
-    const values = [...errors]
+    const sourceLabels: Record<string, string> = {
+      readiness: t('machine.source_readiness'),
+      'docker images': t('machine.source_images'),
+      secrets: t('machine.source_secrets'),
+      skills: t('machine.source_skills'),
+      loops: t('machine.source_loops'),
+    }
+    const values = errors.map(({ source, cause }) => `${sourceLabels[source] ?? source}: ${formatApiError(cause, t, { exposeServerDetail: lang === 'zh' })}`)
+    if (currentRoot === '') values.push(t('machine.no_project'))
     if (readiness && !readiness.docker.available) values.push(t('machine.blocker_docker'))
     if (readiness && !readiness.image.present && !(images?.images.includes(readiness.image.configured) ?? false)) values.push(t('machine.blocker_image', { image: readiness.image.configured, command: readiness.image.build_hint }))
     for (const skill of skills ?? []) if (blocksMachine(skill) && !skill.installed) values.push(t('machine.blocker_skill', { skill: skill.name, command: skill.installCmd ?? t('machine.no_install_command') }))
     if (snapshot && snapshot.capabilities.operations !== true) values.push(t('machine.blocker_operations'))
     return values
-  }, [errors, images, readiness, skills, snapshot, t])
+  }, [currentRoot, errors, images, lang, readiness, skills, snapshot, t])
 
-  const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t), [loops, snapshot, t])
+  const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
   const configuredImage = readiness?.image.configured ?? t('machine.loading_signal')
   const installedSkills = skills?.filter((skill) => skill.installed).length ?? 0
   const secretSource = readiness?.credentials.codex.OPENAI_API_KEY.source

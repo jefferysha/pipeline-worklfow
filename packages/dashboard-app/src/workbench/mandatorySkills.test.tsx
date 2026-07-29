@@ -989,6 +989,38 @@ describe('TrackSettings v3 真实 CRUD', () => {
     })
   })
 
+  it('同一项目内修改 Track 草稿会使在途 Router 预览失效，旧结果不得覆盖新草稿', async () => {
+    const baseFetch = global.fetch
+    let resolvePreview!: (response: Response) => void
+    const previewResponse = new Promise<Response>((resolve) => { resolvePreview = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') return previewResponse
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+    fireEvent.change(screen.getByLabelText('routing.priority'), { target: { value: '999' } })
+
+    await act(async () => {
+      resolvePreview(new Response(JSON.stringify({
+        ok: true,
+        revision: CONFIG_BODY.revision,
+        source: 'project-file',
+        suppressed_reason: null,
+        winner: { track: CONFIG_BODY.tracks[4], order: 4, priority: 250, score: 2, routable: true, excluded: false },
+        candidates: [],
+      }), { status: 200 }))
+      await previewResponse
+    })
+
+    expect(screen.queryByTestId('wb-track-route-result')).toBeNull()
+    expect(screen.getByTestId('wb-track-route-preview')).toBeEnabled()
+  })
+
   it('English Router preview network failure uses localized copy without transport Chinese', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     const baseFetch = global.fetch

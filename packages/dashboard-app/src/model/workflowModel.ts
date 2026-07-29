@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkflow } from '../api/client'
+import type { WbGuardConfig } from '../api/governanceTypes'
 import type { Snapshot } from '../types'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
 
@@ -20,7 +21,7 @@ import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
 //    workbench/WorkbenchView.tsx 的 Wb* 系列是同形状的视图层手抄，两处各自消费）──
 export interface FieldRef { field: string; type: 'string' | 'file_path' | 'boolean' }
 export interface SkillRef { id: string; depends_on?: string[] }
-export type GuardConfig = { type: 'tasks-at-least'; n: number } | { type: 'nonempty-output' }
+export type GuardConfig = WbGuardConfig
 export interface StepTransition { event: string; to: string }
 export interface StepDef {
   id: string; label: string; gate: 'review' | 'confirm' | null
@@ -145,18 +146,7 @@ async function fetchRules(root: string, name: string): Promise<WorkflowRules> {
   const pending = inflight.get(key)
   if (pending) return pending
   const p = (async () => {
-    const res = await fetchWorkflow(name, root)
-    if (!res.ok) {
-      let detail = ''
-      try {
-        const body = (await res.json()) as { error?: string }
-        if (typeof body?.error === 'string') detail = body.error
-      } catch {
-        /* 无 JSON 体 */
-      }
-      throw new Error(detail || `workflow 加载失败（${res.status}）`)
-    }
-    const def = (await res.json()) as { name: string; steps: StepDef[] }
+    const def = await fetchWorkflow(name, root)
     const rules = rulesFromDef(def)
     cache.set(key, rules)
     return rules

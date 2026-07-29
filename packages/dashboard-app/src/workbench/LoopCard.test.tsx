@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOOP_RUNNERS as KERNEL_LOOP_RUNNERS } from '@tenon/kernel'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { LOOP_RUNNERS, LoopCard, useLoops } from './LoopCard'
 
 /**
@@ -106,6 +106,17 @@ function Harness(): JSX.Element {
   return <LoopCard root={ROOT} loops={loops} />
 }
 
+function LanguageHarness(): JSX.Element {
+  const { setLang } = useT()
+  const loops = useLoops(ROOT)
+  return (
+    <>
+      <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+      <LoopCard root={ROOT} loops={loops} />
+    </>
+  )
+}
+
 function renderCard(): void {
   render(
     <I18nProvider>
@@ -193,6 +204,23 @@ describe('LoopCard 读回显（验收①）', () => {
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
+  it('运行时切换语言不 refetch，也不覆盖未保存的 Loop 草稿', async () => {
+    render(<I18nProvider><LanguageHarness /></I18nProvider>)
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: 'keep this dirty draft' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    const getCount = () => (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([input]) => input === '/api/loops/snapshot').length
+    expect(getCount()).toBe(1)
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    expect(getCount()).toBe(1)
+    expect(screen.getByTestId('lp-goal')).toHaveValue('keep this dirty draft')
+    expect(screen.getByTestId('lp-dirty')).toHaveTextContent('Unsaved')
+  })
+
   it('仅路径策略未保存时阻止预检，其他草稿不阻断；保存回读后重新启用', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')

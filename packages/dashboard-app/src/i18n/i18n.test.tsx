@@ -123,6 +123,41 @@ describe('i18n 生产 TSX 不直写中文产品文案', () => {
   })
 })
 
+describe('i18n 生产 TSX 不直出 Error.message', () => {
+  it('错误必须在 locale render boundary 格式化；仅允许本地翻译校验对象', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs')
+    const { join, dirname, relative } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const ts = await import('typescript')
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), '..')
+    function walk(dir: string): string[] {
+      return readdirSync(dir).flatMap((name) => {
+        const file = join(dir, name)
+        if (statSync(file).isDirectory()) return name === 'i18n' ? [] : walk(file)
+        return name.endsWith('.tsx') && !name.endsWith('.test.tsx') ? [file] : []
+      })
+    }
+    const leaks: string[] = []
+    for (const file of walk(SRC)) {
+      const source = readFileSync(file, 'utf8')
+      const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      const visit = (node: import('typescript').Node): void => {
+        if (ts.isPropertyAccessExpression(node) && node.name.text === 'message') {
+          const owner = node.expression.getText(ast)
+          // VerificationEvidenceComposer.validate() creates this object from current-locale t() output.
+          if (owner !== 'validation') {
+            const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+            leaks.push(`${relative(SRC, file)}:${line} → ${node.getText(ast)}`)
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(ast)
+    }
+    expect(leaks).toEqual([])
+  })
+})
+
 function Probe(): JSX.Element {
   const { t, lang, setLang } = useT()
   return (

@@ -179,16 +179,26 @@ export const postAfkDismiss = (name: string, root: string): Promise<void> =>
   postAfkAction(name, root, 'dismiss', '放弃失败')
 
 export async function fetchDockerImages(): Promise<WbDockerImages> {
-  const response = await fetch('/api/docker/images', { headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  let response: Response
+  try {
+    response = await fetch('/api/docker/images', { headers: { Accept: 'application/json' } })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'Docker 镜像获取失败')
   return decodeResponse(response, decodeDockerImages, 'malformed docker images payload')
 }
 
 export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
-  const response = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, {
-    headers: { Accept: 'application/json' },
-  })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  let response: Response
+  try {
+    response = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'AFK 就绪度获取失败')
   return decodeResponse(response, decodeAfkReadiness, 'malformed readiness payload')
 }
 

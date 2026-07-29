@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react'
-import { ArrowRight, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
-import { Dialog } from '../shared/Dialog'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 export { LOOP_RUNNERS, WB_TW, WbAdvanced } from './loopCardModel'
 export { LpSlider } from './LoopControls'
 export { useLoops, type LoopsState } from './useLoops'
-import { BADGE_TW, CHIP_TW, LOOP_RUNNERS, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
+import { BADGE_TW, LOOP_RUNNERS, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
 import { RECO_TOKENS_K, clamp } from './LoopControls'
 import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
 import { LoopCardActions } from './LoopCardActions'
+import { LoopRelationship } from './LoopRelationship'
 const LEVELS = ['L1', 'L2', 'L3'] as const
 export interface LoopCardProps { root: string; loops: LoopsState }
 export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
@@ -29,6 +29,22 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const [confirmLevel, setConfirmLevel] = useState<(typeof LEVELS)[number] | null>(null)
   const [reviewBusy, setReviewBusy] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
+  const saveGeneration = useRef(0)
+  const levelGeneration = useRef(0)
+  const reviewGeneration = useRef(0)
+  const identity = useRef({ root, rowId: row?.id ?? null })
+  identity.current = { root, rowId: row?.id ?? null }
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+  useEffect(() => {
+    ++saveGeneration.current
+    ++levelGeneration.current
+    ++reviewGeneration.current
+    setSaving(false)
+    setLevelBusy(false)
+    setReviewBusy(false)
+    setConfirmLevel(null)
+  }, [root, row?.id])
   useEffect(() => {
     setSaveErrors(null)
     setLevelError(null)
@@ -51,17 +67,27 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   }
   async function save(): Promise<void> {
     if (!row || !dirty || saving) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++saveGeneration.current
+    const targetPatch = patch
     setSaving(true)
     setSaveErrors(null)
     setSaveOk(false)
     try {
-      await postLoopUpdate({ root, id: row.id, patch })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: targetPatch })
+      if (generation !== saveGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       setSaveOk(true)
       loops.reload() // 新行到达后草稿以 server 真值重置（见上方 effect）
     } catch (err) {
-      setSaveErrors([formatApiError(err, t, { exposeServerDetail: lang === 'zh' })])
+      if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setSaveErrors([formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' })])
+      }
     } finally {
-      setSaving(false)
+      if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setSaving(false)
+      }
     }
   }
   function requestLevel(target: (typeof LEVELS)[number]): void {
@@ -74,30 +100,48 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   }
   async function applyLevel(target: string): Promise<void> {
     if (!row) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++levelGeneration.current
     setLevelBusy(true)
     setLevelError(null)
     try {
-      await postLoopLevel({ root, id: row.id, target })
+      await postLoopLevel({ root: targetRoot, id: targetId, target })
+      if (generation !== levelGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
-      setLevelError(t('workbench.lp_level_fail', {
-        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
-      }))
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setLevelError(current.t('workbench.lp_level_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     } finally {
-      setLevelBusy(false)
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setLevelBusy(false)
+      }
     }
   }
   async function reviewAction(status: 'active' | 'paused'): Promise<void> {
     if (!row || reviewBusy) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++reviewGeneration.current
     setReviewBusy(true)
     setReviewError(null)
     try {
-      await postLoopUpdate({ root, id: row.id, patch: { status } })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: { status } })
+      if (generation !== reviewGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload() // 显式重拉：draft 标记已被 server 清，新快照到达即徽章消失
     } catch (err) {
-      setReviewError(formatApiError(err, t, { exposeServerDetail: lang === 'zh' }))
+      if (generation === reviewGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setReviewError(formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      }
     } finally {
-      setReviewBusy(false)
+      if (generation === reviewGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setReviewBusy(false)
+      }
     }
   }
   if (loops.loadError) {
@@ -207,71 +251,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           ))}
         </ul>
       )}
-      {/* ── T7（A2 决策）：三方关系条——loop 是 root 级配置，不属于任何单个 workflow；
-          change_prefix → 实际匹配的 changes（弹层，读 row 真值，不随草稿输入重算——保存前
-          修改草稿不影响本条显示，保存并 reload 后才随新真值刷新）；phases → 阶段 chips 纯
-          展示无点击语义。决议 #3 裁减口径：这是「数据关系澄清」，不是健康度评分——不画环、
-          不给成功率角标。布局沿旧 .lp-policy 的 flex-wrap 分组纪律。 ── */}
-      <div className={WB_TW.sec} data-sec="">
-        <div className={WB_TW.secH}>
-          {t('workbench.lp_rel_sec')}
-          <span className={WB_TW.hint}>{t('workbench.lp_rel_sec_hint')}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5" data-testid="lp-rel">
-          <span
-            className="max-w-[280px] overflow-hidden rounded-[7px] bg-fill-2 px-[9px] py-1 font-mono text-xs font-bold text-ellipsis whitespace-nowrap"
-            data-testid="lp-rel-root"
-            title={row.root}
-          >
-            {row.root}
-          </span>
-          <span className="text-[11.5px] text-text-3">{t('workbench.lp_rel_root_note')}</span>
-          <ArrowRight className="size-3.5 flex-none text-text-3" strokeWidth={1.75} aria-hidden="true" />
-          <button
-            type="button"
-            className="h-[26px] cursor-pointer rounded-full border border-border bg-fill px-2.5 font-mono text-xs text-text-2 transition-colors duration-[120ms] hover:border-(--accent) hover:bg-accent-t hover:text-accent-d"
-            data-testid="lp-rel-prefix-btn"
-            onClick={() => setShowMatches(true)}
-          >
-            {t('workbench.lp_rel_match_btn', {
-              prefix: row.change_prefix ?? t('workbench.lp_rel_prefix_unset'),
-              n: row.matched_changes.length,
-            })}
-          </button>
-          <span className="text-border-2" aria-hidden="true">·</span>
-          <span className="text-xs font-semibold text-text-3">{t('workbench.lp_rel_phases_label')}</span>
-          {row.phases.length === 0 ? (
-            <span className={WB_TW.note} role="status" aria-live="polite">{t('workbench.lp_rel_phases_empty')}</span>
-          ) : (
-            row.phases.map((p) => (
-              <span key={p} className={CHIP_TW} data-testid="lp-rel-phase-chip">{p}</span>
-            ))
-          )}
-          <p className={cn(WB_TW.note, 'mt-1 basis-full')}>{t('workbench.lp_rel_note')}</p>
-        </div>
-      </div>
-      {showMatches && (
-        <Dialog
-          title={t('workbench.lp_rel_dialog_title', { prefix: row.change_prefix ?? t('workbench.lp_rel_prefix_unset') })}
-          onClose={() => setShowMatches(false)}
-          testid="lp-rel-dialog"
-          actions={
-            <Button variant="ghost" size="sm" className={WB_TW.btnGhost} onClick={() => setShowMatches(false)}>
-              {t('workbench.lp_rel_dialog_close')}
-            </Button>
-          }
-        >
-          {row.matched_changes.length === 0 ? (
-            <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2" role="status" aria-live="polite">{t('workbench.lp_rel_dialog_empty')}</p>
-          ) : (
-            <ul className="flex max-h-80 list-none flex-col gap-1.5 overflow-y-auto p-0 text-[12.5px]" data-testid="lp-rel-dialog-list">
-              {row.matched_changes.map((c) => (
-                <li key={c} className="font-mono">{c}</li>
-              ))}
-            </ul>
-          )}
-        </Dialog>
-      )}
+      <LoopRelationship row={row} open={showMatches} onOpen={setShowMatches} t={t} />
       {/* ── 目标 ── */}
       <div className={WB_TW.sec} data-sec="">
         <div className={WB_TW.secH}>

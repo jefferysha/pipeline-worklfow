@@ -4,12 +4,11 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ApiError, fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { DefaultSkillChain } from './DefaultSkillChain'
 import type { WbSkillRef, WbStepDef } from './WorkbenchView'
-import { readErrorDetail } from './workbenchApiDecoders'
 import './workbench.css'
 
 gsap.registerPlugin(useGSAP)
@@ -110,23 +109,8 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
     if (registry !== null || regError !== null) return
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) {
-          const detail = await readErrorDetail(r)
-          throw new ApiError(
-            detail || `skill registry request failed (${r.status})`,
-            r.status,
-            detail !== '',
-          )
-        }
-        try {
-          return await r.json() as { skills: WbSkillEntry[] }
-        } catch {
-          throw new ApiError('skill registry response is invalid', r.status)
-        }
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch((err: unknown) => {
         if (!cancelled) {

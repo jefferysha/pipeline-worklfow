@@ -16,7 +16,6 @@ import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import { PageHeader } from '../shared/PageHeader'
 import type { ChangeSnapshot, Snapshot } from '../types'
-import { isPhase } from '../types'
 import type { View } from '../shell/Nav'
 import { DEFAULT_RULES, type WorkflowRules } from '../model/workflowModel'
 import {
@@ -31,6 +30,8 @@ import { fetchAutomationSettings, postAfkEnqueue, postAfkRetry, postAutomationSe
 import { shellQuote } from '../shared/shellQuote'
 import { shortTime } from '../model/time'
 import { OperationsPanel } from './OperationsPanel'
+import { formatApiError, formatServerProse } from '../api/transport'
+import { MiniTrack, phaseLabel } from './AfkMiniTrack'
 
 gsap.registerPlugin(useGSAP)
 
@@ -67,8 +68,6 @@ interface AfkViewProps {
   onToast?: (msg: string) => void
 }
 
-type Tr = (key: string, vars?: Record<string, string | number>) => string
-
 /** 沙箱谓词：行处于自动化三桶之一（同 ProgressView inSandbox / progressModel schedulerHealth 口径）。 */
 function inSandbox(state: ProgressState): boolean {
   return state === 'running' || state === 'queued' || state === 'failed'
@@ -79,90 +78,12 @@ function fieldStr(c: ChangeSnapshot, key: string): string {
   return typeof v === 'string' ? v : ''
 }
 
-/** 步 id → 展示名：自定义步优先用户 label，缺键/空回退 step id；default 相走 phases.* i18n
- *  （同 ProgressView stepLabel 口径）。 */
-function phaseLabel(
-  step: string,
-  labelByStep: Record<string, string> | undefined,
-  t: Tr,
-  executionModel?: WorkflowRules['executionModel'],
-): string {
-  const custom = executionModel === 'phase-manifest' ? undefined : labelByStep?.[step]
-  if (custom) return custom
-  return isPhase(step) ? t(`phases.${step}`) : step
-}
-
 interface AfkRow {
   row: ProgressRow
   rules: WorkflowRules | undefined
 }
 
 type AfkTool = 'enqueue' | 'starter' | 'run'
-
-type TrackState = 'done' | 'current' | 'todo'
-
-/**
- * 迷你流水线轨 —— 单条 change 在整条流水线里走到哪一步（参照 shell/ProjectsView 的 MiniTrack：
- * 三态节点 + 连线、当前步高亮）。相位序取该 change workflow 的 rules.steps（命中 rulesByKey 用其
- * steps，否则 DEFAULT_RULES），剔末端 archive（终态，不入轨）；change.phase 命中处 = current，
- * 之前 = done、之后 = todo；phase 不在序里（异常）→ 全 todo。失败态（failed=true）当前步走语义红
- * 点出卡住的那一步。纯装饰（aria-hidden——相位语义已由行内 afk.at_phase 文本承载），节点带
- * data-phase/data-state 供测试与 hover title（相位展示名同 phaseLabel 口径）。
- */
-function MiniTrack({
-  change,
-  rules,
-  failed,
-  t,
-}: {
-  change: ChangeSnapshot
-  rules: WorkflowRules | undefined
-  failed: boolean
-  t: Tr
-}): JSX.Element {
-  const steps = (rules?.steps ?? DEFAULT_RULES.steps).filter((s) => s !== 'archive')
-  const currentIndex = steps.indexOf(change.phase)
-  return (
-    <span
-      aria-hidden="true"
-      data-testid={`afk-track-${change.name}`}
-      data-phase={change.phase}
-      className="mt-1.5 flex items-center gap-0"
-    >
-      {steps.map((step, i) => {
-        const state: TrackState =
-          currentIndex === -1
-            ? 'todo'
-            : i < currentIndex
-              ? 'done'
-              : i === currentIndex
-                ? 'current'
-                : 'todo'
-        const reached = state !== 'todo'
-        const dotCls =
-          state === 'current'
-            ? failed
-              ? 'h-2 w-2 bg-red'
-              : 'h-2 w-2 bg-(--accent)'
-            : state === 'done'
-              ? 'h-[7px] w-[7px] bg-border-2'
-              : 'h-[7px] w-[7px] border border-border bg-transparent'
-        return (
-          <span key={step} className="flex flex-none items-center">
-            {i > 0 && <span className={`h-px w-3 flex-none ${reached ? 'bg-border-2' : 'bg-border'}`} />}
-            <span
-              data-phase={step}
-              data-state={state}
-              data-error={state === 'current' && failed ? 'true' : undefined}
-              title={phaseLabel(step, rules?.labelByStep, t, rules?.executionModel)}
-              className={`flex-none rounded-full ${dotCls}`}
-            />
-          </span>
-        )
-      })}
-    </span>
-  )
-}
 
 export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChange, onToast }: AfkViewProps): JSX.Element {
   const { lang, t } = useT()
@@ -194,42 +115,84 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
     })
   }, [snapshot, currentRoot])
   const [actionBusy, setActionBusy] = useState<string | null>(null)
-  const [actionError, setActionError] = useState('')
+  const [actionError, setActionError] = useState<unknown | null>(null)
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [retryPreviewName, setRetryPreviewName] = useState<string | null>(null)
   const [activeTool, setActiveTool] = useState<AfkTool | null>(null)
+  const actionGeneration = useRef(0)
+  const settingsGeneration = useRef(0)
+  const rootIdentity = useRef(currentRoot)
+  rootIdentity.current = currentRoot
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+
+  useEffect(() => () => {
+    ++actionGeneration.current
+    ++settingsGeneration.current
+  }, [])
+
+  useEffect(() => {
+    ++actionGeneration.current
+    ++settingsGeneration.current
+    setActionBusy(null)
+    setActionError(null)
+    setSettingsBusy(false)
+    setSettingsError(null)
+    setSelectedName(null)
+    setRetryPreviewName(null)
+    setActiveTool(null)
+  }, [currentRoot])
 
   // 自动运行设置取真实后端配置；并发修改写回完整配置，避免覆盖重试、默认入队与镜像字段。
   const [automationSettings, setAutomationSettings] = useState<WbAutomationSettings | null>(null)
+  const [settingsBusy, setSettingsBusy] = useState(false)
+  const [settingsError, setSettingsError] = useState<unknown | null>(null)
   useEffect(() => {
     setAutomationSettings(null)
+    setSettingsBusy(false)
+    setSettingsError(null)
     if (currentRoot === '') return
+    const targetRoot = currentRoot
+    const generation = ++settingsGeneration.current
     let cancelled = false
-    fetchAutomationSettings(currentRoot)
+    fetchAutomationSettings(targetRoot)
       .then((s) => {
-        if (!cancelled) setAutomationSettings(s)
+        if (!cancelled && generation === settingsGeneration.current && rootIdentity.current === targetRoot) {
+          setAutomationSettings(s)
+        }
       })
       .catch(() => {
         /* fail-open */
       })
     return () => {
       cancelled = true
+      ++settingsGeneration.current
     }
   }, [currentRoot])
 
   async function updateMaxParallel(next: number): Promise<void> {
-    if (automationSettings === null || next === automationSettings.max_parallel) return
+    if (automationSettings === null || settingsBusy || next === automationSettings.max_parallel) return
     const previous = automationSettings
     const updated = { ...previous, max_parallel: next }
+    const targetRoot = currentRoot
+    const generation = ++settingsGeneration.current
     setAutomationSettings(updated)
-    setActionError('')
+    setSettingsBusy(true)
+    setSettingsError(null)
     try {
-      await postAutomationSettings({ root: currentRoot, ...updated })
-      onToast?.(t('afk.max_parallel_updated', { n: next }))
+      await postAutomationSettings({ root: targetRoot, ...updated })
+      if (generation !== settingsGeneration.current || rootIdentity.current !== targetRoot) return
+      onToast?.(localeIdentity.current.t('afk.max_parallel_updated', { n: next }))
     } catch (error) {
-      setAutomationSettings(previous)
-      setActionError(error instanceof Error ? error.message : String(error))
+      if (generation === settingsGeneration.current && rootIdentity.current === targetRoot) {
+        setAutomationSettings(previous)
+        setSettingsError(error)
+      }
+    } finally {
+      if (generation === settingsGeneration.current && rootIdentity.current === targetRoot) {
+        setSettingsBusy(false)
+      }
     }
   }
 
@@ -260,20 +223,27 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
     return null
   }
   function copyCmd(cmd: string): void {
-    void navigator.clipboard?.writeText(cmd).then(() => onToast?.(t('detail.copied', { value: cmd })))
+    void navigator.clipboard?.writeText(cmd).then(() => onToast?.(localeIdentity.current.t('detail.copied', { value: cmd })))
   }
   async function runAction(key: string, name: string, action: () => Promise<void>, successKey: string): Promise<boolean> {
+    const targetRoot = currentRoot
+    const generation = ++actionGeneration.current
     setActionBusy(key)
-    setActionError('')
+    setActionError(null)
     try {
       await action()
-      onToast?.(t(successKey, { name }))
+      if (generation !== actionGeneration.current || rootIdentity.current !== targetRoot) return false
+      onToast?.(localeIdentity.current.t(successKey, { name }))
       return true
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error))
+      if (generation === actionGeneration.current && rootIdentity.current === targetRoot) {
+        setActionError(error)
+      }
       return false
     } finally {
-      setActionBusy(null)
+      if (generation === actionGeneration.current && rootIdentity.current === targetRoot) {
+        setActionBusy(null)
+      }
     }
   }
 
@@ -298,7 +268,16 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
   const selectedState = selected?.row.state ?? null
   const selectedFailure = selectedChange === null || selectedState !== 'failed'
     ? ''
-    : fieldStr(selectedChange, 'automation_error') || fieldStr(selectedChange, 'automation_reason') || t('afk.failure_default', { phase: phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t, selectedRules?.executionModel) })
+    : formatServerProse(
+        fieldStr(selectedChange, 'automation_error') || fieldStr(selectedChange, 'automation_reason'),
+        t,
+        {
+          exposeServerDetail: lang === 'zh',
+          fallback: t('afk.failure_default', {
+            phase: phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t, selectedRules?.executionModel),
+          }),
+        },
+      )
   const selectedCmd = selectedChange && selectedState === 'failed' ? cmdFor(selectedChange) : null
 
   function stateLabel(state: ProgressState): string {
@@ -345,9 +324,14 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
         />
       </div>
 
-      {actionError !== '' && (
+      {actionError !== null && (
         <p className="mb-4 rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-xs text-red" role="alert">
-          {t('afk.action_error', { msg: actionError })}
+          {t('afk.action_error', { msg: formatApiError(actionError, t, { exposeServerDetail: lang === 'zh' }) })}
+        </p>
+      )}
+      {settingsError !== null && (
+        <p className="mb-4 rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-xs text-red" role="alert" data-testid="afk-settings-error">
+          {t('afk.action_error', { msg: formatApiError(settingsError, t, { exposeServerDetail: lang === 'zh' }) })}
         </p>
       )}
 
@@ -373,6 +357,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                     className="h-8 rounded-lg border border-border bg-card px-2 font-mono text-xs font-semibold text-text outline-none focus:border-(--accent)"
                     data-testid="afk-limit-input"
                     value={automationSettings.max_parallel}
+                    disabled={settingsBusy}
                     onChange={(event) => void updateMaxParallel(Number(event.target.value))}
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((value) => <option key={value} value={value}>{value}</option>)}

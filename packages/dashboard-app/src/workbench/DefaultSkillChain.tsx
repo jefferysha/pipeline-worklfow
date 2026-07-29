@@ -56,7 +56,12 @@ export function DefaultSkillChain({
   const [requestedTrack, setTrack] = useState<string | null>(null)
   const [cfg, setCfg] = useState<MandatoryConfig | null>(() => peekMandatoryConfig(root))
   const [editing, setEditing] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<
+    { kind: 'request'; cause: unknown }
+    | { kind: 'server'; detail: string; status: number }
+    | { kind: 'invalid' }
+    | null
+  >(null)
   const rootRef = useRef(root)
   rootRef.current = root
   const savingRef = useRef<{ token: symbol; root: string; cellKey: string } | null>(null)
@@ -105,16 +110,16 @@ export function DefaultSkillChain({
       }
       if (!response.ok || body.ok !== true) {
         if (rootRef.current === root) {
-          setSaveError(
-            lang === 'zh' && body.error
-              ? body.error
-              : t('workbench.sk_save_failed', { status: response.status }),
-          )
+          setSaveError({
+            kind: 'server',
+            detail: body.error ?? '',
+            status: response.status,
+          })
         }
         return
       }
       if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        if (rootRef.current === root) setSaveError(t('workbench.mand_save_invalid'))
+        if (rootRef.current === root) setSaveError({ kind: 'invalid' })
         return
       }
       const saved = body.skills ?? skills
@@ -129,7 +134,7 @@ export function DefaultSkillChain({
       }
     } catch (error) {
       if (rootRef.current === root) {
-        setSaveError(formatApiError(error, t, { exposeServerDetail: lang === 'zh' }))
+        setSaveError({ kind: 'request', cause: error })
       }
     } finally {
       if (savingRef.current?.token === op.token) savingRef.current = null
@@ -166,7 +171,7 @@ export function DefaultSkillChain({
                 onClick={() => setTrack(definition.id)}
               >
                 {definition.builtin && <LockKeyhole className="mr-1 inline size-3" aria-hidden="true" />}{definition.label}
-                {definition.policyProfile.skills.profile !== definition.id && ` · inherits ${definition.policyProfile.skills.profile}`}
+                {definition.policyProfile.skills.profile !== definition.id && ` · ${t('workbench.sk_inherits', { profile: definition.policyProfile.skills.profile })}`}
                 {effectiveSkills(definition.id).length > 0 && <b className="ml-[3px] font-bold text-(--accent)">{effectiveSkills(definition.id).length}</b>}
               </button>
             ))}
@@ -191,7 +196,15 @@ export function DefaultSkillChain({
           {canEdit && <button type="button" className={ADDCHIP_CLS} data-testid="wb-sk-edit" onClick={() => { setEditing(true); setSaveError(null) }}>{t('workbench.sk_edit')}</button>}
           {cfg.capable === false && <p className={NOTE_CLS} data-testid="wb-sk-cfg-ro">{t('workbench.sk_cfg_readonly')}</p>}
         </div>
-        {saveError && <p className="mt-2 text-[13px] text-red" data-testid="wb-sk-save-error" role="alert">{saveError}</p>}
+        {saveError && <p className="mt-2 text-[13px] text-red" data-testid="wb-sk-save-error" role="alert">
+          {saveError.kind === 'invalid'
+            ? t('workbench.mand_save_invalid')
+            : saveError.kind === 'server'
+              ? lang === 'zh' && saveError.detail !== ''
+                ? saveError.detail
+                : t('workbench.sk_save_failed', { status: saveError.status })
+              : formatApiError(saveError.cause, t, { exposeServerDetail: lang === 'zh' })}
+        </p>}
         {editing && <SkillTransferModal selected={skills} onSave={(next) => { if (!busy) void saveMandatory(next) }} onCancel={() => { if (!busy) { setEditing(false); setSaveError(null) } }} />}
       </>}
       <p className={cn(NOTE_CLS, 'mt-2.5')}>{t('workbench.sk_mand_note')}</p>

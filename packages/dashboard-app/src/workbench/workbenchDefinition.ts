@@ -6,78 +6,23 @@ import {
   TRANSITIONS,
   type Snapshot,
 } from '../types'
-
-export interface WbFieldRef {
-  field: string
-  type: 'string' | 'file_path' | 'boolean'
-}
-
-export interface WbSkillRef {
-  id: string
-  depends_on?: string[]
-}
-
-export interface WbTrackPredicate {
-  kind: 'track-in' | 'track-not-in'
-  values: string[]
-}
-
-export type WbGuardConfig = (
-  | { type: 'tasks-at-least'; n: number }
-  | { type: 'nonempty-output' }
-  | { type: 'field-nonempty'; field: string }
-  | { type: 'file-exists'; path: { kind: 'field'; field: string } }
-  | { type: 'field-equals'; field: string; value: string }
-  | { type: 'field-in'; field: string; values: [string, ...string[]] }
-  | { type: 'full-direct-override' }
-  | { type: 'build-head-unchanged'; field: 'build_sha' }
-) & { when?: WbTrackPredicate }
-
-export type WbActionConfig =
-  | { type: 'freeze-build-sha' }
-  | { type: 'mark-verification-passed' }
-  | { type: 'mark-verification-failed' }
-  | { type: 'archive-run' }
-
-export interface WbArtifactConfig {
-  field: string
-  type: 'file_path'
-  producerPolicy: 'effective-step-skills' | 'effective-phase-skills'
-  requiredWhen?: WbTrackPredicate
-}
-
-export interface WbTransition {
-  event: string
-  to: string
-  guards?: WbGuardConfig[]
-  actions?: WbActionConfig[]
-}
-
-export interface WbStepDef {
-  id: string
-  label: string
-  gate: 'review' | 'confirm' | null
-  prompt?: string
-  skills: WbSkillRef[]
-  inputs: WbFieldRef[]
-  outputs: WbFieldRef[]
-  artifacts?: WbArtifactConfig[]
-  guards: WbGuardConfig[]
-  transitions: WbTransition[]
-}
-
-export interface WbDocumentContract {
-  version: 'v1'
-  slots: Array<{ kind: string; ownerStep: string; producers: string[] }>
-  reads: Array<{ step: string; kinds: string[] }>
-}
-
-export interface WbWorkflowDef {
-  name: string
-  openspecContract?: 'required'
-  documentContract?: WbDocumentContract
-  steps: WbStepDef[]
-}
+import type {
+  WbSkillRef,
+  WbStepDef,
+  WbWorkflowDef,
+} from '../api/governanceTypes'
+export type {
+  WbActionConfig,
+  WbArtifactConfig,
+  WbDocumentContract,
+  WbFieldRef,
+  WbGuardConfig,
+  WbSkillRef,
+  WbStepDef,
+  WbTrackPredicate,
+  WbTransition,
+  WbWorkflowDef,
+} from '../api/governanceTypes'
 
 const GOVERNED_PHASE_SKILLS: Readonly<Record<string, readonly string[]>> = {
   open: ['tenon-open', 'openspec-propose'],
@@ -89,7 +34,7 @@ const GOVERNED_PHASE_SKILLS: Readonly<Record<string, readonly string[]>> = {
   archive: ['tenon-archive'],
 }
 
-export function buildDefaultDef(): WbWorkflowDef {
+export function buildDefaultDef(labels: Partial<Record<(typeof PHASES)[number], string>> = {}): WbWorkflowDef {
   const shape: Record<(typeof PHASES)[number], Pick<WbStepDef, 'label' | 'inputs' | 'outputs' | 'artifacts' | 'guards'>> = {
     open: { label: '立项', inputs: [], outputs: [], guards: [] },
     explore: {
@@ -127,6 +72,9 @@ export function buildDefaultDef(): WbWorkflowDef {
     ship: { label: '交付', inputs: [], outputs: [], guards: [] },
     archive: { label: '归档', inputs: [], outputs: [], guards: [] },
   }
+  for (const phase of PHASES) {
+    shape[phase] = { ...shape[phase], label: labels[phase] ?? shape[phase].label }
+  }
   return {
     name: 'default',
     openspecContract: 'required',
@@ -146,8 +94,11 @@ export function buildDefaultDef(): WbWorkflowDef {
 
 export const DEFAULT_DEF: WbWorkflowDef = buildDefaultDef()
 
-export function governedWorkflow(name: string): WbWorkflowDef {
-  const base = buildDefaultDef()
+export function governedWorkflow(
+  name: string,
+  labels: Partial<Record<(typeof PHASES)[number], string>> = {},
+): WbWorkflowDef {
+  const base = buildDefaultDef(labels)
   return {
     name,
     openspecContract: 'required',
@@ -160,6 +111,17 @@ export function governedWorkflow(name: string): WbWorkflowDef {
       })),
     })),
   }
+}
+
+export function workflowForCreate(
+  mode: 'new' | 'copy',
+  currentIsDefault: boolean,
+  currentDefinition: WbWorkflowDef | null,
+  name: string,
+  labels: Partial<Record<(typeof PHASES)[number], string>>,
+): WbWorkflowDef | null {
+  if (mode === 'new' || currentIsDefault) return governedWorkflow(name, labels)
+  return currentDefinition === null ? null : cloneWorkflowDef(currentDefinition, name)
 }
 
 export interface StageAmbient {
@@ -342,6 +304,24 @@ export function addSkillToDef(def: WbWorkflowDef, stageId: string, skillId: stri
     steps: def.steps.map((candidate) => candidate.id === stageId
       ? { ...candidate, skills: [...candidate.skills, { id: skillId }] }
       : candidate),
+  }
+}
+
+export function cloneWorkflowDef(def: WbWorkflowDef, name: string): WbWorkflowDef {
+  return {
+    ...def,
+    name,
+    steps: def.steps.map((step) => ({
+      ...step,
+      skills: step.skills.map((skill) => ({
+        ...skill,
+        depends_on: skill.depends_on ? [...skill.depends_on] : undefined,
+      })),
+      inputs: step.inputs.map((field) => ({ ...field })),
+      outputs: step.outputs.map((field) => ({ ...field })),
+      guards: step.guards.map((guard) => ({ ...guard })),
+      transitions: step.transitions.map((transition) => ({ ...transition })),
+    })),
   }
 }
 

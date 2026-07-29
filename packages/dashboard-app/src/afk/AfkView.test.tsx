@@ -206,6 +206,32 @@ describe('AfkView 两栏自动运行工作区', () => {
     await waitFor(() => expect(settingsPosts).toEqual([{ root: ROOT, max_parallel: 6, max_retries: 1, default_opt_in: false, image: '' }]))
   })
 
+  it('AFK 入队与设置保存各自拥有独立 generation，不会互相清 busy 或吞掉结果', async () => {
+    const baseFetch = global.fetch
+    let resolveAction!: (response: Response) => void
+    const delayedAction = new Promise<Response>((resolve) => { resolveAction = resolve })
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/afk/gate-d/enqueue' && init?.method === 'POST') return delayedAction
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+    fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
+    const enqueue = screen.getByTestId('afk-enqueue-gate-d')
+    fireEvent.click(enqueue)
+    fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
+    await waitFor(() => expect(settingsPosts).toHaveLength(1))
+    expect(enqueue).toBeDisabled()
+
+    await act(async () => {
+      resolveAction(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      await delayedAction
+    })
+    await waitFor(() => expect(screen.queryByTestId('afk-enqueue-panel')).toBeNull())
+    expect(props.onToast).toHaveBeenCalledWith(expect.stringContaining('gate-d'))
+    expect(props.onToast).toHaveBeenCalledWith(expect.stringContaining('6'))
+  })
+
   it('调度汇总灯：三态齐（有 failed）→ data-status=attention', async () => {
     await renderAfk()
     expect(screen.getByTestId('afk-health')).toHaveAttribute('data-status', 'attention')
