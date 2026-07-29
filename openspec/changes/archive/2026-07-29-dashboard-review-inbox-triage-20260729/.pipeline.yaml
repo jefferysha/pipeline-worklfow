@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-29-dashboard-review-inbox-triage-design.md
 plan: docs/superpowers/plans/2026-07-29-dashboard-review-inbox-triage.md
 verification_report: docs/superpowers/reports/2026-07-29-dashboard-review-inbox-triage-20260729-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/19
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,17 +31,17 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T13:19:05Z
-updated_at: 2026-07-29T14:33:46Z
+updated_at: 2026-07-29T14:46:38Z
 verified_at: 2026-07-29T14:33:46Z
-archived_at: null
-archived: false
+archived_at: 2026-07-29T14:46:38Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 426ea58e-2567-453d-bf90-d22db44f21b7
-pipeline_transition_sequence: 9
-pipeline_transition_head: 938ff99c-a894-4d80-bd84-5b125f8f6e49
-pipeline_state_revision: 35
-pipeline_state_revision_id: 72ab6c88-5a74-44da-8247-520d07bfbbfc
-pipeline_state_digest: 37d070cdc91c930f53808ec382cc3579ddf0c56212aad404563c7dc3fdf17904
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzUsInJldmlzaW9uSWQiOiI3MmFiNmM4OC01YTc0LTQ0ZGEtODI0Ny01MjBkMDdiZmJiZmMiLCJwYXlsb2FkRGlnZXN0IjoiYWI3ZTE4NmM5M2M0ODFlMDIxNGE4ZjYxMjhmNTIwYWEyOThmNThiYzNmNTU5ODBkMzU1ODBjYWYxNTY5ZDZkZiJ9
+pipeline_transition_sequence: 11
+pipeline_transition_head: 990e436a-1f9d-4a77-9f9c-ffae0c2ea46e
+pipeline_state_revision: 38
+pipeline_state_revision_id: 134df3db-996f-42d7-a5bb-263b56ec78fd
+pipeline_state_digest: 5eaf601e9202d0e294a80f1ebab5eaed07878a8b791cd254de96d139627a5b7a
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzgsInJldmlzaW9uSWQiOiIxMzRkZjNkYi05OTZmLTQyZDctYTViYi0yNjNiNTZlYzc4ZmQiLCJwYXlsb2FkRGlnZXN0IjoiMzNhMTUwYWE0MDU0ZmI3YzAzZGIwZDBhMWZjNDY4NmYyZmQ3ODcxMjYwOTY0NzRiZTg3NGY3NzI2YTdlNjdlYyJ9
