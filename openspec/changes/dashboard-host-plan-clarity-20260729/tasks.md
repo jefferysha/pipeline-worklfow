@@ -25,9 +25,9 @@
 
 ## 验证
 
-- [ ] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 和 `npm run build:web`。
-- [ ] 在 1024、1200、1440、1920px 做真实桌面浏览器验收并记录成功/失败/空态、键盘、主题和 reduced-motion 证据。
-- [ ] 完成代码、可视、E2E/浏览器三轨审查并修复 Critical/High/Medium 问题。
+- [x] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 和 `npm run build:web`。
+- [x] 在 1024、1200、1440、1920px 做真实桌面浏览器验收并记录成功/失败/空态、键盘、主题和 reduced-motion 证据。
+- [x] 完成代码、可视、E2E/浏览器三轨审查并修复 Critical/High/Medium 问题。
 
 ## 交付
 
