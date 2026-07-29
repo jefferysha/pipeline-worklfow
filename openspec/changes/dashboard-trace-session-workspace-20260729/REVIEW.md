@@ -40,14 +40,14 @@ revised delta now uses `ADDED Requirements` for the workspace, preserves the
 canonical scenario names under `MODIFIED Requirements`, and archives cleanly in
 an isolated copy (`+1 added`, `~1 modified`).
 
-The reviewer also demonstrated that legal maximum-length proxy, model, and
-transport metadata could expand flex and grid tracks. A red regression test now
-covers the server's 64/256/64-character limits. Rail/detail proxy labels and
-timeline metadata use bounded tracks, `min-width: 0`, truncation, and accessible
-full-value titles.
+The reviewer also demonstrated that a long proxy plus legal maximum-length
+model and transport metadata could expand flex and grid tracks. A red regression
+test now covers a 64-character proxy stress sample and the decoder's 256/64
+model/transport limits. Rail/detail proxy labels and timeline metadata use
+bounded tracks, `min-width: 0`, truncation, and accessible full-value titles.
 
-A production-build browser fixture then exercised those exact 64/256/64 limits
-at 1024×768, 1200×870, 1440×900, and 1920×1080. At every width the document,
+A production-build browser fixture then exercised that 64/256/64 stress set at
+1024×768, 1200×870, 1440×900, and 1920×1080. At every width the document,
 body, and workspace `scrollWidth` matched `clientWidth`; the long labels stayed
 inside their rail/detail/timeline bounds while their titles retained all
 64/256/64 characters. Escape cleared the detail and restored focus to the
@@ -55,3 +55,37 @@ selected session button. The browser loaded `index-zYwgShkc.js` and
 `index-Cgeu0Ldh.css` with no console warnings or errors.
 
 No Critical, High, or Medium findings remain after the correction.
+
+## Round 4
+
+The second frozen-baseline Verify found that the committed dist still contained
+the pre-correction desktop grid rule even though the source no longer did.
+Build now regenerates dist only after all source and review fixes, then compares
+its file hashes with a second clean build before freezing.
+
+Codex also identified shared presentation changes below the accepted 1024px
+boundary. The rail header, session identity rows, persistent detail placeholder,
+2×2 desktop summary, and divided timeline container are now activated only at
+`min-width: 1024px`. Below that breakpoint the existing compact session rows,
+conditional timeline surface, four-column `sm` summary, and card timeline remain
+the baseline presentation; no phone design or browser acceptance was added.
+Desktop loading, unavailable, and empty detail placeholders now explain why
+selection is not currently possible.
+
+The regenerated production build was accepted again in the real desktop browser
+at 1024, 1200, 1440, and 1920px. The document and body had no horizontal
+overflow at any width; the detail summary rendered two columns at 1024/1200 and
+four at 1440/1920. The 64-character proxy, 256-character model, and 64-character
+transport retained their complete accessible titles while rendering with
+bounded ellipsis tracks. Escape cleared the selection and returned focus to the
+same session button, with no console warnings or errors.
+
+The root cause of non-reproducible CSS was Tailwind v4's default current-working-
+directory source discovery: untracked pipeline review files changed the utility
+set. `index.css` now explicitly limits discovery to Dashboard `src`, backed by a
+design-system regression assertion. A source-only archive build and the working
+tree build now produce byte-identical `index-u6qL8tRF.js`,
+`index-GZnjfiST.css`, and `index.html` with aggregate SHA-256
+`c7e41f6e14bab57c61c7cd2fbf863f786d0d4028fd51973b3a58abe8b9a6ed04`.
+
+No Critical, High, or Medium findings remain after the second correction.

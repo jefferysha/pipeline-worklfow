@@ -103,6 +103,26 @@ export function TrafficPanel(): JSX.Element {
     },
     [lang, t],
   )
+  const unselectedCopy = sessionsError
+    ? {
+        description: t('advanced.traffic_select_unavailable_desc'),
+        title: t('advanced.traffic_select_unavailable_title'),
+      }
+    : sessions === null
+      ? {
+          description: t('advanced.traffic_sessions_loading'),
+          title: t('advanced.traffic_select_loading_title'),
+        }
+      : sessions.length === 0
+        ? {
+            description: t('advanced.traffic_sessions_empty'),
+            title: t('advanced.traffic_select_empty_title'),
+          }
+        : {
+            description: t('advanced.traffic_select_desc'),
+            title: t('advanced.traffic_select_title'),
+          }
+  const hasSelectedSession = selected !== null && selectedSession !== null
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2.5" data-testid="traffic-panel" onKeyDown={handleKeyDown}>
@@ -131,7 +151,7 @@ export function TrafficPanel(): JSX.Element {
 
         <section
           aria-label={t('advanced.traffic_timeline_label')}
-          className="flex min-h-[18rem] min-w-0 flex-col rounded-lg border border-border bg-card p-3"
+          className={`${hasSelectedSession ? 'mt-1 flex min-w-0 flex-col gap-2.5 border-t border-border pt-3' : 'hidden'} min-[1024px]:mt-0 min-[1024px]:flex min-[1024px]:min-h-[18rem] min-[1024px]:min-w-0 min-[1024px]:flex-col min-[1024px]:gap-0 min-[1024px]:rounded-lg min-[1024px]:border min-[1024px]:border-border min-[1024px]:bg-card min-[1024px]:p-3`}
           data-testid="traffic-detail"
         >
           {!selected || !selectedSession ? (
@@ -139,15 +159,18 @@ export function TrafficPanel(): JSX.Element {
               className="flex min-h-[15rem] flex-1 flex-col items-center justify-center rounded-md border border-dashed border-border bg-fill/40 px-6 text-center"
               data-testid="traffic-detail-unselected"
             >
-              <p className="m-0 text-sm font-bold text-text">{t('advanced.traffic_select_title')}</p>
+              <p className="m-0 text-sm font-bold text-text">{unselectedCopy.title}</p>
               <p className="mt-1.5 mb-0 max-w-md text-xs leading-5 text-text-3">
-                {t('advanced.traffic_select_desc')}
+                {unselectedCopy.description}
               </p>
             </div>
           ) : (
-            <div className="flex min-w-0 flex-col gap-3" data-testid="traffic-timeline">
+            <div
+              className="contents min-[1024px]:flex min-[1024px]:min-w-0 min-[1024px]:flex-col min-[1024px]:gap-3"
+              data-testid="traffic-timeline"
+            >
               <header
-                className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-border pb-3"
+                className="hidden min-[1024px]:flex min-[1024px]:min-w-0 min-[1024px]:flex-wrap min-[1024px]:items-start min-[1024px]:justify-between min-[1024px]:gap-3 min-[1024px]:border-b min-[1024px]:border-border min-[1024px]:pb-3"
                 data-testid="traffic-session-identity"
               >
                 <div className="min-w-0">
@@ -207,7 +230,10 @@ export function TrafficPanel(): JSX.Element {
                 </p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-1.5 min-[1280px]:grid-cols-4" data-testid="traffic-summary">
+                  <div
+                    className="grid grid-cols-2 gap-1.5 min-[640px]:max-[1023px]:grid-cols-4 min-[1280px]:grid-cols-4"
+                    data-testid="traffic-summary"
+                  >
                     {[
                       [t('advanced.traffic_summary_calls'), formatNumber(timeline.returned_count)],
                       [t('advanced.traffic_summary_errors'), formatNumber(timeline.summary.error_count)],
@@ -281,7 +307,7 @@ export function TrafficPanel(): JSX.Element {
                         </div>
                       ) : (
                         <ol
-                          className="m-0 list-none divide-y divide-border overflow-hidden rounded-md border border-border bg-card p-0"
+                          className="m-0 flex list-none flex-col gap-1.5 p-0 min-[1024px]:block min-[1024px]:divide-y min-[1024px]:divide-border min-[1024px]:overflow-hidden min-[1024px]:rounded-md min-[1024px]:border min-[1024px]:border-border min-[1024px]:bg-card"
                           data-testid="traffic-entries"
                         >
                           {filteredEntries.map((entry, index) => (

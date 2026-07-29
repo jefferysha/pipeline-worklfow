@@ -166,7 +166,13 @@ describe('TrafficPanel metadata-only timeline', () => {
     const sessionButton = await screen.findByRole('button', { name: /claude/ })
     const workspace = screen.getByTestId('traffic-workspace')
     expect(workspace.className).toContain('min-[1024px]:grid-cols-[clamp(15.5rem,28%,18rem)_minmax(0,1fr)]')
-    expect(screen.getByTestId('traffic-session-rail')).toHaveAccessibleName('捕获会话')
+    const rail = screen.getByTestId('traffic-session-rail')
+    const unselectedDetail = screen.getByTestId('traffic-detail')
+    expect(rail).toHaveAccessibleName('捕获会话')
+    expect(rail.className).toContain('min-[1024px]:rounded-lg')
+    expect(screen.getByTestId('traffic-session-rail-header').className).toContain('hidden')
+    expect(unselectedDetail.className).toContain('hidden')
+    expect(unselectedDetail.className).toContain('min-[1024px]:flex')
     expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('选择一个会话')
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
@@ -179,7 +185,16 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(identity).toHaveTextContent('claude')
     expect(identity).toHaveTextContent('sess-A')
     expect(identity).toHaveTextContent('reverse')
-    expect(screen.getByTestId('traffic-entries').className).toContain('divide-y')
+    expect(identity.className).toContain('hidden')
+    expect(identity.className).toContain('min-[1024px]:flex')
+    expect(screen.getByTestId('traffic-detail').className).toContain('mt-1')
+    expect(screen.getByTestId('traffic-summary').className).toContain('min-[640px]:max-[1023px]:grid-cols-4')
+    const entries = screen.getByTestId('traffic-entries')
+    expect(entries.className).toContain('flex')
+    expect(entries.className).toContain('min-[1024px]:divide-y')
+    expect(screen.getByTestId('traffic-entry-1').className).toContain(
+      'min-[640px]:max-[1023px]:grid-cols-[7rem_minmax(0,1fr)_auto]',
+    )
   })
 
   it('shows session loading, local-only sessions, summary, and ordered metadata without raw query', async () => {
@@ -284,8 +299,10 @@ describe('TrafficPanel metadata-only timeline', () => {
     renderTraffic()
 
     expect(await screen.findByTestId('traffic-error')).toHaveAttribute('role', 'alert')
+    expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('会话列表不可用')
     await userEvent.click(screen.getByRole('button', { name: /重试/ }))
     expect(await screen.findByTestId('traffic-empty')).toHaveTextContent('暂无捕获会话')
+    expect(screen.getByTestId('traffic-detail-unselected')).toHaveTextContent('当前没有可选择的会话')
   })
 
   it('supports timeline loading, failure retry, known-empty, and partial/truncated notices', async () => {
@@ -445,7 +462,7 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(sessionButtons[1]).toHaveTextContent('未知')
   })
 
-  it('bounds maximum-length proxy, model, and transport metadata without hiding full values', async () => {
+  it('bounds a long proxy plus maximum-length model and transport metadata without hiding full values', async () => {
     const longProxy = 'p'.repeat(64)
     const longModel = 'm'.repeat(256)
     const longTransport = 't'.repeat(64)
@@ -490,6 +507,7 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(detailProxy).toHaveAttribute('title', longProxy)
     expect(model).toHaveAttribute('title', longModel)
     expect(transport).toHaveAttribute('title', longTransport)
+    expect(model.className).toContain('min-[1024px]:flex-1')
     expect(model.className).toContain('truncate')
     expect(transport.className).toContain('truncate')
   })

@@ -17,15 +17,17 @@ function shortSessionId(id: string): string {
 }
 
 export function SessionStatusBadge({
+  className = '',
   status,
   t,
 }: {
+  className?: string
   status: string
   t: Translate
 }): JSX.Element {
   return (
     <span
-      className="shrink-0 rounded-full bg-fill px-[7px] py-0.5 text-[10.5px] font-bold text-text-3 data-[state=active]:bg-green-t data-[state=active]:text-green-d data-[state=error]:bg-red-t data-[state=error]:text-red"
+      className={`shrink-0 rounded-full bg-fill px-[7px] py-0.5 text-[10.5px] font-bold text-text-3 data-[state=active]:bg-green-t data-[state=active]:text-green-d data-[state=error]:bg-red-t data-[state=error]:text-red ${className}`}
       data-state={status}
     >
       {t(`advanced.${SESSION_STATUS_KEYS[status] ?? 'traffic_status_unknown'}`)}
@@ -48,7 +50,7 @@ export function TimelineEntry({
     : new Date(parsedTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   return (
     <li
-      className="grid min-w-0 gap-2 px-3 py-3 text-xs min-[1280px]:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,12rem)]"
+      className="grid grid-cols-1 gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-xs min-[640px]:max-[1023px]:grid-cols-[7rem_minmax(0,1fr)_auto] min-[1024px]:min-w-0 min-[1024px]:rounded-none min-[1024px]:border-0 min-[1024px]:bg-transparent min-[1024px]:py-3 min-[1280px]:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,12rem)]"
       data-testid={`traffic-entry-${entry.sequence}`}
     >
       <div className="flex flex-col gap-0.5 font-mono text-[11px] text-text-3">
@@ -59,10 +61,10 @@ export function TimelineEntry({
         <p className="m-0 truncate font-mono font-semibold text-text" title={`${entry.method ?? ''} ${entry.path ?? ''}`.trim()}>
           {entry.method ?? t('advanced.traffic_unknown')} {entry.path ?? t('advanced.traffic_unknown')}
         </p>
-        <p className="mt-1 mb-0 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-[11px] text-text-3">
+        <p className="mt-1 mb-0 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-3 min-[1024px]:min-w-0 min-[1024px]:overflow-hidden">
           {entry.model && (
             <span
-              className="min-w-0 max-w-full truncate"
+              className="min-[1024px]:min-w-0 min-[1024px]:max-w-full min-[1024px]:flex-1 min-[1024px]:truncate"
               data-testid="traffic-model-value"
               title={entry.model}
             >
@@ -83,17 +85,17 @@ export function TimelineEntry({
           )}
         </p>
       </div>
-      <div className="flex min-w-0 items-start gap-2 font-mono text-[11px]">
+      <div className="flex items-start gap-2 font-mono text-[11px] min-[1024px]:min-w-0">
         <span
-          className="shrink-0 rounded-full bg-fill px-2 py-0.5 font-bold text-text-3 data-[outcome=error]:bg-red-t data-[outcome=error]:text-red data-[outcome=success]:bg-green-t data-[outcome=success]:text-green-d"
+          className="rounded-full bg-fill px-2 py-0.5 font-bold text-text-3 data-[outcome=error]:bg-red-t data-[outcome=error]:text-red data-[outcome=success]:bg-green-t data-[outcome=success]:text-green-d min-[1024px]:shrink-0"
           data-outcome={entry.outcome}
         >
           {entry.status_code ?? t('advanced.traffic_unknown')}
           {' · '}
           {t(`advanced.traffic_outcome_${entry.outcome}`)}
         </span>
-        <span className="flex min-w-0 items-start gap-1 pt-0.5 text-text-3">
-          <span className="shrink-0">
+        <span className="flex items-start gap-1 pt-0.5 text-text-3 min-[1024px]:min-w-0">
+          <span className="min-[1024px]:shrink-0">
             {entry.duration_ms === null
               ? t('advanced.traffic_duration_unknown')
               : t('advanced.traffic_duration_ms', { n: formatNumber(entry.duration_ms) })}
@@ -102,7 +104,7 @@ export function TimelineEntry({
             <>
               <span aria-hidden="true">·</span>
               <span
-                className="min-w-0 truncate"
+                className="min-[1024px]:min-w-0 min-[1024px]:truncate"
                 data-testid="traffic-transport-value"
                 title={entry.transport}
               >
@@ -140,10 +142,13 @@ export function TrafficSessionRail({
   return (
     <section
       aria-label={t('advanced.traffic_sessions_label')}
-      className="min-w-0 rounded-lg border border-border bg-fill/30 p-2.5"
+      className="min-w-0 min-[1024px]:rounded-lg min-[1024px]:border min-[1024px]:border-border min-[1024px]:bg-fill/30 min-[1024px]:p-2.5"
       data-testid="traffic-session-rail"
     >
-      <header className="mb-2.5 flex items-end justify-between gap-3 px-0.5">
+      <header
+        className="hidden min-[1024px]:mb-2.5 min-[1024px]:flex min-[1024px]:items-end min-[1024px]:justify-between min-[1024px]:gap-3 min-[1024px]:px-0.5"
+        data-testid="traffic-session-rail-header"
+      >
         <div>
           <p className="m-0 text-xs font-bold text-text">{t('advanced.traffic_sessions_heading')}</p>
           <p className="mt-0.5 mb-0 text-[10.5px] text-text-3">{t('advanced.traffic_sessions_hint')}</p>
@@ -179,7 +184,7 @@ export function TrafficSessionRail({
         </p>
       ) : (
         <ul
-          className="m-0 flex max-h-[42rem] list-none flex-col gap-1.5 overflow-y-auto p-0 pr-1"
+          className="m-0 flex list-none flex-col gap-1.5 p-0 min-[1024px]:max-h-[42rem] min-[1024px]:overflow-y-auto min-[1024px]:pr-1"
           data-testid="traffic-sessions"
         >
           {sessions.map((session) => (
@@ -188,17 +193,21 @@ export function TrafficSessionRail({
                 ref={(node) => setButtonRef(session.id, node)}
                 type="button"
                 title={session.id}
-                className="group flex w-full cursor-pointer flex-col gap-1 rounded-md border border-border bg-card px-2.5 py-2.5 text-left text-text outline-none transition-[border-color,box-shadow,background-color] hover:border-accent-b focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-pressed:border-l-[3px] aria-pressed:border-(--accent) aria-pressed:bg-accent-t aria-pressed:shadow-[0_0_0_3px_var(--ring-blue)]"
+                className="group flex w-full cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-[7px] text-left text-text outline-none transition-[border-color,box-shadow,background-color] hover:border-accent-b focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-pressed:border-[1.5px] aria-pressed:border-(--accent) aria-pressed:bg-accent-t aria-pressed:shadow-[0_0_0_3px_var(--ring-blue)] min-[1024px]:flex-col min-[1024px]:items-stretch min-[1024px]:gap-1 min-[1024px]:py-2.5 min-[1024px]:aria-pressed:border-l-[3px]"
                 aria-pressed={selected === session.id}
                 onClick={() => onSelect(session.id)}
               >
-                <span className="flex w-full min-w-0 items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs font-bold text-text">
+                <span className="contents min-[1024px]:flex min-[1024px]:w-full min-[1024px]:min-w-0 min-[1024px]:items-center min-[1024px]:gap-2">
+                  <span className="order-1 min-w-0 truncate font-mono text-xs font-semibold text-text min-[1024px]:order-none min-[1024px]:flex-1 min-[1024px]:font-bold">
                     {session.client || t('advanced.traffic_unknown_client')}
                   </span>
-                  <SessionStatusBadge status={session.status} t={t} />
+                  <SessionStatusBadge
+                    className="order-3 ml-auto min-[1024px]:order-none min-[1024px]:ml-0"
+                    status={session.status}
+                    t={t}
+                  />
                 </span>
-                <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-text-3">
+                <span className="hidden min-[1024px]:flex min-[1024px]:w-full min-[1024px]:min-w-0 min-[1024px]:items-center min-[1024px]:gap-1.5 min-[1024px]:font-mono min-[1024px]:text-[10.5px] min-[1024px]:text-text-3">
                   <span className="min-w-0 truncate">{shortSessionId(session.id)}</span>
                   <span aria-hidden="true">·</span>
                   <span
@@ -209,8 +218,8 @@ export function TrafficSessionRail({
                     {session.proxy_mode || t('advanced.traffic_unknown_proxy')}
                   </span>
                 </span>
-                <span className="flex w-full items-center justify-between gap-2 text-[10.5px] text-text-3">
-                  <span>
+                <span className="contents min-[1024px]:flex min-[1024px]:w-full min-[1024px]:items-center min-[1024px]:justify-between min-[1024px]:gap-2 min-[1024px]:text-[10.5px] min-[1024px]:text-text-3">
+                  <span className="order-2 font-mono text-[11px] text-text-3 min-[1024px]:order-none min-[1024px]:font-sans min-[1024px]:text-[10.5px]">
                     {t(
                       session.record_count === 1
                         ? 'advanced.traffic_session_count_one'
@@ -218,7 +227,11 @@ export function TrafficSessionRail({
                       { n: formatNumber(session.record_count) },
                     )}
                   </span>
-                  <time dateTime={session.updated_at} title={session.updated_at}>
+                  <time
+                    className="hidden min-[1024px]:block"
+                    dateTime={session.updated_at}
+                    title={session.updated_at}
+                  >
                     {formatDateTime(session.updated_at)}
                   </time>
                 </span>

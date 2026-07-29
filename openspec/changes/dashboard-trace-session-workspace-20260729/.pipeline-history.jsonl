@@ -52,3 +52,21 @@
 {"ts":"2026-07-29T11:14:06Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-29T11:14:06Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"4e8766b2-5c6f-405e-950a-fcdfdc62209d"}
 {"ts":"2026-07-29T11:25:29Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T11:26:22Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T11:26:22Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T11:26:22Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T11:26:22Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T11:26:22Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"8536ce8b-9ab7-4c68-8f90-269ae6ec9466"}
+{"ts":"2026-07-29T11:36:04Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-29T11:36:04Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-29T11:36:04Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-dashboard-trace-session-workspace-20260729-verify.md"}
+{"ts":"2026-07-29T11:36:04Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T10:24:16Z authority_host_session=019facd5-50d5-7500-aa18-2c8e717cee00"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T11:36:10Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T11:36:11Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"97145220-b62a-48f9-b854-e098d8e90de1"}
+{"ts":"2026-07-29T11:53:07Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T11:53:19Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
