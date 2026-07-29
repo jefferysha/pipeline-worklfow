@@ -1,4 +1,4 @@
-# codex-skill-receipt-same-turn 验证报告（失败回退记录）
+# codex-skill-receipt-same-turn 验证报告
 
 ## 验证范围
 
@@ -101,9 +101,37 @@
   序列化的当前 custom 信封或明确标型的旧 `execution_result`，令枚举阶段无法证明最新性时
   整体失败关闭，并拒绝目标路径自身含 symlink 祖先。完成红灯测试与实现后重新执行三轨 Verify。
 
+## 最终 Verify（冻结基线）
+
+- 冻结内容基线：
+  `workspace:sha256:eb6aeded3ee47bbe8c40e0e2dc0c9d80c6bcfc34ccf4420495be75820f02f92f`；
+  implementation HEAD：`8e2850bb1a24ad329fa400ec956ab64db207c886`；
+  implementation 指纹前后均为
+  `cd4a8c7949d6f54d46d00e732221f8551639722961270dabd8e03bf6c429ebe4`。
+- Reviewer 轨覆盖 base...HEAD 的 198/198 个路径：implementation 11/11、读者文档/规格/
+  ADR/计划 9/9、canonical governance 178/178、未分类 0；结论
+  `Critical/High/Medium/Low = 0/0/0/0`。
+- Codex CLI 在只读隔离 clone 中完成 base review，结论为“未发现可执行回归”。其额外 Vitest
+  尝试因只读网络沙箱无法连接本机 npm 代理而失败；该环境失败不作为测试证据，也不抵消主轨
+  已有的可写隔离验证。
+- 主线在全新隔离 clone 中对最终 HEAD 运行
+  `codexSkillReceipt.test.ts`、`internal-skill-gate-hook.integration.test.ts`、
+  `runtime/stable-hook.integration.test.ts` 与 `skillSources.test.ts`：
+  4 个文件、111 项全部通过。其中包含 stable launcher/hook、真实 receipt→同轮 evidence、
+  sibling worktree、完整 custom result 与拒绝矩阵。
+- 本次真实宿主会话在 sibling worktree 的 Spec 阶段首次
+  `document record ... --producer tenon-spec` 即成功，并在同一轮完成全部文档登记与
+  `tenon check`；没有依赖第二条用户消息，直接验证了本修复的调度场景。
+- OpenSpec 1.6.0 隔离演练：change strict validate 通过，archive/apply 成功并新增
+  4 项 requirement，应用后的 `codex-skill-receipt-current-turn` 主规格 strict validate
+  通过。全仓 `--specs --strict` 仍有 8 个与本 Change 无关的既有规格失败，未声称全仓规格绿色。
+- 聚合结论：三轨均无 Critical / High / Medium，冻结实现未漂移，Verify **PASS**。
+
 ## 剩余风险
 
-- 修复必须只接受规范、可静态证明的 `await tools.exec_command(<受限字面对象>)` wrapper，并把结果传给 `text`；不应扩展为通用 JavaScript 求值器。
-- 内部执行退出码必须来自完整的 nested result，外层完成状态不能替代内部成功证据。
-- 下一轮 Verify 必须重新冻结基线、回归本轮全部发现并重新全量审查，而非只复查两个 finding。
+- 未来 Codex 若改变 tool-program 或 custom result ABI，当前实现会失败关闭并继续显示“缺少 Skill
+  调用证据”，不会伪造 evidence；届时需以新的真实 host transcript 扩展受支持 ABI。
+- `npm audit` 的 7 个既有依赖漏洞（5 moderate、1 high、1 critical）不由本 Change 引入。
+- 全仓 OpenSpec strict validation 的 8 个既有失败与本 capability 无关；本 Change 与应用后的
+  `codex-skill-receipt-current-turn` 均已单独 strict validate 通过。
 - `npm audit` 报告的 7 个既有依赖漏洞（5 moderate、1 high、1 critical）不由本 Change 引入，不能据此声称依赖面绿色。

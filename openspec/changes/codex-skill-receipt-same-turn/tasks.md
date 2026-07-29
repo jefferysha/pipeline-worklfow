@@ -41,9 +41,9 @@
 
 ## 验证
 
-- [ ] 运行定向测试、typecheck、npm test 及受影响 hook/bundle 门禁。 (verify)
-- [ ] 在全新 Change 中验证首次同轮登记与 phase 推进。 (verify)
-- [ ] 完成 Codex、测试和安全三轨审查并处理发现。 (verify)
+- [x] 运行定向测试、typecheck、npm test 及受影响 hook/bundle 门禁。 (verify)
+- [x] 在全新 Change 中验证首次同轮登记与 phase 推进。 (verify)
+- [x] 完成 Codex、测试和安全三轨审查并处理发现。 (verify)
 
 ## 交付
 
