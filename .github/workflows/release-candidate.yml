@@ -11,7 +11,8 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 concurrency:
   group: release-candidate
@@ -21,13 +22,19 @@ jobs:
   pre-tag:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
       tag: ${{ steps.candidate.outputs.tag }}
+      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       - name: Prove exact current main candidate and unused tag
         id: candidate
@@ -141,21 +148,72 @@ jobs:
             exit 1
           }
 
-      - name: Create tag only after every pre-tag gate passes
+      - name: Prove canonical CI passed for exact candidate SHA
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
-          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.candidate.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git tag -a "$RELEASE_TAG" "$CANDIDATE_SHA" -m "Tenon $RELEASE_VERSION"
-          git push origin "refs/tags/$RELEASE_TAG"
+          matching="$(
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&event=push&status=completed&per_page=100" \
+              --jq '.workflow_runs[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .head_sha'
+          )"
+          printf '%s\n' "$matching" | grep -Fqx -- "$CANDIDATE_SHA" || {
+            echo "canonical push CI has not succeeded for exact candidate: $CANDIDATE_SHA" >&2
+            exit 1
+          }
+
+  create-tag:
+    needs: pre-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Re-prove main and atomically create the approved annotated tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.pre-tag.outputs.sha }}
+          RELEASE_TAG: ${{ needs.pre-tag.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.pre-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          main="$(
+            gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          )"
+          [ "$main" = "$CANDIDATE_SHA" ] || {
+            echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
+            exit 1
+          }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release tag already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          tag_object="$(
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+              -f tag="$RELEASE_TAG" \
+              -f message="Tenon $RELEASE_VERSION" \
+              -f object="$CANDIDATE_SHA" \
+              -f type=commit \
+              --jq '.sha'
+          )"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$RELEASE_TAG" \
+            -f sha="$tag_object" >/dev/null
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   release:
-    needs: pre-tag
+    needs: create-tag
+    permissions:
+      contents: write
     uses: ./.github/workflows/release.yml
     with:
-      tag: ${{ needs.pre-tag.outputs.tag }}
+      tag: ${{ needs.create-tag.outputs.tag }}
+      expected_sha: ${{ needs.create-tag.outputs.sha }}
     secrets: inherit

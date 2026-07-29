@@ -40,6 +40,13 @@
 - [x] 为所有回退 finding 建立 RED→GREEN 回归并重新运行全量 Build 门禁。 (build)
 - [x] 更新统一 REVIEW、pre-Verify 报告并冻结新的完整 Build SHA。 (build)
 
+## 第二次 Verify 回退修复
+
+- [x] 将 release candidate 拆为只读验证与最小写权限 tag job，并 fail-closed 证明精确 SHA canonical CI。 (build)
+- [x] 将 approved SHA 传入 reusable packaging，验证 peeled tag commit 且 checkout 不持久化写凭据。 (build)
+- [x] 将 AFK 两个 dialog 迁移到共享键盘/focus primitive，并修复 390px Automation 三动作裁切。 (build)
+- [x] 本地化 TrackSelector candidate/inherited tooltip，补齐全部回退 finding 的 RED→GREEN 与全量门禁。 (build)
+
 ## 验证
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

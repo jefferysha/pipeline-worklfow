@@ -682,9 +682,25 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     expect(within(tabs).getAllByRole('radio')).toHaveLength(4)
     expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('wb-track-qa')).toHaveTextContent('Quality')
-    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', expect.stringContaining('Frontend'))
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · 沿用 前端 轨道技能')
     expect(screen.queryByTestId('wb-track-chat')).toBeNull()
     expect(screen.queryByTestId('wb-track-observer')).toBeNull()
+  })
+
+  it('中文 tooltip 本地化内建 candidate 与 inherited track，自定义名称保持原值', async () => {
+    await renderMatrix(['build'])
+    expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', '产品')
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · 沿用 前端 轨道技能')
+    expect(screen.getByTestId('wb-track-qa')).not.toHaveAttribute('title', expect.stringContaining('Frontend'))
+  })
+
+  it('English tooltip 本地化 inherited built-in track 且不混入中文', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const tracks = CONFIG_BODY.tracks.map((track) => track.id === 'frontend' ? { ...track, label: '前端原始值' } : track)
+    configResponse = () => new Response(JSON.stringify({ ...CONFIG_BODY, tracks }), { status: 200 })
+    await renderMatrix(['build'])
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · Uses Skills from the Frontend track')
+    expect(screen.getByTestId('wb-track-qa').getAttribute('title')).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   it('轨道滑块不用锁图标制造噪音', async () => {
@@ -794,13 +810,13 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     await waitFor(() => expect(fetchMock()).toHaveBeenCalledWith('/api/config?root=%2Frepo-b', expect.anything()))
     const bodyB = {
       ...CONFIG_BODY,
-      tracks: CONFIG_BODY.tracks.map((track) => track.id === 'pm' ? { ...track, label: 'B Product' } : track),
+      tracks: CONFIG_BODY.tracks.map((track) => track.id === 'qa' ? { ...track, label: 'B Quality' } : track),
     }
     releaseB(new Response(JSON.stringify(bodyB), { status: 200 }))
-    await waitFor(() => expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', 'B Product'))
+    await waitFor(() => expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'B Quality · 沿用 前端 轨道技能'))
     releaseA(new Response(JSON.stringify(CONFIG_BODY), { status: 200 }))
     await act(async () => { await Promise.resolve() })
-    expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', 'B Product')
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'B Quality · 沿用 前端 轨道技能')
     expect(fetchMock().mock.calls.filter(([url]) => String(url).startsWith('/api/config?root=')).map(([url]) => url))
       .toEqual(['/api/config?root=%2Frepo-a', '/api/config?root=%2Frepo-b'])
   })

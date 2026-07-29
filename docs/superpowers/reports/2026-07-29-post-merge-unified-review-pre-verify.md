@@ -6,7 +6,8 @@
 - 主干基线：`main@907dac067c17ed77fb440b91b20d64fd0f24773b`
 - 审查对象：已串行合并到上述主干的 PR #8、#14、#13、#11、#12、#9，以及统一修复工作树。
 - 生产 Dashboard：`http://127.0.0.1:18819`，项目 root 为当前独立 review worktree。
-- 当前修复资产：`assets/index-4SOLOvlh.js`、`assets/index-66K4PrwP.css`，Vite 6.4.3 生产构建。
+- 当前第三次 Build clean production 资产：`assets/index-BwFU9uOX.js`、
+  `assets/index-lJPhasUc.css`，Vite 6.4.3 生产构建。
 
 ## 规则、架构、安全与代码审查
 
@@ -80,12 +81,41 @@
 - 已完成全仓 26/26 OpenSpec strict、依赖 audit/tree、pre-tag 身份双检和 release 防绕过测试。
 - 这些修复只构成新的 Build 候选；必须冻结新 SHA 后由四轨 Verify 重新独立验证。
 
+## Verify attempt 2 与第三次 Build 回退修复
+
+- attempt 2 结论为 FAIL：Reviewer C0/H3/M2/L0，Codex review 命中同一发布 SHA 与 tooltip
+  问题，Dashboard 视觉 C0/H0/M1/L0；E2E/API 轨 C0/H0/M0/L0。
+- 发布候选的完整门禁 job 已改为 `contents: read` + `actions: read` 且 checkout
+  `persist-credentials: false`；它通过 Actions API 要求精确候选 SHA 已有成功的 canonical
+  `ci.yml` push run。
+- tag 写入已隔离到不 checkout、不安装依赖、不执行仓库代码的最小 `contents: write` job；
+  写入前重新证明 `main` 未前进。reusable release 新增必填 `expected_sha`，checkout 后同时校验
+  detached HEAD 与 peeled tag commit，拒绝 tag 移动或打包错 SHA。
+- Automation 工具与重试弹窗统一迁移到共享 `Dialog`；390px 底部三操作导航改为两行弹性布局；
+  built-in Track 的候选与继承 tooltip 统一走当前语言展示名。
+- RED→GREEN：release workflow 静态契约 6/6、AfkView + mandatory skills 98/98；
+  Dashboard 全量 67 files / 1210 tests，root 327 files / 5741 passed / 14 honest-skip。
+- 真实 Chrome（390×844）复验英文 Automation：nav `scrollWidth=clientWidth=356`，
+  三按钮右边界最大 367px（viewport 390px），`Validate schedule` 的键盘焦点为 2px
+  可见 outline。工具 Dialog 首焦点 Close、Shift+Tab 留在 Dialog、Escape 回到
+  `New schedule`；真实临时 Change 的失败重试 Dialog 首焦点 Cancel、Shift+Tab 到
+  Confirm retry 且不逃逸、Escape 回到 `Review retry`。console warning/error 与 page error
+  均为 0。截图位于 `/tmp/tenon-unified-browser-build3/`，不写入发布仓库。
+- full build、dependency/release checks、docs check/build/smoke、OpenSpec 26/26 strict、
+  skills/bundle/hooks/adapters、migration CAS、legacy bridge 与 golden oracle（0 差异）均通过。
+  这些仍是第三次 Build 候选证据；必须 commit 并冻结精确 SHA 后重新跑四轨 Verify。
+- 独立 pre-Verify reviewer 随后抓到 1 个 High：增量 Dashboard dist 保留了已删除
+  `max-w-5xl` 对应的未使用 Tailwind rule，导致候选 CSS 比隔离 clean build 多 22 bytes，
+  release 的 committed-freshness 门会失败。已重新执行 clean `npm ci` 与 production build；
+  连续两次全构建的 HTML/JS/CSS SHA-256 逐字节不变，且与隔离 clean build 完全一致：
+  JS `886af287…`、CSS `ad3d668f…`。最终独立代码审查为 C0/H0/M0/L0。
+
 ## 自动化验证基线
 
 - 定向 Dashboard：5 files、203 tests 通过。
 - Dashboard typecheck 与 Vite 6.4.3 production build 通过。
 - root tests：327 files、5741 passed、14 个仓库既有 honest-skip；Dashboard：67 files、
-  1205 passed。
+  1210 passed。
 - 干净 `npm ci`、root production build、docs check/build/smoke、architecture、comment honesty、
   repository hygiene、identity、default workflow freshness、dependency audit/tree、document
   templates、npx package、512 hook tests、13 migration CAS tests、golden oracle 与 legacy bridge

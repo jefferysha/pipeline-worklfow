@@ -11,9 +11,9 @@ import {
   Search,
   Terminal,
   Workflow,
-  X,
 } from 'lucide-react'
 import { useT } from '../i18n'
+import { Dialog } from '../shared/Dialog'
 import { PageHeader } from '../shared/PageHeader'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
@@ -486,80 +486,88 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
       )}
 
       {(enqueueCandidates.length > 0 || snapshot?.capabilities.operations === true) && (
-        <nav className="sticky bottom-3 z-30 mx-auto mt-4 flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-card/90 p-1.5 shadow-[0_10px_34px_rgba(15,23,42,.12)] backdrop-blur-2xl" aria-label={t('afk.tool_nav_label')}>
+        <nav
+          className="sticky bottom-3 z-30 mx-auto mt-4 flex w-full max-w-[680px] flex-wrap items-center justify-center gap-1 rounded-2xl border border-border bg-card/90 p-1.5 shadow-[0_10px_34px_rgba(15,23,42,.12)] backdrop-blur-2xl"
+          aria-label={t('afk.tool_nav_label')}
+          data-testid="afk-tool-nav"
+        >
           {([
             ['enqueue', t('afk.tool_start'), Plus, enqueueCandidates.length === 0, t('afk.tool_start_hint')],
             ['starter', t('afk.tool_schedule'), Plus, snapshot?.capabilities.operations !== true, t('afk.tool_schedule_hint')],
             ['run', t('afk.tool_validate'), Play, snapshot?.capabilities.operations !== true, t('afk.tool_validate_hint')],
           ] as const).map(([tool, label, Icon, disabled, title]) => (
-            <button key={tool} type="button" title={title} data-testid={`afk-tool-${tool}`} data-active={activeTool === tool} className="inline-flex min-h-10 flex-none items-center gap-2 rounded-xl px-3 text-xs font-semibold text-text-2 transition-[background-color,transform] hover:bg-fill active:scale-[.97] data-[active=true]:bg-accent-t data-[active=true]:text-accent-d disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none" disabled={disabled} onClick={() => setActiveTool(tool)}><Icon className="h-4 w-4" aria-hidden="true" />{label}</button>
+            <button key={tool} type="button" title={title} data-testid={`afk-tool-${tool}`} data-active={activeTool === tool} className="inline-flex min-h-10 min-w-[10.5rem] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-text-2 transition-[background-color,transform] hover:bg-fill active:scale-[.97] data-[active=true]:bg-accent-t data-[active=true]:text-accent-d disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none" disabled={disabled} onClick={() => setActiveTool(tool)}><Icon className="h-4 w-4" aria-hidden="true" />{label}</button>
           ))}
         </nav>
       )}
 
       {activeTool !== null && (activeTool === 'enqueue' || snapshot?.capabilities.operations === true) && (
-        <section data-testid="afk-tool-sheet" role="dialog" aria-modal="true" aria-label={t('afk.tool_dialog_label')} className="fixed inset-0 z-50 grid place-items-center bg-scrim p-5 max-[760px]:p-3">
-          <div className="max-h-[82vh] w-full max-w-[760px] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-[0_24px_80px_rgba(15,23,42,.28)]">
-            <div className="mb-4 flex items-center justify-between gap-4 border-b border-border pb-3">
-              <div><p className="text-[11px] font-semibold tracking-[.08em] text-text-3">{t('afk.tool_kicker')}</p><h2 className="mt-1 text-lg font-bold text-text">{activeTool === 'enqueue' ? t('afk.tool_start') : activeTool === 'starter' ? t('afk.tool_schedule') : t('afk.tool_validate')}</h2></div>
-              <button type="button" data-testid="afk-tool-close" aria-label={t('afk.tool_close')} className="grid h-10 w-10 place-items-center rounded-full text-text-3 hover:bg-fill hover:text-text" onClick={() => setActiveTool(null)}><X className="h-4 w-4" aria-hidden="true" /></button>
-            </div>
-            {activeTool === 'enqueue' ? (
-              <section>
-                <p className="text-sm leading-6 text-text-3">{t('afk.tool_start_desc')}</p>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {enqueueCandidates.map((change) => {
-                    const key = `enqueue:${change.name}`
-                    return (
-                      <button key={change.name} type="button" className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-border bg-bg px-4 py-3 text-left hover:border-(--accent) hover:bg-accent-t" data-testid={`afk-enqueue-${change.name}`} disabled={actionBusy !== null} onClick={() => void runAction(key, change.name, () => postAfkEnqueue(change.name, currentRoot), 'afk.enqueue_ok').then((ok) => { if (ok) setActiveTool(null) })}>
-                        <span><strong className="block font-mono text-sm text-text">{change.name}</strong><span className="mt-1 block text-xs text-text-3">{t('afk.tool_current_phase', { phase: phaseLabel(change.phase, undefined, t) })}</span></span>
-                        <span className="text-xs font-semibold text-(--accent)">{actionBusy === key ? t('afk.tool_starting') : t('afk.tool_start_action')}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            ) : (
-              <OperationsPanel root={currentRoot} onToast={onToast} onOpenChange={onOpenChange} activeTool={activeTool} compact />
-            )}
+        <Dialog
+          title={t('afk.tool_dialog_label')}
+          onClose={() => setActiveTool(null)}
+          testid="afk-tool-sheet"
+          closeLabel={t('afk.tool_close')}
+          closeTestid="afk-tool-close"
+          panelClassName="w-full max-w-[760px]"
+          variant="workspace"
+        >
+          <div className="mb-4 border-b border-border pb-3">
+            <p className="text-[11px] font-semibold tracking-[.08em] text-text-3">{t('afk.tool_kicker')}</p>
+            <h2 className="mt-1 text-lg font-bold text-text">{activeTool === 'enqueue' ? t('afk.tool_start') : activeTool === 'starter' ? t('afk.tool_schedule') : t('afk.tool_validate')}</h2>
           </div>
-        </section>
+          {activeTool === 'enqueue' ? (
+            <section>
+              <p className="text-sm leading-6 text-text-3">{t('afk.tool_start_desc')}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {enqueueCandidates.map((change) => {
+                  const key = `enqueue:${change.name}`
+                  return (
+                    <button key={change.name} type="button" className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-border bg-bg px-4 py-3 text-left hover:border-(--accent) hover:bg-accent-t" data-testid={`afk-enqueue-${change.name}`} disabled={actionBusy !== null} onClick={() => void runAction(key, change.name, () => postAfkEnqueue(change.name, currentRoot), 'afk.enqueue_ok').then((ok) => { if (ok) setActiveTool(null) })}>
+                      <span><strong className="block font-mono text-sm text-text">{change.name}</strong><span className="mt-1 block text-xs text-text-3">{t('afk.tool_current_phase', { phase: phaseLabel(change.phase, undefined, t) })}</span></span>
+                      <span className="text-xs font-semibold text-(--accent)">{actionBusy === key ? t('afk.tool_starting') : t('afk.tool_start_action')}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ) : (
+            <OperationsPanel root={currentRoot} onToast={onToast} onOpenChange={onOpenChange} activeTool={activeTool} compact />
+          )}
+        </Dialog>
       )}
 
       {retryPreviewName !== null && (
-        <section
-          role="dialog"
-          aria-label={t('afk.retry_dialog_label')}
-          data-testid="afk-retry-sheet"
-          className="fixed right-5 bottom-5 left-[112px] z-40 rounded-2xl border border-border bg-card/95 p-5 shadow-[0_20px_55px_rgba(15,23,42,.18)] backdrop-blur-2xl max-[760px]:right-3 max-[760px]:bottom-3 max-[760px]:left-3"
+        <Dialog
+          title={t('afk.retry_dialog_label')}
+          onClose={() => setRetryPreviewName(null)}
+          testid="afk-retry-sheet"
+          panelClassName="w-[min(1040px,92vw)]"
+          actions={<>
+            <button type="button" className="min-h-11 rounded-xl border border-border-2 bg-card px-4 text-sm font-semibold text-text-2" onClick={() => setRetryPreviewName(null)}>{t('afk.retry_cancel')}</button>
+            <button
+              type="button"
+              data-testid={`afk-retry-confirm-${retryPreviewName}`}
+              disabled={actionBusy !== null}
+              className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-btn-fg disabled:opacity-50"
+              onClick={() => {
+                const name = retryPreviewName
+                void runAction(`retry:${name}`, name, () => postAfkRetry(name, currentRoot), 'afk.retry_ok')
+                  .then((ok) => { if (ok) setRetryPreviewName(null) })
+              }}
+            >{actionBusy === `retry:${retryPreviewName}` ? t('afk.retry_submitting') : t('afk.retry_confirm')}</button>
+          </>}
         >
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-5">
-            <div className="min-w-[260px] flex-1">
-              <p className="text-[11px] font-semibold tracking-[.08em] text-text-3 uppercase">{t('afk.retry_kicker')}</p>
-              <h2 className="mt-1 text-lg font-bold text-text">{t('afk.retry_title', { name: retryPreviewName })}</h2>
-              <p className="mt-1 text-xs leading-5 text-text-3">{t('afk.retry_body')}</p>
-            </div>
-            <dl className="grid min-w-[300px] grid-cols-3 gap-2 text-xs max-[760px]:min-w-0 max-[760px]:w-full">
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_start_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_start_value')}</dd></div>
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_merge_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_merge_value')}</dd></div>
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_failure_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_failure_value')}</dd></div>
-            </dl>
-            <div className="ml-auto flex gap-2 max-[760px]:ml-0 max-[760px]:w-full">
-              <button type="button" className="min-h-11 rounded-xl border border-border-2 bg-card px-4 text-sm font-semibold text-text-2 max-[760px]:flex-1" onClick={() => setRetryPreviewName(null)}>{t('afk.retry_cancel')}</button>
-              <button
-                type="button"
-                data-testid={`afk-retry-confirm-${retryPreviewName}`}
-                disabled={actionBusy !== null}
-                className="min-h-11 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-btn-fg disabled:opacity-50 max-[760px]:flex-1"
-                onClick={() => {
-                  const name = retryPreviewName
-                  void runAction(`retry:${name}`, name, () => postAfkRetry(name, currentRoot), 'afk.retry_ok')
-                    .then((ok) => { if (ok) setRetryPreviewName(null) })
-                }}
-              >{actionBusy === `retry:${retryPreviewName}` ? t('afk.retry_submitting') : t('afk.retry_confirm')}</button>
-            </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-[.08em] text-text-3 uppercase">{t('afk.retry_kicker')}</p>
+            <h2 className="mt-1 text-lg font-bold text-text">{t('afk.retry_title', { name: retryPreviewName })}</h2>
+            <p className="mt-1 text-xs leading-5 text-text-3">{t('afk.retry_body')}</p>
           </div>
-        </section>
+          <dl className="mt-4 grid grid-cols-3 gap-2 text-xs max-[760px]:grid-cols-1">
+            <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_start_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_start_value')}</dd></div>
+            <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_merge_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_merge_value')}</dd></div>
+            <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_failure_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_failure_value')}</dd></div>
+          </dl>
+        </Dialog>
       )}
     </section>
   )

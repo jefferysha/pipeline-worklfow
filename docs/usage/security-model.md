@@ -51,8 +51,11 @@ CI, the pre-tag release candidate, and the tag release workflow run
 advisory audit with `npm ls --all`, so invalid, extraneous, or incompatible
 resolved trees fail too. A formal release starts by dispatching
 **Release candidate (pre-tag)** with the exact current `main` SHA and new tag.
-The workflow rechecks that identity immediately before creating the tag, creates
-it only after every gate passes, then dispatches packaging from that immutable tag.
+Its untrusted verification job is read-only, does not persist checkout
+credentials, and fails closed unless canonical push CI succeeded for that exact
+SHA. A separate minimal writer job checks out and executes no repository code
+before creating the tag. Packaging receives the approved SHA and rejects any tag
+whose peeled commit differs.
 
 ## Hooks and review
 

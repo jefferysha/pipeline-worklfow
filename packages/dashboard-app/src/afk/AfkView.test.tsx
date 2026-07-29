@@ -218,7 +218,7 @@ describe('AfkView 两栏自动运行工作区', () => {
     expect(screen.queryByTestId('afk-tool-sync')).toBeNull()
     expect(screen.queryByTestId('afk-enqueue-panel')).toBeNull()
     fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
-    expect(screen.getByTestId('afk-tool-sheet')).toHaveAttribute('role', 'dialog')
+    expect(within(screen.getByTestId('afk-tool-sheet')).getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('开启自动运行')
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('不创建新任务，也不改变它的工作流')
     expect(screen.getByTestId('afk-enqueue-gate-d')).toBeInTheDocument()
@@ -227,6 +227,31 @@ describe('AfkView 两栏自动运行工作区', () => {
     await waitFor(() => expect(screen.getByTestId('ops-starter-daily-triage')).toBeInTheDocument())
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('选择定时任务类型')
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('模板决定如何发现或生成任务')
+  })
+
+  it('工具 Dialog 进入首个控件、困住 Tab，Escape 关闭并把焦点还给打开按钮', async () => {
+    await renderAfk({ snapshot: fixtureWithOperations() })
+    const trigger = screen.getByTestId('afk-tool-enqueue')
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '自动运行工具' })
+    const close = screen.getByTestId('afk-tool-close')
+    const last = within(dialog).getAllByRole('button').at(-1)
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(dialog).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('390px 动作区使用完整可见的换行布局，不以隐藏横向滚动承载 English 长标签', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    await renderAfk({ snapshot: fixtureWithOperations() })
+    const nav = screen.getByTestId('afk-tool-nav')
+    expect(nav.className).toContain('flex-wrap')
+    expect(nav.className).not.toContain('overflow-x-auto')
+    expect(within(nav).getAllByRole('button')).toHaveLength(3)
   })
 
   it('生产操作能力未接通时仍可开启现有任务的自动运行，但新建与验证定时任务明确禁用', async () => {
@@ -292,6 +317,23 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
     fireEvent.click(screen.getByTestId('afk-retry-confirm-fail-c'))
     await waitFor(() => expect(afkPosts[0]?.url).toBe('/api/afk/fail-c/retry'))
     expect(screen.getByTestId('afk-cmd-fail-c')).toHaveAttribute('title', 'cd /wt/fail-c')
+  })
+
+  it('重试 Dialog 进入取消动作、困住 Shift+Tab，Escape 关闭并恢复触发器焦点', async () => {
+    await renderAfk()
+    const trigger = screen.getByTestId('afk-retry-preview-fail-c')
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '重试预览' })
+    const cancel = screen.getByRole('button', { name: '取消' })
+    const confirm = screen.getByTestId('afk-retry-confirm-fail-c')
+    expect(cancel).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(confirm).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(dialog).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(afkPosts).toHaveLength(0)
   })
 
   it('失败行无 worktree 现场 → 只给真实 retry，不再展示会被后端拒绝的 enqueue 命令', async () => {

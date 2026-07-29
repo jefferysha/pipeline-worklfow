@@ -62,6 +62,7 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
           {state.matrixTracks.map((candidate, index) => {
             const selected = candidate.id === state.track
             const profile = candidate.policyProfile.skills.profile
+            const inherited = state.tracks.find((track) => track.id === profile)
             return (
               <button
                 key={candidate.id}
@@ -69,7 +70,7 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
                 role="radio"
                 className="cursor-pointer rounded-lg border-0 bg-transparent px-4 py-2 text-[12.5px] font-bold text-text-3 transition-all not-aria-checked:hover:text-text-2 aria-checked:bg-card aria-checked:text-accent-d aria-checked:shadow-sm"
                 aria-checked={selected}
-                title={`${candidate.label}${profile !== candidate.id ? ` · ${t('workbench.track_selector_inherits', { track: state.tracks.find((track) => track.id === profile)?.label ?? profile })}` : ''}`}
+                title={`${trackDisplayName(candidate, lang)}${profile !== candidate.id ? ` · ${t('workbench.track_selector_inherits', { track: inherited ? trackDisplayName(inherited, lang) : profile })}` : ''}`}
                 tabIndex={selected ? 0 : -1}
                 data-testid={`wb-track-${candidate.id}`}
                 onClick={() => state.setTrack(candidate.id)}
@@ -77,7 +78,7 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
               >
                 {candidate.builtin && <span className="sr-only">{t('workbench.track_selector_system')} </span>}
                 {trackDisplayName(candidate, lang)}
-                {profile !== candidate.id && <span className="sr-only">, {t('workbench.track_selector_inherits', { track: trackDisplayName(state.tracks.find((track) => track.id === profile) ?? candidate, lang) })}</span>}
+                {profile !== candidate.id && <span className="sr-only">, {t('workbench.track_selector_inherits', { track: trackDisplayName(inherited ?? candidate, lang) })}</span>}
               </button>
             )
           })}
