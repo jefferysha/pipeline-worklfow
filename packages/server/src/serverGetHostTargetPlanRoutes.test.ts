@@ -139,7 +139,7 @@ function planFor(host: HostId, operation: Operation) {
   const native = host === 'codex' || host === 'claude'
   const command = planCommand(
     'tenon',
-    native ? [operation, `--${host}`] : [operation, `--${host}`, '--target', '<project>'],
+    native ? [operation, `--${host}`] : [operation, `--${host}`, '--target', '.'],
   )
   const nativeIds = operation === 'setup'
     ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
@@ -182,7 +182,7 @@ function planFor(host: HostId, operation: Operation) {
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
-      ...(native ? [] : ['host-plan.notice.project-placeholder']),
+      ...(native ? [] : ['host-plan.notice.current-project-target']),
     ],
   }
 }
@@ -251,7 +251,12 @@ describe('Host Target Plan route resolver', () => {
 
     const catalog = await resolveHostTargetPlanRoute('/api/host-targets', '/api/host-targets', deps(runner))
     expect(catalog).toEqual({ status: 200, body: CATALOG })
-    expect(runner).toHaveBeenNthCalledWith(1, '/host/home', ['host-target-plan', '--json'])
+    expect(runner).toHaveBeenNthCalledWith(
+      1,
+      '/host/home',
+      ['host-target-plan', '--json'],
+      { signal: expect.any(AbortSignal) },
+    )
 
     const plan = await resolveHostTargetPlanRoute(
       '/api/host-target-plan?host=codex&operation=update',
@@ -263,6 +268,7 @@ describe('Host Target Plan route resolver', () => {
       2,
       '/host/home',
       ['host-target-plan', '--host', 'codex', '--operation', 'update', '--json'],
+      { signal: expect.any(AbortSignal) },
     )
   })
 
@@ -477,7 +483,7 @@ describe('Host Target Plan route resolver', () => {
 
   it.each([
     {
-      name: 'top command omits the project placeholder',
+      name: 'top command omits the current-project target',
       mutate: (value: ReturnType<typeof planFor>) => ({
         ...value,
         command: planCommand('tenon', ['setup', '--cursor']),
@@ -503,7 +509,7 @@ describe('Host Target Plan route resolver', () => {
       }),
     },
     {
-      name: 'project-placeholder notice is missing',
+      name: 'current-project-target notice is missing',
       mutate: (value: ReturnType<typeof planFor>) => ({
         ...value,
         notices: value.notices.slice(0, 2),
@@ -602,7 +608,7 @@ describe('Host Target Plan server assembly', () => {
     expect(runner).toHaveBeenCalledTimes(2)
   })
 
-  it('caps cross-key CLI concurrency at one across all 25 valid keys', async () => {
+  it('caps cross-key CLI concurrency at four across all 25 valid keys', async () => {
     let active = 0
     let maxActive = 0
     const runner = vi.fn<PipelineCliRunner>(async (_root, args) => {
@@ -618,6 +624,59 @@ describe('Host Target Plan server assembly', () => {
 
     expect(responses.every((result) => result.status === 200)).toBe(true)
     expect(runner).toHaveBeenCalledTimes(25)
-    expect(maxActive).toBe(1)
+    expect(maxActive).toBe(4)
+  })
+
+  it('lets a healthy key proceed while another key remains pending', async () => {
+    const runtime = createHostTargetPlanRuntime({ maxConcurrent: 2, timeoutMs: 1_000 })
+    let releaseFirst: (() => void) | undefined
+    const first = runtime.resolve('first', () => new Promise((resolve) => {
+      releaseFirst = () => resolve({ status: 200, body: { key: 'first' } })
+    }))
+    await vi.waitFor(() => expect(releaseFirst).toBeTypeOf('function'))
+
+    const second = runtime.resolve('second', async () => ({
+      status: 200,
+      body: { key: 'second' },
+    }))
+    const outcome = await Promise.race([
+      second.then((value) => ({ kind: 'resolved' as const, value })),
+      delay(50).then(() => ({ kind: 'blocked' as const })),
+    ])
+
+    releaseFirst?.()
+    await first
+    expect(outcome).toEqual({
+      kind: 'resolved',
+      value: { status: 200, body: { key: 'second' } },
+    })
+  })
+
+  it('times out a stuck load, aborts it, frees the slot, and does not cache the failure', async () => {
+    const runtime = createHostTargetPlanRuntime({ maxConcurrent: 1, timeoutMs: 10 })
+    let observedSignal: AbortSignal | undefined
+    const stuck = runtime.resolve('catalog', (signal) => {
+      observedSignal = signal
+      return new Promise(() => {})
+    })
+    const timed = await Promise.race([
+      stuck,
+      delay(100).then(() => ({ status: -1, body: 'still pending' })),
+    ])
+
+    expect(timed).toEqual({
+      status: 503,
+      body: {
+        ok: false,
+        code: 'HOST_TARGET_PLAN_UNAVAILABLE',
+        error: '宿主计划功能当前不可用',
+      },
+    })
+    expect(observedSignal?.aborted).toBe(true)
+
+    await expect(runtime.resolve('catalog', async () => ({
+      status: 200,
+      body: CATALOG,
+    }))).resolves.toEqual({ status: 200, body: CATALOG })
   })
 })

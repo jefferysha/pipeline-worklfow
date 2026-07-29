@@ -98,7 +98,7 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     expect(update.notices).not.toContain('host-plan.notice.codex-auth-guidance')
   })
 
-  test('adapter setup/update 分别对齐真实外层流程并固定使用 <project> 占位', () => {
+  test('adapter setup/update 分别对齐真实外层流程并生成当前目录可安全复制的命令', () => {
     const setup = createHostTargetPlan('cursor', 'setup')
     const update = createHostTargetPlan('cursor', 'update')
 
@@ -108,13 +108,13 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       operation: 'update',
       command: {
         executable: 'tenon',
-        args: ['update', '--cursor', '--target', '<project>'],
-        display: 'tenon update --cursor --target <project>',
+        args: ['update', '--cursor', '--target', '.'],
+        display: 'tenon update --cursor --target .',
       },
       notices: [
         'host-plan.notice.read-only-generation',
         'host-plan.notice.manual-command-has-effects',
-        'host-plan.notice.project-placeholder',
+        'host-plan.notice.current-project-target',
       ],
     })
     expect(setup.steps.map(({ id }) => id)).toEqual([
@@ -132,8 +132,8 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
         label: 'host-plan.step.adapter-deploy',
         command: {
           executable: 'tenon',
-          args: ['update', '--cursor', '--target', '<project>'],
-          display: 'tenon update --cursor --target <project>',
+          args: ['update', '--cursor', '--target', '.'],
+          display: 'tenon update --cursor --target .',
         },
       },
     ])

@@ -157,6 +157,30 @@ describe('HostTargetPlanView', () => {
     expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
   })
 
+  it('keeps a stable master-detail layout instead of expanding and reflowing the selected card', async () => {
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadPlan: vi.fn().mockResolvedValue(setupPlan),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '选择 Cursor' }))
+
+    expect(screen.getByTestId('host-plan-workspace').className).toContain(
+      'min-[769px]:grid-cols-[minmax(240px,0.78fr)_minmax(0,1.22fr)]',
+    )
+    expect(screen.getByTestId('host-target-grid').className).toContain(
+      'order-2 min-[769px]:order-1',
+    )
+    expect(screen.getByTestId('host-plan-detail').className).toContain(
+      'order-1 min-[769px]:order-2',
+    )
+    const selectedCard = screen.getByRole('heading', { name: 'Cursor' }).closest('article')
+    expect(selectedCard?.className).not.toContain('col-span-full')
+    expect(within(screen.getByTestId('host-plan-detail')).getByRole('region', {
+      name: 'Cursor 操作',
+    })).toBeInTheDocument()
+  })
+
   it('shows a plan error and retries the exact selected operation', async () => {
     const loadPlan = vi.fn()
       .mockRejectedValueOnce(

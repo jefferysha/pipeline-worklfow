@@ -36,7 +36,7 @@ export function HostOperationPlanPanel({
 
   return (
     <section
-      className="col-span-full rounded-2xl border border-blue-b bg-blue-t/30 p-5"
+      className="min-w-0 rounded-2xl border border-blue-b bg-blue-t/30 p-5"
       aria-labelledby="host-plan-operation-title"
     >
       <h2 id="host-plan-operation-title" className="text-base font-bold text-text">

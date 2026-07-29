@@ -444,10 +444,19 @@ describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱�
   })
 
   it('切视图写回记忆：点工作台后 localStorage 存 workbench', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<App />)
     await screen.findByTestId('progress-view')
-    fireEvent.click(screen.getByTestId('nav-workbench'))
+    await act(async () => {
+      screen.getByTestId('nav-workbench').click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
     expect(localStorage.getItem('tenon-dashboard-view')).toBe('workbench')
+    expect(consoleError).not.toHaveBeenCalledWith(
+      expect.stringContaining('was not wrapped in act'),
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it('品牌 Overview 不覆盖上一次运营视图记忆', async () => {

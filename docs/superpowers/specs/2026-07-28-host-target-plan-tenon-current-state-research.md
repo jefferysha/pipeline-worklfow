@@ -53,12 +53,12 @@ Tenon 在基线 `2d103e330f847e003ff5909097d892f5722cca04` 已经拥有单宿主
 
 - 假设：`TENON_HOSTS` 是 P1 唯一可选集合。证据：setup/update 的 flag 类型和选择器直接消费它。若不成立，CLI 与 Dashboard 会显示不受支持的宿主；因此 API 只消费该 catalog，不解析任意 adapter 路径。
 - 假设：CLI plan 可以作为 server 的稳定只读真相源。证据：server 已用 `PipelineCliRunner` 承载 CLI 生产逻辑。若 CLI 输出畸形，server 必须返回稳定错误而不是透传未知 JSON。
-- 假设：不用 project root 也能给出有价值预览。native 计划不需要 root；adapter 以 `<project>` 占位符展示 project-scope 命令。若未来需要真实目标目录，应新增受注册表信任锚约束的 v2 输入，不能把任意路径塞进 v1。
+- 假设：不用 project root 也能给出有价值预览。native 计划不需要 root；原始方案让 adapter 以 `<project>` 占位符展示 project-scope 命令。PR #8 合并审计已发现该文本复制到 shell 会被解释为重定向，因此后续规格改为安全的 `--target .` 当前目录语义；若未来需要真实目标目录，应新增受注册表信任锚约束的 v2 输入，不能把任意路径塞进 v1。
 - 假设：计划不是执行。DTO 必须显式 `side_effects: "none"`，UI 必须标明只读并仅提供复制命令，不提供运行按钮。
 
 ## 开放问题与保守结论
 
 - 是否展示 adapter 的完整 hook tier？本轮只展示由 CLI 可稳定证明的 native/adapter、target scope、auto-update/project-target 等能力；完整 registry tier 留给后续共享 registry contract。
 - 是否允许 custom target？不允许。Comet 的 project-scope custom target 只作为设计启发，P1 仅支持 `TENON_HOSTS`。
-- 是否在 API 接受 `target`？不接受。P1 的计划保持机器级稳定且零路径输入；adapter 命令使用 `<project>` 占位。
+- 是否在 API 接受 `target`？不接受。P1 的计划保持机器级稳定且零路径输入；经 PR #8 合并审计后，adapter 命令使用 `--target .` 并明确要求用户先进入目标项目。
 - 是否提供执行按钮？不提供。用户只能复制现有 setup/update 命令并回到终端自行执行。

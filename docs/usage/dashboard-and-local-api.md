@@ -55,7 +55,9 @@ The operational destinations are:
 - Workbench — Workflows, Tracks, hooks, automation, loops, and configuration
 - Machine — runtime identity, traffic, and advanced diagnostics
 - Host Plan (`hostPlan`) — choose a registered host and preview a zero-side-effect
-  setup or update command and its ordered steps
+  setup or update command and its ordered steps. Adapter previews use
+  `--target .`, so enter the intended project directory before running a copied
+  command
 
 The product Overview at `/?view=overview` is a separate brand-level read-only
 view, not an operational destination and not the installed default.
@@ -127,7 +129,13 @@ configuration, and diagnostics.
 
 The Host Plan endpoints are strictly read-only. They accept only registered
 Tenon hosts and the `setup` or `update` operation, return
-`host-target-plan/v1`, and never execute the displayed command.
+`host-target-plan/v1`, and never execute the displayed command. Native-host
+plans are user-scoped; adapter-host plans use the current project directory
+(`--target .`) instead of a shell placeholder.
+
+The production server negotiates gzip for compressible generated assets and
+returns `Vary: Accept-Encoding`. Clients that decline gzip receive the original
+bytes; API JSON remains `no-store`.
 
 Mutation requests require:
 

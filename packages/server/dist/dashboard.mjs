@@ -16681,7 +16681,7 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
+var runPipelineCli = (repoRoot, args, options) => new Promise((resolve12, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
     reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
@@ -16695,7 +16695,8 @@ var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
       env: process.env,
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
-      timeout: 15 * 60 * 1e3
+      timeout: 15 * 60 * 1e3,
+      signal: options?.signal
     },
     (error, stdout, stderr) => {
       if (error === null) {
@@ -19597,7 +19598,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (serveIndexWithToken(res)) return;
     return sendHtml(res, 200, indexHtml2(token));
   }
-  if (serveAsset(res, path7)) return;
+  if (serveAsset(req, res, path7)) return;
   if (path7 === "/api/health") {
     return sendJson(res, 200, {
       ok: true,
@@ -19751,7 +19752,7 @@ var NOTICE_IDS = [
   "host-plan.notice.read-only-generation",
   "host-plan.notice.manual-command-has-effects",
   "host-plan.notice.codex-auth-guidance",
-  "host-plan.notice.project-placeholder"
+  "host-plan.notice.current-project-target"
 ];
 function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19865,7 +19866,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
   const command = decodeCommand(value.command);
   if (host === null || host.id !== expectedHost || command === null) return null;
   const native = host.kind === "native";
-  const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "<project>"];
+  const expectedCommandArgs = native ? [expectedOperation, `--${expectedHost}`] : [expectedOperation, `--${expectedHost}`, "--target", "."];
   if (command.executable !== "tenon" || !arraysEqual(command.args, expectedCommandArgs) || command.display !== ["tenon", ...expectedCommandArgs].join(" ")) return null;
   const steps = [];
   for (const item2 of value.steps) {
@@ -19910,6 +19911,12 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
 
 // packages/server/src/serverGetHostTargetPlanRoutes.ts
 var MAX_HOST_PLAN_KEYS = 25;
+var DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS = 4;
+var DEFAULT_HOST_PLAN_TIMEOUT_MS = 1e4;
+var PLAN_UNAVAILABLE = {
+  status: 503,
+  body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
+};
 function parseHostTargetPlanJson(stdout) {
   const trimmed = stdout.trim();
   if (trimmed === "") return null;
@@ -19919,18 +19926,63 @@ function parseHostTargetPlanJson(stdout) {
     return null;
   }
 }
-function createHostTargetPlanRuntime() {
+function createHostTargetPlanRuntime(options = {}) {
+  const maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HOST_PLAN_TIMEOUT_MS;
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > MAX_HOST_PLAN_KEYS) {
+    throw new Error(`maxConcurrent \u5FC5\u987B\u662F 1..${MAX_HOST_PLAN_KEYS} \u7684\u6574\u6570`);
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("timeoutMs \u5FC5\u987B\u662F\u6B63\u6570");
+  }
   const cache = /* @__PURE__ */ new Map();
   const inFlight = /* @__PURE__ */ new Map();
-  let queueTail = Promise.resolve();
+  const queue = [];
+  let active = 0;
+  const drain = () => {
+    while (active < maxConcurrent) {
+      const queued = queue.shift();
+      if (queued === void 0) return;
+      active += 1;
+      const controller = new AbortController();
+      let settled = false;
+      const finish = (settle) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        active -= 1;
+        settle();
+        drain();
+      };
+      const timer = setTimeout(() => {
+        controller.abort();
+        finish(() => queued.resolve(PLAN_UNAVAILABLE));
+      }, timeoutMs);
+      timer.unref?.();
+      try {
+        void queued.load(controller.signal).then(
+          (result) => finish(() => queued.resolve(result)),
+          (error) => finish(() => queued.reject(error))
+        );
+      } catch (error) {
+        finish(() => queued.reject(error));
+      }
+    }
+  };
+  const schedule = (load) => {
+    const scheduled = new Promise((resolve12, reject) => {
+      queue.push({ load, resolve: resolve12, reject });
+    });
+    drain();
+    return scheduled;
+  };
   return {
     resolve(key, load) {
       const cached = cache.get(key);
       if (cached !== void 0) return Promise.resolve(cached);
       const existing = inFlight.get(key);
       if (existing !== void 0) return existing;
-      const queued = queueTail.then(load);
-      queueTail = queued.then(() => void 0, () => void 0);
+      const queued = schedule(load);
       const shared = queued.then((result) => {
         if (result.status === 200) {
           cache.delete(key);
@@ -19956,10 +20008,6 @@ var QUERY_INVALID = {
   status: 400,
   body: { ok: false, code: "HOST_TARGET_QUERY_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u67E5\u8BE2\u53C2\u6570\u65E0\u6548" }
 };
-var PLAN_UNAVAILABLE = {
-  status: 503,
-  body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
-};
 var PLAN_INVALID = {
   status: 502,
   body: { ok: false, code: "HOST_TARGET_PLAN_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u54CD\u5E94\u65E0\u6548" }
@@ -19972,9 +20020,9 @@ function parsePlanQuery(searchParams) {
   if (!isHostId(host) || operation !== "setup" && operation !== "update") return null;
   return { host, operation };
 }
-async function runAndDecode(args, deps, decode) {
+async function runAndDecode(args, deps, decode, signal) {
   try {
-    const result = await deps.operationRunner(deps.hostHome, args);
+    const result = await deps.operationRunner(deps.hostHome, args, { signal });
     if (result.exitCode !== 0) return PLAN_INVALID;
     const decoded = decode(parseHostTargetPlanJson(result.stdout));
     return decoded === null ? PLAN_INVALID : { status: 200, body: decoded };
@@ -19990,7 +20038,7 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
     return deps.runtime.resolve(
       "catalog",
-      () => runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog)
+      (signal) => runAndDecode(["host-target-plan", "--json"], deps, decodeHostTargetCatalog, signal)
     );
   }
   const query = parsePlanQuery(searchParams);
@@ -19998,10 +20046,11 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
   if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
   return deps.runtime.resolve(
     `plan:${query.host}:${query.operation}`,
-    () => runAndDecode(
+    (signal) => runAndDecode(
       ["host-target-plan", "--host", query.host, "--operation", query.operation, "--json"],
       deps,
-      (value) => decodeHostTargetPlan(value, query.host, query.operation)
+      (value) => decodeHostTargetPlan(value, query.host, query.operation),
+      signal
     )
   );
 }
@@ -21695,6 +21744,7 @@ function indexHtml(token) {
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync23 } from "node:fs";
 import { join as join51 } from "node:path";
+import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
   const { registry, snapshotDeps, heartbeatMs, pollIntervalMs, token } = options;
@@ -21840,6 +21890,22 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     ".ico": "image/x-icon",
     ".woff2": "font/woff2"
   };
+  const GZIP_MIN_BYTES = 1024;
+  const GZIP_TYPES = /* @__PURE__ */ new Set([".js", ".css", ".html", ".json", ".svg"]);
+  const gzipCache = /* @__PURE__ */ new Map();
+  function acceptsGzip(header) {
+    if (header === void 0) return false;
+    const accepted = /* @__PURE__ */ new Map();
+    for (const entry of (Array.isArray(header) ? header.join(",") : header).split(",")) {
+      const [rawName, ...params] = entry.trim().toLowerCase().split(";");
+      if (!rawName) continue;
+      const qParam = params.map((param) => param.trim()).find((param) => param.startsWith("q="));
+      const parsed = qParam === void 0 ? 1 : Number(qParam.slice(2));
+      accepted.set(rawName, Number.isFinite(parsed) ? parsed : 0);
+    }
+    const gzip = accepted.get("gzip");
+    return (gzip ?? accepted.get("*") ?? 0) > 0;
+  }
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
@@ -21853,19 +21919,29 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
       return false;
     }
   }
-  function serveAsset(res, path7) {
+  function serveAsset(req, res, path7) {
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
     const abs = join51(webRoot, rel);
     if (!abs.startsWith(join51(webRoot, "assets"))) return false;
     try {
-      const body = readFileSync23(abs);
+      const source = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
+      const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
+      const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
+      let body = source;
+      if (gzip) {
+        const compressed = gzipCache.get(abs) ?? gzipSync(source);
+        gzipCache.set(abs, compressed);
+        body = compressed;
+      }
       res.writeHead(200, {
         "Content-Type": STATIC_TYPES[ext] ?? "application/octet-stream",
         "Content-Length": body.length,
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ...compressible ? { Vary: "Accept-Encoding" } : {},
+        ...gzip ? { "Content-Encoding": "gzip" } : {}
       });
       res.end(body);
       return true;

@@ -29,7 +29,7 @@ const NOTICE_IDS = [
   'host-plan.notice.read-only-generation',
   'host-plan.notice.manual-command-has-effects',
   'host-plan.notice.codex-auth-guidance',
-  'host-plan.notice.project-placeholder',
+  'host-plan.notice.current-project-target',
 ] as const
 
 export type HostId = (typeof HOST_IDS)[number]
@@ -254,7 +254,7 @@ export function decodeHostTargetPlan(
   const native = host.kind === 'native'
   const expectedCommandArgs = native
     ? [expectedOperation, `--${expectedHost}`]
-    : [expectedOperation, `--${expectedHost}`, '--target', '<project>']
+    : [expectedOperation, `--${expectedHost}`, '--target', '.']
   if (
     command.executable !== 'tenon'
     || !arraysEqual(command.args, expectedCommandArgs)

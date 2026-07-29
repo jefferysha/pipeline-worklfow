@@ -166,7 +166,7 @@ export function createHostTargetPlan(
   const target = targetFor(host)
   const args = isNativePipelineHost(host)
     ? [operation, hostFlag(host)]
-    : [operation, hostFlag(host), '--target', '<project>']
+    : [operation, hostFlag(host), '--target', '.']
   const manualCommand = command('tenon', args)
   const steps = isNativePipelineHost(host)
     ? nativeSteps(
@@ -186,7 +186,7 @@ export function createHostTargetPlan(
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
-      ...(isNativePipelineHost(host) ? [] : ['host-plan.notice.project-placeholder']),
+      ...(isNativePipelineHost(host) ? [] : ['host-plan.notice.current-project-target']),
     ],
   }
 }

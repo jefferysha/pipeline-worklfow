@@ -49,7 +49,7 @@ export interface GetRouteDeps {
   sendJson: (res: ServerResponse, code: number, body: unknown) => void
   sendHtml: (res: ServerResponse, code: number, body: string) => void
   serveIndexWithToken: (res: ServerResponse) => boolean
-  serveAsset: (res: ServerResponse, path: string) => boolean
+  serveAsset: (req: IncomingMessage, res: ServerResponse, path: string) => boolean
   indexHtml: (token: string) => string
   token: string
   version: string

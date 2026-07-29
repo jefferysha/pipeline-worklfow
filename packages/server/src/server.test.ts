@@ -971,7 +971,8 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const web = await mkdtemp(join(tmpdir(), 'spa-'))
     await writeFile(join(web, 'index.html'), '<!doctype html><head><title>SPA</title></head><body><div id=app></div></body>', 'utf8')
     await mkdir(join(web, 'assets'), { recursive: true })
-    await writeFile(join(web, 'assets', 'app.js'), 'console.log("real bundle")', 'utf8')
+    const jsBundle = 'console.log("real bundle")\n'.repeat(100)
+    await writeFile(join(web, 'assets', 'app.js'), jsBundle, 'utf8')
     const store = newStore()
     const root = await makeProject()
     await initChange(store, root, 'c1')
@@ -992,7 +993,24 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const asset = await reqGet(port, '/assets/app.js')
     expect(asset.status).toBe(200)
     expect(String(asset.headers['content-type'])).toContain('javascript')
-    expect(asset.body).toContain('real bundle')
+    expect(asset.body).toBe(jsBundle)
+    const compressed = await reqGet(
+      port,
+      '/assets/app.js',
+      '127.0.0.1',
+      { 'Accept-Encoding': 'gzip' },
+    )
+    expect(compressed.status).toBe(200)
+    expect(compressed.headers['content-encoding']).toBe('gzip')
+    expect(compressed.headers.vary).toBe('Accept-Encoding')
+    expect(Number(compressed.headers['content-length'])).toBeLessThan(
+      Buffer.byteLength(jsBundle),
+    )
+    const decoded = await fetch(`http://127.0.0.1:${port}/assets/app.js`, {
+      headers: { 'Accept-Encoding': 'gzip' },
+    })
+    expect(decoded.headers.get('content-encoding')).toBe('gzip')
+    expect(await decoded.text()).toBe(jsBundle)
     // 路径穿越防护：/assets/../server.ts 不泄露
     const evil = await reqGet(port, '/assets/../package.json')
     expect(evil.status).not.toBe(200)

@@ -28,7 +28,7 @@ PR #8 在较早的 `main@15fe619b` 上新增 `host-target-plan/v1`、两个只�
 3. `side_effects: "none"` 只描述计划生成；可复制的后续终端命令具有真实副作用，UI 必须明确区分。
 4. server 仅接受 GET，先经过现有 loopback Host 守卫，再校验 exact query，使用固定 argv，严格消费一个完整 JSON 文档，并对 stderr、路径和内部异常脱敏。
 5. 成功结果可有界缓存，同 key 并发可共享；失败不得缓存且必须允许重试。任何队列都必须有界或由固定 25-key 空间证明边界。
-6. Dashboard 不需要 project context，不提供执行控件；必须覆盖 loading、empty、error、retry、ready、陈旧响应抑制、复制失败、zh/en、light/dark、键盘、焦点、响应式和 reduced motion。
+6. Dashboard 不需要 project context，不提供执行控件；adapter 可复制命令固定为 `--target .` 并明确要求用户先进入目标项目，禁止输出 `<project>` 这类会被 shell 当作重定向的伪占位符；必须覆盖 loading、empty、error、retry、ready、陈旧响应抑制、复制失败、zh/en、light/dark、键盘、焦点、响应式和 reduced motion。
 7. 源码、测试、CLI/server bundle、Dashboard hashed assets、OpenSpec 与用户文档必须从同一最终 head 生成并原子提交。
 
 ## 状态机与数据流
@@ -76,7 +76,7 @@ host -> operation -> plan loading/error/ready -> copy only
 
 ## 安全与架构红队
 
-- 若 `display` 只是 `args.join(" ")`，包含空格的参数可能不是可安全复制的 shell 命令；Build 必须以真实 CLI 参数语义和测试决定转义/展示契约，而非假设当前占位符永远安全。
+- `display` 的直接 token 拼接只适用于当前封闭协议中的安全 argv；Build 必须锁定 token 白名单，并以 `--target .` 取代会被 shell 解释的 `<project>`，三端 decoder 必须拒绝漂移、空白、控制字符或 shell 元字符。
 - server decoder 当前复制 native 命令真相以做严格校验；这增强 fail-closed，但也形成跨包漂移点。Build 必须评估公开共享 contract、生成 fixture或保留复制并用跨端测试锁定三者的一致性。
 - 25 个固定 key 证明缓存 key 空间有界，但串行 `queueTail` 可能让一个慢 child 阻塞全部不同 key；需用并发/超时事实决定是否接受、限时或改成明确并发上限。
 - 当前主线的 setup/update 已包含更强的 managed runtime、事务/WAL 和 Dashboard handoff 语义；计划步骤必须诚实描述稳定层级，不能把粗粒度摘要声称为逐条真实执行日志。
@@ -86,7 +86,7 @@ host -> operation -> plan loading/error/ready -> copy only
 
 - 持续授权采用最保守选择：`preset=full`、独立 worktree、普通 merge、发现偏差一律修复。
 - PR #8 的产品方向“只读计划中心”暂定保留；具体 requirement 只有在 Spec 对当前主线调用链完成核对后冻结。
-- 原上游 Comet/Trellis 调研仅作为历史输入；本次不需要新增外部依赖或复制外部实现，因此 `search-first` 以仓库内 contract/测试/相邻实现为主。
+- 原外部参考项目调研仅作为历史输入；本次不需要新增外部依赖或复制外部实现，因此 `search-first` 以仓库内 contract/测试/相邻实现为主。
 - 原 PR 的测试与浏览器报告只是风险清单，不是当前 Change 的通过证据。
 - 合并后任何 requirement 语义变化必须从 Build 走 `requirements-changed` 回 Spec，不能覆盖已登记 SHA。
 

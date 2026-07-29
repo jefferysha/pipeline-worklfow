@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchHostTargetPlan,
   fetchHostTargets,
@@ -83,6 +83,7 @@ export function HostTargetPlanView({
   const [selectedOperation, setSelectedOperation] = useState<HostOperation | null>(null)
   const [planState, setPlanState] = useState<HostPlanRequestState>({ status: 'idle' })
   const requestSequence = useRef(0)
+  const detailRef = useRef<HTMLDivElement>(null)
 
   const refreshCatalog = useCallback(() => {
     const sequence = requestSequence.current + 1
@@ -118,6 +119,9 @@ export function HostTargetPlanView({
     setSelectedHost(host)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
+    if (window.matchMedia?.('(max-width: 768px)').matches) {
+      requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'start' }))
+    }
   }
 
   const requestPlan = (host: HostId, operation: HostOperation): void => {
@@ -139,6 +143,9 @@ export function HostTargetPlanView({
       },
     )
   }
+  const selectedTarget = catalogState.status === 'ready'
+    ? catalogState.catalog.targets.find((target) => target.id === selectedHost) ?? null
+    : null
 
   return (
     <section className="mx-auto w-full max-w-[1120px] py-5" data-testid="host-plan-view">
@@ -179,16 +186,22 @@ export function HostTargetPlanView({
           </button>
         </div>
       ) : (
-        <>
-          <div className="mt-8 grid grid-cols-2 gap-4 max-[720px]:grid-cols-1" data-testid="host-target-grid">
+        <div
+          className="mt-8 grid items-start gap-5 min-[769px]:grid-cols-[minmax(240px,0.78fr)_minmax(0,1.22fr)]"
+          data-testid="host-plan-workspace"
+        >
+          <div
+            className="grid min-w-0 gap-3 order-2 min-[769px]:order-1 min-[520px]:grid-cols-2 min-[769px]:max-h-[calc(100vh-8rem)] min-[769px]:grid-cols-1 min-[769px]:overflow-y-auto min-[769px]:pr-2 min-[769px]:[scrollbar-gutter:stable]"
+            data-testid="host-target-grid"
+          >
             {catalogState.catalog.targets.map((target) => {
               const name = hostName(target)
               const selected = selectedHost === target.id
               return (
-                <Fragment key={target.id}>
                 <article
-                  className={`min-w-0 rounded-2xl border bg-card p-5 shadow-sm ${
-                    selected ? 'col-span-full border-(--accent) ring-1 ring-(--accent)' : 'border-border'
+                  key={target.id}
+                  className={`min-w-0 rounded-2xl border bg-card p-4 shadow-sm ${
+                    selected ? 'border-(--accent) ring-1 ring-(--accent)' : 'border-border'
                   }`}
                   data-kind={target.kind}
                 >
@@ -201,7 +214,7 @@ export function HostTargetPlanView({
                       {t(`hostPlan.kind.${target.kind}`)}
                     </span>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     <span className="rounded-full border border-border bg-bg px-2 py-1 text-[11px] font-semibold text-text-3">
                       {t(`hostPlan.scope.${target.target_scope}`)}
                     </span>
@@ -217,31 +230,40 @@ export function HostTargetPlanView({
                   <button
                     type="button"
                     aria-pressed={selected}
-                    className="mt-5 w-full rounded-lg border border-border-2 bg-bg px-3.5 py-2 text-sm font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent)"
+                    className="mt-4 w-full rounded-lg border border-border-2 bg-bg px-3.5 py-2 text-sm font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent)"
                     onClick={() => selectHost(target.id)}
                   >
                     {selected ? t('hostPlan.selected') : t('hostPlan.select', { host: name })}
                   </button>
                 </article>
-                {selected && (
-                  <HostOperationPlanPanel
-                    target={target}
-                    targetLabel={name}
-                    selectedOperation={selectedOperation}
-                    planState={planState}
-                    copyText={copyText}
-                    onRequestPlan={requestPlan}
-                    errorMessage={(error) => localizedError(error, t)}
-                  />
-                )}
-                </Fragment>
               )
             })}
           </div>
-          {selectedHost === null && (
-            <p className="mt-5 text-sm text-text-2" role="status">{t('hostPlan.awaiting_host')}</p>
-          )}
-        </>
+          <div
+            ref={detailRef}
+            className="min-w-0 scroll-mt-16 order-1 min-[769px]:order-2 min-[769px]:sticky min-[769px]:top-5"
+            data-testid="host-plan-detail"
+          >
+            {selectedTarget === null ? (
+              <div
+                className="rounded-2xl border border-dashed border-border-2 bg-card p-6 text-sm text-text-2"
+                role="status"
+              >
+                {t('hostPlan.awaiting_host')}
+              </div>
+            ) : (
+              <HostOperationPlanPanel
+                target={selectedTarget}
+                targetLabel={hostName(selectedTarget)}
+                selectedOperation={selectedOperation}
+                planState={planState}
+                copyText={copyText}
+                onRequestPlan={requestPlan}
+                errorMessage={(error) => localizedError(error, t)}
+              />
+            )}
+          </div>
+        </div>
       )}
     </section>
   )

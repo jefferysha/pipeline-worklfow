@@ -21,7 +21,7 @@
 
 ### Requirement: 单目标 setup/update 计划
 
-系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 生成确定性 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标、operation、结构化可复制命令、有序稳定层级步骤与 notices。native 的外部宿主命令 MUST 从当前 `nativeInstallPlan/nativeUpdatePlan` owner 派生；adapter 只描述当前稳定 release adapter 外层流程。计划不得把粗粒度摘要声称为逐条执行日志。
+系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 生成确定性 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标、operation、结构化可复制命令、有序稳定层级步骤与 notices。native 的外部宿主命令 MUST 从当前 `nativeInstallPlan/nativeUpdatePlan` owner 派生；adapter 只描述当前稳定 release adapter 外层流程，并以执行命令时的当前工作目录作为项目目标。计划不得把粗粒度摘要声称为逐条执行日志。
 
 #### Scenario: native setup/update 与当前 owner 一致
 
@@ -33,16 +33,17 @@
 #### Scenario: adapter setup/update
 
 - **WHEN** 对已注册 adapter 请求 setup 或 update
-- **THEN** 命令使用 `tenon <operation> --<host> --target <project>` 的结构化 argv
+- **THEN** 命令使用 `tenon <operation> --<host> --target .` 的结构化 argv，`.` 明确表示用户执行命令时的当前项目目录
 - **AND** setup 展示 `package-assets → managed-runtime → adapter-deploy → bundled-skills → runtime-readiness`
 - **AND** update 只展示 `package-assets → managed-runtime → adapter-deploy`
-- **AND** 不接收调用方真实 root 或任意路径
+- **AND** 不接收调用方真实 root 或任意路径，也不返回会被 shell 解释为输入重定向的尖括号占位符
 
 #### Scenario: 可复制展示与副作用告知
 
 - **WHEN** 计划返回结构化命令及 `display`
-- **THEN** `display` 必须与结构化 argv 的明确 shell 展示契约一致
+- **THEN** `display` 必须与结构化 argv 的明确 shell 展示契约一致，且所有可复制 token 均来自封闭协议值，不含未转义的空白、控制字符或 shell 元字符
 - **AND** UI 明确说明生成计划无副作用、手工执行所示终端命令有真实副作用
+- **AND** adapter UI 明确说明命令作用于终端当前目录，用户应先进入目标项目
 
 ### Requirement: 严格只读且有界的 Dashboard API
 
@@ -113,4 +114,4 @@ Dashboard SHALL 提供不依赖 project context 的 Host Plan 视图，通过统
 
 - **WHEN** 审查源码、测试、文案、依赖与历史研究
 - **THEN** 只保留可核验上游引用与独立设计结论
-- **AND** 不引入 Comet/Trellis 源码或 AGPL 依赖
+- **AND** 不引入外部参考项目源码或 AGPL 依赖

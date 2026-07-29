@@ -99,7 +99,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
 const plan = nativePlan('codex', 'setup')
 
 function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
-  const hostCommand = command('tenon', [operation, `--${host}`, '--target', '<project>'])
+  const hostCommand = command('tenon', [operation, `--${host}`, '--target', '.'])
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',
@@ -120,7 +120,7 @@ function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
-      'host-plan.notice.project-placeholder',
+      'host-plan.notice.current-project-target',
     ],
   }
 }
@@ -254,7 +254,7 @@ describe('host target plan read-only client', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ...adapter,
         steps: adapter.steps.map((step) => step.id === 'adapter-deploy'
-          ? { ...step, command: command('tenon', ['setup', '--cursor', '--target', '<project>']) }
+          ? { ...step, command: command('tenon', ['setup', '--cursor', '--target', '.']) }
           : step),
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({

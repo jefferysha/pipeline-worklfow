@@ -240,7 +240,7 @@ export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {
   if (!command || !host) return null
   const expectedArgs = host.kind === 'native'
     ? [value.operation, host.cli_flag]
-    : [value.operation, host.cli_flag, '--target', '<project>']
+    : [value.operation, host.cli_flag, '--target', '.']
   if (!commandMatches(command, 'tenon', expectedArgs)) return null
 
   const decodedSteps: HostPlanStep[] = []
@@ -266,7 +266,7 @@ export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {
     ? [...BASE_NOTICES, 'host-plan.notice.codex-auth-guidance']
     : host.kind === 'native'
       ? BASE_NOTICES
-    : [...BASE_NOTICES, 'host-plan.notice.project-placeholder']
+    : [...BASE_NOTICES, 'host-plan.notice.current-project-target']
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {
     schema_version: HOST_PLAN_SCHEMA_VERSION,

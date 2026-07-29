@@ -35,7 +35,7 @@ export async function handleGetActivityRoutes(
       if (serveIndexWithToken(res)) return // SPA 产物存在 → 服务真前端
       return sendHtml(res, 200, indexHtml(token)) // 回退最小落地页
     }
-    if (serveAsset(res, path)) return
+    if (serveAsset(req, res, path)) return
     if (path === '/api/health') {
       return sendJson(res, 200, {
         ok: true,

@@ -18,11 +18,11 @@
 - 原 PR 已有验证证据可能因主线与生成资产变化而失效，不能直接复用。
 - server 与 Dashboard decoder 复制 native 命令/步骤真相，可能在三层漂移。
 - 固定 25-key 空间使缓存有界，但全局串行 child 队列可能产生跨 key 阻塞。
-- 可复制 `display` 的 shell 转义语义必须明确，不能把简单 join 当作普适安全命令。
+- adapter 可复制命令必须固定使用当前工作目录 `--target .`，不得把 `<project>` 这类会被 shell 解释为重定向的伪占位符交给用户；`display` 只允许展示 schema 封闭且可安全逐 token 拼接的 argv。
 
 ## 待验证问题
 
-- Spec 必须冻结 `host-target-plan/v1` 的稳定层级、错误码、缓存/并发和复制命令语义。
+- Spec 必须冻结 `host-target-plan/v1` 的稳定层级、错误码、缓存/并发和安全复制命令语义；adapter 的复制命令明确作用于用户运行命令时的当前项目目录。
 - Build 必须用当前源码/测试回答 12 个注册宿主、setup/update 真实顺序与事务化 runtime 的一致性。
 - Build/Verify 必须证明固定 argv、严格 JSON、Host 守卫、错误脱敏和失败不缓存均 fail-closed。
 - Dashboard 必须通过前端分层、文件长度、i18n、状态机、可访问性及强制 `design-taste-frontend` 门禁。

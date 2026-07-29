@@ -38,7 +38,7 @@ design-doc: docs/superpowers/specs/2026-07-29-pr-8-merge-audit-design.md
    - 重复/缺失/未知 host/operation/无 `--json`；
    - `display` 与结构化 argv 的明确 shell 展示语义；
    - Codex auth status 只作为预览步骤，不实际探测；
-   - adapter `<project>` 占位与路径注入拒绝；
+   - adapter `--target .` 当前项目语义、危险尖括号占位与路径注入拒绝；
    - setup/update owner 漂移。
 4. 检查触碰文件长度、包公开出口、领域/DTO 分离和无新增依赖。
 

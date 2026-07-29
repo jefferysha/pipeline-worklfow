@@ -240,7 +240,7 @@ export const zh: Dict = {
       'read-only-generation': '生成计划是只读操作，不会修改宿主或项目。',
       'manual-command-has-effects': '只有在终端手动运行预览命令时才会产生安装或更新副作用。',
       'codex-auth-guidance': 'Codex 流程会在托管运行时就绪后检查登录状态，并在需要时显示认证引导。',
-      'project-placeholder': '命令中的 <project> 需要替换为目标项目路径。',
+      'current-project-target': '此命令作用于终端当前目录；请先进入目标项目，再复制执行。',
     },
     errors: {
       network: '无法连接本机 Tenon 服务。请检查连接后重试。',
@@ -1654,7 +1654,7 @@ export const en: Dict = {
       'read-only-generation': 'Generating this plan is read-only and changes neither the host nor the project.',
       'manual-command-has-effects': 'Setup or update side effects begin only if you manually run the previewed command in a terminal.',
       'codex-auth-guidance': 'The Codex flow checks login status after the managed runtime is ready and shows authentication guidance when needed.',
-      'project-placeholder': 'Replace <project> in the command with the target project path.',
+      'current-project-target': 'This command targets the terminal’s current directory. Enter the target project before running it.',
     },
     errors: {
       network: 'Could not reach the local Tenon service. Check the connection and retry.',

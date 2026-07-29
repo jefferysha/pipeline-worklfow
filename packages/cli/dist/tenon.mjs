@@ -46082,7 +46082,7 @@ function adapterSteps(operation, manualCommand) {
 }
 function createHostTargetPlan(host, operation) {
   const target = targetFor2(host);
-  const args = isNativePipelineHost(host) ? [operation, hostFlag(host)] : [operation, hostFlag(host), "--target", "<project>"];
+  const args = isNativePipelineHost(host) ? [operation, hostFlag(host)] : [operation, hostFlag(host), "--target", "."];
   const manualCommand = command("tenon", args);
   const steps = isNativePipelineHost(host) ? nativeSteps(
     host,
@@ -46100,7 +46100,7 @@ function createHostTargetPlan(host, operation) {
       "host-plan.notice.read-only-generation",
       "host-plan.notice.manual-command-has-effects",
       ...host === "codex" ? ["host-plan.notice.codex-auth-guidance"] : [],
-      ...isNativePipelineHost(host) ? [] : ["host-plan.notice.project-placeholder"]
+      ...isNativePipelineHost(host) ? [] : ["host-plan.notice.current-project-target"]
     ]
   };
 }

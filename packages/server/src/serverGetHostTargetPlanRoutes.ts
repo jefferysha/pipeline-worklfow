@@ -23,11 +23,29 @@ export interface HostTargetPlanRouteResult {
 export interface HostTargetPlanRuntime {
   resolve(
     key: string,
-    load: () => Promise<HostTargetPlanRouteResult>,
+    load: (signal: AbortSignal) => Promise<HostTargetPlanRouteResult>,
   ): Promise<HostTargetPlanRouteResult>
 }
 
+export interface HostTargetPlanRuntimeOptions {
+  readonly maxConcurrent?: number
+  readonly timeoutMs?: number
+}
+
 const MAX_HOST_PLAN_KEYS = 25
+const DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS = 4
+const DEFAULT_HOST_PLAN_TIMEOUT_MS = 10_000
+
+const PLAN_UNAVAILABLE: HostTargetPlanRouteResult = {
+  status: 503,
+  body: { ok: false, code: 'HOST_TARGET_PLAN_UNAVAILABLE', error: '宿主计划功能当前不可用' },
+}
+
+interface QueuedHostPlanLoad {
+  readonly load: (signal: AbortSignal) => Promise<HostTargetPlanRouteResult>
+  readonly resolve: (result: HostTargetPlanRouteResult) => void
+  readonly reject: (error: unknown) => void
+}
 
 function parseHostTargetPlanJson(stdout: string): unknown | null {
   const trimmed = stdout.trim()
@@ -39,10 +57,65 @@ function parseHostTargetPlanJson(stdout: string): unknown | null {
   }
 }
 
-export function createHostTargetPlanRuntime(): HostTargetPlanRuntime {
+export function createHostTargetPlanRuntime(
+  options: HostTargetPlanRuntimeOptions = {},
+): HostTargetPlanRuntime {
+  const maxConcurrent = options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS
+  const timeoutMs = options.timeoutMs ?? DEFAULT_HOST_PLAN_TIMEOUT_MS
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > MAX_HOST_PLAN_KEYS) {
+    throw new Error(`maxConcurrent 必须是 1..${MAX_HOST_PLAN_KEYS} 的整数`)
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error('timeoutMs 必须是正数')
+  }
+
   const cache = new Map<string, HostTargetPlanRouteResult>()
   const inFlight = new Map<string, Promise<HostTargetPlanRouteResult>>()
-  let queueTail: Promise<void> = Promise.resolve()
+  const queue: QueuedHostPlanLoad[] = []
+  let active = 0
+
+  const drain = (): void => {
+    while (active < maxConcurrent) {
+      const queued = queue.shift()
+      if (queued === undefined) return
+      active += 1
+      const controller = new AbortController()
+      let settled = false
+      const finish = (
+        settle: () => void,
+      ): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        active -= 1
+        settle()
+        drain()
+      }
+      const timer = setTimeout(() => {
+        controller.abort()
+        finish(() => queued.resolve(PLAN_UNAVAILABLE))
+      }, timeoutMs)
+      timer.unref?.()
+      try {
+        void queued.load(controller.signal).then(
+          (result) => finish(() => queued.resolve(result)),
+          (error: unknown) => finish(() => queued.reject(error)),
+        )
+      } catch (error) {
+        finish(() => queued.reject(error))
+      }
+    }
+  }
+
+  const schedule = (
+    load: (signal: AbortSignal) => Promise<HostTargetPlanRouteResult>,
+  ): Promise<HostTargetPlanRouteResult> => {
+    const scheduled = new Promise<HostTargetPlanRouteResult>((resolve, reject) => {
+      queue.push({ load, resolve, reject })
+    })
+    drain()
+    return scheduled
+  }
 
   return {
     resolve(key, load) {
@@ -51,8 +124,7 @@ export function createHostTargetPlanRuntime(): HostTargetPlanRuntime {
       const existing = inFlight.get(key)
       if (existing !== undefined) return existing
 
-      const queued = queueTail.then(load)
-      queueTail = queued.then(() => undefined, () => undefined)
+      const queued = schedule(load)
       const shared = queued.then((result) => {
         if (result.status === 200) {
           cache.delete(key)
@@ -78,11 +150,6 @@ export function createHostTargetPlanRuntime(): HostTargetPlanRuntime {
 const QUERY_INVALID: HostTargetPlanRouteResult = {
   status: 400,
   body: { ok: false, code: 'HOST_TARGET_QUERY_INVALID', error: '宿主计划查询参数无效' },
-}
-
-const PLAN_UNAVAILABLE: HostTargetPlanRouteResult = {
-  status: 503,
-  body: { ok: false, code: 'HOST_TARGET_PLAN_UNAVAILABLE', error: '宿主计划功能当前不可用' },
 }
 
 const PLAN_INVALID: HostTargetPlanRouteResult = {
@@ -111,9 +178,10 @@ async function runAndDecode(
   args: readonly string[],
   deps: HostTargetPlanRouteDeps,
   decode: (value: unknown) => HostTargetCatalogDto | HostTargetPlanDto | null,
+  signal: AbortSignal,
 ): Promise<HostTargetPlanRouteResult> {
   try {
-    const result = await deps.operationRunner(deps.hostHome, args)
+    const result = await deps.operationRunner(deps.hostHome, args, { signal })
     if (result.exitCode !== 0) return PLAN_INVALID
     const decoded = decode(parseHostTargetPlanJson(result.stdout))
     return decoded === null ? PLAN_INVALID : { status: 200, body: decoded }
@@ -134,7 +202,7 @@ export async function resolveHostTargetPlanRoute(
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE
     return deps.runtime.resolve(
       'catalog',
-      () => runAndDecode(['host-target-plan', '--json'], deps, decodeHostTargetCatalog),
+      (signal) => runAndDecode(['host-target-plan', '--json'], deps, decodeHostTargetCatalog, signal),
     )
   }
   const query = parsePlanQuery(searchParams)
@@ -142,10 +210,11 @@ export async function resolveHostTargetPlanRoute(
   if (!deps.operationsAvailable) return PLAN_UNAVAILABLE
   return deps.runtime.resolve(
     `plan:${query.host}:${query.operation}`,
-    () => runAndDecode(
+    (signal) => runAndDecode(
       ['host-target-plan', '--host', query.host, '--operation', query.operation, '--json'],
       deps,
       (value) => decodeHostTargetPlan(value, query.host, query.operation),
+      signal,
     ),
   )
 }

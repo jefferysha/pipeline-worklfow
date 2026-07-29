@@ -38,7 +38,9 @@ tenon uninstall [--dry-run] [-y]
 `host-target-plan` is a machine-readable, read-only contract. With only
 `--json` it returns the registered host catalog; with both `--host` and
 `--operation` it returns one `host-target-plan/v1` preview. It never runs
-setup or update, and it rejects custom host IDs.
+setup or update, and it rejects custom host IDs. Native-host previews target
+their user-scoped installation. Adapter-host previews use `--target .`; enter
+the intended project directory before copying or running that command.
 
 Host flags:
 

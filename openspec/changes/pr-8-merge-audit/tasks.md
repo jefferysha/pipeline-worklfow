@@ -19,13 +19,13 @@
 
 ## 实现
 
-- [ ] 以 Codex setup 为 tracer bullet，普通合并最新 `origin/main`，解决源码冲突并从最终源码重建全部生成物。
-- [ ] 以 TDD 核对 12×2 CLI truth table、当前 setup/update/runtime/WAL 语义、输入拒绝和命令展示契约。
-- [ ] 以 TDD 加固 GET/Host/query/fixed argv/strict JSON/DTO/错误脱敏、同 key 共享、失败重试、有界缓存/并发/超时。
-- [ ] 修复 Dashboard catalog/plan 全状态、陈旧响应、copy-only、i18n、键盘/focus/a11y 与当前 rail/route 共存。
-- [ ] 执行 `frontend-design`、`web-design-guidelines`、`design-taste-frontend` 和 production browser 全矩阵，修复全部 C/H/M。
-- [ ] 同步源码、测试、正式生成物、OpenSpec、README/CONTRACT/TEST-REALITY/用户文档与回滚事实。
-- [ ] 运行定向、前端、后端、全仓、分发、OpenSpec、oracle、hygiene、依赖与 repo-zero 门禁。
+- [x] 以 Codex setup 为 tracer bullet，普通合并最新 `origin/main`，解决源码冲突并从最终源码重建全部生成物。
+- [x] 以 TDD 核对 12×2 CLI truth table、当前 setup/update/runtime/WAL 语义、输入拒绝，以及 adapter `--target .` 的安全可复制命令展示契约。
+- [x] 以 TDD 加固 GET/Host/query/fixed argv/strict JSON/DTO/错误脱敏、同 key 共享、失败重试、有界缓存/并发/超时。
+- [x] 修复 Dashboard catalog/plan 全状态、陈旧响应、copy-only、i18n、键盘/focus/a11y 与当前 rail/route 共存。
+- [x] 执行 `frontend-design`、`web-design-guidelines`、`design-taste-frontend` 和 production browser 全矩阵，修复全部 C/H/M。
+- [x] 同步源码、测试、正式生成物、OpenSpec、README/CONTRACT/TEST-REALITY/用户文档与回滚事实。
+- [x] 运行定向、前端、后端、全仓、分发、OpenSpec、oracle、hygiene、依赖与 repo-zero 门禁。
 - [ ] 完成独立 pre-Verify Spec、Rules/Architecture/Security、Dashboard 视觉复审，推送并取得精确 head CI。
 
 ## 验证
