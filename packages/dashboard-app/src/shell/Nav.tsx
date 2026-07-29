@@ -1,25 +1,27 @@
-import { useState } from 'react'
-import { Bot, FolderKanban, GitBranch, Moon, ScanLine, Settings, SlidersHorizontal, Sun, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bot, FolderKanban, GitBranch, Monitor, Moon, ScanLine, Settings, SlidersHorizontal, Sun, Target, type LucideIcon } from 'lucide-react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
 import { Icon } from './Icon'
 
 /**
  * 外壳左侧图标 rail（v10b `design-demos/v10b-railway-canvas.html` .rail 结构对位；配色一律走
- * token）。2026-07-15 外壳 IA 重构拍板：rail 放视图导航——项目 / 进度 / AFK / 工作台 / 机器（五枚
+ * token）。2026-07-15 外壳 IA 重构拍板：rail 放视图导航——项目 / 进度 / AFK / 工作台 / 机器 / 宿主计划（六枚
  * lucide 图标 + 小字）。「项目」既是 rail 首枚入口（点入 view='projects' 总览页），也仍由内容区
  * 项目总览直接承担自动发现与项目选择；rail 不重复展示当前项目名。
  *
- * 结构（自上而下）：logo 标（品牌名收进 title 悬浮）→ 分隔线 → 竖排导航项 项目/进度/AFK/工作台
- * （lucide 图标 + 小字，激活态沿 aria-current 变体，进度项挂待拍板红徽标、AFK 项挂待处置失败红
- * 徽标）→ 弹性空档 → 分隔线 → 底部单一「设置」入口；连接、主题和语言收进锚定浮层。
+ * 结构（自上而下）：logo 标（品牌名收进 title 悬浮）→ 分隔线 → 六个竖排导航项
+ * 项目/进度/AFK/工作台/机器/宿主计划（lucide 图标 + 小字，激活态沿 aria-current 变体，进度项挂
+ * 待拍板红徽标、AFK 项挂待处置失败红徽标）→ 弹性空档 → 分隔线 → 底部单一「设置」入口；
+ * 连接、主题和语言收进锚定浮层。
  * 窄屏（≤720px）切为底部导航并保留短标签，释放横向阅读空间。
  */
-export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
+export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan'
+export type ThemePreference = 'system' | 'light' | 'dark'
 
-/** rail 竖排渲染的一级导航项——显式枚举白名单，顺序=项目/进度/AFK/工作台/机器。 */
-export type RailView = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
-export const PRIMARY_VIEWS: RailView[] = ['projects', 'progress', 'afk', 'workbench', 'machine']
+/** rail 竖排渲染的六个一级导航项——显式枚举白名单，顺序=项目/进度/AFK/工作台/机器/宿主计划。 */
+export type RailView = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan'
+export const PRIMARY_VIEWS: RailView[] = ['projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan']
 
 /** rail 导航项 lucide 图标：项目=看板文件夹、进度=流程节点、AFK=无人值守机器人、工作台=设置滑杆。 */
 const VIEW_ICONS: Record<RailView, LucideIcon> = {
@@ -28,6 +30,7 @@ const VIEW_ICONS: Record<RailView, LucideIcon> = {
   afk: Bot,
   workbench: SlidersHorizontal,
   machine: ScanLine,
+  hostPlan: Target,
 }
 
 interface NavProps {
@@ -35,8 +38,8 @@ interface NavProps {
   onView: (v: View) => void
   lang: Lang
   onLang: (l: Lang) => void
-  theme: 'light' | 'dark'
-  onTheme: (t: 'light' | 'dark') => void
+  theme: ThemePreference
+  onTheme: (t: ThemePreference) => void
   connected: boolean
   /** 待拍板徽标数（在等你决定的 change 数，currentRoot 语境）——收件箱退役后挂在「进度」导航项上。 */
   decisionCount: number
@@ -53,8 +56,31 @@ const RAIL_LB_CLS = 'max-w-full truncate text-[11px] font-medium leading-[1.2] m
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null)
+  const settingsPanelRef = useRef<HTMLElement>(null)
   // 在线/离线 短标签：title 走既有 common.connected/common.offline 键；短标签内联双语。
   const connLabel = connected ? (lang === 'zh' ? '在线' : 'Live') : lang === 'zh' ? '离线' : 'Offline'
+  const nextTheme: ThemePreference = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system'
+  const themeLabel = theme === 'system' ? t('common.theme_system') : theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const panel = settingsPanelRef.current
+    const firstControl = panel?.querySelector<HTMLElement>(
+      'button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+    )
+    firstControl?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key !== 'Escape') return
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      event.preventDefault()
+      setSettingsOpen(false)
+      settingsTriggerRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [settingsOpen])
 
   return (
     <header
@@ -132,7 +158,9 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
       <div className="relative flex flex-none flex-col items-center mobile:mt-1">
         <button
           type="button"
+          ref={settingsTriggerRef}
           data-testid="nav-settings"
+          aria-label={t('common.settings')}
           aria-expanded={settingsOpen}
           aria-haspopup="dialog"
           className={`${RAIL_BTN_CLS} aria-[expanded=true]:border-accent-b aria-[expanded=true]:bg-accent-t aria-[expanded=true]:font-bold aria-[expanded=true]:text-accent-d mobile:w-11 mobile:flex-none`}
@@ -144,7 +172,9 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
         {settingsOpen && (
           <section
+            ref={settingsPanelRef}
             role="dialog"
+            aria-modal="false"
             aria-label={t('common.settings')}
             data-testid="nav-settings-panel"
             className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/96 p-3.5 text-left shadow-lg backdrop-blur-2xl mobile:bottom-[calc(100%+12px)] mobile:left-auto mobile:right-0 mobile:max-w-[calc(100vw-24px)]"
@@ -164,17 +194,17 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue)"
                 data-testid="theme-toggle"
-                aria-label={t('common.theme_toggle')}
-                onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
+                aria-label={t('common.theme_toggle_current', { theme: themeLabel })}
+                onClick={() => onTheme(nextTheme)}
               >
-                {theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
-                {theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')}
+                {theme === 'system' ? <Monitor className="h-4 w-4" aria-hidden="true" /> : theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+                {themeLabel}
               </button>
               <button
                 type="button"
-                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue)"
                 data-testid="lang-toggle"
                 onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
               >

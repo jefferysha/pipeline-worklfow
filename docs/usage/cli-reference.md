@@ -17,6 +17,8 @@ Canonical first-host examples:
 ```bash
 tenon setup --codex
 tenon update --codex
+tenon host-target-plan --json
+tenon host-target-plan --host codex --operation setup --json
 tenon runtime status
 tenon runtime repair --rollback
 tenon dashboard --open
@@ -25,12 +27,20 @@ tenon dashboard --open
 ```text
 tenon setup --<one-host> [--target <dir>] [--auto-update] [--dry-run] [-y]
 tenon update --<one-host> [--target <dir>] [--dry-run] [-y] [--auto]
+tenon host-target-plan [--host <registered-host> --operation <setup|update>] --json
 tenon runtime status [--json]
 tenon runtime repair --rollback [--json]
 tenon dashboard [--port <port>] [--background] [--open] [--dry-run]
 tenon doctor [--json]
 tenon uninstall [--dry-run] [-y]
 ```
+
+`host-target-plan` is a machine-readable, read-only contract. With only
+`--json` it returns the registered host catalog; with both `--host` and
+`--operation` it returns one `host-target-plan/v1` preview. It never runs
+setup or update, and it rejects custom host IDs. Native-host previews target
+their user-scoped installation. Adapter-host previews use `--target .`; enter
+the intended project directory before copying or running that command.
 
 Host flags:
 

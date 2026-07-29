@@ -279,6 +279,26 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
   路径实现。Dashboard 按稳定 code/reasonCode 做中英文映射，并覆盖 loading、empty、budget error、
   integrity error、retry、Abort/竞态及键盘路径。
 
+### 3.2 Host Target Plan 只读契约
+
+- **入口**：`tenon host-target-plan --json` 返回固定注册宿主目录；同时提供
+  `--host <registered-host> --operation <setup|update>` 时返回单个
+  `host-target-plan/v1`。Dashboard 对位入口是 `GET /api/host-targets` 与
+  `GET /api/host-target-plan?host=<id>&operation=<operation>`。
+- **纯预览**：CLI、API 与 Dashboard 都不得执行展示命令。响应 `side_effects` 固定为
+  `none`；Dashboard 只提供复制，不提供执行按钮。
+- **命令语义**：原生宿主的 setup/update 是用户级命令；适配器宿主必须输出固定 argv
+  `tenon <setup|update> --<host> --target .`。`.` 表示调用者当前项目目录，禁止使用
+  `<project>` 等会被 shell 解释为重定向的展示占位符。
+- **输入与资源边界**：只接受固定 12 个宿主、两种 operation、各一个查询参数且无额外参数；
+  重复、缺失、未知或额外参数统一为稳定 400。server 在进入 runner 前执行 loopback Host
+  守卫；runner 只使用固定 argv，严格解码 JSON，错误响应不得暴露 stderr、绝对路径或底层异常。
+- **运行时有界性**：同 key 并发共享一次请求；成功结果进入 25-key 有界缓存；失败可重试；
+  全局并发默认最多 4；单次默认 10 秒，超时必须中止子进程、释放槽位并返回稳定 503。
+- **静态资源**：生产 server 对大于等于 1024 bytes 的可压缩生成资源按
+  `Accept-Encoding` 协商 gzip，返回 `Vary: Accept-Encoding` 并遵守显式 `gzip;q=0`；
+  原始与 gzip 响应字节均由真实 HTTP 测试校验。
+
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 
 | 目录 | 所有者 | 内容 |

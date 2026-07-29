@@ -108,6 +108,51 @@ test('allows external identities only as text inside governed source-evidence do
   }
 })
 
+test('allows fixed host-target-plan research and governance paths but rejects source and unrelated docs', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const unrelatedReference = String.fromCharCode(
+    97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
+  )
+  const allowed = [
+    'docs/adr/host-target-plan-dashboard.md',
+    `docs/superpowers/specs/2026-07-28-host-target-plan-${secondIdentity}-platform-research.md`,
+    `docs/superpowers/specs/2026-07-28-host-target-plan-${firstIdentity}-context-research.md`,
+    'openspec/changes/host-target-plan-dashboard/design.md',
+    'openspec/changes/archive/2026-07-28-host-target-plan-dashboard/applied-spec.md',
+    'openspec/specs/host-target-plan/spec.md',
+  ]
+  const rejected = [
+    'packages/server/src/hostTargetPlanProtocol.ts',
+    'docs/reference.md',
+    'openspec/changes/host-target-plan-dashboard/copied-source.ts',
+    'openspec/changes/host-target-plan-dashboard/notes.md',
+    'openspec/changes/archive/2026-07-28-other-change/design.md',
+    'openspec/specs/other-capability/spec.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(
+      join(root, path),
+      `Fixed research: https://github.com/example/${secondIdentity}/commit/2945693 and ${firstIdentity} 12e279a8.\n`,
+    )
+  }
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    await writeFile(
+      join(root, allowed[0]),
+      `Fixed research: ${secondIdentity}, ${firstIdentity}, and ${unrelatedReference}.\n`,
+    )
+    assert.equal(checkReferenceIdentities(root, [allowed[0]]).length, 1)
+    const failures = checkReferenceIdentities(root, rejected)
+    assert.equal(failures.length, rejected.length)
+    assert.ok(failures.every((failure) => /受管理文本/.test(failure)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('reference identity matching is case-insensitive and diagnostics never echo the identity', async () => {
   const root = await fixture()
   const identity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)

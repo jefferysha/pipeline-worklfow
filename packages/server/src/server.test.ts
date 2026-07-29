@@ -971,7 +971,8 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const web = await mkdtemp(join(tmpdir(), 'spa-'))
     await writeFile(join(web, 'index.html'), '<!doctype html><head><title>SPA</title></head><body><div id=app></div></body>', 'utf8')
     await mkdir(join(web, 'assets'), { recursive: true })
-    await writeFile(join(web, 'assets', 'app.js'), 'console.log("real bundle")', 'utf8')
+    const jsBundle = 'console.log("real bundle")\n'.repeat(100)
+    await writeFile(join(web, 'assets', 'app.js'), jsBundle, 'utf8')
     const store = newStore()
     const root = await makeProject()
     await initChange(store, root, 'c1')
@@ -992,7 +993,24 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const asset = await reqGet(port, '/assets/app.js')
     expect(asset.status).toBe(200)
     expect(String(asset.headers['content-type'])).toContain('javascript')
-    expect(asset.body).toContain('real bundle')
+    expect(asset.body).toBe(jsBundle)
+    const compressed = await reqGet(
+      port,
+      '/assets/app.js',
+      '127.0.0.1',
+      { 'Accept-Encoding': 'gzip' },
+    )
+    expect(compressed.status).toBe(200)
+    expect(compressed.headers['content-encoding']).toBe('gzip')
+    expect(compressed.headers.vary).toBe('Accept-Encoding')
+    expect(Number(compressed.headers['content-length'])).toBeLessThan(
+      Buffer.byteLength(jsBundle),
+    )
+    const decoded = await fetch(`http://127.0.0.1:${port}/assets/app.js`, {
+      headers: { 'Accept-Encoding': 'gzip' },
+    })
+    expect(decoded.headers.get('content-encoding')).toBe('gzip')
+    expect(await decoded.text()).toBe(jsBundle)
     // 路径穿越防护：/assets/../server.ts 不泄露
     const evil = await reqGet(port, '/assets/../package.json')
     expect(evil.status).not.toBe(200)
@@ -5119,8 +5137,9 @@ describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
  * Bug1：此前只有 secrets/docker/readiness 三个 GET 有 isLocalHost 守卫，其余只读数据端点
  * （snapshot / afk log / change history / workflows / config / loops / traces / hooks / automation
  * / skills）全无 → evil.com DNS 重绑定到 127.0.0.1 后可被受害者浏览器同源读走全部项目路径、
- * 状态、run-log（可能含 token）、yaml。修法：handleGet 顶部统一施加 Host 守卫（landing/静态/health
- * 除外）。这里钉「非本地 Host → 403」在全部此前无守卫的端点上都成立，且本地 Host 不被误伤。
+ * 状态、run-log（可能含 token）、yaml。修法：handleGet 顶部统一施加 Host 守卫（仅无敏感内容的
+ * 静态 assets / health 探针除外）。这里钉「非本地 Host → 403」在全部此前无守卫的端点上都成立，
+ * 且本地 Host 不被误伤；注入 bearer token 的 landing page 也必须受保护。
  */
 describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐）', () => {
   const EVIL = { Host: 'evil.example.com' }
@@ -5129,6 +5148,9 @@ describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐
     const h = await startWithConfig()
     const rootQ = `root=${encodeURIComponent(h.root)}`
     const paths = [
+      '/',
+      '/index.html',
+      '/api/cadence/status',
       '/api/snapshot',
       '/api/afk/snapshot',
       '/api/afk/log',
