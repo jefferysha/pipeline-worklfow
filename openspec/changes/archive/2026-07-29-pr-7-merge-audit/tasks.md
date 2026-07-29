@@ -48,11 +48,11 @@
 ## 交付
 
 - [x] 应用主 spec，更新必要 README/CONTRACT/TEST-REALITY/分发与回滚文档。
-- [ ] 在最终 PR 审计和精确 head CI 通过后合并 #7，等待并确认 main CI 通过。
-- [ ] 登记交付证据并完成 Ship 出口。
+- [x] 在最终 PR 审计和精确 head CI 通过后合并 #7，等待并确认 main CI 通过。
+- [x] 登记交付证据并完成 Ship 出口。
 
 ## 归档
 
-- [ ] 核对 applied spec、合并可达性、子 Change、收据和 main CI，完成终态归档。
-- [ ] 安全清理仅属于 #7 且已合并、干净、无独占提交的 worktree，保留当前自动化 worktree。
-- [ ] 提交并推送归档治理证据，写入自动化 memory。
+- [x] 核对 applied spec、合并可达性、子 Change、收据和 main CI，完成终态归档。
+- [x] 安全清理仅属于 #7 且已合并、干净、无独占提交的 worktree，保留当前自动化 worktree。
+- [x] 提交并推送归档治理证据，写入自动化 memory。
