@@ -31,6 +31,5 @@ No mobile viewport, mobile layout, or mobile screenshot was used.
   zero-duration fallback used by the new transitions.
 - Console: zero browser console entries after the acceptance sequence.
 
-The PNG files in this directory are viewport screenshots captured during that
+The JPEG files in this directory are viewport screenshots captured during that
 acceptance run.
-

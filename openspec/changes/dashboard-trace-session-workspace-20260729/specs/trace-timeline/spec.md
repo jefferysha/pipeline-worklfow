@@ -1,6 +1,6 @@
 # OpenSpec 增量规格
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Dashboard 提供桌面主从 Trace 工作区
 
@@ -40,6 +40,8 @@ cwd、uptime 或控制能力。
 - **THEN** detail 显示选择提示
 - **AND** Dashboard 不请求任何 session timeline
 
+## MODIFIED Requirements
+
 ### Requirement: Traffic 交互完整覆盖状态、i18n 与键盘
 
 Traffic 交互 SHALL 让 session rail 与 timeline detail 分别拥有 loading、empty、error、retry 状态；
@@ -51,7 +53,7 @@ Enter/Space 可选择 session 与筛选；session 必须暴露 `aria-pressed`。
 必须清除当前 session、取消旧响应的可见效力、重置筛选，并把焦点恢复到对应 session 按钮。快速切换
 session 时，较早响应不得覆盖当前选择。
 
-#### Scenario: rail 与 detail 独立恢复
+#### Scenario: timeline 失败后重试
 
 - **GIVEN** sessions 成功且 timeline 请求失败
 - **WHEN** 用户激活 detail 内的重试
@@ -59,7 +61,7 @@ session 时，较早响应不得覆盖当前选择。
 - **AND** 同一 session 重新进入 loading
 - **AND** 成功后显示 timeline，不丢失当前 session
 
-#### Scenario: Escape 返回 rail
+#### Scenario: Escape 返回 session 列表
 
 - **GIVEN** 用户已选择 session 且焦点在 detail 控件内
 - **WHEN** 用户按 Escape

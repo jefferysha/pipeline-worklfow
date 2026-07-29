@@ -445,6 +445,55 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(sessionButtons[1]).toHaveTextContent('未知')
   })
 
+  it('bounds maximum-length proxy, model, and transport metadata without hiding full values', async () => {
+    const longProxy = 'p'.repeat(64)
+    const longModel = 'm'.repeat(256)
+    const longTransport = 't'.repeat(64)
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions'
+        ? response({
+          ...SESSIONS,
+          count: 1,
+          sessions: [{ ...SESSIONS.sessions[0], proxy_mode: longProxy }],
+        })
+        : response(timeline('sess-A', {
+          entries: [{
+            ...((timeline().entries as Record<string, unknown>[])[0]),
+            model: longModel,
+            transport: longTransport,
+          }],
+          summary: {
+            success_count: 1,
+            error_count: 0,
+            unknown_count: 0,
+            total_duration_ms: 400,
+            input_tokens: 18,
+            output_tokens: 9,
+            cached_input_tokens: 4,
+          },
+          total_count: 1,
+          returned_count: 1,
+        }))
+    )))
+    renderTraffic()
+
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    const railProxy = screen.getByTestId('traffic-session-proxy')
+    expect(railProxy).toHaveAttribute('title', longProxy)
+    expect(railProxy.className).toContain('min-w-0')
+    expect(railProxy.className).toContain('truncate')
+
+    await userEvent.click(sessionButton)
+    const detailProxy = await screen.findByTestId('traffic-detail-proxy')
+    const model = screen.getByTestId('traffic-model-value')
+    const transport = screen.getByTestId('traffic-transport-value')
+    expect(detailProxy).toHaveAttribute('title', longProxy)
+    expect(model).toHaveAttribute('title', longModel)
+    expect(transport).toHaveAttribute('title', longTransport)
+    expect(model.className).toContain('truncate')
+    expect(transport.className).toContain('truncate')
+  })
+
   it('Escape closes the timeline and restores focus to the selected session button', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (
       url === '/api/traces/sessions' ? response(SESSIONS) : response(timeline())

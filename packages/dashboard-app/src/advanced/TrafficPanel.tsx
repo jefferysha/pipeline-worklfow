@@ -161,9 +161,13 @@ export function TrafficPanel(): JSX.Element {
                     {selectedSession.id}
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <div className="flex min-w-0 max-w-[45%] flex-col items-end gap-1.5">
                   <SessionStatusBadge status={selectedSession.status} t={t} />
-                  <span className="font-mono text-[10.5px] text-text-3">
+                  <span
+                    className="max-w-full truncate font-mono text-[10.5px] text-text-3"
+                    data-testid="traffic-detail-proxy"
+                    title={selectedSession.proxy_mode || t('advanced.traffic_unknown_proxy')}
+                  >
                     {selectedSession.proxy_mode || t('advanced.traffic_unknown_proxy')}
                   </span>
                 </div>

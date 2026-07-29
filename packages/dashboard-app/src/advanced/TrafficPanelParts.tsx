@@ -48,7 +48,7 @@ export function TimelineEntry({
     : new Date(parsedTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   return (
     <li
-      className="grid min-w-0 gap-2 px-3 py-3 text-xs min-[1280px]:grid-cols-[6.5rem_minmax(0,1fr)_auto]"
+      className="grid min-w-0 gap-2 px-3 py-3 text-xs min-[1280px]:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,12rem)]"
       data-testid={`traffic-entry-${entry.sequence}`}
     >
       <div className="flex flex-col gap-0.5 font-mono text-[11px] text-text-3">
@@ -59,8 +59,16 @@ export function TimelineEntry({
         <p className="m-0 truncate font-mono font-semibold text-text" title={`${entry.method ?? ''} ${entry.path ?? ''}`.trim()}>
           {entry.method ?? t('advanced.traffic_unknown')} {entry.path ?? t('advanced.traffic_unknown')}
         </p>
-        <p className="mt-1 mb-0 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-3">
-          {entry.model && <span>{t('advanced.traffic_model', { value: entry.model })}</span>}
+        <p className="mt-1 mb-0 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-[11px] text-text-3">
+          {entry.model && (
+            <span
+              className="min-w-0 max-w-full truncate"
+              data-testid="traffic-model-value"
+              title={entry.model}
+            >
+              {t('advanced.traffic_model', { value: entry.model })}
+            </span>
+          )}
           {entry.input_tokens !== null && (
             <span>{t('advanced.traffic_input_tokens', { n: formatNumber(entry.input_tokens) })}</span>
           )}
@@ -75,20 +83,33 @@ export function TimelineEntry({
           )}
         </p>
       </div>
-      <div className="flex items-start gap-2 font-mono text-[11px]">
+      <div className="flex min-w-0 items-start gap-2 font-mono text-[11px]">
         <span
-          className="rounded-full bg-fill px-2 py-0.5 font-bold text-text-3 data-[outcome=error]:bg-red-t data-[outcome=error]:text-red data-[outcome=success]:bg-green-t data-[outcome=success]:text-green-d"
+          className="shrink-0 rounded-full bg-fill px-2 py-0.5 font-bold text-text-3 data-[outcome=error]:bg-red-t data-[outcome=error]:text-red data-[outcome=success]:bg-green-t data-[outcome=success]:text-green-d"
           data-outcome={entry.outcome}
         >
           {entry.status_code ?? t('advanced.traffic_unknown')}
           {' · '}
           {t(`advanced.traffic_outcome_${entry.outcome}`)}
         </span>
-        <span className="pt-0.5 text-text-3">
-          {entry.duration_ms === null
-            ? t('advanced.traffic_duration_unknown')
-            : t('advanced.traffic_duration_ms', { n: formatNumber(entry.duration_ms) })}
-          {entry.transport && ` · ${entry.transport}`}
+        <span className="flex min-w-0 items-start gap-1 pt-0.5 text-text-3">
+          <span className="shrink-0">
+            {entry.duration_ms === null
+              ? t('advanced.traffic_duration_unknown')
+              : t('advanced.traffic_duration_ms', { n: formatNumber(entry.duration_ms) })}
+          </span>
+          {entry.transport && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span
+                className="min-w-0 truncate"
+                data-testid="traffic-transport-value"
+                title={entry.transport}
+              >
+                {entry.transport}
+              </span>
+            </>
+          )}
         </span>
       </div>
     </li>
@@ -180,7 +201,11 @@ export function TrafficSessionRail({
                 <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-text-3">
                   <span className="min-w-0 truncate">{shortSessionId(session.id)}</span>
                   <span aria-hidden="true">·</span>
-                  <span className="shrink-0">
+                  <span
+                    className="min-w-0 max-w-[45%] truncate"
+                    data-testid="traffic-session-proxy"
+                    title={session.proxy_mode || t('advanced.traffic_unknown_proxy')}
+                  >
                     {session.proxy_mode || t('advanced.traffic_unknown_proxy')}
                   </span>
                 </span>

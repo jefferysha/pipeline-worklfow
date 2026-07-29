@@ -6,13 +6,13 @@ phase: build
 phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-29-dashboard-trace-session-workspace-design.md
 plan: docs/superpowers/plans/2026-07-29-dashboard-trace-session-workspace.md
-verification_report: null
+verification_report: docs/superpowers/reports/2026-07-29-dashboard-trace-session-workspace-20260729-verify.md
 build_mode: direct
 isolation: worktree
 build_sha: null
-agent_review_result: pending
-codex_review_result: pending
-verify_result: pending
+agent_review_result: fail
+codex_review_result: fail
+verify_result: fail
 branch_status: pending
 direct_override: true
 prd_path: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T10:20:31Z
-updated_at: 2026-07-29T10:34:46Z
+updated_at: 2026-07-29T11:14:06Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 5562b66c-b9d4-49e0-b63c-cc1da18b5546
-pipeline_transition_sequence: 3
-pipeline_transition_head: 6e74cf3d-a634-43bc-a2f4-8ec386528d5a
-pipeline_state_revision: 13
-pipeline_state_revision_id: 12585a3d-5000-4631-9f5a-36749ab0482e
-pipeline_state_digest: 6daffa9a8f2587262f3c016ba06b27b3ce2fd72b6bafb2b62ad607a08c5edba2
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTMsInJldmlzaW9uSWQiOiIxMjU4NWEzZC01MDAwLTQ2MzEtOWY1YS0zNjc0OWFiMDQ4MmUiLCJwYXlsb2FkRGlnZXN0IjoiZGJjYjk1MWUyZTZmNjM4MzdhYTg5NGNmZTBkNTcyNjg3YWEwMDcxYjA4NDZhODBkNDgzMDQ3NWY5MGIzZjQ5ZiJ9
+pipeline_transition_sequence: 7
+pipeline_transition_head: 4e8766b2-5c6f-405e-950a-fcdfdc62209d
+pipeline_state_revision: 25
+pipeline_state_revision_id: c7be6b68-053a-4505-81b3-2f6e6b31b450
+pipeline_state_digest: 641b479d863cdb8a6560fc0a80fbcf5ecbcb3eaf46e7787a6c6baaf5b999fd6c
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjUsInJldmlzaW9uSWQiOiJjN2JlNmI2OC0wNTNhLTQ1MDUtODFiMy0yZjZlNmIzMWI0NTAiLCJwYXlsb2FkRGlnZXN0IjoiYmIwZjdhYTM1NWZlMzJlZTM3MGI5ZTVjZWFmNTgwYmIyMmJmY2E2NTgzMzE2MDhiMzExZjcwNjdiN2VkNGJlZiJ9

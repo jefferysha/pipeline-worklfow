@@ -31,3 +31,27 @@ hierarchy remain legible in both themes.
 
 No Critical, High, or Medium findings remain.
 
+## Round 3
+
+The first frozen-baseline Verify found two Medium issues. The delta spec declared
+the new desktop workspace as a modified requirement and renamed two pre-existing
+interaction scenarios, so an isolated OpenSpec archive could not apply it. The
+revised delta now uses `ADDED Requirements` for the workspace, preserves the
+canonical scenario names under `MODIFIED Requirements`, and archives cleanly in
+an isolated copy (`+1 added`, `~1 modified`).
+
+The reviewer also demonstrated that legal maximum-length proxy, model, and
+transport metadata could expand flex and grid tracks. A red regression test now
+covers the server's 64/256/64-character limits. Rail/detail proxy labels and
+timeline metadata use bounded tracks, `min-width: 0`, truncation, and accessible
+full-value titles.
+
+A production-build browser fixture then exercised those exact 64/256/64 limits
+at 1024×768, 1200×870, 1440×900, and 1920×1080. At every width the document,
+body, and workspace `scrollWidth` matched `clientWidth`; the long labels stayed
+inside their rail/detail/timeline bounds while their titles retained all
+64/256/64 characters. Escape cleared the detail and restored focus to the
+selected session button. The browser loaded `index-zYwgShkc.js` and
+`index-Cgeu0Ldh.css` with no console warnings or errors.
+
+No Critical, High, or Medium findings remain after the correction.
