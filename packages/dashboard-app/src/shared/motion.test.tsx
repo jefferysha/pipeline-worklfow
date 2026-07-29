@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import gsap from 'gsap'
-import { revealStages } from './motion'
+import { revealDialog, revealList, revealStages, toastIn } from './motion'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -73,5 +73,55 @@ describe('revealStages（motion 正分支与兜底）', () => {
     revealStages(targets)
     expect(fromTo).not.toHaveBeenCalled()
     expect(set).toHaveBeenCalledWith(targets, expect.objectContaining({ autoAlpha: 1, y: 0 }))
+  })
+})
+
+describe('共享动效的 reduced-motion 与清理', () => {
+  it('无 matchMedia 时列表和弹窗直达可见终态', () => {
+    vi.stubGlobal('matchMedia', undefined)
+    const set = vi.spyOn(gsap, 'set')
+    const targets = makeTargets(2)
+    const backdrop = document.createElement('div')
+    const content = document.createElement('div')
+
+    revealList(targets)
+    revealDialog(backdrop, content)
+
+    expect(set).toHaveBeenCalledWith(targets, expect.objectContaining({ opacity: 1, y: 0 }))
+    expect(set).toHaveBeenCalledWith(backdrop, expect.objectContaining({ opacity: 1 }))
+    expect(set).toHaveBeenCalledWith(content, expect.objectContaining({ opacity: 1, scale: 1, y: 0 }))
+  })
+
+  it('toast 无 matchMedia 时直达终态并返回可清理 handle', () => {
+    vi.stubGlobal('matchMedia', undefined)
+    const tween = { kill: vi.fn() }
+    const set = vi.spyOn(gsap, 'set').mockReturnValue(tween as unknown as gsap.core.Tween)
+    const target = document.createElement('div')
+
+    const handle = toastIn(target)
+    expect(set).toHaveBeenCalledWith(target, { opacity: 1, y: 0 })
+    handle.kill()
+    expect(tween.kill).toHaveBeenCalledTimes(1)
+  })
+
+  it('toast 的媒体上下文在调用方 cleanup 时 revert 并清理活动 tween', () => {
+    stubMatchMedia({ reduce: false, motion: true })
+    const tween = { kill: vi.fn() }
+    vi.spyOn(gsap, 'fromTo').mockReturnValue(tween as unknown as gsap.core.Tween)
+    let cleanup: (() => void) | undefined
+    const mediaContext = {
+      add: vi.fn((_conditions: unknown, callback: (ctx: { conditions?: { reduce?: boolean } }) => (() => void)) => {
+        cleanup = callback({ conditions: { reduce: false } })
+        return mediaContext
+      }),
+      revert: vi.fn(() => cleanup?.()),
+    }
+    vi.spyOn(gsap, 'matchMedia').mockReturnValue(mediaContext as unknown as gsap.MatchMedia)
+
+    const handle = toastIn(document.createElement('div'))
+    handle.kill()
+
+    expect(mediaContext.revert).toHaveBeenCalledTimes(1)
+    expect(tween.kill).toHaveBeenCalledTimes(1)
   })
 })
