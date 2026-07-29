@@ -4,7 +4,8 @@
 
 - 比较基线：`origin/main` / `445aa1411d45a2c112d296a9fc3530db0f62e31e`
 - 能力：`codex-skill-receipt-current-turn`
-- 实现：`codexToolProgram.ts`、`codexProjectIdentity.ts`、`codexTranscriptEvidence.ts`、CLI bundle
+- 实现：`codexToolProgram.ts`、`codexProjectIdentity.ts`、`codexTranscriptEvidence.ts`、
+  `codexTranscriptCompletion.ts`、CLI bundle
 - 测试：`codexSkillReceipt.test.ts`、internal Skill gate 与 stable hook 集成
 - 治理：本 Change 的 proposal、design、ADR、delta spec、plan、tasks 与 ledger
 
@@ -25,6 +26,13 @@
   规格未固定完整 result/绝对 workdir（Medium）；JSON 数组选项被过度拒绝（P2）。
 - 修复：custom ABI 只接受完整 result 转发；无退出码或任一非零退出均拒绝；delta spec、
   技术设计和 ADR 固定安全契约；JSON 仅校验 `cmd`/`command`/`workdir`，忽略其他纯数据字段。
+- 第五轮 Verify finding：custom output 曾允许从任意 stdout 文本提取 `exit_code: 0`（High）；
+  fallback discovery 只绑定 session/visit，没有绑定最新 current turn（Medium）。
+- 修复：custom completion 只接受完整 nested result 信封自身的顶层数值 `exit_code=0`，不递归解释
+  stdout；legacy function ABI 保留独立兼容解析。fallback 只读取最新带 `turn_id` 的
+  `turn_context`，优先用 transcript 自身 `payload.id` 绑定 host session，并在最新匹配 transcript
+  结束查找；即使该文件畸形或读取中断，也不回退旧文件，防止旧 turn、fork 或 sibling transcript
+  复用 evidence。
 - 复查 Finding：无未处理 Critical / High / Medium。
 
 ## Spec 轴
@@ -35,8 +43,9 @@
 | 缺 workdir/跨仓失败关闭 | custom ABI 拒绝测试 |
 | 字面量与单 exec 限制 | 动态值、注释/字符串、死代码、未 await、自造 output、多调用拒绝；JSON/safe-object 覆盖 |
 | sibling 项目身份 | 缺失/相对 workdir、跨仓拒绝；绝对目标 + common Git directory 接受 |
-| 既有 trust/completion gate | 52 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
+| 既有 trust/completion gate | 60 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
 | nested exec completion | output-only、无 exit code、非零 exit 均拒绝；完整 result + exit 0 接受 |
+| stdout/跨 turn 防伪 | plain/JSON stdout exact 与 fallback 均拒绝；新/malformed turn、旧 transcript 与 fork evidence 不可复用 |
 | 根 Skill 防回退 | `skillSources.test.ts` 固定 `text(result)`、禁止 output-only 与 exit-code 指导 |
 | 首次调度同轮成功 | 临时 sibling worktree 的全新 Change 第一次 `document record` exit 0 |
 
@@ -44,14 +53,14 @@ Finding：无 Critical / High / Medium。
 
 ## 门禁结果
 
-- `npx vitest run packages/cli/src/skillSources.test.ts packages/cli/src/codexSkillReceipt.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts packages/cli/src/runtime/stable-hook.integration.test.ts`：85 passed。
+- `npx vitest run packages/cli/src/skillSources.test.ts packages/cli/src/codexSkillReceipt.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts packages/cli/src/runtime/stable-hook.integration.test.ts`：93 passed。
 - `npm run test:hooks`：512 passed。
 - `npm run build`：通过；包含 web、server、CLI bundle。
 - `bash tools/test-bundle.sh`：31 passed、0 failed；分发 bundle、N-1 兼容与文档 evidence smoke 通过。
 - `npm run check:architecture`：通过。
 - `npm run check:comments`：通过。
 - `git diff --check`：通过。
-- 最终 `npm test`：327 files passed；5743 tests passed、26 skipped。本轮 Docker daemon
+- 最终 `npm test`：327 files passed；5751 tests passed、26 skipped。本轮 Docker daemon
   不可用导致 Docker 条件用例诚实跳过；real Codex 与缺少 Claude OAuth 的既有条件跳过同样单列，
   不把外部环境缺失记为代码通过。
 - 第一轮 Verify 的失败报告保留在

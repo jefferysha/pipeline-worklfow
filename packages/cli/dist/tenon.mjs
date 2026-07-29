@@ -35179,15 +35179,89 @@ async function explicitSiblingWorktreeTarget(sessionRoot, commandWorkdir, target
   return sessionGit !== void 0 && targetGit !== void 0 && sessionGit === targetGit;
 }
 
+// packages/cli/src/codexTranscriptCompletion.ts
+function isRecord10(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function asString(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function explicitExitCodes(value) {
+  if (Array.isArray(value)) return value.flatMap((item2) => explicitExitCodes(item2));
+  if (!isRecord10(value)) return [];
+  const nested = Object.entries(value).filter(([key]) => key !== "exit_code").flatMap(([, item2]) => explicitExitCodes(item2));
+  return typeof value.exit_code === "number" ? [value.exit_code, ...nested] : nested;
+}
+function outputStrings(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap((item2) => outputStrings(item2));
+  if (!isRecord10(value)) return [];
+  return Object.values(value).flatMap((item2) => outputStrings(item2));
+}
+function scriptStates(value) {
+  return outputStrings(value).flatMap(
+    (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
+  );
+}
+function successfulFunctionOutput(value) {
+  if (scriptStates(value).includes("failed")) return false;
+  const textExitCodes = outputStrings(value).flatMap(
+    (text2) => [...text2.matchAll(
+      /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g
+    )].map((match) => Number(match[1]))
+  );
+  const exitCodes = [...explicitExitCodes(value), ...textExitCodes];
+  if (exitCodes.some((status) => status !== 0)) return false;
+  if (new Set(exitCodes).size > 1) return false;
+  return exitCodes.length > 0;
+}
+function topLevelExitCode(value) {
+  if (!isRecord10(value)) return void 0;
+  return typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : void 0;
+}
+function parsedResultEnvelopeExitCode(text2) {
+  try {
+    const value = JSON.parse(text2);
+    if (!isRecord10(value) || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0) return void 0;
+    return topLevelExitCode(value);
+  } catch {
+    return void 0;
+  }
+}
+function successfulCustomOutput(value) {
+  const states = scriptStates(value);
+  if (!states.includes("completed") || states.includes("failed")) return false;
+  const values = Array.isArray(value) ? value : [value];
+  const exitCodes = values.flatMap((item2) => {
+    if (typeof item2 === "string") {
+      const parsed = parsedResultEnvelopeExitCode(item2.trim());
+      return parsed === void 0 ? [] : [parsed];
+    }
+    if (!isRecord10(item2)) return [];
+    if (item2.type === "input_text") {
+      const text2 = asString(item2.text);
+      const parsed = text2 === void 0 ? void 0 : parsedResultEnvelopeExitCode(text2.trim());
+      return parsed === void 0 ? [] : [parsed];
+    }
+    if (item2.type === "execution_result") {
+      const code2 = topLevelExitCode(item2);
+      return code2 === void 0 ? [] : [code2];
+    }
+    const code = topLevelExitCode(item2);
+    return code === void 0 ? [] : [code];
+  });
+  return exitCodes.length > 0 && exitCodes.every((status) => status === 0);
+}
+
 // packages/cli/src/codexTranscriptEvidence.ts
 var MAX_RECEIPT_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_DISCOVERY_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_DISCOVERY_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_DISCOVERED_TRANSCRIPTS = 32;
-function isRecord10(value) {
+function isRecord11(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function asString(value) {
+function asString2(value) {
   return typeof value === "string" ? value : void 0;
 }
 function isInside2(base, candidate) {
@@ -35203,7 +35277,7 @@ function isTrustedTranscriptPath(transcriptPath, homeDir, configured) {
 }
 function responseItemAtOrAfter(event, notBefore) {
   if (notBefore === void 0) return true;
-  const timestamp = asString(event.timestamp);
+  const timestamp = asString2(event.timestamp);
   if (!timestamp) return false;
   const eventTime = Date.parse(timestamp);
   const lowerBound = Date.parse(notBefore);
@@ -35211,48 +35285,18 @@ function responseItemAtOrAfter(event, notBefore) {
 }
 function receiptTurnId(payload) {
   const metadata = payload.internal_chat_message_metadata_passthrough;
-  if (!isRecord10(metadata)) return void 0;
-  return asString(metadata.turn_id);
-}
-function explicitExitCodes(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap((item2) => explicitExitCodes(item2));
-  }
-  if (!isRecord10(value)) return [];
-  const nested = Object.entries(value).filter(([key]) => key !== "exit_code").flatMap(([, item2]) => explicitExitCodes(item2));
-  return typeof value.exit_code === "number" ? [value.exit_code, ...nested] : nested;
-}
-function outputStrings(value) {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap((item2) => outputStrings(item2));
-  if (!isRecord10(value)) return [];
-  return Object.values(value).flatMap((item2) => outputStrings(item2));
-}
-function successfulOutput(value) {
-  const strings = outputStrings(value);
-  const scriptStates = strings.flatMap(
-    (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1])
-  );
-  if (scriptStates.includes("failed")) return false;
-  const textExitCodes = strings.flatMap(
-    (text2) => [...text2.matchAll(
-      /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g
-    )].map((match) => Number(match[1]))
-  );
-  const exitCodes = [...explicitExitCodes(value), ...textExitCodes];
-  if (exitCodes.some((status) => status !== 0)) return false;
-  if (new Set(exitCodes).size > 1) return false;
-  return exitCodes.length > 0;
+  if (!isRecord11(metadata)) return void 0;
+  return asString2(metadata.turn_id);
 }
 function functionExecInvocation(payload) {
-  if (payload.type !== "function_call" || asString(payload.name) !== "exec_command") return void 0;
-  const argumentsText = asString(payload.arguments);
+  if (payload.type !== "function_call" || asString2(payload.name) !== "exec_command") return void 0;
+  const argumentsText = asString2(payload.arguments);
   if (!argumentsText) return void 0;
   try {
     const args = JSON.parse(argumentsText);
-    if (!isRecord10(args)) return void 0;
-    const command2 = asString(args.cmd) ?? asString(args.command);
-    return command2 === void 0 ? void 0 : { command: command2, workdir: asString(args.workdir) };
+    if (!isRecord11(args)) return void 0;
+    const command2 = asString2(args.cmd) ?? asString2(args.command);
+    return command2 === void 0 ? void 0 : { command: command2, workdir: asString2(args.workdir) };
   } catch {
     return void 0;
   }
@@ -35294,13 +35338,13 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       } catch {
         continue;
       }
-      if (!isRecord10(event)) continue;
+      if (!isRecord11(event)) continue;
       if (event.type === "session_meta") {
         const session = event.payload;
-        if (isRecord10(session)) {
-          const sessionId = asString(session.session_id) ?? asString(session.id);
+        if (isRecord11(session)) {
+          const sessionId = asString2(session.session_id) ?? asString2(session.id);
           matchesSession = sessionId === receipt.sessionId;
-          const cwd = asString(session.cwd);
+          const cwd = asString2(session.cwd);
           sessionRoot = cwd;
           matchesProject = cwd !== void 0 && await isSamePhysicalDirectory(cwd, repoRoot);
         }
@@ -35308,18 +35352,18 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       }
       if (!matchesSession || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
       const payload = event.payload;
-      if (!isRecord10(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
+      if (!isRecord11(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
       const functionInvocation = functionExecInvocation(payload);
       if (functionInvocation !== void 0) {
-        const callId = asString(payload.call_id);
+        const callId = asString2(payload.call_id);
         if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt);
         continue;
       }
       if (payload.type === "custom_tool_call") {
-        const callId = asString(payload.call_id);
-        const name2 = asString(payload.name);
-        const status = asString(payload.status);
-        const command2 = asString(payload.input);
+        const callId = asString2(payload.call_id);
+        const name2 = asString2(payload.name);
+        const status = asString2(payload.status);
+        const command2 = asString2(payload.input);
         const invocation = command2 === void 0 ? void 0 : transcriptInputTrustedSkillInvocation(command2, receipt.skillPath);
         if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && invocation !== void 0 && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot))) return await matchingSuccessfulOutput(lines, receipt);
         continue;
@@ -35338,10 +35382,10 @@ async function matchingSuccessfulOutput(lines, receipt) {
     } catch {
       continue;
     }
-    if (!isRecord10(event) || event.type !== "response_item") continue;
+    if (!isRecord11(event) || event.type !== "response_item") continue;
     const payload = event.payload;
-    if (!isRecord10(payload) || receiptTurnId(payload) !== receipt.turnId || payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output" || asString(payload.call_id) !== receipt.toolUseId) continue;
-    return successfulOutput(payload.output);
+    if (!isRecord11(payload) || receiptTurnId(payload) !== receipt.turnId || payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output" || asString2(payload.call_id) !== receipt.toolUseId) continue;
+    return payload.type === "custom_tool_call_output" ? successfulCustomOutput(payload.output) : successfulFunctionOutput(payload.output);
   }
   return false;
 }
@@ -35471,9 +35515,11 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
   for (const transcript of transcripts) {
     if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break;
     const readsByCall = /* @__PURE__ */ new Map();
+    const confirmedInLatestTurn = /* @__PURE__ */ new Set();
     let matchesRepo = false;
     let matchesHostSession = hostSessionId === void 0;
     let sessionRoot;
+    let latestTurnId;
     try {
       const stream = createReadStream(transcript, { encoding: "utf8" });
       const lines = createInterface2({ input: stream, crlfDelay: Infinity });
@@ -35484,26 +35530,37 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         } catch {
           continue;
         }
-        if (!isRecord10(event)) continue;
+        if (!isRecord11(event)) continue;
         if (event.type === "session_meta") {
           const payload2 = event.payload;
-          if (isRecord10(payload2)) {
-            const cwd = asString(payload2.cwd);
+          if (isRecord11(payload2)) {
+            const cwd = asString2(payload2.cwd);
             sessionRoot = cwd;
             if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot);
             if (hostSessionId !== void 0) {
-              const sessionId = asString(payload2.session_id) ?? asString(payload2.id);
+              const sessionId = asString2(payload2.id) ?? asString2(payload2.session_id);
               matchesHostSession = sessionId === hostSessionId;
             }
           }
           continue;
         }
-        if (!matchesHostSession || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
+        if (event.type === "turn_context") {
+          const payload2 = event.payload;
+          const turnId = isRecord11(payload2) ? asString2(payload2.turn_id) : void 0;
+          if (turnId === latestTurnId) continue;
+          latestTurnId = turnId;
+          readsByCall.clear();
+          confirmedInLatestTurn.clear();
+          continue;
+        }
+        if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
         const payload = event.payload;
-        if (!isRecord10(payload)) continue;
+        if (!isRecord11(payload)) continue;
+        const eventTurnId = receiptTurnId(payload);
+        if (eventTurnId !== void 0 && eventTurnId !== latestTurnId) continue;
         const functionInvocation = functionExecInvocation(payload);
         if (functionInvocation !== void 0) {
-          const callId2 = asString(payload.call_id);
+          const callId2 = asString2(payload.call_id);
           if (!callId2) continue;
           if (!matchesRepo && !await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) continue;
           const readIds = aliases.filter(
@@ -35516,10 +35573,10 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           continue;
         }
         if (payload.type === "custom_tool_call") {
-          const callId2 = asString(payload.call_id);
-          const name2 = asString(payload.name);
-          const status = asString(payload.status);
-          const toolInput = asString(payload.input);
+          const callId2 = asString2(payload.call_id);
+          const name2 = asString2(payload.name);
+          const status = asString2(payload.status);
+          const toolInput = asString2(payload.input);
           if (!callId2 || name2 !== "exec" || status !== "completed" || !toolInput) continue;
           const invocations = transcriptExecInvocations(toolInput);
           const invocation = invocations.length === 1 ? invocations[0] : void 0;
@@ -35532,14 +35589,21 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           continue;
         }
         if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
-        const callId = asString(payload.call_id);
-        if (callId && successfulOutput(payload.output)) {
-          for (const id of readsByCall.get(callId) ?? []) confirmed.add(id);
-          if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break;
+        const callId = asString2(payload.call_id);
+        const successful = payload.type === "custom_tool_call_output" ? successfulCustomOutput(payload.output) : successfulFunctionOutput(payload.output);
+        if (callId && successful) {
+          for (const id of readsByCall.get(callId) ?? []) confirmedInLatestTurn.add(id);
         }
+      }
+      if (matchesHostSession) {
+        if (latestTurnId !== void 0) {
+          for (const id of confirmedInLatestTurn) confirmed.add(id);
+        }
+        break;
       }
     } catch {
     }
+    if (matchesHostSession) break;
   }
   return [...confirmed];
 }
@@ -35553,10 +35617,10 @@ var REAL_CODEX_SKILL_RECEIPT_ENV = {
   selectedPluginRoot: () => process.env.TENON_CODEX_PLUGIN_ROOT,
   trustRoots: productionCodexSkillTrustRoots
 };
-function isRecord11(value) {
+function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function asString2(value) {
+function asString3(value) {
   return typeof value === "string" ? value : void 0;
 }
 function isSafeSkillId(value) {
@@ -35579,15 +35643,15 @@ function isTrustedTranscriptPath2(transcriptPath, homeDir, configured) {
   return isInside3(codexSessionsRoot3(homeDir, configured), resolve19(transcriptPath));
 }
 function parseReceipt2(value) {
-  if (!isRecord11(value) || value.version !== RECEIPT_VERSION) return void 0;
-  const receivedAt = asString2(value.receivedAt);
-  const changeName = asString2(value.changeName);
-  const skillId = asString2(value.skillId);
-  const skillPath = asString2(value.skillPath);
-  const transcriptPath = asString2(value.transcriptPath);
-  const sessionId = asString2(value.sessionId);
-  const turnId = asString2(value.turnId);
-  const toolUseId = asString2(value.toolUseId);
+  if (!isRecord12(value) || value.version !== RECEIPT_VERSION) return void 0;
+  const receivedAt = asString3(value.receivedAt);
+  const changeName = asString3(value.changeName);
+  const skillId = asString3(value.skillId);
+  const skillPath = asString3(value.skillPath);
+  const transcriptPath = asString3(value.transcriptPath);
+  const sessionId = asString3(value.sessionId);
+  const turnId = asString3(value.turnId);
+  const toolUseId = asString3(value.toolUseId);
   if (!receivedAt || !changeName || !skillId || !skillPath || !transcriptPath || !sessionId || !turnId || !toolUseId) return void 0;
   if (!isValidChangeName(changeName) || !isSafeSkillId(skillId) || !isSafeOpaqueId(sessionId) || !isSafeOpaqueId(turnId) || !isSafeOpaqueId(toolUseId)) {
     return void 0;
@@ -35664,7 +35728,7 @@ function skillsEquivalent3(left, right) {
   return skillAliases2(right).some((candidate) => leftAliases.has(candidate));
 }
 function validTimestamp(value) {
-  const timestamp = asString2(value);
+  const timestamp = asString3(value);
   return timestamp !== void 0 && !Number.isNaN(Date.parse(timestamp)) ? timestamp : void 0;
 }
 function currentVisitEvidence(history, evidenceScope) {
@@ -35682,7 +35746,7 @@ function currentVisitEvidence(history, evidenceScope) {
   if (evidenceScope) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const entry = entries[index];
-      if (isRecord11(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
+      if (isRecord12(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
         start = index + 1;
         startedAt = validTimestamp(entry.ts);
         valid = startedAt !== void 0;
@@ -35690,12 +35754,12 @@ function currentVisitEvidence(history, evidenceScope) {
       }
     }
     const hasAnyTransition = entries.some(
-      (entry) => isRecord11(entry) && entry.kind === "transition"
+      (entry) => isRecord12(entry) && entry.kind === "transition"
     );
     if (!valid && !hasAnyTransition) {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
-        if (isRecord11(entry) && entry.kind === "init") {
+        if (isRecord12(entry) && entry.kind === "init") {
           start = index + 1;
           startedAt = validTimestamp(entry.ts);
           valid = startedAt !== void 0;
@@ -35706,8 +35770,8 @@ function currentVisitEvidence(history, evidenceScope) {
   }
   const ids = /* @__PURE__ */ new Set();
   for (const entry of entries.slice(start)) {
-    if (!isRecord11(entry) || entry.kind !== "tool") continue;
-    const raw = asString2(entry.raw);
+    if (!isRecord12(entry) || entry.kind !== "tool") continue;
+    const raw = asString3(entry.raw);
     const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null;
     if (match?.[1]) ids.add(match[1]);
   }
@@ -35735,9 +35799,9 @@ async function latestBoundHostSessionId(repoRoot, changeName) {
     if (!await regularFile(path9)) continue;
     try {
       const value = JSON.parse(await readFile25(path9, "utf8"));
-      if (!isRecord11(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString2(value.change) !== changeName) continue;
-      const sessionId = asString2(value.session_id);
-      const boundAt = asString2(value.bound_at);
+      if (!isRecord12(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString3(value.change) !== changeName) continue;
+      const sessionId = asString3(value.session_id);
+      const boundAt = asString3(value.bound_at);
       if (!sessionId || !boundAt || !isSafeOpaqueId(sessionId) || Number.isNaN(Date.parse(boundAt))) continue;
       if (latest === void 0 || boundAt > latest.boundAt) latest = { sessionId, boundAt };
     } catch {
@@ -44838,7 +44902,7 @@ var visitStrings = (value, emit4) => {
     for (const item2 of Object.values(value)) visitStrings(item2, emit4);
   }
 };
-var isRecord12 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord13 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var diagnosticMessage = (value) => value.replace(/\s+/g, " ").trim().slice(0, 400);
 async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
   if (mode !== "usage" && mode !== "transitions" && mode !== "last-message") {
@@ -44868,7 +44932,7 @@ async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
             if (embeddedLine.startsWith("[TRANSITION] ")) deps.io.out(embeddedLine);
           }
         });
-      } else if (isRecord12(event) && event.type === "item.completed" && isRecord12(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
+      } else if (isRecord13(event) && event.type === "item.completed" && isRecord13(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
         const message2 = diagnosticMessage(event.item.text);
         if (message2.length > 0) lastAgentMessage = message2;
       }
@@ -45910,7 +45974,7 @@ var PAYLOAD_ENTRIES = [
   "tools/verify-skills.sh"
 ];
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
-function isRecord13(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function nonEmptyString(value) {
@@ -45924,7 +45988,7 @@ function isExistingReleaseCollision(error) {
   return code === "EEXIST" || code === "ENOTEMPTY";
 }
 function sourceFromUnknown(value) {
-  if (!isRecord13(value)) return null;
+  if (!isRecord14(value)) return null;
   const host = value.host;
   const pluginVersion = nonEmptyString(value.pluginVersion);
   if (host !== "codex" && host !== "claude" && host !== "adapter" && host !== "manual" || pluginVersion === null) {
@@ -45939,7 +46003,7 @@ function parseManifest(raw) {
   } catch {
     return null;
   }
-  if (!isRecord13(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
+  if (!isRecord14(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
   const payloadDigest = nonEmptyString(value.payloadDigest);
   const createdAt = nonEmptyString(value.createdAt);
   const source = sourceFromUnknown(value.source);
@@ -45954,7 +46018,7 @@ function parseSelection(raw) {
   } catch {
     return null;
   }
-  if (!isRecord13(value)) return null;
+  if (!isRecord14(value)) return null;
   const revision = value.revision;
   if (value.version !== 1 || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) return null;
   const activeRelease = value.activeRelease;
@@ -45970,7 +46034,7 @@ function parseAudit(raw) {
   } catch {
     return null;
   }
-  if (!isRecord13(value) || value.version !== 1) return null;
+  if (!isRecord14(value) || value.version !== 1) return null;
   const at = nonEmptyString(value.at);
   const detail = nonEmptyString(value.detail);
   const kind = value.kind;
@@ -46154,7 +46218,7 @@ function hookCommands(value, output) {
     for (const item2 of value) hookCommands(item2, output);
     return;
   }
-  if (!isRecord13(value)) return;
+  if (!isRecord14(value)) return;
   const command2 = value.command;
   if (typeof command2 === "string") output.push(command2);
   for (const item2 of Object.values(value)) hookCommands(item2, output);
@@ -46219,7 +46283,7 @@ async function candidateVersion(candidateRoot) {
   for (const manifest of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
       const parsed = JSON.parse(await readFile36(join72(candidateRoot, manifest), "utf8"));
-      const version = isRecord13(parsed) ? nonEmptyString(parsed.version) : null;
+      const version = isRecord14(parsed) ? nonEmptyString(parsed.version) : null;
       if (version !== null) return version;
     } catch {
     }
@@ -46475,7 +46539,7 @@ import { lstat as lstat35, mkdir as mkdir26, readFile as readFile37, unlink as u
 import { dirname as dirname18, isAbsolute as isAbsolute21, join as join73, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
-function isRecord14(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys(value, allowed) {
@@ -46488,7 +46552,7 @@ function decodeManagedHostSteps(value) {
   const ids = /* @__PURE__ */ new Set();
   const steps = [];
   for (const item2 of value) {
-    if (!isRecord14(item2) || !exactKeys(item2, [
+    if (!isRecord15(item2) || !exactKeys(item2, [
       "id",
       "state",
       "before",
@@ -46515,7 +46579,7 @@ function decodeManagedHostSteps(value) {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 var JOURNAL_FILE = "release-transaction.json";
-function isRecord15(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys2(value, required2, optional = []) {
@@ -46526,7 +46590,7 @@ function isSource(value) {
   return value === "codex" || value === "claude" || value === "adapter" || value === "manual";
 }
 function decodeSelection(value) {
-  if (!isRecord15(value) || !exactKeys2(value, [
+  if (!isRecord16(value) || !exactKeys2(value, [
     "version",
     "revision",
     "activeRelease",
@@ -46543,14 +46607,14 @@ function decodeSelection(value) {
   };
 }
 function decodeRelease(value) {
-  if (!isRecord15(value) || !exactKeys2(value, [
+  if (!isRecord16(value) || !exactKeys2(value, [
     "version",
     "releaseId",
     "payloadDigest",
     "createdAt",
     "source"
   ])) return null;
-  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord15(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
+  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord16(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
   return {
     version: 1,
     releaseId: value.releaseId,
@@ -46563,9 +46627,9 @@ function decodeRelease(value) {
   };
 }
 function decodeLauncherFile(value) {
-  if (!isRecord15(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute21(value.path) || normalize(value.path) !== value.path) return null;
+  if (!isRecord16(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute21(value.path) || normalize(value.path) !== value.path) return null;
   const state = value.state;
-  if (!isRecord15(state) || typeof state.kind !== "string") return null;
+  if (!isRecord16(state) || typeof state.kind !== "string") return null;
   if (state.kind === "missing" && exactKeys2(state, ["kind"])) {
     return { path: value.path, state: { kind: "missing" } };
   }
@@ -46582,13 +46646,13 @@ function decodeLauncherFile(value) {
   return null;
 }
 function decodeLauncherSnapshot(value) {
-  if (!isRecord15(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
+  if (!isRecord16(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
   const tenon = decodeLauncherFile(value.tenon);
   const hook = decodeLauncherFile(value.hook);
   return tenon === null || hook === null ? null : { tenon, hook };
 }
 function decodeActivation(value) {
-  if (!isRecord15(value) || !exactKeys2(
+  if (!isRecord16(value) || !exactKeys2(
     value,
     ["selection", "release", "releaseRoot"],
     ["launcherSnapshot", "launcherCommitted"]
@@ -46608,7 +46672,7 @@ function decodeActivation(value) {
   };
 }
 function decodeActivationCheckpoint(value) {
-  if (!isRecord15(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
+  if (!isRecord16(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
   const selection = decodeSelection(value.selection);
   const launchers = decodeLauncherSnapshot(value.launchers);
   return selection === null || launchers === null ? null : { selection, launchers };
@@ -46618,7 +46682,7 @@ function isOperation(value) {
 }
 function decodeDashboardIdentity(value) {
   if (value === void 0) return void 0;
-  if (!isRecord15(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
+  if (!isRecord16(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
   return {
     version: 1,
     port: value.port,
@@ -46630,7 +46694,7 @@ function decodeDashboardIdentity(value) {
 }
 function decodeDashboard(value) {
   if (value === void 0) return void 0;
-  if (!isRecord15(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
+  if (!isRecord16(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
   const identity = decodeDashboardIdentity({
     version: value.version,
     port: value.port,
@@ -46653,7 +46717,7 @@ function decodeJournal(raw, paths) {
   } catch {
     return null;
   }
-  if (!isRecord15(value) || !exactKeys2(
+  if (!isRecord16(value) || !exactKeys2(
     value,
     ["version", "transactionId", "operation", "source", "phase", "startedAt", "updatedAt"],
     [

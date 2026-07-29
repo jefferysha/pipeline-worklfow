@@ -65,6 +65,16 @@
 - 第四轮 Codex CLI 审查在只读 sandbox 中运行；其 Vitest 尝试因无法写入 Vite timestamp
   返回 `EPERM`，不计为测试通过证据。正式可写工作树中的最新权威结果为 327 个测试文件通过、
   5743 个测试通过、26 个条件跳过。
+- **第五轮 Verify — Codex 轨发现 1 High / 1 Medium。** Reviewer 轨与真实 managed runtime
+  E2E 轨通过，OpenSpec 隔离 apply 演练通过，冻结基线
+  `workspace:sha256:9614154f2b83afab0f444715fbb187aab8c150df1af06bcac9eca1a442318ab5`
+  前后未漂移；但独立 Codex CLI 轨证明 `successfulOutput` 会从任意 stdout 文本提取
+  `exit_code: 0`，使没有完整 nested result 的输出可能伪造成功（High）。同时 fallback
+  discovery 只绑定 session 与 visit 时间，没有绑定可审计的当前 turn（Medium）。
+- 第五轮选择持续自主模式的安全默认值“修复”：不得把两轨通过抵消第三轨的安全发现，
+  先走 `verify-fail` 回 Build，拆分 custom/function completion ABI，令 custom 路径只接受
+  完整 result 信封，并把 fallback 限定在受信当前 turn；新增 exact/fallback 伪造输出与跨 turn
+  回归测试后重新执行全量门禁。
 
 ## 剩余风险
 

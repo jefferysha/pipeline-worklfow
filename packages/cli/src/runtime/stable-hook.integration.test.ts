@@ -189,6 +189,11 @@ describe('stable host-hook ABI', () => {
         payload: { cwd: project, session_id: 'session-receipt-1', id: 'session-receipt-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: eventTimestamp,
+        payload: { turn_id: turnId },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: eventTimestamp,
         payload: {
@@ -206,7 +211,10 @@ describe('stable host-hook ABI', () => {
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-skill-read',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+          ],
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),

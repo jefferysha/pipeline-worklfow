@@ -19,6 +19,7 @@ import {
 } from './codexSkillTrust.js'
 import { transcriptExecInvocations, type TranscriptExecInvocation } from './codexToolProgram.js'
 import { explicitSiblingWorktreeTarget } from './codexProjectIdentity.js'
+import { successfulCustomOutput, successfulFunctionOutput } from './codexTranscriptCompletion.js'
 
 // Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
 // session/project/turn/tool/path bound and streamed rather than buffered, so use the same bounded
@@ -62,41 +63,6 @@ function receiptTurnId(payload: Record<string, unknown>): string | undefined {
   const metadata = payload.internal_chat_message_metadata_passthrough
   if (!isRecord(metadata)) return undefined
   return asString(metadata.turn_id)
-}
-function explicitExitCodes(value: unknown): number[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => explicitExitCodes(item))
-  }
-  if (!isRecord(value)) return []
-  const nested = Object.entries(value)
-    .filter(([key]) => key !== 'exit_code')
-    .flatMap(([, item]) => explicitExitCodes(item))
-  return typeof value.exit_code === 'number' ? [value.exit_code, ...nested] : nested
-}
-
-function outputStrings(value: unknown): string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.flatMap((item) => outputStrings(item))
-  if (!isRecord(value)) return []
-  return Object.values(value).flatMap((item) => outputStrings(item))
-}
-
-function successfulOutput(value: unknown): boolean {
-  const strings = outputStrings(value)
-  const scriptStates = strings.flatMap((text) =>
-    [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
-      .map((match) => match[1]),
-  )
-  if (scriptStates.includes('failed')) return false
-  const textExitCodes = strings.flatMap((text) =>
-    [...text.matchAll(
-      /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
-    )].map((match) => Number(match[1])),
-  )
-  const exitCodes = [...explicitExitCodes(value), ...textExitCodes]
-  if (exitCodes.some((status) => status !== 0)) return false
-  if (new Set(exitCodes).size > 1) return false
-  return exitCodes.length > 0
 }
 interface FunctionExecInvocation {
   readonly command: string
@@ -240,7 +206,9 @@ async function matchingSuccessfulOutput(
       || (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output')
       || asString(payload.call_id) !== receipt.toolUseId
     ) continue
-    return successfulOutput(payload.output)
+    return payload.type === 'custom_tool_call_output'
+      ? successfulCustomOutput(payload.output)
+      : successfulFunctionOutput(payload.output)
   }
   return false
 }
@@ -408,9 +376,11 @@ export async function discoverCompletedCodexSkillReads(
   for (const transcript of transcripts) {
     if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break
     const readsByCall = new Map<string, readonly string[]>()
+    const confirmedInLatestTurn = new Set<string>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
     let sessionRoot: string | undefined
+    let latestTurnId: string | undefined
     try {
       const stream = createReadStream(transcript, { encoding: 'utf8' })
       const lines = createInterface({ input: stream, crlfDelay: Infinity })
@@ -429,19 +399,31 @@ export async function discoverCompletedCodexSkillReads(
             sessionRoot = cwd
             if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot)
             if (hostSessionId !== undefined) {
-              const sessionId = asString(payload.session_id) ?? asString(payload.id)
+              const sessionId = asString(payload.id) ?? asString(payload.session_id)
               matchesHostSession = sessionId === hostSessionId
             }
           }
           continue
         }
+        if (event.type === 'turn_context') {
+          const payload = event.payload
+          const turnId = isRecord(payload) ? asString(payload.turn_id) : undefined
+          if (turnId === latestTurnId) continue
+          latestTurnId = turnId
+          readsByCall.clear()
+          confirmedInLatestTurn.clear()
+          continue
+        }
         if (
           !matchesHostSession
+          || latestTurnId === undefined
           || event.type !== 'response_item'
           || !responseItemAtOrAfter(event, notBefore)
         ) continue
         const payload = event.payload
         if (!isRecord(payload)) continue
+        const eventTurnId = receiptTurnId(payload)
+        if (eventTurnId !== undefined && eventTurnId !== latestTurnId) continue
         const functionInvocation = functionExecInvocation(payload)
         if (functionInvocation !== undefined) {
           const callId = asString(payload.call_id)
@@ -483,14 +465,24 @@ export async function discoverCompletedCodexSkillReads(
         }
         if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
         const callId = asString(payload.call_id)
-        if (callId && successfulOutput(payload.output)) {
-          for (const id of readsByCall.get(callId) ?? []) confirmed.add(id)
-          if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break
+        const successful = payload.type === 'custom_tool_call_output'
+          ? successfulCustomOutput(payload.output)
+          : successfulFunctionOutput(payload.output)
+        if (callId && successful) {
+          for (const id of readsByCall.get(callId) ?? []) confirmedInLatestTurn.add(id)
         }
       }
+      if (matchesHostSession) {
+        if (latestTurnId !== undefined) {
+          for (const id of confirmedInLatestTurn) confirmed.add(id)
+        }
+        break
+      }
     } catch {
-      // An unreadable/rotated transcript cannot provide evidence; continue with another host file.
+      // A rotated transcript cannot provide evidence. Once it identified the bound host session,
+      // do not fall back to an older file from that session after a later I/O failure.
     }
+    if (matchesHostSession) break
   }
   return [...confirmed]
 }

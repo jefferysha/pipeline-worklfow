@@ -45,6 +45,18 @@
           "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -90,6 +102,18 @@
           "sha256": "f2ee0588070c0e7eeab902f2fe522adf67570d534d490c51f7cfd0642533c897",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f2ee0588070c0e7eeab902f2fe522adf67570d534d490c51f7cfd0642533c897",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f2ee0588070c0e7eeab902f2fe522adf67570d534d490c51f7cfd0642533c897",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -135,6 +159,18 @@
           "sha256": "7b232cde907d79af700d5fcff91e747bf7189d44a5097e7f426c0b5d91027a2a",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7b232cde907d79af700d5fcff91e747bf7189d44a5097e7f426c0b5d91027a2a",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7b232cde907d79af700d5fcff91e747bf7189d44a5097e7f426c0b5d91027a2a",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -180,6 +216,18 @@
           "sha256": "2fd67ee78bdd609bb452ca5e9a471f51ff74e9a64f8d7e2cc4986429dbc24087",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2fd67ee78bdd609bb452ca5e9a471f51ff74e9a64f8d7e2cc4986429dbc24087",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2fd67ee78bdd609bb452ca5e9a471f51ff74e9a64f8d7e2cc4986429dbc24087",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -213,6 +261,18 @@
           "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -246,6 +306,18 @@
           "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0c91d57c0c7d347de287163a5c47f8cb7c177990ae34699f739e3644993afc9c",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -273,6 +345,18 @@
           "sha256": "4052f87835df0abb37160400883e469bf9f3541458164a814f1c86db4c0b804d",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4052f87835df0abb37160400883e469bf9f3541458164a814f1c86db4c0b804d",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4052f87835df0abb37160400883e469bf9f3541458164a814f1c86db4c0b804d",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
@@ -312,15 +396,27 @@
           "sha256": "8661714a73d902dceb39b8a3603e6b879ffe11cd7c911f38e136bdfba600fa4d",
           "readAt": "2026-07-29T15:09:21Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "8661714a73d902dceb39b8a3603e6b879ffe11cd7c911f38e136bdfba600fa4d",
+          "readAt": "2026-07-29T15:20:15Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "8661714a73d902dceb39b8a3603e6b879ffe11cd7c911f38e136bdfba600fa4d",
+          "readAt": "2026-07-29T15:33:43Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",17]"
         }
       ]
     },
     {
       "kind": "verification-report",
       "path": "docs/superpowers/reports/codex-skill-receipt-same-turn-verify.md",
-      "sha256": "a67c40e66dab128853f2c762cdc06c2f45a38c8e14e02d9bc6f9548db7c406e9",
+      "sha256": "5ed6c4c28a1e5a9460b17c048ab0fb3ead85dcc36433aef003586ab9dfcdbf5d",
       "producer": "verification-before-completion",
-      "recordedAt": "2026-07-29T15:02:20Z",
+      "recordedAt": "2026-07-29T15:20:15Z",
       "reads": []
     }
   ]

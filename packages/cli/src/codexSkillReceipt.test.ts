@@ -1,4 +1,4 @@
-import { appendFile, mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readFile, rm, symlink, truncate, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -25,6 +25,22 @@ const turnId = 'turn-verified-1'
 const sessionId = 'session-verified-1'
 const toolUseId = 'call-skill-read'
 const LEGACY_RECEIPT_TRANSCRIPT_LIMIT = 64 * 1024 * 1024
+
+function customResultOutput(exitCode = 0, output = ''): readonly unknown[] {
+  return [
+    { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+    {
+      type: 'input_text',
+      text: JSON.stringify({
+        chunk_id: 'verified',
+        wall_time_seconds: 0.1,
+        exit_code: exitCode,
+        original_token_count: 0,
+        output,
+      }),
+    },
+  ]
+}
 
 function reconcileCodexSkillEvidence(
   input: Omit<CodexSkillEvidenceInput, 'selectedPluginRoot'> & { readonly selectedPluginRoot?: string },
@@ -56,6 +72,11 @@ function eventLines(
       },
     },
     {
+      type: 'turn_context',
+      timestamp,
+      payload: { turn_id: turnId },
+    },
+    {
       type: 'response_item',
       timestamp,
       payload: {
@@ -85,7 +106,7 @@ function eventLines(
 
 function sessionScopedEventLines(
   sessionCwd: string,
-  output = 'Process exited with code 0\nWall time 0.1 seconds\n',
+  output: unknown = customResultOutput(),
   skillPaths: readonly string[] = [skillPath],
   transcriptSessionId?: string,
 ): string {
@@ -108,6 +129,11 @@ function multilineSessionScopedEventLines(sessionCwd: string): string {
       payload: { cwd: sessionCwd, session_id: sessionId, id: sessionId },
     },
     {
+      type: 'turn_context',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: { turn_id: turnId },
+    },
+    {
       type: 'response_item',
       timestamp: '2026-07-24T00:02:00Z',
       payload: {
@@ -125,7 +151,7 @@ function multilineSessionScopedEventLines(sessionCwd: string): string {
       payload: {
         type: 'custom_tool_call_output',
         call_id: 'call-multiline-skill-read',
-        output: 'Process exited with code 0\nWall time 0.1 seconds\n',
+        output: customResultOutput(),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -141,6 +167,11 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
       type: 'session_meta',
       timestamp: '2026-07-24T00:02:00Z',
       payload: { cwd: sessionCwd, session_id: sessionId, id: sessionId },
+    },
+    {
+      type: 'turn_context',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: { turn_id: turnId },
     },
     {
       type: 'response_item',
@@ -160,7 +191,7 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
       payload: {
         type: 'custom_tool_call_output',
         call_id: 'call-unquoted-object-skill-read',
-        output: 'Process exited with code 0\nWall time 0.1 seconds\n',
+        output: customResultOutput(),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -176,6 +207,11 @@ function functionCallSessionScopedEventLines(sessionCwd: string, workdir?: strin
       type: 'session_meta',
       timestamp: '2026-07-24T00:02:00Z',
       payload: { cwd: sessionCwd, session_id: sessionId, id: sessionId },
+    },
+    {
+      type: 'turn_context',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: { turn_id: turnId },
     },
     {
       type: 'response_item',
@@ -210,6 +246,11 @@ function customCallSessionScopedEventLines(sessionCwd: string, workdir?: string)
       type: 'session_meta',
       timestamp: '2026-07-24T00:02:00Z',
       payload: { cwd: sessionCwd, session_id: sessionId, id: sessionId },
+    },
+    {
+      type: 'turn_context',
+      timestamp: '2026-07-24T00:02:00Z',
+      payload: { turn_id: turnId },
     },
     {
       type: 'response_item',
@@ -405,7 +446,7 @@ describe('Codex transcript skill receipt', () => {
             directDevelopmentRoot: pluginRoot,
             executingPluginRoot: pluginRoot,
           }
-      await writeFile(transcript, eventLines('Process exited with code 0'), 'utf8')
+      await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
       const deps = { ...makeDeps({ cwd: root }), clock: (): string => '2026-07-24T00:02:00Z' }
       expect(await cmdInternalCodexSkillReceipt(
         deps,
@@ -466,7 +507,7 @@ describe('Codex transcript skill receipt', () => {
     expect(pending.confirmedSkillIds).toEqual([])
     await expect(readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
 
-    await writeFile(transcript, eventLines('Process exited with code 0\nWall time 0.1 seconds\n'), 'utf8')
+    await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
     const confirmed = await reconcileCodexSkillEvidence({
       repoRoot: root,
       changeDir,
@@ -480,12 +521,8 @@ describe('Codex transcript skill receipt', () => {
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
   })
 
-  it('accepts the current Codex content-array ABI when the host reports Script completed', async () => {
-    await writeFile(transcript, eventLines([
-      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
-      { type: 'input_text', text: '# skill body\n' },
-      { type: 'execution_result', exit_code: 0 },
-    ]), 'utf8')
+  it('accepts the current Codex content-array ABI when text(result) forwards a complete JSON envelope', async () => {
+    await writeFile(transcript, eventLines(customResultOutput(0, '# skill body\n')), 'utf8')
     await recordPendingReceipt()
 
     const result = await reconcileCodexSkillEvidence({
@@ -498,6 +535,44 @@ describe('Codex transcript skill receipt', () => {
       codexHomeDir: join(home, '.codex'),
     })
     expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects stdout that prints exit_code=0 without a complete result envelope', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'input_text', text: 'exit_code: 0\nProcess exited with code 0\n' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects JSON stdout that only imitates a top-level exit code', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'input_text', text: '{"exit_code":0}' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('rejects outer Script completed when the complete nested result has no exit code', async () => {
@@ -642,7 +717,7 @@ describe('Codex transcript skill receipt', () => {
   it('treats an explicit nested non-zero exit as authoritative over success-looking stdout', async () => {
     await writeFile(
       transcript,
-      eventLines('exit_code: 1\nstdout: Process exited with code 0\n'),
+      eventLines(customResultOutput(1, 'Process exited with code 0\n')),
       'utf8',
     )
     await recordPendingReceipt()
@@ -1353,6 +1428,171 @@ describe('Codex transcript skill receipt', () => {
 
     expect(result.confirmedSkillIds).toEqual([])
     await expect(readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('does not fall back to an older matching transcript when the newest one has no valid turn', async () => {
+    const newerTranscript = join(home, '.codex', 'sessions', '2026', '07', '24', 'newer.jsonl')
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await writeFile(newerTranscript, [
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: '2026-07-24T00:03:00Z',
+        payload: { cwd: root, session_id: sessionId, id: sessionId },
+      }),
+      JSON.stringify({
+        type: 'turn_context',
+        timestamp: '2026-07-24T00:03:00Z',
+        payload: {},
+      }),
+      '',
+    ].join('\n'), 'utf8')
+    await utimes(transcript, new Date('2026-07-24T00:02:00Z'), new Date('2026-07-24T00:02:00Z'))
+    await utimes(newerTranscript, new Date('2026-07-24T00:03:00Z'), new Date('2026-07-24T00:03:00Z'))
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not accept an inherited parent session_id when the transcript id identifies a fork', async () => {
+    await writeFile(
+      transcript,
+      sessionScopedEventLines(root).replace(
+        `"session_id":"${sessionId}","id":"${sessionId}"`,
+        `"session_id":"${sessionId}","id":"session-fork"`,
+      ),
+      'utf8',
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not let stdout forge fallback completion without a complete result envelope', async () => {
+    await writeFile(
+      transcript,
+      sessionScopedEventLines(root, [
+        { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+        { type: 'input_text', text: 'exit_code: 0\nProcess exited with code 0\n' },
+      ]),
+      'utf8',
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not let JSON stdout imitate a fallback result envelope', async () => {
+    await writeFile(
+      transcript,
+      sessionScopedEventLines(root, [
+        { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+        { type: 'input_text', text: '{"exit_code":0}' },
+      ]),
+      'utf8',
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not reuse a completed fallback read after a later host turn begins', async () => {
+    await writeFile(transcript, [
+      eventLines(customResultOutput()).trimEnd(),
+      JSON.stringify({
+        type: 'turn_context',
+        timestamp: '2026-07-24T00:03:00Z',
+        payload: { turn_id: 'turn-later' },
+      }),
+      JSON.stringify({
+        type: 'response_item',
+        timestamp: '2026-07-24T00:03:00Z',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [],
+          internal_chat_message_metadata_passthrough: { turn_id: 'turn-later' },
+        },
+      }),
+      '',
+    ].join('\n'), 'utf8')
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('invalidates an older completed fallback read when a malformed turn boundary appears', async () => {
+    await writeFile(transcript, [
+      eventLines(customResultOutput()).trimEnd(),
+      JSON.stringify({
+        type: 'turn_context',
+        timestamp: '2026-07-24T00:03:00Z',
+        payload: {},
+      }),
+      '',
+    ].join('\n'), 'utf8')
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('proves the skill again after a workflow loop re-enters the same phase, then deduplicates within that visit', async () => {

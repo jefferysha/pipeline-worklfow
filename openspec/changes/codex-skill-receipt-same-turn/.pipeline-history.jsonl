@@ -84,3 +84,11 @@
 {"ts":"2026-07-29T15:02:28Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
 {"ts":"2026-07-29T15:02:28Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T14:51:38Z authority_host_session=019fad97-4fde-7b40-a747-0f75eb2eac00"}
 {"ts":"2026-07-29T15:02:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b267cbfb-ad29-4300-af4a-f1ff538f4662"}
+{"ts":"2026-07-29T15:10:36Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T15:10:36Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T15:10:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T15:10:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"20550709-cfda-4cc8-897d-54fdae03b159"}
+{"ts":"2026-07-29T15:20:15Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T15:20:24Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T15:20:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T14:51:38Z authority_host_session=019fad97-4fde-7b40-a747-0f75eb2eac00"}
+{"ts":"2026-07-29T15:20:24Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"3e77928f-6eae-46b1-bd7a-8d5e38f1d4b1"}

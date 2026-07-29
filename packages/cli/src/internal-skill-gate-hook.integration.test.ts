@@ -244,6 +244,11 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: { cwd: h.cwd, session_id: 'session-dag-1', id: 'session-dag-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: transcriptTimestamp,
+        payload: { turn_id: 'turn-dag-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: transcriptTimestamp,
         payload: {
@@ -261,7 +266,10 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-tenon-open',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+          ],
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
@@ -319,6 +327,11 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: { cwd: h.cwd, session_id: 'session-omitted-1', id: 'session-omitted-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: transcriptTimestamp,
+        payload: { turn_id: 'turn-omitted-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: transcriptTimestamp,
         payload: {
@@ -335,7 +348,10 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-tenon-open',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            { type: 'input_text', text: JSON.stringify({ exit_code: 0, output: '', wall_time_seconds: 0.1 }) },
+          ],
         },
       }),
     ].join('\n') + '\n', 'utf8')
