@@ -21,7 +21,7 @@
 - [x] 子阶段 1：移植 Solution 章节导航纵向切片；保留 main 的 Button 基线，运行定向测试。 (build)
 - [x] 子阶段 2：整合共享原语、motion、App/Nav/Onboarding 生命周期与成对 i18n，运行定向测试。 (build)
 - [x] 子阶段 3：整合 Projects 工作区身份并运行定向测试、typecheck 与全量前端测试。 (build)
-- [ ] 子阶段 4：从最终源码重新生成 tracked assets，确认无 conflict marker 或旧 asset 残留。 (build)
+- [x] 子阶段 4：从最终源码重新生成 tracked assets，确认无 conflict marker 或旧 asset 残留。 (build)
 - [x] 保持既有前端分层，不引入新依赖或服务端契约变更。 (build)
 
 ## 验证

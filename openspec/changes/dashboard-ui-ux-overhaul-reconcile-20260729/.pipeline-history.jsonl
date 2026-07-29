@@ -21,3 +21,14 @@
 {"ts":"2026-07-29T05:00:37Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-29T05:00:37Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-07-29T05:03:18Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T05:17:14Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T05:17:14Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T05:17:14Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T05:17:14Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T05:17:14Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"a15b0b22-4eaa-452d-ace7-ff69ce02c77a"}
+{"ts":"2026-07-29T05:17:45Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T05:17:51Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T05:17:51Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T04:47:36Z authority_host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T05:18:12Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T05:18:12Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T05:18:13Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"07087baf-658e-4aa3-b316-6c749be1fece"}
