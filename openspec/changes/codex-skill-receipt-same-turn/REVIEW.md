@@ -2,7 +2,7 @@
 
 ## 基线与范围
 
-- 比较基线：`origin/main` / `607c2ed97f2217b8edf44dd9cd872e7e9cceb545`
+- 比较基线：`origin/main` / `445aa1411d45a2c112d296a9fc3530db0f62e31e`
 - 能力：`codex-skill-receipt-current-turn`
 - 实现：`codexToolProgram.ts`、`codexProjectIdentity.ts`、`codexTranscriptEvidence.ts`、CLI bundle
 - 测试：`codexSkillReceipt.test.ts`、internal Skill gate 与 stable hook 集成
@@ -44,7 +44,7 @@ Finding：无 Critical / High / Medium。
 
 ## 门禁结果
 
-- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts packages/cli/src/runtime/stable-hook.integration.test.ts`：64 passed。
+- `npx vitest run packages/cli/src/skillSources.test.ts packages/cli/src/codexSkillReceipt.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts packages/cli/src/runtime/stable-hook.integration.test.ts`：85 passed。
 - `npm run test:hooks`：512 passed。
 - `npm run build`：通过；包含 web、server、CLI bundle。
 - `bash tools/test-bundle.sh`：31 passed、0 failed；分发 bundle、N-1 兼容与文档 evidence smoke 通过。
