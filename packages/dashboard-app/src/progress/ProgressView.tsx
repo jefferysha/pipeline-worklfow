@@ -184,6 +184,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     return names
   }, [base])
   const effectiveWf = wfFilter !== 'all' && wfNames.includes(wfFilter) ? wfFilter : 'all'
+  const filterSummary = useMemo(() => {
+    const scopedRows = effectiveWf === 'all'
+      ? flatRows
+      : flatRows.filter((row) => row.workflow === effectiveWf)
+    const shown = scopedRows.filter((row) => deckMatch(row, deckTab)).length
+    return { shown, context: scopedRows.length - shown }
+  }, [deckTab, effectiveWf, flatRows])
 
   function setPatch(key: string, patch: RowPatch | null): void {
     setPatches((prev) => {
@@ -497,6 +504,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         rowCount={flatRows.length}
         deckTab={deckTab}
         deckCounts={deckCounts}
+        filterSummary={filterSummary}
         workflows={wfNames}
         workflow={effectiveWf}
         onDeckTab={setDeckTab}
