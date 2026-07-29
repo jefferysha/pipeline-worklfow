@@ -34,8 +34,8 @@
 ## 交付
 
 - [x] 应用 delta spec，提交、推送并创建包含完整证据的非草稿 PR。 (ship)
-- [ ] 检查远端 PR、标签与 CI，修复可控失败。 (ship)
+- [x] 检查远端 PR、标签与 CI，修复可控失败。 (ship)
 
 ## 归档
 
-- [ ] 完成 Change 归档与自动化 memory 记录。 (archive)
+- [x] 完成 Change 归档与自动化 memory 记录。 (archive)
