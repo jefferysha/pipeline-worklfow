@@ -96,3 +96,20 @@ tree. A full build and independent re-review are required before the next freeze
   and stream-event labels, no sensitive query rendering, no horizontal overflow, and no unexpected
   page errors.
 - Isolated browser evidence: `/tmp/tenon-trace-final-browser-e8PPXh/qa-output/`.
+
+## Focus-visible repair round
+
+- A red component test first proved that the session and outcome-filter buttons did not expose the
+  shared `focus-visible` ring contract. The implementation now gives every session, filter, retry,
+  and clear button the same accent border plus 3 px ring; the focused test passes 9/9 and the full
+  Web suite passes 1068/1068.
+- Independent full-diff re-review: PASS, with Critical/High/Medium/Low all 0. The reviewer also
+  checked the rebuilt Web bundle, architecture, comments, OpenSpec strict validation, and diff
+  hygiene.
+- Isolated Chromium re-verification: PASS. Tabbing to the unselected Errors filter produced
+  `:focus-visible=true`, `border-color=rgb(37, 99, 235)`, and a 3 px
+  `rgba(37, 99, 235, 0.12)` ring. Enter, Space, Escape, partial, empty, and 390 px responsive paths
+  remained correct, with no page errors or console errors.
+- Browser evidence was produced in the disposable copy
+  `/tmp/tenon-trace-focus-reverify-KdUgRI/qa-output/`; the real repository was not modified by the
+  reviewer.

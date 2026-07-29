@@ -12,7 +12,7 @@ import {
 import { useT } from '../i18n'
 
 const buttonClass =
-  'cursor-pointer rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-text transition-colors hover:border-accent-b aria-pressed:border-(--accent) aria-pressed:bg-accent-t'
+  'cursor-pointer rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-text outline-none transition-[border-color,box-shadow] hover:border-accent-b focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-pressed:border-(--accent) aria-pressed:bg-accent-t'
 
 const SESSION_STATUS_KEYS: Readonly<Record<string, string>> = {
   active: 'traffic_status_active',
@@ -192,7 +192,7 @@ export function TrafficPanel(): JSX.Element {
                   else sessionButtons.current.delete(session.id)
                 }}
                 type="button"
-                className="flex w-full cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-[7px] text-left text-text transition-[border-color,box-shadow] hover:border-accent-b aria-pressed:border-[1.5px] aria-pressed:border-(--accent) aria-pressed:bg-accent-t aria-pressed:shadow-[0_0_0_3px_var(--ring-blue)]"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-[7px] text-left text-text outline-none transition-[border-color,box-shadow] hover:border-accent-b focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-pressed:border-[1.5px] aria-pressed:border-(--accent) aria-pressed:bg-accent-t aria-pressed:shadow-[0_0_0_3px_var(--ring-blue)]"
                 aria-pressed={selected === session.id}
                 onClick={() => loadTimeline(session.id, true)}
               >

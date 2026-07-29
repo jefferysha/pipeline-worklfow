@@ -166,11 +166,13 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(screen.getByTestId('traffic-sessions-loading')).toHaveTextContent('加载捕获会话')
     const sessionButton = await screen.findByRole('button', { name: /claude/ })
     expect(screen.getByTestId('traffic-note')).toHaveTextContent('local-only')
+    expect(sessionButton.className).toContain('focus-visible:ring-[3px]')
     expect(sessionButton).toHaveTextContent('已完成')
     expect(sessionButton).not.toHaveTextContent('complete')
     await userEvent.click(sessionButton)
 
     const rows = await screen.findAllByTestId(/traffic-entry-/)
+    expect(screen.getByRole('button', { name: /失败/ }).className).toContain('focus-visible:ring-[3px]')
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('/v1/messages')
     expect(rows[0]).toHaveTextContent('缓存输入 4')

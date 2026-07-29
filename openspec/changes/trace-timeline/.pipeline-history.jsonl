@@ -61,3 +61,19 @@
 {"ts":"2026-07-29T06:05:13Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"cb0aecae-d139-49d9-9cc8-30472c53086b"}
 {"ts":"2026-07-29T06:12:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-29T06:16:28Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T06:16:47Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T06:16:47Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T06:16:47Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T06:16:47Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T06:16:47Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"2ad4cc53-4db0-42cd-bba0-1ce85e021b00"}
+{"ts":"2026-07-29T06:40:52Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-trace-timeline-verify.md"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T04:43:51Z authority_host_session=019fac27-12d0-7cc3-93f1-a9170e60f52b"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T06:40:53Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T06:40:53Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"35b66a1e-4783-4ded-8b0f-c8b6d84d4ac6"}
+{"ts":"2026-07-29T06:50:07Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T06:50:07Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
