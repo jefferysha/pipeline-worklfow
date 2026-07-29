@@ -41,15 +41,22 @@ const HOST_TARGET_PLAN_CHANGE_REFERENCE_FILES = new Set([
 ])
 const HOST_TARGET_PLAN_CHANGE_PATH =
   /^openspec\/changes\/(?:host-target-plan-dashboard|archive\/\d{4}-\d{2}-\d{2}-host-target-plan-dashboard)\/(.+)$/
+const TRACE_TIMELINE_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const TRACE_TIMELINE_REFERENCE_DOCS = new Set([
+  'docs/adr/trace-timeline.md',
+  'docs/superpowers/specs/2026-07-29-trace-timeline-tenon-upstreams-research.md',
+  'docs/superpowers/specs/trace-timeline-design.md',
+])
+const TRACE_TIMELINE_CHANGE_REFERENCE_FILES = new Set([
+  'proposal.md',
+  'tasks.md',
+])
+const TRACE_TIMELINE_CHANGE_PATH =
+  /^openspec\/changes\/(?:trace-timeline|archive\/\d{4}-\d{2}-\d{2}-trace-timeline)\/(.+)$/
 const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
   String.fromCharCode(
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
   ),
-]
-const SOURCE_EVIDENCE_TEXT = [
-  /^docs\/adr\/[^/]+\.md$/,
-  /^docs\/superpowers\/specs\/[^/]+\.md$/,
-  /^openspec\/changes\/(?:archive\/[^/]+|[^/]+)\/(?:proposal|tasks)\.md$/,
 ]
 
 function posixPath(path) {
@@ -109,19 +116,28 @@ function allowedHostTargetPlanReference(rel, identity) {
   )
 }
 
-function disallowedReferenceIdentity(rel, value, allowSourceEvidenceText = false) {
+function allowedTraceTimelineReference(rel, identity) {
+  const changeMatch = rel.match(TRACE_TIMELINE_CHANGE_PATH)
+  return (
+    TRACE_TIMELINE_REFERENCE_IDENTITIES.has(identity)
+    && (
+      TRACE_TIMELINE_REFERENCE_DOCS.has(rel)
+      || (
+        changeMatch !== null
+        && TRACE_TIMELINE_CHANGE_REFERENCE_FILES.has(changeMatch[1] ?? '')
+      )
+    )
+  )
+}
+
+function disallowedReferenceIdentity(rel, value) {
   const normalized = value.toLowerCase()
-  const hostTargetPlanReferencePath =
-    HOST_TARGET_PLAN_REFERENCE_DOCS.has(rel) || HOST_TARGET_PLAN_CHANGE_PATH.test(rel)
   return FORBIDDEN_REFERENCE_IDENTITIES.find(
-    (identity) =>
+    (identity) => (
       normalized.includes(identity)
       && !allowedHostTargetPlanReference(rel, identity)
-      && !(
-        allowSourceEvidenceText
-        && !hostTargetPlanReferencePath
-        && SOURCE_EVIDENCE_TEXT.some((pattern) => pattern.test(rel))
-      ),
+      && !allowedTraceTimelineReference(rel, identity)
+    ),
   )
 }
 
@@ -136,7 +152,7 @@ export function checkReferenceIdentities(root, tracked) {
     if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
     const bytes = readFileSync(absolute)
     if (bytes.includes(0)) continue
-    if (disallowedReferenceIdentity(rel, bytes.toString('utf8'), true)) {
+    if (disallowedReferenceIdentity(rel, bytes.toString('utf8'))) {
       failures.push(`受管理文本包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
     }
   }

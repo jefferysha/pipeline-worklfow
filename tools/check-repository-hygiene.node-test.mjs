@@ -80,29 +80,46 @@ test('rejects reference identities in tracked paths and ordinary managed text', 
   }
 })
 
-test('allows external identities only as text inside governed source-evidence documents', async () => {
+test('allows fixed trace-timeline research and governance paths but rejects source and unrelated docs', async () => {
   const root = await fixture()
-  const identity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
-  const evidenceFiles = [
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const unrelatedReference = String.fromCharCode(
+    97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
+  )
+  const allowed = [
     'docs/adr/trace-timeline.md',
+    'docs/superpowers/specs/2026-07-29-trace-timeline-tenon-upstreams-research.md',
     'docs/superpowers/specs/trace-timeline-design.md',
     'openspec/changes/trace-timeline/proposal.md',
     'openspec/changes/trace-timeline/tasks.md',
     'openspec/changes/archive/2026-07-29-trace-timeline/proposal.md',
     'openspec/changes/archive/2026-07-29-trace-timeline/tasks.md',
   ]
-  for (const path of evidenceFiles) {
-    await mkdir(join(root, path.split('/').slice(0, -1).join('/')), { recursive: true })
-    await writeFile(join(root, path), `pinned upstream: ${identity}\n`)
+  const rejected = [
+    'packages/server/src/serverGetRoutes.ts',
+    'docs/reference.md',
+    'openspec/changes/trace-timeline/design.md',
+    'openspec/changes/trace-timeline/copied-source.ts',
+    'openspec/changes/archive/2026-07-29-other-change/proposal.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(join(root, path), `Fixed research: ${firstIdentity} and ${secondIdentity}.\n`)
   }
-  const identityInPath = `docs/adr/${identity}.md`
+  const identityInPath = `docs/adr/${firstIdentity}.md`
   await writeFile(join(root, identityInPath), 'evidence\n')
   try {
-    assert.deepEqual(checkReferenceIdentities(root, evidenceFiles), [])
-    const failures = checkReferenceIdentities(root, [identityInPath])
-    assert.equal(failures.length, 1)
-    assert.match(failures[0], /路径/)
-    assert.ok(!failures[0].toLowerCase().includes(identity))
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    await writeFile(join(root, allowed[0]), `Fixed research: ${firstIdentity}, ${secondIdentity}, and ${unrelatedReference}.\n`)
+    assert.equal(checkReferenceIdentities(root, [allowed[0]]).length, 1)
+    const rejectedFailures = checkReferenceIdentities(root, rejected)
+    assert.equal(rejectedFailures.length, rejected.length)
+    assert.ok(rejectedFailures.every((failure) => /受管理文本/.test(failure)))
+    const pathFailures = checkReferenceIdentities(root, [identityInPath])
+    assert.equal(pathFailures.length, 1)
+    assert.match(pathFailures[0], /路径/)
+    assert.ok(!pathFailures[0].toLowerCase().includes(firstIdentity))
   } finally {
     await rm(root, { recursive: true, force: true })
   }
