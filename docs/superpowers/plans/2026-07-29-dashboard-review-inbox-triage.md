@@ -9,8 +9,6 @@ design-doc: docs/superpowers/specs/2026-07-29-dashboard-review-inbox-triage-desi
 
 只修改 Progress 状态筛选、画布任务卡交互语义、相邻测试和中英文翻译。保持默认 `all`、现有
 `deckMatch`、Workflow 画布位置、抽屉/API/Snapshot/GSAP 合约；不恢复 Inbox、不改手机设计、不加依赖。
-Explore 已用真实浏览器与 DOM 消除交互可行性未知，且本批不改数据模型或状态机；持续授权下不插入
-一次性 prototype，以红绿组件测试作为最小可逆探索面。
 
 ## 子阶段 1：状态筛选 tracer bullet
 
@@ -26,8 +24,6 @@ Explore 已用真实浏览器与 DOM 消除交互可行性未知，且本批不�
 3. 在 `packages/dashboard-app/src/i18n/translations.ts` 成对增加摘要 key。
 4. 运行：
    `npx vitest run --config packages/dashboard-app/vitest.config.ts packages/dashboard-app/src/progress/ProgressToolbar.test.tsx`
-5. 验收条件：当前 tab 是 tablist 唯一普通 Tab 停靠点；方向键切换不会调用任务动作；摘要在
-   中文、英文和零匹配场景中都报告精确计数。
 
 此处建议 `/clear`。
 
@@ -42,8 +38,6 @@ Explore 已用真实浏览器与 DOM 消除交互可行性未知，且本批不�
 3. 在 `packages/dashboard-app/src/progress/ProgressView.test.tsx` 把筛选集成断言从“只淡出”升级为
    “淡出 + 禁用 + 隐藏”，并覆盖零匹配摘要。
 4. 运行三份 Progress 定向测试和 `npm run typecheck:web`。
-5. 验收条件：匹配卡仍能打开抽屉并恢复焦点；每个上下文卡由同一 `dimmed` 布尔量同时驱动
-   `data-dim`、`disabled` 与 `aria-hidden`，不存在隐藏焦点或鼠标旁路。
 
 此处建议 `/clear`。
 

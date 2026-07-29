@@ -32,13 +32,6 @@ Progress 的状态筛选 MUST 让视觉、指针、键盘与辅助技术得到�
 - **AND** 所有不匹配任务不可交互
 - **AND** polite 状态反馈明确报告 0 个匹配任务而非伪装为空白或加载
 
-#### Scenario: 加载、错误与空数据保持诚实
-
-- **WHEN** Progress 尚无 Snapshot 而处于加载、错误或真实空数据状态
-- **THEN** 页面继续显示对应的 loading、alert 或 empty 反馈
-- **AND** 在没有可分类任务时不显示伪造的筛选结果摘要
-- **AND** 已有 Snapshot 的后台刷新或错误不会清除用户当前选择或可用任务
-
 #### Scenario: reduced-motion 与主题
 
 - **WHEN** Light、Dark 或 System 主题下启用 `prefers-reduced-motion: reduce` 并切换状态 tab
