@@ -88,6 +88,8 @@ test('allows external identities only as text inside governed source-evidence do
     'docs/superpowers/specs/trace-timeline-design.md',
     'openspec/changes/trace-timeline/proposal.md',
     'openspec/changes/trace-timeline/tasks.md',
+    'openspec/changes/archive/2026-07-29-trace-timeline/proposal.md',
+    'openspec/changes/archive/2026-07-29-trace-timeline/tasks.md',
   ]
   for (const path of evidenceFiles) {
     await mkdir(join(root, path.split('/').slice(0, -1).join('/')), { recursive: true })

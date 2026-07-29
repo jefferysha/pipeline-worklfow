@@ -28,7 +28,7 @@ const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
 const SOURCE_EVIDENCE_TEXT = [
   /^docs\/adr\/[^/]+\.md$/,
   /^docs\/superpowers\/specs\/[^/]+\.md$/,
-  /^openspec\/changes\/[^/]+\/(?:proposal|tasks)\.md$/,
+  /^openspec\/changes\/(?:archive\/[^/]+|[^/]+)\/(?:proposal|tasks)\.md$/,
 ]
 
 function posixPath(path) {
