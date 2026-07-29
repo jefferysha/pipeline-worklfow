@@ -42,6 +42,32 @@ export function HostOperationPlanPanel({
       <h2 id="host-plan-operation-title" className="text-base font-bold text-text">
         {t('hostPlan.operation_title', { host: targetLabel })}
       </h2>
+      <div
+        className="mt-3 rounded-xl border border-border bg-card/80 p-3"
+        data-testid="host-selected-context"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <code className="text-xs font-semibold text-text">{target.cli_flag}</code>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full border border-border bg-fill px-2 py-1 text-[11px] font-semibold text-text-2">
+              {t(`hostPlan.kind.${target.kind}`)}
+            </span>
+            <span className="rounded-full border border-border bg-bg px-2 py-1 text-[11px] font-semibold text-text-3">
+              {t(`hostPlan.scope.${target.target_scope}`)}
+            </span>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {target.capabilities.map((capability) => (
+            <span
+              key={capability}
+              className="rounded-full border border-blue-b bg-blue-t px-2 py-1 text-[11px] font-semibold text-blue-d"
+            >
+              {t(`hostPlan.capability.${capability}`)}
+            </span>
+          ))}
+        </div>
+      </div>
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('hostPlan.operation_group')}>
         {target.supported_operations.map((operation) => (
           <button
