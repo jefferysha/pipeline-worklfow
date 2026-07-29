@@ -10,15 +10,18 @@
  * 真跑一条 `opencode run` 产生真会话、`sqlite3 .schema` 逐字核对），列裁到本适配器实际用到的
  * 子集（略去 cost/tokens/revert 等本适配器不读的列——省略不影响真实性，SELECT 语句不引用它们）。
  */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { utimesSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { nodeMemFs } from '../fs.js'
-import type { MemFs } from '../fs.js'
+import type { MemContentReadBudget, MemFs } from '../fs.js'
 import type { MemFilter, MemSession } from '../types.js'
 import { buildChildIndex } from '../sessions.js'
+import { searchRelatedSessions } from '../relatedSearch.js'
 import {
   opencodeExtractDialogue,
   opencodeListSessions,
@@ -42,6 +45,12 @@ let fs: MemFs
 /** env 全 undefined——不让真跑这套测试的宿主 shell 的 XDG_DATA_HOME 泄进来，保持临时目录隔离。 */
 function realFs(home: string): MemFs {
   const base = nodeMemFs(home)
+  return { ...base, env: () => undefined, realPath: (path) => path }
+}
+
+/** Production-path fs: unlike realFs(), preserve nodeMemFs' real canonicalization. */
+function canonicalFs(home: string): MemFs {
+  const base = nodeMemFs(home)
   return { ...base, env: () => undefined }
 }
 
@@ -55,6 +64,10 @@ function filter(overrides: Partial<MemFilter> = {}): MemFilter {
 
 function createOpencodeSchema(db: DatabaseSyncInstance): void {
   db.exec(`
+    CREATE TABLE project (
+      id text PRIMARY KEY,
+      worktree text NOT NULL
+    );
     CREATE TABLE session (
       id text PRIMARY KEY,
       project_id text NOT NULL,
@@ -68,6 +81,8 @@ function createOpencodeSchema(db: DatabaseSyncInstance): void {
       time_created integer NOT NULL,
       time_updated integer NOT NULL
     );
+    CREATE INDEX session_project_idx
+      ON session (project_id);
     CREATE TABLE message (
       id text PRIMARY KEY,
       session_id text NOT NULL,
@@ -83,6 +98,12 @@ function createOpencodeSchema(db: DatabaseSyncInstance): void {
       time_updated integer NOT NULL,
       data text NOT NULL
     );
+    CREATE INDEX message_session_time_created_id_idx
+      ON message (session_id, time_created, id);
+    CREATE INDEX part_message_id_id_idx
+      ON part (message_id, id);
+    CREATE INDEX part_session_idx
+      ON part (session_id);
   `)
 }
 
@@ -97,16 +118,65 @@ async function openFixtureDb(home: string): Promise<DatabaseSyncInstance> {
   return openDbAt(dbFile(home))
 }
 
+interface SqliteFileFingerprint {
+  name: string
+  size: number
+  sha256: string
+}
+
+async function sqliteFamilyFingerprint(path: string): Promise<SqliteFileFingerprint[]> {
+  const directory = dirname(path)
+  const prefix = basename(path)
+  const names = (await readdir(directory))
+    .filter((name) => name === prefix || name.startsWith(`${prefix}-`))
+    .sort()
+  return Promise.all(names.map(async (name) => {
+    const file = join(directory, name)
+    const [bytes, metadata] = await Promise.all([readFile(file), stat(file)])
+    return {
+      name,
+      size: metadata.size,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }
+  }))
+}
+
+function relatedBudget(onUnavailable: () => void): MemContentReadBudget {
+  let bytesRead = 0
+  return {
+    perSourceBytes: 256 * 1024,
+    remainingBytes: () => 512 * 1024 - bytesRead,
+    consume: (bytes) => { bytesRead += bytes },
+    noteSourceUnavailable: onUnavailable,
+    noteSourceTruncated: () => undefined,
+    noteTotalExhausted: () => undefined,
+  }
+}
+
 function insertSession(
   db: DatabaseSyncInstance,
-  row: { id: string; directory: string; title: string; parentId?: string | null; created: string; updated: string },
+  row: {
+    id: string
+    directory: string
+    title: string
+    projectId?: string
+    projectWorktree?: string
+    parentId?: string | null
+    created: string
+    updated: string
+  },
 ): void {
+  const projectId = row.projectId ?? `project:${row.directory}`
+  db.prepare('INSERT OR IGNORE INTO project (id, worktree) VALUES (?, ?)').run(
+    projectId,
+    row.projectWorktree ?? row.directory,
+  )
   db.prepare(
     `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.id,
-    'global',
+    projectId,
     row.parentId ?? null,
     'test-slug',
     row.directory,
@@ -204,7 +274,7 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
     expect(child?.parent_id).toBe('ses_parent')
 
     const idx = buildChildIndex(rows)
-    expect(idx.get('ses_parent')?.map((s) => s.id)).toEqual(['ses_child'])
+    expect(idx.get('opencode:ses_parent')?.map((s) => s.id)).toEqual(['ses_child'])
   })
 
   test('--cwd 过滤：精确匹配与子目录都保留，非同源目录剔除', async () => {
@@ -238,6 +308,498 @@ describe('opencodeListSessions —— 真 SQLite session 表', () => {
 
     const rows = opencodeListSessions(fs, filter())
     expect(rows[0]?.cwd).toBeNull()
+  })
+
+  test('related-search 预算路径限制并计入 session metadata 字节，超长字段报告截断', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_normal',
+      directory: '/p/' + 'd'.repeat(20_000),
+      title: 't'.repeat(20_000),
+      projectId: 'project:p',
+      projectWorktree: '/p',
+      parentId: 'p'.repeat(20_000),
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertSession(db, {
+      id: 'i'.repeat(20_000),
+      directory: '/p',
+      title: 'oversized id',
+      projectId: 'project:p',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:09Z',
+    })
+    db.close()
+
+    const cliRows = opencodeListSessions(fs, filter())
+    expect(cliRows.some((row) => Buffer.byteLength(row.id) === 20_000)).toBe(true)
+    expect(cliRows.some((row) => Buffer.byteLength(row.parent_id ?? '') === 20_000)).toBe(true)
+
+    let bytesRead = 0
+    let truncatedSources = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 40_000,
+      remainingBytes: () => 120_000 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+      },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => {
+        truncatedSources += 1
+      },
+      noteTotalExhausted: () => undefined,
+    }
+    const rows = opencodeListSessions({ ...fs, contentReadBudget: budget }, filter({ cwd: '/p' }))
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.id).toBe('ses_normal')
+    expect(rows[0]?.parent_id).toBeNull()
+    expect(Buffer.byteLength(rows[0]?.cwd ?? '')).toBeLessThanOrEqual(4_096)
+    expect(Buffer.byteLength(rows[0]?.title ?? '')).toBeLessThanOrEqual(161)
+    expect(bytesRead).toBeGreaterThan(0)
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncatedSources).toBeGreaterThan(0)
+  })
+
+  test('Related Sessions 读取已 checkpoint 的 WAL-mode 数据库不创建或改写宿主 sidecar', async () => {
+    const db = await openFixtureDb(root)
+    db.exec('PRAGMA journal_mode=WAL')
+    insertSession(db, {
+      id: 'ses_checkpointed',
+      directory: root,
+      title: 'Checkpointed session',
+      created: '2026-07-28T05:00:00Z',
+      updated: '2026-07-28T05:01:00Z',
+    })
+    db.close()
+
+    const path = dbFile(root)
+    const before = await sqliteFamilyFingerprint(path)
+    expect(before.map((entry) => entry.name)).toEqual(['opencode.db'])
+
+    let unavailable = 0
+    const budgetedFs = {
+      ...canonicalFs(root),
+      contentReadBudget: relatedBudget(() => { unavailable += 1 }),
+    }
+    expect(opencodeListSessions(budgetedFs, filter({ cwd: root }))).toEqual([
+      expect.objectContaining({ id: 'ses_checkpointed' }),
+    ])
+    expect(unavailable).toBe(0)
+    expect(await sqliteFamilyFingerprint(path)).toEqual(before)
+  })
+
+  test('Related Sessions 查询期间主库 stat 漂移时丢弃结果并报告 unavailable', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_drifted',
+      directory: root,
+      title: 'Drifted session',
+      created: '2026-07-28T05:00:00Z',
+      updated: '2026-07-28T05:01:00Z',
+    })
+    db.close()
+
+    const path = dbFile(root)
+    let bytesRead = 0
+    let unavailable = 0
+    let touched = false
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 256 * 1024,
+      remainingBytes: () => 512 * 1024 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+        if (!touched) {
+          touched = true
+          const changed = new Date(Date.now() + 60_000)
+          utimesSync(path, changed, changed)
+        }
+      },
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeListSessions({
+      ...canonicalFs(root),
+      contentReadBudget: budget,
+    }, filter({ cwd: root }))).toEqual([])
+    expect(touched).toBe(true)
+    expect(unavailable).toBe(1)
+  })
+
+  test('Related Sessions 遇到 live WAL fail closed 且不改变宿主数据库，legacy CLI 仍可读', async () => {
+    const db = await openFixtureDb(root)
+    try {
+      db.exec('PRAGMA journal_mode=WAL')
+      db.exec('PRAGMA wal_autocheckpoint=0')
+      insertSession(db, {
+        id: 'ses_live_wal',
+        directory: root,
+        title: 'Live WAL session',
+        created: '2026-07-28T05:00:00Z',
+        updated: '2026-07-28T05:01:00Z',
+      })
+
+      const path = dbFile(root)
+      const before = await sqliteFamilyFingerprint(path)
+      expect(before.map((entry) => entry.name)).toEqual([
+        'opencode.db',
+        'opencode.db-shm',
+        'opencode.db-wal',
+      ])
+
+      const productionFs = canonicalFs(root)
+      const result = searchRelatedSessions(productionFs, {
+        root,
+        query: 'live WAL session',
+        platform: 'opencode',
+      })
+      expect(result.matches).toEqual([])
+      expect(result.partial).toBe(true)
+      expect(result.warnings.map((warning) => warning.code))
+        .toContain('opencode-reader-unavailable')
+      expect(await sqliteFamilyFingerprint(path)).toEqual(before)
+
+      expect(opencodeListSessions(productionFs, filter({ cwd: root }))).toEqual([
+        expect.objectContaining({ id: 'ses_live_wal' }),
+      ])
+    } finally {
+      db.close()
+    }
+  })
+})
+
+describe('OpenCode related search —— SQLite 内容预算 + descendants merge', () => {
+  test('缺少 session_project_idx 时 fail closed，不执行候选全表扫描与排序', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/home/u/work/proj',
+      title: 'Unindexed session candidates',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    db.exec('DROP INDEX session_project_idx')
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'session candidates',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+  })
+
+  test('缺少有界 query plan 时复用稳定 source-unavailable warning code', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/home/u/work/proj',
+      title: 'Unindexed',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'project memory' },
+    })
+    db.exec('DROP INDEX message_session_time_created_id_idx')
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+    expect(result.warnings.map((warning) => warning.code))
+      .not.toContain('opencode-query-plan-reader-unavailable')
+  })
+
+  test('数据库存在但不可读时返回 partial warning，而不是完整空结果', async () => {
+    await mkdir(dirname(dbFile(root)), { recursive: true })
+    await writeFile(dbFile(root), 'not a sqlite database', 'utf8')
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code)).toContain('opencode-reader-unavailable')
+  })
+
+  test('候选上限在项目过滤后生效，不被其他项目的更新会话挤出', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_target',
+      directory: '/home/u/work/proj',
+      title: 'Target project',
+      created: '2026-07-01T10:00:00Z',
+      updated: '2026-07-01T10:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_target',
+      sessionId: 'ses_target',
+      created: '2026-07-01T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_target',
+      messageId: 'msg_target',
+      sessionId: 'ses_target',
+      created: '2026-07-01T10:00:01Z',
+      data: { type: 'text', text: 'project scoped memory' },
+    })
+    for (let i = 0; i < 101; i += 1) {
+      insertSession(db, {
+        id: `ses_other_${i}`,
+        directory: '/home/u/work/other',
+        title: `Other ${i}`,
+        created: '2026-07-02T10:00:00Z',
+        updated: `2026-07-02T10:${String(i % 60).padStart(2, '0')}:00Z`,
+      })
+    }
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'project memory',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({ sessionId: 'ses_target' }),
+    ])
+  })
+
+  test('候选按更新时间而非插入 rowid 选取最近 100 个会话', async () => {
+    const db = await openFixtureDb(root)
+    for (let index = 0; index < 102; index += 1) {
+      insertSession(db, {
+        id: `ses_inserted_later_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Inserted later ${index}`,
+        created: '2026-07-02T10:00:00Z',
+        updated: '2026-07-02T10:00:00Z',
+      })
+    }
+    insertSession(db, {
+      id: 'ses_updated_target',
+      directory: '/home/u/work/proj',
+      title: 'Updated target',
+      created: '2026-07-01T10:00:00Z',
+      updated: '2026-07-28T12:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_updated_target',
+      sessionId: 'ses_updated_target',
+      created: '2026-07-28T12:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_updated_target',
+      messageId: 'msg_updated_target',
+      sessionId: 'ses_updated_target',
+      created: '2026-07-28T12:00:01Z',
+      data: { type: 'text', text: 'recently updated memory needle' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory needle',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({ sessionId: 'ses_updated_target' }),
+    ])
+  })
+
+  test('候选 relation 超出可核算扫描容量时 fail closed，不返回任意索引前缀', async () => {
+    const db = await openFixtureDb(root)
+    for (let index = 0; index < 200; index += 1) {
+      insertSession(db, {
+        id: `ses_old_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Old ${index}`,
+        created: '2026-07-01T10:00:00Z',
+        updated: '2026-07-01T10:00:00Z',
+      })
+    }
+    insertSession(db, {
+      id: 'ses_newest_outside_prefix',
+      directory: '/home/u/work/proj',
+      title: 'Newest outside prefix',
+      created: '2026-07-01T10:00:00Z',
+      updated: '2026-07-28T12:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_newest_outside_prefix',
+      sessionId: 'ses_newest_outside_prefix',
+      created: '2026-07-28T12:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_newest_outside_prefix',
+      messageId: 'msg_newest_outside_prefix',
+      sessionId: 'ses_newest_outside_prefix',
+      created: '2026-07-28T12:00:01Z',
+      data: { type: 'text', text: 'newest memory needle' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory needle',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.partial).toBe(true)
+    expect(result.warnings.map((warning) => warning.code))
+      .toContain('candidate-discovery-truncated')
+  })
+
+  test('最近 child 的较老 parent 作为有界图支撑节点返回，旧 parent 内容不额外入选', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_old_parent',
+      directory: '/home/u/work/proj',
+      title: 'Old parent',
+      created: '2026-06-01T10:00:00Z',
+      updated: '2026-06-01T10:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_old_parent',
+      sessionId: 'ses_old_parent',
+      created: '2026-06-01T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_old_parent',
+      messageId: 'msg_old_parent',
+      sessionId: 'ses_old_parent',
+      created: '2026-06-01T10:00:01Z',
+      data: { type: 'text', text: 'old parent private phrase' },
+    })
+    for (let index = 0; index < 100; index += 1) {
+      insertSession(db, {
+        id: `ses_recent_filler_${index}`,
+        directory: '/home/u/work/proj',
+        title: `Recent filler ${index}`,
+        created: '2026-07-20T10:00:00Z',
+        updated: `2026-07-20T10:${String(index % 60).padStart(2, '0')}:00Z`,
+      })
+    }
+    insertSession(db, {
+      id: 'ses_recent_child',
+      directory: '/home/u/work/proj',
+      title: 'Recent child',
+      parentId: 'ses_old_parent',
+      created: '2026-07-28T12:00:00Z',
+      updated: '2026-07-28T12:00:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_recent_child',
+      sessionId: 'ses_recent_child',
+      created: '2026-07-28T12:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_recent_child',
+      messageId: 'msg_recent_child',
+      sessionId: 'ses_recent_child',
+      created: '2026-07-28T12:00:01Z',
+      data: { type: 'text', text: 'recent child memory needle' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory needle',
+      platform: 'opencode',
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        sessionId: 'ses_old_parent',
+        excerpt: 'recent child memory needle',
+        descendantsMerged: 1,
+      }),
+    ])
+    expect(result.matches[0]?.excerpt).not.toContain('old parent private phrase')
+  })
+
+  test('child user 命中合并到 parent，安全 DTO 只返回一个 parent 结果', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_parent',
+      directory: '/home/u/work/proj',
+      title: 'Parent task',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:00Z',
+    })
+    insertSession(db, {
+      id: 'ses_child',
+      directory: '/home/u/work/proj',
+      title: 'Child task',
+      parentId: 'ses_parent',
+      created: '2026-07-05T10:01:00Z',
+      updated: '2026-07-05T10:02:00Z',
+    })
+    insertMessage(db, {
+      id: 'msg_child',
+      sessionId: 'ses_child',
+      created: '2026-07-05T10:01:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_child',
+      messageId: 'msg_child',
+      sessionId: 'ses_child',
+      created: '2026-07-05T10:01:01Z',
+      data: { type: 'text', text: 'related memory clue' },
+    })
+    db.close()
+
+    const result = searchRelatedSessions(fs, {
+      root: '/home/u/work/proj',
+      query: 'memory clue',
+      platform: 'opencode',
+    })
+
+    expect(result.partial).toBe(false)
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        platform: 'opencode',
+        sessionId: 'ses_parent',
+        excerpt: 'related memory clue',
+        descendantsMerged: 1,
+      }),
+    ])
+    expect(result.matches[0]).not.toHaveProperty('cwd')
+    expect(result.matches[0]).not.toHaveProperty('filePath')
   })
 })
 
@@ -288,6 +850,351 @@ describe('opencodeExtractDialogue —— message+part 联表，只收 text part'
 
     const turns = opencodeExtractDialogue(fs, { platform: 'opencode', id: 'ses_1', filePath: dbFile(root) })
     expect(turns).toEqual([{ role: 'assistant', text: 'Part one.\n\nPart two.' }])
+  })
+
+  test('有界读取以 part id 稳定排序同一时间戳的多个 text part', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, { id: 'ses_1', directory: '/p', title: 't', created: '2026-07-05T10:00:00Z', updated: '2026-07-05T10:00:10Z' })
+    insertMessage(db, { id: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:01Z', data: { role: 'assistant' } })
+    insertPart(db, { id: 'prt_2', messageId: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:02Z', data: { type: 'text', text: 'Part two.' } })
+    insertPart(db, { id: 'prt_1', messageId: 'msg_a1', sessionId: 'ses_1', created: '2026-07-05T10:00:02Z', data: { type: 'text', text: 'Part one.' } })
+    db.close()
+
+    let bytesRead = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+    const turns = opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toEqual([{ role: 'assistant', text: 'Part one.\n\nPart two.' }])
+  })
+
+  test('同一请求读取同一数据库的多个会话，共享累计 per-source 字节上限并报告截断', async () => {
+    const db = await openFixtureDb(root)
+    for (const sessionId of ['ses_1', 'ses_2']) {
+      insertSession(db, {
+        id: sessionId,
+        directory: '/p',
+        title: sessionId,
+        created: '2026-07-05T10:00:00Z',
+        updated: '2026-07-05T10:00:10Z',
+      })
+      insertMessage(db, {
+        id: `msg_${sessionId}`,
+        sessionId,
+        created: '2026-07-05T10:00:01Z',
+        data: { role: 'user' },
+      })
+      for (const suffix of ['a', 'b']) {
+        insertPart(db, {
+          id: `part_${sessionId}_${suffix}`,
+          messageId: `msg_${sessionId}`,
+          sessionId,
+          created: '2026-07-05T10:00:01Z',
+          data: { type: 'text', text: 'x'.repeat(2_700) },
+        })
+      }
+    }
+    db.close()
+
+    let bytesRead = 0
+    let truncatedSources = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 10_000,
+      remainingBytes: () => 30_000 - bytesRead,
+      consume: (bytes) => {
+        bytesRead += bytes
+      },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => {
+        truncatedSources += 1
+      },
+      noteTotalExhausted: () => undefined,
+    }
+    const budgetedFs: MemFs = { ...fs, contentReadBudget: budget }
+
+    expect(opencodeExtractDialogue(budgetedFs, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toHaveLength(1)
+    expect(truncatedSources).toBe(0)
+
+    opencodeExtractDialogue(budgetedFs, {
+      platform: 'opencode',
+      id: 'ses_2',
+      filePath: dbFile(root),
+    })
+
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncatedSources).toBeGreaterThan(0)
+  })
+
+  test('有界 SQLite 读取拒绝超长关系 id，并把所有投影字段计入预算', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    const oversizedMessageId = 'm'.repeat(2 * 1024 * 1024)
+    insertMessage(db, {
+      id: oversizedMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: oversizedMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.close()
+
+    let bytesRead = 0
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+    const turns = opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toEqual([])
+    expect(bytesRead).toBeLessThanOrEqual(budget.perSourceBytes)
+    expect(truncated).toBeGreaterThan(0)
+  })
+
+  test('多字节关系 id 在 byte cap 中间截断时拒绝 replacement key 并报告 partial', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    const splitMessageId = `${'m'.repeat(511)}é`
+    insertMessage(db, {
+      id: splitMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: splitMessageId,
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.close()
+
+    let bytesRead = 0
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024 - bytesRead,
+      consume: (bytes) => { bytesRead += bytes },
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(truncated).toBeGreaterThan(0)
+  })
+
+  test('缺少有界复合索引时 fail closed，不执行潜在全库同步扫描', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.exec(`
+      DROP INDEX message_session_time_created_id_idx;
+      DROP INDEX part_message_id_id_idx;
+    `)
+    db.close()
+
+    let unavailable = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024,
+      consume: () => undefined,
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(unavailable).toBeGreaterThan(0)
+  })
+
+  test('普通 relation 索引仍可走有界查询，不要求 fixture-only 排序复合索引', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    insertPart(db, {
+      id: 'part_1',
+      messageId: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:02Z',
+      data: { type: 'text', text: 'memory search' },
+    })
+    db.exec(`
+      DROP INDEX message_session_time_created_id_idx;
+      DROP INDEX part_message_id_id_idx;
+      CREATE INDEX message_session_idx ON message (session_id);
+      CREATE INDEX part_message_idx ON part (message_id);
+    `)
+    db.close()
+
+    let unavailable = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 32 * 1024,
+      remainingBytes: () => 64 * 1024,
+      consume: () => undefined,
+      noteSourceUnavailable: () => { unavailable += 1 },
+      noteSourceTruncated: () => undefined,
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([{ role: 'user', text: 'memory search' }])
+    expect(unavailable).toBe(0)
+  })
+
+  test('批量按 session_id 读取 parts，不依赖逐 message 查询索引', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    for (let index = 0; index < 32; index += 1) {
+      const messageId = `msg_${String(index).padStart(3, '0')}`
+      insertMessage(db, {
+        id: messageId,
+        sessionId: 'ses_1',
+        created: `2026-07-05T10:00:${String(index).padStart(2, '0')}Z`,
+        data: { role: 'user' },
+      })
+      insertPart(db, {
+        id: `part_${String(index).padStart(3, '0')}`,
+        messageId,
+        sessionId: 'ses_1',
+        created: `2026-07-05T10:00:${String(index).padStart(2, '0')}Z`,
+        data: { type: 'text', text: `turn ${index}` },
+      })
+    }
+    db.exec('DROP INDEX part_message_id_id_idx')
+    db.close()
+
+    const turns = opencodeExtractDialogue(fs, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })
+
+    expect(turns).toHaveLength(32)
+    expect(turns[0]).toEqual({ role: 'user', text: 'turn 0' })
+    expect(turns[31]).toEqual({ role: 'user', text: 'turn 31' })
+  })
+
+  test('剩余预算不足关系 id 预留时诚实报告截断', async () => {
+    const db = await openFixtureDb(root)
+    insertSession(db, {
+      id: 'ses_1',
+      directory: '/p',
+      title: 't',
+      created: '2026-07-05T10:00:00Z',
+      updated: '2026-07-05T10:00:10Z',
+    })
+    insertMessage(db, {
+      id: 'msg_1',
+      sessionId: 'ses_1',
+      created: '2026-07-05T10:00:01Z',
+      data: { role: 'user' },
+    })
+    db.close()
+
+    let truncated = 0
+    const budget: MemContentReadBudget = {
+      perSourceBytes: 256,
+      remainingBytes: () => 256,
+      consume: () => undefined,
+      noteSourceUnavailable: () => undefined,
+      noteSourceTruncated: () => { truncated += 1 },
+      noteTotalExhausted: () => undefined,
+    }
+
+    expect(opencodeExtractDialogue({ ...fs, contentReadBudget: budget }, {
+      platform: 'opencode',
+      id: 'ses_1',
+      filePath: dbFile(root),
+    })).toEqual([])
+    expect(truncated).toBeGreaterThan(0)
   })
 
   test('compaction part（无 text 字段，边界折叠本轮诚实不做——见文件头注释）不产出 turn、不崩，兄弟消息仍正常出', async () => {

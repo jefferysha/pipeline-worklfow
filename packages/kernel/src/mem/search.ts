@@ -3,6 +3,7 @@
  * 对位老仓 skills/pipeline/scripts/mem/search.py。
  */
 import type { DialogueTurn, SearchExcerpt, SearchHit } from './types.js'
+import { isHostSummaryTurn } from './dialogue.js'
 
 /**
  * 加权密度相关性：(3*userCount + asstCount) / totalTurns。
@@ -19,6 +20,11 @@ export interface ChunkSpan {
   start: number
   end: number
   truncated: boolean
+}
+
+export interface SearchInDialogueOptions {
+  /** Privacy-sensitive callers may prevent synthetic host summaries from counting as original user text. */
+  hostSummariesAsAssistant?: boolean
 }
 
 /**
@@ -49,11 +55,15 @@ export function searchInDialogue(
   kw: string,
   maxExcerpts = 3,
   chunkChars = 400,
+  options: SearchInDialogueOptions = {},
 ): SearchHit {
   const tokens = kw.toLowerCase().split(/\s+/).filter(Boolean)
   if (tokens.length === 0) {
     return { count: 0, userCount: 0, asstCount: 0, totalTurns: turns.length, excerpts: [] }
   }
+  const tokenMultiplicity = new Map<string, number>()
+  for (const token of tokens) tokenMultiplicity.set(token, (tokenMultiplicity.get(token) ?? 0) + 1)
+  const excerptLimit = Math.max(0, Math.trunc(maxExcerpts))
 
   let userCount = 0
   let asstCount = 0
@@ -61,50 +71,40 @@ export function searchInDialogue(
   const asstExcerpts: SearchExcerpt[] = []
 
   for (const t of turns) {
+    const effectiveRole = options.hostSummariesAsAssistant && isHostSummaryTurn(t) ? 'assistant' : t.role
     const hay = t.text.toLowerCase()
     if (!tokens.every((tok) => hay.includes(tok))) continue
 
-    const hitPositions: Array<{ idx: number; tok: string }> = []
     const tokenFreq = new Map<string, number>()
     let turnHits = 0
-    for (const tok of tokens) {
+    const target = effectiveRole === 'user' ? userExcerpts : asstExcerpts
+    const candidateBudget = Math.max(0, excerptLimit - target.length)
+    for (const [tok, multiplicity] of tokenMultiplicity) {
       let frm = 0
       let n = 0
       for (;;) {
         const idx = hay.indexOf(tok, frm)
         if (idx === -1) break
         n += 1
-        turnHits += 1
-        hitPositions.push({ idx, tok })
         frm = idx + tok.length
       }
       tokenFreq.set(tok, n)
+      turnHits += n * multiplicity
     }
-    if (t.role === 'user') userCount += turnHits
+    if (effectiveRole === 'user') userCount += turnHits
     else asstCount += turnHits
-    hitPositions.sort((a, b) => a.idx - b.idx)
 
-    const candidates: Array<ChunkSpan & { coverage: number; rarity: number }> = []
-    const seenStarts = new Set<number>()
-    for (const { idx, tok } of hitPositions) {
-      const ca = chunkAround(t.text, idx, chunkChars)
-      if (seenStarts.has(ca.start)) continue
-      seenStarts.add(ca.start)
-      const sl = hay.slice(ca.start, ca.end)
-      const coverage = tokens.reduce((acc, tk) => acc + (sl.includes(tk) ? 1 : 0), 0)
-      const rarity = 1 / (tokenFreq.get(tok) || 1)
-      candidates.push({ start: ca.start, end: ca.end, truncated: ca.truncated, coverage, rarity })
-    }
-    // 三级排序：coverage 降 > rarity 降 > start 升
-    candidates.sort((a, b) => b.coverage - a.coverage || b.rarity - a.rarity || a.start - b.start)
+    const candidates = candidateBudget > 0
+      ? selectExcerptCandidates(t.text, hay, tokens, tokenFreq, chunkChars, candidateBudget)
+      : []
     for (const c of candidates) {
       let snippet = t.text.slice(c.start, c.end).trim()
       if (c.truncated) {
         if (c.start > 0) snippet = '…' + snippet
         if (c.end < t.text.length) snippet = snippet + '…'
       }
-      const target = t.role === 'user' ? userExcerpts : asstExcerpts
-      target.push({ role: t.role, snippet })
+      target.push({ role: effectiveRole, snippet })
+      if (target.length >= excerptLimit) break
     }
   }
 
@@ -116,5 +116,100 @@ export function searchInDialogue(
     asstCount,
     totalTurns: turns.length,
     excerpts,
+  }
+}
+
+interface RankedChunk extends ChunkSpan {
+  coverage: number
+  rarity: number
+}
+
+function compareRankedChunks(a: RankedChunk, b: RankedChunk): number {
+  return b.coverage - a.coverage || b.rarity - a.rarity || a.start - b.start
+}
+
+/**
+ * Merge each token's occurrence stream by position, so every distinct chunk remains eligible for
+ * coverage ranking without retaining an unbounded hit-position array. The top-K array is bounded by
+ * the caller's remaining excerpt slots; occurrence counting stays exact in the preceding pass.
+ */
+function selectExcerptCandidates(
+  text: string,
+  hay: string,
+  tokens: readonly string[],
+  tokenFreq: ReadonlyMap<string, number>,
+  chunkChars: number,
+  limit: number,
+): RankedChunk[] {
+  const locateChunk = createChunkLocator(text, chunkChars)
+  const cursors = Array.from(tokenFreq.keys(), (tok) => ({ tok, idx: hay.indexOf(tok) }))
+  const selected: RankedChunk[] = []
+  let lastStart: number | null = null
+
+  for (;;) {
+    let nextCursor = -1
+    for (let idx = 0; idx < cursors.length; idx += 1) {
+      const occurrence = cursors[idx]?.idx ?? -1
+      if (occurrence === -1) continue
+      if (nextCursor === -1 || occurrence < (cursors[nextCursor]?.idx ?? Number.MAX_SAFE_INTEGER)) {
+        nextCursor = idx
+      }
+    }
+    if (nextCursor === -1) break
+
+    const cursor = cursors[nextCursor]!
+    const occurrence = cursor.idx
+    const chunk = locateChunk(occurrence)
+    if (chunk.start !== lastStart) {
+      lastStart = chunk.start
+      const slice = hay.slice(chunk.start, chunk.end)
+      const coverage = tokens.reduce((total, token) => total + (slice.includes(token) ? 1 : 0), 0)
+      selected.push({
+        ...chunk,
+        coverage,
+        rarity: 1 / (tokenFreq.get(cursor.tok) || 1),
+      })
+      selected.sort(compareRankedChunks)
+      if (selected.length > limit) selected.pop()
+    }
+    cursor.idx = hay.indexOf(cursor.tok, occurrence + cursor.tok.length)
+  }
+
+  return selected
+}
+
+function createChunkLocator(text: string, maxChars: number): (hitIdx: number) => ChunkSpan {
+  const paragraphBreaks: number[] = []
+  let from = 0
+  for (;;) {
+    const idx = text.indexOf('\n\n', from)
+    if (idx === -1) break
+    paragraphBreaks.push(idx)
+    from = idx + 1
+  }
+
+  const lowerBound = (value: number): number => {
+    let low = 0
+    let high = paragraphBreaks.length
+    while (low < high) {
+      const mid = low + Math.floor((high - low) / 2)
+      if ((paragraphBreaks[mid] ?? 0) < value) low = mid + 1
+      else high = mid
+    }
+    return low
+  }
+
+  return (hitIdx) => {
+    const nextIdx = lowerBound(hitIdx)
+    const previousIdx = lowerBound(hitIdx - 1) - 1
+    let start = previousIdx >= 0 ? (paragraphBreaks[previousIdx] ?? -2) + 2 : 0
+    let end = nextIdx < paragraphBreaks.length ? (paragraphBreaks[nextIdx] ?? text.length) : text.length
+    let truncated = false
+    if (end - start > maxChars) {
+      start = Math.max(0, hitIdx - Math.floor(maxChars / 2))
+      end = Math.min(text.length, hitIdx + Math.ceil(maxChars / 2))
+      truncated = true
+    }
+    return { start, end, truncated }
   }
 }

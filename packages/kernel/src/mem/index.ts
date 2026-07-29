@@ -44,6 +44,8 @@ export type {
   ParsedTaskCmd,
   PhaseEvent,
   ProjectAgg,
+  RelatedSessionMatch,
+  RelatedSessionSearchResult,
   SearchExcerpt,
   SearchHit,
   SearchMatch,
@@ -51,7 +53,13 @@ export type {
 } from './types.js'
 
 // fs 注入面
-export type { MemDirent, MemFs } from './fs.js'
+export type {
+  BoundedTextRead,
+  CheckedDirectoryRead,
+  MemContentReadBudget,
+  MemDirent,
+  MemFs,
+} from './fs.js'
 export { mtimeIso, nodeMemFs } from './fs.js'
 
 // 平台可用性探测（CLI 降级提示据此判断是否要出警告，而非无条件印，见 mem.ts maybeWarnOpencode）
@@ -87,3 +95,12 @@ export {
 } from './sessions.js'
 export { readMemContext } from './context.js'
 export { listMemProjects } from './projects.js'
+export {
+  RELATED_SESSION_SEARCH_BUDGETS,
+  RelatedSessionSearchInputError,
+  searchRelatedSessions,
+} from './relatedSearch.js'
+export type {
+  RelatedSessionSearchInputErrorReason,
+  RelatedSessionSearchOptions,
+} from './relatedSearch.js'

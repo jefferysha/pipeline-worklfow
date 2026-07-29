@@ -11,6 +11,7 @@ import {
   listAll,
   MemSessionNotFoundError,
   resolveFilter,
+  sessionKey,
   WIDE_LIMIT,
 } from './sessions.js'
 
@@ -123,7 +124,7 @@ export function readMemContext(
     const wide = { ...f, cwd: null, limit: WIDE_LIMIT }
     const all = listAll(fs, wide)
     const childIndex = buildChildIndex(all)
-    const kids = childIndex.get(s.id) ?? []
+    const kids = childIndex.get(sessionKey(s.platform, s.id)) ?? []
     mergedChildren = kids.length
     for (const c of kids) turns = turns.concat(extractDialogue(fs, c))
   }

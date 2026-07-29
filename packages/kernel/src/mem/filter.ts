@@ -5,6 +5,7 @@
  * since/until 为 epoch ms（CLI build_filter 从 YYYY-MM-DD 解析）；会话 start/end 是 ISO 字符串。
  */
 import { resolve, sep } from 'node:path'
+import type { MemFs } from './fs.js'
 
 export interface RangeFilter {
   since?: number | null
@@ -63,4 +64,28 @@ export function sameProject(sessionCwd: string | null | undefined, target: strin
   const a = resolve(sessionCwd)
   const b = resolve(target)
   return a === b || a.startsWith(b + sep)
+}
+
+/**
+ * Related Sessions must compare physical paths so a lexical descendant symlink cannot escape the
+ * registered root. Legacy mem callers retain sameProject's lexical compatibility contract.
+ */
+export function sameProjectForMemFs(
+  fs: MemFs,
+  sessionCwd: string | null | undefined,
+  target: string | null | undefined,
+): boolean {
+  if (!fs.enforcePhysicalProjectScope) return sameProject(sessionCwd, target)
+  if (!target) return true
+  if (!sessionCwd || !fs.realPath) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.()
+    return false
+  }
+  const physicalSession = fs.realPath(sessionCwd)
+  const physicalTarget = fs.realPath(target)
+  if (!physicalSession || !physicalTarget) {
+    fs.contentReadBudget?.noteProjectScopeUnavailable?.()
+    return false
+  }
+  return sameProject(physicalSession, physicalTarget)
 }

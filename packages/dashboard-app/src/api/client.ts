@@ -73,6 +73,7 @@ export {
   fetchTraceTimeline,
 } from './auditClient'
 
+export { searchRelatedSessions } from './memoryClient'
 export {
   postVerificationEvidenceCompose,
   VerificationEvidenceApiError,
@@ -131,6 +132,13 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  RelatedSessionMatch,
+  RelatedSessionPlatform,
+  RelatedSessionSearchInput,
+  RelatedSessionSearchResponse,
+} from './memoryTypes'
 
 export type {
   ContextBundleMode,
