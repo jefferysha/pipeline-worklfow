@@ -31,4 +31,4 @@
 
 ## 归档
 
-- [ ] 完成最终 CI/反馈核对、Tenon 归档与 automation memory 更新。
+- [x] 完成最终 CI/反馈核对、Tenon 归档与 automation memory 更新。
