@@ -7,6 +7,10 @@ const readSource = (relativePath: string): string =>
   readFileSync(join(process.cwd(), 'packages/dashboard-app/src', relativePath), 'utf8')
 
 describe('Dashboard 电脑端设计系统契约', () => {
+  it('Tailwind 只扫描 Dashboard src，避免治理文档改变生产资源哈希', () => {
+    expect(css).toMatch(/@import\s+"tailwindcss"\s+source\("\."\);/)
+  })
+
   it('主动作使用 accent 语义，不复用 success green', () => {
     expect(css).toMatch(/--btn-bg:\s*var\(--accent\)/)
     expect(css).toMatch(/--btn-hover:\s*var\(--accent-d\)/)
