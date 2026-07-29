@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WorkflowRules } from '../model/workflowModel'
+import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { buildProjectRows, compareProjectRows, type PhaseCell, type ProjectRow } from './projectsModel'
 
@@ -238,17 +239,13 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
 
   return (
     <section ref={rootRef} data-testid="projects-view" data-page-frame="standard" aria-label={t('projects.title')} className="mx-auto w-full max-w-[1088px] pt-7 pb-5">
-      <header className="mb-8 flex flex-wrap items-start gap-4">
-        <div className="mr-auto">
-          <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">{t('projects.title')}</h1>
-          <p className="mt-2 text-[13px] leading-5 text-text-3" data-testid="projects-summary">
-            {t('projects.count_summary', { n: rows.length, need: needCount })}
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={t('projects.title')}
+        description={<span data-testid="projects-summary">{t('projects.count_summary', { n: rows.length, need: needCount })}</span>}
+      />
 
       {snapshot === null ? (
-        <p className="text-[14px] text-text-3">{t('common.loading')}</p>
+        <p className="text-[14px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
       ) : (
         <div className="flex flex-col gap-7">
           {needRows.length > 0 && (

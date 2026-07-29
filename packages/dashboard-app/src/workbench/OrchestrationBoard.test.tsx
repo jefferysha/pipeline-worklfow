@@ -314,6 +314,7 @@ describe('OrchestrationBoard 运行信号', () => {
     expect(screen.queryByTestId('wb-flow-gloss-ship')).toBeNull()
     const gloss = screen.getByTestId('wb-flow-gloss-review')
     expect(gloss).toHaveAttribute('data-anim', 'wb-gloss')
+    expect(gloss).not.toHaveClass('opacity-0')
   })
 })
 

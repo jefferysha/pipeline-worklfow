@@ -232,7 +232,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
             />
           </label>
           {name !== '' && !validName && (
-            <p className="text-xs text-red-d" data-testid="change-name-error">{t('change_create.name_error')}</p>
+            <p className="text-xs text-red-d" data-testid="change-name-error" role="alert">{t('change_create.name_error')}</p>
           )}
           <label className="block text-xs font-bold text-text-2">
             {t('change_create.intent')}
@@ -258,17 +258,17 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
             </span>
           </div>
 
-          {previewState === 'idle' && <p className="py-8 text-center text-xs text-text-3">{t('change_create.route_idle')}</p>}
-          {previewState === 'loading' && <p className="py-8 text-center text-xs text-text-3">{t('change_create.route_loading')}</p>}
-          {previewState === 'error' && <p className="py-4 text-xs text-red-d">{previewError}</p>}
+          {previewState === 'idle' && <p className="py-8 text-center text-xs text-text-3" role="status" aria-live="polite">{t('change_create.route_idle')}</p>}
+          {previewState === 'loading' && <p className="py-8 text-center text-xs text-text-3" role="status" aria-live="polite">{t('change_create.route_loading')}</p>}
+          {previewState === 'error' && <p className="py-4 text-xs text-red-d" role="alert">{previewError}</p>}
           {preview && previewState === 'ready' && (
             <>
               {preview.suppressed_reason !== null ? (
-                <div className="mb-3 rounded-lg border border-amb-b bg-amb-t px-3 py-2 text-xs text-amb-d" data-testid="route-suppressed">
+                <div className="mb-3 rounded-lg border border-amb-b bg-amb-t px-3 py-2 text-xs text-amb-d" data-testid="route-suppressed" role="status" aria-live="polite">
                   {t('change_create.route_suppressed', { reason: preview.suppressed_reason })}
                 </div>
               ) : preview.winner ? (
-                <div className="mb-3 rounded-lg border border-accent-b bg-accent-t px-3 py-2 text-xs text-accent-d" data-testid="route-winner">
+                <div className="mb-3 rounded-lg border border-accent-b bg-accent-t px-3 py-2 text-xs text-accent-d" data-testid="route-winner" role="status" aria-live="polite">
                   {t('change_create.route_winner', {
                     label: preview.winner.track.label,
                     score: preview.winner.score,
@@ -276,7 +276,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                   })}
                 </div>
               ) : (
-                <div className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-xs text-text-2">{t('change_create.route_no_match')}</div>
+                <div className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-xs text-text-2" role="status" aria-live="polite">{t('change_create.route_no_match')}</div>
               )}
 
               <div className="flex flex-wrap gap-2" role="group" aria-label={t('change_create.track')}>
@@ -322,7 +322,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                       >
                         {workflows.map((workflow) => <option key={workflow} value={workflow}>{workflow}</option>)}
                       </select>
-                      <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step">
+                      <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step" role="status" aria-live="polite">
                         {firstStepState === 'loading' ? t('change_create.step_loading') : t('change_create.first_step', { step: firstStep || '—' })}
                       </span>
                     </label>

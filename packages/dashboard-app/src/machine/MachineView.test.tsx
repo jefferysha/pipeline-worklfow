@@ -36,13 +36,16 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers').textContent).toContain('browser-e2e')
   })
 
-  it('风险队列把后端异常翻译为可理解的中文处置项，并可跳回项目', async () => {
+  it('风险队列把后端异常翻译为可理解的中文处置项，并为窄屏声明单列与全宽动作', async () => {
     const onOpenProject = vi.fn()
     const snapshot = makeSnapshot([makeProject(ROOT, [makeChange('failed-change', 'build', { fields: { automation: 'failed' } })])])
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={onOpenProject} /></I18nProvider>)
     const queue = await screen.findByTestId('machine-risk-queue')
     for (const text of ['failed-change', '自动运行失败', '账本异常', '预算已熔断', '就绪度不足', '未配置技能包']) expect(queue.textContent).toContain(text)
     for (const raw of ['automation failed', 'ledger degraded', 'budget tripped', 'readiness not-ready', 'skill bundle missing']) expect(queue.textContent).not.toContain(raw)
+    const riskRow = within(queue).getByTestId('machine-risk-row-broken-loop')
+    expect(riskRow).toHaveClass('max-[480px]:flex-col')
+    expect(within(riskRow).getByRole('button')).toHaveClass('max-[480px]:w-full')
     fireEvent.click(within(queue).getByTestId('machine-risk-open-broken-loop'))
     expect(onOpenProject).toHaveBeenCalledWith(ROOT)
   })

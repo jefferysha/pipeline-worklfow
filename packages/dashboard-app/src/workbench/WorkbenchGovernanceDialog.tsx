@@ -36,8 +36,8 @@ export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recent
           <div className={SIDE_CARD} data-testid="wb-recent">
             <div className={SIDE_HEAD}><b className={SIDE_HEAD_B}>{t('workbench.recent_title')}</b><span className="ml-auto text-xs font-normal text-text-3">{t('workbench.recent_note')}</span></div>
             <div className={SIDE_BODY}>
-              {recent === null && <p className={NOTE}>{t('common.loading')}</p>}
-              {recent !== null && recent.length === 0 && <p className={NOTE} data-testid="wb-recent-empty">{t('workbench.recent_empty')}</p>}
+              {recent === null && <p className={NOTE} role="status" aria-live="polite">{t('common.loading')}</p>}
+              {recent !== null && recent.length === 0 && <p className={NOTE} data-testid="wb-recent-empty" role="status" aria-live="polite">{t('workbench.recent_empty')}</p>}
               {recent !== null && recent.length > 0 && <ul className="flex list-none flex-col gap-[7px]" data-testid="wb-recent-list">{recent.map((entry, index) => <li key={`${entry.change}-${entry.ts}-${index}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-[1.45]"><span className="flex-none text-[10.5px] text-text-3">{entry.ts.slice(5, 16).replace('T', ' ')}</span><span className="flex-none text-[11px] text-text-2">{entry.change}</span><span className="text-text">{entry.kind === 'transition' ? `${entry.from ?? '?'} → ${entry.to ?? '?'}` : entry.field ? t('workbench.recent_set', { field: entry.field }) : (entry.raw ?? entry.kind)}</span></li>)}</ul>}
               {recent !== null && recentSilent > 0 && <p className={NOTE} data-testid="wb-recent-legacy">{t('workbench.recent_legacy', { n: recentSilent })}</p>}
             </div>

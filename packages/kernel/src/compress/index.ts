@@ -36,6 +36,28 @@ export {
   type ContextBundleV1,
 } from './context-bundle.js'
 export {
+  compileLedgerContextBundleWithPorts,
+  DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES,
+  DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
+  LedgerContextBundleError,
+  type CompiledLedgerContextBundle,
+  type CompileLedgerContextBundleInput,
+  type CompileLedgerContextBundleWithPortsInput,
+  type LedgerContextBundleErrorCode,
+  type LedgerContextBundleInputSummary,
+  type LedgerContextBundleLedgerRepository,
+  type LedgerContextBundlePreview,
+  type LedgerContextBundlePrimitives,
+  type LedgerContextBundleResourceLimits,
+  type LedgerContextBundleSource,
+  type LedgerContextBundleSourceReadLimit,
+  type LedgerContextBundleSourceReader,
+} from './ledger-context-bundle.js'
+export {
+  compileLedgerContextBundle,
+  nodeLedgerContextBundlePrimitives,
+} from './ledger-context-bundle-node-adapter.js'
+export {
   buildHandoff,
   nodeHandoffFs,
   phaseHandoffDocs,

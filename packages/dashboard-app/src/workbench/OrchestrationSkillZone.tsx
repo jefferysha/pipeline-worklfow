@@ -1,4 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import { Diamond, GripVertical, X } from 'lucide-react'
 import type { WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import {
@@ -63,7 +64,7 @@ export function OrchestrationSkillZone({
   return (
                           <div data-testid={`wb-lane-skills-${lane.id}`}>
                             <div className="mx-0.5 mb-2 flex items-center gap-2">
-                              <span className={ZONE_TITLE}>◇ {t('workbench.board_zone_skills')}</span>
+                              <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`}><Diamond className="size-3" aria-hidden="true" />{t('workbench.board_zone_skills')}</span>
                             </div>
                             <div
                               className="flex min-h-2 flex-col gap-2.5"
@@ -166,7 +167,7 @@ export function OrchestrationSkillZone({
                                             aria-hidden="true"
                                             title={t('workbench.board_drag_skill')}
                                           >
-                                            ⠿
+                                            <GripVertical className="size-4" aria-hidden="true" />
                                           </span>
                                         )}
                                         <span className="grid h-[22px] w-[22px] flex-none place-items-center rounded-full border border-purple-b bg-purple-t font-mono text-[12.5px] font-extrabold text-purple-d">
@@ -191,7 +192,7 @@ export function OrchestrationSkillZone({
                                                 onSkillRemove?.(lane.id, skillId)
                                               }}
                                             >
-                                              ×
+                                              <X className="size-3.5" aria-hidden="true" />
                                             </button>
                                           </>
                                         )}
@@ -259,7 +260,7 @@ export function OrchestrationSkillZone({
                                   )
                                 })
                               ) : (
-                                <span className="mx-0.5 text-[13px] text-text-3">{t('workbench.board_skills_empty')}</span>
+                                <span className="mx-0.5 text-[13px] text-text-3" role="status" aria-live="polite">{t('workbench.board_skills_empty')}</span>
                               )}
                             </div>
                             {dupWarn === lane.id && (

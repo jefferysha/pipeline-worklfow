@@ -2,7 +2,7 @@ import type {
   DocumentGovernancePolicy,
   DocumentKind,
 } from '../workflow/document-contract.js'
-import { readValidatedTransitionHead } from './run-revision-store.js'
+import { readValidatedTransitionHead } from './run-revision-head-reader.js'
 
 interface SpecAdrCompatibilityInput {
   readonly policy?: DocumentGovernancePolicy

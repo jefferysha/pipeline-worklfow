@@ -31,6 +31,11 @@ export {
 export { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate } from './loopsClient'
 
 export {
+  ContextBundlePreviewApiError,
+  fetchContextBundlePreview,
+} from './contextBundleClient'
+
+export {
   deleteSecret,
   fetchAfkLog,
   fetchAfkReadiness,
@@ -60,6 +65,11 @@ export {
   fetchTraceRecords,
   fetchTraceSessions,
 } from './auditClient'
+
+export {
+  postVerificationEvidenceCompose,
+  VerificationEvidenceApiError,
+} from './verificationEvidenceClient'
 
 export type {
   ChangeHistoryEntry,
@@ -107,3 +117,25 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  ContextBundleMode,
+  ContextBundlePhase,
+  ContextBundlePreviewBudget,
+  ContextBundlePreviewFailure,
+  ContextBundlePreviewInput,
+  ContextBundlePreviewRequest,
+  ContextBundlePreviewSuccess,
+  ContextBundleReasonCode,
+  ContextBundleTier,
+} from './contextBundleTypes'
+
+export type {
+  VerificationEvidenceComposeInput,
+  VerificationEvidenceComposeResponse,
+  VerificationEvidenceDraftEntry,
+  VerificationEvidenceFieldError,
+  VerificationEvidenceKind,
+  VerificationEvidenceLocale,
+  VerificationEvidenceStatus,
+} from './verificationEvidenceTypes'

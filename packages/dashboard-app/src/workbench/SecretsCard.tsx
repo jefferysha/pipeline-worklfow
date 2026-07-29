@@ -115,7 +115,7 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
         <span className="flex-1" />
         <span className={WB_TW.headSub}>{t('workbench.sc_head_sub')}</span>
       </div>
-      {loadError && <p className={WB_TW.loadError} data-tone="error" data-testid="sc-load-error">{loadError}</p>}
+      {loadError && <p className={WB_TW.loadError} data-tone="error" data-testid="sc-load-error" role="alert">{loadError}</p>}
       {opError && <p className={WB_TW.loadError} data-tone="error" role="alert" data-testid="sc-op-error">{opError}</p>}
       {keys && (
         <div className={WB_TW.sec} data-sec="">

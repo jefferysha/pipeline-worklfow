@@ -224,7 +224,7 @@ export const BADGE_BASE = 'inline-flex items-center gap-1 rounded-full border px
 export const BADGE_LOCK = 'border-border-2 bg-fill text-text-3'
 // 区头右侧小徽章：11.5px（demo .minibadge）——比泳道头徽章再小半档，但仍在契约下限上。
 export const MINI_BASE = 'inline-flex items-center rounded-full border px-2 py-0.5 text-[11.5px] font-extrabold whitespace-nowrap'
-export const MINI_RW = 'border-green-b bg-green-t text-green-d'
+export const MINI_RW = 'border-accent-b bg-accent-t text-accent-d'
 export const MINI_RO = 'border-border-2 bg-fill-2 text-text-3'
 export const ZONE_TITLE = 'text-[13px] font-[750] whitespace-nowrap text-text-2'
 
@@ -242,7 +242,7 @@ export const OUT_X =
   '-mr-[3px] inline-grid h-4 w-4 flex-none cursor-pointer place-items-center rounded-[5px] p-0 text-[13px] leading-none text-text-3 transition-colors hover:bg-red-t hover:text-red-d'
 // 「+ 添加」产出（demo .outs .add 等值搬运）
 export const OUT_ADD =
-  'cursor-pointer rounded-lg border-[1.5px] border-dashed border-border-2 px-2.5 py-1 text-[12.5px] font-bold whitespace-nowrap text-text-3 transition-colors hover:border-green-b hover:text-green-d'
+  'cursor-pointer rounded-lg border-[1.5px] border-dashed border-border-2 px-2.5 py-1 text-[12.5px] font-bold whitespace-nowrap text-text-3 transition-colors hover:border-accent-b hover:text-accent-d'
 // 泳道头的低调删除入口（demo .ecard .rm 等值搬运）
 export const LANE_RM =
   'inline-grid h-[22px] w-[22px] flex-none cursor-pointer place-items-center rounded-md p-0 text-[15px] leading-none text-text-3 transition-colors hover:bg-red-t hover:text-red-d'

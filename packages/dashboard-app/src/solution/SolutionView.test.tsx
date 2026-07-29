@@ -63,6 +63,22 @@ describe('SolutionView 开源产品概览', () => {
     }
   })
 
+  it('720px 临界点的内容网格只使用共享 desktop 变体', () => {
+    renderSolution()
+
+    const evidence = screen.getByTestId('solution-evidence')
+    const modules = screen.getByTestId('solution-modules')
+    const legacyBreakpoint = ['min', '[720px]:'].join('-')
+    expect(evidence).toHaveClass('desktop:grid-cols-5')
+    expect(modules).toHaveClass('desktop:grid-cols-2')
+    expect(evidence.className).not.toContain(legacyBreakpoint)
+    expect(modules.className).not.toContain(legacyBreakpoint)
+
+    const dir = dirname(fileURLToPath(import.meta.url))
+    const css = readFileSync(join(dir, '..', 'index.css'), 'utf8')
+    expect(css).toContain('@custom-variant desktop (@media (min-width: 720.02px));')
+  })
+
   it('覆盖公共模块、安装边界、主机能力分级和可选前置条件', () => {
     renderSolution()
 

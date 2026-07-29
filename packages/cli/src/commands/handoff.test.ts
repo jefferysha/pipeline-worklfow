@@ -3,9 +3,22 @@
  * 覆盖 dispatch / text·json 输出 / 无文档 / 非法名 / 状态缺失 / --phase 覆写，
  * 文档经注入 fake HandoffFs（避免 fs——真 fs 面在 integration）。
  */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES,
+  compileLedgerContextBundle,
+  type CompiledLedgerContextBundle,
+  type CompileLedgerContextBundleInput,
+} from '@tenon/kernel'
 import { makeDeps, mockState } from '../test-support.js'
-import { cmdHandoff, type HandoffFs } from './handoff.js'
+import {
+  cmdHandoff,
+  type HandoffFs,
+  type LedgerContextBundleCompiler,
+} from './handoff.js'
 
 const zhLocale = async () => 'zh-CN' as const
 const enLocale = async () => 'en' as const
@@ -142,5 +155,83 @@ describe('--phase 覆写 —— 压不同相位的产出', () => {
     expect(env.docs).toHaveLength(1)
     expect(env.docs[0].path).toBe('reports/vr.md')
     expect(env.docs[0].decisions).toContain('Conclusion: all three gates pass and the build SHA matches HEAD.')
+  })
+})
+
+describe('--bundle —— 共享 ledger compiler 适配', () => {
+  const compiled: CompiledLedgerContextBundle = {
+    bundle: {
+      schemaVersion: 'context-bundle/v1',
+      change: 'chg',
+      from: 'spec',
+      to: 'build',
+      tier: 'strong',
+      inputs: [],
+      budget: { maxBytes: DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES, usedBytes: 0 },
+      aggregateDigest: `sha256:${'a'.repeat(64)}`,
+    },
+    preview: {
+      change: 'chg',
+      from: 'spec',
+      to: 'build',
+      tier: 'strong',
+      inputs: [],
+      documentCount: 0,
+      budget: { maxBytes: DEFAULT_LEDGER_CONTEXT_BUNDLE_BUDGET_BYTES, usedBytes: 0 },
+    },
+  }
+
+  test('只透传 root/change/from/target/budget/fs，并保持 context-bundle/v1 输出', async () => {
+    const d = makeDeps({ state: mockState({ phase: 'spec' }) })
+    const fs = fakeFs({})
+    const calls: CompileLedgerContextBundleInput[] = []
+    const compiler: LedgerContextBundleCompiler = async (input) => {
+      calls.push(input)
+      return compiled
+    }
+
+    expect(await cmdHandoff(
+      d,
+      'chg',
+      { bundle: true, target: 'build', budgetBytes: 4096, json: true },
+      fs,
+      zhLocale,
+      compiler,
+    )).toBe(0)
+    expect(calls).toEqual([{
+      root: '/repo',
+      change: 'chg',
+      from: 'spec',
+      target: 'build',
+      budgetBytes: 4096,
+      fs,
+    }])
+    expect(JSON.parse(d.outLines[0]!)).toEqual(compiled.bundle)
+    expect(d.errLines).toEqual([])
+  })
+
+  test('CLI 不提供 budget 时由共享服务应用 120000 默认值', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tenon-cli-bundle-empty-'))
+    try {
+      const d = makeDeps({ cwd: root, state: mockState({ phase: 'archive' }) })
+      expect(await cmdHandoff(
+        d,
+        'chg',
+        { bundle: true, target: 'open', json: true },
+      )).toBe(0)
+      expect(JSON.parse(d.outLines[0]!).budget).toEqual({
+        maxBytes: 120_000,
+        usedBytes: 0,
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('legacy non-bundle handoff 不调用共享编译器', async () => {
+    const d = makeDeps({ state: mockState({ phase: 'build' }) })
+    const compiler = vi.fn<typeof compileLedgerContextBundle>()
+    expect(await cmdHandoff(d, 'chg', {}, fakeFs({}), zhLocale, compiler)).toBe(0)
+    expect(compiler).not.toHaveBeenCalled()
   })
 })

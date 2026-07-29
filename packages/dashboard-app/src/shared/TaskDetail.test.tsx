@@ -186,6 +186,13 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
     expect(screen.getByTestId('dtl-todo-verify').textContent).toContain('运行浏览器验收')
     expect(screen.getByTestId('dtl-todo-verify-0').getAttribute('data-completed')).toBe('false')
     expect(screen.queryByTestId('dtl-todo-ship')).toBeNull()
+
+    const compactDoneTasks = screen.getByTestId('dtl-todo-open-compact')
+    expect(compactDoneTasks.tagName).toBe('DETAILS')
+    expect(within(compactDoneTasks).getByText('查看 1 项已完成任务')).toBeInTheDocument()
+    expect(compactDoneTasks).not.toHaveAttribute('open')
+    expect(screen.getByTestId('dtl-todo-open')).toHaveClass('max-[769px]:hidden')
+    expect(screen.getByTestId('dtl-todo-verify')).not.toHaveClass('max-[769px]:hidden')
   })
 })
 

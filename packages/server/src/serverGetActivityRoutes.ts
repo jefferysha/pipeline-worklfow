@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath } from 'node:path'
 import { listAutomationPolicyTemplates, stateStorageExistsSync } from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, readAfkRunLog } from './afk.js'
+import { handleContextBundlePreview } from './contextBundlePreview.js'
 import { buildRunDetail } from './runDetail.js'
 import { buildSnapshot } from './snapshot.js'
 import { readChangeHistory } from './transition.js'
@@ -54,6 +55,9 @@ export async function handleGetActivityRoutes(
     //    下方 secrets/docker/readiness 的 inline 守卫遂归并至此（不再各自重复）。
     if (!isLocalHost(req.headers.host, boundPort)) {
       return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
+    if (path === '/api/context-bundle/preview') {
+      return handleContextBundlePreview(req, res, deps)
     }
     if (path === '/api/snapshot') {
       try {

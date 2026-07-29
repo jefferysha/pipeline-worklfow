@@ -11,8 +11,8 @@ export function stageStateLabel(state: StageState): string {
 export function StageNode({ state }: { state: StageState }): JSX.Element {
   if (state === 'done') {
     return (
-      <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-(--accent) text-white shadow-sm">
-        <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
+      <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-(--accent) text-btn-fg shadow-sm">
+        <Check className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
       </span>
     )
   }

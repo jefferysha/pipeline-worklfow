@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Button } from '@/components/ui/button'
@@ -67,8 +68,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
   const [dep, setDep] = useState('')
 
 
-  // ── v8-E（用户点名）：依赖链动态入场——编号节点逐个弹入 + 紫流动虚线连线生长
-  //    （demo v8 animChain 对位：节点 back.out stagger .07、连线 scaleX 0→1 origin left）。
+  // ── 依赖链动态入场——编号节点短距离上浮，连线由左向右出现。
   //    纯展示升级：依赖链语义/添加面板/default 轨道 tab 零改动。useGSAP+matchMedia 全包，
   //    reduced 直显（不放 from 动画,CSS 侧连接件 ::before 流动虚线由 motion-reduce: 变体停帧）。
   //    hook 必须在 isDefault 分岔 return 之前调用（React hooks 纪律）；default 模式 ref 不挂,
@@ -86,7 +86,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
           if ((ctx.conditions as { reduce?: boolean } | undefined)?.reduce) return
           const nodes = el.querySelectorAll('[data-anim="skc"]')
           if (nodes.length > 0) {
-            gsap.from(nodes, { autoAlpha: 0, scale: 0.88, duration: 0.28, stagger: 0.07, ease: 'back.out(1.8)', clearProps: 'all' })
+            gsap.from(nodes, { autoAlpha: 0, y: 6, duration: 0.22, stagger: 0.05, ease: 'power2.out', clearProps: 'all' })
           }
           const conns = el.querySelectorAll('[data-anim="skconn"]')
           if (conns.length > 0) {
@@ -218,7 +218,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
           aria-label={t('workbench.sk_remove', { id })}
           onClick={() => removeSkill(id)}
         >
-          ×
+          <X className="size-3" aria-hidden="true" />
         </button>
       )}
     </span>
@@ -236,7 +236,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
       <div data-testid="wb-sk-chains" ref={chainsRef} className="divide-y divide-dashed divide-border">
         {step.skills.length === 0 && (
           <div className={CHAIN_CLS}>
-            <span className={EMPTY_CLS}>{t('workbench.sk_empty_custom')}</span>
+            <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_empty_custom')}</span>
           </div>
         )}
         {chains.map((c) => (
@@ -286,10 +286,10 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
             <span className={cn(HINT_CLS, 'ml-1.5')}>{t('workbench.sk_panel_hint')}</span>
           </div>
           <div className="mb-[11px] flex flex-wrap gap-1.5">
-            {regError && <span className={ERR_CLS}>{regError}</span>}
-            {!regError && registry === null && <span className={EMPTY_CLS}>{t('common.loading')}</span>}
+            {regError && <span className={ERR_CLS} role="alert">{regError}</span>}
+            {!regError && registry === null && <span className={EMPTY_CLS} role="status" aria-live="polite">{t('common.loading')}</span>}
             {!regError && registry !== null && candidates.length === 0 && (
-              <span className={EMPTY_CLS}>{t('workbench.sk_panel_empty')}</span>
+              <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_panel_empty')}</span>
             )}
             {/* 候选选中态用 aria-pressed 承载（原 .on 类）、未安装用 data-uninstalled（原修饰符类）。 */}
             {candidates.map((id) => {

@@ -128,6 +128,11 @@ function renderRail(): void {
   )
 }
 
+async function openPromoteDialog(target: 'L2' | 'L3'): Promise<HTMLElement> {
+  fireEvent.click(screen.getByTestId(`wb-gov-lv-${target}`))
+  return screen.findByTestId('wb-gov-promote-confirm')
+}
+
 /** 某端点的全部 POST 调用。 */
 function posts(url: string) {
   return (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
@@ -223,8 +228,7 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
   it('升档 L1→L2：先出确认弹窗，**取消则一发 POST 都不发**，档位不动', async () => {
     renderRail()
     await screen.findByTestId('wb-gov-level')
-    fireEvent.click(screen.getByTestId('wb-gov-lv-L2'))
-    expect(screen.getByTestId('wb-gov-promote-confirm')).toBeInTheDocument()
+    expect(await openPromoteDialog('L2')).toBeInTheDocument()
     // 弹窗只是问话，本身不许先斩后奏
     expect(posts('/api/loops/level')).toHaveLength(0)
 
@@ -238,7 +242,7 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
   it('升档 L1→L2：确认后才 POST /api/loops/level，body = {root,id,target}，reload 后回显 L2', async () => {
     renderRail()
     await screen.findByTestId('wb-gov-level')
-    fireEvent.click(screen.getByTestId('wb-gov-lv-L2'))
+    await openPromoteDialog('L2')
     fireEvent.click(screen.getByTestId('wb-gov-promote-ok'))
     await waitFor(() => expect(screen.getByTestId('wb-gov-lv-L2')).toHaveAttribute('aria-checked', 'true'))
     expect(posts('/api/loops/level')).toHaveLength(1)
@@ -267,8 +271,7 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     await waitFor(() => expect(lastPostBody('/api/loops/level')).toEqual({ root: ROOT, id: 'restyle-loop', target: 'L1' }))
 
     // 现在停在 L1，跨级点 L3 → 仍是升档 → 仍要确认
-    fireEvent.click(screen.getByTestId('wb-gov-lv-L3'))
-    expect(screen.getByTestId('wb-gov-promote-confirm')).toBeInTheDocument()
+    expect(await openPromoteDialog('L3')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('wb-gov-promote-ok'))
     await waitFor(() => expect(lastPostBody('/api/loops/level')).toEqual({ root: ROOT, id: 'restyle-loop', target: 'L3' }))
   })
@@ -286,7 +289,7 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     mockFetch({ levelStatus: 400, levelBody: { errors: ['就绪度未达标：L1-only', '缺 kill_criteria 覆盖'] } })
     renderRail()
     await screen.findByTestId('wb-gov-level')
-    fireEvent.click(screen.getByTestId('wb-gov-lv-L2'))
+    await openPromoteDialog('L2')
     fireEvent.click(screen.getByTestId('wb-gov-promote-ok'))
     const err = await screen.findByTestId('wb-gov-level-error')
     // 不翻译、不改写、不吞并——server 的两条 blocker 一字不落
@@ -308,7 +311,7 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     await screen.findByTestId('wb-gov-level')
     expect(screen.getByTestId('wb-gov-lv-L2')).toBeEnabled()
     expect(screen.getByTestId('wb-gov-lv-L3')).toBeEnabled()
-    fireEvent.click(screen.getByTestId('wb-gov-lv-L3'))
+    await openPromoteDialog('L3')
     fireEvent.click(screen.getByTestId('wb-gov-promote-ok'))
     await waitFor(() => expect(lastPostBody('/api/loops/level')).toEqual({ root: ROOT, id: 'restyle-loop', target: 'L3' }))
   })

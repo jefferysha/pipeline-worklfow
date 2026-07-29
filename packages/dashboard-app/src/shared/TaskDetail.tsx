@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, ChevronRight, Circle, CircleDot, Clock3, X, type LucideIcon } from 'lucide-react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
@@ -14,7 +15,7 @@ import { copyBtnCls } from './SessionResumeRow'
 import { revealStages } from './motion'
 import { Icon } from './Icon'
 import { RunAuditPanel } from './RunAuditPanel'
-import { BoxField, StageChip } from './taskDetailParts'
+import { BoxField, StageChip, StageTaskList } from './taskDetailParts'
 import { TaskHistorySection } from './TaskHistorySection'
 import { TaskConnectionCard } from './TaskConnectionCard'
 import { TaskDetailIntro } from './TaskDetailIntro'
@@ -28,6 +29,7 @@ export interface TaskDetailProps {
   badge?: ReactNode
   actions?: ReactNode
   curStageExtra?: ReactNode
+  documentsExtra?: ReactNode
   collapseTechnical?: boolean
   onClose?: () => void
   onToast?: (msg: string) => void
@@ -68,6 +70,7 @@ export function TaskDetail({
   badge,
   actions,
   curStageExtra,
+  documentsExtra,
   collapseTechnical = false,
   onClose,
   onToast,
@@ -126,21 +129,21 @@ export function TaskDetail({
   const failCause = fieldStr(change, 'automation_cause')
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
-  function verdict(): { text: string; bad: boolean; glyph: string } {
-    if (state === 'failed') return { text: lastError || t('detail.fail_generic'), bad: true, glyph: '×' }
-    if (state === 'running') return { text: t('detail.verdict_running'), bad: false, glyph: '●' }
-    if (state === 'queued') return { text: t('detail.verdict_queued'), bad: false, glyph: '○' }
-    if (state === 'agent') return { text: t('detail.verdict_agent'), bad: false, glyph: '○' }
+  function verdict(): { text: string; bad: boolean; icon: LucideIcon } {
+    if (state === 'failed') return { text: lastError || t('detail.fail_generic'), bad: true, icon: X }
+    if (state === 'running') return { text: t('detail.verdict_running'), bad: false, icon: CircleDot }
+    if (state === 'queued') return { text: t('detail.verdict_queued'), bad: false, icon: Clock3 }
+    if (state === 'agent') return { text: t('detail.verdict_agent'), bad: false, icon: Circle }
     const kind = decisionKind(change)
     if (kind === 'verify' && rules) {
       const failed = gateEvidence(change, rules).filter(
         (c) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(c.key) && c.tone !== 'pass',
       )
       return failed.length === 0
-        ? { text: t('detail.why_gate_allpass'), bad: false, glyph: '✓' }
-        : { text: t('detail.why_gate', { names: failed.map((c) => c.key.replace(/_result$/, '')).join('、') }), bad: false, glyph: '○' }
+        ? { text: t('detail.why_gate_allpass'), bad: false, icon: Check }
+        : { text: t('detail.why_gate', { names: failed.map((c) => c.key.replace(/_result$/, '')).join('、') }), bad: false, icon: Circle }
     }
-    return { text: t(`inbox.awaiting.${kind}`), bad: false, glyph: '○' }
+    return { text: t(`inbox.awaiting.${kind}`), bad: false, icon: Circle }
   }
   function stageLabel(id: string): string {
     return isPhase(id) ? t(`phases.${id}`) : id
@@ -189,7 +192,8 @@ export function TaskDetail({
             )}
             {lastError !== '' && (
               <details className="group mt-[11px]" data-testid="dt8-rawfold">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-[12.5px] font-semibold text-text-2 outline-none before:text-[10px] before:text-text-3 before:transition-transform before:content-['▸'] group-open:before:rotate-90 focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-[12.5px] font-semibold text-text-2 outline-none focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3 flex-none text-text-3 transition-transform group-open:rotate-90 motion-reduce:transition-none" strokeWidth={1.75} aria-hidden="true" />
                   {t('detail.raw_error_summary')}
                 </summary>
                 <pre
@@ -236,6 +240,7 @@ export function TaskDetail({
       )
     }
     const v = verdict()
+    const VerdictIcon = v.icon
     return (
       <>
         <div
@@ -243,9 +248,7 @@ export function TaskDetail({
           data-tone={v.bad ? 'bad' : 'ok'}
           data-testid="dt-verdict"
         >
-          <span className={`flex-none ${v.glyph === '✓' ? 'text-green' : ''}`} aria-hidden="true">
-            {v.glyph}
-          </span>
+          <VerdictIcon className={`size-3.5 flex-none ${v.icon === Check ? 'text-green-d' : ''}`} strokeWidth={1.75} aria-hidden="true" />
           {v.text}
         </div>
         {chips.length > 0 ? (
@@ -302,7 +305,7 @@ export function TaskDetail({
                   key={st.step}
                 >
                   <span className={`${nodeBaseCls} ${nodeToneCls[status]}`} aria-hidden="true">
-                    {status === 'done' ? '✓' : status === 'fail' ? '×' : ''}
+                    {status === 'done' ? <Check className="size-2.5" strokeWidth={1.75} /> : status === 'fail' ? <X className="size-2.5" strokeWidth={1.75} /> : null}
                   </span>
                   <div className={chipRowCls}>
                     <span className={`text-[13px] ${stageNameCls[status]}`}>{stageLabel(st.step)}</span>
@@ -324,22 +327,11 @@ export function TaskDetail({
                     </>
                   )}
                   {todo !== undefined && todo.tasks.length > 0 && (
-                    <ul
-                      className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs"
-                      data-testid={`dtl-todo-${st.step}`}
-                    >
-                      {todo.tasks.map((task, taskIndex) => (
-                        <li
-                          className={`flex gap-1.5 [overflow-wrap:anywhere] ${task.completed ? 'text-text-3 line-through' : 'text-text-2'}`}
-                          data-completed={task.completed ? 'true' : 'false'}
-                          data-testid={`dtl-todo-${st.step}-${taskIndex}`}
-                          key={`${taskIndex}-${task.text}`}
-                        >
-                          <span aria-hidden="true">{task.completed ? '✓' : '○'}</span>
-                          <span>{task.text}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <StageTaskList
+                      stage={st.step}
+                      tasks={todo.tasks}
+                      collapseCompleted={status === 'done' && todo.tasks.every((task) => task.completed)}
+                    />
                   )}
                 </div>
               )
@@ -359,9 +351,19 @@ export function TaskDetail({
           </div>
         )}
       </div>
-      {change.documents?.governed && (
-        <TaskDocumentsSection documents={change.documents} />
-      )}
+      {change.documents?.governed ? (
+        <TaskDocumentsSection
+          documents={change.documents}
+          extra={documentsExtra}
+        />
+      ) : documentsExtra !== undefined ? (
+        <div
+          className="border-b border-border py-[13px] last:border-b-0"
+          data-testid="dt-verification-tools"
+        >
+          {documentsExtra}
+        </div>
+      ) : null}
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
           <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>
