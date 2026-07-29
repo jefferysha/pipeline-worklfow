@@ -41,6 +41,12 @@ export function TaskDocumentsSection({
                     : t('detail.docs_unread')}
               {item.requiredRead && <span className="text-text-3"> · {t('detail.docs_read_required')}</span>}
               {item.paths.length > 0 && <span className="font-mono text-[11px] text-text-2"> · {item.paths.join(', ')}</span>}
+              {item.timeline === undefined && (
+                <span className="text-text-3"> · {t('detail.docs_timeline_unavailable')}</span>
+              )}
+              {item.timeline !== undefined && item.timeline.length > 0 && (
+                <details className="mt-1.5 text-text-2"><summary className="cursor-pointer">{t('detail.docs_timeline')}</summary>{item.timeline.map((entry) => <div key={`${entry.producer}-${entry.recordedAt}`}>{entry.producer} · {entry.recordedAt}{entry.readAt === undefined ? ` · ${t('detail.docs_unread')}` : ` → ${entry.readAt}`}</div>)}</details>
+              )}
             </li>
           ))}
         </ul>
