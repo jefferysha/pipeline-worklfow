@@ -344,8 +344,8 @@ var require_help = __commonJS({
        * @returns {number}
        */
       longestSubcommandTermLength(cmd, helper) {
-        return helper.visibleCommands(cmd).reduce((max, command) => {
-          return Math.max(max, helper.subcommandTerm(command).length);
+        return helper.visibleCommands(cmd).reduce((max, command2) => {
+          return Math.max(max, helper.subcommandTerm(command2).length);
         }, 0);
       }
       /**
@@ -1057,8 +1057,8 @@ var require_command = __commonJS({
        */
       _getCommandAndAncestors() {
         const result = [];
-        for (let command = this; command; command = command.parent) {
-          result.push(command);
+        for (let command2 = this; command2; command2 = command2.parent) {
+          result.push(command2);
         }
         return result;
       }
@@ -1486,21 +1486,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {Command} command
        * @private
        */
-      _registerCommand(command) {
+      _registerCommand(command2) {
         const knownBy = (cmd) => {
           return [cmd.name()].concat(cmd.aliases());
         };
-        const alreadyUsed = knownBy(command).find(
+        const alreadyUsed = knownBy(command2).find(
           (name2) => this._findCommand(name2)
         );
         if (alreadyUsed) {
           const existingCmd = knownBy(this._findCommand(alreadyUsed)).join("|");
-          const newCmd = knownBy(command).join("|");
+          const newCmd = knownBy(command2).join("|");
           throw new Error(
             `cannot add command '${newCmd}' as already have command '${existingCmd}'`
           );
         }
-        this.commands.push(command);
+        this.commands.push(command2);
       }
       /**
        * Add an option.
@@ -2601,12 +2601,12 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let suggestion = "";
         if (flag.startsWith("--") && this._showSuggestionAfterError) {
           let candidateFlags = [];
-          let command = this;
+          let command2 = this;
           do {
-            const moreFlags = command.createHelp().visibleOptions(command).filter((option) => option.long).map((option) => option.long);
+            const moreFlags = command2.createHelp().visibleOptions(command2).filter((option) => option.long).map((option) => option.long);
             candidateFlags = candidateFlags.concat(moreFlags);
-            command = command.parent;
-          } while (command && !command._enablePositionalOptions);
+            command2 = command2.parent;
+          } while (command2 && !command2._enablePositionalOptions);
           suggestion = suggestSimilar(flag, candidateFlags);
         }
         const message2 = `error: unknown option '${flag}'${suggestion}`;
@@ -2636,9 +2636,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let suggestion = "";
         if (this._showSuggestionAfterError) {
           const candidateNames = [];
-          this.createHelp().visibleCommands(this).forEach((command) => {
-            candidateNames.push(command.name());
-            if (command.alias()) candidateNames.push(command.alias());
+          this.createHelp().visibleCommands(this).forEach((command2) => {
+            candidateNames.push(command2.name());
+            if (command2.alias()) candidateNames.push(command2.alias());
           });
           suggestion = suggestSimilar(unknownName, candidateNames);
         }
@@ -2709,11 +2709,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
        */
       alias(alias) {
         if (alias === void 0) return this._aliases[0];
-        let command = this;
+        let command2 = this;
         if (this.commands.length !== 0 && this.commands[this.commands.length - 1]._executableHandler) {
-          command = this.commands[this.commands.length - 1];
+          command2 = this.commands[this.commands.length - 1];
         }
-        if (alias === command._name)
+        if (alias === command2._name)
           throw new Error("Command alias can't be the same as its name");
         const matchingCommand = this.parent?._findCommand(alias);
         if (matchingCommand) {
@@ -2722,7 +2722,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
             `cannot add alias '${alias}' to command '${this.name()}' as already have command '${existingCmd}'`
           );
         }
-        command._aliases.push(alias);
+        command2._aliases.push(alias);
         return this;
       }
       /**
@@ -2845,7 +2845,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           contextOptions = void 0;
         }
         const context = this._getHelpContext(contextOptions);
-        this._getCommandAndAncestors().reverse().forEach((command) => command.emit("beforeAllHelp", context));
+        this._getCommandAndAncestors().reverse().forEach((command2) => command2.emit("beforeAllHelp", context));
         this.emit("beforeHelp", context);
         let helpInformation = this.helpInformation(context);
         if (deprecatedCallback) {
@@ -2860,7 +2860,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         }
         this.emit("afterHelp", context);
         this._getCommandAndAncestors().forEach(
-          (command) => command.emit("afterAllHelp", context)
+          (command2) => command2.emit("afterAllHelp", context)
         );
       }
       /**
@@ -11477,10 +11477,10 @@ function structuredKindForKey(key) {
   }
   return null;
 }
-function commandMatchesDeletedPath(command, deletedPaths) {
-  if (typeof command !== "string")
+function commandMatchesDeletedPath(command2, deletedPaths) {
+  if (typeof command2 !== "string")
     return false;
-  const trimmed = command.trim();
+  const trimmed = command2.trim();
   if (!trimmed)
     return false;
   const tokens = trimmed.split(/\s+/);
@@ -14564,10 +14564,10 @@ ${summary}` }] : [];
           const inp = block?.input;
           if (!inp || typeof inp !== "object")
             continue;
-          const command = inp.command;
-          if (typeof command !== "string")
+          const command2 = inp.command;
+          if (typeof command2 !== "string")
             continue;
-          for (const parsed of parseTaskPyCommandsAll(command)) {
+          for (const parsed of parseTaskPyCommandsAll(command2)) {
             const ev = { action: parsed.action, timestamp: o?.timestamp || "", turnIndex: state.turns.length };
             if (parsed.action === "create")
               ev.slug = parsed.slug;
@@ -15002,14 +15002,14 @@ function collectTaskEvents(entry, turnIndex, events) {
     const args = block.arguments;
     if (!args || typeof args !== "object")
       continue;
-    const command = args.command;
-    if (typeof command !== "string")
+    const command2 = args.command;
+    if (typeof command2 !== "string")
       continue;
-    pushTaskEvents(command, entry?.timestamp, turnIndex, events);
+    pushTaskEvents(command2, entry?.timestamp, turnIndex, events);
   }
 }
-function pushTaskEvents(command, timestamp, turnIndex, events) {
-  for (const parsed of parseTaskPyCommandsAll(command)) {
+function pushTaskEvents(command2, timestamp, turnIndex, events) {
+  for (const parsed of parseTaskPyCommandsAll(command2)) {
     const ev = {
       action: parsed.action,
       timestamp: (typeof timestamp === "string" ? timestamp : "") || "",
@@ -21704,17 +21704,17 @@ function isRejection(x) {
 function fieldStr4(v) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
-async function planDefaultTransition(state, command, flow, clock, effectivePlan) {
-  const edge = eventEdge(command.event);
+async function planDefaultTransition(state, command2, flow, clock, effectivePlan) {
+  const edge = eventEdge(command2.event);
   if (!edge)
-    return { kind: "unknown-event", event: command.event };
+    return { kind: "unknown-event", event: command2.event };
   const current = fieldStr4(state.fields.phase);
   if (current !== edge.from) {
-    return { kind: "event-source-mismatch", event: command.event, current, expected: edge.from, to: edge.to };
+    return { kind: "event-source-mismatch", event: command2.event, current, expected: edge.from, to: edge.to };
   }
-  const event = command.event;
+  const event = command2.event;
   const policy = DEFAULT_EVENT_POLICY[event];
-  const violations = await checkDefaultEventPreconditions(event, state, command.context);
+  const violations = await checkDefaultEventPreconditions(event, state, command2.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
   let result;
@@ -21731,8 +21731,8 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
     const outcome = await applyActions(policy.actions, {
       fields: result.state.fields,
       clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
+      gitHeadSha: command2.context.gitHeadSha,
+      workspaceFingerprint: command2.context.workspaceFingerprint
     });
     nextFields = { ...result.state.fields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -21748,11 +21748,11 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
     warnings
   };
 }
-async function planCustomTransition(state, effectivePlan, command, clock) {
+async function planCustomTransition(state, effectivePlan, command2, clock) {
   const ir = effectivePlan.workflow;
   const workflowName = effectivePlan.id;
   const currentBeforePlan = resolveStep(ir, fieldStr4(state.fields.phase));
-  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command.event === "archived";
+  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command2.event === "archived";
   const planningIr = terminalArchive ? {
     ...ir,
     steps: ir.steps.map((step) => step.id === "archive" ? {
@@ -21765,16 +21765,16 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
       }]
     } : step)
   } : ir;
-  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
+  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command2.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
   const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
-  const plan = await planStepTransition(planningIr, state, command.event, {
-    changeDirAbs: command.changeDir,
-    fileExists: command.context.fileExists,
-    gitHeadSha: command.context.gitHeadSha,
-    workspaceFingerprint: command.context.workspaceFingerprint,
-    specMigrationStatus: command.context.specMigrationStatus
+  const plan = await planStepTransition(planningIr, state, command2.event, {
+    changeDirAbs: command2.changeDir,
+    fileExists: command2.context.fileExists,
+    gitHeadSha: command2.context.gitHeadSha,
+    workspaceFingerprint: command2.context.workspaceFingerprint,
+    specMigrationStatus: command2.context.specMigrationStatus
   }, lifecycle?.guards);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
@@ -21784,7 +21784,7 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
         kind: "event-unsupported",
         workflowName,
         stepId: plan.stepId,
-        event: command.event,
+        event: command2.event,
         available: plan.available
       };
     }
@@ -21802,8 +21802,8 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
       clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
+      gitHeadSha: command2.context.gitHeadSha,
+      workspaceFingerprint: command2.context.workspaceFingerprint
     });
     nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
@@ -21821,8 +21821,8 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
 }
 function createTransitionApplication(deps) {
   return {
-    async execute(command) {
-      return deps.runRepository.transact(command.changeDir, async (tx) => {
+    async execute(command2) {
+      return deps.runRepository.transact(command2.changeDir, async (tx) => {
         const workflowName = tx.run.workflowId;
         let effectivePlan;
         try {
@@ -21832,7 +21832,7 @@ function createTransitionApplication(deps) {
             documentProfile: tx.run.documentProfile,
             documentGovernanceFingerprint: tx.run.documentGovernanceFingerprint,
             workflowPlanFingerprint: tx.run.workflowPlanFingerprint
-          }, command.loadWorkflow, track, tx.run.workflowPlanSnapshot);
+          }, command2.loadWorkflow, track, tx.run.workflowPlanSnapshot);
         } catch (error) {
           if (error instanceof DocumentGovernanceBindingError) {
             return { kind: "document-governance-invalid", workflowName, reason: error.message };
@@ -21843,15 +21843,15 @@ function createTransitionApplication(deps) {
           return { kind: "workflow-not-found", workflowName };
         let prepared;
         if (effectivePlan.capabilities.execution.model === "phase-manifest") {
-          prepared = await planDefaultTransition(tx.state, command, deps.flow, deps.clock, effectivePlan);
+          prepared = await planDefaultTransition(tx.state, command2, deps.flow, deps.clock, effectivePlan);
         } else {
-          prepared = await planCustomTransition(tx.state, effectivePlan, command, deps.clock);
+          prepared = await planCustomTransition(tx.state, effectivePlan, command2, deps.clock);
         }
         if (isRejection(prepared))
           return prepared;
         if (deps.missingStepSkills !== void 0) {
           const missing3 = await deps.missingStepSkills({
-            changeDir: command.changeDir,
+            changeDir: command2.changeDir,
             stepId: prepared.from,
             capability: effectivePlan.capabilities.skills
           });
@@ -21866,7 +21866,7 @@ function createTransitionApplication(deps) {
         }
         const policy = tx.run.automationPolicy;
         if (policy !== void 0) {
-          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command, target: prepared.to });
+          const facts = deps.resolveConstraintContext === void 0 ? { active: false, humanGateSatisfied: false } : await deps.resolveConstraintContext({ policy, command: command2, target: prepared.to });
           const decision = evaluateConstraintPolicy(policy.constraints, {
             operation: "transition",
             active: facts.active,
@@ -21894,19 +21894,19 @@ function createTransitionApplication(deps) {
                 blockers: [`legacy document contract \u4F7F\u7528\u4E86\u975E\u6CD5 phase '${prepared.from}'`]
               };
             }
-            evidence = await deps.documentEvidence(command.root, command.changeDir, prepared.from);
+            evidence = await deps.documentEvidence(command2.root, command2.changeDir, prepared.from);
           } else {
-            evidence = await evaluateDocumentEvidence(command.root, command.changeDir, prepared.from, {}, prepared.documentPolicy);
+            evidence = await evaluateDocumentEvidence(command2.root, command2.changeDir, prepared.from, {}, prepared.documentPolicy);
           }
           if (!evidence.pass) {
             return { kind: "document-evidence-failed", phase: prepared.from, blockers: evidence.blockers };
           }
         }
-        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
-          return { kind: "review-approval-required", phase: prepared.from, event: command.event };
+        if (prepared.requiresReviewApproval && command2.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command2.event)) {
+          return { kind: "review-approval-required", phase: prepared.from, event: command2.event };
         }
         const { record: record2, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
-          event: command.event,
+          event: command2.event,
           from: prepared.from,
           to: prepared.to
         });
@@ -21919,14 +21919,14 @@ function createTransitionApplication(deps) {
           });
         }
         if (prepared.governedDocumentContract) {
-          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: prepared.to });
+          const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command2.changeDir, name: command2.changeName, to: prepared.to });
           if (!breadcrumbTail.ok) {
             warnings.push({ kind: "projection-write-failed", projection: "breadcrumb", cause: breadcrumbTail.error });
           }
         }
         if (deps.history) {
           try {
-            await deps.history.append(command.changeDir, transitionRecordToHistoryEntry(record2));
+            await deps.history.append(command2.changeDir, transitionRecordToHistoryEntry(record2));
           } catch (e) {
             warnings.push({ kind: "projection-write-failed", projection: "history", cause: e });
           }
@@ -27118,8 +27118,8 @@ var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA25
 var buildAfkRunCommand = (name2, runner, expectation = {}) => {
   const selected = assertLoopRunner(runner ?? "codex");
   const cliGuard = expectation.cliDistSha256 === void 0 ? "" : `; ${checksumGuard(IMAGE_CLI_DIST_PATH, expectation.cliDistSha256, "pipeline_cli_dist_sha256", "Tenon CLI dist")}`;
-  const command = selected === "codex" ? `TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run ${name2}` : `TENON_AFK=1 tenon-afk-run ${name2}`;
-  return `${AFK_RUN_DRIFT_GUARD}${cliGuard}; ${command}`;
+  const command2 = selected === "codex" ? `TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run ${name2}` : `TENON_AFK=1 tenon-afk-run ${name2}`;
+  return `${AFK_RUN_DRIFT_GUARD}${cliGuard}; ${command2}`;
 };
 
 // packages/automation/dist/lifecycle/mergeback.js
@@ -28322,9 +28322,9 @@ var buildContainerRunArgs = (opts) => {
     // image 末位（buildContainerRunArgs 契约；保活命令由 startContainer 追加）
   ];
 };
-var buildExecArgs = (name2, command, opts) => {
+var buildExecArgs = (name2, command2, opts) => {
   const cwdFlags = opts?.cwd ? ["-w", opts.cwd] : [];
-  return ["exec", ...cwdFlags, name2, "sh", "-c", command];
+  return ["exec", ...cwdFlags, name2, "sh", "-c", command2];
 };
 var startContainer = async (exec, opts) => {
   const args = [...buildContainerRunArgs(opts), ...KEEPALIVE_CMD];
@@ -28334,7 +28334,7 @@ var startContainer = async (exec, opts) => {
   }
   return opts.name;
 };
-var execInContainer = (exec, name2, command, opts) => exec("docker", buildExecArgs(name2, command, { cwd: opts?.cwd }), { onLine: opts?.onLine });
+var execInContainer = (exec, name2, command2, opts) => exec("docker", buildExecArgs(name2, command2, { cwd: opts?.cwd }), { onLine: opts?.onLine });
 var requireDockerSuccess = (operation, result) => {
   if (result.exitCode !== 0) {
     throw new Error(`${operation} failed (exit ${result.exitCode}): ${(result.stderr || result.stdout).slice(0, 300)}`);
@@ -34052,8 +34052,8 @@ function commandFromObjectLiteral(source) {
     const parsed = JSON.parse(source);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
     const record2 = parsed;
-    const command = record2.cmd ?? record2.command;
-    return typeof command === "string" ? command : void 0;
+    const command2 = record2.cmd ?? record2.command;
+    return typeof command2 === "string" ? command2 : void 0;
   } catch {
     return commandFromSafeObjectLiteral(source);
   }
@@ -34098,8 +34098,8 @@ function transcriptExecCommands(input) {
       cursor = markerAt + marker.length;
       continue;
     }
-    const command = commandFromObjectLiteral(input.slice(objectStart, objectEnd));
-    if (command) commands.push(command);
+    const command2 = commandFromObjectLiteral(input.slice(objectStart, objectEnd));
+    if (command2) commands.push(command2);
     cursor = objectEnd;
   }
   return commands;
@@ -34238,8 +34238,8 @@ function functionExecInvocation(payload) {
   try {
     const args = JSON.parse(argumentsText);
     if (!isRecord10(args)) return void 0;
-    const command = asString(args.cmd) ?? asString(args.command);
-    return command === void 0 ? void 0 : { command, workdir: asString(args.workdir) };
+    const command2 = asString(args.cmd) ?? asString(args.command);
+    return command2 === void 0 ? void 0 : { command: command2, workdir: asString(args.workdir) };
   } catch {
     return void 0;
   }
@@ -34307,8 +34307,8 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         const callId = asString(payload.call_id);
         const name2 = asString(payload.name);
         const status = asString(payload.status);
-        const command = asString(payload.input);
-        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && command !== void 0 && transcriptInputReadsTrustedSkill(command, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt);
+        const command2 = asString(payload.input);
+        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && command2 !== void 0 && transcriptInputReadsTrustedSkill(command2, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt);
         continue;
       }
     }
@@ -34336,22 +34336,22 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function unwrapReadCommand(segment) {
-  const command = segment.trim();
-  if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(command)) return command;
+  const command2 = segment.trim();
+  if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(command2)) return command2;
   for (const prefix of ['/bin/zsh -lc "', '/bin/zsh -c "', 'zsh -lc "', 'zsh -c "']) {
-    if (!command.startsWith(prefix) || !command.endsWith('"')) continue;
-    return command.slice(prefix.length, -1);
+    if (!command2.startsWith(prefix) || !command2.endsWith('"')) continue;
+    return command2.slice(prefix.length, -1);
   }
   return void 0;
 }
-function finalReadPath(command) {
-  const quoted = /(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/.exec(command);
+function finalReadPath(command2) {
+  const quoted = /(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/.exec(command2);
   return quoted?.[1] ?? quoted?.[2] ?? quoted?.[3];
 }
-function commandReadsTrustedSkill(command, skillPath) {
-  if (command.includes("||")) return false;
+function commandReadsTrustedSkill(command2, skillPath) {
+  if (command2.includes("||")) return false;
   const trustedPath = new RegExp(`^${escapeRegex(skillPath)}$`);
-  const unwrapped = unwrapReadCommand(command) ?? command;
+  const unwrapped = unwrapReadCommand(command2) ?? command2;
   const hasAnd = unwrapped.includes("&&");
   const hasSequence = /;|\r?\n/.test(unwrapped);
   if (hasAnd && hasSequence) return false;
@@ -37891,10 +37891,10 @@ function isSupervisorCmdline(cmd, channel, worker) {
 function nodeProcessFace() {
   return {
     selfPid: process.pid,
-    spawn: (command, args, opts) => nodeSpawnWorker(command, args, opts),
-    spawnDetached: (command, args, opts) => {
+    spawn: (command2, args, opts) => nodeSpawnWorker(command2, args, opts),
+    spawnDetached: (command2, args, opts) => {
       try {
-        const child = spawn4(command, args, {
+        const child = spawn4(command2, args, {
           cwd: opts?.cwd,
           env: mergeEnv(opts?.env),
           detached: true,
@@ -37958,13 +37958,13 @@ function mergeEnv(extra) {
   }
   return out;
 }
-function nodeSpawnWorker(command, args, opts) {
+function nodeSpawnWorker(command2, args, opts) {
   const spawnOpts = {
     cwd: opts?.cwd,
     env: mergeEnv(opts?.env),
     stdio: ["pipe", "pipe", "pipe"]
   };
-  const child = spawn4(command, args, spawnOpts);
+  const child = spawn4(command2, args, spawnOpts);
   let exitedFlag = false;
   child.on("exit", () => {
     exitedFlag = true;
@@ -42906,7 +42906,7 @@ function emitLaunchSummary(deps, clients, json) {
 async function cmdTap(deps, sub, args) {
   switch (sub) {
     case "start": {
-      const command = deps.passthroughArgv ?? [];
+      const command2 = deps.passthroughArgv ?? [];
       const { clients, caDir, json, forward } = parseStartArgs(args);
       if (clients.length === 0) {
         deps.io.err("ERROR: tap start \u9700\u81F3\u5C11\u4E00\u4E2A client\uFF08\u5982 tenon tap start claude\uFF09");
@@ -42925,9 +42925,9 @@ async function cmdTap(deps, sub, args) {
         deps.io.err(`ERROR: ${errMsg(e)}`);
         return 1;
       }
-      if (command.length > 0) {
+      if (command2.length > 0) {
         emitLaunchSummary(deps, result.clients, json);
-        const executable = command[0];
+        const executable = command2[0];
         if (executable === void 0) {
           await result.daemon.stop();
           return 1;
@@ -42935,7 +42935,7 @@ async function cmdTap(deps, sub, args) {
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
         const code = await new Promise((resolve36) => {
-          const child = spawn5(executable, command.slice(1), {
+          const child = spawn5(executable, command2.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
@@ -44508,7 +44508,7 @@ function launch(serverBundle, env) {
   });
 }
 function openBrowser(url) {
-  const command = process.platform === "darwin" ? { file: "open", args: [url] } : process.platform === "win32" ? { file: "cmd.exe", args: ["/c", "start", "", url] } : { file: "xdg-open", args: [url] };
+  const command2 = process.platform === "darwin" ? { file: "open", args: [url] } : process.platform === "win32" ? { file: "cmd.exe", args: ["/c", "start", "", url] } : { file: "xdg-open", args: [url] };
   return new Promise((resolveOpened) => {
     let settled = false;
     const finish = (opened) => {
@@ -44516,7 +44516,7 @@ function openBrowser(url) {
       settled = true;
       resolveOpened(opened);
     };
-    const child = spawn7(command.file, command.args, { detached: true, stdio: "ignore" });
+    const child = spawn7(command2.file, command2.args, { detached: true, stdio: "ignore" });
     child.once("error", () => finish(false));
     child.once("spawn", () => {
       child.unref();
@@ -45139,8 +45139,8 @@ function hookCommands(value, output) {
     return;
   }
   if (!isRecord13(value)) return;
-  const command = value.command;
-  if (typeof command === "string") output.push(command);
+  const command2 = value.command;
+  if (typeof command2 === "string") output.push(command2);
   for (const item2 of Object.values(value)) hookCommands(item2, output);
 }
 async function verifyHookAbi(payloadRoot) {
@@ -45154,12 +45154,12 @@ async function verifyHookAbi(payloadRoot) {
   const commands = [];
   hookCommands(parsed, commands);
   if (commands.length === 0) throw new RuntimeFailure("candidate-invalid", "hooks/hooks.json \u672A\u58F0\u660E\u547D\u4EE4 hook");
-  for (const command of commands) {
-    if (command.includes("${PLUGIN_ROOT") || command.includes("${CLAUDE_PLUGIN_ROOT")) {
+  for (const command2 of commands) {
+    if (command2.includes("${PLUGIN_ROOT") || command2.includes("${CLAUDE_PLUGIN_ROOT")) {
       throw new RuntimeFailure("candidate-invalid", "host hook \u4E0D\u5F97\u76F4\u63A5\u6267\u884C\u53EF\u53D8 PLUGIN_ROOT payload");
     }
-    if (!command.includes("tenon-hook")) {
-      throw new RuntimeFailure("candidate-invalid", `host hook \u672A\u8C03\u7528\u7A33\u5B9A tenon-hook ABI: ${command}`);
+    if (!command2.includes("tenon-hook")) {
+      throw new RuntimeFailure("candidate-invalid", `host hook \u672A\u8C03\u7528\u7A33\u5B9A tenon-hook ABI: ${command2}`);
     }
   }
 }
@@ -45994,45 +45994,6 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
   return 1;
 }
 
-// packages/cli/src/commands/managed-dashboard-identity.ts
-function sameManagedDashboardIdentity(left, right) {
-  return left !== void 0 && right !== void 0 && left.version === right.version && left.port === right.port && left.pid === right.pid && left.releaseId === right.releaseId && left.stateScopeId === right.stateScopeId && left.transactionId === right.transactionId;
-}
-
-// packages/cli/src/commands/released-dashboard-starter.ts
-var DashboardInspectionUnverifiableError = class extends Error {
-  constructor(port) {
-    super(`Dashboard port ${port} \u5B58\u5728 listener\uFF0C\u4F46 managed health identity \u4E0D\u53EF\u9A8C\u8BC1`);
-    this.name = "DashboardInspectionUnverifiableError";
-  }
-};
-function createReleasedDashboardStarter(runtime) {
-  return {
-    inspect: async (_deps, opts) => {
-      const port = opts.port ?? DEFAULT_DASHBOARD_PORT;
-      const stateScopeId = runtime.resolveStateScopeId();
-      const identity = await runtime.probeHealthyServer(port, void 0, stateScopeId, "*");
-      if (identity !== null && identity.releaseId !== "unmanaged") {
-        return identity;
-      }
-      if (!await dashboardPortOpen(port)) return null;
-      throw new DashboardInspectionUnverifiableError(port);
-    },
-    adopt: async (deps, identity) => {
-      const current = await runtime.probeHealthyServer(
-        identity.port,
-        identity.releaseId,
-        identity.stateScopeId,
-        identity.transactionId
-      );
-      if (current === null || !sameManagedDashboardIdentity(current, identity)) return null;
-      return releasedDashboardSession(deps, current, runtime.stopOwnedDashboard);
-    },
-    start: (deps, payloadRoot, opts) => startReleasedDashboard(deps, payloadRoot, opts, runtime)
-  };
-}
-var REAL_RELEASED_DASHBOARD_STARTER = createReleasedDashboardStarter(REAL_DASHBOARD_RUNTIME);
-
 // packages/cli/src/commands/plugin-host.ts
 import { isAbsolute as isAbsolute22, normalize as normalize2 } from "node:path";
 var TENON_HOSTS = [
@@ -46137,6 +46098,196 @@ function nativeInstallPlan(host) {
     { cmd: "claude", args: ["plugin", "list", "--json"] }
   ];
 }
+function nativeUpdatePlan(host) {
+  if (host === "codex") {
+    return [
+      { cmd: "codex", args: ["plugin", "marketplace", "upgrade", TENON_MARKETPLACE_NAME, "--json"] },
+      { cmd: "codex", args: ["plugin", "add", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--json"] },
+      { cmd: "codex", args: ["plugin", "list", "--json"] }
+    ];
+  }
+  return [
+    { cmd: "claude", args: ["plugin", "marketplace", "update", TENON_MARKETPLACE_NAME] },
+    { cmd: "claude", args: ["plugin", "update", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
+    { cmd: "claude", args: ["plugin", "list", "--json"] }
+  ];
+}
+
+// packages/cli/src/commands/host-target-plan.ts
+var HOST_TARGET_PLAN_SCHEMA_VERSION = "host-target-plan/v1";
+var PRODUCT_STEPS = [
+  { id: "managed-runtime", label: "host-plan.step.managed-runtime", command: null },
+  { id: "bundled-skills", label: "host-plan.step.bundled-skills", command: null },
+  { id: "runtime-readiness", label: "host-plan.step.runtime-readiness", command: null }
+];
+var CODEX_AUTH_STATUS_STEP = {
+  id: "codex-auth-status",
+  label: "host-plan.step.codex-auth-status",
+  command: {
+    executable: "codex",
+    args: ["login", "status"],
+    display: "codex login status"
+  }
+};
+var NATIVE_STEP_IDS = {
+  setup: ["marketplace-register", "plugin-install", "plugin-inventory"],
+  update: ["marketplace-refresh", "plugin-update", "plugin-inventory"]
+};
+function command(executable, args) {
+  return {
+    executable,
+    args: [...args],
+    display: [executable, ...args].join(" ")
+  };
+}
+function targetFor2(host) {
+  if (isNativePipelineHost(host)) {
+    return {
+      id: host,
+      kind: "native",
+      cli_flag: hostFlag(host),
+      target_scope: "user",
+      supported_operations: ["setup", "update"],
+      capabilities: [
+        "native-marketplace",
+        "managed-runtime",
+        "bundled-skills",
+        "automatic-update"
+      ]
+    };
+  }
+  return {
+    id: host,
+    kind: "adapter",
+    cli_flag: hostFlag(host),
+    target_scope: "project",
+    supported_operations: ["setup", "update"],
+    capabilities: ["project-adapter", "managed-runtime", "bundled-skills"]
+  };
+}
+function createHostTargetCatalog() {
+  return {
+    schema_version: HOST_TARGET_PLAN_SCHEMA_VERSION,
+    targets: TENON_HOSTS.map(targetFor2)
+  };
+}
+function nativeSteps(host, operation, plan) {
+  const ids = NATIVE_STEP_IDS[operation];
+  return [
+    ...plan.map((item2, index) => {
+      const id = ids[index] ?? `host-command-${index + 1}`;
+      return {
+        id,
+        label: `host-plan.step.${id}`,
+        command: command(item2.cmd, item2.args)
+      };
+    }),
+    PRODUCT_STEPS[0],
+    ...host === "codex" ? [CODEX_AUTH_STATUS_STEP] : [],
+    ...operation === "setup" ? PRODUCT_STEPS.slice(1) : []
+  ];
+}
+function adapterSteps(operation, manualCommand) {
+  const deploymentSteps = [
+    { id: "package-assets", label: "host-plan.step.package-assets", command: null },
+    PRODUCT_STEPS[0],
+    { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand }
+  ];
+  return operation === "setup" ? [...deploymentSteps, ...PRODUCT_STEPS.slice(1)] : deploymentSteps;
+}
+function createHostTargetPlan(host, operation) {
+  const target = targetFor2(host);
+  const args = isNativePipelineHost(host) ? [operation, hostFlag(host)] : [operation, hostFlag(host), "--target", "."];
+  const manualCommand = command("tenon", args);
+  const steps = isNativePipelineHost(host) ? nativeSteps(
+    host,
+    operation,
+    operation === "setup" ? nativeInstallPlan(host) : nativeUpdatePlan(host)
+  ) : adapterSteps(operation, manualCommand);
+  return {
+    schema_version: HOST_TARGET_PLAN_SCHEMA_VERSION,
+    side_effects: "none",
+    host: target,
+    operation,
+    command: manualCommand,
+    steps,
+    notices: [
+      "host-plan.notice.read-only-generation",
+      "host-plan.notice.manual-command-has-effects",
+      ...host === "codex" ? ["host-plan.notice.codex-auth-guidance"] : [],
+      ...isNativePipelineHost(host) ? [] : ["host-plan.notice.current-project-target"]
+    ]
+  };
+}
+function isPipelineHost(value) {
+  return TENON_HOSTS.includes(value);
+}
+function isHostTargetOperation(value) {
+  return value === "setup" || value === "update";
+}
+function cmdHostTargetPlan(deps, opts) {
+  if (opts.json !== true) {
+    deps.io.err("ERROR: host-target-plan \u662F\u673A\u5668\u53EF\u8BFB\u53EA\u8BFB\u5951\u7EA6\uFF0C\u5FC5\u987B\u6307\u5B9A --json\u3002");
+    return 1;
+  }
+  if (opts.host === void 0 && opts.operation === void 0) {
+    deps.io.out(JSON.stringify(createHostTargetCatalog()));
+    return 0;
+  }
+  if (opts.host === void 0 || opts.operation === void 0) {
+    deps.io.err("ERROR: \u5355\u76EE\u6807\u8BA1\u5212\u5FC5\u987B\u540C\u65F6\u6307\u5B9A --host \u4E0E --operation\u3002");
+    return 1;
+  }
+  if (!isPipelineHost(opts.host)) {
+    deps.io.err(`ERROR: \u672A\u77E5\u5BBF\u4E3B\uFF1B\u4EC5\u652F\u6301 ${TENON_HOSTS.join(", ")}\u3002`);
+    return 1;
+  }
+  if (!isHostTargetOperation(opts.operation)) {
+    deps.io.err("ERROR: \u672A\u77E5\u64CD\u4F5C\uFF1B\u4EC5\u652F\u6301 setup, update\u3002");
+    return 1;
+  }
+  deps.io.out(JSON.stringify(createHostTargetPlan(opts.host, opts.operation)));
+  return 0;
+}
+
+// packages/cli/src/commands/managed-dashboard-identity.ts
+function sameManagedDashboardIdentity(left, right) {
+  return left !== void 0 && right !== void 0 && left.version === right.version && left.port === right.port && left.pid === right.pid && left.releaseId === right.releaseId && left.stateScopeId === right.stateScopeId && left.transactionId === right.transactionId;
+}
+
+// packages/cli/src/commands/released-dashboard-starter.ts
+var DashboardInspectionUnverifiableError = class extends Error {
+  constructor(port) {
+    super(`Dashboard port ${port} \u5B58\u5728 listener\uFF0C\u4F46 managed health identity \u4E0D\u53EF\u9A8C\u8BC1`);
+    this.name = "DashboardInspectionUnverifiableError";
+  }
+};
+function createReleasedDashboardStarter(runtime) {
+  return {
+    inspect: async (_deps, opts) => {
+      const port = opts.port ?? DEFAULT_DASHBOARD_PORT;
+      const stateScopeId = runtime.resolveStateScopeId();
+      const identity = await runtime.probeHealthyServer(port, void 0, stateScopeId, "*");
+      if (identity !== null && identity.releaseId !== "unmanaged") {
+        return identity;
+      }
+      if (!await dashboardPortOpen(port)) return null;
+      throw new DashboardInspectionUnverifiableError(port);
+    },
+    adopt: async (deps, identity) => {
+      const current = await runtime.probeHealthyServer(
+        identity.port,
+        identity.releaseId,
+        identity.stateScopeId,
+        identity.transactionId
+      );
+      if (current === null || !sameManagedDashboardIdentity(current, identity)) return null;
+      return releasedDashboardSession(deps, current, runtime.stopOwnedDashboard);
+    },
+    start: (deps, payloadRoot, opts) => startReleasedDashboard(deps, payloadRoot, opts, runtime)
+  };
+}
+var REAL_RELEASED_DASHBOARD_STARTER = createReleasedDashboardStarter(REAL_DASHBOARD_RUNTIME);
 
 // packages/cli/src/commands/setupEnvironment.ts
 import { dirname as dirname18, join as join75, resolve as resolve31 } from "node:path";
@@ -46163,24 +46314,24 @@ function nativeHostCommandBinding(executable, platform = process.platform, runti
     executable,
     invocation: (args) => {
       if (args.some((arg) => arg === "" || WINDOWS_BATCH_ARG_UNSAFE.test(arg))) return void 0;
-      const command = [`"${executable}"`, ...args].join(" ");
+      const command2 = [`"${executable}"`, ...args].join(" ");
       return {
         file: commandInterpreter,
-        args: ["/d", "/s", "/c", `"${command}"`],
+        args: ["/d", "/s", "/c", `"${command2}"`],
         cwd
       };
     }
   };
 }
 function bindNativeHostCommand(env, host, binding) {
-  const invocation = (command, args) => command === host ? binding.invocation(args) : { file: command, args: [...args] };
+  const invocation = (command2, args) => command2 === host ? binding.invocation(args) : { file: command2, args: [...args] };
   const reconcile = env.managedHostReconciliation;
   return {
     ...env,
     resolveHostCommand: (candidate) => candidate === host ? binding : env.resolveHostCommand(candidate),
     codexAuthStatus: host === "codex" ? () => env.codexAuthStatus(binding.executable) : env.codexAuthStatus,
-    runCommand: (command, args, options) => {
-      const plan = invocation(command, args);
+    runCommand: (command2, args, options) => {
+      const plan = invocation(command2, args);
       if (plan === void 0) {
         return { code: 1, stdout: "", stderr: "\u5BBF\u4E3B\u547D\u4EE4\u53C2\u6570\u65E0\u6CD5\u5B89\u5168\u8868\u793A\uFF1B\u672A\u6267\u884C\u3002" };
       }
@@ -46190,8 +46341,8 @@ function bindNativeHostCommand(env, host, binding) {
       });
     },
     ...reconcile === void 0 ? {} : {
-      managedHostReconciliation: (candidateHost, stepId, command) => {
-        const plan = invocation(command.cmd, command.args);
+      managedHostReconciliation: (candidateHost, stepId, command2) => {
+        const plan = invocation(command2.cmd, command2.args);
         if (plan === void 0) throw new Error("\u5BBF\u4E3B\u547D\u4EE4\u53C2\u6570\u65E0\u6CD5\u5B89\u5168\u8868\u793A\uFF1B\u672A\u6267\u884C\u3002");
         return reconcile(candidateHost, stepId, { cmd: plan.file, args: plan.args });
       }
@@ -47516,21 +47667,21 @@ function decodeResult(raw, stepId) {
     stderr: record2.stderr
   };
 }
-async function runManagedHostCommand(transaction, stepId, env, command) {
+async function runManagedHostCommand(transaction, stepId, env, command2) {
   if (stepId.startsWith("inventory-")) {
-    return env.runCommand(command.cmd, [...command.args]);
+    return env.runCommand(command2.cmd, [...command2.args]);
   }
-  if (command.cmd !== "codex" && command.cmd !== "claude") {
+  if (command2.cmd !== "codex" && command2.cmd !== "claude") {
     throw new ManagedRuntimeIndeterminateError(`host step '${stepId}' \u7F3A\u5C11\u53EF\u89C2\u5BDF\u7684\u539F\u751F\u5BBF\u4E3B`);
   }
-  const host = command.cmd;
-  const injected = env.managedHostReconciliation?.(host, stepId, command);
+  const host = command2.cmd;
+  const injected = env.managedHostReconciliation?.(host, stepId, command2);
   const desired = injected === void 0 ? desiredNativeHostPostcondition(env, host, stepId) : { serialized: injected.desired, isDesired: injected.isDesired };
   const raw = await transaction.runStep(stepId, {
     desired: desired.serialized,
     observe: injected?.observe ?? (() => observeNativeHost(env, host)),
     isDesired: desired.isDesired,
-    execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args]))
+    execute: () => JSON.stringify(env.runCommand(command2.cmd, [...command2.args]))
   });
   if (raw === "") return { code: 0, stdout: "", stderr: "" };
   const diagnostic = decodeResult(raw, stepId);
@@ -47949,14 +48100,14 @@ async function finalizePendingHostPluginConflictWithinTransaction(deps, env, ins
 
 // packages/cli/src/commands/setupHost.ts
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
-  const command = [join81(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
-  if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command.join(" ")}`);
+  const command2 = [join81(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
+  if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command2.join(" ")}`);
   if (dryRun) return 0;
   if (!env.pathExists(join81(root, "runtime", "tenon-bootstrap.mjs"))) {
     if (!silent) deps.io.err("ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A\u7F3A\u5C11 runtime/tenon-bootstrap.mjs\uFF08\u8BE5 marketplace release \u4E0D\u662F\u5B8C\u6574\u53EF\u5B89\u88C5\u5305\uFF09");
     return 1;
   }
-  const result = env.runCommand("bash", command);
+  const result = env.runCommand("bash", command2);
   if (result.code === 0) {
     if (!silent) deps.io.out("[setup] \u63D2\u4EF6\u8D44\u4EA7\u5B8C\u6574\uFF1Ahooks\u3001manifests\u3001runtime \u4E0E\u5185\u7F6E skills \u5DF2\u901A\u8FC7\u6821\u9A8C\u3002");
     return 0;
@@ -48680,20 +48831,6 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 
 // packages/cli/src/commands/update.ts
 import { isAbsolute as isAbsolute26, join as join84 } from "node:path";
-function nativeUpdatePlan(host) {
-  if (host === "codex") {
-    return [
-      { cmd: "codex", args: ["plugin", "marketplace", "upgrade", TENON_MARKETPLACE_NAME, "--json"] },
-      { cmd: "codex", args: ["plugin", "add", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--json"] },
-      { cmd: "codex", args: ["plugin", "list", "--json"] }
-    ];
-  }
-  return [
-    { cmd: "claude", args: ["plugin", "marketplace", "update", TENON_MARKETPLACE_NAME] },
-    { cmd: "claude", args: ["plugin", "update", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
-    { cmd: "claude", args: ["plugin", "list", "--json"] }
-  ];
-}
 function renderPlan2(deps, host, plan) {
   deps.io.out(`[update] ${hostFlag(host)} \u53D1\u5E03\u66F4\u65B0\u8BA1\u5212\uFF08\u53EA\u66F4\u65B0\u6240\u9009\u5BBF\u4E3B\uFF09`);
   for (const item2 of plan) deps.io.out(`  $ ${item2.cmd} ${item2.args.join(" ")}`);
@@ -48914,12 +49051,23 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
 }
 
 // packages/cli/src/program-install.ts
+function rejectRepeatedOption(flag) {
+  return (value, previous) => {
+    if (previous !== void 0) {
+      throw new InvalidArgumentError(`\u4E0D\u5F97\u91CD\u590D\u6307\u5B9A ${flag}`);
+    }
+    return value;
+  };
+}
 function registerInstallCommands(program2, deps, dashboardRuntime) {
   program2.command("setup [sub]").description("\u5B89\u88C5\u5B8C\u6574 Tenon\uFF1A\u5FC5\u987B\u9009\u62E9\u4E00\u4E2A\u5BBF\u4E3B\uFF08\u5982 --codex\uFF09\uFF1B\u4E0D\u4F1A\u540C\u65F6\u4FEE\u6539 Codex \u4E0E Claude").option("--codex", "\u5B89\u88C5/\u9A8C\u8BC1 Codex \u539F\u751F\u63D2\u4EF6").option("--claude", "\u5B89\u88C5/\u9A8C\u8BC1 Claude \u539F\u751F\u63D2\u4EF6").option("--cursor", "\u90E8\u7F72 Cursor adapter").option("--gemini", "\u90E8\u7F72 Gemini adapter").option("--copilot", "\u90E8\u7F72 Copilot adapter").option("--pi", "\u90E8\u7F72 Pi adapter").option("--devin", "\u90E8\u7F72 Devin adapter").option("--zed", "\u90E8\u7F72 Zed adapter").option("--aider", "\u90E8\u7F72 Aider adapter").option("--continue", "\u90E8\u7F72 Continue adapter").option("--cline", "\u90E8\u7F72 Cline adapter").option("--amp", "\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--auto-update", "\u4E3A\u6240\u9009\u539F\u751F\u5BBF\u4E3B\u542F\u7528\u6BCF\u65E5\u4E00\u6B21\u7684\u81EA\u52A8\u5347\u7EA7\u68C0\u67E5").option("--dry-run", "\u4EC5\u6253\u5370\u6240\u9009\u5BBF\u4E3B\u5B89\u88C5\u8BA1\u5212\uFF0C\u4E0D\u5199\u6587\u4EF6\u3001\u4E0D\u6267\u884C adapter \u6216 marketplace \u64CD\u4F5C").option("-y, --yes", "\u8DF3\u8FC7\u517C\u5BB9 skills/setup \u7684 y/N \u786E\u8BA4\u4F4D").action(async (sub, opts) => {
     bail(await cmdSetup(deps, sub, opts));
   });
   program2.command("update").description("\u5237\u65B0\u4E00\u4E2A\u5DF2\u5B89\u88C5\u7684\u539F\u751F Tenon \u63D2\u4EF6\uFF1B\u5347\u7EA7\u540E\u8BF7\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D skills \u548C hooks").option("--codex", "\u66F4\u65B0 Codex marketplace \u4E2D\u7684 tenon").option("--claude", "\u66F4\u65B0 Claude marketplace \u4E2D\u7684 tenon").option("--cursor", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cursor adapter").option("--gemini", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Gemini adapter").option("--copilot", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Copilot adapter").option("--pi", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Pi adapter").option("--devin", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Devin adapter").option("--zed", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Zed adapter").option("--aider", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Aider adapter").option("--continue", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Continue adapter").option("--cline", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cline adapter").option("--amp", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--dry-run", "\u4EC5\u6253\u5370\u5347\u7EA7\u8BA1\u5212\uFF0C\u4E0D\u6267\u884C marketplace \u6216 adapter \u64CD\u4F5C").option("-y, --yes", "\u4F9B\u81EA\u52A8\u66F4\u65B0\u8C03\u7528\u7684\u975E\u4EA4\u4E92\u786E\u8BA4").option("--auto", "\u7531\u5DF2\u660E\u786E\u542F\u7528\u7684\u81EA\u52A8\u66F4\u65B0\u4EFB\u52A1\u8C03\u7528\uFF08\u4E0D\u6539\u53D8\u7528\u6237\u7684 opt-in \u72B6\u6001\uFF09").action(async (opts) => {
     bail(await cmdUpdate(deps, opts));
+  });
+  program2.command("host-target-plan").description("\u53EA\u8BFB\u8F93\u51FA\u5DF2\u6CE8\u518C\u5BBF\u4E3B catalog\uFF0C\u6216\u4E00\u4E2A setup/update JSON \u8BA1\u5212\uFF1B\u4E0D\u6267\u884C\u5BBF\u4E3B\u5199\u64CD\u4F5C").option("--host <host>", "TENON_HOSTS \u4E2D\u7684\u5DF2\u6CE8\u518C\u5BBF\u4E3B id", rejectRepeatedOption("--host")).option("--operation <operation>", "setup | update", rejectRepeatedOption("--operation")).option("--json", "\u8F93\u51FA host-target-plan/v1 JSON DTO").action((opts) => {
+    bail(cmdHostTargetPlan(deps, opts));
   });
   program2.command("runtime <sub>").description("\u67E5\u770B managed runtime\uFF0C\u6216\u4EC5\u56DE\u6EDA\u5230\u4E0A\u4E00\u4EFD\u5B8C\u6574\u6821\u9A8C\u901A\u8FC7\u7684 release").option("--rollback", "\u4EC5 runtime repair \u4F7F\u7528\uFF1A\u5207\u6362\u5230\u4E0A\u4E00\u4EFD\u5DF2\u9A8C\u8BC1 release").option("--json", "\u673A\u5668\u53EF\u8BFB\u8F93\u51FA").action(async (sub, opts) => {
     bail(await cmdRuntime(deps, sub, opts));

@@ -94,7 +94,8 @@ export function TaskDetail({
   }, [change.name, change.phase, root])
   useGSAP(
     () => {
-      revealStages('[data-anim="stage"]')
+      const stages = scopeRef.current?.querySelectorAll('[data-anim="stage"]')
+      if (stages && stages.length > 0) revealStages(stages)
     },
     { scope: scopeRef, dependencies: [change.name] },
   )

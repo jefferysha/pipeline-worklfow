@@ -18,9 +18,14 @@ export interface PipelineCliResult {
   readonly stderr: string
 }
 
+export interface PipelineCliRunOptions {
+  readonly signal?: AbortSignal
+}
+
 export type PipelineCliRunner = (
   repoRoot: string,
   args: readonly string[],
+  options?: PipelineCliRunOptions,
 ) => Promise<PipelineCliResult>
 
 /** Works from both `src/operations.ts` and the bundled `dist/dashboard.mjs`. */
@@ -32,7 +37,7 @@ export function pipelineCliAvailable(): boolean {
   return existsSync(pipelineCliBundlePath())
 }
 
-export const runPipelineCli: PipelineCliRunner = (repoRoot, args) =>
+export const runPipelineCli: PipelineCliRunner = (repoRoot, args, options) =>
   new Promise((resolve, reject) => {
     const bundle = pipelineCliBundlePath()
     if (!existsSync(bundle)) {
@@ -48,6 +53,7 @@ export const runPipelineCli: PipelineCliRunner = (repoRoot, args) =>
         encoding: 'utf8',
         maxBuffer: 16 * 1024 * 1024,
         timeout: 15 * 60 * 1000,
+        signal: options?.signal,
       },
       (error, stdout, stderr) => {
         if (error === null) {

@@ -206,6 +206,22 @@ export function nativeInstallPlan(host: NativePipelineHost): readonly HostComman
   ]
 }
 
+/** Refresh and reinstall the released plugin using only the selected native host's public CLI. */
+export function nativeUpdatePlan(host: NativePipelineHost): readonly HostCommandPlanItem[] {
+  if (host === 'codex') {
+    return [
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', TENON_MARKETPLACE_NAME, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'list', '--json'] },
+    ]
+  }
+  return [
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', TENON_MARKETPLACE_NAME] },
+    { cmd: 'claude', args: ['plugin', 'update', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
+    { cmd: 'claude', args: ['plugin', 'list', '--json'] },
+  ]
+}
+
 /** Parse the host-owned plugin inventory without assuming its cache directory layout. */
 export function installedPipelineRoot(host: NativePipelineHost, stdout: string): string | null {
   return parseHostPluginInventory(host, stdout)?.tenonRoot ?? null

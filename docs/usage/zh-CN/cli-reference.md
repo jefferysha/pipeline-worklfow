@@ -8,11 +8,18 @@
 tenon setup --codex
 tenon setup --claude
 tenon update --codex
+tenon host-target-plan --json
+tenon host-target-plan --host codex --operation setup --json
 tenon doctor --json
 tenon runtime status
 tenon runtime repair --rollback
 tenon dashboard --open
 ```
+
+`host-target-plan` 是机器可读的只读契约。仅传 `--json` 时返回已注册宿主目录；同时传入
+`--host` 与 `--operation setup|update` 时返回一个 `host-target-plan/v1` 计划。
+它不会执行 setup/update，也不接受自定义宿主 ID。原生宿主计划面向用户级安装；适配器宿主
+计划固定使用 `--target .`，复制或运行前必须先进入目标项目目录。
 
 ## Change 与状态
 

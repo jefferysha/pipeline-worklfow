@@ -20,6 +20,28 @@ export async function handleGetActivityRoutes(
     clock, store, recordStore, loopLedger, errMsg,
   } = deps
   const boundPort = deps.boundPort()
+    if (serveAsset(req, res, path)) return
+    if (path === '/api/health') {
+      return sendJson(res, 200, {
+        ok: true,
+        scope: 'global',
+        version,
+        ...(releaseId === undefined ? {} : { releaseId }),
+        ...(transactionId === undefined ? {} : { transactionId }),
+        stateScopeId,
+        pid: process.pid,
+      })
+    }
+    // ── DNS 重绑定守卫（Bug 修复）：除无敏感内容的静态 /assets 与 health 探针（以上均已 return）外，
+    //    落地页和所有 /api 只读数据端点统一挡伪造 Host。落地页会注入 bearer token，cadence 会返回
+    //    项目绝对路径，二者都不得像静态资源一样在守卫前提前 return。此前仅 secrets/docker/readiness 各自 inline
+    //    了这道校验，其余（snapshot / afk log / change history / workflows / config / loops / traces /
+    //    hooks / automation / skills）全无 → evil.com 经 DNS 重绑定到 127.0.0.1 后，受害者浏览器可同源
+    //    读走全部项目路径、状态、run-log（可能含 token）、yaml。统一在此施加，语义同 handlePost 首道守卫；
+    //    下方 secrets/docker/readiness 的 inline 守卫遂归并至此（不再各自重复）。
+    if (!isLocalHost(req.headers.host, boundPort)) {
+      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
     if (path === '/api/cadence/status') {
       if (cadenceScheduler === null) {
         return sendJson(res, 404, { ok: false, error: 'cadence scheduler 未启用（capabilities.cadence=false）' })
@@ -34,27 +56,6 @@ export async function handleGetActivityRoutes(
     if (path === '/' || path === '/index.html') {
       if (serveIndexWithToken(res)) return // SPA 产物存在 → 服务真前端
       return sendHtml(res, 200, indexHtml(token)) // 回退最小落地页
-    }
-    if (serveAsset(res, path)) return
-    if (path === '/api/health') {
-      return sendJson(res, 200, {
-        ok: true,
-        scope: 'global',
-        version,
-        ...(releaseId === undefined ? {} : { releaseId }),
-        ...(transactionId === undefined ? {} : { transactionId }),
-        stateScopeId,
-        pid: process.pid,
-      })
-    }
-    // ── DNS 重绑定守卫（Bug 修复）：除落地页 / 静态 /assets / health 探针（以上均已 return）外，
-    //    所有 /api 只读数据端点统一挡伪造 Host。此前仅 secrets/docker/readiness 三个端点各自 inline
-    //    了这道校验，其余（snapshot / afk log / change history / workflows / config / loops / traces /
-    //    hooks / automation / skills）全无 → evil.com 经 DNS 重绑定到 127.0.0.1 后，受害者浏览器可同源
-    //    读走全部项目路径、状态、run-log（可能含 token）、yaml。统一在此施加，语义同 handlePost 首道守卫；
-    //    下方 secrets/docker/readiness 的 inline 守卫遂归并至此（不再各自重复）。
-    if (!isLocalHost(req.headers.host, boundPort)) {
-      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
     }
     if (path === '/api/context-bundle/preview') {
       return handleContextBundlePreview(req, res, deps)

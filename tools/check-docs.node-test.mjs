@@ -61,8 +61,8 @@ async function fixture() {
     root,
     'packages/dashboard-app/src/shell/Nav.tsx',
     [
-      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'",
-      "export const PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine']",
+      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan'",
+      "export const PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan']",
     ].join('\n'),
   )
   await write(
@@ -154,7 +154,7 @@ async function fixture() {
   await write(
     root,
     'docs/usage/dashboard-and-local-api.md',
-    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine are the five operational views. Overview is separate. Use 127.0.0.1:18765 and `tenon dashboard --open`.\n',
+    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine → hostPlan are the operational views. Overview is separate. Use 127.0.0.1:18765 and `tenon dashboard --open`.\n',
   )
   await write(
     root,
@@ -199,7 +199,7 @@ async function fixture() {
   await write(
     root,
     'docs/usage/zh-CN/dashboard-and-local-api.md',
-    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine 是五个操作视图，Overview 独立。使用 127.0.0.1:18765 和 `tenon dashboard --open`。\n',
+    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine → hostPlan 是操作视图，Overview 独立。使用 127.0.0.1:18765 和 `tenon dashboard --open`。\n',
   )
   await write(
     root,
@@ -275,20 +275,34 @@ test('detects drift in the documented runtime subcommands', async (t) => {
   assert.match(checkRepository(root).join('\n'), /commands\/runtime\.ts.*status/)
 })
 
-test('keeps exactly five operational views and Overview outside PRIMARY_VIEWS', async (t) => {
+test('keeps operational views declared in View and Overview outside PRIMARY_VIEWS', async (t) => {
   const root = await fixture()
   t.after(() => rm(root, { recursive: true, force: true }))
   await write(
     root,
     'packages/dashboard-app/src/shell/Nav.tsx',
     [
-      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'",
-      "export const PRIMARY_VIEWS = ['overview', 'projects', 'progress', 'afk', 'workbench', 'machine']",
+      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan'",
+      "export const PRIMARY_VIEWS = ['overview', 'projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan', 'missing']",
     ].join('\n'),
   )
   const failures = checkRepository(root).join('\n')
-  assert.match(failures, /PRIMARY_VIEWS.*exactly 5/)
   assert.match(failures, /overview.*separate/i)
+  assert.match(failures, /PRIMARY_VIEWS entry missing must be declared in View/)
+})
+
+test('rejects removing or replacing one of the six primary operational views', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await write(
+    root,
+    'packages/dashboard-app/src/shell/Nav.tsx',
+    [
+      "export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine' | 'hostPlan' | 'other'",
+      "export const PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'other']",
+    ].join('\n'),
+  )
+  assert.match(checkRepository(root).join('\n'), /PRIMARY_VIEWS must remain the exact operational set/)
 })
 
 test('requires README language and community links', async (t) => {

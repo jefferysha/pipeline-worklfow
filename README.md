@@ -50,6 +50,9 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 | <img src="docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard Workflow 工作台" width="1440" height="900" loading="lazy"> |
 | 默认、自定义与自由模式共享同一套可检查编排。 |
 
+宿主计划视图列出 12 个受支持宿主，可只读预览 setup/update 的结构化命令、步骤与注意事项；
+它只提供复制，不执行命令。项目级 adapter 使用 `--target .`，运行前先进入目标项目目录。
+
 [查看 Dashboard 完整图文指南 →](docs/usage/zh-CN/dashboard-and-local-api.md)
 
 ## 安装
@@ -209,7 +212,7 @@ Tenon 提供 12 个宿主目标，并显式标注执行保真度：
 | CLI | Setup、runtime 生命周期、Change 状态、转换、复核、证据、Tracks、自动化与诊断 |
 | Kernel | Workflow/Track 编译、状态、guards、ledgers、锁、CAS 和 loop policy |
 | Hooks 与 adapters | 上下文注入、工具调用前阻断、Skill 留痕和宿主安装 |
-| Dashboard | 在同一 loopback server 上提供项目、进度、AFK、配置和机器诊断 |
+| Dashboard | 在同一 loopback server 上提供项目、进度、AFK、配置、机器诊断与只读宿主计划 |
 | AFK 与 loops | 可选沙箱工作、准入、预算、并发和 L1/L2/L3 升档 |
 | Channel | 高级 event-sourced worker 通信；不修改 canonical Tenon state |
 | Memory bridge | 只读本地会话发现和上下文提取 |

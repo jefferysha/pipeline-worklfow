@@ -1,0 +1,97 @@
+import type {
+  HostId,
+  HostOperation,
+  HostTarget,
+  HostTargetPlan,
+} from '../api/hostTargetPlanTypes'
+import { useT } from '../i18n'
+import { HostPlanPreview } from './HostPlanPreview'
+
+export type HostPlanRequestState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; error: unknown }
+  | { status: 'ready'; plan: HostTargetPlan }
+
+interface HostOperationPlanPanelProps {
+  target: HostTarget
+  targetLabel: string
+  selectedOperation: HostOperation | null
+  planState: HostPlanRequestState
+  copyText: (text: string) => Promise<void>
+  onRequestPlan: (host: HostId, operation: HostOperation) => void
+  errorMessage: (error: unknown) => string
+}
+
+export function HostOperationPlanPanel({
+  target,
+  targetLabel,
+  selectedOperation,
+  planState,
+  copyText,
+  onRequestPlan,
+  errorMessage,
+}: HostOperationPlanPanelProps): JSX.Element {
+  const { t } = useT()
+
+  return (
+    <section
+      className="min-w-0 rounded-2xl border border-blue-b bg-blue-t/30 p-5"
+      aria-labelledby="host-plan-operation-title"
+    >
+      <h2 id="host-plan-operation-title" className="text-base font-bold text-text">
+        {t('hostPlan.operation_title', { host: targetLabel })}
+      </h2>
+      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('hostPlan.operation_group')}>
+        {target.supported_operations.map((operation) => (
+          <button
+            key={operation}
+            type="button"
+            aria-pressed={selectedOperation === operation}
+            className="rounded-lg border border-border-2 bg-card px-4 py-2 text-sm font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent) aria-[pressed=true]:border-(--accent) aria-[pressed=true]:bg-blue-t aria-[pressed=true]:text-blue-d"
+            onClick={() => onRequestPlan(target.id, operation)}
+          >
+            {t(`hostPlan.operation.${operation}`)}
+          </button>
+        ))}
+      </div>
+
+      {planState.status === 'idle' ? (
+        <p className="mt-4 text-sm text-text-2" role="status">{t('hostPlan.awaiting_operation')}</p>
+      ) : planState.status === 'loading' && selectedOperation ? (
+        <p className="mt-4 text-sm text-text-2" role="status">
+          {t('hostPlan.plan_loading', {
+            host: targetLabel,
+            operation: t(`hostPlan.operation.${selectedOperation}`),
+          })}
+        </p>
+      ) : planState.status === 'error' && selectedOperation ? (
+        <div className="mt-4 rounded-xl border border-red-b bg-red-t p-4 text-red-d" role="alert">
+          <p className="break-words text-sm">{errorMessage(planState.error)}</p>
+          <button
+            type="button"
+            className="mt-3 rounded-lg border border-red-b bg-card px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+            onClick={() => onRequestPlan(target.id, selectedOperation)}
+          >
+            {t('hostPlan.plan_retry', { operation: t(`hostPlan.operation.${selectedOperation}`) })}
+          </button>
+        </div>
+      ) : planState.status === 'ready' ? (
+        <>
+          <p
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            data-testid="host-plan-ready-announcement"
+          >
+            {t('hostPlan.plan_ready', {
+              host: targetLabel,
+              operation: t(`hostPlan.operation.${planState.plan.operation}`),
+            })}
+          </p>
+          <HostPlanPreview plan={planState.plan} copyText={copyText} />
+        </>
+      ) : null}
+    </section>
+  )
+}
