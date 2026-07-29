@@ -28,6 +28,11 @@ Verify 后进一步固定：当前 custom ABI 的成功 output 必须是包含 `
 `lstat`/`realpath`、单文件预算或总预算无法证明最新候选完整时，不得回退旧文件。
 项目路径检查同时要求字面路径等于其物理路径，从而拒绝最终组件或任一祖先为 symlink 的别名。
 
+transcript 完整性不再分为 exact 与 fallback 两套强度：两者都捕获
+device/inode/size/mtime/ctime，以 `O_NOFOLLOW` 打开并按捕获大小读取；完成后同时复核原 fd
+和 candidate path 当前打开结果。host 在打开后 rename/unlink 旧 inode、在原路径创建新
+transcript，或增长/改写候选时均失败关闭。
+
 ## 备选方案
 
 - 放弃 worktree 隔离：违反自动化并发安全要求。
@@ -40,4 +45,4 @@ Verify 后进一步固定：当前 custom ABI 的成功 output 必须是包含 `
 身份规则保持一致。解析失败和缺少显式 `workdir` 继续失败关闭。无需迁移状态或回填 ledger。
 外层 custom tool 完成状态不再替代内部执行成功；只有可见的 nested `exit_code=0` 能产生 receipt。
 更严格的完整信封、精确 session id 与损坏 transcript 处理会拒绝先前模糊接受的边缘格式；
-这是有意的安全收紧，不改变持久化格式。
+读取期间路径轮换或元数据漂移也会被拒绝。这些是有意的安全收紧，不改变持久化格式。

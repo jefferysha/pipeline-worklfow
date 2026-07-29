@@ -24,6 +24,17 @@ async function physicalDirectory(path: string): Promise<string | undefined> {
   }
 }
 
+export async function isSameOrdinaryPhysicalDirectory(
+  left: string,
+  right: string,
+): Promise<boolean> {
+  const [physicalLeft, physicalRight] = await Promise.all([
+    physicalDirectory(left),
+    physicalDirectory(right),
+  ])
+  return physicalLeft !== undefined && physicalLeft === physicalRight
+}
+
 function singleLine(value: string): string | undefined {
   const lines = value.trim().split(/\r?\n/)
   return lines.length === 1 && lines[0] !== '' ? lines[0] : undefined

@@ -11,7 +11,7 @@
  * 见该文件 §3 红线自证段的说明）。
  */
 import { spawnSync } from 'node:child_process'
-import { chmod, cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -96,6 +96,10 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
 
   beforeEach(async () => {
     h = await freshHarness()
+    // The trust boundary deliberately rejects paths reached through symlinked ancestors. macOS
+    // exposes tmpdir through /var -> /private/var, so normalize this test-only project fixture
+    // before placing its path in host-owned transcript metadata.
+    h.cwd = await realpath(h.cwd)
   })
 
   afterEach(async () => {

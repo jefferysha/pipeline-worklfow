@@ -46,3 +46,8 @@ transcript fallback 的 session 身份只来自 `session_meta.payload.id`，不�
 不能跨 ABI 借用成功判定。失败关闭覆盖 transcript 枚举阶段；无法读取元数据、解析物理路径或
 容纳最新候选时，不能跳过它再接受旧文件。项目根与 `workdir` 即使使用相同字面别名，也必须
 证明该路径不含符号链接祖先。
+
+第九轮审查把 transcript 完整性收紧到统一 fd 契约：fallback 和 exact receipt 都先捕获
+device/inode/size/mtime/ctime，以 `O_NOFOLLOW` 打开同一候选并按捕获大小有界读取。解析后既
+复核原 fd，也重新打开 candidate path 复核同一身份；因此 host 在读取期间轮换路径、替换
+inode 或增长文件时均失败关闭，不会接受已脱离当前路径的旧 transcript。

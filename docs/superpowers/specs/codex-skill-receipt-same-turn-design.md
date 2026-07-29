@@ -59,6 +59,10 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
 - discovery 的失败关闭覆盖枚举阶段；候选元数据或物理路径无法读取、最新候选超过预算时
   返回无 evidence，而不是跳过后接受旧文件。
 - 项目根与 `workdir` 都必须是其物理字面路径；二者使用相同的祖先 symlink 别名仍拒绝。
+- exact receipt 与 fallback 使用同一 transcript candidate 身份：读取前捕获
+  device/inode/size/mtime/ctime，以 `O_NOFOLLOW` 打开，固定读取到捕获的 size。
+- 读取结束后同时复核原 fd 与 candidate path 当前打开结果；路径轮换、新 inode、增长或
+  元数据漂移都使本次证据失败关闭。
 
 ## 备选方案
 
@@ -75,7 +79,8 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
   `cmd`/`command`/`workdir` 三个信任字段并忽略其余字段。unquoted safe-object fallback
   继续只接受受限 primitive 字面量并失败关闭。
 - 解析器公共返回类型改变可能影响既有 command-only 调用；保留旧函数作为映射层。
-- 修复仅影响 fallback discovery，不修改严格 receipt、ledger 或 review gate。
+- 修复同时收紧 fallback discovery 与严格 receipt 的 transcript 读取原语，不修改 receipt
+  journal、ledger schema 或 review gate。
 
 ## 验证矩阵
 
@@ -87,6 +92,8 @@ worktree 而被拒绝。用户下一轮偶尔能前进，是因为后续出现�
   缺少 `payload.id` 但继承 `session_id` 的 fork、malformed JSON 与读取 I/O 失败。
 - 拒绝：custom/function 调用与 output 错型配对、枚举阶段超预算后回退旧文件、目标与
   `workdir` 同时使用相同祖先 symlink 别名。
+- 拒绝：候选打开后原路径被新 inode 占据、打开后增长，以及 exact receipt 在读取期间发生
+  同类路径或元数据漂移。
 - 兼容：JSON `prefix_rule` 数组等非信任纯数据选项不影响 command/workdir 解码。
 - 集成：全新 Change 在同一自动化首轮用 custom ABI 读取后，第一次文档登记成功。
 
@@ -110,7 +117,8 @@ result 转发；其他工具程序返回零个 invocation。
 目标身份必须同时满足字面路径等于物理路径、显式物理目录相等与同一 canonical Git common
 directory；不跟随最终组件或祖先 symlink、不接受动态 workdir、不扫描 host sessions root
 之外的 transcript，也不扩大文件和总字节预算。session 绑定只认 host 自有 `payload.id`，
-不把 fork 继承字段当作主身份。
+不把 fork 继承字段当作主身份。transcript 读取以 `O_NOFOLLOW` fd、捕获 size 和读后
+fd/path 双重身份复核组成单一失败关闭边界。
 
 ## 术语
 

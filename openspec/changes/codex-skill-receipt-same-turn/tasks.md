@@ -33,7 +33,11 @@
 - [x] 重跑全部定向、hook、bundle、构建、全仓和静态门禁。 (build)
 - [x] 以红灯固定调用/output ABI 同型与完整未标型对象拒绝。 (build)
 - [x] 以红灯固定枚举阶段失败关闭与相同祖先 symlink 别名拒绝。 (build)
-- [x] 重跑第八轮全部定向、hook、bundle、构建、全仓和静态门禁。 (build)
+- [x] 修复第八轮 pre-Verify 的普通路径捷径与 transcript 枚举/打开竞态。 (build)
+- [x] 补齐候选替换/增长和反向 ABI 错型回归，重跑定向、hook、bundle、构建与静态门禁。 (build)
+- [x] 修复第九轮 pre-Verify 的打开后路径替换和 exact receipt 无 fd/上限绑定缺口。 (build)
+- [x] 增加路径轮换回归并重跑 receipt、真实 hook、构建和静态门禁。 (build)
+- [x] 重跑第十轮全仓门禁并取得无 Critical / High / Medium 的 pre-Verify 审查。 (build)
 
 ## 验证
 

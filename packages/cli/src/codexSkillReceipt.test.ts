@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  rename,
   rm,
   symlink,
   truncate,
@@ -23,6 +24,11 @@ import type { CodexSkillEvidenceInput, CodexSkillEvidenceResult } from './codexS
 import { trustedCodexSkillPath } from './codexSkillTrust.js'
 import type { CodexSkillTrustRoots } from './codexSkillTrust.js'
 import { transcriptExecInvocations } from './codexToolProgram.js'
+import {
+  hostTranscriptUnchanged,
+  openVerifiedHostTranscript,
+  recentHostTranscripts,
+} from './codexTranscriptDiscovery.js'
 import { makeDeps } from './test-support.js'
 
 let root = ''
@@ -220,7 +226,12 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
 }
 
 /** Current Codex Desktop ABI: function_call(exec_command) + function_call_output. */
-function functionCallSessionScopedEventLines(sessionCwd: string, workdir?: string): string {
+function functionCallSessionScopedEventLines(
+  sessionCwd: string,
+  workdir?: string,
+  outputType: 'function_call_output' | 'custom_tool_call_output' = 'function_call_output',
+  output: unknown = 'Chunk ID: abc123\nWall time: 0.001 seconds\nProcess exited with code 0\n',
+): string {
   const command = `wc -l ${skillPath} && sed -n '1,120p' ${skillPath}`
   const events: unknown[] = [
     {
@@ -248,9 +259,9 @@ function functionCallSessionScopedEventLines(sessionCwd: string, workdir?: strin
       type: 'response_item',
       timestamp: '2026-07-24T00:02:00Z',
       payload: {
-        type: 'function_call_output',
+        type: outputType,
         call_id: 'call-function-skill-read',
-        output: 'Chunk ID: abc123\nWall time: 0.001 seconds\nProcess exited with code 0\n',
+        output,
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -673,6 +684,32 @@ describe('Codex transcript skill receipt', () => {
       'utf8',
     )
     await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects a custom output paired with an exact function call', async () => {
+    await writeFile(
+      transcript,
+      functionCallSessionScopedEventLines(
+        root,
+        undefined,
+        'custom_tool_call_output',
+        customResultOutput(),
+      ),
+      'utf8',
+    )
+    await recordPendingReceipt('call-function-skill-read')
 
     const result = await reconcileCodexSkillEvidence({
       repoRoot: root,
@@ -1451,6 +1488,41 @@ describe('Codex transcript skill receipt', () => {
       .rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('rejects direct project identity when session, workdir, and target share one symlinked ancestor', async () => {
+    const realParent = join(root, 'direct-alias-real-parent')
+    const linkedParent = join(root, 'direct-alias-linked-parent')
+    const linkedRoot = join(realParent, 'direct-alias-worktree')
+    const linkedAlias = join(linkedParent, 'direct-alias-worktree')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'direct-alias-worktree')
+    const linkedChangeDir = join(linkedAlias, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(join(linkedRoot, 'openspec', 'changes', 'receipt-proof'), { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await symlink(realParent, linkedParent)
+    await writeFile(
+      transcript,
+      customCallSessionScopedEventLines(linkedAlias, linkedAlias),
+      'utf8',
+    )
+    await recordPendingReceipt('call-custom-skill-read', linkedAlias)
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedAlias,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('confirms an exact custom exec receipt explicitly targeted at a sibling worktree', async () => {
     const linkedRoot = join(root, 'linked-custom-receipt-worktree')
     const linkedGitDir = join(root, '.git', 'worktrees', 'linked-custom-receipt-worktree')
@@ -1709,6 +1781,57 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
+  it('rejects a fallback candidate replaced after discovery', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+    expect(candidates).toHaveLength(1)
+    const candidate = candidates?.[0]
+    expect(candidate).toBeDefined()
+
+    await rm(transcript)
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+
+    expect(candidate && await openVerifiedHostTranscript(candidate)).toBeUndefined()
+  })
+
+  it('detects a fallback candidate that grows after its verified open', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+    const candidate = candidates?.[0]
+    expect(candidate).toBeDefined()
+    if (candidate === undefined) return
+    const handle = await openVerifiedHostTranscript(candidate)
+    expect(handle).toBeDefined()
+    if (handle === undefined) return
+
+    try {
+      await appendFile(transcript, `${JSON.stringify({ type: 'forged-after-open' })}\n`, 'utf8')
+      await expect(hostTranscriptUnchanged(handle, candidate)).resolves.toBe(false)
+    } finally {
+      await handle.close()
+    }
+  })
+
+  it('detects a fallback candidate whose path is replaced after its verified open', async () => {
+    const rotated = `${transcript}.rotated`
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+    const candidate = candidates?.[0]
+    expect(candidate).toBeDefined()
+    if (candidate === undefined) return
+    const handle = await openVerifiedHostTranscript(candidate)
+    expect(handle).toBeDefined()
+    if (handle === undefined) return
+
+    try {
+      await rename(transcript, rotated)
+      await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+      await expect(hostTranscriptUnchanged(handle, candidate)).resolves.toBe(false)
+    } finally {
+      await handle.close()
+    }
+  })
+
   it('does not accept an inherited parent session_id when the transcript id identifies a fork', async () => {
     await writeFile(
       transcript,
@@ -1811,6 +1934,32 @@ describe('Codex transcript skill receipt', () => {
       eventLines(customResultOutput()).replace(
         '"type":"custom_tool_call_output"',
         '"type":"function_call_output"',
+      ),
+      'utf8',
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('does not let a custom output sign a fallback function invocation', async () => {
+    await writeFile(
+      transcript,
+      functionCallSessionScopedEventLines(
+        root,
+        undefined,
+        'custom_tool_call_output',
+        customResultOutput(),
       ),
       'utf8',
     )

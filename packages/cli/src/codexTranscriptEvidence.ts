@@ -6,11 +6,11 @@
  * long active transcript, but only inside the host sessions root and under both per-file and total
  * byte budgets.  This is a cold path executed while the change lock is held.
  */
-import { createReadStream } from 'node:fs'
-import { lstat, realpath, stat } from 'node:fs/promises'
+import type { ReadStream } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
+import { finished } from 'node:stream/promises'
 import type { CodexSkillReceipt } from './codexSkillReceipt.js'
 import {
   codexHomeRoot,
@@ -18,9 +18,17 @@ import {
   type CodexSkillTrustRoots,
 } from './codexSkillTrust.js'
 import { transcriptExecInvocations, type TranscriptExecInvocation } from './codexToolProgram.js'
-import { explicitSiblingWorktreeTarget } from './codexProjectIdentity.js'
+import {
+  explicitSiblingWorktreeTarget,
+  isSameOrdinaryPhysicalDirectory,
+} from './codexProjectIdentity.js'
 import { successfulCustomOutput, successfulFunctionOutput } from './codexTranscriptCompletion.js'
-import { recentHostTranscripts } from './codexTranscriptDiscovery.js'
+import {
+  exactHostTranscript,
+  hostTranscriptUnchanged,
+  openVerifiedHostTranscript,
+  recentHostTranscripts,
+} from './codexTranscriptDiscovery.js'
 
 // Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
 // session/project/turn/tool/path bound and streamed rather than buffered, so use the same bounded
@@ -62,6 +70,13 @@ function receiptTurnId(payload: Record<string, unknown>): string | undefined {
   if (!isRecord(metadata)) return undefined
   return asString(metadata.turn_id)
 }
+
+async function settleBoundedStream(stream: ReadStream | undefined): Promise<void> {
+  if (stream === undefined) return
+  if (!stream.readableEnded && !stream.destroyed) stream.destroy()
+  await finished(stream).catch(() => undefined)
+}
+
 interface FunctionExecInvocation {
   readonly command: string
   readonly workdir?: string
@@ -101,25 +116,23 @@ export async function transcriptConfirmsReceipt(
   const candidate = resolve(receipt.transcriptPath)
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false
 
-  let physicalRoot: string
-  let physicalTranscript: string
-  try {
-    const info = await lstat(candidate)
-    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
-    physicalRoot = await realpath(sessionsRoot)
-    physicalTranscript = await realpath(candidate)
-    if (!isInside(physicalRoot, physicalTranscript)) return false
-    const physicalInfo = await stat(physicalTranscript)
-    if (!physicalInfo.isFile() || physicalInfo.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
-  } catch {
-    return false
-  }
+  const transcript = await exactHostTranscript(sessionsRoot, candidate)
+  if (transcript === undefined || transcript.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
+  const handle = await openVerifiedHostTranscript(transcript)
+  if (handle === undefined) return false
 
   let matchesSession = false
   let matchesProject = false
   let sessionRoot: string | undefined
+  let confirmed = false
+  let input: ReadStream | undefined
   try {
-    const input = createReadStream(physicalTranscript, { encoding: 'utf8' })
+    input = handle.createReadStream({
+      encoding: 'utf8',
+      autoClose: false,
+      start: 0,
+      end: transcript.size - 1,
+    })
     const lines = createInterface({ input, crlfDelay: Infinity })
     for await (const line of lines) {
       let event: unknown
@@ -136,7 +149,8 @@ export async function transcriptConfirmsReceipt(
           matchesSession = sessionId === receipt.sessionId
           const cwd = asString(session.cwd)
           sessionRoot = cwd
-          matchesProject = cwd !== undefined && await isSamePhysicalDirectory(cwd, repoRoot)
+          matchesProject = cwd !== undefined
+            && await isSameOrdinaryPhysicalDirectory(cwd, repoRoot)
         }
         continue
       }
@@ -157,7 +171,10 @@ export async function transcriptConfirmsReceipt(
             || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)
           )
           && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)
-        ) return await matchingSuccessfulOutput(lines, receipt, 'function')
+        ) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, 'function')
+          break
+        }
         continue
       }
       if (payload.type === 'custom_tool_call') {
@@ -176,14 +193,21 @@ export async function transcriptConfirmsReceipt(
             matchesProject
             || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
           )
-        ) return await matchingSuccessfulOutput(lines, receipt, 'custom')
+        ) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, 'custom')
+          break
+        }
         continue
       }
     }
+    await settleBoundedStream(input)
+    return confirmed && await hostTranscriptUnchanged(handle, transcript)
   } catch {
     return false
+  } finally {
+    await settleBoundedStream(input)
+    await handle.close().catch(() => undefined)
   }
-  return false
 }
 
 async function matchingSuccessfulOutput(
@@ -285,14 +309,6 @@ function skillsEquivalent(left: string, right: string): boolean {
   return skillAliases(right).some((candidate) => leftAliases.has(candidate))
 }
 
-async function isSamePhysicalDirectory(left: string, right: string): Promise<boolean> {
-  try {
-    return await realpath(left) === await realpath(right)
-  } catch {
-    return false
-  }
-}
-
 function confirmsEveryCandidate(confirmed: ReadonlySet<string>, candidates: readonly string[]): boolean {
   return candidates.every((candidate) => [...confirmed].some((found) => skillsEquivalent(candidate, found)))
 }
@@ -336,8 +352,16 @@ export async function discoverCompletedCodexSkillReads(
     let sessionRoot: string | undefined
     let latestTurnId: string | undefined
     let malformedTranscript = false
+    const handle = await openVerifiedHostTranscript(transcript)
+    if (handle === undefined) return []
+    let stream: ReadStream | undefined
     try {
-      const stream = createReadStream(transcript, { encoding: 'utf8' })
+      stream = handle.createReadStream({
+        encoding: 'utf8',
+        autoClose: false,
+        start: 0,
+        end: transcript.size - 1,
+      })
       const lines = createInterface({ input: stream, crlfDelay: Infinity })
       for await (const line of lines) {
         let event: unknown
@@ -355,7 +379,9 @@ export async function discoverCompletedCodexSkillReads(
           if (isRecord(payload)) {
             const cwd = asString(payload.cwd)
             sessionRoot = cwd
-            if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot)
+            if (cwd) {
+              matchesRepo = await isSameOrdinaryPhysicalDirectory(cwd, repoRoot)
+            }
             if (hostSessionId !== undefined) {
               const sessionId = asString(payload.id)
               matchesHostSession = sessionId === hostSessionId
@@ -439,7 +465,9 @@ export async function discoverCompletedCodexSkillReads(
           for (const id of pendingRead.skillIds) confirmedInLatestTurn.add(id)
         }
       }
+      await settleBoundedStream(stream)
       if (malformedTranscript) return []
+      if (!await hostTranscriptUnchanged(handle, transcript)) return []
       if (matchesHostSession) {
         if (latestTurnId !== undefined) {
           for (const id of confirmedInLatestTurn) confirmed.add(id)
@@ -450,6 +478,9 @@ export async function discoverCompletedCodexSkillReads(
       // A transcript I/O failure makes recency and completeness unknowable. Fail closed instead
       // of accepting evidence from an older file that may belong to a superseded host turn.
       return []
+    } finally {
+      await settleBoundedStream(stream)
+      await handle.close().catch(() => undefined)
     }
     if (matchesHostSession) break
   }

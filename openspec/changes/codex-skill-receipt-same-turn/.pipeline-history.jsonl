@@ -128,3 +128,14 @@
 {"ts":"2026-07-29T16:52:51Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T14:51:38Z authority_host_session=019fad97-4fde-7b40-a747-0f75eb2eac00"}
 {"ts":"2026-07-29T16:52:51Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"3da6df3a-0e49-4930-bebb-459bc309ba08"}
 {"ts":"2026-07-29T17:04:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T17:43:37Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T17:44:02Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T17:44:02Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"cbf8782f-8b55-4763-8b31-40dd5edb0aa1"}
+{"ts":"2026-07-29T17:48:36Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T17:48:51Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T17:48:51Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T17:48:58Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T17:49:01Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T14:51:38Z authority_host_session=019fad97-4fde-7b40-a747-0f75eb2eac00"}
+{"ts":"2026-07-29T17:49:08Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"fa8bcb85-d660-4956-92b1-987f734a6931"}
+{"ts":"2026-07-29T17:49:44Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T17:49:52Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

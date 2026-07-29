@@ -105,6 +105,18 @@
           "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
           "readAt": "2026-07-29T17:04:57Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
+          "readAt": "2026-07-29T17:48:52Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
@@ -119,123 +131,129 @@
     {
       "kind": "openspec-design",
       "path": "openspec/changes/codex-skill-receipt-same-turn/design.md",
-      "sha256": "c8ad6e3067c8e570c53320c659a70bebaec9532fcb43c042349fc4b199858989",
+      "sha256": "5e41d1cb5955f45c35bb77762885958c6aa2cd91db4bd59f0bfec331333a28c9",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-29T16:52:41Z",
+      "recordedAt": "2026-07-29T17:48:36Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "c8ad6e3067c8e570c53320c659a70bebaec9532fcb43c042349fc4b199858989",
-          "readAt": "2026-07-29T16:52:43Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",24]"
+          "sha256": "5e41d1cb5955f45c35bb77762885958c6aa2cd91db4bd59f0bfec331333a28c9",
+          "readAt": "2026-07-29T17:48:52Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",26]"
         },
         {
           "phase": "build",
-          "sha256": "c8ad6e3067c8e570c53320c659a70bebaec9532fcb43c042349fc4b199858989",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "5e41d1cb5955f45c35bb77762885958c6aa2cd91db4bd59f0bfec331333a28c9",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/codex-skill-receipt-same-turn-design.md",
-      "sha256": "6ad072166f65eae230deddb472246c2a4a21c88a6c096ddef48886376ffac827",
+      "sha256": "483df9cc1cd1cf9b1920f385416ac1873e8df5844f3e7326acd9792d6b2533b5",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-29T16:52:42Z",
+      "recordedAt": "2026-07-29T17:48:51Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "6ad072166f65eae230deddb472246c2a4a21c88a6c096ddef48886376ffac827",
-          "readAt": "2026-07-29T16:52:43Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",24]"
+          "sha256": "483df9cc1cd1cf9b1920f385416ac1873e8df5844f3e7326acd9792d6b2533b5",
+          "readAt": "2026-07-29T17:48:52Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",26]"
         },
         {
           "phase": "build",
-          "sha256": "6ad072166f65eae230deddb472246c2a4a21c88a6c096ddef48886376ffac827",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "483df9cc1cd1cf9b1920f385416ac1873e8df5844f3e7326acd9792d6b2533b5",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "adr",
       "path": "docs/adr/codex-skill-receipt-same-turn.md",
-      "sha256": "058caa4d7ed9bc5bcfc9a3a30b2a5d4a4c35bab5c0c7cfabc6dcbfc031759797",
+      "sha256": "cc893fca19e3d77e5f02a589775dfd4229a0ace8624714d2cb813ddab5335c97",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-29T16:52:42Z",
+      "recordedAt": "2026-07-29T17:48:51Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "058caa4d7ed9bc5bcfc9a3a30b2a5d4a4c35bab5c0c7cfabc6dcbfc031759797",
-          "readAt": "2026-07-29T16:52:43Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",24]"
+          "sha256": "cc893fca19e3d77e5f02a589775dfd4229a0ace8624714d2cb813ddab5335c97",
+          "readAt": "2026-07-29T17:48:52Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",26]"
         },
         {
           "phase": "build",
-          "sha256": "058caa4d7ed9bc5bcfc9a3a30b2a5d4a4c35bab5c0c7cfabc6dcbfc031759797",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "cc893fca19e3d77e5f02a589775dfd4229a0ace8624714d2cb813ddab5335c97",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "delta-spec",
       "path": "openspec/changes/codex-skill-receipt-same-turn/specs/codex-skill-receipt-current-turn/spec.md",
-      "sha256": "e9bb809112a8f3e4a877f5e661e81cb0c2df9c5f88d4c4bd4f31e8edaad93a00",
+      "sha256": "0400f0f99c86c7e78fd1a20215854c4ea1fc844ac363615818875a95843fa128",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-29T16:52:42Z",
+      "recordedAt": "2026-07-29T17:48:51Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "e9bb809112a8f3e4a877f5e661e81cb0c2df9c5f88d4c4bd4f31e8edaad93a00",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "0400f0f99c86c7e78fd1a20215854c4ea1fc844ac363615818875a95843fa128",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "superpower-plan",
       "path": "docs/superpowers/plans/codex-skill-receipt-same-turn.md",
-      "sha256": "ba8c7a56965ae6ccb00a36c09daa0e1503e50b19f1a525f22ae2fbbbbfcaa683",
+      "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-29T16:52:42Z",
+      "recordedAt": "2026-07-29T17:48:51Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "ba8c7a56965ae6ccb00a36c09daa0e1503e50b19f1a525f22ae2fbbbbfcaa683",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "plan",
       "path": "docs/superpowers/plans/codex-skill-receipt-same-turn.md",
-      "sha256": "ba8c7a56965ae6ccb00a36c09daa0e1503e50b19f1a525f22ae2fbbbbfcaa683",
+      "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-29T16:52:42Z",
+      "recordedAt": "2026-07-29T17:48:51Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "ba8c7a56965ae6ccb00a36c09daa0e1503e50b19f1a525f22ae2fbbbbfcaa683",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/codex-skill-receipt-same-turn/tasks.md",
-      "sha256": "23a60470ee2400a889c50c06c197e4de6f66984bf1411c05a5753b4735afa258",
+      "sha256": "889e48c5d981ab2dec77b68ba336a0fca2832f8e3a0bf9cbf42a947a9c9f4e2a",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-29T17:04:57Z",
+      "recordedAt": "2026-07-29T17:49:44Z",
       "reads": [
         {
+          "phase": "spec",
+          "sha256": "889e48c5d981ab2dec77b68ba336a0fca2832f8e3a0bf9cbf42a947a9c9f4e2a",
+          "readAt": "2026-07-29T17:48:52Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",26]"
+        },
+        {
           "phase": "build",
-          "sha256": "23a60470ee2400a889c50c06c197e4de6f66984bf1411c05a5753b4735afa258",
-          "readAt": "2026-07-29T17:04:57Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",25]"
+          "sha256": "889e48c5d981ab2dec77b68ba336a0fca2832f8e3a0bf9cbf42a947a9c9f4e2a",
+          "readAt": "2026-07-29T17:49:44Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",27]"
         }
       ]
     }

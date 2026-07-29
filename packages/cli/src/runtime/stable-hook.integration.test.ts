@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +14,7 @@ const roots: string[] = []
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 async function freshRoot(label: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `pipeline-stable-hook-${label}-`))
+  const root = await realpath(await mkdtemp(join(tmpdir(), `pipeline-stable-hook-${label}-`)))
   roots.push(root)
   return root
 }

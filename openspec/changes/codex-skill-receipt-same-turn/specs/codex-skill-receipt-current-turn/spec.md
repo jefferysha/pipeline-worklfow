@@ -114,7 +114,9 @@
 
 fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身份，并只接受
 同一 transcript 中完整、可解析的当前 turn。`payload.session_id`、fork 继承字段、损坏 JSON
-或读取失败不得触发旧 transcript 回退。
+或读取失败不得触发旧 transcript 回退。exact receipt 与 fallback discovery 都 MUST 在
+读取前以 `O_NOFOLLOW` 打开候选并把 device/inode/size/mtime/ctime 绑定到枚举快照，按快照
+大小限制读取范围；读取结束后 MUST 同时复核原 fd 和当前 candidate path 仍指向同一完整身份。
 
 #### Scenario: Fork 缺少 payload.id 时失败关闭
 
@@ -137,3 +139,15 @@ fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身
 - **WHEN** transcript 在枚举阶段发生目录读取、`lstat`、`realpath` 失败，或最新候选超过
   单文件/总字节预算
 - **THEN** discovery MUST 返回无 evidence，且不得跳过该候选后接受更旧、更小的 transcript
+
+#### Scenario: 打开后 candidate path 被轮换时失败关闭
+
+- **WHEN** verifier 已打开候选 transcript，但 host 随后 rename/unlink 该 inode，并在原路径
+  创建新的 transcript
+- **THEN** 系统 MUST 不接受旧 fd 中的 evidence；读后 path 身份复核 MUST 失败关闭
+
+#### Scenario: Exact receipt 读取保持同一有界 inode
+
+- **WHEN** exact receipt 指向受信 transcript path
+- **THEN** 系统 MUST 固定打开时的 inode 与字节上限，且只有原 fd 和当前 path 在读取后仍与
+  捕获快照一致时才能确认 receipt

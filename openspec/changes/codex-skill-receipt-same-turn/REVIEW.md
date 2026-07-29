@@ -12,8 +12,8 @@
 ## Standards 轴
 
 - 包边界：解析留在 CLI adapter，不向 kernel/domain 引入 host ABI。
-- 复杂度：`codexTranscriptEvidence.ts` 为 457 行；独立的有界枚举模块
-  `codexTranscriptDiscovery.ts` 为 75 行，均低于 backend service 500 行门限。
+- 复杂度：`codexTranscriptEvidence.ts` 为 488 行；独立的有界枚举模块
+  `codexTranscriptDiscovery.ts` 为 155 行，均低于 backend service 500 行门限。
 - 兼容：保留 `transcriptExecCommands`，新增结构化 invocation 仅供需要 workdir 的调用方。
 - 生成物：`npm run bundle` 已重建 `packages/cli/dist/tenon.mjs`。
 - 第一轮 Verify finding：custom program 的文本扫描可能把注释、字符串、死代码或未等待调用误认成
@@ -51,6 +51,20 @@
   只接受序列化当前信封或明确标型的 `execution_result`；枚举阶段的目录/候选读取失败及
   单文件超预算整体失败关闭，总预算只保留连续的最新前缀；项目字面路径必须等于物理路径，
   所以相同祖先别名也不能成为身份。枚举逻辑拆入 `codexTranscriptDiscovery.ts` 后通过架构门。
+- 第八轮 pre-Verify finding：同目录快捷判断仍可在 session、workdir 与目标都使用同一祖先
+  symlink 别名时绕过普通目录约束（Medium）；枚举到打开之间没有 inode/大小复核，替换或增长
+  可能破坏 recency 与预算证明（Medium）；反向 ABI 错型与文档状态缺少覆盖（Low）。
+- 修复：直接项目匹配与 sibling 匹配共用普通物理目录约束；fallback 枚举记录
+  device/inode/size/mtime/ctime，以 `O_NOFOLLOW` 打开后复核并限定读取区间，解析结束再次
+  `fstat`，任何替换或增长整体失败关闭；exact 与 fallback 都加入双向 ABI 错型测试。
+- 第九轮 pre-Verify finding：打开后的候选若被 rename/unlink 后由新 inode 占据原路径，仅
+  检查旧 fd 无法证明它仍是当前 transcript（Medium）；exact receipt 仍按路径读取，缺少
+  fd 身份、固定长度与读后元数据绑定（Medium）。
+- 修复：读后校验同时复核原 fd，并重新以 `O_NOFOLLOW` 打开 candidate path 比较完整身份；
+  exact receipt 与 fallback 共用 candidate 捕获、fd 绑定、固定 `end`、流回收和读后路径/
+  元数据复核。新增“打开后路径替换”回归，防止 host 轮换后接受已脱离路径的旧 inode。
+- 第十轮独立复查：`C/H/M/L = 0/0/0/0`，实现指纹
+  `cd4a8c7949d6f54d46d00e732221f8551639722961270dabd8e03bf6c429ebe4` 连续两次一致。
 - 复查 Finding：无未处理 Critical / High / Medium。
 
 ## Spec 轴
@@ -61,7 +75,7 @@
 | 缺 workdir/跨仓失败关闭 | custom ABI 拒绝测试 |
 | 字面量与单 exec 限制 | 动态值、注释/字符串、死代码、未 await、自造 output、多调用拒绝；JSON/safe-object 覆盖 |
 | sibling 项目身份 | 缺失/相对 workdir、跨仓拒绝；绝对目标 + common Git directory 接受 |
-| 既有 trust/completion gate | 67 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
+| 既有 trust/completion gate | 78 个 receipt 测试、9 个 DAG/hook 集成和 3 个 stable-hook 测试继续通过 |
 | nested exec completion | output-only、无 exit code、非零 exit 均拒绝；完整 result + exit 0 接受 |
 | stdout/跨 turn 防伪 | plain/JSON stdout exact 与 fallback 均拒绝；新/malformed turn、旧 transcript 与 fork evidence 不可复用 |
 | 根 Skill 防回退 | `skillSources.test.ts` 固定 `text(result)`、禁止 output-only 与 exit-code 指导 |
@@ -69,12 +83,15 @@
 | invocation/output ABI 同型 | exact 与 fallback 均拒绝 custom invocation + function output |
 | 枚举阶段失败关闭 | 新候选超 512 MiB 时不得接受旧 transcript |
 | 祖先 symlink 身份 | 目标与 workdir 同时使用相同别名仍拒绝 |
+| 枚举/打开竞态 | 打开前替换无法接受；已打开候选增长或路径换 inode 后复核失败 |
+| exact receipt 有界读取 | 与 fallback 共用 fd 身份、固定长度与读后路径/元数据复核 |
+| invocation/output ABI 双向同型 | exact 与 fallback 均拒绝 function invocation + custom output |
 
 Finding：无 Critical / High / Medium。
 
 ## 门禁结果
 
-- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts`：72 passed。
+- `npx vitest run packages/cli/src/codexSkillReceipt.test.ts`：78 passed。
 - `npx vitest run packages/cli/src/runtime/stable-hook.integration.test.ts packages/cli/src/internal-skill-gate-hook.integration.test.ts`：12 passed。
 - `npm run test:hooks`：512 passed。
 - `npm run build`：通过；包含 web、server、CLI bundle。
@@ -85,7 +102,7 @@ Finding：无 Critical / High / Medium。
 - `npm run check:architecture`：通过。
 - `npm run check:comments`：通过。
 - `git diff --check`：通过。
-- 最终 `npm test`：327 files passed；5763 tests passed、26 skipped。本轮 Docker daemon
+- 最终 `npm test`：327 files passed；5769 tests passed、26 skipped。本轮 Docker daemon
   不可用导致 Docker 条件用例诚实跳过；real Codex 与缺少 Claude OAuth 的既有条件跳过同样单列，
   不把外部环境缺失记为代码通过。
 - 第一轮 Verify 的失败报告保留在

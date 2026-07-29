@@ -3033,7 +3033,7 @@ var require_commander = __commonJS({
 import { execFile as execFile5, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash33 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync11 } from "node:fs";
-import { readFile as readFile39, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
+import { readFile as readFile39, rm as rm13, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
 import { dirname as dirname25, join as join87 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
@@ -10006,8 +10006,8 @@ var EXCLUDED_ROOT_ARTIFACTS = [
 function sortNames(names) {
   return names.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
 }
-function modeOf(stat14) {
-  return (stat14.mode & 511).toString(8);
+function modeOf(stat13) {
+  return (stat13.mode & 511).toString(8);
 }
 function sameFileIdentity(before, after) {
   return before.size === after.size && before.mode === after.mode && before.mtimeMs === after.mtimeMs && before.ino === after.ino;
@@ -20347,7 +20347,7 @@ function appendSection(current, section2) {
 }
 function scanManagedSections(bytes) {
   const sections = /* @__PURE__ */ new Map();
-  let open7 = null;
+  let open8 = null;
   let lineStart = 0;
   while (lineStart < bytes.byteLength) {
     let lineEnd = lineStart;
@@ -20367,27 +20367,27 @@ function scanManagedSections(bytes) {
         return { ok: false, detail: `malformed managed marker at byte ${lineStart}` };
       }
       if (kind === "START") {
-        if (open7 !== null) {
-          return { ok: false, detail: `nested managed sections ${open7.loop_id} and ${loopId}` };
+        if (open8 !== null) {
+          return { ok: false, detail: `nested managed sections ${open8.loop_id} and ${loopId}` };
         }
-        open7 = { loop_id: loopId, start: lineStart };
+        open8 = { loop_id: loopId, start: lineStart };
       } else {
-        if (open7 === null)
+        if (open8 === null)
           return { ok: false, detail: `managed END marker for ${loopId} has no START` };
-        if (open7.loop_id !== loopId) {
-          return { ok: false, detail: `managed marker ids do not match: ${open7.loop_id} and ${loopId}` };
+        if (open8.loop_id !== loopId) {
+          return { ok: false, detail: `managed marker ids do not match: ${open8.loop_id} and ${loopId}` };
         }
         if (sections.has(loopId)) {
           return { ok: false, detail: `duplicate managed section for ${loopId}` };
         }
-        sections.set(loopId, { start: open7.start, end: nextLine });
-        open7 = null;
+        sections.set(loopId, { start: open8.start, end: nextLine });
+        open8 = null;
       }
     }
     lineStart = nextLine;
   }
-  if (open7 !== null)
-    return { ok: false, detail: `managed START marker for ${open7.loop_id} has no END` };
+  if (open8 !== null)
+    return { ok: false, detail: `managed START marker for ${open8.loop_id} has no END` };
   return { ok: true, sections };
 }
 function applyReconciliationOperations(input) {
@@ -29436,9 +29436,9 @@ var randomName = () => `${Date.now().toString(36)}-${Math.random().toString(16).
 import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import { resolve as resolve14 } from "node:path";
 var resolveGitMounts = async (gitPath, deps) => {
-  const stat14 = deps?.stat ?? ((p) => fsStat(p));
+  const stat13 = deps?.stat ?? ((p) => fsStat(p));
   const readFile40 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
-  const s = await stat14(gitPath);
+  const s = await stat13(gitPath);
   if (s.isDirectory()) {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
   }
@@ -34847,20 +34847,19 @@ async function cmdArtifactRegister(deps, name2, field2, path9, producer) {
 }
 
 // packages/cli/src/commands/document.ts
-import { lstat as lstat25 } from "node:fs/promises";
+import { lstat as lstat24 } from "node:fs/promises";
 import { relative as relative11, resolve as resolve22 } from "node:path";
 
 // packages/cli/src/codexSkillReceipt.ts
-import { appendFile as appendFile2, lstat as lstat23, mkdir as mkdir19, readdir as readdir11, readFile as readFile25 } from "node:fs/promises";
+import { appendFile as appendFile2, lstat as lstat22, mkdir as mkdir19, readdir as readdir11, readFile as readFile25 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
 import { basename as basename5, isAbsolute as isAbsolute13, join as join55, relative as relative9, resolve as resolve19, sep as sep11 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
-import { createReadStream } from "node:fs";
-import { lstat as lstat22, realpath as realpath10, stat as stat10 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
 import { isAbsolute as isAbsolute12, join as join54, relative as relative8, resolve as resolve18, sep as sep10 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
+import { finished } from "node:stream/promises";
 
 // packages/cli/src/codexSkillTrust.ts
 import { lstat as lstat19, readFile as readFile23, realpath as realpath7 } from "node:fs/promises";
@@ -35142,6 +35141,13 @@ async function physicalDirectory(path9) {
     return void 0;
   }
 }
+async function isSameOrdinaryPhysicalDirectory(left, right) {
+  const [physicalLeft, physicalRight] = await Promise.all([
+    physicalDirectory(left),
+    physicalDirectory(right)
+  ]);
+  return physicalLeft !== void 0 && physicalLeft === physicalRight;
+}
 function singleLine(value) {
   const lines = value.trim().split(/\r?\n/);
   return lines.length === 1 && lines[0] !== "" ? lines[0] : void 0;
@@ -35255,11 +35261,31 @@ function successfulCustomOutput(value) {
 }
 
 // packages/cli/src/codexTranscriptDiscovery.ts
-import { lstat as lstat21, readdir as readdir10, realpath as realpath9 } from "node:fs/promises";
+import { constants as constants5 } from "node:fs";
+import { lstat as lstat21, open as open6, readdir as readdir10, realpath as realpath9 } from "node:fs/promises";
 import { isAbsolute as isAbsolute11, join as join53, relative as relative7, sep as sep9 } from "node:path";
 var MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_TRANSCRIPTS = 32;
+async function inspectHostTranscript(physicalRoot, candidate) {
+  try {
+    const info = await lstat21(candidate, { bigint: true });
+    if (!info.isFile() || info.isSymbolicLink() || info.size === 0n || info.size > BigInt(MAX_TRANSCRIPT_BYTES)) return void 0;
+    const physical = await realpath9(candidate);
+    if (!isInside2(physicalRoot, physical)) return void 0;
+    return {
+      path: physical,
+      modifiedAt: Number(info.mtimeMs),
+      size: Number(info.size),
+      device: info.dev,
+      inode: info.ino,
+      modifiedAtNs: info.mtimeNs,
+      changedAtNs: info.ctimeNs
+    };
+  } catch {
+    return void 0;
+  }
+}
 function isInside2(base, candidate) {
   const fromBase = relative7(base, candidate);
   return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute11(fromBase);
@@ -35287,15 +35313,9 @@ async function recentHostTranscripts(sessionsRoot) {
       }
       if (!entry.name.endsWith(".jsonl")) continue;
       if (!entry.isFile()) return false;
-      try {
-        const info = await lstat21(candidate);
-        if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_TRANSCRIPT_BYTES) return false;
-        const physical = await realpath9(candidate);
-        if (!isInside2(physicalRoot, physical)) return false;
-        discovered.push({ path: physical, modifiedAt: info.mtimeMs, size: info.size });
-      } catch {
-        return false;
-      }
+      const transcript = await inspectHostTranscript(physicalRoot, candidate);
+      if (transcript === void 0) return false;
+      discovered.push(transcript);
     }
     return true;
   }
@@ -35304,10 +35324,43 @@ async function recentHostTranscripts(sessionsRoot) {
   const selected = [];
   for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break;
-    selected.push(transcript.path);
+    selected.push(transcript);
     remaining -= transcript.size;
   }
   return selected;
+}
+async function exactHostTranscript(sessionsRoot, transcriptPath) {
+  try {
+    return await inspectHostTranscript(await realpath9(sessionsRoot), transcriptPath);
+  } catch {
+    return void 0;
+  }
+}
+function matchesCandidate(candidate, info) {
+  return info.isFile() && info.dev === candidate.device && info.ino === candidate.inode && info.size === BigInt(candidate.size) && info.mtimeNs === candidate.modifiedAtNs && info.ctimeNs === candidate.changedAtNs;
+}
+async function openVerifiedHostTranscript(candidate) {
+  let handle;
+  try {
+    handle = await open6(candidate.path, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+    const info = await handle.stat({ bigint: true });
+    if (matchesCandidate(candidate, info)) return handle;
+  } catch {
+  }
+  await handle?.close().catch(() => void 0);
+  return void 0;
+}
+async function hostTranscriptUnchanged(handle, candidate) {
+  let currentPathHandle;
+  try {
+    if (!matchesCandidate(candidate, await handle.stat({ bigint: true }))) return false;
+    currentPathHandle = await openVerifiedHostTranscript(candidate);
+    return currentPathHandle !== void 0;
+  } catch {
+    return false;
+  } finally {
+    await currentPathHandle?.close().catch(() => void 0);
+  }
 }
 
 // packages/cli/src/codexTranscriptEvidence.ts
@@ -35342,6 +35395,11 @@ function receiptTurnId(payload) {
   if (!isRecord11(metadata)) return void 0;
   return asString2(metadata.turn_id);
 }
+async function settleBoundedStream(stream) {
+  if (stream === void 0) return;
+  if (!stream.readableEnded && !stream.destroyed) stream.destroy();
+  await finished(stream).catch(() => void 0);
+}
 function functionExecInvocation(payload) {
   if (payload.type !== "function_call" || asString2(payload.name) !== "exec_command") return void 0;
   const argumentsText = asString2(payload.arguments);
@@ -35366,24 +35424,22 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
   const sessionsRoot = codexSessionsRoot2(homeDir, configured);
   const candidate = resolve18(receipt.transcriptPath);
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false;
-  let physicalRoot;
-  let physicalTranscript;
-  try {
-    const info = await lstat22(candidate);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false;
-    physicalRoot = await realpath10(sessionsRoot);
-    physicalTranscript = await realpath10(candidate);
-    if (!isInside3(physicalRoot, physicalTranscript)) return false;
-    const physicalInfo = await stat10(physicalTranscript);
-    if (!physicalInfo.isFile() || physicalInfo.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false;
-  } catch {
-    return false;
-  }
+  const transcript = await exactHostTranscript(sessionsRoot, candidate);
+  if (transcript === void 0 || transcript.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false;
+  const handle = await openVerifiedHostTranscript(transcript);
+  if (handle === void 0) return false;
   let matchesSession = false;
   let matchesProject = false;
   let sessionRoot;
+  let confirmed = false;
+  let input;
   try {
-    const input = createReadStream(physicalTranscript, { encoding: "utf8" });
+    input = handle.createReadStream({
+      encoding: "utf8",
+      autoClose: false,
+      start: 0,
+      end: transcript.size - 1
+    });
     const lines = createInterface2({ input, crlfDelay: Infinity });
     for await (const line of lines) {
       let event;
@@ -35400,7 +35456,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
           matchesSession = sessionId === receipt.sessionId;
           const cwd = asString2(session.cwd);
           sessionRoot = cwd;
-          matchesProject = cwd !== void 0 && await isSamePhysicalDirectory(cwd, repoRoot);
+          matchesProject = cwd !== void 0 && await isSameOrdinaryPhysicalDirectory(cwd, repoRoot);
         }
         continue;
       }
@@ -35410,7 +35466,10 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       const functionInvocation = functionExecInvocation(payload);
       if (functionInvocation !== void 0) {
         const callId = asString2(payload.call_id);
-        if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)) return await matchingSuccessfulOutput(lines, receipt, "function");
+        if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, "function");
+          break;
+        }
         continue;
       }
       if (payload.type === "custom_tool_call") {
@@ -35419,14 +35478,21 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         const status = asString2(payload.status);
         const command2 = asString2(payload.input);
         const invocation = command2 === void 0 ? void 0 : transcriptInputTrustedSkillInvocation(command2, receipt.skillPath);
-        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && invocation !== void 0 && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot))) return await matchingSuccessfulOutput(lines, receipt, "custom");
+        if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && invocation !== void 0 && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot))) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, "custom");
+          break;
+        }
         continue;
       }
     }
+    await settleBoundedStream(input);
+    return confirmed && await hostTranscriptUnchanged(handle, transcript);
   } catch {
     return false;
+  } finally {
+    await settleBoundedStream(input);
+    await handle.close().catch(() => void 0);
   }
-  return false;
 }
 async function matchingSuccessfulOutput(lines, receipt, outputAbi) {
   const expectedOutputType = outputAbi === "custom" ? "custom_tool_call_output" : "function_call_output";
@@ -35504,13 +35570,6 @@ function skillsEquivalent2(left, right) {
   const leftAliases = new Set(skillAliases(left));
   return skillAliases(right).some((candidate) => leftAliases.has(candidate));
 }
-async function isSamePhysicalDirectory(left, right) {
-  try {
-    return await realpath10(left) === await realpath10(right);
-  } catch {
-    return false;
-  }
-}
 function confirmsEveryCandidate(confirmed, candidates) {
   return candidates.every((candidate) => [...confirmed].some((found) => skillsEquivalent2(candidate, found)));
 }
@@ -35535,8 +35594,16 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
     let sessionRoot;
     let latestTurnId;
     let malformedTranscript = false;
+    const handle = await openVerifiedHostTranscript(transcript);
+    if (handle === void 0) return [];
+    let stream;
     try {
-      const stream = createReadStream(transcript, { encoding: "utf8" });
+      stream = handle.createReadStream({
+        encoding: "utf8",
+        autoClose: false,
+        start: 0,
+        end: transcript.size - 1
+      });
       const lines = createInterface2({ input: stream, crlfDelay: Infinity });
       for await (const line of lines) {
         let event;
@@ -35554,7 +35621,9 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           if (isRecord11(payload2)) {
             const cwd = asString2(payload2.cwd);
             sessionRoot = cwd;
-            if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot);
+            if (cwd) {
+              matchesRepo = await isSameOrdinaryPhysicalDirectory(cwd, repoRoot);
+            }
             if (hostSessionId !== void 0) {
               const sessionId = asString2(payload2.id);
               matchesHostSession = sessionId === hostSessionId;
@@ -35620,7 +35689,9 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           for (const id of pendingRead.skillIds) confirmedInLatestTurn.add(id);
         }
       }
+      await settleBoundedStream(stream);
       if (malformedTranscript) return [];
+      if (!await hostTranscriptUnchanged(handle, transcript)) return [];
       if (matchesHostSession) {
         if (latestTurnId !== void 0) {
           for (const id of confirmedInLatestTurn) confirmed.add(id);
@@ -35629,6 +35700,9 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
       }
     } catch {
       return [];
+    } finally {
+      await settleBoundedStream(stream);
+      await handle.close().catch(() => void 0);
     }
     if (matchesHostSession) break;
   }
@@ -35697,7 +35771,7 @@ function parseReceipt2(value) {
 }
 async function regularFile(path9) {
   try {
-    const info = await lstat23(path9);
+    const info = await lstat22(path9);
     return info.isFile() && !info.isSymbolicLink();
   } catch {
     return false;
@@ -35980,7 +36054,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 }
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
-import { lstat as lstat24, realpath as realpath11 } from "node:fs/promises";
+import { lstat as lstat23, realpath as realpath10 } from "node:fs/promises";
 import { dirname as dirname11, isAbsolute as isAbsolute14, relative as relative10, resolve as resolve21, sep as sep12 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
@@ -36003,19 +36077,19 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
   if (lexical === ".." || lexical.startsWith(`..${sep12}`) || isAbsolute14(lexical)) {
     throw new Error(`Change \u6839\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
-  const rootInfo = await lstat24(root);
+  const rootInfo = await lstat23(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
     throw new Error(`\u9879\u76EE\u6839\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${root}`);
   }
   let cursor = root;
   for (const segment of lexical.split(sep12).filter(Boolean)) {
     cursor = resolve21(cursor, segment);
-    const info = await lstat24(cursor);
+    const info = await lstat23(cursor);
     if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error(`Change \u6839\u8DEF\u5F84\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${cursor}`);
     }
   }
-  const [rootReal, changeReal] = await Promise.all([realpath11(root), realpath11(changeRoot)]);
+  const [rootReal, changeReal] = await Promise.all([realpath10(root), realpath10(changeRoot)]);
   const escaped3 = relative10(rootReal, changeReal);
   if (escaped3 === ".." || escaped3.startsWith(`..${sep12}`) || isAbsolute14(escaped3)) {
     throw new Error(`Change \u6839\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
@@ -36062,7 +36136,7 @@ async function cmdDocumentScaffold(deps, name2, kind, requestedLocale, requested
     const parent = await ensureSafeDocumentParent(deps.cwd, target);
     await assertSafeChangeRoot(deps.cwd, dir);
     try {
-      const info = await lstat25(target);
+      const info = await lstat24(target);
       if (!ordinaryDocumentFile(info)) throw new Error(`document scaffold \u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${targetRelative}`);
       deps.io.out(targetRelative);
       return 0;
@@ -36083,7 +36157,7 @@ async function cmdDocumentScaffold(deps, name2, kind, requestedLocale, requested
       await atomicLinkPublish(parent, ".pipeline-document-scaffold.tmp", target, content);
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const info = await lstat25(target);
+      const info = await lstat24(target);
       if (!ordinaryDocumentFile(info)) {
         throw new Error(`document scaffold \u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${targetRelative}`);
       }
@@ -36975,7 +37049,7 @@ import { writeFile as writeFile11 } from "node:fs/promises";
 import { join as join59 } from "node:path";
 
 // packages/cli/src/commands/afk-executor.ts
-import { constants as constants5 } from "node:fs";
+import { constants as constants6 } from "node:fs";
 import { access as access2 } from "node:fs/promises";
 import { homedir as homedir11 } from "node:os";
 import { join as join58 } from "node:path";
@@ -37399,7 +37473,7 @@ function createProductionSkillContentLocator(opts) {
 
 // packages/cli/src/commands/afk-executor-contract.ts
 import { createHash as createHash29 } from "node:crypto";
-import { readFile as readFile27, realpath as realpath12 } from "node:fs/promises";
+import { readFile as readFile27, realpath as realpath11 } from "node:fs/promises";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var SHA256_HEX = /^[0-9a-f]{64}$/;
 var BUNDLED_CLI_SUFFIX = "/packages/cli/dist/tenon.mjs";
@@ -37435,7 +37509,7 @@ async function resolveBundledCliDistSha256(moduleUrl = import.meta.url) {
   }
   let resolved;
   try {
-    resolved = await realpath12(candidate);
+    resolved = await realpath11(candidate);
   } catch (error) {
     throw new BundledCliDigestUnavailableError(
       candidate,
@@ -37524,7 +37598,7 @@ async function runAfkRound(deps, options, runtime = {}) {
   const currentBranchFn = runtime.currentBranch ?? ((cwd) => branchWith(cwd, exec));
   const resolveCliDistSha256 = runtime.resolveCliDistSha256 ?? (() => resolveBundledCliDistSha256());
   const homeDir = runtime.homeDir ?? homedir11;
-  const canReadFile2 = runtime.canReadFile ?? ((path9) => access2(path9, constants5.R_OK));
+  const canReadFile2 = runtime.canReadFile ?? ((path9) => access2(path9, constants6.R_OK));
   const { level } = options;
   const image = options.image ?? readAutomationJson(deps.cwd).image ?? DEFAULT_SANDCASTLE_IMAGE;
   const targetedLoopIds = options.targets === void 0 ? void 0 : [...new Set(options.targets.map((target) => target.expectedLoopId))];
@@ -41271,8 +41345,8 @@ async function cmdLoopRun(deps, args, fs, projectLedger = ledgerProjections, wir
 }
 
 // packages/cli/src/commands/loop-sync.ts
-import { constants as constants6 } from "node:fs";
-import { lstat as lstat26, open as open6 } from "node:fs/promises";
+import { constants as constants7 } from "node:fs";
+import { lstat as lstat25, open as open7 } from "node:fs/promises";
 import { join as join62 } from "node:path";
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
 var SHA256_RE5 = /^[a-f0-9]{64}$/;
@@ -41332,7 +41406,7 @@ async function readRunLog(repoRoot) {
   const path9 = join62(repoRoot, ".superpowers", "loops", "progress.md");
   let before;
   try {
-    before = await lstat26(path9);
+    before = await lstat25(path9);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     const code = error.code ?? "IO";
@@ -41342,7 +41416,7 @@ async function readRunLog(repoRoot) {
   if (!before.isFile()) throw new Error(`loop-sync run-log read failed (not-regular-file): ${path9}`);
   let handle;
   try {
-    handle = await open6(path9, constants6.O_RDONLY | constants6.O_NOFOLLOW);
+    handle = await open7(path9, constants7.O_RDONLY | constants7.O_NOFOLLOW);
   } catch (error) {
     const code = error.code ?? "IO";
     const reason = code === "ELOOP" ? "symlink" : `io/${code}`;
@@ -42831,17 +42905,17 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 }
 
 // packages/cli/src/commands/scaffold.ts
-import { lstat as lstat30, mkdir as mkdir22, readFile as readFile30, rm as rm8, stat as stat11, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
+import { lstat as lstat29, mkdir as mkdir22, readFile as readFile30, rm as rm8, stat as stat10, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
 import { dirname as dirname14, isAbsolute as isAbsolute20, join as join64, relative as relative15, resolve as resolve28, sep as sep15 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
-import { lstat as lstat29, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
+import { lstat as lstat28, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { dirname as dirname13, isAbsolute as isAbsolute19, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash31 } from "node:crypto";
-import { copyFile, lstat as lstat27, mkdir as mkdir20, readFile as readFile28, readdir as readdir12 } from "node:fs/promises";
+import { copyFile, lstat as lstat26, mkdir as mkdir20, readFile as readFile28, readdir as readdir12 } from "node:fs/promises";
 import { relative as relative12, resolve as resolve25 } from "node:path";
 async function copyOrdinaryTree(source, target) {
   await mkdir20(target);
@@ -42908,7 +42982,7 @@ async function ordinaryTreeDigest(root) {
   return hash.digest("hex");
 }
 async function ordinaryDirectoryIdentity(target) {
-  const info = await lstat27(target);
+  const info = await lstat26(target);
   if (!info.isDirectory() || info.isSymbolicLink()) {
     throw new Error(`spec scaffold \u4E8B\u52A1\u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${target}`);
   }
@@ -42919,7 +42993,7 @@ function ordinaryPathKey(target) {
 }
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
-import { lstat as lstat28, readFile as readFile29, rename as rename7, rm as rm6 } from "node:fs/promises";
+import { lstat as lstat27, readFile as readFile29, rename as rename7, rm as rm6 } from "node:fs/promises";
 import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute18, relative as relative13, resolve as resolve26, sep as sep13 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
@@ -42932,7 +43006,7 @@ function contained2(root, target) {
 }
 async function existingOrdinaryFile(target) {
   try {
-    const info = await lstat28(target);
+    const info = await lstat27(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`spec scaffold \u4E8B\u52A1\u63CF\u8FF0\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
@@ -42944,7 +43018,7 @@ async function existingOrdinaryFile(target) {
 }
 async function existingOrdinaryDirectory(target) {
   try {
-    const info = await lstat28(target);
+    const info = await lstat27(target);
     if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error(`spec scaffold \u4E8B\u52A1\u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${target}`);
     }
@@ -43107,7 +43181,7 @@ function contained3(root, target) {
 }
 async function existingOrdinaryDirectory2(target) {
   try {
-    const info = await lstat29(target);
+    const info = await lstat28(target);
     if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error(`spec scaffold \u4E8B\u52A1\u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${target}`);
     }
@@ -43164,7 +43238,7 @@ async function publishSpecScaffoldTransaction(options) {
       }
       await ensureTrustedProjectDirectory(candidateSpecDirectory, dirname13(target));
       try {
-        const info = await lstat29(target);
+        const info = await lstat28(target);
         if (!info.isFile() || info.isSymbolicLink()) {
           throw new Error(`spec scaffold overwrite \u76EE\u6807\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${file.relativePath}`);
         }
@@ -43248,7 +43322,7 @@ async function publishSpecScaffoldTransaction(options) {
 var REAL_FS = {
   exists: async (abs) => {
     try {
-      await stat11(abs);
+      await stat10(abs);
       return true;
     } catch {
       return false;
@@ -43288,7 +43362,7 @@ async function assertExistingParentsSafe(cwd, target) {
   for (const segment of rel.split(sep15).filter(Boolean)) {
     cursor = resolve28(cursor, segment);
     try {
-      const info = await lstat30(cursor);
+      const info = await lstat29(cursor);
       if (!info.isDirectory() || info.isSymbolicLink()) {
         throw new Error(`scaffold \u7236\u8DEF\u5F84\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${cursor}`);
       }
@@ -43301,7 +43375,7 @@ async function assertExistingParentsSafe(cwd, target) {
 async function removeScaffoldFile(cwd, target) {
   await assertExistingParentsSafe(cwd, target);
   try {
-    const info = await lstat30(target);
+    const info = await lstat29(target);
     if (!ordinaryDocumentFile(info)) {
       throw new Error(`scaffold overwrite \u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
@@ -43352,7 +43426,7 @@ async function cmdScaffoldSpec(deps, args, fs) {
         const target = abs(f.rel);
         await assertExistingParentsSafe(deps.cwd, target);
         try {
-          const info = await lstat30(target);
+          const info = await lstat29(target);
           if (!ordinaryDocumentFile(info)) {
             throw new Error(`scaffold \u76EE\u6807\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
           }
@@ -43485,11 +43559,11 @@ async function cmdScaffold(deps, sub, args, fs = REAL_FS) {
 }
 
 // packages/cli/src/commands/session.ts
-import { appendFile as appendFile3, lstat as lstat32, mkdir as mkdir23, readFile as readFile32, rename as rename9, rm as rm9, writeFile as writeFile14 } from "node:fs/promises";
+import { appendFile as appendFile3, lstat as lstat31, mkdir as mkdir23, readFile as readFile32, rename as rename9, rm as rm9, writeFile as writeFile14 } from "node:fs/promises";
 import { join as join66 } from "node:path";
 
 // packages/cli/src/continuousAuthority.ts
-import { lstat as lstat31, readFile as readFile31 } from "node:fs/promises";
+import { lstat as lstat30, readFile as readFile31 } from "node:fs/promises";
 import { join as join65 } from "node:path";
 var ACTIVE_POINTER_FILE = ".pipeline-active";
 var INTERACTION_AUTHORITY_FILE = ".pipeline-interaction-authority";
@@ -43502,7 +43576,7 @@ function isValidHostSessionId(value) {
 }
 async function readRegularFile(path9) {
   try {
-    const entry = await lstat31(path9);
+    const entry = await lstat30(path9);
     if (!entry.isFile() || entry.isSymbolicLink()) return null;
     return await readFile31(path9, "utf8");
   } catch {
@@ -43553,7 +43627,7 @@ function authorityTimestamp() {
 }
 async function assertRegularOrMissing(path9) {
   try {
-    const entry = await lstat32(path9);
+    const entry = await lstat31(path9);
     if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("\u76EE\u6807\u4E0D\u662F\u666E\u901A\u6587\u4EF6");
   } catch (error) {
     if (error.code === "ENOENT") return;
@@ -43562,7 +43636,7 @@ async function assertRegularOrMissing(path9) {
 }
 async function ensurePlainDirectory(path9) {
   try {
-    const entry = await lstat32(path9);
+    const entry = await lstat31(path9);
     if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("\u76EE\u5F55\u4E0D\u662F\u666E\u901A\u76EE\u5F55");
     return;
   } catch (error) {
@@ -43573,7 +43647,7 @@ async function ensurePlainDirectory(path9) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const created = await lstat32(path9);
+  const created = await lstat31(path9);
   if (!created.isDirectory() || created.isSymbolicLink()) throw new Error("\u76EE\u5F55\u4E0D\u662F\u666E\u901A\u76EE\u5F55");
 }
 async function writeTerminalSessionBinding(cwd, name2, sessionId) {
@@ -45002,7 +45076,7 @@ async function cmdMigrateWorkflow(deps, name2) {
 }
 
 // packages/cli/src/commands/state-projection.ts
-import { lstat as lstat33, readFile as readFile33 } from "node:fs/promises";
+import { lstat as lstat32, readFile as readFile33 } from "node:fs/promises";
 import { isAbsolute as isAbsolute21, join as join67, resolve as resolve29 } from "node:path";
 function message(error) {
   return error instanceof Error ? error.message : String(error);
@@ -45044,7 +45118,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
           return 0;
         }
         const sourcePath = isAbsolute21(opts.workflowFile) ? opts.workflowFile : resolve29(deps.cwd, opts.workflowFile);
-        const info = await lstat33(sourcePath);
+        const info = await lstat32(sourcePath);
         if (!info.isFile() || info.isSymbolicLink()) {
           throw new Error(`workflow file \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${sourcePath}`);
         }
@@ -45830,7 +45904,7 @@ import { mkdir as mkdir27 } from "node:fs/promises";
 import { join as join75 } from "node:path";
 
 // packages/cli/src/runtime/launchers.ts
-import { chmod as chmod2, lstat as lstat34, mkdir as mkdir24, readFile as readFile34, rm as rm10 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat33, mkdir as mkdir24, readFile as readFile34, rm as rm10 } from "node:fs/promises";
 import { homedir as homedir16 } from "node:os";
 import { dirname as dirname16, join as join70 } from "node:path";
 function shellQuote(value) {
@@ -45860,7 +45934,7 @@ function launcherPaths(homeDir) {
 }
 async function captureLauncher(path9) {
   try {
-    const item2 = await lstat34(path9);
+    const item2 = await lstat33(path9);
     if (item2.isSymbolicLink() || !item2.isFile()) {
       throw new Error(`launcher \u4E0D\u662F\u53EF\u5B89\u5168\u66FF\u6362\u7684\u666E\u901A\u6587\u4EF6: ${path9}`);
     }
@@ -45951,13 +46025,13 @@ import { execFile as execFile4 } from "node:child_process";
 import {
   chmod as chmod3,
   copyFile as copyFile2,
-  lstat as lstat35,
+  lstat as lstat34,
   mkdir as mkdir25,
   readFile as readFile36,
   readdir as readdir13,
   rename as rename10,
   rm as rm12,
-  stat as stat12
+  stat as stat11
 } from "node:fs/promises";
 import { basename as basename8, dirname as dirname17, join as join73, relative as relative16, resolve as resolve31, sep as sep16 } from "node:path";
 
@@ -46165,7 +46239,7 @@ function candidatePath(root, entry) {
   return path9;
 }
 async function copyEntry(source, target) {
-  const sourceStat = await lstat35(source);
+  const sourceStat = await lstat34(source);
   if (sourceStat.isSymbolicLink()) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u5305\u542B\u7B26\u53F7\u94FE\u63A5: ${source}`);
   if (sourceStat.isDirectory()) {
     await mkdir25(target, { recursive: true, mode: sourceStat.mode & 511 });
@@ -46198,7 +46272,7 @@ async function hashTree(root) {
     for (const entry of entries) {
       const child = join73(dir, entry.name);
       const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
-      const item2 = await lstat35(child);
+      const item2 = await lstat34(child);
       if (item2.isSymbolicLink()) throw new RuntimeFailure("runtime-corrupt", `\u53D1\u5E03 payload \u5305\u542B\u7B26\u53F7\u94FE\u63A5: ${childRel}`);
       if (item2.isDirectory()) {
         hash.update(`D\0${childRel}\0`);
@@ -46231,7 +46305,7 @@ async function shellFiles(root) {
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const path9 = join73(dir, entry.name);
-      const item2 = await lstat35(path9);
+      const item2 = await lstat34(path9);
       if (item2.isSymbolicLink()) throw new RuntimeFailure("candidate-invalid", `shell \u8D44\u4EA7\u4E0D\u5F97\u662F\u7B26\u53F7\u94FE\u63A5: ${path9}`);
       if (item2.isDirectory()) await visit(path9);
       else if (item2.isFile() && entry.name.endsWith(".sh")) files.push(path9);
@@ -46272,7 +46346,7 @@ async function verifyHookAbi(payloadRoot) {
 }
 async function assertFile(path9, label) {
   try {
-    const value = await lstat35(path9);
+    const value = await lstat34(path9);
     if (!value.isFile() || value.isSymbolicLink()) throw new Error("\u4E0D\u662F\u666E\u901A\u6587\u4EF6");
   } catch (error) {
     throw new RuntimeFailure("candidate-invalid", `${label} \u7F3A\u5931\u6216\u4E0D\u53EF\u7528: ${String(error)}`);
@@ -46525,7 +46599,7 @@ var RuntimeReleaseStore = class {
     const active = join73(this.paths.bootstrapRoot, "active.mjs");
     const previous = join73(this.paths.bootstrapRoot, "previous.mjs");
     try {
-      await stat12(active);
+      await stat11(active);
       await atomicWriteFile(previous, await readFile36(active, "utf8"));
       await chmod3(previous, 493);
     } catch (error) {
@@ -46541,7 +46615,7 @@ var RuntimeReleaseStore = class {
     for (const entry of entries) {
       if (!entry.isDirectory() || !validReleaseId(entry.name) || protectedIds.has(entry.name)) continue;
       try {
-        candidates.push({ id: entry.name, modifiedAt: (await stat12(join73(this.paths.releasesRoot, entry.name))).mtimeMs });
+        candidates.push({ id: entry.name, modifiedAt: (await stat11(join73(this.paths.releasesRoot, entry.name))).mtimeMs });
       } catch {
       }
     }
@@ -46562,7 +46636,7 @@ var RuntimeReleaseStore = class {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { lstat as lstat36, mkdir as mkdir26, readFile as readFile37, unlink as unlink6 } from "node:fs/promises";
+import { lstat as lstat35, mkdir as mkdir26, readFile as readFile37, unlink as unlink6 } from "node:fs/promises";
 import { dirname as dirname18, isAbsolute as isAbsolute22, join as join74, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
@@ -46796,7 +46870,7 @@ function decodeJournal(raw, paths) {
 }
 async function readJournal(path9, paths) {
   try {
-    const info = await lstat36(path9);
+    const info = await lstat35(path9);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`managed release journal \u4E0D\u662F\u666E\u901A\u6587\u4EF6\uFF1A${path9}`);
     }
@@ -50827,7 +50901,7 @@ async function readGateMarkers(cwd) {
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
       const p = join87(cwd, `.pipeline-pending-${kind}`);
-      const st = await stat13(p);
+      const st = await stat12(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile39(p, "utf8") });
     } catch {
     }
