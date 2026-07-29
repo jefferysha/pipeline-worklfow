@@ -1788,6 +1788,7 @@ export const zh: Dict = {
     tab_need: '等你动手',
     tab_run: '运行中',
     tab_queue: '等待中',
+    filter_summary: '匹配 {shown} 个 · 上下文 {context} 个',
     // 用户追加口径:workflow chip 用全称,不缩写(不是「wf: default」是「workflow: default」)。
     wf_label: 'workflow: {wf}',
     sched_sandbox: '▦ 沙箱',
@@ -3649,6 +3650,7 @@ export const en: Dict = {
     tab_need: 'Needs you',
     tab_run: 'Running',
     tab_queue: 'Waiting',
+    filter_summary: 'Matches {shown} · Context {context}',
     // Full word per user feedback: "workflow: default", never the "wf:" abbreviation.
     wf_label: 'workflow: {wf}',
     sched_sandbox: '▦ Sandbox',

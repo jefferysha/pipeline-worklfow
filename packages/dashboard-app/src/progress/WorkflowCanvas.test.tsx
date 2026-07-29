@@ -368,8 +368,8 @@ describe('WorkflowCanvas change 小卡', () => {
     expect(group.textContent).not.toMatch(/[项目流程运行中阶段工作流终端打开项]/)
   })
 
-  it('小卡：状态点 data-pulse（running）/data-state/data-sbx；dim 小卡 data-dim；选中小卡 data-on；单项目无项目缩写', () => {
-    renderCanvas([
+  it('小卡：dim 上下文同时淡出、禁用并从无障碍树隐藏，且点击不会打开抽屉', () => {
+    const onOpen = renderCanvas([
       makeGroup({
         changes: [
           chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),
@@ -387,9 +387,15 @@ describe('WorkflowCanvas change 小卡', () => {
     const judge = screen.getByTestId('prg-cv-chg-a2')
     expect(judge).toHaveAttribute('data-state', 'gatejudge')
     expect(judge).toHaveAttribute('data-dim', 'true')
+    expect(judge).toBeDisabled()
+    expect(judge).toHaveAttribute('aria-hidden', 'true')
     expect(judge).toHaveAttribute('data-on', 'true')
     expect(judge.getAttribute('data-sbx')).toBeNull()
     expect(judge.querySelector('[data-pulse="true"]')).toBeNull()
+    fireEvent.click(judge)
+    expect(onOpen).not.toHaveBeenCalled()
+    fireEvent.click(run)
+    expect(onOpen).toHaveBeenCalledWith('a1@/tmp/proj-a', run)
   })
 
   it('终稿调度图标使用压缩包同款 lucide：沙箱 change → coffee；终端 change → terminal', () => {
