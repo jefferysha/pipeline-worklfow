@@ -44,6 +44,7 @@ export interface DocumentEvidenceSnapshot {
     requiredRead: boolean
     paths: string[]
     producers: string[]
+    timeline?: Array<{ producer: string; recordedAt: string; readAt?: string }>
   }>
 }
 

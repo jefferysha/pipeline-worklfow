@@ -686,6 +686,9 @@ describe('OpenSpec document ledger', () => {
     expect(afterRead.pass).toBe(false)
     expect(afterRead.items.find((item) => item.kind === 'proposal')?.status).toBe('recorded')
     expect(afterRead.items.find((item) => item.kind === 'openspec-design')?.status).toBe('recorded')
+    expect(afterRead.items.find((item) => item.kind === 'proposal')?.timeline).toEqual([
+      { producer: 'tenon-explore', recordedAt: NOW, readAt: NOW },
+    ])
     expect(afterRead.blockers).not.toContain("document 'proposal' 的 producer 不符合当前 document contract")
     expect(afterRead.blockers).not.toContain("document 'openspec-design' 的 producer 不符合当前 document contract")
   })

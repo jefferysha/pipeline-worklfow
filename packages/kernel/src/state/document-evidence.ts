@@ -25,6 +25,7 @@ export interface DocumentEvidenceItem {
   readonly requiredRead: boolean
   readonly paths: readonly string[]
   readonly producers: readonly string[]
+  readonly timeline: readonly { readonly producer: string; readonly recordedAt: string; readonly readAt?: string }[]
 }
 
 export interface DocumentEvidenceReport {
@@ -53,6 +54,8 @@ function item(
   status: DocumentEvidenceItemStatus,
   requiredRead: boolean,
   records: readonly DocumentRecord[],
+  phase: string,
+  currentVisitId?: string,
 ): DocumentEvidenceItem {
   return {
     kind,
@@ -60,6 +63,16 @@ function item(
     requiredRead,
     paths: records.map((record) => record.path),
     producers: records.map((record) => record.producer),
+    timeline: records.map((record) => ({
+      producer: record.producer,
+      recordedAt: record.recordedAt,
+      ...(status === 'recorded' && requiredRead
+        ? (() => {
+            const receipt = record.reads.find((candidate) => currentVisitId !== undefined && receiptMatchesVisit(candidate, phase, record.sha256, currentVisitId))
+            return receipt === undefined ? {} : { readAt: receipt.readAt }
+          })()
+        : {}),
+    })),
   }
 }
 
@@ -131,7 +144,7 @@ export async function evaluateDocumentEvidence(
     const requiredRead = readRequirements.has(kind)
     if (records.length === 0) {
       blockers.push(`缺少 document '${kind}'；执行 tenon document record <change> ${kind} <path> --producer <skill>`)
-      items.push(item(kind, 'missing', requiredRead, records))
+      items.push(item(kind, 'missing', requiredRead, records, phase, currentVisitId))
       continue
     }
     if (records.some((record) => {
@@ -140,7 +153,7 @@ export async function evaluateDocumentEvidence(
         : !isAcceptedDocumentProducer(kind, record.producer)
     })) {
       blockers.push(`document '${kind}' 的 producer 不符合当前 document contract`)
-      items.push(item(kind, 'stale', requiredRead, records))
+      items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
       continue
     }
     const legacyDelta = kind === 'delta-spec'
@@ -150,13 +163,13 @@ export async function evaluateDocumentEvidence(
       blockers.push(
         `存在旧 delta-spec 记录，必须用 tenon document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
       )
-      items.push(item(kind, 'stale', requiredRead, records))
+      items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
       continue
     }
     const digests = await Promise.all(records.map((record) => currentRecordDigest(repoRoot, record)))
     if (records.some((record, index) => digests[index] !== record.sha256)) {
       blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 tenon document record 后再继续`)
-      items.push(item(kind, 'stale', requiredRead, records))
+      items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
       continue
     }
     if (requiredRead && (
@@ -170,10 +183,10 @@ export async function evaluateDocumentEvidence(
           `document '${kind}' 尚未由 ${phase} 的当前 step visit 读取；执行 tenon document read <change> ${kind}`,
         )
       }
-      items.push(item(kind, 'unread', requiredRead, records))
+      items.push(item(kind, 'unread', requiredRead, records, phase, currentVisitId))
       continue
     }
-    items.push(item(kind, 'recorded', requiredRead, records))
+    items.push(item(kind, 'recorded', requiredRead, records, phase, currentVisitId))
   }
   return { phase, hasLedger: true, pass: blockers.length === 0, blockers, items }
 }

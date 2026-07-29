@@ -6294,13 +6294,21 @@ async function currentRecordDigest(repoRoot, record2) {
     return void 0;
   }
 }
-function item(kind, status, requiredRead, records) {
+function item(kind, status, requiredRead, records, phase, currentVisitId) {
   return {
     kind,
     status,
     requiredRead,
     paths: records.map((record2) => record2.path),
-    producers: records.map((record2) => record2.producer)
+    producers: records.map((record2) => record2.producer),
+    timeline: records.map((record2) => ({
+      producer: record2.producer,
+      recordedAt: record2.recordedAt,
+      ...status === "recorded" && requiredRead ? (() => {
+        const receipt = record2.reads.find((candidate) => currentVisitId !== void 0 && receiptMatchesVisit(candidate, phase, record2.sha256, currentVisitId));
+        return receipt === void 0 ? {} : { readAt: receipt.readAt };
+      })() : {}
+    }))
   };
 }
 function receiptMatchesVisit(receipt, phase, digest2, visitId) {
@@ -6347,36 +6355,36 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
     const requiredRead = readRequirements.has(kind);
     if (records.length === 0) {
       blockers.push(`\u7F3A\u5C11 document '${kind}'\uFF1B\u6267\u884C tenon document record <change> ${kind} <path> --producer <skill>`);
-      items.push(item(kind, "missing", requiredRead, records));
+      items.push(item(kind, "missing", requiredRead, records, phase, currentVisitId));
       continue;
     }
     if (records.some((record2) => {
       return policy ? !isRecordedDocumentProducerAllowedThroughPolicyStep(policy, kind, phase, record2.producer) : !isAcceptedDocumentProducer(kind, record2.producer);
     })) {
       blockers.push(`document '${kind}' \u7684 producer \u4E0D\u7B26\u5408\u5F53\u524D document contract`);
-      items.push(item(kind, "stale", requiredRead, records));
+      items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
     const legacyDelta = kind === "delta-spec" ? records.filter((record2) => deltaSpecSlot(record2.path, changeDir) === void 0) : [];
     if (legacyDelta.length > 0) {
       blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record2) => record2.path).join(", ")}`);
-      items.push(item(kind, "stale", requiredRead, records));
+      items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
     const digests = await Promise.all(records.map((record2) => currentRecordDigest(repoRoot, record2)));
     if (records.some((record2, index) => digests[index] !== record2.sha256)) {
       blockers.push(`document '${kind}' \u5DF2\u7F3A\u5931\u6216\u5185\u5BB9\u53D8\u5316\uFF1B\u91CD\u65B0\u6267\u884C tenon document record \u540E\u518D\u7EE7\u7EED`);
-      items.push(item(kind, "stale", requiredRead, records));
+      items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
     if (requiredRead && (currentVisitId === void 0 || records.some((record2) => !record2.reads.some((receipt) => receiptMatchesVisit(receipt, phase, record2.sha256, currentVisitId))))) {
       if (currentVisitId !== void 0) {
         blockers.push(`document '${kind}' \u5C1A\u672A\u7531 ${phase} \u7684\u5F53\u524D step visit \u8BFB\u53D6\uFF1B\u6267\u884C tenon document read <change> ${kind}`);
       }
-      items.push(item(kind, "unread", requiredRead, records));
+      items.push(item(kind, "unread", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    items.push(item(kind, "recorded", requiredRead, records));
+    items.push(item(kind, "recorded", requiredRead, records, phase, currentVisitId));
   }
   return { phase, hasLedger: true, pass: blockers.length === 0, blockers, items };
 }
@@ -20579,7 +20587,8 @@ async function documentEvidence(root, changeDir, plan, phase) {
       status: item2.status,
       requiredRead: item2.requiredRead,
       paths: [...item2.paths],
-      producers: [...item2.producers]
+      producers: [...item2.producers],
+      timeline: item2.timeline.map((entry) => ({ ...entry }))
     }))
   };
 }

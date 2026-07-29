@@ -123,6 +123,7 @@ async function documentEvidence(
       requiredRead: item.requiredRead,
       paths: [...item.paths],
       producers: [...item.producers],
+      timeline: item.timeline.map((entry) => ({ ...entry })),
     })),
   }
 }
