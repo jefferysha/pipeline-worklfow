@@ -244,6 +244,30 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(trigger).toHaveFocus()
   })
 
+  it('modal Dialog 位于设置浮层之上时，Escape 不关闭设置或抢走焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+
+    const theme = screen.getByTestId('theme-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    const modal = document.createElement('div')
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    document.body.append(modal)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByTestId('nav-settings-panel')).toBeInTheDocument()
+    expect(theme).toHaveFocus()
+    expect(trigger).not.toHaveFocus()
+
+    modal.remove()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
   it('离线状态只在设置浮层内呈现', () => {
     renderNav({ connected: false })
     fireEvent.click(screen.getByTestId('nav-settings'))

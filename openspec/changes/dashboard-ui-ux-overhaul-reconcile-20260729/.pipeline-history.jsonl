@@ -33,3 +33,31 @@
 {"ts":"2026-07-29T05:18:12Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-29T05:18:13Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"07087baf-658e-4aa3-b316-6c749be1fece"}
 {"ts":"2026-07-29T05:26:26Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T05:26:41Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T05:26:41Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T05:26:41Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T05:26:41Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T05:26:41Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0a474f16-77a4-4a5f-ab8e-cb623d5a25eb"}
+{"ts":"2026-07-29T05:36:31Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-dashboard-ui-ux-overhaul-reconcile-verify.md"}
+{"ts":"2026-07-29T05:36:36Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T04:47:36Z authority_host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T05:36:51Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T05:36:52Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"445a90d1-44f3-40e0-a4e0-cb9672d69adf"}
+{"ts":"2026-07-29T05:37:14Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T05:37:14Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T05:38:18Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T05:38:18Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T05:38:18Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"a0e1c027-56fa-4aad-907d-2714b0b86e32"}
+{"ts":"2026-07-29T05:40:16Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-29-dashboard-ui-ux-overhaul-reconcile.md"}
+{"ts":"2026-07-29T05:40:17Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T05:40:17Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T05:40:17Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T05:40:24Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T05:40:24Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T04:47:36Z authority_host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
+{"ts":"2026-07-29T05:40:24Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"4368513b-6b55-418e-8a47-0f53f69282fd"}
+{"ts":"2026-07-29T05:46:46Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T05:56:14Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

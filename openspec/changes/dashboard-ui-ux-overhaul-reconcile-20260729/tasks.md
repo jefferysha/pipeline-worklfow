@@ -23,6 +23,9 @@
 - [x] 子阶段 3：整合 Projects 工作区身份并运行定向测试、typecheck 与全量前端测试。 (build)
 - [x] 子阶段 4：从最终源码重新生成 tracked assets，确认无 conflict marker 或旧 asset 残留。 (build)
 - [x] 保持既有前端分层，不引入新依赖或服务端契约变更。 (build)
+- [x] 子阶段 5：修复同 basename 的可见唯一标签与稳定 DOM id，并补 modal Escape 回归测试。 (build)
+- [x] 子阶段 5：清理 diff 门禁问题，从最终源码重建 tracked assets 并证明隔离重建无漂移。 (build)
+- [x] 子阶段 5：在隔离副本证明 OpenSpec desktop-only delta 可应用且不改写真实主规格。 (build)
 
 ## 验证
 

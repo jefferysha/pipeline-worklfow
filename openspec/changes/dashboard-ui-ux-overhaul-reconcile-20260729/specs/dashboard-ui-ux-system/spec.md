@@ -70,13 +70,11 @@ Overview/SolutionView MUST 为七个主要章节提供由同一域配置生成�
 - **THEN** `npm run build` 从当前源码重新生成所有 tracked bundle
 - **AND** 浏览器验收记录最终 asset hash，而非旧 PR 的 hash
 
-## MODIFIED Requirements
-
-### Requirement: 自适应应用外壳
+### Requirement: 电脑端应用外壳
 
 Dashboard MUST 面向本地开发者的电脑端工作流，在 1024px 至 1920px 的受支持视口内提供带可见
-标签的左侧导航 rail，并 MUST 保持主要内容无根级水平溢出。已有小于 1024px 的 best-effort
-布局 MAY 保留，但不属于本规格的产品支持、设计或验收范围。
+标签的左侧导航 rail，并 MUST 保持主要内容无根级水平溢出。本要求不声明或修改小于 1024px
+视口的产品行为；已有窄屏要求属于主规格的既存能力，不属于本 Change 的设计、实现或验收范围。
 
 #### Scenario: 1440px 桌面导航
 
@@ -90,51 +88,15 @@ Dashboard MUST 面向本地开发者的电脑端工作流，在 1024px 至 1920p
 - **THEN** 左侧 rail、主要内容和设置浮层均可操作
 - **AND** 文档根节点没有水平溢出
 
-### Requirement: 统一一级页面层级
+### Requirement: 电脑端生产环境浏览器验收
 
-Projects、Progress、AFK、Workbench 和 Machine MUST 在 1024–1920px 电脑端使用一致的唯一 H1，
-并 SHOULD 按标题、说明、状态、主要动作的顺序组织页面头。长项目名或 Change 名 MUST 按定义
-规则换行、截断或提供完整 accessible name，不得挤掉状态、原因和下一步。
-
-#### Scenario: 在一级页面间切换
-
-- **WHEN** 用户依次进入任意两个一级页面
-- **THEN** 两个页面都存在唯一 H1、清晰的一句用途说明和一致的标题尺度
-- **AND** 当前页面与主要动作在首屏可定位
-
-#### Scenario: 长名称与 1024px 视口
-
-- **WHEN** 项目名或 Change 名超过 1024px 内容区的单行可用宽度
-- **THEN** 名称按已定义规则换行或截断，并可取得完整值
-- **AND** 状态、原因和下一步保持可扫描
-
-### Requirement: Progress 响应式任务流
-
-Progress MUST 在 1024–1920px 电脑端保留可横向理解的阶段画布，并 MUST 让 toolbar、状态筛选、
-workflow 筛选、项目摘要、阶段轨和 Change 摘要保持清晰任务顺序。局部 tabs 或阶段轨 MAY
-在容器内横向滚动，但整个文档 MUST NOT 横向滚动。
-
-#### Scenario: 1024px 查看当前 Change
-
-- **WHEN** 用户在 1024×768 视口打开包含七阶段 default workflow 的项目
-- **THEN** 当前状态、Change 名和缺失产出/待处理原因可定位
-- **AND** 阶段轨明确提示可查看视口外阶段
-- **AND** 项目名不会挤压成不可扫描的窄列
-
-#### Scenario: 状态筛选超过可用宽度
-
-- **WHEN** 全部状态 tabs 的总宽度超过桌面内容区
-- **THEN** tabs 容器可水平滚动
-- **AND** 选中态、计数和滚动边界保持可见
-
-### Requirement: 生产环境浏览器验收
-
-UI/UX Change MUST 通过相邻组件测试、前端类型检查、前端全量测试、生产构建和真实生产
+本 UI/UX Change MUST 通过相邻组件测试、前端类型检查、前端全量测试、生产构建和真实生产
 Dashboard 浏览器验收。浏览器验收 MUST 核对 `Tenon Dashboard` 页面标题、目标 URL、独立
 worktree root、目标 Change 与最终 asset hash，并覆盖 1024×768、1200×870、1440×900、
-1920×1080 电脑端视口的明暗/system 主题、键盘、关键状态和 reduced-motion。
+1920×1080 电脑端视口的明暗/system 主题、键盘、关键状态和 reduced-motion。本要求不要求
+新增、修改或验收手机端行为。
 
-#### Scenario: 验收目标身份
+#### Scenario: 电脑端验收目标身份
 
 - **WHEN** 验收工具连接本地 Dashboard 端口
 - **THEN** 验收记录确认页面标题、注册项目 root、目标 Change 和最终 asset hash
@@ -151,3 +113,57 @@ worktree root、目标 Change 与最终 asset hash，并覆盖 1024×768、1200�
 - **WHEN** 验收 success、loading、error/retry、empty、disabled、offline/reconnect 与 reduced-motion
 - **THEN** 状态通过文字、图标和语义 role 表达
 - **AND** reduced-motion 直接呈现可操作终态
+
+## MODIFIED Requirements
+
+### Requirement: 统一一级页面层级
+
+Projects、Progress、AFK、Workbench 和 Machine MUST 使用一致的一级页面标题层级，并 SHOULD
+按标题、说明、状态、主要动作的顺序组织页面头。在 1024–1920px 电脑端，长项目名或 Change 名
+MUST 按定义规则换行、截断或提供完整 accessible name，不得挤掉状态、原因和下一步。既有窄屏
+行为保持主规格当前约束，但不属于本 Change 的验收范围。
+
+#### Scenario: 在一级页面间切换
+
+- **WHEN** 用户依次进入任意两个一级页面
+- **THEN** 两个页面都存在唯一 H1、清晰的一句用途说明和一致的标题尺度
+- **AND** 当前页面与主要动作在首屏可定位
+
+#### Scenario: 长标题与窄屏
+
+- **WHEN** 项目名或 Change 名超过移动卡片的单行宽度
+- **THEN** 名称按已定义规则换行或截断
+- **AND** 状态、原因和下一步不被挤出可见信息顺序
+
+#### Scenario: 长名称与 1024px 视口
+
+- **WHEN** 项目名或 Change 名超过 1024px 内容区的单行可用宽度
+- **THEN** 名称按已定义规则换行或截断，并可取得完整值
+- **AND** 状态、原因和下一步保持可扫描
+
+### Requirement: Progress 响应式任务流
+
+Progress MUST 在桌面保留可横向理解的阶段画布，并 MUST 在移动端把 toolbar、状态筛选、
+workflow 筛选、项目摘要、阶段轨和 Change 摘要按纵向任务顺序重排。在 1024–1920px 电脑端，
+这些区域 MUST 保持清晰任务顺序。局部 tabs 或阶段轨 MAY 在各自容器内横向滚动，但整个文档
+MUST NOT 横向滚动。
+
+#### Scenario: 移动端查看当前 Change
+
+- **WHEN** 用户在 390×844 视口打开包含七阶段 default workflow 的项目
+- **THEN** 用户先看到当前状态、Change 名和缺失产出/待处理原因
+- **AND** 可在独立阶段轨容器中查看后续阶段
+- **AND** 项目名不会逐词挤压成不可扫描的窄列
+
+#### Scenario: 1024px 查看当前 Change
+
+- **WHEN** 用户在 1024×768 视口打开包含七阶段 default workflow 的项目
+- **THEN** 当前状态、Change 名和缺失产出/待处理原因可定位
+- **AND** 阶段轨明确提示可查看视口外阶段
+- **AND** 项目名不会挤压成不可扫描的窄列
+
+#### Scenario: 状态筛选超过可用宽度
+
+- **WHEN** 全部状态 tabs 的总宽度超过桌面内容区
+- **THEN** tabs 容器可水平滚动
+- **AND** 选中态、计数和滚动边界保持可见

@@ -2,7 +2,7 @@
 
 ## 范围与方法
 
-- 对象：最终生产 bundle `index-oDUz_gKv.js` / `index-CuN80qlk.css`。
+- 对象：最终生产 bundle `index-DvRUgA0L.js` / `index-DsdZ7MR-.css`。
 - 页面：Projects、Overview、设置浮层、Onboarding，以及全局 loading/error/offline/disabled 状态。
 - 视口：1024×768、1200×870、1440×900、1920×1080；不包含手机端。
 - 主题与动效：light、dark、system、`prefers-reduced-motion: reduce`。
@@ -12,7 +12,7 @@
 
 | Severity | 用户任务 | 问题 | 修复 |
 | --- | --- | --- | --- |
-| MEDIUM | 在 Projects 选择正确 worktree | 同 basename 行只显示项目名，视觉、accessible name 与测试标识均会冲突。 | 行内增加完整 root 次级文本；accessible name 包含 root；重复 basename 使用 root 派生唯一标识，动画指纹改用 root。 |
+| MEDIUM | 在 Projects 选择正确 worktree | 同 basename 行只显示项目名，视觉、accessible name 与测试标识均会冲突。 | 行内增加 root 次级文本；accessible name 包含完整 root；重复 basename 使用 root 派生唯一标识，动画指纹改用 root。 |
 | MEDIUM | 用键盘修改 Dashboard 设置 | 设置浮层缺少首控件聚焦、Escape 关闭和焦点归还，且可能与 modal Dialog 的 Escape 冲突。 | 保持非模态语义，打开聚焦首控件，Escape 关闭并归还入口；检测上层 modal，避免抢键。 |
 | MEDIUM | 在长 Overview 中定位内容 | 七个章节无页内导航和稳定 section id，1024px 下需要长距离滚动且位置不可分享。 | 从同一 section 配置生成七个原生锚点，加入 sticky 章节导航、稳定 id、`aria-labelledby` 与 `aria-current`。 |
 | MEDIUM | 区分动作、成功和状态 | primary token 与 accent 重复硬编码，语义关系不可追踪；旧对比度测试无法解析 token alias。 | `btn-bg/hover` 显式引用 accent family，primary 引用动作 token；对比度测试递归解析 CSS 变量并继续执行 AA 门槛。 |
@@ -27,7 +27,9 @@
 - reduced-motion 模拟为真时，章节跳转保留 hash/当前态且计算后的 transition duration 为 `0s`。
 - 设置浮层打开后焦点位于主题控件；Escape 后浮层卸载且焦点返回 `nav-settings`。
 - system 偏好可随媒体查询解析，且可显式切换 light/dark；两套主题均保持清晰的表面、边框与焦点层级。
-- Projects 同名 worktree 的按钮名称包含完整 root，可见次级路径能区分 `pr8-audit`、`ba9e` 等工作区。
+- Projects 同名 worktree 的按钮名称包含完整 root，可见次级路径使用最短唯一后缀，能直接区分
+  `…/pr8-audit/pipeline-worklfow`、`…/ba9e/pipeline-worklfow` 等工作区；按钮 DOM `id`
+  与稳定 test id 一一对应。
 - synthetic 503 显示 `role="alert"`、唯一错误 H1 和可用重试；延迟快照显示 `role="status"`
   与 `aria-live="polite"`；零项目显示教学式 H1 与两条可复制命令；SSE 失败显示离线 status；
   不可达项目为非按钮元素并带 `aria-disabled="true"`。
@@ -46,6 +48,26 @@
 - MEDIUM：0
 - LOW：生产 JS bundle 仍超过 Vite 500kB 提示；本 Change 未增加依赖或新页面级数据请求，拆包属于独立性能工作，不影响本次桌面交互正确性。
 - 结论：视觉层级、状态语义、键盘路径、token、一致性、桌面适配和 reduced-motion 已达到进入 pre-Verify 全量代码审查的条件。
+
+## Verify 失败修复与第三轮复评
+
+首个冻结 SHA `8a2d4007ae2d82a976398489ef0fcb8d94c0e496` 的 Reviewer/E2E 结论为
+FAIL，本轮已处理全部 HIGH/MEDIUM：
+
+| Severity | Finding | 修复与证据 |
+| --- | --- | --- |
+| HIGH | 固定 240px 区域左向截断完整 root，多个共享长前缀 worktree 视觉上仍不可区分。 | 对同 basename 组计算最短唯一目录后缀并从左侧显示；真实 1440px Dashboard 已显示 `…/pr8-audit/…`、`…/ba9e/…`，`overflowX=0`。 |
+| MEDIUM | 项目行缺少稳定唯一 DOM `id`。 | 把 root 派生的稳定 row id 同时绑定到 `id` 与 `data-testid`，相邻测试断言两行均唯一。 |
+| MEDIUM | modal Dialog 覆盖设置浮层时缺少 Escape 回归证据。 | 新增测试：上层 `aria-modal="true"` 存在时 Escape 不关闭设置、不抢焦点；移除 modal 后 Escape 正常关闭并返焦。 |
+| MEDIUM | 三个设计文档存在 EOF 空行，旧 `git diff --check` 结论失真。 | 清理三处 EOF 空行，并重新运行冻结比较区间和工作区 `git diff --check`。 |
+| MEDIUM | 隔离构建后 tracked Dashboard dist 漂移。 | 从最终源码重建为 `index-DvRUgA0L.js` / `index-DsdZ7MR-.css`；连续构建需保持三个输出文件 SHA-256 一致。 |
+| MEDIUM | OpenSpec archive 演练因 `MODIFIED` 丢失当前 scenario 而失败。 | 桌面外壳和桌面验收改为独立 ADDED requirement；两个 MODIFIED 块保留完整当前 scenario。隔离 archive 成功：added 6、modified 2。 |
+
+第三轮真实浏览器复评仍为 CRITICAL 0、HIGH 0、MEDIUM 0。1440×900、light、真实生产
+Dashboard 的 11 个可达项目行均具有可见唯一后缀、完整 accessible name/title 与唯一 DOM id；
+页面标题为 `Tenon Dashboard`、唯一 H1、根级 `overflowX=0`、console error 为 0。
+1920×1080 深色证据也已在最终 DOM id 修复后重拍，项目身份为
+`…/pr8-audit/pipeline-worklfow`，id 不含 ASCII whitespace。
 
 ## pre-Verify 全量代码审查
 
@@ -72,9 +94,11 @@ Spec 轴：
 - `npm run check:architecture`：通过，640 个生产文件，5 个既有 size-only exception。
 - `npm run typecheck:web`：通过。
 - 定向 Vitest：7 files / 124 tests 通过。
-- 全量 `npm run test:web`：60 files / 1078 tests 通过；stderr 中保留既有 React `act(...)`
+- 全量 `npm run test:web`：60 files / 1079 tests 通过；stderr 中保留既有 React `act(...)`
   与空 GSAP target 警告，无失败。
-- `npm run build`：通过；最终资产为 `index-oDUz_gKv.js` / `index-CuN80qlk.css`。
+- `npm run build`：通过；最终资产为 `index-DvRUgA0L.js` / `index-DsdZ7MR-.css`。
+- 连续两次 `npm run build:web`：输出文件 SHA-256 一致，tracked Dashboard dist 可复现。
+- OpenSpec 隔离归档演练：通过，真实主规格未改动。
 - `git diff --check` 与 conflict marker 扫描：通过。
 
 代码审查结论：CRITICAL 0、HIGH 0、MEDIUM 0；可冻结 Build 基线。

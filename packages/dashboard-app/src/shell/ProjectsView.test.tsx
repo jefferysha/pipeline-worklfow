@@ -58,8 +58,8 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
   })
 
   it('同 basename 的电脑端 worktree 显示并朗读唯一 root，且行标识不冲突', () => {
-    const firstRoot = '/Users/me/.codex/worktrees/alpha/pipeline-worklfow'
-    const secondRoot = '/Users/me/.codex/worktrees/beta/pipeline-worklfow'
+    const firstRoot = '/Users/me/.codex/worktrees/shared-prefix/alpha/pipeline-worklfow'
+    const secondRoot = '/Users/me/.codex/worktrees/shared-prefix/beta/pipeline-worklfow'
     renderView({
       snapshot: makeSnapshot([
         makeProject(firstRoot, [makeChange('alpha-change', 'build')]),
@@ -74,9 +74,14 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     const second = screen.getByRole('button', {
       name: `打开项目 pipeline-worklfow（${secondRoot}）的进度`,
     })
-    expect(within(first).getByText(firstRoot)).toBeInTheDocument()
-    expect(within(second).getByText(secondRoot)).toBeInTheDocument()
+    expect(within(first).getByText('…/alpha/pipeline-worklfow')).toHaveAttribute('title', firstRoot)
+    expect(within(second).getByText('…/beta/pipeline-worklfow')).toHaveAttribute('title', secondRoot)
     expect(first.dataset.testid).not.toBe(second.dataset.testid)
+    expect(first.id).toBe(`project-row-${encodeURIComponent(firstRoot)}`)
+    expect(second.id).toBe(`project-row-${encodeURIComponent(secondRoot)}`)
+    expect(first.id).not.toBe(second.id)
+    expect(first.id).not.toMatch(/\s/)
+    expect(second.id).not.toMatch(/\s/)
   })
 
   it('顶部摘要 count_summary：{n} 个项目 · {need} 个需你动手（repo-a 需动手、repo-b 不需 → 2 项/1 需）', () => {

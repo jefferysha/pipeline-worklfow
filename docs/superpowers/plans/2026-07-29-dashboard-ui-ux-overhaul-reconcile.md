@@ -85,10 +85,27 @@ design-doc: docs/superpowers/specs/2026-07-29-dashboard-ui-ux-overhaul-reconcile
 
 回滚边界：生成资产与文档证据可随源码提交整体回滚；不得单独保留不匹配的 bundle。
 
+**此处建议 /clear**
+
+## 子阶段 5：Verify 失败闭环
+
+1. 将桌面外壳与桌面浏览器验收表达为独立新增 requirement；既有 requirement 的
+   `MODIFIED` 块保留完整 scenario 集合，并在隔离副本演练 OpenSpec 应用。
+2. 先为共享长前缀的同 basename worktree、唯一 DOM `id` 和 modal Dialog 覆盖设置浮层
+   Escape 分支补失败测试。
+3. 为重复 basename 计算最短唯一祖先标签，保留完整 root accessible name/title，并增加稳定唯一
+   DOM `id`。
+4. 清理三个文档的 EOF 空行，重新运行 `git diff --check`。
+5. 运行 `npm run build` 并提交最终 tracked Dashboard assets；在隔离副本再次构建，要求
+   `packages/dashboard-app/dist` 无漂移。
+6. 以新冻结 SHA 完整重跑 Reviewer、E2E、Codex 与视觉轨，不只复查旧 finding。
+
+回滚边界：本子阶段代码修复与生成资产作为一个独立提交；若最短唯一标签产生回归，可回退该提交，
+完整 root 的无障碍名称仍由前序提交保留。
+
 ## Ship 与替代 PR
 
 1. Verify 通过后提交并推送 `codex/dashboard-ui-ux-overhaul-reconcile-20260729`，禁止 force push。
 2. 创建非草稿替代 PR，说明旧 PR、冲突矩阵、桌面边界、测试、浏览器证据、风险和回滚。
 3. 替代 PR 可读取后，在 PR #10 留下替代链接并关闭 #10。
 4. 检查 CI；范围内失败继续修复，不自动合并。
-

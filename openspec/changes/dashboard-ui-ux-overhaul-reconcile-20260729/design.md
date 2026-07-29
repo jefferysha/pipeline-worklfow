@@ -21,13 +21,17 @@
 - 已验证：Projects 重复 basename、设置 Escape/焦点归还、Solution 长页章节导航仍未被 main 等价覆盖。
 - 已验证：真实冲突集中在 App、Nav、Onboarding、SolutionView、i18n、全局 CSS、主规格与生成入口。
 - 已验证：main 在 1024/1440 基线无根级水平溢出，现有视觉语言与新功能应保留。
-- Spec 需冻结：如何把主规格从手机端 MUST 收敛为 1024–1920px 电脑端，并覆盖 loading、error、empty、disabled、键盘、明暗主题与 reduced-motion。
+- 已验证：OpenSpec CLI 的 `MODIFIED` 会整段替换 requirement，且禁止隐式删除当前主规格中的 scenario。
+- Spec 已冻结：用独立的“电脑端应用外壳”和“电脑端生产环境浏览器验收”要求表达
+  1024–1920px 产品边界；既有窄屏要求保持为主规格的既存能力，但不进入本 Change 的设计、
+  实现或验收。
 
 ## Explore 决策
 
 - 采用最新 main 为底、旧产品提交逐个移植、冲突文件人工增量合并。
 - 不复制旧治理历史、归档、Verify 报告或 `dist/`；生成资产最终重建。
 - 保留 main 已存在的手机 best-effort 代码，但不把手机端纳入产品承诺、实施投入或验收。
+- 对需要修改的既有 requirement 保留其完整 scenario 集合，避免 OpenSpec 应用时静默丢失主规格。
 - 替代 PR 创建并可审查后再关闭 PR #10。
 - Build 使用 `direct + worktree`：App、Nav、i18n、CSS 与 Solution 的冲突面高度重叠，需要在同一隔离分支按切片串行保持主线调用链；本次持续自动化授权覆盖该 direct override。
 

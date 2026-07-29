@@ -138,12 +138,14 @@ function HealthSummary({
 function ProjectRowButton({
   rowId,
   row,
+  visibleRoot,
   need,
   onOpen,
   t,
 }: {
   rowId: string
   row: ProjectRow
+  visibleRoot: string
   /** 是否归「需要你动手」分区（决定高亮）。 */
   need: boolean
   onOpen: (root: string) => void
@@ -152,6 +154,7 @@ function ProjectRowButton({
   return (
     <button
       type="button"
+      id={`project-row-${encodeURIComponent(row.root)}`}
       data-anim="pv-item"
       data-testid={rowId}
       data-ok="true"
@@ -171,7 +174,7 @@ function ProjectRowButton({
           {row.basename}
         </span>
         <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
-          {row.root}
+          {visibleRoot}
         </span>
       </span>
       <MiniTrack rowId={rowId} cells={row.cells} t={t} />
@@ -208,6 +211,27 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
     const counts = new Map<string, number>()
     for (const row of rows) counts.set(row.basename, (counts.get(row.basename) ?? 0) + 1)
     return new Set([...counts].filter(([, count]) => count > 1).map(([basename]) => basename))
+  }, [rows])
+  const visibleRoots = useMemo(() => {
+    const labels = new Map(rows.map((row) => [row.root, row.root]))
+    const groups = new Map<string, ProjectRow[]>()
+    for (const row of rows) {
+      const group = groups.get(row.basename) ?? []
+      group.push(row)
+      groups.set(row.basename, group)
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const segments = group.map((row) => row.root.replace(/\\/g, '/').split('/').filter(Boolean))
+      const maxDepth = Math.max(...segments.map((parts) => parts.length))
+      for (let depth = 2; depth <= maxDepth; depth += 1) {
+        const suffixes = segments.map((parts) => parts.slice(-depth).join('/'))
+        if (new Set(suffixes).size !== group.length) continue
+        group.forEach((row, index) => labels.set(row.root, `…/${suffixes[index]}`))
+        break
+      }
+    }
+    return labels
   }, [rows])
   const rowId = (row: ProjectRow) =>
     duplicateBasenames.has(row.basename)
@@ -265,7 +289,15 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_need')} tone="need" />
               <div className="flex flex-col gap-2.5">
                 {needRows.map((row) => (
-                  <ProjectRowButton key={row.root} rowId={rowId(row)} row={row} need onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton
+                    key={row.root}
+                    rowId={rowId(row)}
+                    row={row}
+                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
+                    need
+                    onOpen={onOpenProject}
+                    t={t}
+                  />
                 ))}
               </div>
             </div>
@@ -276,7 +308,15 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_rest')} tone="quiet" />
               <div className="flex flex-col gap-2.5">
                 {restRows.map((row) => (
-                  <ProjectRowButton key={row.root} rowId={rowId(row)} row={row} need={false} onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton
+                    key={row.root}
+                    rowId={rowId(row)}
+                    row={row}
+                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
+                    need={false}
+                    onOpen={onOpenProject}
+                    t={t}
+                  />
                 ))}
               </div>
             </div>

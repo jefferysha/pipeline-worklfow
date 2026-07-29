@@ -93,12 +93,16 @@ flowchart LR
 
 ## 主规格决策
 
-当前 main 的 `dashboard-ui-ux-system` 仍声明 390px、720px、44px 移动触控和手机截图为 MUST，这与用户再次明确的产品边界冲突。Spec 阶段将：
+当前 main 的 `dashboard-ui-ux-system` 仍包含既有窄屏要求，但 OpenSpec CLI 对 `MODIFIED`
+采用整段替换并禁止隐式删除 scenario。为了不把手机端重新纳入本 Change，又不在归档时静默破坏
+主规格，Spec 阶段将：
 
-- 将支持范围收敛为 1024–1920px 电脑端；
+- 新增独立的“电脑端应用外壳”和“电脑端生产环境浏览器验收”要求，支持范围固定为
+  1024–1920px；
 - 保留语义 token、Lucide、一级页面层级、键盘/屏幕阅读器、状态反馈和 reduced-motion；
-- 将 Progress/Workbench 场景改写为桌面信息密度与可发现性；
-- 删除手机端验收矩阵，不要求移除已有 best-effort CSS。
+- 在确实修改的一级页面层级与 Progress requirement 中完整保留当前 scenario，再追加桌面信息密度
+  与可发现性场景；
+- 不新增、不修改也不验收手机端行为，不要求移除已有 best-effort CSS。
 
 ## 状态与回滚
 
@@ -147,6 +151,8 @@ stateDiagram-v2
 4. 旧分支只作为增量提交和证据来源，不整文件覆盖 main。
 5. 先保留 PR #10，替代 PR 创建并可审查后再关闭，避免交付窗口中断。
 6. 生成资产由最终源码重建，不参与手工冲突选边。
+7. Verify 发现 OpenSpec 归档演练会因场景缺失失败；采用独立桌面 requirement，而不是把旧手机
+   scenario 伪装成本 Change 的验收范围。
 
 ## Grill 红队自检
 
@@ -204,4 +210,3 @@ L7_perf:     filled -> #性能与清理
 L8_deps:     filled -> #依赖与安全
 L10_terms:   filled -> #术语
 ```
-
