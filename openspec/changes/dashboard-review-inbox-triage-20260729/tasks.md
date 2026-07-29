@@ -26,9 +26,9 @@
 
 ## 验证
 
-- [ ] 运行完整 Dashboard 测试、全仓构建与静态门禁。
-- [ ] 完成四宽度、三主题、键盘、状态与 reduced-motion 真实浏览器验收。
-- [ ] 完成 reviewer/Codex/E2E/视觉轨并登记验证报告。
+- [x] 运行完整 Dashboard 测试、全仓构建与静态门禁。
+- [x] 完成四宽度、三主题、键盘、状态与 reduced-motion 真实浏览器验收。
+- [x] 完成 reviewer/Codex/E2E/视觉轨并登记验证报告。
 
 ## 交付
 
