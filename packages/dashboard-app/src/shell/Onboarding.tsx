@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useT } from '../i18n'
 import { Icon } from './Icon'
@@ -31,10 +31,26 @@ const STEP_N_CLS = 'h-[22px] w-[22px] flex-none rounded-full bg-ink text-center 
 function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copyTestid: string }): JSX.Element {
   const { t } = useT()
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+    }
+  }, [])
+
   function copy(): void {
     void navigator.clipboard?.writeText(cmd).then(() => {
+      if (!mountedRef.current) return
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      copyTimerRef.current = window.setTimeout(() => {
+        copyTimerRef.current = null
+        setCopied(false)
+      }, 2000)
     })
   }
   return (

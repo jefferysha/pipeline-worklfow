@@ -103,6 +103,25 @@ design-doc: docs/superpowers/specs/2026-07-29-dashboard-ui-ux-overhaul-reconcile
 回滚边界：本子阶段代码修复与生成资产作为一个独立提交；若最短唯一标签产生回归，可回退该提交，
 完整 root 的无障碍名称仍由前序提交保留。
 
+**此处建议 /clear**
+
+## 子阶段 6：第二轮 Verify 语义与可访问性闭环
+
+1. 在 delta spec 的两个 `MODIFIED` requirement 中逐字保留主规格既有规范语义和 scenario 条件，
+   把电脑端行为拆为独立句子与独立命名 scenario；在隔离副本比较归档前后的既有语义。
+2. 先更新 `Nav.test.tsx`，要求 system/light/dark 三态主题按钮的 accessible name 均包含当前值；
+   再补中英文翻译并更新 `Nav.tsx`。
+3. 先更新 `ProjectsView.test.tsx`，覆盖两个不可达同 basename worktree 的唯一可见后缀、
+   完整 accessible name/title 与 root 派生 DOM id；再复用可达行身份投影实现。
+4. 先更新 `Onboarding.test.tsx`，覆盖快速重复复制和卸载 timer cleanup；再以 ref 保存、重置和清理
+   复制反馈 timer。
+5. 运行定向测试、`npm run typecheck:web`、`npm run test:web`、`npm run build` 和隔离
+   build/hash 检查；重跑真实电脑端浏览器矩阵。
+6. 重新冻结新 SHA，完整执行 Reviewer、E2E、Codex 和视觉四轨，不缩小为 finding 复查。
+
+回滚边界：规格语义修正、Nav/Projects/Onboarding 行为和生成资产保持为一个独立修复提交；
+任一回归可整体回退到第二轮冻结 SHA `77a32fd7`。
+
 ## Ship 与替代 PR
 
 1. Verify 通过后提交并推送 `codex/dashboard-ui-ux-overhaul-reconcile-20260729`，禁止 force push。

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { Onboarding } from './Onboarding'
 
@@ -7,6 +7,8 @@ beforeEach(() => {
   localStorage.clear()
 })
 afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -64,6 +66,65 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('tenon init'))
     fireEvent.click(screen.getByTestId('onboard-copy-doctor'))
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('tenon doctor'))
+  })
+
+  it('重复复制以最后一次为准，并在命令行卸载时清理反馈 timer', async () => {
+    vi.useFakeTimers()
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-project" />
+      </I18nProvider>,
+    )
+    const copy = screen.getByTestId('onboard-copy')
+
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+    })
+    act(() => vi.advanceTimersByTime(1000))
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+    })
+    act(() => vi.advanceTimersByTime(1001))
+    expect(copy).toHaveTextContent('已复制')
+
+    result.unmount()
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('剪贴板写入在命令行卸载后才完成时，不再创建反馈 timer', async () => {
+    vi.useFakeTimers()
+    let resolveWrite: (() => void) | undefined
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: {
+        writeText: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveWrite = resolve
+            }),
+        ),
+      },
+    })
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-project" />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('onboard-copy'))
+    expect(resolveWrite).toBeTypeOf('function')
+    result.unmount()
+    await act(async () => {
+      resolveWrite?.()
+      await Promise.resolve()
+    })
+
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('项目来源只给自动登记的真实 init 路径，不再发送 POST /api/projects', () => {

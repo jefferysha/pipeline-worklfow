@@ -10,8 +10,8 @@ verification_report: docs/superpowers/reports/2026-07-29-dashboard-ui-ux-overhau
 build_mode: direct
 isolation: worktree
 build_sha: null
-agent_review_result: pending
-codex_review_result: pending
+agent_review_result: pass
+codex_review_result: fail
 verify_result: fail
 branch_status: pending
 direct_override: true
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T04:47:35Z
-updated_at: 2026-07-29T05:40:24Z
+updated_at: 2026-07-29T06:14:27Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 4207189c-18e2-43e4-86ea-47766f79d8a0
-pipeline_transition_sequence: 9
-pipeline_transition_head: 4368513b-6b55-418e-8a47-0f53f69282fd
-pipeline_state_revision: 28
-pipeline_state_revision_id: 34ca0737-fa0e-4201-85fd-c628fdb21502
-pipeline_state_digest: fac4207d2146c4638ee8c3550eebf9acd5cc120f578ad1e29fff03851e275b24
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjgsInJldmlzaW9uSWQiOiIzNGNhMDczNy1mYTBlLTQyMDEtODVmZC1jNjI4ZmRiMjE1MDIiLCJwYXlsb2FkRGlnZXN0IjoiYjk0NWNjMjNiNzUzYjE2NzBjNjBkZWEzYmMwMjJkMzc1Mzk1OWY0YTE0OTU4NWFiOGFlOGYxNTJiNTcxNWE1OCJ9
+pipeline_transition_sequence: 13
+pipeline_transition_head: 5446e107-0408-4e2a-9310-d3481c4a7e63
+pipeline_state_revision: 41
+pipeline_state_revision_id: e8d2a848-9f48-4550-8aa5-c8e49309fda8
+pipeline_state_digest: 44d69f5353371d85f424b443325a1e83fec9ca20a33ed2216b97f68f2d8f5105
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDEsInJldmlzaW9uSWQiOiJlOGQyYTg0OC05ZjQ4LTQ1NTAtOGFhNS1jOGU0OTMwOWZkYTgiLCJwYXlsb2FkRGlnZXN0IjoiODg5NzMyNTQ0YjAzM2ZiZjllOGFkZWYwZDMwNmJkZTY0Y2IwOGMwMDQ2NmQ4YmFhNTRkNjBmMWJlMmI5ODJhMCJ9

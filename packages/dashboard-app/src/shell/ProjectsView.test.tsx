@@ -251,6 +251,30 @@ describe('ProjectsView 读不到（ok=false）可折叠区', () => {
     const label = within(screen.getByTestId(`project-row-${basename}`)).getByTitle(root)
     expect(label).toHaveClass('truncate')
   })
+
+  it('两个不可达同 basename worktree 仍显示并朗读唯一身份，且 DOM/动画目标不冲突', () => {
+    const firstRoot = '/Users/me/.codex/worktrees/alpha/pipeline-worklfow'
+    const secondRoot = '/Users/me/.codex/worktrees/beta/pipeline-worklfow'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstRoot, [], { ok: false }),
+        makeProject(secondRoot, [], { ok: false }),
+      ]),
+      rulesByKey: rulesFor(),
+    })
+
+    fireEvent.click(screen.getByTestId('unreachable-toggle'))
+
+    const first = screen.getByRole('group', { name: `读不到项目 pipeline-worklfow（${firstRoot}）` })
+    const second = screen.getByRole('group', { name: `读不到项目 pipeline-worklfow（${secondRoot}）` })
+    expect(within(first).getByText('…/alpha/pipeline-worklfow')).toHaveAttribute('title', firstRoot)
+    expect(within(second).getByText('…/beta/pipeline-worklfow')).toHaveAttribute('title', secondRoot)
+    expect(first.id).toBe(`project-row-${encodeURIComponent(firstRoot)}`)
+    expect(second.id).toBe(`project-row-${encodeURIComponent(secondRoot)}`)
+    expect(first.id).not.toBe(second.id)
+    expect(first).toHaveAttribute('data-anim', 'pv-item')
+    expect(second).toHaveAttribute('data-anim', 'pv-item')
+  })
 })
 
 describe('ProjectsView 加载态', () => {

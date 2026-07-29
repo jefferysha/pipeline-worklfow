@@ -172,6 +172,7 @@ describe('Nav 交互 + 徽标', () => {
   it('主题切换 light→dark', () => {
     const props = renderNav({ theme: 'light' })
     fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：浅色' })).toBe(screen.getByTestId('theme-toggle'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
     expect(props.onTheme).toHaveBeenCalledWith('dark')
   })
@@ -180,8 +181,15 @@ describe('Nav 交互 + 徽标', () => {
     const props = renderNav({ theme: 'system' })
     fireEvent.click(screen.getByTestId('nav-settings'))
     expect(screen.getByTestId('theme-toggle')).toHaveTextContent('系统')
+    expect(screen.getByRole('button', { name: '主题：系统' })).toBe(screen.getByTestId('theme-toggle'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
     expect(props.onTheme).toHaveBeenCalledWith('light')
+  })
+
+  it('深色主题在操作前向屏幕阅读器朗读当前值', () => {
+    renderNav({ theme: 'dark' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：深色' })).toBe(screen.getByTestId('theme-toggle'))
   })
 
   it('decisionCount>0 徽标挂在「进度」项内显示计数（progress-badge）', () => {

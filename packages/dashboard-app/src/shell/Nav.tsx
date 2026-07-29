@@ -194,7 +194,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 type="button"
                 className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 outline-none transition-colors motion-reduce:transition-none hover:bg-fill focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue)"
                 data-testid="theme-toggle"
-                aria-label={t('common.theme_toggle')}
+                aria-label={t('common.theme_toggle_current', { theme: themeLabel })}
                 onClick={() => onTheme(nextTheme)}
               >
                 {theme === 'system' ? <Monitor className="h-4 w-4" aria-hidden="true" /> : theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}

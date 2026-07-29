@@ -26,6 +26,9 @@
 - [x] 子阶段 5：修复同 basename 的可见唯一标签与稳定 DOM id，并补 modal Escape 回归测试。 (build)
 - [x] 子阶段 5：清理 diff 门禁问题，从最终源码重建 tracked assets 并证明隔离重建无漂移。 (build)
 - [x] 子阶段 5：在隔离副本证明 OpenSpec desktop-only delta 可应用且不改写真实主规格。 (build)
+- [x] 子阶段 6：逐字保留两个 MODIFIED requirement 的既有语义，以独立场景追加电脑端约束。 (build)
+- [x] 子阶段 6：补主题当前值 accessible name、不可达 workspace 唯一身份与复制 timer cleanup。 (build)
+- [x] 子阶段 6：重建资产并完成定向、全量、构建和电脑端浏览器紧反馈。 (build)
 
 ## 验证
 

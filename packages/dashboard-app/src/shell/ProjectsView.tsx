@@ -345,8 +345,12 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
                     return (
                       <div
                         key={row.root}
+                        id={`project-row-${encodeURIComponent(row.root)}`}
                         data-testid={id}
+                        data-anim="pv-item"
                         data-ok="false"
+                        role="group"
+                        aria-label={t('projects.unreachable_aria', { name: row.basename, root: row.root })}
                         aria-disabled="true"
                         className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5 opacity-70"
                       >
@@ -357,7 +361,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="truncate font-mono text-[14px] text-text-3">{row.basename}</span>
                           <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
-                            {row.root}
+                            {visibleRoots.get(row.root) ?? row.root}
                           </span>
                         </span>
                         <span className="flex-none text-[12px] font-semibold text-text-3">{t('projects.unreachable')}</span>

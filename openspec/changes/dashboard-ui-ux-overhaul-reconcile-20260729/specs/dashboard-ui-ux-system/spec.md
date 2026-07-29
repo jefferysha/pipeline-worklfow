@@ -119,9 +119,9 @@ worktree root、目标 Change 与最终 asset hash，并覆盖 1024×768、1200�
 ### Requirement: 统一一级页面层级
 
 Projects、Progress、AFK、Workbench 和 Machine MUST 使用一致的一级页面标题层级，并 SHOULD
-按标题、说明、状态、主要动作的顺序组织页面头。在 1024–1920px 电脑端，长项目名或 Change 名
-MUST 按定义规则换行、截断或提供完整 accessible name，不得挤掉状态、原因和下一步。既有窄屏
-行为保持主规格当前约束，但不属于本 Change 的验收范围。
+按标题、说明、状态、主要动作的顺序组织页面头。移动端 MUST 允许这些元素自然重排，不得通过
+缩小正文或隐藏关键状态来强行保持桌面横排。在 1024–1920px 电脑端，长项目名或 Change 名 MUST
+按定义规则换行、截断或提供完整 accessible name，不得挤掉状态、原因和下一步。
 
 #### Scenario: 在一级页面间切换
 
@@ -144,9 +144,9 @@ MUST 按定义规则换行、截断或提供完整 accessible name，不得挤�
 ### Requirement: Progress 响应式任务流
 
 Progress MUST 在桌面保留可横向理解的阶段画布，并 MUST 在移动端把 toolbar、状态筛选、
-workflow 筛选、项目摘要、阶段轨和 Change 摘要按纵向任务顺序重排。在 1024–1920px 电脑端，
-这些区域 MUST 保持清晰任务顺序。局部 tabs 或阶段轨 MAY 在各自容器内横向滚动，但整个文档
-MUST NOT 横向滚动。
+workflow 筛选、项目摘要、阶段轨和 Change 摘要按纵向任务顺序重排。状态 tabs 和阶段轨 MAY
+在各自容器内横向滚动，但整个文档 MUST NOT 横向滚动。在 1024–1920px 电脑端，toolbar、
+状态筛选、workflow 筛选、项目摘要、阶段轨和 Change 摘要 MUST 保持清晰任务顺序。
 
 #### Scenario: 移动端查看当前 Change
 
@@ -164,6 +164,12 @@ MUST NOT 横向滚动。
 
 #### Scenario: 状态筛选超过可用宽度
 
-- **WHEN** 全部状态 tabs 的总宽度超过桌面内容区
+- **WHEN** 全部状态 tabs 的总宽度超过移动视口
+- **THEN** tabs 容器可水平滚动
+- **AND** 选中态、计数和滚动边界保持可见
+
+#### Scenario: 状态筛选超过桌面内容区
+
+- **WHEN** 全部状态 tabs 的总宽度超过 1024–1920px 电脑端内容区
 - **THEN** tabs 容器可水平滚动
 - **AND** 选中态、计数和滚动边界保持可见

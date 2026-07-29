@@ -2,7 +2,7 @@
 
 ## 范围与方法
 
-- 对象：最终生产 bundle `index-DvRUgA0L.js` / `index-DsdZ7MR-.css`。
+- 对象：最终生产 bundle `index-DLfimi5h.js` / `index-DsdZ7MR-.css`。
 - 页面：Projects、Overview、设置浮层、Onboarding，以及全局 loading/error/offline/disabled 状态。
 - 视口：1024×768、1200×870、1440×900、1920×1080；不包含手机端。
 - 主题与动效：light、dark、system、`prefers-reduced-motion: reduce`。
@@ -96,9 +96,55 @@ Spec 轴：
 - 定向 Vitest：7 files / 124 tests 通过。
 - 全量 `npm run test:web`：60 files / 1079 tests 通过；stderr 中保留既有 React `act(...)`
   与空 GSAP target 警告，无失败。
-- `npm run build`：通过；最终资产为 `index-DvRUgA0L.js` / `index-DsdZ7MR-.css`。
+- `npm run build`：通过；当前最终资产为 `index-DLfimi5h.js` / `index-DsdZ7MR-.css`。
 - 连续两次 `npm run build:web`：输出文件 SHA-256 一致，tracked Dashboard dist 可复现。
 - OpenSpec 隔离归档演练：通过，真实主规格未改动。
 - `git diff --check` 与 conflict marker 扫描：通过。
 
 代码审查结论：CRITICAL 0、HIGH 0、MEDIUM 0；可冻结 Build 基线。
+
+## Verify 失败修复与第四轮复评
+
+第二个冻结 SHA `77a32fd7ace6670d09db80edb601e03e116d3e56` 的独立 Codex 审查补充发现
+1 个 HIGH、2 个 MEDIUM 和 1 个 LOW；本轮全部修复：
+
+| Severity | Finding | 修复与证据 |
+| --- | --- | --- |
+| HIGH | 两个 `MODIFIED` requirement 改写了既有小屏语义，超出本 Change 的电脑端范围。 | 通过 `requirements-changed` 回到 Spec，逐字恢复既有 requirement 和 scenario，再用独立命名的新增电脑端场景表达约束；隔离 archive 演练证明既有语义不漂移。 |
+| MEDIUM | 主题按钮 accessible name 固定为“主题”，没有朗读当前 System/Light/Dark 值。 | 增加中英文 `theme_toggle_current`，按钮现在朗读当前值；三种状态都有角色查询测试。 |
+| MEDIUM | 不可达的同 basename worktree 缺少唯一 DOM id、动画目标、可见后缀和完整 accessible identity。 | 不可达行保持非按钮，只读 group 朗读完整 root，显示最短唯一后缀，并绑定 root 派生 id 与 `data-anim`；相邻测试覆盖两个同名 worktree。 |
+| LOW | Onboarding 复制反馈 timer 在重复点击和卸载时没有取消。 | 用 ref 替换旧 timer，重复复制先清理、卸载时清理；fake-timer 测试证明第二次反馈拥有完整 2 秒窗口且 unmount 调用 cleanup。 |
+
+第四轮 `frontend-design`、`web-design-guidelines` 与 `design-taste-frontend` 复评：
+
+- 设计 token、层级、排版和桌面间距没有因语义修复变化。
+- 主题控件的视觉文本保持不变，accessible name 补足当前值，不增加冗余可见文案。
+- 不可达 workspace 延续可达行的身份模式，但保持不可点击与 `aria-disabled` 语义。
+- timer cleanup 不改变反馈节奏，只消除过早回落与卸载后的状态更新。
+- CRITICAL：0；HIGH：0；MEDIUM：0。
+
+## 子阶段 6 Build 紧反馈
+
+- 红：主题三态、两个不可达同 basename workspace 和重复复制 timer 测试先运行并按预期失败。
+- 绿：定向 Vitest 3 files / 55 tests 通过。
+- 全量：`npm run typecheck:web`、`npm run test:web`（60 files / 1082 tests）、
+  `npm run check:comments`、`npm run check:architecture`、`npm run build` 全部退出 0。
+- 资产：连续两次生产构建均得到当时的 `index-BPNHlGAF.js` / `index-DsdZ7MR-.css`，
+  三个 Dashboard 输出文件 SHA-256 完全一致。
+- OpenSpec：Change strict validate 通过；隔离 archive 通过，added 6、modified 2、removed 0；
+  真实主规格 SHA-256 保持 `cdc31db…`。
+- 真实生产浏览器：端口 18846，目标标题 `Tenon Dashboard`，目标 root/Change 与最终 asset
+  身份均确认；1024×768、1200×870、1440×900、1920×1080 电脑端均无根级横向溢出。
+- 状态与交互：light/dark/system、主题当前值 accessible name、设置 Escape 焦点归还、两个不可达
+  同名 worktree、loading/error/retry/empty 与 reduced-motion 共 25 项断言通过，console error 为 0。
+- 临时证据：`/tmp/dashboard-ui-final-build-qa/report.json` 与同目录截图；未写入仓库或手机端证据。
+
+## 第五轮 cleanup 复评
+
+- Reviewer 的 LOW 复现证明：Clipboard Promise 若在 `CmdRow` 卸载后才 resolve，会在 cleanup
+  之后新建 timer。
+- 新增延迟 Promise 红测，先复现 `vi.getTimerCount() === 1`；实现 mounted guard 后，
+  卸载后 resolve 不再更新状态或创建 timer。
+- 定向 Vitest 3 files / 56 tests、全量 60 files / 1083 tests、`npm run typecheck:web`、
+  comments/architecture、全仓生产构建、连续 Dashboard 重建和最终 asset 浏览器复验全部通过。
+- CRITICAL：0；HIGH：0；MEDIUM：0；该 timer LOW 已关闭。

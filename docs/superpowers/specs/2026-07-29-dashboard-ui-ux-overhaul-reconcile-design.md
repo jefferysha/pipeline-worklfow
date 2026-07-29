@@ -100,8 +100,8 @@ flowchart LR
 - 新增独立的“电脑端应用外壳”和“电脑端生产环境浏览器验收”要求，支持范围固定为
   1024–1920px；
 - 保留语义 token、Lucide、一级页面层级、键盘/屏幕阅读器、状态反馈和 reduced-motion；
-- 在确实修改的一级页面层级与 Progress requirement 中完整保留当前 scenario，再追加桌面信息密度
-  与可发现性场景；
+- 在确实修改的一级页面层级与 Progress requirement 中逐字保留当前规范语义和 scenario 条件，
+  再用独立句子与独立命名 scenario 追加桌面信息密度和可发现性；
 - 不新增、不修改也不验收手机端行为，不要求移除已有 best-effort CSS。
 
 ## 状态与回滚
@@ -153,6 +153,8 @@ stateDiagram-v2
 6. 生成资产由最终源码重建，不参与手工冲突选边。
 7. Verify 发现 OpenSpec 归档演练会因场景缺失失败；采用独立桌面 requirement，而不是把旧手机
    scenario 伪装成本 Change 的验收范围。
+8. 第二轮 Verify 发现结构可归档仍可能语义覆盖；既有窄屏 MUST 与 scenario 条件必须逐字保留，
+   这属于防回归边界，不把手机端纳入当前实现或验收。
 
 ## Grill 红队自检
 

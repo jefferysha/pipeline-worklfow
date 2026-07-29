@@ -31,7 +31,10 @@
 - 采用最新 main 为底、旧产品提交逐个移植、冲突文件人工增量合并。
 - 不复制旧治理历史、归档、Verify 报告或 `dist/`；生成资产最终重建。
 - 保留 main 已存在的手机 best-effort 代码，但不把手机端纳入产品承诺、实施投入或验收。
-- 对需要修改的既有 requirement 保留其完整 scenario 集合，避免 OpenSpec 应用时静默丢失主规格。
+- 对需要修改的既有 requirement 逐字保留其既有规范语义与完整 scenario 集合，电脑端增量使用
+  独立句子和独立命名 scenario 表达，避免 OpenSpec 应用时静默弱化主规格。
+- 第二轮 Verify 证明“场景标题仍存在”不足以保证语义安全；归档演练必须同时比较应用前后的
+  requirement 正文和既有 scenario 条件。
 - 替代 PR 创建并可审查后再关闭 PR #10。
 - Build 使用 `direct + worktree`：App、Nav、i18n、CSS 与 Solution 的冲突面高度重叠，需要在同一隔离分支按切片串行保持主线调用链；本次持续自动化授权覆盖该 direct override。
 

@@ -21,7 +21,7 @@
 
 | 路径 | 冲突类型 | 整合原则 |
 | --- | --- | --- |
-| `openspec/specs/dashboard-ui-ux-system/spec.md` | add/add | 以当前主规格为底，删除手机端支持承诺，吸收旧 PR 的 1024–1920px 桌面契约 |
+| `openspec/specs/dashboard-ui-ux-system/spec.md` | add/add | 以当前主规格为底，逐字保留既有小屏语义，仅追加旧 PR 的 1024–1920px 电脑端契约 |
 | `packages/dashboard-app/src/App.tsx` | content | 保留 main 的新路由、项目选择和错误边界；增量加入 system theme、live region、timer/tween/listener 清理 |
 | `packages/dashboard-app/src/i18n/translations.ts` | content | 保留 main 全部新 key，只加入旧修复需要的成对中英文 key |
 | `packages/dashboard-app/src/index.css` | content | 保留 main 的视觉系统；只整合语义主色、焦点、disabled 与 reduced-motion 基线 |
