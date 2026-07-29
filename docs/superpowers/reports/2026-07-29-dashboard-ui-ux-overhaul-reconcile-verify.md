@@ -1,6 +1,78 @@
 # Dashboard UI/UX 主线整合验证报告
 
-## 验证对象
+## 最终冻结验证
+
+### 验证对象与结论
+
+- Change：`dashboard-ui-ux-overhaul-reconcile-20260729`
+- 冻结 SHA：`4f2c4c20558be0b336835a88a926564bc7e7875f`
+- 冻结 tree：`effd4303154516a9af14600be6771f1c31e179eb`
+- 基线：`origin/main@4c242b928b61285561f9cdbc63617db899a18a12`
+- 生产资产：`index-DLfimi5h.js` / `index-DsdZ7MR-.css`
+- 范围：仅 1024×768、1200×870、1440×900、1920×1080 电脑端 Dashboard；
+  未做手机端设计或验收，既有小屏契约逐字保留。
+- 聚合结论：`PASS`；CRITICAL 0、HIGH 0、MEDIUM 0。
+
+### Reviewer：PASS
+
+- Standards 与 Spec 两轴覆盖完整 153 文件交付差异；冻结前后实现指纹一致。
+- 冻结二进制审查指纹：
+  `be1fe661749adcd44f2be07708146bc297acf0f3909bfd85d01b53a03137c397`。
+- OpenSpec strict、隔离 archive、`build:web` 与 tracked dist 一致性均通过。
+- 既有 mobile contract 逐字保留；没有把手机端纳入本 Change 的设计、实现或验收结论。
+- LOW：802.96 kB JS chunk；11px workspace 次级路径。
+
+### E2E / 行为：PASS
+
+- 隔离证据目录：`/tmp/dashboard-ui-ux-repozero-e2e.cKCzON`。
+- `npm ci`、定向 Nav / Projects / Onboarding（3 files / 56 tests）、
+  `npm run check:comments`、`npm run check:architecture`、`npm run build`、
+  `npm run typecheck:web` 均退出 0。
+- `npm run test:web`：60 files / 1083 tests，退出 0；仅保留既有 React `act(...)` 警告。
+- Dashboard dist 构建前后 SHA-256 完全一致，`dist-diff.log` 为空；共享工作树实现指纹未漂移。
+- 真实生产 Dashboard 的电脑端浏览器断言 26/26 通过：1024、1200、1440、1920 均无页面级
+  水平溢出；title、目标 root、Change 与 `index-DLfimi5h.js` 资产身份均确认。
+- light/dark/system、当前主题 accessible name、skip link、设置首焦点/Escape 返焦、Progress 深链
+  与抽屉、success/loading/error/retry/empty/offline/reconnect、可达与不可达重复 basename、
+  clipboard 延迟 Promise cleanup 和 reduced-motion 均通过。
+- LOW：约 803 kB JS chunk；既有测试中的 React `act(...)` 警告。
+
+### Codex CLI：PASS
+
+- `codex exec --sandbox read-only --ephemeral` 直接读取冻结提交区间并退出 0。
+- 结论：没有发现可操作的正确性回归或规格对齐问题；前端 typecheck 通过。
+- Codex 只读沙箱因 Vite 无法写临时 config bundle 而未启动 Vitest；独立 E2E 轨已在隔离副本
+  对同一冻结 SHA 完成 56 个定向测试和 1083 个全量测试，因此不形成证据空缺。
+
+### 视觉 / 无障碍：PASS
+
+- 证据目录：`/tmp/tenon-final-track4.09sLXu`；核心报告：`report-final.json`。
+- 4 档电脑端视口覆盖 light、dark、system；正常页面均 `overflowX=0`、唯一 H1、console error 0。
+- rail 的 7/7 SVG 均来自 Lucide 且 `aria-hidden`；主题按钮逐态朗读
+  `主题：系统/浅色/深色`。
+- 键盘 skip link、设置 3px focus ring、首焦点、Escape 返焦、Overview 7 个 anchors、
+  可达/不可达同名 workspace 身份、状态 live region 与 disabled 语义均通过。
+- reduced-motion 下 26 个交互/动画节点无大于 0.001s 的 duration。
+- 最低文本复合对比度：light 4.67、dark 5.05，无低于 4.5 的样本。
+- LOW：11px workspace 次级路径扫描舒适性一般；loading 为明确文本而非 skeleton。
+
+### OpenSpec、映射与仓库零漂移
+
+- `openspec show --json --deltas-only` 与 Change strict validate 均通过。
+- 隔离目录 `/tmp/dashboard-ui-openspec-verify.LqiB7y` 的 archive 演练通过：
+  added 6、modified 2、removed 0；归档后的目标主规格 strict validate 通过。
+- 真实主规格 SHA-256 前后保持
+  `cdc31db8411899f7afe4ef2d09dcbd9396f4539d6416ea26ae851d3a1465d4ee`。
+- `/tmp/dashboard-ui-verify-spec-map.tsv` 含 153 条逐文件 `read-and-matched` 映射，均指向
+  `openspec/specs/dashboard-ui-ux-system/spec.md`。
+- 最终资产 SHA-256：
+  - JS：`7b297825b1fc21c7ac9ca21a4012230c9a6c07fd5ab0845c7e3b7d48ad0b748f`
+  - CSS：`b24ac13da64d14b02eabc4f691becdb4aa708d804b2752c5d4d4c088d8f3d37f`
+  - index：`c66682eda62be721bf0e75810d6469d4606c5b2c35577f922e0587b3e0c0e1ca`
+- 三条独立轨均证明冻结 SHA/tree 与共享工作树实现文件前后不变；当前未提交差异仅为 Tenon
+  正常生成的 Verify 治理证据与本验证报告/tasks 更新。
+
+## 历史第一轮验证对象
 
 - Change：`dashboard-ui-ux-overhaul-reconcile-20260729`
 - 冻结 SHA：`8a2d4007ae2d82a976398489ef0fcb8d94c0e496`

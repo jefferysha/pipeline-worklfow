@@ -32,9 +32,9 @@
 
 ## 验证
 
-- [ ] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 与风险匹配构建。 (verify)
-- [ ] 在真实 Tenon Dashboard 上完成 1024–1920px 桌面验收，包括主题、键盘、状态与 reduced-motion。 (verify)
-- [ ] 完成代码、E2E/行为与视觉三轨复核并登记验证报告。 (verify)
+- [x] 运行定向 Vitest、`npm run typecheck:web`、`npm run test:web` 与风险匹配构建。 (verify)
+- [x] 在真实 Tenon Dashboard 上完成 1024–1920px 桌面验收，包括主题、键盘、状态与 reduced-motion。 (verify)
+- [x] 完成代码、E2E/行为与视觉三轨复核并登记验证报告。 (verify)
 
 ## 交付
 
