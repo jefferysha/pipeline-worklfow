@@ -29,7 +29,10 @@ canonical state 只由 Tenon CLI 写。路径必须落在项目允许范围，�
 
 ## 供应链
 
-依赖固定版本，CI 使用最小权限。Pages deploy 只接受已验证 artifact；第三方搜索/分析默认不启用。
+依赖固定版本，CI 使用最小权限。CI 与 release workflow 都运行
+`npm run check:dependencies`；High 或 Critical advisory 会直接失败。正式发布前还要运行完整
+`npm audit` 与 `npm ls vite vitest ajv vitepress`，确认 lockfile、override 和实际解析树一致。
+Pages deploy 只接受已验证 artifact；第三方搜索/分析默认不启用。
 
 ## 报告漏洞
 

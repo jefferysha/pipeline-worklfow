@@ -11,7 +11,7 @@ import {
   GH_B_TW, GH_TW, GNOTE_ERR_TW, GNOTE_HINT_TW, GNOTE_TW, LAMP_TW, LEVELS,
   LEVEL_MIN_SCORE, LEVEL_SHORT_KEY, MINIBADGE_TW, MIN_L2_RUNS_FOR_L3, RAIL_TW,
   READY_STRONG, READY_THRESHOLD, RECO_TOKENS_K, TAG_DERIVED_TW, TAG_RW_TW,
-  TOKENS_K_MAX, TOKENS_K_MIN, TOKENS_K_STEP, clamp, finiteOrNull, fmtK, tokensKOf,
+  TOKENS_K_MAX, TOKENS_K_MIN, TOKENS_K_STEP, clamp, finiteOrNull, fmtK, promotionDecisionKey, tokensKOf,
   type GovernanceLevel,
 } from './governanceModel'
 export { BUDGET_WARN_RATIO, MIN_L2_RUNS_FOR_L3, READY_STRONG, READY_THRESHOLD } from './governanceModel'
@@ -24,7 +24,6 @@ export interface GovernanceRailProps {
 export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Element {
   const { t } = useT()
   const row = loops.selected
-
   const [levelBusy, setLevelBusy] = useState(false)
   const [levelError, setLevelError] = useState<string | null>(null)
   /** 待确认的升档目标（null = 无弹窗）——只有升档会落到这里，降档直发。 */
@@ -33,16 +32,18 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   const [tokK, setTokK] = useState<number | null>(null)
   const [budgetError, setBudgetError] = useState<string | null>(null)
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 轮询对象换代不撤确认；只有确认文案与裁决前提中的事实变化才撤。
+  const promotionFacts = promotionDecisionKey(root, row)
 
-  // row 换新（首载/切 loop/写回后 reload）→ 丢弃草稿与上一轮错误，以 server 真值为准。
-  // 待确认的升档也一并撤掉：那个弹窗是针对**旧行**问的话（「就绪分带 X、预算 Y，确认升 L3？」），
-  // 换行后它的前提已经不成立，留着就会拿旧事实骗用户点确认。
   useEffect(() => {
     setTokK(null)
     setLevelError(null)
     setBudgetError(null)
-    setConfirmLevel(null)
   }, [row])
+
+  useEffect(() => {
+    setConfirmLevel(null)
+  }, [promotionFacts])
 
   // 卸载/换行时清掉在飞的去抖计时器（否则 unmount 后仍会发一发 POST）。
   useEffect(

@@ -44,6 +44,13 @@ only a previous complete verified release.
 This protects against accidental partial/corrupt updates; it is not a substitute
 for host marketplace/source trust or OS account security.
 
+## Dependency supply chain
+
+CI and the release workflow run `npm run check:dependencies`; any High or
+Critical advisory fails the job. Before a formal release, also review the full
+`npm audit` result and `npm ls vite vitest ajv vitepress` so the lockfile,
+overrides, and resolved dependency tree are proven together.
+
 ## Hooks and review
 
 Host capabilities vary by adapter tier. Tier C static guidance is not a native
@@ -109,4 +116,3 @@ controls in [AFK and loops](automation-and-loops.md).
 
 For operational help, use [Support](../../SUPPORT.md). For vulnerabilities, use
 the private reporting path in [SECURITY.md](../../SECURITY.md).
-

@@ -5,19 +5,19 @@ import { useT } from '../i18n'
 import type { HooksConfigState } from './HookTimeline'
 
 export const EVENT_META = {
-  SessionStart: { title: '进入阶段', hint: '初始化当前任务', icon: LogIn },
-  UserPromptSubmit: { title: '准备输入', hint: '每次提交任务', icon: ArrowRight },
-  PreToolUse: { title: '工具调用前', hint: '执行动作之前', icon: Wrench },
-  PostToolUse: { title: '工具调用后', hint: '取得结果之后', icon: Wrench },
+  SessionStart: { titleKey: 'workbench.timeline_event_session_title', hintKey: 'workbench.timeline_event_session_hint', icon: LogIn },
+  UserPromptSubmit: { titleKey: 'workbench.timeline_event_prompt_title', hintKey: 'workbench.timeline_event_prompt_hint', icon: ArrowRight },
+  PreToolUse: { titleKey: 'workbench.timeline_event_pretool_title', hintKey: 'workbench.timeline_event_pretool_hint', icon: Wrench },
+  PostToolUse: { titleKey: 'workbench.timeline_event_posttool_title', hintKey: 'workbench.timeline_event_posttool_hint', icon: Wrench },
 } as const
 
 export const EVENT_ORDER = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'] as const
 
-export function sourceLabel(source: WbSkillEntry['source']): string {
-  if (source === 'builtin') return '内置'
-  if (source === 'local-plugin') return '本地插件'
-  if (source === 'external-marketplace') return '扩展市场'
-  return '用户目录'
+export function sourceLabel(source: WbSkillEntry['source'], t: (key: string) => string): string {
+  if (source === 'builtin') return t('workbench.timeline_source_builtin')
+  if (source === 'local-plugin') return t('workbench.timeline_source_local')
+  if (source === 'external-marketplace') return t('workbench.timeline_source_marketplace')
+  return t('workbench.timeline_source_user')
 }
 
 export function statusTone(installed: boolean | undefined): string {
@@ -49,7 +49,7 @@ export function HookRows({
       </span>
     )
   }
-  if (hooks.length === 0) return <span className="text-xs text-text-3" role="status" aria-live="polite">此时点没有已注册 Hook</span>
+  if (hooks.length === 0) return <span className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.timeline_hook_empty')}</span>
   return (
     <div className="flex min-w-0 flex-1 flex-col divide-y divide-border max-[720px]:w-full">
       {hooks.map((hook) => {
@@ -76,7 +76,7 @@ export function HookRows({
                 type="button"
                 role="switch"
                 aria-checked={enabled}
-                aria-label={`${name}（${hook.id}） · ${EVENT_META[event].title}`}
+                aria-label={`${name} (${hook.id}) · ${t(EVENT_META[event].titleKey)}`}
                 data-testid={`wb-lane-hk-sw-${stageId}-${hook.id}`}
                 disabled={config.busyKeys.has(key)}
                 className="relative h-[22px] w-9 flex-none rounded-full bg-fill-2 transition-colors duration-150 aria-checked:bg-(--accent) disabled:opacity-50 motion-reduce:transition-none after:absolute after:top-[3px] after:left-[3px] after:h-4 after:w-4 after:rounded-full after:bg-card after:shadow-sm after:transition-transform after:duration-150 after:content-[''] aria-checked:after:translate-x-[14px] motion-reduce:after:transition-none"
@@ -84,10 +84,10 @@ export function HookRows({
               />
             )}
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2"><span className="truncate text-[13px] font-semibold text-text">{name}</span><span className="rounded-full bg-fill-2 px-2 py-0.5 text-[10px] font-semibold text-text-3">内置 Hook</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="break-words text-[13px] font-semibold text-text">{name}</span><span className="rounded-full bg-fill-2 px-2 py-0.5 text-[10px] font-semibold text-text-3">{t('workbench.timeline_hook_builtin')}</span></div>
               <p className="mt-0.5 text-[11px] leading-4 text-text-3">{description}</p>
             </div>
-            <span className={`text-xs font-semibold ${enabled ? 'text-accent-d' : 'text-text-3'}`}>{enabled ? '启用' : '停用'}</span>
+            <span className={`text-xs font-semibold ${enabled ? 'text-accent-d' : 'text-text-3'}`}>{t(enabled ? 'workbench.timeline_hook_enabled' : 'workbench.timeline_hook_disabled')}</span>
           </div>
         )
       })}
@@ -219,6 +219,7 @@ export function TimelineHookNodes({
   config: HooksConfigState
   readonly: boolean
 }): JSX.Element {
+  const { t } = useT()
   return <>
     {events.map((event) => {
       const meta = EVENT_META[event]
@@ -230,8 +231,8 @@ export function TimelineHookNodes({
           </span>
           <div className="flex min-w-0 items-start gap-4 mobile:flex-col">
             <div className="w-32 flex-none pt-1">
-              <h3 className="text-sm font-semibold text-text">{meta.title}</h3>
-              <p className="mt-0.5 font-mono text-[10px] text-text-3">{meta.hint}</p>
+              <h3 className="text-sm font-semibold text-text">{t(meta.titleKey)}</h3>
+              <p className="mt-0.5 font-mono text-[10px] text-text-3">{t(meta.hintKey)}</p>
             </div>
             <HookRows event={event} stageId={stageId} config={config} readonly={readonly} />
           </div>

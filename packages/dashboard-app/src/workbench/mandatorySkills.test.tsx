@@ -851,7 +851,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     const panel = screen.getByTestId('wb-track-settings-panel')
     expect(panel.parentElement).toBe(document.body)
-    expect(panel).toHaveAttribute('role', 'dialog')
+    expect(within(panel).getByRole('dialog', { name: '工作轨道' })).toBeInTheDocument()
     expect(within(panel).getAllByTestId(/^wb-track-setting-/)).toHaveLength(CONFIG_BODY.tracks.length)
     expect(screen.getByTestId('wb-track-setting-chat').querySelector('svg')).not.toBeNull()
     expect(screen.getByTestId('wb-track-setting-chat')).toHaveTextContent('不注入默认 Skill')

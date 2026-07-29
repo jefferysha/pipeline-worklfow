@@ -392,8 +392,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     }
   }, { scope: rootRef, dependencies: [pendingSwitch] })
   const stepName = useCallback(
-    (s: WbStepDef): string => s.label || (isPhase(s.id) ? t(`phases.${s.id}`) : s.id),
-    [t],
+    (s: WbStepDef): string => (wfName === 'default' && isPhase(s.id) ? t(`phases.${s.id}`) : s.label || s.id),
+    [t, wfName],
   )
   const { hooks: hookMetas, matrix: hookMatrix } = hooksConfig
   const hookCountOf = useCallback(

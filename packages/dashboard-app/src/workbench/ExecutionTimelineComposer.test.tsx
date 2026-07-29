@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WbHookMeta, WbSkillEntry } from '../api/client'
 import { I18nProvider } from '../i18n'
 import type { HooksConfigState } from './HookTimeline'
@@ -95,7 +95,26 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Execution
   )
 }
 
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
+
 describe('ExecutionTimelineComposer', () => {
+  it('English locale translates the complete execution surface while preserving user stage names', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderComposer()
+
+    const editor = screen.getByTestId('step-policy-editor')
+    expect(editor).toHaveTextContent('Run Codex')
+    expect(editor).toHaveTextContent('Prepare input')
+    expect(editor).toHaveTextContent('Check result')
+    expect(editor).toHaveTextContent('Pre-run facts')
+    expect(editor).not.toHaveTextContent('准备输入')
+    expect(editor).not.toHaveTextContent('检查结果')
+    expect(editor).not.toHaveTextContent('运行前事实')
+    expect(editor).not.toHaveTextContent('执行时冻结')
+  })
+
   it('阶段总览完整展示名称，并把复核状态留在阶段设置而不是轨道连接线上', () => {
     const lanes: BoardLane[] = [
       { ...LANES[0], id: 'start', name: 'Start' },

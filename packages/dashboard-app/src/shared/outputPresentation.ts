@@ -25,17 +25,39 @@ const OUTPUTS: Record<string, { label: string; description: string }> = {
   release_url: { label: '发布地址', description: '提供本轮交付结果的访问位置。' },
 }
 
+const OUTPUTS_EN: Record<string, { label: string; description: string }> = {
+  draft_doc: { label: 'Stage draft', description: 'A document draft produced by this stage for later refinement.' },
+  design_doc: { label: 'Research document', description: 'Research findings, constraints, and design evidence.' },
+  plan_md: { label: 'Stage plan', description: 'Confirmed execution steps and arrangements for this stage.' },
+  plan: { label: 'Implementation plan', description: 'Executable steps, dependencies, and acceptance checks.' },
+  spec_md: { label: 'Requirements spec', description: 'Confirmed scope, constraints, and acceptance criteria.' },
+  architecture_decision_record_md: { label: 'Architecture decision record', description: 'Key technical decisions, tradeoffs, and impact.' },
+  branch: { label: 'Code branch', description: 'The source-control branch for this implementation.' },
+  build_sha: { label: 'Build baseline', description: 'The reproducible implementation baseline: a commit SHA in Git isolation or a workspace fingerprint in place.' },
+  sha: { label: 'Code version', description: 'The code version associated with this delivery.' },
+  release_notes: { label: 'Release notes', description: 'Delivery contents, impact, and usage guidance.' },
+  evidence: { label: 'Verification evidence', description: 'Evidence retained for independent review.' },
+  verify_result: { label: 'Verification result', description: 'Whether checks passed and why they failed when they did not.' },
+  agent_review_result: { label: 'Agent review', description: 'The execution agent’s independent review result.' },
+  codex_review_result: { label: 'Codex review', description: 'Codex’s independent review result.' },
+  verification_report: { label: 'Verification report', description: 'Tests, checks, and the final verification conclusion.' },
+  pr_url: { label: 'Pull request', description: 'The pull request associated with this delivery.' },
+  release_url: { label: 'Release URL', description: 'Where the delivered result can be accessed.' },
+}
+
 export const OUTPUT_PRESETS = Object.entries(OUTPUTS).map(([field, value]) => ({ field, ...value }))
 
-export function outputPresentation(field: string): { label: string; title: string } {
-  const known = OUTPUTS[field]
-  if (!known) return { label: '自定义产出', title: '供后续阶段使用的自定义结果。' }
+export function outputPresentation(field: string, lang: 'zh' | 'en' = 'zh'): { label: string; title: string } {
+  const known = (lang === 'en' ? OUTPUTS_EN : OUTPUTS)[field]
+  if (!known) return lang === 'en'
+    ? { label: 'Custom output', title: 'A custom result for later stages.' }
+    : { label: '自定义产出', title: '供后续阶段使用的自定义结果。' }
   return { label: known.label, title: known.description }
 }
 
-export function outputValuePresentation(value: string): string {
-  if (value === 'pass') return '通过'
-  if (value === 'fail') return '未通过'
-  if (value === 'pending') return '待验证'
+export function outputValuePresentation(value: string, lang: 'zh' | 'en' = 'zh'): string {
+  if (value === 'pass') return lang === 'en' ? 'Pass' : '通过'
+  if (value === 'fail') return lang === 'en' ? 'Fail' : '未通过'
+  if (value === 'pending') return lang === 'en' ? 'Pending' : '待验证'
   return value
 }

@@ -8,6 +8,26 @@
 > 当时语境；v3 最新 source/dist/live/真实浏览器对照见
 > `docs/ux/2026-07-19-v3-backend-to-frontend-gap-inventory.md`。
 
+## 2026-07-29 · 合并后统一审查当前证据
+
+- Dashboard Workbench 的 header、内建阶段、Track 设置、执行时间线、Hook、Skill 编排、mandatory
+  Skill、产出与可访问名称使用同一 `I18nProvider`；英文回归保留用户自定义中文数据，但拒绝已知产品
+  中文残留。root `npm run test:web` 当前 67/67 文件、1200/1200 tests 通过。
+- Governance 升档确认绑定 root、loop id、自治级、就绪、预算和 graduation 决策事实；逻辑等价的
+  snapshot 对象刷新不再关闭确认，事实变化仍关闭并把焦点归还触发器。
+- 依赖基线 5 Moderate / 1 High / 1 Critical 已收敛为 audit total 0。解析树为 AJV 8.20.0、
+  Vite 6.4.3、Vitest 3.2.7、VitePress 1.6.4；VitePress 的 Vite 6.4.3 override 已通过 root build、
+  Dashboard 全量测试与 docs check/build。
+- CI 与 release workflow 现在执行 `npm run check:dependencies`，High/Critical advisory 会阻断；
+  正式发布仍复核完整 `npm audit` 和依赖解析树。
+- 干净 `npm ci` 后，root Vitest 327/327 文件、5741 passed、14 个仓库既有 honest-skip；
+  Dashboard 67/67 文件、1200/1200 tests 通过。生产 build、docs check/build/smoke、架构、
+  注释、仓库卫生、身份、default workflow freshness、文档模板、npx 包、512 hook tests、
+  13 migration CAS tests、golden oracle 与 legacy bridge 均通过。
+- 最终生产资产 `assets/index-DOIcCiLI.js` 在 390/720/1024/1440、zh/en、三主题、
+  reduced-motion、loading/empty/error/normal、键盘和焦点矩阵通过；完整浏览器与审查证据见
+  `docs/superpowers/reports/2026-07-29-post-merge-unified-review-pre-verify.md`。
+
 ## 2026-07-29 · Host Target Plan 当前证据
 
 - CLI/server：12 个固定宿主 × setup/update 真值表、严格 query、Host 守卫、固定 argv、

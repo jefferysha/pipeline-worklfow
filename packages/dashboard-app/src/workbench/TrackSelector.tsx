@@ -8,7 +8,7 @@ import { trackDisplayName } from './trackPresentation'
 const NOTE_CLS = 'text-[12.5px] leading-[1.55] text-text-3'
 
 export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
 
   function onTrackKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number): void {
     const last = state.matrixTracks.length - 1
@@ -29,8 +29,8 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
   return (
     <div className="flex flex-wrap items-center gap-3">
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-bold text-text-3">
-        运行轨道
-        <span className="grid h-6 w-6 place-items-center rounded-full text-text-3" title="轨道是项目级运行配置：为任务选择角色、路由与默认 Skill，不改变 Workflow 的阶段。所有 Workflow 都可以使用同一组轨道。" aria-label="运行轨道说明">
+        {t('workbench.track_selector_label')}
+        <span className="grid h-6 w-6 place-items-center rounded-full text-text-3" title={t('workbench.track_selector_help')} aria-label={t('workbench.track_selector_help_label')}>
           <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       </span>
@@ -59,15 +59,15 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
                 role="radio"
                 className="cursor-pointer rounded-lg border-0 bg-transparent px-4 py-2 text-[12.5px] font-bold text-text-3 transition-all not-aria-checked:hover:text-text-2 aria-checked:bg-card aria-checked:text-accent-d aria-checked:shadow-sm"
                 aria-checked={selected}
-                title={`${candidate.label}${profile !== candidate.id ? `；沿用 ${state.tracks.find((track) => track.id === profile)?.label ?? profile} 轨道 Skill` : ''}`}
+                title={`${candidate.label}${profile !== candidate.id ? ` · ${t('workbench.track_selector_inherits', { track: state.tracks.find((track) => track.id === profile)?.label ?? profile })}` : ''}`}
                 tabIndex={selected ? 0 : -1}
                 data-testid={`wb-track-${candidate.id}`}
                 onClick={() => state.setTrack(candidate.id)}
                 onKeyDown={(event) => onTrackKeyDown(event, index)}
               >
-                {candidate.builtin && <span className="sr-only">系统轨道 </span>}
-                {trackDisplayName(candidate)}
-                {profile !== candidate.id && <span className="sr-only">，沿用 {trackDisplayName(state.tracks.find((track) => track.id === profile) ?? candidate)} 轨道技能</span>}
+                {candidate.builtin && <span className="sr-only">{t('workbench.track_selector_system')} </span>}
+                {trackDisplayName(candidate, lang)}
+                {profile !== candidate.id && <span className="sr-only">, {t('workbench.track_selector_inherits', { track: trackDisplayName(state.tracks.find((track) => track.id === profile) ?? candidate, lang) })}</span>}
               </button>
             )
           })}

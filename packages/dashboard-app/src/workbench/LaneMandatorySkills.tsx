@@ -24,7 +24,7 @@ export interface LaneMandatorySkillsProps {
 }
 
 export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMandatorySkillsProps): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
   const { table, capable, track, tracks, writableProfiles, savingKey, saveError, saveErrorKey, registry } = state
   const [popOpen, setPopOpen] = useState(false)
   const popWrapRef = useRef<HTMLDivElement>(null)
@@ -70,10 +70,10 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
   // 不做「只显示最高优先级那条」的裁剪——每条都是真的，藏掉任何一条都是少说。
   const notes: string[] = []
   if (isArchive) notes.push(t('workbench.mand_note_archive'))
-  if (cell?.source === 'profile-inherited') notes.push(`沿用“${tracks.find((candidate) => candidate.id === cell.profile)?.label ?? cell.profile}”轨道的默认 Skill。`)
-  if (cell?.source === 'all-inherited') notes.push('沿用所有轨道共用的默认 Skill。')
-  if (cell?.source === 'missing') notes.push('当前轨道尚未设置默认 Skill。')
-  if (cell?.source === 'explicit' && !cell.editable) notes.push('当前配置仅供查看。')
+  if (cell?.source === 'profile-inherited') notes.push(t('workbench.mand_profile_inherited', { track: tracks.find((candidate) => candidate.id === cell.profile)?.label ?? cell.profile }))
+  if (cell?.source === 'all-inherited') notes.push(t('workbench.mand_all_inherited'))
+  if (cell?.source === 'missing') notes.push(t('workbench.mand_missing_profile'))
+  if (cell?.source === 'explicit' && !cell.editable) notes.push(t('workbench.mand_view_only'))
   if (entriesRendered && capable && registry === null) notes.push(t('workbench.mand_note_reg'))
 
   const candidates = (registry ?? []).map((e) => e.name).filter((id) => !skills.includes(id))
@@ -90,7 +90,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
     <div data-testid={`wb-mand-${phase}`}>
       <div className="mx-0.5 mb-2 flex items-center gap-2">
         <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`} title={t('workbench.mand_zone_title')}>
-          <Layers3 className="h-3.5 w-3.5" aria-hidden="true" /> Skill 调用
+          <Layers3 className="h-3.5 w-3.5" aria-hidden="true" /> {t('workbench.mand_call')}
         </span>
       </div>
 
@@ -111,16 +111,16 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
               ))}
             </div>
           )}
-          <div className="relative" data-testid={`wb-mand-parallel-${phase}`} title="本阶段启动时会注入这些 Skill；当前来源未声明相互依赖。">
+          <div className="relative" data-testid={`wb-mand-parallel-${phase}`} title={t('workbench.mand_parallel_title')}>
             <div className="mb-2 inline-flex items-center gap-2 text-[11.5px] font-bold text-text-3">
               <span className="h-2.5 w-2.5 rounded-full bg-(--accent) shadow-[0_0_0_4px_var(--accent-t)]" aria-hidden="true" />
-              阶段开始
+              {t('workbench.mand_stage_start')}
               {skills.length > 0 && <span className="h-px w-7 bg-purple-b" aria-hidden="true" />}
             </div>
             <div className="relative flex flex-col items-start gap-2 border-l border-purple-b pl-4">
             {skills.length === 0 && <span className="mx-0.5 text-[13px] text-text-3" role="status" aria-live="polite">{t('workbench.mand_empty')}</span>}
             {skills.map((id) => {
-              const presentation = skillPresentation(id, registry)
+              const presentation = skillPresentation(id, registry, lang)
               const resolvedId = resolvedSkillId(id, registry)
               return (
                 <span
@@ -130,7 +130,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
                   data-uninstalled={entryOf.get(resolvedId)?.installed === false ? '' : undefined}
                   className={CHIP_CLS}
                   data-testid={`wb-mand-chip-${phase}-${id}`}
-                  title={`${presentation.technicalTitle} 当前来源只提供本阶段需要的 Skill，没有声明先后依赖；可编辑工作流中可设置串行、并行与依赖。`}
+                  title={t('workbench.mand_skill_title', { title: presentation.technicalTitle })}
                 >
                   <span className="-ml-[22px] h-2.5 w-2.5 flex-none rounded-full border-2 border-card bg-purple" aria-hidden="true" />
                   <span className="flex-none font-sans">{presentation.name}</span>
@@ -180,7 +180,7 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
                     <p className="px-1.5 py-1 text-[11.5px] font-bold text-text-3">{t('workbench.mand_pop_title', { key: cell.key })}</p>
                     {candidates.length === 0 && <p className="px-1.5 py-1 text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.mand_pop_empty')}</p>}
                     {candidates.map((id) => {
-                      const presentation = skillPresentation(id, registry)
+                      const presentation = skillPresentation(id, registry, lang)
                       return (
                       <button
                         key={id}

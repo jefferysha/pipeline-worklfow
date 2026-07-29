@@ -252,6 +252,10 @@ This is a local, single-user workstation model. It is not a remote multi-tenant
 control plane and does not claim protection from every malicious process running
 as the same OS user. Tap interception is off by default.
 
+Both CI and the release workflow run `npm run check:dependencies`; any High or
+Critical dependency advisory blocks delivery. Review the complete dependency
+tree with `npm audit` before every formal release.
+
 [Security model →](docs/usage/security-model.md) ·
 [Report a vulnerability privately →](SECURITY.md)
 

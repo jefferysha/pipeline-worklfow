@@ -17,7 +17,7 @@ export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recent
   const { t } = useT()
   const [nonce, setNonce] = useState(0)
   return (
-    <Dialog title="运行治理" onClose={onClose} testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} onClick={onClose}>关闭</button>}>
+    <Dialog title={t('workbench.governance_dialog_title')} onClose={onClose} closeLabel={t('workbench.track_cancel')} testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} onClick={onClose}>{t('workbench.track_cancel')}</button>}>
       <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
         <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)}>
           <div className={SIDE_CARD}>

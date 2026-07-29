@@ -35,7 +35,7 @@ export function TimelineStageStrip({
       </p>
       <section
         data-testid="wb-stage-scroll"
-        aria-label={`${workflowName} 阶段`}
+        aria-label={t('workbench.timeline_region', { name: workflowName })}
         aria-describedby={scrollHintId}
         className="overflow-x-auto rounded-2xl border border-border bg-card px-3 py-3 shadow-sm"
       >
@@ -72,7 +72,7 @@ export function TimelineStageStrip({
                 <button
                   type="button"
                   aria-current={isSelected ? 'step' : undefined}
-                  aria-label={`选择阶段 ${lane.name}`}
+                  aria-label={t('workbench.timeline_select_stage', { name: lane.name })}
                   aria-pressed={isSelected}
                   className="group relative z-10 flex min-h-12 w-max min-w-[112px] items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-[background-color,box-shadow,transform] duration-200 hover:bg-fill active:scale-[.98] aria-[current=step]:bg-accent-t aria-[current=step]:shadow-[inset_0_0_0_1px_var(--accent)] motion-reduce:transition-none"
                   onClick={(event) => {
@@ -95,8 +95,8 @@ export function TimelineStageStrip({
           })}
           {!readonly && onAddStage && (
             <div className="relative min-w-0 px-1">
-              <button type="button" aria-label="+ 添加阶段" data-testid="wb-add-stage-open" className="relative z-10 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-2 bg-card px-3 text-sm font-semibold text-accent-d hover:border-(--accent) hover:bg-accent-t/30" onClick={onAddStage}>
-                <Plus className="h-4 w-4" aria-hidden="true" /> 添加阶段
+              <button type="button" aria-label={t('workbench.add_stage')} data-testid="wb-add-stage-open" className="relative z-10 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-2 bg-card px-3 text-sm font-semibold text-accent-d hover:border-(--accent) hover:bg-accent-t/30" onClick={onAddStage}>
+                <Plus className="h-4 w-4" aria-hidden="true" /> {t('workbench.add_stage')}
               </button>
             </div>
           )}

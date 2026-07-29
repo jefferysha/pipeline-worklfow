@@ -1,0 +1,35 @@
+{"ts":"2026-07-29T08:23:16Z","kind":"init"}
+{"ts":"2026-07-29T08:23:17Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T08:26:19Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T08:26:25Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"2a7133ed-08fa-42d0-b0a4-a61c367df335"}
+{"ts":"2026-07-29T08:49:02Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.md"}
+{"ts":"2026-07-29T08:49:02Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-29T08:49:03Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-29T08:49:27Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-29T08:49:27Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-29T08:23:17Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T08:49:28Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-29T08:49:28Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-29T08:49:28Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-07-29T08:49:28Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"2300e634-21a9-4d52-bac3-effa0110c2a9"}
+{"ts":"2026-07-29T08:52:51Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-29-post-merge-unified-review.md"}
+{"ts":"2026-07-29T08:53:30Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T08:53:57Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T08:54:07Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T08:54:08Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T08:54:23Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T08:54:23Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T08:53:30Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T08:54:23Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"b29b6c03-4b1d-48c0-a259-14989e4cbb88"}
+{"ts":"2026-07-29T08:54:43Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-29T08:54:43Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-29T08:54:44Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-29T08:55:23Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T08:55:54Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T08:55:54Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"e5524d9a-6060-4199-8993-a1d21fb0cca9"}
+{"ts":"2026-07-29T08:56:31Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-29T08:56:55Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T08:56:55Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-29T08:57:01Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-29T08:57:02Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T08:53:30Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T08:57:02Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"5d60596c-6671-4b13-8741-ec865608a970"}
+{"ts":"2026-07-29T09:26:44Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T10:15:38Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

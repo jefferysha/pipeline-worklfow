@@ -11,7 +11,7 @@ export function TrackSettingsList({
   state: MandatoryState
   onEdit: (track: WbTrackDefinition) => void
 }): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
   return (
     <ul className="grid list-none gap-3 p-0 sm:grid-cols-2">
       {state.tracks.map((track) => {
@@ -26,8 +26,8 @@ export function TrackSettingsList({
           >
             <div className="mb-2 flex items-center gap-2">
               {track.builtin && <LockKeyhole className="h-3.5 w-3.5 text-text-3" aria-label={t('workbench.track_builtin_lock')} />}
-              <b className="text-[15px] text-text">{trackDisplayName(track)}</b>
-              {track.builtin && <span className="rounded-full bg-fill px-2 py-0.5 text-[11px] text-text-3">系统轨道</span>}
+              <b className="text-[15px] text-text">{trackDisplayName(track, lang)}</b>
+              {track.builtin && <span className="rounded-full bg-fill px-2 py-0.5 text-[11px] text-text-3">{t('workbench.track_list_system')}</span>}
               <button
                 type="button"
                 className="ml-auto rounded-md border border-border px-2 py-1 text-[11px] font-bold text-text-3 disabled:cursor-not-allowed disabled:opacity-55"
@@ -38,17 +38,17 @@ export function TrackSettingsList({
               </button>
             </div>
             <dl className="grid grid-cols-[76px_1fr] gap-x-3 gap-y-2 border-t border-border pt-3">
-              <dt className="text-text-3">适用流程</dt>
-              <dd className="m-0 font-semibold text-text">{track.workflow.default}{Array.isArray(track.workflow.allowed) ? ` · ${track.workflow.allowed.join('、')}` : ' · 全部'}</dd>
-              <dt className="text-text-3">自动分配</dt>
-              <dd className="m-0 font-semibold text-text">{routing.enabled ? '已启用' : '未启用'}</dd>
-              <dt className="text-text-3">AFK 接管</dt>
-              <dd className="m-0 font-semibold text-text">{track.policyProfile.autoEnqueueOnSpecComplete ? 'Spec 完成后自动排队' : '仅按需执行'}</dd>
-              <dt className="text-text-3">默认技能</dt>
+              <dt className="text-text-3">{t('workbench.track_list_workflows')}</dt>
+              <dd className="m-0 font-semibold text-text">{track.workflow.default}{Array.isArray(track.workflow.allowed) ? ` · ${track.workflow.allowed.join(', ')}` : ` · ${t('workbench.track_list_all')}`}</dd>
+              <dt className="text-text-3">{t('workbench.track_list_routing')}</dt>
+              <dd className="m-0 font-semibold text-text">{t(routing.enabled ? 'workbench.track_list_enabled' : 'workbench.track_list_disabled')}</dd>
+              <dt className="text-text-3">{t('workbench.track_list_afk')}</dt>
+              <dd className="m-0 font-semibold text-text">{t(track.policyProfile.autoEnqueueOnSpecComplete ? 'workbench.track_list_afk_auto' : 'workbench.track_list_afk_manual')}</dd>
+              <dt className="text-text-3">{t('workbench.track_list_skills')}</dt>
               <dd className="m-0 font-semibold text-text">
                 {track.policyProfile.skills.matrix
-                  ? profile === track.id ? '使用本轨道配置' : `沿用“${trackDisplayName(inherited)}”轨道`
-                  : '不注入默认 Skill'}
+                  ? profile === track.id ? t('workbench.track_list_skills_self') : t('workbench.track_list_skills_inherit', { track: trackDisplayName(inherited, lang) })
+                  : t('workbench.track_list_skills_none')}
               </dd>
             </dl>
           </li>

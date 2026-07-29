@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Block high and critical dependency advisories
+        run: npm run check:dependencies
+
       # 纯静态扫描（bash + grep，零构建依赖、~1s）——放在 build/test 之前 fail-fast：
       # 一条假待做注释不值得等 60 分钟的构建+docker/real-Codex 集成测试跑完才报。
       # 走 npm script 而非直接 `bash tools/...`：与本地 `npm run check:comments` 单一真相源，

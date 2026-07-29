@@ -242,6 +242,9 @@ Dashboard 绑定 loopback、校验本地 Host header、为 mutation 使用随机
 
 这是本地单用户工作站模型，不是远程多租户控制面，也不声称防御同一 OS 用户下所有恶意进程。Tap interception 默认关闭。
 
+CI 与 release workflow 都运行 `npm run check:dependencies`，任何 High 或 Critical 依赖 advisory
+都会阻断交付；完整依赖树仍应在每次正式发布前以 `npm audit` 复核。
+
 [安全模型 →](docs/usage/zh-CN/security-model.md) ·
 [私密报告漏洞 →](SECURITY.md)
 

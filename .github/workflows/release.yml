@@ -65,6 +65,7 @@ jobs:
           }
 
       - run: npm ci
+      - run: npm run check:dependencies
       - run: npm run check:identity
       - run: npm run check:repository-hygiene
       - run: npm run check:legacy-bridge

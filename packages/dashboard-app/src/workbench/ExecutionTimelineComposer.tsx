@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { outputPresentation } from '../shared/outputPresentation'
+import { useT } from '../i18n'
 import { SkillExecutionTopology } from './SkillExecutionTopology'
 import { skillPresentation } from './skillPresentation'
 import type { ExecutionTimelineComposerProps } from './executionTimelineTypes'
@@ -41,6 +42,7 @@ export function ExecutionTimelineComposer({
   onStageReorder,
   onOpenSkillEditor,
 }: ExecutionTimelineComposerProps): JSX.Element {
+  const { lang, t } = useT()
   const selected = lanes.find((lane) => lane.id === selectedId) ?? lanes[0] ?? null
   const [draggingSkill, setDraggingSkill] = useState<string | null>(null)
   const [skillDrop, setSkillDrop] = useState<{ id: string; after: boolean } | null>(null)
@@ -93,7 +95,7 @@ export function ExecutionTimelineComposer({
   }
 
   if (!selected) {
-    return <p className="rounded-xl border border-dashed border-border bg-card px-5 py-10 text-center text-sm text-text-3">工作流没有阶段</p>
+    return <p className="rounded-xl border border-dashed border-border bg-card px-5 py-10 text-center text-sm text-text-3">{t('workbench.timeline_empty')}</p>
   }
 
   const nextLane = lanes[lanes.findIndex((lane) => lane.id === selected.id) + 1]
@@ -115,12 +117,12 @@ export function ExecutionTimelineComposer({
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-(--accent)" aria-hidden="true" />
               {readonly || !onLaneEdit ? (
-                <h2 data-testid={`wb-lane-name-${selected.id}`} className="text-[24px] font-bold tracking-[-0.02em] text-text">{selected.name}阶段</h2>
+                <h2 data-testid={`wb-lane-name-${selected.id}`} className="text-[24px] font-bold tracking-[-0.02em] text-text">{t('workbench.timeline_stage_title', { name: selected.name })}</h2>
               ) : editingName ? (
                 <input
                   autoFocus
                   data-testid={`wb-lane-name-input-${selected.id}`}
-                  aria-label="阶段名称"
+                  aria-label={t('workbench.timeline_stage_name')}
                   value={nameDraft}
                   className="h-10 min-w-44 rounded-lg border border-(--accent) bg-card px-3 text-[20px] font-bold text-text outline-none ring-3 ring-accent-t"
                   onChange={(event) => setNameDraft(event.target.value)}
@@ -140,19 +142,19 @@ export function ExecutionTimelineComposer({
                     setEditingName(true)
                   }}
                 >
-                  {selected.name}阶段
+                  {t('workbench.timeline_stage_title', { name: selected.name })}
                 </button>
               )}
-              <span className="grid h-9 w-9 place-items-center rounded-full text-text-3" title="这里按真实执行顺序展示进入阶段、准备输入、运行 Codex、Hook 与结果检查。" aria-label="阶段执行说明">
+              <span className="grid h-9 w-9 place-items-center rounded-full text-text-3" title={t('workbench.timeline_help')} aria-label={t('workbench.timeline_help_label')}>
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />
               </span>
             </div>
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] leading-6 text-text-2">
-              <span>进入{selected.name}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>准备输入</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Codex 执行</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>检查结果</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>{nextLane ? `进入${nextLane.name}` : '结束工作流'}</span>
+              <span>{t('workbench.timeline_enter', { name: selected.name })}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t('workbench.timeline_prepare')}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t('workbench.timeline_run')}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t('workbench.timeline_check')}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{nextLane ? t('workbench.timeline_enter', { name: nextLane.name }) : t('workbench.timeline_finish')}</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -170,17 +172,17 @@ export function ExecutionTimelineComposer({
                   className="accent-(--accent)"
                   onChange={(event) => onLaneEdit(selected.id, { gate: event.target.checked ? 'review' : null })}
                 />
-                离开前复核
+                {t('workbench.timeline_review_before_leave')}
               </label>
             )}
             {!readonly && onRemoveStage && lanes.length > 1 && (
               confirmRemove ? (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-red-t p-1">
-                  <button type="button" className="min-h-8 rounded-md px-2.5 text-xs font-semibold text-red-d hover:bg-card" onClick={() => { onRemoveStage(selected.id); setConfirmRemove(false) }}>确认删除</button>
-                  <button type="button" className="min-h-8 rounded-md px-2.5 text-xs text-text-3 hover:bg-card" onClick={() => setConfirmRemove(false)}>取消</button>
+                  <button type="button" className="min-h-8 rounded-md px-2.5 text-xs font-semibold text-red-d hover:bg-card" onClick={() => { onRemoveStage(selected.id); setConfirmRemove(false) }}>{t('workbench.timeline_delete_confirm')}</button>
+                  <button type="button" className="min-h-8 rounded-md px-2.5 text-xs text-text-3 hover:bg-card" onClick={() => setConfirmRemove(false)}>{t('workbench.workflow_cancel')}</button>
                 </span>
               ) : (
-                <button type="button" data-testid={`wb-lane-rm-${selected.id}`} className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-red-t hover:text-red-d" aria-label="删除阶段" onClick={() => setConfirmRemove(true)}>
+                <button type="button" data-testid={`wb-lane-rm-${selected.id}`} className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-red-t hover:text-red-d" aria-label={t('workbench.timeline_delete_stage')} onClick={() => setConfirmRemove(true)}>
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               )
@@ -197,7 +199,7 @@ export function ExecutionTimelineComposer({
                 <Braces className="h-4 w-4" aria-hidden="true" />
               </span>
               <div className="mb-3 flex flex-wrap items-center gap-3">
-                <h3 className="text-base font-semibold text-text">运行 Codex</h3>
+                <h3 className="text-base font-semibold text-text">{t('workbench.timeline_run_codex')}</h3>
                 <div className="inline-flex rounded-lg bg-fill p-0.5 text-xs">
                   <button
                     type="button"
@@ -205,7 +207,7 @@ export function ExecutionTimelineComposer({
                     className="min-h-8 rounded-md px-3 font-semibold text-text-3 hover:text-text aria-pressed:bg-card aria-pressed:text-accent-d aria-pressed:shadow-sm"
                     onClick={() => setCodexPanel('skills')}
                   >
-                    Skill 编排
+                    {t('workbench.timeline_skills')}
                   </button>
                   <button
                     type="button"
@@ -213,28 +215,28 @@ export function ExecutionTimelineComposer({
                     className="min-h-8 rounded-md px-3 font-semibold text-text-3 hover:text-text aria-pressed:bg-card aria-pressed:text-accent-d aria-pressed:shadow-sm"
                     onClick={() => setCodexPanel('prompt')}
                   >
-                    执行指令
+                    {t('workbench.timeline_prompt')}
                   </button>
                 </div>
-                <span className="ml-auto text-xs text-text-3">{codexPanel === 'skills' ? '显示真实依赖关系' : '随阶段定义保存'}</span>
+                <span className="ml-auto text-xs text-text-3">{t(codexPanel === 'skills' ? 'workbench.timeline_dependencies_hint' : 'workbench.timeline_saved_hint')}</span>
               </div>
 
               {codexPanel === 'prompt' ? (
                 <div className="rounded-xl bg-card p-3 shadow-sm ring-1 ring-border">
-                  <label htmlFor={`wb-timeline-prompt-${selected.id}`} className="mb-2 block text-xs font-semibold text-text-2">Codex 阶段指令</label>
+                  <label htmlFor={`wb-timeline-prompt-${selected.id}`} className="mb-2 block text-xs font-semibold text-text-2">{t('workbench.step_prompt_label')}</label>
                   <textarea
                     id={`wb-timeline-prompt-${selected.id}`}
                     value={prompt}
                     readOnly={readonly || !onPromptChange}
                     rows={7}
-                    placeholder="说明这一阶段要完成什么、需要验证什么。"
+                    placeholder={t('workbench.timeline_prompt_placeholder')}
                     className="min-h-36 w-full resize-y rounded-lg border border-border bg-bg px-3 py-2.5 text-sm leading-6 text-text outline-none placeholder:text-text-3 focus:border-(--accent) focus:ring-3 focus:ring-accent-t read-only:cursor-default read-only:bg-fill"
                     onChange={(event) => onPromptChange?.(event.target.value)}
                   />
-                  <p className="mt-2 text-xs leading-5 text-text-3">保存 Workflow 后生效；运行时会与当前阶段、Skill 和 Hook 一起冻结。</p>
+                  <p className="mt-2 text-xs leading-5 text-text-3">{t('workbench.timeline_prompt_note')}</p>
                 </div>
               ) : skills === undefined ? (
-                selectedSkillZone ?? <p className="rounded-lg bg-fill px-3 py-4 text-sm text-text-3">技能来自运行时矩阵，当前数据尚未就绪。</p>
+                selectedSkillZone ?? <p className="rounded-lg bg-fill px-3 py-4 text-sm text-text-3">{t('workbench.timeline_skills_loading')}</p>
               ) : (
                 <div className="space-y-3">
                   {skills.length > 0 && (
@@ -247,10 +249,10 @@ export function ExecutionTimelineComposer({
                     />
                   )}
                   <div className="rounded-xl bg-card px-3 shadow-sm ring-1 ring-border">
-                  {skills.length === 0 && <p className="py-5 text-center text-sm text-text-3" role="status" aria-live="polite">此阶段尚未配置 Skill</p>}
+                  {skills.length === 0 && <p className="py-5 text-center text-sm text-text-3" role="status" aria-live="polite">{t('workbench.timeline_skills_empty')}</p>}
                   {skills.map((skillId) => {
                     const entry = registryByName.get(skillId)
-                    const presentation = skillPresentation(skillId, skillRegistry)
+                    const presentation = skillPresentation(skillId, skillRegistry, lang)
                     const deps = selected.skillDeps?.[skillId] ?? []
                     const isDrop = skillDrop?.id === skillId
                     return (
@@ -280,16 +282,16 @@ export function ExecutionTimelineComposer({
                           <div className="flex flex-wrap items-center gap-2">
                             <span data-testid={`wb-lane-sk-${selected.id}-${skillId}`} className="text-[13px] font-semibold text-text" title={presentation.technicalTitle}>{presentation.name}</span>
                             <span className={`text-[11px] font-semibold ${statusTone(entry?.installed)}`}>
-                              {entry ? (entry.installed ? '已安装' : '未安装') : '状态未知'}
+                              {t(entry ? (entry.installed ? 'workbench.timeline_installed' : 'workbench.timeline_uninstalled') : 'workbench.timeline_unknown')}
                             </span>
                           </div>
                           <p className="mt-0.5 text-[11px] text-text-3">
-                            {presentation.description} · {entry ? sourceLabel(entry.source) : '未在当前技能库中发现'}
-                            {' · '}{deps.length > 0 ? `等待 ${deps.join('、')}` : skills.length > 1 ? '可并行启动' : '独立执行'}
+                            {presentation.description} · {entry ? sourceLabel(entry.source, t) : t('workbench.timeline_source_missing')}
+                            {' · '}{deps.length > 0 ? t('workbench.timeline_waiting', { ids: deps.join(', ') }) : t(skills.length > 1 ? 'workbench.timeline_parallel_start' : 'workbench.timeline_independent')}
                           </p>
                         </div>
                         {!readonly && onSkillRemove && (
-                          <button type="button" className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-red" aria-label={`移除 ${skillId}`} onClick={() => onSkillRemove(selected.id, skillId)}>
+                          <button type="button" className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-red" aria-label={t('workbench.timeline_remove_skill', { id: skillId })} onClick={() => onSkillRemove(selected.id, skillId)}>
                             <X className="h-4 w-4" aria-hidden="true" />
                           </button>
                         )}
@@ -303,7 +305,7 @@ export function ExecutionTimelineComposer({
               {codexPanel === 'skills' && !readonly && onOpenSkillEditor && skills !== undefined && (
                 <div className="mt-3">
                   <button type="button" data-testid={`wb-lane-sk-add-${selected.id}`} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-dashed border-border-2 px-3 text-sm font-semibold text-accent-d hover:border-(--accent) hover:bg-card" onClick={onOpenSkillEditor}>
-                    <Plus className="h-4 w-4" aria-hidden="true" /> 添加 Skill
+                    <Plus className="h-4 w-4" aria-hidden="true" /> {t('workbench.timeline_add_skill')}
                   </button>
                 </div>
               )}
@@ -314,32 +316,32 @@ export function ExecutionTimelineComposer({
             <div className="relative mb-2 rounded-xl border border-border bg-card px-4 py-3" data-testid="wb-timeline-node-guard">
               <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3"><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
               <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-                <h3 className="w-32 flex-none text-sm font-semibold text-text">检查结果</h3>
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-t px-2.5 py-1.5 text-xs font-semibold text-green-d"><ShieldCheck className="h-4 w-4" aria-hidden="true" />安全边界 · 已启用</span>
-                <span className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${selected.nonemptyGuard ? 'bg-accent-t text-accent-d' : 'bg-fill text-text-3'}`}><Check className="h-4 w-4" aria-hidden="true" />产出检查 · {selected.nonemptyGuard ? '按运行结果校验' : '由 Agent 判断'}</span>
+                <h3 className="w-32 flex-none text-sm font-semibold text-text">{t('workbench.timeline_check')}</h3>
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-t px-2.5 py-1.5 text-xs font-semibold text-green-d"><ShieldCheck className="h-4 w-4" aria-hidden="true" />{t('workbench.timeline_safety_enabled')}</span>
+                <span className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${selected.nonemptyGuard ? 'bg-accent-t text-accent-d' : 'bg-fill text-text-3'}`}><Check className="h-4 w-4" aria-hidden="true" />{t(selected.nonemptyGuard ? 'workbench.timeline_output_check_runtime' : 'workbench.timeline_output_check_agent')}</span>
               </div>
               <div data-testid={`wb-lane-outs-${selected.id}`} className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-                <span className="mr-1 text-xs font-semibold text-text-2">运行时产出</span>
-                <span className="text-xs text-text-3">运行 Agent 显式登记，系统校验后展示</span>
+                <span className="mr-1 text-xs font-semibold text-text-2">{t('workbench.timeline_runtime_outputs')}</span>
+                <span className="text-xs text-text-3">{t('workbench.timeline_runtime_outputs_note')}</span>
                 {selected.outputs.map((output) => {
-                  const presentation = outputPresentation(output)
+                  const presentation = outputPresentation(output, lang)
                   return (
-                  <span key={output} title={`系统已知的结果类型：${presentation.title}`} className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-fill px-2.5 text-xs text-text-2">
+                  <span key={output} title={t('workbench.timeline_output_title', { title: presentation.title })} className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-fill px-2.5 text-xs text-text-2">
                     {presentation.label}
                   </span>
                   )
                 })}
-                {selected.outputs.length === 0 && <span className="rounded-lg bg-fill px-2.5 py-1.5 text-xs text-text-3" role="status" aria-live="polite">当前没有预设类型</span>}
+                {selected.outputs.length === 0 && <span className="rounded-lg bg-fill px-2.5 py-1.5 text-xs text-text-3" role="status" aria-live="polite">{t('workbench.timeline_no_output')}</span>}
               </div>
             </div>
 
             <div className="relative rounded-xl border border-border bg-card px-4 py-3" data-testid="wb-timeline-node-leave">
               <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3"><LogOut className="h-4 w-4" aria-hidden="true" /></span>
               <div className="flex flex-wrap items-center gap-3">
-                <h3 className="w-32 flex-none text-sm font-semibold text-text">离开阶段</h3>
-                <span className="text-sm text-text-2">{nextLane ? `成功后进入 ${nextLane.name}` : '这是工作流终点'}</span>
-                {selected.gate && <span className="rounded-lg bg-red-t px-2.5 py-1.5 text-xs font-semibold text-red-d">复核通过后才能离开</span>}
-                {selected.linkEvent && <span className="ml-auto text-xs text-text-3">已配置推进条件</span>}
+                <h3 className="w-32 flex-none text-sm font-semibold text-text">{t('workbench.timeline_leave')}</h3>
+                <span className="text-sm text-text-2">{nextLane ? t('workbench.timeline_leave_success', { name: nextLane.name }) : t('workbench.timeline_endpoint')}</span>
+                {selected.gate && <span className="rounded-lg bg-red-t px-2.5 py-1.5 text-xs font-semibold text-red-d">{t('workbench.timeline_leave_review')}</span>}
+                {selected.linkEvent && <span className="ml-auto text-xs text-text-3">{t('workbench.timeline_advance_condition')}</span>}
               </div>
             </div>
           </div>
@@ -347,22 +349,22 @@ export function ExecutionTimelineComposer({
           <aside data-testid="wb-timeline-preview" className="sticky top-(--nav-offset) rounded-2xl bg-fill p-4 max-[1000px]:static">
             <div className="flex items-center gap-2">
               <Eye className="h-4 w-4 text-(--accent)" aria-hidden="true" />
-              <h3 className="text-sm font-semibold text-text">运行前事实</h3>
+              <h3 className="text-sm font-semibold text-text">{t('workbench.timeline_facts')}</h3>
               <ChevronDown className="ml-auto h-4 w-4 text-text-3" aria-hidden="true" />
             </div>
             <div className="mt-4 space-y-2" data-testid="wb-runtime-facts">
-              <PreviewRow label="技能编排" value={skills === undefined ? '运行时解析' : `${skills.length} 个 Skill · ${dependencyCount} 条依赖`} ready={skills === undefined || skills.length > 0} />
-              <PreviewRow label="Hook 覆盖" value={enabledHooks === null ? '读取中' : `${enabledHooks.length} 个 Hook · ${enabledHooks.length}/${hooks.hooks?.length ?? 0} 已启用`} ready={enabledHooks !== null && enabledHooks.length > 0} />
-              <PreviewRow label="运行时产出" value={selected.nonemptyGuard ? '登记后执行完整性校验' : '登记后随进度展示'} ready />
-              <PreviewRow label="依赖关系" value={dependencyCount > 0 ? `${dependencyCount} 条真实依赖` : '全部可并行'} ready />
-              <PreviewRow label="执行指令" value={prompt.trim() ? `${prompt.trim().length} 字` : '尚未填写'} ready={prompt.trim().length > 0} />
+              <PreviewRow label={t('workbench.timeline_skill_fact')} value={skills === undefined ? t('workbench.timeline_skill_runtime') : t('workbench.timeline_skill_count', { skills: skills.length, dependencies: dependencyCount })} ready={skills === undefined || skills.length > 0} />
+              <PreviewRow label={t('workbench.timeline_hook_fact')} value={enabledHooks === null ? t('workbench.timeline_loading') : t('workbench.timeline_hook_count', { enabled: enabledHooks.length, total: hooks.hooks?.length ?? 0 })} ready={enabledHooks !== null && enabledHooks.length > 0} />
+              <PreviewRow label={t('workbench.timeline_runtime_outputs')} value={t(selected.nonemptyGuard ? 'workbench.timeline_output_fact_integrity' : 'workbench.timeline_output_fact_progress')} ready />
+              <PreviewRow label={t('workbench.timeline_dependency_fact')} value={dependencyCount > 0 ? t('workbench.timeline_dependency_count', { n: dependencyCount }) : t('workbench.timeline_all_parallel')} ready />
+              <PreviewRow label={t('workbench.timeline_prompt_fact')} value={prompt.trim() ? t('workbench.timeline_prompt_length', { n: prompt.trim().length }) : t('workbench.timeline_prompt_missing')} ready={prompt.trim().length > 0} />
             </div>
             {missingSkills !== null && missingSkills > 0 && (
-              <p className="mt-3 flex gap-2 rounded-lg bg-amb-t px-3 py-2 text-xs leading-5 text-amb-d"><AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />存在未安装 Skill，真实运行会由后端准入检查决定是否阻断。</p>
+              <p className="mt-3 flex gap-2 rounded-lg bg-amb-t px-3 py-2 text-xs leading-5 text-amb-d"><AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />{t('workbench.timeline_missing_skills')}</p>
             )}
             <div className="mt-3 flex items-center gap-2 rounded-lg bg-card px-3 py-2 text-xs text-text-2">
               <LockKeyhole className="h-4 w-4 text-text-3" aria-hidden="true" />
-              <span>快照</span><strong className="ml-auto font-semibold text-text">执行时冻结</strong>
+              <span>{t('workbench.timeline_snapshot')}</span><strong className="ml-auto font-semibold text-text">{t('workbench.timeline_frozen')}</strong>
             </div>
           </aside>
         </div>

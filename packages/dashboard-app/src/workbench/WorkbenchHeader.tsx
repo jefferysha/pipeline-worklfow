@@ -31,7 +31,7 @@ export function WorkbenchHeader(props: {
       <div className="relative">
         <button className="group inline-flex min-h-14 min-w-[280px] cursor-pointer items-center gap-3 rounded-xl border border-accent-b bg-accent-t/45 px-3.5 text-left transition hover:border-(--accent) hover:bg-accent-t" data-testid="wb-wf-btn" aria-haspopup="menu" aria-expanded={props.menuOpen} onClick={() => props.onMenuOpen(!props.menuOpen)}>
           <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-(--accent) text-btn-fg shadow-sm"><Layers3 className="h-4.5 w-4.5" aria-hidden="true" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold tracking-[.08em] text-accent-d uppercase">当前工作流</span><span className="mt-0.5 block truncate text-[17px] font-extrabold tracking-[-0.01em] text-text">{props.workflowName ?? '…'}</span></span>
+          <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold tracking-[.08em] text-accent-d uppercase">{t('workbench.current_workflow')}</span><span className="mt-0.5 block truncate text-[17px] font-extrabold tracking-[-0.01em] text-text">{props.workflowName ?? '…'}</span></span>
           {props.currentStages != null && <span className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-text-2 shadow-sm">{t('workbench.wf_stages', { n: props.currentStages })}</span>}
           <ChevronDown className="h-4 w-4 flex-none text-text-3 transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
         </button>
@@ -44,7 +44,7 @@ export function WorkbenchHeader(props: {
       </div>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t('workbench.workflow_actions')}>
         <button className={BTN_GHOST} data-testid="wb-workflow-new" onClick={() => props.onCreate('new')}>{t('workbench.workflow_new')}</button>
-        <button className={BTN_GHOST} data-testid="wb-workflow-copy" onClick={() => props.onCreate('copy')} disabled={!props.def} title={props.readonly ? '保留系统默认流程的阶段与 Skill，创建一个可编辑副本' : '基于当前配置创建另一条工作流'}>{props.readonly ? '创建可编辑副本' : '另存副本'}</button>
+        <button className={BTN_GHOST} data-testid="wb-workflow-copy" onClick={() => props.onCreate('copy')} disabled={!props.def} title={t(props.readonly ? 'workbench.workflow_copy_readonly_title' : 'workbench.workflow_copy_editable_title')}>{t(props.readonly ? 'workbench.workflow_copy_readonly' : 'workbench.workflow_copy_editable')}</button>
         {!props.readonly && <button className={BTN_DANGER} data-testid="wb-workflow-delete" onClick={props.onDelete} disabled={!props.workflowName}>{t('workbench.workflow_delete')}</button>}
         <button className={BTN_GHOST} data-testid="wb-governance-open" onClick={props.onGovernance} disabled={!props.def}>
           <ShieldCheck className="size-3.5" aria-hidden="true" />

@@ -420,11 +420,53 @@ beforeEach(() => {
 })
 afterEach(() => {
   delete window.__TENON_DASHBOARD_TOKEN__
+  window.localStorage.removeItem('tenon-dashboard-lang')
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe('WorkbenchView stepper（验收①）', () => {
+  it('English locale covers the Dashboard Workbench header, track controls, and canonical phases', async () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('Current workflow')
+    expect(screen.getByText('Run track')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-track-pm')).toHaveTextContent('Product')
+    expect(screen.getByTestId('wb-track-frontend')).toHaveTextContent('Frontend')
+    expect(screen.getByTestId('wb-track-backend')).toHaveTextContent('Backend')
+    expect(screen.queryByText('当前工作流')).toBeNull()
+    expect(screen.queryByText('运行轨道')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    const open = await screen.findByTestId('wb-step-open')
+    expect(open).toHaveTextContent('Open')
+    expect(open).not.toHaveTextContent('立项')
+    expect(screen.getByTestId('wb-workflow-copy')).toHaveTextContent('Create editable copy')
+
+    const settingsToggle = screen.getByTestId('wb-track-settings-toggle')
+    settingsToggle.focus()
+    fireEvent.click(settingsToggle)
+    const trackSettings = screen.getByTestId('wb-track-settings-panel')
+    expect(trackSettings).toHaveTextContent('Work tracks')
+    expect(trackSettings).toHaveTextContent('Automatic routing')
+    expect(trackSettings).not.toHaveTextContent('工作轨道')
+    expect(trackSettings).not.toHaveTextContent('自动分配')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('wb-track-settings-panel')).toBeNull()
+    expect(settingsToggle).toHaveFocus()
+
+    const governanceTrigger = screen.getByTestId('wb-governance-open')
+    governanceTrigger.focus()
+    fireEvent.click(governanceTrigger)
+    expect(screen.getByRole('dialog', { name: 'Runtime governance' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(governanceTrigger).toHaveFocus()
+  })
+
   it('主视图就是工作流编辑器；不再经过“查看与编辑”二层浮层，阶段内添加 Skill 才打开编排浮层', async () => {
     renderView({}, false)
     await screen.findByTestId('wb-step-draft')

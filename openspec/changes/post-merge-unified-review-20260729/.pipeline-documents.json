@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-29T08:23:16Z",
+  "records": [
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.md",
+      "sha256": "149eba9af08f801a15188762792b5a4ae63e67006bad54e3abf05e6ffba3af58",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-29T08:49:03Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "149eba9af08f801a15188762792b5a4ae63e67006bad54e3abf05e6ffba3af58",
+          "readAt": "2026-07-29T08:54:15Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "149eba9af08f801a15188762792b5a4ae63e67006bad54e3abf05e6ffba3af58",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "149eba9af08f801a15188762792b5a4ae63e67006bad54e3abf05e6ffba3af58",
+          "readAt": "2026-07-29T08:56:56Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "149eba9af08f801a15188762792b5a4ae63e67006bad54e3abf05e6ffba3af58",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-29-post-merge-unified-review-explore.md",
+      "sha256": "b1e877bfe7327abc61fb3855e2385dceab9e5b29bbd79b4bda47d0de035cd8ef",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-29T08:49:03Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "b1e877bfe7327abc61fb3855e2385dceab9e5b29bbd79b4bda47d0de035cd8ef",
+          "readAt": "2026-07-29T08:54:15Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b1e877bfe7327abc61fb3855e2385dceab9e5b29bbd79b4bda47d0de035cd8ef",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b1e877bfe7327abc61fb3855e2385dceab9e5b29bbd79b4bda47d0de035cd8ef",
+          "readAt": "2026-07-29T08:56:56Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b1e877bfe7327abc61fb3855e2385dceab9e5b29bbd79b4bda47d0de035cd8ef",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/post-merge-unified-review-20260729/proposal.md",
+      "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T08:49:03Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+          "readAt": "2026-07-29T08:49:19Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+          "readAt": "2026-07-29T08:54:15Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+          "readAt": "2026-07-29T08:56:56Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4a9c35e61f23a98f2802e5e4f647e735a74f224c5437ec2570d0b6fa8cc7b3ee",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/post-merge-unified-review-20260729/design.md",
+      "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-29T08:49:19Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+          "readAt": "2026-07-29T08:49:19Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+          "readAt": "2026-07-29T08:54:15Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+          "readAt": "2026-07-29T08:56:56Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2b6baf3d998484935c10650eaf8b660e2d9231182934438b37f40dcfb574368f",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/post-merge-unified-review-20260729/specs/dashboard-ui-ux-system/spec.md",
+      "sha256": "046cc59e4dbbd82fe8df8c20101a48f2f609673709e4612275be3aceba308c94",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-29T08:53:58Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "046cc59e4dbbd82fe8df8c20101a48f2f609673709e4612275be3aceba308c94",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "046cc59e4dbbd82fe8df8c20101a48f2f609673709e4612275be3aceba308c94",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/post-merge-unified-review-20260729/specs/repository-architecture-compliance/spec.md",
+      "sha256": "94eb8ee988364f9247b19e0db45b6b33ce8fd43b9e3054940c64c86f6c0a66ca",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-29T08:56:31Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "94eb8ee988364f9247b19e0db45b6b33ce8fd43b9e3054940c64c86f6c0a66ca",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-29-post-merge-unified-review.md",
+      "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T08:56:55Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-29-post-merge-unified-review.md",
+      "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-29T08:56:55Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+          "readAt": "2026-07-29T08:55:02Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6e27425c05693cf407064e5fd2863ad4c4b83fecc9094bca3e5a276dfe223130",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/post-merge-unified-review-20260729/tasks.md",
+      "sha256": "d4f86869d24733efbb7a0c6cf1fbc52ccffd400f34d4cda80e55fe3c8f0d3066",
+      "producer": "tenon:tenon-build",
+      "recordedAt": "2026-07-29T10:15:38Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "d4f86869d24733efbb7a0c6cf1fbc52ccffd400f34d4cda80e55fe3c8f0d3066",
+          "readAt": "2026-07-29T10:15:38Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",5]"
+        }
+      ]
+    }
+  ]
+}

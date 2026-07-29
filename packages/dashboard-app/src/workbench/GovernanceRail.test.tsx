@@ -117,7 +117,12 @@ function mockFetch(opts?: { snapshotStatus?: number; snapshotBody?: unknown; upd
 /** 出货接线同款 harness：useLoops 住宿主（WorkbenchView 的同一拓扑），本轨纯消费 LoopsState。 */
 function Harness(): JSX.Element {
   const loops = useLoops(ROOT)
-  return <GovernanceRail root={ROOT} loops={loops} />
+  return (
+    <>
+      <button data-testid="test-reload-loops" onClick={() => loops.reload()}>reload</button>
+      <GovernanceRail root={ROOT} loops={loops} />
+    </>
+  )
 }
 
 function renderRail(): void {
@@ -129,7 +134,9 @@ function renderRail(): void {
 }
 
 async function openPromoteDialog(target: 'L2' | 'L3'): Promise<HTMLElement> {
-  fireEvent.click(screen.getByTestId(`wb-gov-lv-${target}`))
+  const trigger = screen.getByTestId(`wb-gov-lv-${target}`)
+  trigger.focus()
+  fireEvent.click(trigger)
   return screen.findByTestId('wb-gov-promote-confirm')
 }
 
@@ -237,6 +244,32 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     await settle()
     expect(posts('/api/loops/level')).toHaveLength(0)
     expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('升档确认期间收到逻辑等价的新 row 对象 → 保持确认，不把轮询刷新误判成决策失效', async () => {
+    renderRail()
+    await screen.findByTestId('wb-gov-level')
+    await openPromoteDialog('L2')
+
+    rows = rows.map((row) => ({ ...row }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/loops/snapshot', expect.anything()))
+    expect(screen.getByTestId('wb-gov-promote-confirm')).toBeInTheDocument()
+    expect(posts('/api/loops/level')).toHaveLength(0)
+  })
+
+  it('升档确认期间决策事实变化 → 撤销旧确认且把焦点归还升档入口', async () => {
+    renderRail()
+    await screen.findByTestId('wb-gov-level')
+    await openPromoteDialog('L2')
+
+    rows = rows.map((row) => ({ ...row, readiness: { score: 48, band: 'not-ready' } }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.queryByTestId('wb-gov-promote-confirm')).toBeNull())
+    expect(screen.getByTestId('wb-gov-lv-L2')).toHaveFocus()
+    expect(posts('/api/loops/level')).toHaveLength(0)
   })
 
   it('升档 L1→L2：确认后才 POST /api/loops/level，body = {root,id,target}，reload 后回显 L2', async () => {

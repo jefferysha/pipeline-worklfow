@@ -172,9 +172,9 @@ export function OrchestrationBoard({
               const hookBody = hookZoneBody(lane, hkOpen)
               const hookSummary = (
                 <>
-                  <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`}><Icon name="gauge" size={12} />自动检查</span>
+                  <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`}><Icon name="gauge" size={12} />{t('workbench.board_auto_checks')}</span>
                   <span className="ml-auto inline-flex flex-none items-center gap-1.5">
-                    <span className={`${MINI_BASE} ${MINI_RO}`}>{(lane.hooksCount ?? 0) + (lane.hooksLocked ?? 0)} 项</span>
+                    <span className={`${MINI_BASE} ${MINI_RO}`}>{t('workbench.board_items', { n: (lane.hooksCount ?? 0) + (lane.hooksLocked ?? 0) })}</span>
                   </span>
                 </>
               )

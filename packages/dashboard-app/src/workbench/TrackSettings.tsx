@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
 import {
   deleteTrackDefinition,
   patchTrackDefinition,
@@ -10,6 +8,7 @@ import {
   type WbTrackDefinition,
 } from '../api/client'
 import { useT } from '../i18n'
+import { Dialog } from '../shared/Dialog'
 import type { MandatoryState } from './mandatoryState'
 import { TrackSettingsList } from './TrackSettingsList'
 
@@ -196,31 +195,22 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
         className="rounded-md border border-border bg-card px-3 py-[6px] text-[12.5px] font-bold text-text-2 transition-colors hover:bg-fill"
         data-testid="wb-track-settings-toggle"
         aria-expanded={open}
-        aria-controls="wb-track-settings-panel"
         onClick={() => setOpen((value) => !value)}
       >
-        轨道设置
+        {t('workbench.track_settings_toggle')}
       </button>
-      {open && createPortal(
-        <section
-          id="wb-track-settings-panel"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-scrim/60 p-4 backdrop-blur-[2px]"
-          data-testid="wb-track-settings-panel"
-          aria-label="工作轨道"
-          role="dialog"
-          aria-modal="true"
-          onClick={(event) => { if (event.target === event.currentTarget) setOpen(false) }}
+      {open && (
+        <Dialog
+          title={t('workbench.track_settings_dialog')}
+          onClose={() => setOpen(false)}
+          testid="wb-track-settings-panel"
+          closeLabel={t('workbench.track_settings_close')}
+          panelClassName="w-[min(920px,calc(100vw-32px))]"
+          variant="workspace"
         >
-          <div className="max-h-[calc(100vh-32px)] w-[min(920px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-xl font-extrabold tracking-[-0.02em] text-text">工作轨道</h3>
-              <p className="mt-1 text-sm text-text-3">为不同类型的工作选择默认流程与 Skill。</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" className={ADD_CLS} data-testid="wb-track-create" onClick={openCreate}>新增轨道</button>
-              <button type="button" className="grid size-9 place-items-center rounded-lg border border-border text-text-3 hover:bg-fill hover:text-text" aria-label="关闭轨道设置" onClick={() => setOpen(false)}><X className="size-4" aria-hidden="true" /></button>
-            </div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-text-3">{t('workbench.track_settings_description')}</p>
+            <button type="button" className={ADD_CLS} data-testid="wb-track-create" onClick={openCreate}>{t('workbench.track_settings_create')}</button>
           </div>
           {editor && (
             <form
@@ -234,30 +224,30 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  轨道标识
+                  {t('workbench.track_id')}
                   <input aria-label="Track ID" className={fieldClass} value={editor.draft.id} disabled={editor.mode === 'edit'} onChange={(event) => updateDraft({ id: event.target.value })} />
                 </label>
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  显示名称
-                  <input aria-label="显示名称" className={fieldClass} value={editor.draft.label} onChange={(event) => updateDraft({ label: event.target.value })} />
+                  {t('workbench.track_label')}
+                  <input aria-label={t('workbench.track_label')} className={fieldClass} value={editor.draft.label} onChange={(event) => updateDraft({ label: event.target.value })} />
                 </label>
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  默认流程
-                  <input aria-label="默认 Workflow" className={fieldClass} value={editor.draft.workflowDefault} onChange={(event) => updateDraft({ workflowDefault: event.target.value })} />
+                  {t('workbench.track_workflow_default')}
+                  <input aria-label={t('workbench.track_workflow_default')} className={fieldClass} value={editor.draft.workflowDefault} onChange={(event) => updateDraft({ workflowDefault: event.target.value })} />
                 </label>
                 <label className="flex items-center gap-2 self-end rounded-md border border-border px-2 py-1.5 text-[11.5px] font-bold text-text-2">
                   <input type="checkbox" checked={editor.draft.workflowAny} onChange={(event) => updateDraft({ workflowAny: event.target.checked })} />
-                  适用于全部流程
+                  {t('workbench.track_workflow_any')}
                 </label>
                 {!editor.draft.workflowAny && (
                   <label className="grid gap-1 text-[11.5px] font-bold text-text-2 sm:col-span-2">
-                    允许使用的流程
+                    {t('workbench.track_workflow_allowed')}
                     <input className={fieldClass} value={editor.draft.workflowAllowed} onChange={(event) => updateDraft({ workflowAllowed: event.target.value })} />
                   </label>
                 )}
                 {!editor.original?.builtin && (
                   <label className="grid gap-1 text-[11.5px] font-bold text-text-2 sm:col-span-2">
-                    规则模板
+                    {t('workbench.track_policy_template')}
                     <select
                       aria-label="Policy 模板"
                       className={fieldClass}
@@ -275,26 +265,26 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
               </div>
               {!editor.original?.builtin && (
                 <details className="mt-3 rounded-md border border-border bg-card/60 p-2">
-                  <summary className="cursor-pointer text-xs font-bold text-text-2">自动分配与执行规则</summary>
+                  <summary className="cursor-pointer text-xs font-bold text-text-2">{t('workbench.track_policy_details')}</summary>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label className="grid gap-1 text-[11px] text-text-2">初始复核状态
+                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_review_seed')}
                       <select aria-label="reviewSeed" className={fieldClass} value={editor.draft.policyProfile.reviewSeed} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, reviewSeed: event.target.value as 'pending' | 'skipped' } })}>
-                        <option value="pending">等待复核</option><option value="skipped">无需复核</option>
+                        <option value="pending">{t('workbench.track_review_pending')}</option><option value="skipped">{t('workbench.track_review_skipped')}</option>
                       </select>
                     </label>
-                    <label className="grid gap-1 text-[11px] text-text-2">覆盖检查
+                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_coverage')}
                       <select aria-label="coverageProfile" className={fieldClass} value={editor.draft.policyProfile.coverageProfile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, coverageProfile: event.target.value as 'none' | 'pm' | 'frontend' | 'backend' } })}>
-                        <option value="none">不检查</option><option value="pm">产品</option><option value="frontend">前端</option><option value="backend">后端</option>
+                        <option value="none">{t('workbench.track_coverage_none')}</option><option value="pm">{t('workbench.track_coverage_pm')}</option><option value="frontend">{t('workbench.track_coverage_frontend')}</option><option value="backend">{t('workbench.track_coverage_backend')}</option>
                       </select>
                     </label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="automationEligible" type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />允许手动 AFK</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="autoEnqueueOnSpecComplete" type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />规格完成后自动进入 AFK</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="skills.matrix" type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />使用轨道 Skill</label>
-                    <label className="grid gap-1 text-[11px] text-text-2">Skill 来源<input aria-label="skills.profile" className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="routing.enabled" type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />启用自动分配</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="automationEligible" type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />{t('workbench.track_afk_manual')}</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="autoEnqueueOnSpecComplete" type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />{t('workbench.track_afk_auto')}</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="skills.matrix" type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />{t('workbench.track_skills_matrix')}</label>
+                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_skills_profile')}<input aria-label="skills.profile" className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="routing.enabled" type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />{t('workbench.track_routing_enabled')}</label>
                     {editor.draft.policyProfile.routing.enabled && <>
-                      <label className="grid gap-1 text-[11px] text-text-2">匹配规则<input aria-label="routing.pattern" className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">排除规则（可选）<input aria-label="routing.excludePattern" className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_pattern')}<input aria-label="routing.pattern" className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_exclude')}<input aria-label="routing.excludePattern" className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
                         const routing = editor.draft.policyProfile.routing as { enabled: true; pattern: string; excludePattern?: string; priority: number }
                         const excludePattern = event.target.value
                         updateDraft({
@@ -306,7 +296,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                           },
                         })
                       }} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">优先级<input aria-label="routing.priority" type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_priority')}<input aria-label="routing.priority" type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
                     </>}
                   </div>
                 </details>
@@ -352,7 +342,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                         {routePreview.candidates.map((candidate) => (
                           <li key={candidate.track.id} className="flex justify-between gap-2 rounded bg-fill px-2 py-1">
                             <span>{candidate.track.label}</span>
-                            <code>匹配度 {candidate.score} · 优先级 {candidate.priority}</code>
+                            <code>{t('workbench.track_route_score', { score: candidate.score, priority: candidate.priority })}</code>
                           </li>
                         ))}
                       </ul>
@@ -372,9 +362,8 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
             </form>
           )}
           <TrackSettingsList state={state} onEdit={openEdit} />
-          </div>
-        </section>
-      , document.body)}
+        </Dialog>
+      )}
     </div>
   )
 }
