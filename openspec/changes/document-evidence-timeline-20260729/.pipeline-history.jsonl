@@ -24,3 +24,19 @@
 {"ts":"2026-07-29T10:39:59Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fad64-b5bc-7e52-9f9e-780b44053975"}
 {"ts":"2026-07-29T10:40:22Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fad30-dcfb-7370-91d6-9599e96aec49"}
 {"ts":"2026-07-29T10:41:21Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T10:46:20Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T10:46:21Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T10:46:30Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T10:46:31Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T10:46:31Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0e93b86e-1e75-49bb-bc53-46927aabb090"}
+{"ts":"2026-07-29T10:48:50Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-document-evidence-timeline-20260729-verify.md"}
+{"ts":"2026-07-29T10:48:50Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T10:48:50Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-29T10:48:51Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-29T10:48:51Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-29T10:48:51Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-29T10:48:56Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-29T10:48:56Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-29T10:40:22Z authority_host_session=019fad30-dcfb-7370-91d6-9599e96aec49"}
+{"ts":"2026-07-29T10:48:57Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"14e34c9e-ac30-4df3-a0dc-97af5390cd9a"}
+{"ts":"2026-07-29T10:49:42Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-29T10:49:42Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
