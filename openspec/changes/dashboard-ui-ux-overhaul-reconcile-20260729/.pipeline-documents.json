@@ -147,20 +147,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/dashboard-ui-ux-overhaul-reconcile-20260729/tasks.md",
-      "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-29T04:58:13Z",
+      "sha256": "62136aa8e44d002c27021108e7ab9306e94b80dc69d343f871ddf8f97c494ae6",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-29T05:03:18Z",
       "reads": [
         {
-          "phase": "spec",
-          "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
-          "readAt": "2026-07-29T04:58:13Z",
-          "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",2]"
-        },
-        {
           "phase": "build",
-          "sha256": "f60a6112ef3fb8995e1d10a18c063aa2ea171d188675251dadc7541a73c1be07",
-          "readAt": "2026-07-29T05:00:38Z",
+          "sha256": "62136aa8e44d002c27021108e7ab9306e94b80dc69d343f871ddf8f97c494ae6",
+          "readAt": "2026-07-29T05:03:19Z",
           "visitId": "[\"4207189c-18e2-43e4-86ea-47766f79d8a0\",3]"
         }
       ]

@@ -20,3 +20,4 @@
 {"ts":"2026-07-29T05:00:37Z","kind":"set","field":"build_mode","to":"direct"}
 {"ts":"2026-07-29T05:00:37Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-29T05:00:37Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-29T05:03:18Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
