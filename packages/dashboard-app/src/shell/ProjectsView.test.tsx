@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { ProjectsView } from './ProjectsView'
 import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
-import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { DEFAULT_WORKFLOW_RULES, makeChange, makeProject, makeSnapshot } from '../testkit'
 
 beforeEach(() => {
   localStorage.clear()
@@ -43,6 +43,26 @@ function renderView(over: Partial<Parameters<typeof ProjectsView>[0]> = {}) {
 }
 
 describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', () => {
+  it('English 下 phase-manifest 忽略中文投影 label，以当前 locale 显示 canonical phase', () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const root = '/code/repo-english'
+    const change = makeChange('shipping', 'ship')
+    change.workflowRules = {
+      ...DEFAULT_WORKFLOW_RULES,
+      executionModel: 'phase-manifest',
+      labelByStep: {
+        open: '立项', explore: '调研', spec: '规格', build: '实现',
+        verify: '验证', ship: '交付', archive: '归档',
+      },
+    }
+    renderView({
+      snapshot: makeSnapshot([makeProject(root, [change])]),
+      rulesByKey: new Map(),
+    })
+    expect(screen.getByTestId('project-row-repo-english-at')).toHaveTextContent('At Ship')
+    expect(screen.getByTestId('project-row-repo-english')).not.toHaveTextContent('交付')
+  })
+
   it('渲染 projects-view + 每项目一行（testid=project-row-{basename}）', () => {
     renderView()
     expect(screen.getByTestId('projects-view')).toHaveAttribute('data-page-frame', 'standard')

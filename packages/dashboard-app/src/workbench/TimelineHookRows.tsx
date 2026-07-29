@@ -61,16 +61,26 @@ export function HookRows({
         const translatedName = t(nameKey)
         const translatedDescription = t(descriptionKey)
         const fallback = hook.id === 'guard-write-scope'
-          ? { name: '写入范围保护', description: '在工具执行前检查写入是否越界。' }
+          ? { name: t('workbench.timeline_hook_guard_scope_name'), description: t('workbench.timeline_hook_guard_scope_desc') }
           : hook.id === 'collect-evidence'
-            ? { name: '收集验证证据', description: '工具完成后归集可复核的结果与证据。' }
+            ? { name: t('workbench.timeline_hook_collect_evidence_name'), description: t('workbench.timeline_hook_collect_evidence_desc') }
             : hook.id === 'load-context'
-              ? { name: '加载任务上下文', description: '进入阶段时注入当前目标、限制与可用能力。' }
-              : { name: hook.id, description: '在这一执行时点运行预先配置的自动化处理。' }
+              ? { name: t('workbench.timeline_hook_load_context_name'), description: t('workbench.timeline_hook_load_context_desc') }
+              : { name: hook.id, description: t('workbench.timeline_hook_fallback_desc') }
         const name = translatedName === nameKey ? fallback.name : translatedName
         const description = translatedDescription === descriptionKey ? fallback.description : translatedDescription
         return (
-          <div key={hook.id} className="flex min-h-14 items-center gap-3 py-2" data-testid={`wb-timeline-hook-${hook.id}`} title={`技术详情：${hook.id} · ${hook.event} · 匹配 ${hook.matcher || '*'} · ${hook.script}`}>
+          <div
+            key={hook.id}
+            className="flex min-h-14 items-center gap-3 py-2"
+            data-testid={`wb-timeline-hook-${hook.id}`}
+            title={t('workbench.timeline_hook_technical_details', {
+              id: hook.id,
+              event: hook.event,
+              matcher: hook.matcher || '*',
+              script: hook.script,
+            })}
+          >
             {locked || readonly ? <LockKeyhole className="h-4 w-4 flex-none text-text-3" aria-hidden="true" /> : (
               <button
                 type="button"
@@ -183,7 +193,7 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
         <button
           type="submit"
           disabled={config.promptSkipBusy}
-          className="rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 disabled:opacity-50"
+          className="rounded-lg bg-btn-bg px-3 py-1.5 text-xs font-semibold text-btn-fg transition-colors hover:bg-btn-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 disabled:opacity-50"
         >
           {config.promptSkipBusy
             ? t('workbench.hk_bypass_saving')

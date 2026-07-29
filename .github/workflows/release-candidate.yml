@@ -1,0 +1,161 @@
+name: Release candidate (pre-tag)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact 40-character main commit SHA to release
+        required: true
+      tag:
+        description: New v-prefixed semver tag to create after every gate passes
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-candidate
+  cancel-in-progress: false
+
+jobs:
+  pre-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.candidate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Prove exact current main candidate and unused tag
+        id: candidate
+        env:
+          CANDIDATE_SHA: ${{ inputs.ref }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          case "$CANDIDATE_SHA" in
+            *[!0-9a-fA-F]*|'') echo "ref must be a full hexadecimal commit SHA" >&2; exit 1 ;;
+          esac
+          [ "${#CANDIDATE_SHA}" -eq 40 ] || {
+            echo "ref must contain exactly 40 hexadecimal characters" >&2
+            exit 1
+          }
+          case "$RELEASE_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "tag must be v-prefixed semver" >&2; exit 1 ;;
+          esac
+          git fetch --force --no-tags origin main
+          head="$(git rev-parse HEAD)"
+          main="$(git rev-parse origin/main)"
+          [ "$head" = "$CANDIDATE_SHA" ] && [ "$head" = "$main" ] || {
+            echo "candidate drift: input=$CANDIDATE_SHA checkout=$head origin/main=$main" >&2
+            exit 1
+          }
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release tag already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          root_version="$(node -p "require('./package.json').version")"
+          plugin_version="$(node -p "require('./.codex-plugin/plugin.json').version")"
+          claude_version="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          [ "$version" = "$root_version" ] &&
+            [ "$version" = "$plugin_version" ] &&
+            [ "$version" = "$claude_version" ] || {
+              echo "version mismatch: tag=$version root=$root_version codex=$plugin_version claude=$claude_version" >&2
+              exit 1
+            }
+          echo "sha=$head" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install exact lockfile
+        run: npm ci
+
+      - name: Block advisories and invalid, extraneous, or incompatible resolved trees
+        run: npm run check:dependencies
+
+      - name: Prove release workflow anti-bypass contract
+        run: npm run check:release-workflows
+
+      - name: Repository, identity, compatibility, and package gates
+        run: |
+          npm run check:comments
+          npm run check:architecture
+          npm run check:identity
+          npm run check:repository-hygiene
+          npm run check:npx-package
+          npm run check:legacy-bridge
+          npm run check:default-workflow-freshness
+
+      - name: Build complete release payload and prove committed freshness
+        run: |
+          npm run build
+          git diff --exit-code -- \
+            packages/cli/dist/tenon.mjs \
+            packages/server/dist/dashboard.mjs \
+            packages/dashboard-app/dist
+          bash tools/verify-skills.sh
+          bash tools/test-bundle.sh
+
+      - name: Documentation and governance-document gates
+        run: |
+          npm run check:docs
+          npm run check:document-templates
+          npm run docs:sync
+          npm run docs:check
+          npm run docs:build
+          npm run docs:smoke
+
+      - name: Full runtime, Dashboard, hook, adapter, migration, and oracle verification
+        run: |
+          npm test
+          npm run test:web
+          bash tools/test-hooks.sh
+          bash tools/test-adapters.sh
+          npm run test:migration-cas
+          npm run oracle
+
+      - name: Real clean Codex install from candidate checkout
+        run: |
+          npm install --global @openai/codex@0.144.1
+          npm run test:clean-install
+
+      - name: Re-prove main identity immediately before tagging
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin main
+          [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
+          [ "$(git rev-parse origin/main)" = "$CANDIDATE_SHA" ] || {
+            echo "main advanced while the release candidate was running; rerun against the new exact SHA" >&2
+            exit 1
+          }
+
+      - name: Create tag only after every pre-tag gate passes
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "$RELEASE_TAG" "$CANDIDATE_SHA" -m "Tenon $RELEASE_VERSION"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+  release:
+    needs: pre-tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.pre-tag.outputs.tag }}
+    secrets: inherit

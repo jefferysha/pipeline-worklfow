@@ -81,8 +81,13 @@ function fieldStr(c: ChangeSnapshot, key: string): string {
 
 /** 步 id → 展示名：自定义步优先用户 label，缺键/空回退 step id；default 相走 phases.* i18n
  *  （同 ProgressView stepLabel 口径）。 */
-function phaseLabel(step: string, labelByStep: Record<string, string> | undefined, t: Tr): string {
-  const custom = labelByStep?.[step]
+function phaseLabel(
+  step: string,
+  labelByStep: Record<string, string> | undefined,
+  t: Tr,
+  executionModel?: WorkflowRules['executionModel'],
+): string {
+  const custom = executionModel === 'phase-manifest' ? undefined : labelByStep?.[step]
   if (custom) return custom
   return isPhase(step) ? t(`phases.${step}`) : step
 }
@@ -149,7 +154,7 @@ function MiniTrack({
               data-phase={step}
               data-state={state}
               data-error={state === 'current' && failed ? 'true' : undefined}
-              title={phaseLabel(step, rules?.labelByStep, t)}
+              title={phaseLabel(step, rules?.labelByStep, t, rules?.executionModel)}
               className={`flex-none rounded-full ${dotCls}`}
             />
           </span>
@@ -160,7 +165,7 @@ function MiniTrack({
 }
 
 export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChange, onToast }: AfkViewProps): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
   const rootRef = useRef<HTMLElement>(null)
 
   const sel = useMemo(() => selectProgress(snapshot, currentRoot, rulesByKey), [snapshot, currentRoot, rulesByKey])
@@ -221,7 +226,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
     setActionError('')
     try {
       await postAutomationSettings({ root: currentRoot, ...updated })
-      onToast?.(`并发上限已更新为 ${next}`)
+      onToast?.(t('afk.max_parallel_updated', { n: next }))
     } catch (error) {
       setAutomationSettings(previous)
       setActionError(error instanceof Error ? error.message : String(error))
@@ -293,18 +298,24 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
   const selectedState = selected?.row.state ?? null
   const selectedFailure = selectedChange === null || selectedState !== 'failed'
     ? ''
-    : fieldStr(selectedChange, 'automation_error') || fieldStr(selectedChange, 'automation_reason') || `${phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t)}阶段未通过`
+    : fieldStr(selectedChange, 'automation_error') || fieldStr(selectedChange, 'automation_reason') || t('afk.failure_default', { phase: phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t, selectedRules?.executionModel) })
   const selectedCmd = selectedChange && selectedState === 'failed' ? cmdFor(selectedChange) : null
 
   function stateLabel(state: ProgressState): string {
-    if (state === 'failed') return '需要处理'
-    if (state === 'running') return '运行中'
-    if (state === 'queued') return '等待中'
-    return state === 'gate' ? '等待确认' : '等待处理'
+    if (state === 'failed') return t('afk.state_needs_attention')
+    if (state === 'running') return t('afk.state_running')
+    if (state === 'queued') return t('afk.state_queued')
+    return t(state === 'gate' ? 'afk.state_awaiting_confirmation' : 'afk.state_waiting')
   }
 
-  function fact(value: string, fallback = '未提供'): string {
+  function fact(value: string, fallback = t('afk.fact_missing')): string {
     return value.trim() === '' ? fallback : value
+  }
+
+  function displayTime(value: string): string {
+    if (lang === 'zh') return shortTime(value)
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value)
+    return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6] ?? '00'}` : value
   }
 
   return (
@@ -348,16 +359,16 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
           role="status"
           aria-live="polite"
         >
-          当前没有自动运行任务
+          {t('afk.empty_runs')}
         </p>
       ) : (
         <div className="grid min-h-[650px] min-w-0 grid-cols-[360px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border bg-card shadow-sm max-[760px]:grid-cols-1" data-anim="afk-card">
           <aside className="min-w-0 border-r border-border bg-card p-4 max-[760px]:border-r-0 max-[760px]:border-b" data-testid="afk-queue">
             <div className="flex items-center justify-between py-1">
-              <h2 className="text-[17px] font-bold tracking-[-0.01em] text-text">运行队列</h2>
+              <h2 className="text-[17px] font-bold tracking-[-0.01em] text-text">{t('afk.queue_title')}</h2>
               {automationSettings !== null && (
                 <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-3">
-                  并发
+                  {t('afk.concurrency_label')}
                   <select
                     className="h-8 rounded-lg border border-border bg-card px-2 font-mono text-xs font-semibold text-text outline-none focus:border-(--accent)"
                     data-testid="afk-limit-input"
@@ -370,9 +381,9 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
               )}
             </div>
             <div className="mt-3 grid grid-cols-3 rounded-xl bg-fill p-1 text-xs font-semibold" data-testid="afk-health" data-status={health.status}>
-              <span className="rounded-lg bg-card px-2 py-2 text-center text-red shadow-sm">需要处理 {health.failed}</span>
-              <span className="px-2 py-2 text-center text-text-2">运行中 {health.running}</span>
-              <span className="px-2 py-2 text-center text-text-2">等待中 {health.queued}</span>
+              <span className="rounded-lg bg-card px-2 py-2 text-center text-red shadow-sm">{t('afk.health_needs_attention', { n: health.failed })}</span>
+              <span className="px-2 py-2 text-center text-text-2">{t('afk.health_running', { n: health.running })}</span>
+              <span className="px-2 py-2 text-center text-text-2">{t('afk.health_queued', { n: health.queued })}</span>
             </div>
             <ul className="mt-3 flex flex-col gap-1">
               {visibleRows.map(({ row, rules }) => {
@@ -392,8 +403,8 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                         <strong className="min-w-0 flex-1 break-words font-mono text-[14px] font-bold text-text">{change.name}</strong>
                         <ChevronRight className="h-4 w-4 text-text-3 opacity-0 transition-opacity group-hover:opacity-100 group-data-[selected=true]:opacity-100" aria-hidden="true" />
                       </span>
-                      <span className="mt-1.5 block break-words text-xs font-semibold text-text-2">项目 · {currentRoot.split('/').filter(Boolean).pop() ?? currentRoot}</span>
-                      <span className="mt-1 block text-xs text-text-3">{phaseLabel(change.phase, rules?.labelByStep, t)} · {stateLabel(row.state)}</span>
+                      <span className="mt-1.5 block break-words text-xs font-semibold text-text-2">{t('afk.project_label', { name: currentRoot.split('/').filter(Boolean).pop() ?? currentRoot })}</span>
+                      <span className="mt-1 block text-xs text-text-3">{phaseLabel(change.phase, rules?.labelByStep, t, rules?.executionModel)} · {stateLabel(row.state)}</span>
                       <span><MiniTrack change={change} rules={rules} failed={row.state === 'failed'} t={t} /></span>
                     </button>
                   </li>
@@ -410,25 +421,25 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                     <h2 className="font-mono text-[18px] font-bold tracking-[-0.015em] text-text">{selectedChange.name}</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${selectedState === 'failed' ? 'bg-red-t text-red-d' : selectedState === 'running' ? 'bg-green-t text-green-d' : 'bg-fill text-text-2'}`}>{stateLabel(selectedState)}</span>
                   </div>
-                  <p className="mt-1.5 text-xs font-medium text-text-3">{phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t)}阶段</p>
+                  <p className="mt-1.5 text-xs font-medium text-text-3">{t('afk.stage_label', { phase: phaseLabel(selectedChange.phase, selectedRules?.labelByStep, t, selectedRules?.executionModel) })}</p>
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px]" data-testid="afk-run-facts">
-                    <span className="rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">工作流 {fact(fieldStr(selectedChange, 'workflow'), 'default')}</span>
-                    {fieldStr(selectedChange, 'autonomy_level') !== '' && <span className="rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">自治 {fieldStr(selectedChange, 'autonomy_level')}</span>}
-                    {fieldStr(selectedChange, 'skill_bundle_id') !== '' && <span className="max-w-full truncate rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">技能 {fieldStr(selectedChange, 'skill_bundle_id')}</span>}
-                    {fieldStr(selectedChange, 'automation_container') !== '' && <span className="max-w-full truncate rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">容器 {fieldStr(selectedChange, 'automation_container')}</span>}
+                    <span className="rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">{t('afk.fact_workflow', { value: fact(fieldStr(selectedChange, 'workflow'), 'default') })}</span>
+                    {fieldStr(selectedChange, 'autonomy_level') !== '' && <span className="rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">{t('afk.fact_autonomy', { value: fieldStr(selectedChange, 'autonomy_level') })}</span>}
+                    {fieldStr(selectedChange, 'skill_bundle_id') !== '' && <span className="max-w-full truncate rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">{t('afk.fact_skills', { value: fieldStr(selectedChange, 'skill_bundle_id') })}</span>}
+                    {fieldStr(selectedChange, 'automation_container') !== '' && <span className="max-w-full truncate rounded-lg bg-fill px-2.5 py-1.5 font-semibold text-text-2">{t('afk.fact_container', { value: fieldStr(selectedChange, 'automation_container') })}</span>}
                   </div>
                 </div>
                 <div className="flex flex-none flex-col items-end gap-2">
-                  <span className="text-xs text-text-3">{selectedChange.updated_at ? `更新于 ${shortTime(selectedChange.updated_at)}` : '更新时间未提供'}</span>
+                  <span className="text-xs text-text-3">{selectedChange.updated_at ? t('afk.updated_at', { time: displayTime(selectedChange.updated_at) }) : t('afk.updated_unknown')}</span>
                   <div className="flex flex-wrap justify-end gap-2">
-                    <button type="button" className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-text-2 hover:bg-fill" data-testid={`afk-flow-${selectedChange.name}`} onClick={() => onOpenChange ? onOpenChange(selectedChange.name) : onView('progress')}><Workflow className="h-3.5 w-3.5" aria-hidden="true" />查看流水线</button>
-                    {selectedCmd && <button type="button" className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-text-2 hover:bg-fill" data-testid={`afk-cmd-${selectedChange.name}`} title={selectedCmd.cmd} aria-label={`${selectedCmd.label}：${selectedCmd.cmd}`} onClick={() => copyCmd(selectedCmd.cmd)}><Terminal className="h-3.5 w-3.5" aria-hidden="true" />人工接管</button>}
+                    <button type="button" className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-text-2 hover:bg-fill" data-testid={`afk-flow-${selectedChange.name}`} onClick={() => onOpenChange ? onOpenChange(selectedChange.name) : onView('progress')}><Workflow className="h-3.5 w-3.5" aria-hidden="true" />{t('afk.view_pipeline')}</button>
+                    {selectedCmd && <button type="button" className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-text-2 hover:bg-fill" data-testid={`afk-cmd-${selectedChange.name}`} title={selectedCmd.cmd} aria-label={`${selectedCmd.label}: ${selectedCmd.cmd}`} onClick={() => copyCmd(selectedCmd.cmd)}><Terminal className="h-3.5 w-3.5" aria-hidden="true" />{t('afk.take_over')}</button>}
                   </div>
                 </div>
               </div>
 
-              <section className="mt-5" aria-label="阶段进度">
-                <h3 className="text-sm font-semibold text-text">阶段进度</h3>
+              <section className="mt-5" aria-label={t('afk.progress_label')}>
+                <h3 className="text-sm font-semibold text-text">{t('afk.progress_title')}</h3>
                 <div className="mt-4 min-w-0 overflow-x-auto pb-2 [scrollbar-width:thin]" data-testid="afk-stage-scroll">
                   <div className="flex min-w-[560px] items-start" data-testid="afk-stage-track">
                     {(selectedRules?.steps ?? DEFAULT_RULES.steps).map((step, index, all) => {
@@ -441,8 +452,8 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                           <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${done ? 'border-green bg-green text-btn-fg' : here && selectedState === 'failed' ? 'border-red bg-card text-red-d' : here ? 'border-(--accent) bg-(--accent) text-btn-fg' : 'border-border-2 bg-card text-text-3'}`}>
                             {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
                           </span>
-                          <span className="mt-2 block text-xs font-semibold text-text">{phaseLabel(step, selectedRules?.labelByStep, t)}</span>
-                          <span className={`mt-0.5 block text-[10px] ${here && selectedState === 'failed' ? 'text-red' : 'text-text-3'}`}>{done ? '已完成' : here ? stateLabel(selectedState) : '等待'}</span>
+                          <span className="mt-2 block text-xs font-semibold text-text">{phaseLabel(step, selectedRules?.labelByStep, t, selectedRules?.executionModel)}</span>
+                          <span className={`mt-0.5 block text-[10px] ${here && selectedState === 'failed' ? 'text-red' : 'text-text-3'}`}>{done ? t('afk.stage_done') : here ? stateLabel(selectedState) : t('afk.stage_waiting')}</span>
                         </div>
                         {index < all.length - 1 && <span className={`mt-3.5 h-px min-w-2 flex-1 ${index < current ? 'bg-green' : 'bg-border-2'}`} aria-hidden="true" />}
                       </div>
@@ -456,16 +467,16 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                 <section className="mt-5 rounded-xl border border-red-b bg-red-t/45 px-4 py-3">
                   <div className="flex gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-red" aria-hidden="true" />
-                    <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-text">验证未通过：{selectedFailure}</h3><p className="mt-1 text-xs leading-5 text-text-3">修复问题后，先查看本次重试会做什么，再重新运行验证。</p></div>
-                    <button type="button" className="min-h-9 flex-none rounded-lg bg-(--accent) px-3 text-xs font-semibold text-btn-fg shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>查看重试预览</button>
+                    <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-text">{t('afk.verify_failed_title', { reason: selectedFailure })}</h3><p className="mt-1 text-xs leading-5 text-text-3">{t('afk.verify_failed_hint')}</p></div>
+                    <button type="button" className="min-h-9 flex-none rounded-lg bg-btn-bg px-3 text-xs font-semibold text-btn-fg shadow-sm transition-transform active:scale-[.97] motion-reduce:transform-none" data-testid={`afk-retry-preview-${selectedChange.name}`} onClick={() => setRetryPreviewName(selectedChange.name)}>{t('afk.retry_preview')}</button>
                   </div>
                 </section>
               )}
 
               <section className="mt-4 rounded-xl border border-border px-4 py-3">
-                <h3 className="text-sm font-semibold text-text">运行活动</h3>
+                <h3 className="text-sm font-semibold text-text">{t('afk.activity_title')}</h3>
                 <ul className="mt-3 divide-y divide-border text-xs">
-                  <li className="flex gap-3 py-2"><Clock3 className="h-4 w-4 text-text-3" aria-hidden="true" /><span className="text-text-2">{selectedChange.updated_at ? shortTime(selectedChange.updated_at) : '时间未提供'}</span><strong className="text-text">{selectedState === 'failed' ? '验证失败' : stateLabel(selectedState)}</strong></li>
+                  <li className="flex gap-3 py-2"><Clock3 className="h-4 w-4 text-text-3" aria-hidden="true" /><span className="text-text-2">{selectedChange.updated_at ? displayTime(selectedChange.updated_at) : t('afk.time_unknown')}</span><strong className="text-text">{selectedState === 'failed' ? t('afk.activity_verify_failed') : stateLabel(selectedState)}</strong></li>
                 </ul>
               </section>
             </main>
@@ -475,11 +486,11 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
       )}
 
       {(enqueueCandidates.length > 0 || snapshot?.capabilities.operations === true) && (
-        <nav className="sticky bottom-3 z-30 mx-auto mt-4 flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-card/90 p-1.5 shadow-[0_10px_34px_rgba(15,23,42,.12)] backdrop-blur-2xl" aria-label="自动运行工具">
+        <nav className="sticky bottom-3 z-30 mx-auto mt-4 flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-card/90 p-1.5 shadow-[0_10px_34px_rgba(15,23,42,.12)] backdrop-blur-2xl" aria-label={t('afk.tool_nav_label')}>
           {([
-            ['enqueue', '开启自动运行', Plus, enqueueCandidates.length === 0, '让已有任务进入无人值守队列'],
-            ['starter', '新建定时任务', Plus, snapshot?.capabilities.operations !== true, '按周期发现或生成任务'],
-            ['run', '验证定时任务', Play, snapshot?.capabilities.operations !== true, '上线前检查任务选择与执行计划'],
+            ['enqueue', t('afk.tool_start'), Plus, enqueueCandidates.length === 0, t('afk.tool_start_hint')],
+            ['starter', t('afk.tool_schedule'), Plus, snapshot?.capabilities.operations !== true, t('afk.tool_schedule_hint')],
+            ['run', t('afk.tool_validate'), Play, snapshot?.capabilities.operations !== true, t('afk.tool_validate_hint')],
           ] as const).map(([tool, label, Icon, disabled, title]) => (
             <button key={tool} type="button" title={title} data-testid={`afk-tool-${tool}`} data-active={activeTool === tool} className="inline-flex min-h-10 flex-none items-center gap-2 rounded-xl px-3 text-xs font-semibold text-text-2 transition-[background-color,transform] hover:bg-fill active:scale-[.97] data-[active=true]:bg-accent-t data-[active=true]:text-accent-d disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none" disabled={disabled} onClick={() => setActiveTool(tool)}><Icon className="h-4 w-4" aria-hidden="true" />{label}</button>
           ))}
@@ -487,22 +498,22 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
       )}
 
       {activeTool !== null && (activeTool === 'enqueue' || snapshot?.capabilities.operations === true) && (
-        <section data-testid="afk-tool-sheet" role="dialog" aria-modal="true" aria-label="自动运行工具" className="fixed inset-0 z-50 grid place-items-center bg-scrim p-5 max-[760px]:p-3">
+        <section data-testid="afk-tool-sheet" role="dialog" aria-modal="true" aria-label={t('afk.tool_dialog_label')} className="fixed inset-0 z-50 grid place-items-center bg-scrim p-5 max-[760px]:p-3">
           <div className="max-h-[82vh] w-full max-w-[760px] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-[0_24px_80px_rgba(15,23,42,.28)]">
             <div className="mb-4 flex items-center justify-between gap-4 border-b border-border pb-3">
-              <div><p className="text-[11px] font-semibold tracking-[.08em] text-text-3">自动运行</p><h2 className="mt-1 text-lg font-bold text-text">{activeTool === 'enqueue' ? '开启自动运行' : activeTool === 'starter' ? '新建定时任务' : '验证定时任务'}</h2></div>
-              <button type="button" data-testid="afk-tool-close" aria-label="关闭工具" className="grid h-10 w-10 place-items-center rounded-full text-text-3 hover:bg-fill hover:text-text" onClick={() => setActiveTool(null)}><X className="h-4 w-4" aria-hidden="true" /></button>
+              <div><p className="text-[11px] font-semibold tracking-[.08em] text-text-3">{t('afk.tool_kicker')}</p><h2 className="mt-1 text-lg font-bold text-text">{activeTool === 'enqueue' ? t('afk.tool_start') : activeTool === 'starter' ? t('afk.tool_schedule') : t('afk.tool_validate')}</h2></div>
+              <button type="button" data-testid="afk-tool-close" aria-label={t('afk.tool_close')} className="grid h-10 w-10 place-items-center rounded-full text-text-3 hover:bg-fill hover:text-text" onClick={() => setActiveTool(null)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
             {activeTool === 'enqueue' ? (
               <section>
-                <p className="text-sm leading-6 text-text-3">把已有任务交给无人值守队列。此操作不创建新任务，也不改变它的工作流；调度器只负责按并发上限推进。</p>
+                <p className="text-sm leading-6 text-text-3">{t('afk.tool_start_desc')}</p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {enqueueCandidates.map((change) => {
                     const key = `enqueue:${change.name}`
                     return (
                       <button key={change.name} type="button" className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-border bg-bg px-4 py-3 text-left hover:border-(--accent) hover:bg-accent-t" data-testid={`afk-enqueue-${change.name}`} disabled={actionBusy !== null} onClick={() => void runAction(key, change.name, () => postAfkEnqueue(change.name, currentRoot), 'afk.enqueue_ok').then((ok) => { if (ok) setActiveTool(null) })}>
-                        <span><strong className="block font-mono text-sm text-text">{change.name}</strong><span className="mt-1 block text-xs text-text-3">当前阶段 · {phaseLabel(change.phase, undefined, t)}</span></span>
-                        <span className="text-xs font-semibold text-(--accent)">{actionBusy === key ? '开启中…' : '开启'}</span>
+                        <span><strong className="block font-mono text-sm text-text">{change.name}</strong><span className="mt-1 block text-xs text-text-3">{t('afk.tool_current_phase', { phase: phaseLabel(change.phase, undefined, t) })}</span></span>
+                        <span className="text-xs font-semibold text-(--accent)">{actionBusy === key ? t('afk.tool_starting') : t('afk.tool_start_action')}</span>
                       </button>
                     )
                   })}
@@ -518,23 +529,23 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
       {retryPreviewName !== null && (
         <section
           role="dialog"
-          aria-label="重试预览"
+          aria-label={t('afk.retry_dialog_label')}
           data-testid="afk-retry-sheet"
           className="fixed right-5 bottom-5 left-[112px] z-40 rounded-2xl border border-border bg-card/95 p-5 shadow-[0_20px_55px_rgba(15,23,42,.18)] backdrop-blur-2xl max-[760px]:right-3 max-[760px]:bottom-3 max-[760px]:left-3"
         >
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-5">
             <div className="min-w-[260px] flex-1">
-              <p className="text-[11px] font-semibold tracking-[.08em] text-text-3 uppercase">安全重试预览</p>
-              <h2 className="mt-1 text-lg font-bold text-text">重新运行验证 · <span className="font-mono">{retryPreviewName}</span></h2>
-              <p className="mt-1 text-xs leading-5 text-text-3">复用当前工作区与 Skill 快照，从验证阶段继续。不会自动合并，也不会修改 Workflow 配置。</p>
+              <p className="text-[11px] font-semibold tracking-[.08em] text-text-3 uppercase">{t('afk.retry_kicker')}</p>
+              <h2 className="mt-1 text-lg font-bold text-text">{t('afk.retry_title', { name: retryPreviewName })}</h2>
+              <p className="mt-1 text-xs leading-5 text-text-3">{t('afk.retry_body')}</p>
             </div>
             <dl className="grid min-w-[300px] grid-cols-3 gap-2 text-xs max-[760px]:min-w-0 max-[760px]:w-full">
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">起点</dt><dd className="mt-1 font-semibold text-text">验证阶段</dd></div>
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">代码合并</dt><dd className="mt-1 font-semibold text-text">保持关闭</dd></div>
-              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">失败处理</dt><dd className="mt-1 font-semibold text-text">回到待处理</dd></div>
+              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_start_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_start_value')}</dd></div>
+              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_merge_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_merge_value')}</dd></div>
+              <div className="rounded-xl bg-fill px-3 py-2"><dt className="text-text-3">{t('afk.retry_failure_label')}</dt><dd className="mt-1 font-semibold text-text">{t('afk.retry_failure_value')}</dd></div>
             </dl>
             <div className="ml-auto flex gap-2 max-[760px]:ml-0 max-[760px]:w-full">
-              <button type="button" className="min-h-11 rounded-xl border border-border-2 bg-card px-4 text-sm font-semibold text-text-2 max-[760px]:flex-1" onClick={() => setRetryPreviewName(null)}>取消</button>
+              <button type="button" className="min-h-11 rounded-xl border border-border-2 bg-card px-4 text-sm font-semibold text-text-2 max-[760px]:flex-1" onClick={() => setRetryPreviewName(null)}>{t('afk.retry_cancel')}</button>
               <button
                 type="button"
                 data-testid={`afk-retry-confirm-${retryPreviewName}`}
@@ -545,7 +556,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                   void runAction(`retry:${name}`, name, () => postAfkRetry(name, currentRoot), 'afk.retry_ok')
                     .then((ok) => { if (ok) setRetryPreviewName(null) })
                 }}
-              >{actionBusy === `retry:${retryPreviewName}` ? '提交中…' : '确认重试'}</button>
+              >{actionBusy === `retry:${retryPreviewName}` ? t('afk.retry_submitting') : t('afk.retry_confirm')}</button>
             </div>
           </div>
         </section>

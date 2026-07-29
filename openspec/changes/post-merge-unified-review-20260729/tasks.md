@@ -30,6 +30,16 @@
 - [x] 更新 README、测试现实、依赖安全/发布文档和持久浏览器证据。 (build)
 - [x] 完成 Spec、规则/架构/安全与 Dashboard 设计质量的独立 pre-Verify 复核。 (build)
 
+## Verify 回退修复
+
+- [x] 本地化 review gate、Hook fallback/tooltip、Policy 模板、Projects default phase 与 Automation 空态/动作。 (build)
+- [x] 修复 workflow menu 的完整键盘交互、暗色旁路按钮对比度与 config error 显式重试。 (build)
+- [x] 将 audit 与 `npm ls --all` 合并为 CI/release canonical dependency gate。 (build)
+- [x] 增加精确候选 main SHA 的 pre-tag release-candidate 门并更新发布文档。 (build)
+- [x] 为七个既有 OpenSpec capability 补齐不改变 requirement 语义的 Purpose，使全仓 strict validation 为 GREEN。 (build)
+- [x] 为所有回退 finding 建立 RED→GREEN 回归并重新运行全量 Build 门禁。 (build)
+- [x] 更新统一 REVIEW、pre-Verify 报告并冻结新的完整 Build SHA。 (build)
+
 ## 验证
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

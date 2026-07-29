@@ -29,9 +29,11 @@ canonical state 只由 Tenon CLI 写。路径必须落在项目允许范围，�
 
 ## 供应链
 
-依赖固定版本，CI 使用最小权限。CI 与 release workflow 都运行
-`npm run check:dependencies`；High 或 Critical advisory 会直接失败。正式发布前还要运行完整
-`npm audit` 与 `npm ls vite vitest ajv vitepress`，确认 lockfile、override 和实际解析树一致。
+依赖固定版本。CI、pre-tag release candidate 与 tag release workflow 都运行
+`npm run check:dependencies`；该单一门禁同时执行 High/Critical advisory audit 与
+`npm ls --all`，invalid、extraneous 或不兼容解析树也会失败。正式发布必须把精确且仍为最新
+`main` 的 40 位 SHA 与新 tag 交给 **Release candidate (pre-tag)**；它在创建 tag 前再次复核
+主干身份，只有全部门禁通过才创建 tag，并从该不可变 tag 分派 GitHub Release 打包。
 Pages deploy 只接受已验证 artifact；第三方搜索/分析默认不启用。
 
 ## 报告漏洞

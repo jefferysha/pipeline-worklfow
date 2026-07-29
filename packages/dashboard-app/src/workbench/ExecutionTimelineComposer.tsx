@@ -159,14 +159,14 @@ export function ExecutionTimelineComposer({
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {selected.gate && (
-              <span data-testid="wb-selected-gate" className="rounded-full bg-red-t px-3 py-1.5 text-xs font-semibold text-red-d">复核门</span>
+              <span data-testid="wb-selected-gate" className="rounded-full bg-red-t px-3 py-1.5 text-xs font-semibold text-red-d">{t('workbench.timeline_review_gate')}</span>
             )}
             {!readonly && onLaneEdit && (
               <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg bg-fill px-3 text-xs font-semibold text-text-2">
                 <input
                   type="checkbox"
                   role="switch"
-                  aria-label="复核门"
+                  aria-label={t('workbench.timeline_review_gate')}
                   data-testid={`wb-lane-gate-sw-${selected.id}`}
                   checked={Boolean(selected.gate)}
                   className="accent-(--accent)"

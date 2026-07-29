@@ -46,10 +46,13 @@ for host marketplace/source trust or OS account security.
 
 ## Dependency supply chain
 
-CI and the release workflow run `npm run check:dependencies`; any High or
-Critical advisory fails the job. Before a formal release, also review the full
-`npm audit` result and `npm ls vite vitest ajv vitepress` so the lockfile,
-overrides, and resolved dependency tree are proven together.
+CI, the pre-tag release candidate, and the tag release workflow run
+`npm run check:dependencies`. The canonical gate combines the High/Critical
+advisory audit with `npm ls --all`, so invalid, extraneous, or incompatible
+resolved trees fail too. A formal release starts by dispatching
+**Release candidate (pre-tag)** with the exact current `main` SHA and new tag.
+The workflow rechecks that identity immediately before creating the tag, creates
+it only after every gate passes, then dispatches packaging from that immutable tag.
 
 ## Hooks and review
 

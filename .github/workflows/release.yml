@@ -1,13 +1,11 @@
 name: Release Tenon
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tag:
-        description: Existing v-prefixed tag to package
+        description: Candidate-created v-prefixed tag to package
+        type: string
         required: true
 
 permissions:
@@ -31,11 +29,10 @@ jobs:
       - name: Resolve and validate release tag
         id: release
         env:
-          DISPATCH_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then tag="$DISPATCH_TAG"; fi
+          tag="$RELEASE_TAG"
           case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid release tag: $tag" >&2; exit 1 ;; esac
           version="${tag#v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -66,6 +63,7 @@ jobs:
 
       - run: npm ci
       - run: npm run check:dependencies
+      - run: npm run check:release-workflows
       - run: npm run check:identity
       - run: npm run check:repository-hygiene
       - run: npm run check:legacy-bridge

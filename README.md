@@ -242,8 +242,10 @@ Dashboard 绑定 loopback、校验本地 Host header、为 mutation 使用随机
 
 这是本地单用户工作站模型，不是远程多租户控制面，也不声称防御同一 OS 用户下所有恶意进程。Tap interception 默认关闭。
 
-CI 与 release workflow 都运行 `npm run check:dependencies`，任何 High 或 Critical 依赖 advisory
-都会阻断交付；完整依赖树仍应在每次正式发布前以 `npm audit` 复核。
+CI、pre-tag release candidate 与 tag release workflow 都运行 `npm run check:dependencies`。
+该单一门禁同时执行 High/Critical advisory audit 和 `npm ls --all` 完整解析树校验。正式发布必须先
+对精确、仍为最新 `main` 的 40 位 SHA 手动运行 **Release candidate (pre-tag)**；只有全套门禁通过，
+workflow 才创建 tag 并从该不可变 tag 分派 GitHub Release 打包。
 
 [安全模型 →](docs/usage/zh-CN/security-model.md) ·
 [私密报告漏洞 →](SECURITY.md)

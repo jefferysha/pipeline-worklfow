@@ -104,6 +104,43 @@ async function renderAfk(over: Partial<Parameters<typeof AfkView>[0]> = {}) {
 }
 
 describe('AfkView 两栏自动运行工作区', () => {
+  it('English empty state and automation tools contain no hard-coded Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const empty = makeSnapshot([makeProject(ROOT, [makeChange('manual', 'build', {})])])
+    empty.capabilities = { ...empty.capabilities, operations: true }
+    await renderAfk({ snapshot: empty })
+    expect(screen.getByTestId('afk-empty')).toHaveTextContent('No automatic runs right now')
+    expect(screen.getByTestId('afk-view').textContent).not.toMatch(/[\u3400-\u9fff]/u)
+    expect(screen.getByTestId('afk-tool-enqueue')).toHaveTextContent('Start automatic run')
+    expect(screen.getByTestId('afk-tool-starter')).toHaveTextContent('New schedule')
+    expect(screen.getByTestId('afk-tool-run')).toHaveTextContent('Validate schedule')
+  })
+
+  it('English populated queue, facts, progress, activity, and retry preview contain no Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const snapshot = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('failed-en', 'verify', {
+          fields: {
+            automation: 'failed',
+            automation_worktree: '/wt/failed-en',
+            automation_error: 'Coverage is below threshold',
+            workflow: 'default',
+            autonomy_level: 'L2',
+            skill_bundle_id: 'verification@v1',
+            automation_container: 'node:22',
+          },
+        }),
+        makeChange('queued-en', 'spec', { fields: { automation: 'queued' } }),
+      ]),
+    ])
+    await renderAfk({ snapshot })
+    const view = screen.getByTestId('afk-view')
+    expect(view.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+    fireEvent.click(screen.getByTestId('afk-retry-preview-failed-en'))
+    expect(screen.getByTestId('afk-retry-sheet').textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('打开页面即以待处理任务为主视图，任务事实与动作合并进详情，不再重复展示下一步侧栏', async () => {
     await renderAfk()
     expect(screen.getByTestId('afk-view')).toHaveAttribute('data-page-frame', 'standard')

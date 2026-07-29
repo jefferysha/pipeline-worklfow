@@ -16,6 +16,9 @@ dependency security, CI/release policy, documentation, and generated assets.
 - Track Settings uses the repository Dialog primitive instead of a new modal/focus system.
 - The dependency update is atomic across manifests, lockfile, resolved tree, CI, release, and
   documentation. No public API, DTO, state file, or compatibility boundary changed.
+- Release packaging is now callable only from a pre-tag candidate workflow that proves an exact
+  current `main` SHA before and after the full gate, then creates the tag. Three static
+  anti-bypass tests keep CI, candidate, and packaging on that contract.
 - Architecture, comment-honesty, repository-hygiene, documentation, identity, and freshness
   checks are part of the frozen-baseline gate.
 
@@ -24,28 +27,32 @@ dependency security, CI/release policy, documentation, and generated assets.
 - No dynamic shell construction, path-trust expansion, secret handling, authorization bypass,
   root-scope widening, or raw server-error disclosure was introduced.
 - AJV/Vite/Vitest and the VitePress Vite override resolve to the reviewed patched versions.
-  `npm audit --audit-level=high` blocks CI and release; the complete audit must remain zero.
+  The canonical dependency gate combines `npm audit --audit-level=high` with `npm ls --all`
+  and blocks CI, candidate, and release packaging.
 - The UI-only `/api/config` failure injection proved localized failure handling without exposing
   the injected server message or disabling the rest of Workbench.
 
 ## Dashboard design and accessibility
 
-The first pass found mixed-language product copy, a Track Settings Escape/focus failure,
-mobile Hook-title truncation, mixed-language built-in track/Dialog labels, and the Governance
-row-identity lifecycle defect. All were fixed and received test plus production-browser
-regression evidence.
+The original pre-Verify pass fixed mixed-language product copy, Track Settings focus behavior,
+mobile Hook-title truncation, built-in track/Dialog labels, and the Governance row-identity
+lifecycle defect.
 
-The second pass covers 390/720/1024/1440, zh/en, System/Light/Dark, reduced motion,
-loading/empty/error/normal, keyboard, focus, internal stage scrolling, console/network,
-and visual inspection. Result: no remaining Critical, High, Medium, or Low finding.
+Verify attempt 1 then correctly failed with additional findings: review-gate/Hook/Policy,
+Projects, and Automation localization gaps; workflow-menu keyboard semantics; dark-theme
+button contrast; missing config retry; and incomplete dependency/release/OpenSpec gates.
+Build remediation now has RED→GREEN regression coverage for every finding, including the
+populated Automation view and release anti-bypass contract. The complete second production
+browser matrix remains a Verify-phase gate and is not claimed by this pre-Verify review.
 
 ## Code review result
 
 - Critical: 0
 - High: 0
 - Medium: 0
-- Low: 0
-- Result: PASS, subject to the frozen Build SHA passing the full Verify matrix.
+- Low: 0 in the remediated code review; production-browser recheck remains required.
+- Result: PASS for Build handoff only, subject to the new frozen SHA passing every Verify track.
 
 Detailed evidence:
-`docs/superpowers/reports/2026-07-29-post-merge-unified-review-pre-verify.md`.
+`docs/superpowers/reports/2026-07-29-post-merge-unified-review-pre-verify.md` and
+`docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-1.md`.

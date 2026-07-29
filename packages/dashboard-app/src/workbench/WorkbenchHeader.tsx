@@ -1,3 +1,4 @@
+import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { ChevronDown, Layers3, ShieldCheck } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbWorkflowDef } from './workbenchDefinition'
@@ -26,16 +27,78 @@ export function WorkbenchHeader(props: {
   onSave: () => void
 }): JSX.Element {
   const { t } = useT()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const openFocusRef = useRef<'current' | 'first' | 'last'>('current')
+
+  function menuItems(): HTMLButtonElement[] {
+    return Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])
+  }
+
+  function focusMenuItem(target: 'current' | 'first' | 'last' | number): void {
+    const items = menuItems()
+    if (items.length === 0) return
+    const index = typeof target === 'number'
+      ? target
+      : target === 'last'
+        ? items.length - 1
+        : target === 'current'
+          ? Math.max(0, props.menuNames.indexOf(props.workflowName ?? ''))
+          : 0
+    items[Math.min(Math.max(index, 0), items.length - 1)]?.focus()
+  }
+
+  useEffect(() => {
+    if (!props.menuOpen) return
+    focusMenuItem(openFocusRef.current)
+    openFocusRef.current = 'current'
+  }, [props.menuOpen])
+
+  function openMenu(focus: 'current' | 'first' | 'last' = 'current'): void {
+    openFocusRef.current = focus
+    props.onMenuOpen(true)
+  }
+
+  function onTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    openMenu(event.key === 'ArrowUp' ? 'last' : 'current')
+  }
+
+  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    const items = menuItems()
+    if (items.length === 0) return
+    const index = items.indexOf(document.activeElement as HTMLButtonElement)
+    let next: number | null = null
+    if (event.key === 'ArrowDown') next = index < 0 || index === items.length - 1 ? 0 : index + 1
+    if (event.key === 'ArrowUp') next = index <= 0 ? items.length - 1 : index - 1
+    if (event.key === 'Home') next = 0
+    if (event.key === 'End') next = items.length - 1
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      props.onMenuOpen(false)
+      triggerRef.current?.focus()
+      return
+    }
+    if (event.key === 'Tab') {
+      props.onMenuOpen(false)
+      return
+    }
+    if (next === null) return
+    event.preventDefault()
+    focusMenuItem(next)
+  }
+
   return <>
     <div className="mb-5 flex flex-wrap items-center gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-sm">
       <div className="relative">
-        <button className="group inline-flex min-h-14 min-w-[280px] cursor-pointer items-center gap-3 rounded-xl border border-accent-b bg-accent-t/45 px-3.5 text-left transition hover:border-(--accent) hover:bg-accent-t" data-testid="wb-wf-btn" aria-haspopup="menu" aria-expanded={props.menuOpen} onClick={() => props.onMenuOpen(!props.menuOpen)}>
+        <button ref={triggerRef} className="group inline-flex min-h-14 min-w-[280px] cursor-pointer items-center gap-3 rounded-xl border border-accent-b bg-accent-t/45 px-3.5 text-left transition hover:border-(--accent) hover:bg-accent-t" data-testid="wb-wf-btn" aria-haspopup="menu" aria-expanded={props.menuOpen} onKeyDown={onTriggerKeyDown} onClick={() => props.menuOpen ? props.onMenuOpen(false) : openMenu()}>
           <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-(--accent) text-btn-fg shadow-sm"><Layers3 className="h-4.5 w-4.5" aria-hidden="true" /></span>
           <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold tracking-[.08em] text-accent-d uppercase">{t('workbench.current_workflow')}</span><span className="mt-0.5 block truncate text-[17px] font-extrabold tracking-[-0.01em] text-text">{props.workflowName ?? '…'}</span></span>
           {props.currentStages != null && <span className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-text-2 shadow-sm">{t('workbench.wf_stages', { n: props.currentStages })}</span>}
           <ChevronDown className="h-4 w-4 flex-none text-text-3 transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
         </button>
-        {props.menuOpen && <div className="absolute top-[calc(100%+6px)] left-0 z-40 min-w-[238px] rounded-lg border border-border bg-card p-1.5 shadow-md" role="menu" aria-label={t('workbench.wf_menu_label')}>
+        {props.menuOpen && <div ref={menuRef} className="absolute top-[calc(100%+6px)] left-0 z-40 min-w-[238px] rounded-lg border border-border bg-card p-1.5 shadow-md" role="menu" aria-label={t('workbench.wf_menu_label')} onKeyDown={onMenuKeyDown}>
           {props.menuNames.map((name) => {
             const count = props.stagesCountOf(name)
             return <button key={name} className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left font-mono text-[13px] text-text-2 transition-colors hover:bg-fill data-on:bg-fill-2 data-on:font-semibold data-on:text-text" role="menuitem" data-on={name === props.workflowName ? '' : undefined} data-testid={`wb-wf-item-${name}`} onClick={() => props.onSwitch(name)}><span>{name}</span>{count != null && <span className="ml-auto font-sans text-xs text-text-3">{t('workbench.wf_stages', { n: count })}</span>}</button>

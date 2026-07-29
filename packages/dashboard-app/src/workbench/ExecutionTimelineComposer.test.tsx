@@ -89,6 +89,7 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Execution
         hooks={hooks()}
         skillRegistry={REGISTRY}
         onSelect={vi.fn()}
+        onLaneEdit={vi.fn()}
         {...overrides}
       />
     </I18nProvider>,
@@ -113,6 +114,16 @@ describe('ExecutionTimelineComposer', () => {
     expect(editor).not.toHaveTextContent('检查结果')
     expect(editor).not.toHaveTextContent('运行前事实')
     expect(editor).not.toHaveTextContent('执行时冻结')
+    expect(screen.getByTestId('wb-selected-gate')).toHaveTextContent('Review gate')
+    expect(screen.getByRole('switch', { name: 'Review gate' })).toBeInTheDocument()
+    expect(editor).not.toHaveTextContent('复核门')
+    expect(screen.getByTestId('wb-timeline-hook-load-context')).toHaveTextContent('Load task context')
+    expect(screen.getByTestId('wb-timeline-hook-guard-write-scope')).toHaveTextContent('Protect write scope')
+    expect(screen.getByTestId('wb-timeline-hook-collect-evidence')).toHaveTextContent('Collect verification evidence')
+    expect(screen.getByTestId('wb-timeline-hook-load-context')).toHaveAttribute(
+      'title',
+      'Technical details: load-context · SessionStart · matcher * · load-context.sh',
+    )
   })
 
   it('阶段总览完整展示名称，并把复核状态留在阶段设置而不是轨道连接线上', () => {

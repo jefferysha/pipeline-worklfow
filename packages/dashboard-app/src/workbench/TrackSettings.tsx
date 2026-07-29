@@ -249,7 +249,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                   <label className="grid gap-1 text-[11.5px] font-bold text-text-2 sm:col-span-2">
                     {t('workbench.track_policy_template')}
                     <select
-                      aria-label="Policy 模板"
+                      aria-label={t('workbench.track_policy_template')}
                       className={fieldClass}
                       defaultValue=""
                       onChange={(event) => {

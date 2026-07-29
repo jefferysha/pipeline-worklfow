@@ -224,6 +224,9 @@ describe('LaneMandatorySkills §4.7 诚实门：运行时 config/registry 不可
     expect(screen.queryByTestId('wb-mand-chip-build-prototype|huashu-design')).toBeNull()
     expect(screen.getByTestId('wb-track-load-error')).toHaveTextContent('运行时轨道配置加载失败')
     expect(screen.getByTestId('wb-mand-unavailable-build')).toHaveTextContent('运行时轨道配置不可用')
+    configResponse = () => new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
+    fireEvent.click(screen.getByTestId('wb-track-retry'))
+    expect(await screen.findByTestId('wb-track-tabs')).toBeInTheDocument()
   })
 
   it('capable=false → 不渲染假 ×/+，因此不会发 POST', async () => {
@@ -846,6 +849,16 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
 })
 
 describe('TrackSettings v3 真实 CRUD', () => {
+  it('English 自定义轨编辑器的 Policy template accessible name 不含中文', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    const editor = screen.getByTestId('wb-track-editor')
+    expect(within(editor).getByLabelText('Policy template')).toBeInTheDocument()
+    expect(within(editor).queryByLabelText('Policy 模板')).toBeNull()
+  })
+
   it('列出完整轨道：不注入默认 Skill 的轨道仍在设置里，系统轨道与沿用关系可见', async () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))

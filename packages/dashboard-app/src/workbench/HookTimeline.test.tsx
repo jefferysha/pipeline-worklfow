@@ -408,7 +408,10 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     fireEvent.change(within(editor).getByRole('textbox', { name: 'One-turn bypass keyword' }), {
       target: { value: 'skip-tenon' },
     })
-    fireEvent.click(within(editor).getByRole('button', { name: 'Save bypass keyword' }))
+    const save = within(editor).getByRole('button', { name: 'Save bypass keyword' })
+    expect(save).toHaveClass('bg-btn-bg', 'text-btn-fg')
+    expect(save).not.toHaveClass('text-white')
+    fireEvent.click(save)
     expect(await within(editor).findByRole('alert')).toHaveTextContent('Bypass keyword was not saved. Try again.')
     expect(within(editor).queryByText(/磁盘|网络/)).toBeNull()
   })

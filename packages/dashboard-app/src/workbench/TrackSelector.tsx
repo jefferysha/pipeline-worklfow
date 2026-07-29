@@ -37,9 +37,19 @@ export function TrackSelector({ state }: { state: MandatoryState }): JSX.Element
       {state.table === null ? (
         <span className={NOTE_CLS} role="status" data-testid="wb-track-loading">{t('workbench.track_loading')}</span>
       ) : state.configError !== null ? (
-        <span className="text-[12.5px] text-red" role="alert" data-testid="wb-track-load-error">
-          {t('workbench.track_load_error')}
-        </span>
+        <>
+          <span className="text-[12.5px] text-red" role="alert" data-testid="wb-track-load-error">
+            {t('workbench.track_load_error')}
+          </span>
+          <button
+            type="button"
+            className="min-h-8 rounded-lg border border-red-b bg-card px-3 text-xs font-semibold text-red-d hover:bg-red-t"
+            data-testid="wb-track-retry"
+            onClick={() => void state.reloadConfig()}
+          >
+            {t('workbench.track_retry')}
+          </button>
+        </>
       ) : state.matrixTracks.length === 0 ? (
         <span className={NOTE_CLS} role="status" data-testid="wb-track-empty">{t('workbench.track_empty')}</span>
       ) : (

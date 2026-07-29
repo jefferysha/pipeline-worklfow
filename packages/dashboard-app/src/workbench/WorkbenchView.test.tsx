@@ -710,6 +710,26 @@ describe('WorkbenchView 选中态（验收②）', () => {
 })
 
 describe('WorkbenchView workflow 下拉（验收①/②）', () => {
+  it('遵循 ARIA menu 键盘模式：打开聚焦当前项、方向/Home/End 漫游、Escape 回触发器', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const trigger = screen.getByTestId('wb-wf-btn')
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(await screen.findByRole('menu')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('wb-wf-item-release-train')).toHaveFocus())
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })
+    expect(screen.getByTestId('wb-wf-item-default')).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Home' })
+    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' })
+    expect(screen.getAllByRole('menuitem').at(-1)).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
   it('按钮显示当前 workflow 与阶段数；切到 default 渲染 7 个完整阶段名且总览不叠加复核徽标', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
