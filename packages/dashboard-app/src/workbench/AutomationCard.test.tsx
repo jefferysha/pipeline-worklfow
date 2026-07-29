@@ -4,7 +4,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { AutomationCard } from './AutomationCard'
 
 const ROOT = '/tmp/proj-a'
@@ -29,8 +29,13 @@ const READY_BODY = (over: Record<string, unknown> = {}) => ({
 })
 
 function renderCard() {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+  }
   render(
     <I18nProvider>
+      <LanguageToggle />
       <AutomationCard root={ROOT} />
     </I18nProvider>,
   )
@@ -72,6 +77,23 @@ afterEach(() => {
 })
 
 describe('AutomationCard —— 真值渲染', () => {
+  it('切换语言不重拉设置，也不覆盖未保存的自动化草稿', async () => {
+    renderCard()
+    const parallel = await screen.findByTestId('afk-sld-parallel')
+    fireEvent.change(parallel, { target: { value: '7' } })
+    expect(parallel).toHaveValue('7')
+    const getsBefore = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url, options]) => url === GET_URL && (!(options as RequestInit | undefined)?.method || (options as RequestInit).method === 'GET')).length
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    expect(screen.getByTestId('afk-sld-parallel')).toHaveValue('7')
+    expect(screen.getByTestId('afk-dirty')).toHaveTextContent('Unsaved')
+    const getsAfter = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url, options]) => url === GET_URL && (!(options as RequestInit | undefined)?.method || (options as RequestInit).method === 'GET')).length
+    expect(getsAfter).toBe(getsBefore)
+  })
+
   it('GET 后两滑杆/开关/镜像输入显示 server 真值；副题一句人话在卡头', async () => {
     settings = { max_parallel: 6, max_retries: 3, default_opt_in: true, image: 'ghcr.io/a/b:v1' }
     renderCard()

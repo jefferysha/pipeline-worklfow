@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WbHookEvent, WbHookMeta } from '../api/client'
 import { I18nProvider } from '../i18n'
 import { LOCKED_IDS, type HooksConfigState } from './HookTimeline'
 import { OrchestrationBoard, type BoardLane, type LanePatch } from './OrchestrationBoard'
 import type { GateHookInfo } from './StepperRail'
+
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
 
 /**
  * OrchestrationBoard.test（P0：编排画布只读泳道骨架）—— 纯展示组件的独立单测，钉住
@@ -243,6 +247,17 @@ describe('OrchestrationBoard 门徽章（data-gated）', () => {
 })
 
 describe('OrchestrationBoard 门徽章 popover（行为自 StepperRail 移植）', () => {
+  it('English locale covers the gate badge and its hidden popover explanation', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderBoard()
+    const gate = screen.getByTestId('wb-flow-gate-review')
+    expect(gate).toHaveTextContent('Review before leaving')
+    fireEvent.mouseEnter(gate)
+    expect(screen.getByTestId('wb-flow-gatepop-review')).toHaveTextContent(
+      'Before leaving this phase, the system runs the built-in checks below.',
+    )
+  })
+
   it('默认不展示 popover；hover 门徽章展示 gateHooks 内容，移出后收起', () => {
     renderBoard()
     const gate = screen.getByTestId('wb-flow-gate-review')
@@ -1859,6 +1874,15 @@ describe('OrchestrationBoard P3 §4.1 诚实门：Hook 卡零拖手柄（本期�
 })
 
 describe('OrchestrationBoard P3 §4.2 四时机分组（顺序固定，空组也画节点）', () => {
+  it('English locale covers hidden Hook event metadata and built-in state badges', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderHk()
+    const zone = expandHk('plan')
+    expect(within(zone).getByTitle('Technical event: SessionStart')).toBeInTheDocument()
+    expect(within(zone).getAllByText('Built-in Hook').length).toBeGreaterThan(0)
+    expect(zone).not.toHaveTextContent('内置 Hook')
+  })
+
   it('展开后四组齐全，DOM 顺序 = 会话生命周期序（不随数据顺序漂）', () => {
     // hooks 数组刻意打乱：分组顺序若来自数据而非 EVENT_ORDER，这条就红
     renderHk({ hooks: [...HOOK_METAS].reverse() })

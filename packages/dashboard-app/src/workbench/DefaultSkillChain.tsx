@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LockKeyhole } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { postMandatorySkills, type WbSkillEntry } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
   isValidMandatorySkillList,
@@ -51,7 +52,7 @@ export function DefaultSkillChain({
   root: string
   registry: WbSkillEntry[] | null
 }): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [requestedTrack, setTrack] = useState<string | null>(null)
   const [cfg, setCfg] = useState<MandatoryConfig | null>(() => peekMandatoryConfig(root))
   const [editing, setEditing] = useState(false)
@@ -103,10 +104,18 @@ export function DefaultSkillChain({
         body = {}
       }
       if (!response.ok || body.ok !== true) {
-        throw new Error(body.error || t('workbench.sk_save_failed', { status: response.status }))
+        if (rootRef.current === root) {
+          setSaveError(
+            lang === 'zh' && body.error
+              ? body.error
+              : t('workbench.sk_save_failed', { status: response.status }),
+          )
+        }
+        return
       }
       if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        throw new Error(t('workbench.mand_save_invalid'))
+        if (rootRef.current === root) setSaveError(t('workbench.mand_save_invalid'))
+        return
       }
       const saved = body.skills ?? skills
       const base = peekMandatoryConfig(root) ?? requestCfg
@@ -119,7 +128,9 @@ export function DefaultSkillChain({
         }
       }
     } catch (error) {
-      if (rootRef.current === root) setSaveError(error instanceof Error ? error.message : String(error))
+      if (rootRef.current === root) {
+        setSaveError(formatApiError(error, t, { exposeServerDetail: lang === 'zh' }))
+      }
     } finally {
       if (savingRef.current?.token === op.token) savingRef.current = null
     }

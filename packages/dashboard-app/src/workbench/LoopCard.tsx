@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, TriangleAlert } from 'lucide-react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import { Button } from '@/components/ui/button'
@@ -15,12 +16,9 @@ import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
 import { LoopCardActions } from './LoopCardActions'
 const LEVELS = ['L1', 'L2', 'L3'] as const
-export interface LoopCardProps {
-  root: string
-  loops: LoopsState
-}
+export interface LoopCardProps { root: string; loops: LoopsState }
 export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const row = loops.selected
   const [draft, setDraft] = useState<LoopDraft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -31,6 +29,11 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const [confirmLevel, setConfirmLevel] = useState<(typeof LEVELS)[number] | null>(null)
   const [reviewBusy, setReviewBusy] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
+  useEffect(() => {
+    setSaveErrors(null)
+    setLevelError(null)
+    setReviewError(null)
+  }, [lang])
   const [promptCopied, setPromptCopied] = useState(false)
   const [showMatches, setShowMatches] = useState(false)
   useEffect(() => {
@@ -56,7 +59,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
       setSaveOk(true)
       loops.reload() // 新行到达后草稿以 server 真值重置（见上方 effect）
     } catch (err) {
-      setSaveErrors([(err instanceof Error ? err.message : t('workbench.lp_network_error'))])
+      setSaveErrors([formatApiError(err, t, { exposeServerDetail: lang === 'zh' })])
     } finally {
       setSaving(false)
     }
@@ -77,7 +80,9 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
       await postLoopLevel({ root, id: row.id, target })
       loops.reload()
     } catch (err) {
-      setLevelError(t('workbench.lp_level_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      setLevelError(t('workbench.lp_level_fail', {
+        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
+      }))
     } finally {
       setLevelBusy(false)
     }
@@ -90,7 +95,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
       await postLoopUpdate({ root, id: row.id, patch: { status } })
       loops.reload() // 显式重拉：draft 标记已被 server 清，新快照到达即徽章消失
     } catch (err) {
-      setReviewError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+      setReviewError(formatApiError(err, t, { exposeServerDetail: lang === 'zh' }))
     } finally {
       setReviewBusy(false)
     }
@@ -387,10 +392,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         confirmLevel={confirmLevel}
         onReview={(status) => void reviewAction(status)}
         onClosePromotion={() => setConfirmLevel(null)}
-        onConfirmPromotion={(target) => {
-          setConfirmLevel(null)
-          void applyLevel(target)
-        }}
+        onConfirmPromotion={(target) => { setConfirmLevel(null); void applyLevel(target) }}
       />
     </section>
   )

@@ -77,6 +77,52 @@ describe('i18n 无缺键（源码 t() 字面量键 ⊆ 字典键）', () => {
   })
 })
 
+describe('i18n 生产 TSX 不直写中文产品文案', () => {
+  it('可见文案、ARIA、title 与产品常量必须通过词典；仅允许明确登记的内部诊断', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs')
+    const { join, dirname, relative } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const ts = await import('typescript')
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), '..')
+    const ALLOWED_INTERNAL = new Set([
+      'AppErrorBoundary.tsx:[dashboard] render 抛错，已被顶层 ErrorBoundary 兜底：',
+    ])
+    function walk(dir: string): string[] {
+      return readdirSync(dir).flatMap((name) => {
+        const file = join(dir, name)
+        if (statSync(file).isDirectory()) return name === 'i18n' ? [] : walk(file)
+        return name.endsWith('.tsx') && !name.endsWith('.test.tsx') ? [file] : []
+      })
+    }
+    const leaks: string[] = []
+    for (const file of walk(SRC)) {
+      const source = readFileSync(file, 'utf8')
+      const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      const visit = (node: import('typescript').Node): void => {
+        let text: string | undefined
+        if (ts.isJsxText(node)) text = node.getText(ast).trim().replace(/\s+/g, ' ')
+        else if (
+          ts.isStringLiteral(node)
+          || ts.isNoSubstitutionTemplateLiteral(node)
+          || ts.isTemplateHead(node)
+          || ts.isTemplateMiddle(node)
+          || ts.isTemplateTail(node)
+        ) text = node.text
+        if (text && /[\u3400-\u9fff]/.test(text)) {
+          const key = `${relative(SRC, file)}:${text}`
+          if (!ALLOWED_INTERNAL.has(key)) {
+            const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+            leaks.push(`${relative(SRC, file)}:${line} → ${text}`)
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(ast)
+    }
+    expect(leaks).toEqual([])
+  })
+})
+
 function Probe(): JSX.Element {
   const { t, lang, setLang } = useT()
   return (

@@ -12,6 +12,7 @@ const templates = [
 let requests: Array<{ url: string; body?: Record<string, unknown> }>
 
 beforeEach(() => {
+  localStorage.clear()
   requests = []
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -52,6 +53,19 @@ function renderPanel() {
 }
 
 describe('OperationsPanel：H11-H14 可操作面', () => {
+  it('English locale covers starter catalog, form help, risks, and run permissions without Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderPanel()
+    const panel = await screen.findByTestId('operations-panel')
+    expect(panel).toHaveTextContent('Choose a scheduled task type')
+    expect(panel).toHaveTextContent('CI failure sweep')
+    expect(panel).toHaveTextContent('Medium risk')
+    expect(panel).toHaveTextContent('Discover or generate tasks')
+    expect(panel).toHaveTextContent('Use only lowercase letters, numbers, and hyphens')
+    expect(panel).toHaveTextContent('L2 · Assisted actions')
+    expect(panel.textContent).not.toMatch(/[\u3400-\u9fff]/)
+  })
+
   it('从 server 读 starter gallery，默认 runner=codex，不在前端手抄模板', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByTestId('ops-starter-ci-sweeper')).toBeInTheDocument())

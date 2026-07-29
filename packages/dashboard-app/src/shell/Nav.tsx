@@ -58,8 +58,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsTriggerRef = useRef<HTMLButtonElement>(null)
   const settingsPanelRef = useRef<HTMLElement>(null)
-  // 在线/离线 短标签：title 走既有 common.connected/common.offline 键；短标签内联双语。
-  const connLabel = connected ? (lang === 'zh' ? '在线' : 'Live') : lang === 'zh' ? '离线' : 'Offline'
+  const connLabel = t(connected ? 'common.connection_live' : 'common.connection_offline')
   const nextTheme: ThemePreference = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system'
   const themeLabel = theme === 'system' ? t('common.theme_system') : theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')
 

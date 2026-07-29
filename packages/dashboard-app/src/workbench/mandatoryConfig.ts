@@ -248,7 +248,7 @@ export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {
         error: null,
       }
     })
-    .catch((error): MandatoryConfig => unavailableConfig(error instanceof Error ? error.message : String(error)))
+    .catch((): MandatoryConfig => unavailableConfig('network'))
     .then((r) => {
       cfgCache.set(key, r)
       cfgInflight.delete(key)

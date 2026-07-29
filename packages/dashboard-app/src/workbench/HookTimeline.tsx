@@ -9,6 +9,7 @@ import {
   type WbHookMeta,
 } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 
 /**
  * HookTimeline（T15，计划 2026-07-11-v5-interaction-rebuild）—— 工作台 Hook 会话时序线：
@@ -70,9 +71,11 @@ export interface HooksConfigState {
  * showFlash），不再落 toggleError 行内 alert（两处同时报同一件事是重复）；缺省行为与 T15 一致。
  */
 export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
-  const { t } = useT()
+  const { t, lang } = useT()
   const tRef = useRef(t)
   tRef.current = t
+  const langRef = useRef(lang)
+  langRef.current = lang
   const [hooks, setHooks] = useState<WbHookMeta[] | null>(null)
   const [matrix, setMatrix] = useState<Record<string, false>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -134,7 +137,7 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
           return next
         })
         const msg = tRef.current('workbench.hk_toggle_error', {
-          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
+          msg: formatApiError(err, tRef.current, { exposeServerDetail: langRef.current === 'zh' }),
         })
         if (onError) onError(msg)
         else setToggleError(msg)

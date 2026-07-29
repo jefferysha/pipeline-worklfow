@@ -369,7 +369,7 @@ export function TaskDetail({
       <RelatedSessionsSection key={`${root}\u0000${change.name}`} root={root} name={change.name} />
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
-          <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>
+          <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">{t('runAudit.title')}</summary>
           <RunAuditPanel root={root} change={change.name} refreshKey={`${change.phase}:${automation}`} />
           {historySection}
         </details>

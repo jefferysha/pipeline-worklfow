@@ -223,8 +223,8 @@ export function OrchestrationSkillZone({
                                                     {dn.ns !== '' && <span className="font-normal text-text-3">{dn.ns}</span>}
                                                     {dn.base}
                                                   </span>
-                                                </button> : <span className={DEP_CHIP} title={`等待 ${dep} 完成后执行`}>
-                                                  <span className="flex-none whitespace-nowrap">等待</span>
+                                                </button> : <span className={DEP_CHIP} title={t('workbench.board_dep_wait_hint', { id: dep })}>
+                                                  <span className="flex-none whitespace-nowrap">{t('workbench.board_dep_wait')}</span>
                                                   <span className="flex-none whitespace-nowrap">
                                                     {dn.ns !== '' && <span className="font-normal text-text-3">{dn.ns}</span>}
                                                     {dn.base}
@@ -276,7 +276,7 @@ export function OrchestrationSkillZone({
                                   data-testid={`wb-lane-sk-add-${lane.id}`}
                                   aria-expanded={onOpenSkillEditor ? undefined : skPop === lane.id}
                                   aria-label={`${t('workbench.board_sk_add')} · ${lane.name}`}
-                                  title={regReady ? '打开 Skill 编排器，配置顺序、并行与依赖' : t('workbench.board_sk_noreg')}
+                                  title={regReady ? t('workbench.board_skill_orchestrator_open') : t('workbench.board_sk_noreg')}
                                   disabled={!regReady}
                                   onClick={(e) => {
                                     e.stopPropagation()

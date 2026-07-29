@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   deleteTrackDefinition,
   patchTrackDefinition,
@@ -8,6 +8,7 @@ import {
   type WbTrackDefinition,
 } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 import { Dialog } from '../shared/Dialog'
 import type { MandatoryState } from './mandatoryState'
 import { TrackSettingsList } from './TrackSettingsList'
@@ -45,7 +46,7 @@ function draftFromTrack(track: WbTrackDefinition): TrackEditorDraft {
 }
 
 export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [open, setOpen] = useState(false)
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; original: WbTrackDefinition | null; draft: TrackEditorDraft } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -55,6 +56,10 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   const [routePreview, setRoutePreview] = useState<WbRouterPreview | null>(null)
   const [routePreviewBusy, setRoutePreviewBusy] = useState(false)
   const [routePreviewError, setRoutePreviewError] = useState('')
+  useEffect(() => {
+    setError(null)
+    setRoutePreviewError('')
+  }, [lang])
   const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
 
   function openCreate(): void {
@@ -101,7 +106,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       setRoutePreview(await postRouterPreview(state.root, routePrompt.trim(), effectiveDraft(editor.draft)))
     } catch (cause) {
       setRoutePreview(null)
-      setRoutePreviewError(cause instanceof Error ? cause.message : String(cause))
+      setRoutePreviewError(formatApiError(cause, t))
     } finally {
       setRoutePreviewBusy(false)
     }
@@ -115,8 +120,13 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   async function readMutationError(response: Response): Promise<string> {
     let body: { error?: string; references?: string[]; blockers?: string[] } = {}
     try { body = await response.json() as typeof body } catch { /* no JSON */ }
-    const details = [...(Array.isArray(body.references) ? body.references : []), ...(Array.isArray(body.blockers) ? body.blockers : [])]
-    return [body.error ?? t('workbench.track_save_failed', { status: response.status }), ...details].join(' · ')
+    const details = lang === 'zh'
+      ? [...(Array.isArray(body.references) ? body.references : []), ...(Array.isArray(body.blockers) ? body.blockers : [])]
+      : []
+    const summary = lang === 'zh' && body.error
+      ? body.error
+      : t('common.request_http_error', { status: response.status })
+    return [summary, ...details].join(' · ')
   }
 
   async function saveTrack(): Promise<void> {
@@ -163,7 +173,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       await state.reloadConfig()
       setEditor(null)
     } catch (mutationError) {
-      setError(mutationError instanceof Error ? mutationError.message : String(mutationError))
+      setError(formatApiError(mutationError, t))
     } finally {
       setBusy(false)
     }
@@ -182,7 +192,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       await state.reloadConfig()
       setEditor(null)
     } catch (mutationError) {
-      setError(mutationError instanceof Error ? mutationError.message : String(mutationError))
+      setError(formatApiError(mutationError, t))
     } finally {
       setBusy(false)
     }

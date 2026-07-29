@@ -2,8 +2,8 @@
 
 ## 审查基线
 
-- 唯一代码基线为 `origin/main@7c59eecfba9e8652d69e25dae01058ae1df783be`。
-- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17；冻结前再次查询以 `main`
+- 唯一代码基线为 `origin/main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`。
+- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18；冻结前再次查询以 `main`
   为 base 的开放非 Draft PR，结果为空。
 - PR #16 的 exact-head GitHub Actions run `30452978039` 在
   `55b13b50ad8523b33773fe6b23337a2d7afc658a` 成功后才正常合并。最终 `main` push CI
@@ -11,6 +11,9 @@
 - PR #17 的 exact-head GitHub Actions run `30454247261` 在
   `e4a07718b71d4ee080da57c072a8a35d185dbb82` 以 8m20s 完整通过后才正常合并；独立只读审查
   覆盖 174 个文件并得到 C0/H0/M0/L0。
+- PR #18 的 exact-head GitHub Actions run `30455424146` 在
+  `fcadf8a35f454290fce68941812c814243cef1ca` 通过后合并；独立只读审查验证 66 条 revision、
+  19 条 transition、66 个 pre-Verify anchor 和 10 份 document ledger hash，结果 C0/H0/M0/L0。
 - 干净 worktree 执行 `npm ci` 后，必须先运行仓库正式 `npm run build` 生成
   `@tenon/kernel`/`@tenon/server` 产物；随后 architecture、comments、repository hygiene、
   docs 与 Dashboard typecheck 均通过。
@@ -30,6 +33,7 @@
 | #15 | Host Plan desktop clarity / `host-target-plan` | compact catalog → selected context → operation | 桌面密度、键盘、主题、状态和完整 Dashboard 一致性 |
 | #16 | document evidence timeline / `document-evidence-timeline` | ledger receipt → snapshot DTO → disclosure | digest/路径脱敏、旧 server 降级、键盘、空/错/加载 |
 | #17 | Trace session workspace / `trace-timeline` | session rail → selected identity → metadata timeline | 并发隔离、Escape/焦点、桌面响应式、长内容与状态矩阵 |
+| #18 | 已完成 Trace Change 治理归档 | canonical Change tree → 日期化 archive | revision/transition/document digest、路径迁移、无 runtime drift |
 
 `verification-evidence-composer` 与 `context-bundle-budget-preview` 已在主干上，作为相邻组合能力继续
 执行回归；它们不是本批次新 requirement。
@@ -87,6 +91,21 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
 - `check:architecture`、`check:comments`、`check:repository-hygiene`、`check:docs` 和
   `typecheck:web` 均通过。
 
+### 5. 最终组合审查新增 finding
+
+- Workbench 的保存与新建 workflow 共用 `readSaveErrors`；其 401 分支硬编码中文，导致 English
+  locale 的真实保存失败路径泄漏中文。`fetchWorkflowNames` 还会把共享 transport 的中文网络
+  fallback 和 endpoint 中文非 JSON HTTP fallback 拼进英文加载错误。修复必须由调用方注入现有
+  `t` 的 locale 文案，并让 Workbench 按网络/HTTP/无效响应的稳定事实渲染本地化恢复信息；以英文
+  401、network 和 non-JSON HTTP 回归覆盖，不得仅替换为硬编码英文。
+- #16 归档后的 `openspec/specs/document-evidence-timeline/spec.md` 缺少必需 `## Purpose`；
+  目标 strict validator 实际失败。补齐 Purpose 只解释既有 requirement，不改变行为语义。
+- `openspec validate --all --strict` 还扫描到 5 个历史 state-only 目录。它们的 Tenon phase 已为
+  `done` 或 `escalated`，均无 proposal/design/delta，且不在 `tenon status` 活跃清单；继续留在
+  `openspec/changes/` 会稳定制造假活跃 Change 和严格校验失败。隔离副本已证明
+  `openspec archive --yes --skip-specs --no-validate --json` 会完整移动目录到日期化 archive，
+  不更新主规格、不丢状态证据。只允许对已枚举的 5 个目录执行，执行前后逐文件计数和摘要必须一致。
+
 ## 关键业务规则与不变量
 
 1. 同一 Loop 的逻辑等价轮询快照不得打断已开始的升档决策；决策相关事实改变后，旧确认不得继续。
@@ -100,6 +119,10 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
    Dashboard 的响应式、主题、语言、状态、键盘和焦点边界。
 7. #17 的 desktop-only Trace workspace 验证不能替代整个 Dashboard 的视觉与浏览器验收；其
    metadata-only、无隐式 timeline 请求、请求 identity 隔离和 Escape 焦点恢复语义必须保持。
+8. Active OpenSpec change tree 必须只包含可验证的真实 Change；历史 state-only 证据必须完整归档，
+   不得删除、补写虚假 delta 或手改 canonical state。
+9. #18 的归档只改变治理证据位置；66 条 revision、19 条 transition、66 个 pre-Verify anchor
+   与 10 份 document ledger 的 identity/digest 链必须保持可验证，不能把 rename 当作内容重写。
 
 ## 升档确认状态机
 
@@ -129,10 +152,12 @@ key 或显式字段比较，但不得依赖 React row 对象引用。
 - 依赖升级保持 Node `>=22`、npm workspace 和现有脚本名称。若全量测试、docs build 或正式资产
   freshness 失败，整组依赖变更回滚，不保留部分漂移。
 - 不修改 automation schedule，不发布 npm 包，不执行生产部署。
+- 历史 state-only 目录使用 OpenSpec 官方 archive 操作迁移；若文件集合或内容摘要变化，立即回滚
+  该迁移并阻止发布。
 
 ## 术语与证据边界
 
-- “最终主干”只指 `7c59eecfba9e8652d69e25dae01058ae1df783be` 及本 Change 后续合并 SHA。
+- “最终主干”只指 `607c2ed97f2217b8edf44dd9cd872e7e9cceb545` 及本 Change 后续合并 SHA。
 - “逻辑等价快照”指影响当前升档决策的字段完全相同，仅对象身份或非决策展示字段变化。
 - “0 vulnerabilities”只由干净安装后的 `npm audit --json` 元数据证明，不由旧 lockfile 或
   `npm audit fix --force` 声明。

@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { SecretsCard } from './SecretsCard'
 
 let keys: Record<string, { set: boolean; masked?: string }>
@@ -14,8 +14,13 @@ let deleteUrls: string[]
 let getCalls: number
 
 function renderCard(onChanged?: () => void) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+  }
   render(
     <I18nProvider>
+      <LanguageToggle />
       <SecretsCard onChanged={onChanged} />
     </I18nProvider>,
   )
@@ -109,6 +114,32 @@ describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
     fireEvent.click(screen.getByTestId('sc-save-OPENAI_API_KEY'))
     expect((await screen.findByTestId('sc-op-error')).textContent).toContain('值超长')
     expect(screen.getByTestId('sc-input-OPENAI_API_KEY')).toBeInTheDocument()
+  })
+
+  it('切换语言时不重拉凭证、不清空 write-only 草稿，既有错误按当前语言重算', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/secrets' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false, error: '值超长(>4KB)' }), { status: 400 })
+      }
+      if (url === '/api/secrets') {
+        getCalls += 1
+        return new Response(JSON.stringify({ ok: true, keys }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderCard()
+    fireEvent.click(await screen.findByTestId('sc-edit-OPENAI_API_KEY'))
+    fireEvent.change(screen.getByTestId('sc-input-OPENAI_API_KEY'), { target: { value: 'keep-me' } })
+    fireEvent.click(screen.getByTestId('sc-save-OPENAI_API_KEY'))
+    expect(await screen.findByTestId('sc-op-error')).toHaveTextContent('值超长')
+    expect(getCalls).toBe(1)
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    expect(screen.getByTestId('sc-input-OPENAI_API_KEY')).toHaveValue('keep-me')
+    expect(screen.getByTestId('sc-op-error')).toHaveTextContent('Request failed (HTTP 400).')
+    expect(screen.getByTestId('sc-op-error')).not.toHaveTextContent('值超长')
+    expect(getCalls).toBe(1)
   })
 })
 

@@ -145,7 +145,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
         if (!response.ok) throw new Error(`Workflow ${selectedWorkflow} ${response.status}`)
         const body: unknown = await response.json()
         const first = firstWorkflowStep(body)
-        if (first === null) throw new Error(`Workflow ${selectedWorkflow} 没有首 Step`)
+        if (first === null) throw new Error('__workflow_empty__')
         if (active) {
           setFirstStep(first)
           setFirstStepState('ready')
@@ -323,7 +323,9 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                         {workflows.map((workflow) => <option key={workflow} value={workflow}>{workflow}</option>)}
                       </select>
                       <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step" role="status" aria-live="polite">
-                        {firstStepState === 'loading' ? t('change_create.step_loading') : t('change_create.first_step', { step: firstStep || '—' })}
+                        {firstStepState === 'loading'
+                          ? t('change_create.step_loading')
+                          : t('change_create.first_step', { step: firstStep === '__workflow_empty__' ? t('change_create.workflow_empty', { workflow: selectedWorkflow }) : firstStep || '—' })}
                       </span>
                     </label>
                   </div>

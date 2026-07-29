@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchLoopsSnapshot, type WbLoopRow } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 
 export interface LoopsState {
   /** 当前 root 的 loop 行；null = 加载中/加载失败（loadError 区分）。 */
@@ -12,7 +13,7 @@ export interface LoopsState {
 }
 
 export function useLoops(root: string): LoopsState {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [rows, setRows] = useState<WbLoopRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -38,12 +39,14 @@ export function useLoops(root: string): LoopsState {
       .catch((err: unknown) => {
         if (cancelled) return
         // 加载失败不挡工作台其余区块：卡内行内报错、摘要行回落 '—'。
-        setLoadError(t('workbench.lp_load_error', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+        setLoadError(t('workbench.lp_load_error', {
+          msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
+        }))
       })
     return () => {
       cancelled = true
     }
-  }, [root, tick, t])
+  }, [root, tick, t, lang])
 
   return {
     rows,

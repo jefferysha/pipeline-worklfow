@@ -213,6 +213,16 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     expect(preflight).toHaveAttribute('data-can-graduate', 'false')
   })
 
+  it('English preflight keeps structured metrics but masks server-authored blocker prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderRail()
+    const preflight = await screen.findByTestId('wb-gov-graduation')
+    expect(preflight).toHaveTextContent('runs 3')
+    expect(preflight).toHaveTextContent('drift 2')
+    expect(preflight).toHaveTextContent('Demotion signal')
+    expect(preflight.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('三档是一组 radio：当前档 aria-checked=true，其余 false；轨与三张卡都在', async () => {
     renderRail()
     await screen.findByTestId('wb-gov-level')
@@ -567,6 +577,16 @@ describe('GovernanceRail §4.11 token 预算滑杆（postLoopUpdate body 精确 
     const err = await screen.findByTestId('wb-gov-budget-error')
     expect(err).toHaveTextContent('patch 后 schema 校验失败，未落盘')
     expect(err).toHaveAttribute('data-tone', 'error')
+  })
+
+  it('English budget failure keeps the HTTP fact but masks server-authored Chinese prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    mockFetch({ updateStatus: 400, updateBody: { ok: false, error: 'patch 后 schema 校验失败，未落盘' } })
+    renderRail()
+    fireEvent.change(await screen.findByTestId('wb-gov-budget-slider'), { target: { value: '120' } })
+    const err = await screen.findByTestId('wb-gov-budget-error')
+    expect(err).toHaveTextContent('Request failed (HTTP 400).')
+    expect(err.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   /** 未声明预算：滑杆停在推荐位，但显示仍是「未设置」——**不拿推荐值冒充已设置的真值**。 */

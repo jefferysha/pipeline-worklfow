@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useT } from '../i18n'
 
 /**
  * 中立共享 Dialog 组件（评审 P0-5/P1-9 的地基，Task 3）。
@@ -77,7 +78,9 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, closeLabel = '关闭', closeTestid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, closeLabel, closeTestid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+  const { t } = useT()
+  const resolvedCloseLabel = closeLabel ?? t('common.dialog_close')
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
@@ -182,7 +185,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6 py-3">
               <h2 className="min-w-0 flex-1 break-words whitespace-normal text-[18px] leading-tight font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" data-testid={closeTestid} aria-label={closeLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" data-testid={closeTestid} aria-label={resolvedCloseLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}

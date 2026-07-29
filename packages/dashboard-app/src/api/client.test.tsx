@@ -9,6 +9,7 @@ import {
 } from './client'
 import { lastEventSource, resetEventSources } from '../test-setup'
 import { makeSnapshot } from '../testkit'
+import { formatApiError } from './transport'
 
 beforeEach(() => {
   resetEventSources()
@@ -21,6 +22,28 @@ afterEach(() => {
 describe('getToken（同源注入的 window token）', () => {
   it('读取 window.__TENON_DASHBOARD_TOKEN__', () => {
     expect(getToken()).toBe('tok-abc')
+  })
+})
+
+describe('formatApiError locale boundary', () => {
+  const t = (key: string, vars?: Record<string, string | number>): string => {
+    if (key === 'common.network_error') return '网络错误'
+    if (key === 'common.invalid_response') return '服务端响应格式无效。'
+    if (key === 'common.request_http_error') return `请求失败（HTTP ${String(vars?.status)}）。`
+    return key
+  }
+
+  it('中文也只展示真实 server detail，不把客户端英文 fallback 当成服务端原文', () => {
+    expect(formatApiError(
+      new ApiError('skill registry request failed (503)', 503),
+      t,
+      { exposeServerDetail: true },
+    )).toBe('请求失败（HTTP 503）。')
+    expect(formatApiError(
+      new ApiError('技能注册表暂不可用', 503, true),
+      t,
+      { exposeServerDetail: true },
+    )).toBe('技能注册表暂不可用')
   })
 })
 

@@ -169,6 +169,42 @@ describe('App 宿主计划机器级视图', () => {
 })
 
 describe('App 初始 snapshot 错误恢复', () => {
+  it('English 500 error never exposes the Chinese snapshot transport fallback', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    window.history.replaceState({}, '', '/?view=projects')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url !== '/api/snapshot') throw new Error(`unexpected fetch ${url}`)
+      return {
+        ok: false,
+        status: 500,
+        json: async () => ({ ok: false, error: '快照暂时不可用' }),
+      }
+    }))
+
+    render(<App />)
+
+    const errorState = await screen.findByTestId('snapshot-error')
+    expect(errorState).toHaveTextContent('Request failed (HTTP 500).')
+    expect(errorState.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English malformed successful snapshot is classified as an invalid response, not a network outage', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    window.history.replaceState({}, '', '/?view=projects')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url !== '/api/snapshot') throw new Error(`unexpected fetch ${url}`)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => { throw new SyntaxError('Unexpected token') },
+      }
+    }))
+
+    render(<App />)
+
+    expect(await screen.findByTestId('snapshot-error')).toHaveTextContent('Invalid server response.')
+  })
+
   it('首次 500 显示明确错误与重试入口，重试成功后恢复项目总览', async () => {
     window.history.replaceState({}, '', '/?view=projects')
     let snapshotAttempts = 0
@@ -192,7 +228,7 @@ describe('App 初始 snapshot 错误恢复', () => {
 
     const errorState = await screen.findByTestId('snapshot-error')
     expect(errorState).toHaveAttribute('role', 'alert')
-    expect(errorState).toHaveTextContent('快照获取失败（500）')
+    expect(errorState).toHaveTextContent('请求失败（HTTP 500）。')
     const retry = screen.getByRole('button', { name: '重试加载' })
 
     fireEvent.click(retry)

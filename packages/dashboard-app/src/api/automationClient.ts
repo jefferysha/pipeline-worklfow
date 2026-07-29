@@ -101,7 +101,7 @@ async function postOperation(path: string, input: Record<string, unknown>): Prom
     const detail = isRecord(raw) && typeof raw.error === 'string'
       ? raw.error
       : `操作响应形状无效（${response.status}）`
-    throw new ApiError(detail, response.status)
+    throw new ApiError(detail, response.status, isRecord(raw) && typeof raw.error === 'string')
   }
   return body
 }
@@ -194,18 +194,20 @@ export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
 
 export async function fetchSecrets(): Promise<WbSecretsKeys> {
   const response = await fetch('/api/secrets', { headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  if (!response.ok) throw await secretError(response)
   return decodeResponse(response, decodeSecrets, 'malformed secrets payload')
 }
 
-async function secretError(response: Response): Promise<Error> {
+async function secretError(response: Response): Promise<ApiError> {
   try {
     const detail = await readJson(response)
-    if (isRecord(detail) && typeof detail.error === 'string') return new Error(detail.error)
+    if (isRecord(detail) && typeof detail.error === 'string') {
+      return new ApiError(detail.error, response.status, true)
+    }
   } catch {
     // Fall through to the stable HTTP status message.
   }
-  return new Error(`(${response.status})`)
+  return new ApiError(`secret request failed (${response.status})`, response.status)
 }
 
 export async function postSecret(key: string, value: string): Promise<void> {

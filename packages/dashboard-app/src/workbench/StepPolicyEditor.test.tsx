@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import type { WbStepDef } from './WorkbenchView'
 import { StepPolicyEditor } from './StepPolicyEditor'
+
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
 
 const STEP: WbStepDef = {
   id: 'verify', label: '验证', gate: 'review', prompt: 'Run API checks.',
@@ -21,6 +25,26 @@ function setup(): ReturnType<typeof vi.fn> {
 }
 
 describe('StepPolicyEditor · 完整 Workflow Step IR', () => {
+  it('English locale covers the full policy editor, including collapsed sections', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    setup()
+    const editor = screen.getByTestId('step-policy-editor')
+    for (const label of [
+      'Phase settings',
+      'Required inputs',
+      'Phase outputs',
+      'Persisted artifacts',
+      'Event',
+      'Edge guards',
+      'Actions',
+    ]) {
+      expect(editor).toHaveTextContent(label)
+    }
+    expect(editor).not.toHaveTextContent('阶段设置')
+    expect(editor).not.toHaveTextContent('必需输入')
+    expect(editor).not.toHaveTextContent('持久化产物')
+  })
+
   it('标题说明设置用于自动运行，不重复展示内部 step id 或“高级编排”', () => {
     setup()
     const editor = screen.getByTestId('step-policy-editor')

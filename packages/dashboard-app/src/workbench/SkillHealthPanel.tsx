@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { ApiError, fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { WbAdvanced } from './LoopCard'
+import { readErrorDetail } from './workbenchApiDecoders'
 
 /**
  * SkillHealthPanel（full-install W4，计划 2026-07-12-full-install-experience 批 2 Wave B，
@@ -35,23 +37,8 @@ const ROW_CLS = 'flex items-center gap-[9px] py-[9px] text-[12.5px] text-text-2'
 /** 原 .side-card__row-value（警示变体 text-red-d 由调用点条件叠加）。 */
 const ROW_VALUE_CLS = 'flex-none font-mono text-sm font-[750] text-accent-d'
 
-interface ErrorBody {
-  error?: string
-}
-
-/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 SkillChain.readErrorDetail 的既有模式）。 */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody
-    if (typeof body?.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
-
 export function SkillHealthPanel(): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
   const [regError, setRegError] = useState<string | null>(null)
 
@@ -60,8 +47,19 @@ export function SkillHealthPanel(): JSX.Element {
     let cancelled = false
     fetchSkillsRegistry()
       .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
+        if (!r.ok) {
+          const detail = await readErrorDetail(r)
+          throw new ApiError(
+            detail || `skill registry request failed (${r.status})`,
+            r.status,
+            detail !== '',
+          )
+        }
+        try {
+          return await r.json() as { skills: WbSkillEntry[] }
+        } catch {
+          throw new ApiError('skill registry response is invalid', r.status)
+        }
       })
       .then((body) => {
         if (!cancelled) setRegistry(body.skills)
@@ -69,7 +67,9 @@ export function SkillHealthPanel(): JSX.Element {
       .catch((err: unknown) => {
         if (!cancelled) {
           setRegError(
-            t('workbench.skh_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }),
+            t('workbench.skh_error', {
+              msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
+            }),
           )
         }
       })

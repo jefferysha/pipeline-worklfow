@@ -2,8 +2,8 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: build
-phase_status: pending
+phase: spec
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.md
 plan: docs/superpowers/plans/2026-07-29-post-merge-unified-review.md
 verification_report: docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-2.md
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T08:23:16Z
-updated_at: 2026-07-29T13:15:19Z
+updated_at: 2026-07-29T14:55:43Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,10 +39,10 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: d5c0234f-22a6-4a86-bed0-4c26c59b79ff
-pipeline_transition_sequence: 15
-pipeline_transition_head: de9eb0af-79a8-49eb-9999-eb22efaaabd2
-pipeline_state_revision: 51
-pipeline_state_revision_id: c01dc178-0773-4f2b-ad74-1a53277071fa
-pipeline_state_digest: 41f1d946dc572ca415726a0fe32107574d198034abb44f1b011ed03fc506f62b
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTEsInJldmlzaW9uSWQiOiJjMDFkYzE3OC0wNzczLTRmMmItYWQ3NC0xYTUzMjc3MDcxZmEiLCJwYXlsb2FkRGlnZXN0IjoiYjk1MTU5NjRhMmQ4MGZhMTZlMmQ4MjFkZjVlZTg4Nzk0NzU0ZGZhOTU4YjU0MWE2YzNjZGE2ZWZmYmQ1YTdkMSJ9
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImQ1YzAyMzRmLTIyYTYtNGE4Ni1iZWQwLTRjMjZjNTliNzlmZiIsInNlcXVlbmNlIjoxNSwicmVjb3JkSWQiOiJkZTllYjBhZi03OWE4LTQ5ZWItOTk5OS1lYjIyZWZhYWFiZDIiLCJyZWNvcmREaWdlc3QiOiI2NTQzMDE1MmM4MGQ1MGJkNmQ2NjQ5MjE5NDJiNjM4MTE1ZTQ0ZWY3Nzg2NzE2N2Y4YjMwZWMzYmYxMGVkZjQ4In0
+pipeline_transition_sequence: 20
+pipeline_transition_head: 0491f6c7-a002-4bb1-ab89-2bc6a1c69155
+pipeline_state_revision: 63
+pipeline_state_revision_id: 73706b4f-25fa-44c9-bdd9-8492834e6e2f
+pipeline_state_digest: 7f1dfd4af0ad529c1bce959a8dc6e8e8bda79b16ab96a163ff66af0d2f84f95f
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NjMsInJldmlzaW9uSWQiOiI3MzcwNmI0Zi0yNWZhLTQ0YzktYmRkOS04NDkyODM0ZTZlMmYiLCJwYXlsb2FkRGlnZXN0IjoiZjgwNGJkMjI5OWQzYmZkZTgxOTlkMWE0ZGJjZTVhYThkNzIzODViODRlNzQwZjcwYjJkMDZkNjg2ZGY0Mzk3MCJ9
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImQ1YzAyMzRmLTIyYTYtNGE4Ni1iZWQwLTRjMjZjNTliNzlmZiIsInNlcXVlbmNlIjoyMCwicmVjb3JkSWQiOiIwNDkxZjZjNy1hMDAyLTRiYjEtYWI4OS0yYmM2YTFjNjkxNTUiLCJyZWNvcmREaWdlc3QiOiJiYzNlNTEyY2ExMTE0MjFlZmRiNDk2NTQ0YjIyZDA1ZjM3NzEyMzEwZmQwNmVhOGY4N2NiZmYzN2M3YjFmZDAyIn0

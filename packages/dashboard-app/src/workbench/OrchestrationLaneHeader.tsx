@@ -54,7 +54,7 @@ export function OrchestrationLaneHeader({
   const editing = nameEdit?.id === lane.id
   const showGateSwitch = canEdit
   const hasBadges = lane.gate !== null || readonly || showGateSwitch
-  const gateLabel = lane.gate === 'confirm' ? '需要确认' : '离开前复核'
+  const gateLabel = t(lane.gate === 'confirm' ? 'workbench.board_gate_confirm' : 'workbench.board_gate_review')
   return (
     <div className="relative flex flex-col items-start gap-[9px] border-b border-border px-3.5 pt-[13px] pb-3">
       {lane.running && <span className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-t-2xl" aria-hidden="true"><i className="absolute top-2 left-2 size-1.5 rounded-full bg-green" data-anim="wb-gloss" data-testid={`wb-flow-gloss-${lane.id}`} /></span>}
@@ -93,7 +93,7 @@ export function OrchestrationLaneHeader({
           {lane.gate !== null && (
             <span className="relative inline-flex">
               <button type="button" className={`${BADGE_BASE} border-red-b bg-red-t text-red-d cursor-pointer hover:bg-red-b focus-visible:bg-red-b`} data-testid={`wb-flow-gate-${lane.id}`} aria-expanded={gateOpen} title={t('workbench.gate_pop_title')} onMouseEnter={() => onGateHover(lane.id)} onMouseLeave={() => onGateHover(null)} onFocus={() => onGateHover(lane.id)} onBlur={() => onGateHover(null)} onClick={(event) => { event.stopPropagation(); onGatePin(lane.id) }}><Icon name="gate" size={11} />{gateLabel}</button>
-              {gateOpen && <div className="absolute top-[calc(100%+6px)] left-0 z-[6] w-60 rounded-[11px] border border-border bg-card px-3 py-2.5 text-left shadow-md" data-testid={`wb-flow-gatepop-${lane.id}`} role="tooltip"><p className="mb-1.5 text-[12px] font-bold text-text-2">{t('workbench.gate_pop_title')}</p><p className="mb-2 text-[12px] leading-[1.55] text-text-3">离开本阶段前，系统会执行下面的内置检查；任一检查未通过，流程就停在这里等待处理。</p><div className="space-y-[5px]">{gateHooks.map((hook) => <p key={hook.id} className="text-[12px] leading-[1.55] text-text-2"><b className="block font-[650] text-text">{hook.name}</b>{hook.desc}</p>)}</div></div>}
+              {gateOpen && <div className="absolute top-[calc(100%+6px)] left-0 z-[6] w-60 rounded-[11px] border border-border bg-card px-3 py-2.5 text-left shadow-md" data-testid={`wb-flow-gatepop-${lane.id}`} role="tooltip"><p className="mb-1.5 text-[12px] font-bold text-text-2">{t('workbench.gate_pop_title')}</p><p className="mb-2 text-[12px] leading-[1.55] text-text-3">{t('workbench.gate_pop_desc')}</p><div className="space-y-[5px]">{gateHooks.map((hook) => <p key={hook.id} className="text-[12px] leading-[1.55] text-text-2"><b className="block font-[650] text-text">{hook.name}</b>{hook.desc}</p>)}</div></div>}
             </span>
           )}
           {readonly && <span className={`${BADGE_BASE} ${BADGE_LOCK}`} data-testid={`wb-lane-lock-${lane.id}`}><Icon name="gate" size={11} />{t('workbench.board_lane_locked')}</span>}

@@ -20,10 +20,16 @@ export async function readErrorDetail(response: Response): Promise<string> {
   }
 }
 
-export async function readSaveErrors(response: Response): Promise<string[]> {
-  if (response.status === 401) return ['当前页面的保存凭证已失效，请刷新页面后重试。']
+export async function readSaveErrors(
+  response: Response,
+  unauthorizedMessage: string,
+  localizedFallback: string,
+  exposeServerDetail: boolean,
+): Promise<string[]> {
+  if (response.status === 401) return [unauthorizedMessage]
   try {
     const body: unknown = await response.json()
+    if (!exposeServerDetail) return [localizedFallback]
     const errors = field(body, 'errors')
     if (Array.isArray(errors)) {
       const strings = errors.filter((error): error is string => typeof error === 'string')
@@ -31,8 +37,6 @@ export async function readSaveErrors(response: Response): Promise<string[]> {
     }
     const error = field(body, 'error')
     if (typeof error === 'string') return [error]
-  } catch {
-    return [`(${response.status})`]
-  }
-  return [`(${response.status})`]
+  } catch { /* use the localized status fallback */ }
+  return [localizedFallback]
 }

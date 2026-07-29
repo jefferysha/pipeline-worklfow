@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { deleteWorkflowDef, fetchWorkflow, fetchWorkflowNames, postWorkflowDef } from '../api/client'
+import { ApiError, deleteWorkflowDef, fetchWorkflow, fetchWorkflowNames, postWorkflowDef } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
 import { isPhase } from '../types'
@@ -59,13 +60,14 @@ export type {
   WbWorkflowDef,
 } from './workbenchDefinition'
 gsap.registerPlugin(useGSAP)
+
 export function WorkbenchView({ root, onToggleError, snapshot = null }: WorkbenchViewProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [names, setNames] = useState<string[] | null>(null)
-  const [namesError, setNamesError] = useState<string | null>(null)
+  const [namesError, setNamesError] = useState<unknown | null>(null)
   const [wfName, setWfName] = useState<string | null>(null)
   const [def, setDef] = useState<WbWorkflowDef | null>(null)
-  const [defError, setDefError] = useState<string | null>(null)
+  const [defError, setDefError] = useState<unknown | null>(null)
   const [menuOpen, setMenuOpen] = useState(false); const [stageId, setStageId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' } | { kind: 'error'; errors: string[] }>({ kind: 'idle' })
   const [saving, setSaving] = useState(false)
@@ -94,6 +96,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const { recent, recentSilent } = useRecentWorkflowHistory(snapshot, root, wfName)
   const loops = useLoops(root)
   useEffect(() => {
+    setSaveStatus((current) => current.kind === 'error' ? { kind: 'idle' } : current)
+    setWorkflowOpErrors([])
+    setWorkflowDeleteError(null)
+  }, [lang])
+  useEffect(() => {
     let cancelled = false
     fetchWorkflowNames(root)
       .then((names) => {
@@ -105,13 +112,13 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       .catch((err: unknown) => {
         if (cancelled) return
         setNames([])
-        setNamesError(t('workbench.names_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        setNamesError(err)
         setWfName((cur) => cur ?? 'default')
       })
     return () => {
       cancelled = true
     }
-  }, [root, t])
+  }, [root])
   useEffect(() => {
     if (!wfName) return
     setSaveStatus({ kind: 'idle' }) // 上一个 workflow 的保存态不跨名残留
@@ -127,8 +134,15 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     defSnapshotRef.current = null
     fetchWorkflow(wfName, root)
       .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<WbWorkflowDef>
+        if (!r.ok) {
+          const detail = await readErrorDetail(r)
+          throw new ApiError(detail || `workflow request failed (${r.status})`, r.status, detail !== '')
+        }
+        try {
+          return await r.json() as WbWorkflowDef
+        } catch {
+          throw new ApiError('workflow response is invalid', r.status)
+        }
       })
       .then((body) => {
         if (cancelled) return
@@ -138,17 +152,19 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setDefError(t('workbench.def_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        setDefError(err)
       })
     return () => {
       cancelled = true
     }
-  }, [root, wfName, t])
+  }, [root, wfName])
   useEffect(() => {
     if (!def) return
     setStageId((cur) => (cur && def.steps.some((s) => s.id === cur) ? cur : def.steps[0]?.id ?? null))
   }, [def])
   const readonlyWf = wfName === 'default'
+  const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
+  const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
   function editLane(laneId: string, patch: LanePatch): void {
     setDef((prev) => {
@@ -244,14 +260,22 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     try {
       const res = await postWorkflowDef(wfName, { ...def, root })
       if (!res.ok) {
-        setSaveStatus({ kind: 'error', errors: await readSaveErrors(res) })
+        setSaveStatus({
+          kind: 'error',
+          errors: await readSaveErrors(
+            res,
+            t('workbench.save_unauthorized'),
+            t('common.request_http_error', { status: res.status }),
+            lang === 'zh',
+          ),
+        })
         return
       }
       invalidateWorkflowRules(root, wfName)
       defSnapshotRef.current = JSON.stringify(def)
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
-      setSaveStatus({ kind: 'error', errors: [err instanceof Error ? err.message : t('workbench.network_error')] })
+      setSaveStatus({ kind: 'error', errors: [formatApiError(err, t)] })
     } finally {
       setSaving(false)
     }
@@ -310,7 +334,12 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     try {
       const res = await postWorkflowDef(workflowName, { root, ...nextDef })
       if (!res.ok) {
-        setWorkflowOpErrors(await readSaveErrors(res))
+        setWorkflowOpErrors(await readSaveErrors(
+          res,
+          t('workbench.save_unauthorized'),
+          t('common.request_http_error', { status: res.status }),
+          lang === 'zh',
+        ))
         return
       }
       invalidateWorkflowRules(root, workflowName)
@@ -319,7 +348,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       setWorkflowDraftName('')
       switchTo(workflowName)
     } catch (err) {
-      setWorkflowOpErrors([err instanceof Error ? err.message : t('workbench.network_error')])
+      setWorkflowOpErrors([formatApiError(err, t)])
     } finally {
       setWorkflowOpBusy(false)
     }
@@ -350,11 +379,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         } = {}
         try { body = await res.json() as typeof body } catch {  }
         setWorkflowDeleteError({
-          message: body.error ?? (body.code === 'WORKFLOW_REFERENCED'
+          message: (lang === 'zh' ? body.error : undefined) ?? (body.code === 'WORKFLOW_REFERENCED'
             ? t('workbench.workflow_delete_referenced')
             : t('workbench.workflow_delete_failed', { status: res.status })),
-          references: Array.isArray(body.references) ? body.references : [],
-          blockers: Array.isArray(body.blockers) ? body.blockers : [],
+          references: lang === 'zh' && Array.isArray(body.references) ? body.references : [],
+          blockers: lang === 'zh' && Array.isArray(body.blockers) ? body.blockers : [],
         })
         return
       }
@@ -366,7 +395,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       switchTo(remaining[0] ?? 'default')
     } catch (err) {
       setWorkflowDeleteError({
-        message: err instanceof Error ? err.message : t('workbench.network_error'),
+        message: formatApiError(err, t),
         references: [],
         blockers: [],
       })
@@ -473,8 +502,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         dirty={dirty}
         saving={saving}
         saveStatus={saveStatus}
-        namesError={namesError}
-        defError={defError}
+        namesError={namesErrorText}
+        defError={defErrorText}
         onMenuOpen={setMenuOpen}
         onSwitch={requestSwitch}
         onCreate={openWorkflowCreate}

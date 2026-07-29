@@ -13,10 +13,37 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status?: number,
+    public readonly hasServerDetail = false,
   ) {
     super(message)
     this.name = 'ApiError'
   }
+}
+
+type Translate = (key: string, vars?: Record<string, string | number>) => string
+
+/**
+ * Convert transport facts into reader-facing copy at the rendering boundary.
+ *
+ * Api clients may retain server detail in `ApiError.message` for diagnostics and
+ * programmatic callers, but the Dashboard must not render endpoint-authored or
+ * server-authored prose in the wrong locale.
+ */
+export function formatApiError(
+  error: unknown,
+  t: Translate,
+  options: { exposeServerDetail?: boolean } = {},
+): string {
+  if (error instanceof ApiError) {
+    if (error.status === undefined) return t('common.network_error')
+    if (error.status >= 400) {
+      return options.exposeServerDetail && error.hasServerDetail
+        ? error.message
+        : t('common.request_http_error', { status: error.status })
+    }
+    return t('common.invalid_response')
+  }
+  return t('common.network_error')
 }
 
 export function wrapNetwork(error: unknown): never {
@@ -35,7 +62,7 @@ export async function throwApiError(response: Response, fallback: string): Promi
   } catch {
     // A response without a JSON envelope falls back to the endpoint-specific message.
   }
-  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status)
+  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status, detail !== '')
 }
 
 export async function throwDetailedApiError(response: Response, fallback: string): Promise<never> {
@@ -49,7 +76,7 @@ export async function throwDetailedApiError(response: Response, fallback: string
   } catch {
     // A response without a JSON envelope falls back to the endpoint-specific message.
   }
-  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status)
+  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status, detail !== '')
 }
 
 export async function throwListApiError(response: Response, fallback: string): Promise<never> {
@@ -63,7 +90,7 @@ export async function throwListApiError(response: Response, fallback: string): P
   } catch {
     // A response without a JSON envelope falls back to the endpoint-specific message.
   }
-  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status)
+  throw new ApiError(detail || `${fallback}（${response.status}）`, response.status, detail !== '')
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

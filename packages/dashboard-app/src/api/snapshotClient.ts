@@ -9,9 +9,15 @@ export async function fetchSnapshot(): Promise<Snapshot> {
   } catch (error) {
     wrapNetwork(error)
   }
-  if (!response.ok) throw new ApiError(`快照获取失败（${response.status}）`, response.status)
-  const snapshot = decodeSnapshot(await readJson(response))
-  if (!snapshot) throw new ApiError('快照响应形状无效', response.status)
+  if (!response.ok) throw new ApiError(`snapshot request failed (${response.status})`, response.status)
+  let body: unknown
+  try {
+    body = await readJson(response)
+  } catch {
+    throw new ApiError('snapshot response is invalid', response.status)
+  }
+  const snapshot = decodeSnapshot(body)
+  if (!snapshot) throw new ApiError('snapshot response is invalid', response.status)
   return snapshot
 }
 

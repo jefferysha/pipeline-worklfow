@@ -21,7 +21,13 @@ async function readOrThrow<T>(
   decode: (value: unknown) => T | null,
   invalidMessage: string,
 ): Promise<T> {
-  const decoded = decode(await readJson(response))
+  let body: unknown
+  try {
+    body = await readJson(response)
+  } catch {
+    throw new ApiError(invalidMessage, response.status)
+  }
+  const decoded = decode(body)
   if (!decoded) throw new ApiError(invalidMessage, response.status)
   return decoded
 }

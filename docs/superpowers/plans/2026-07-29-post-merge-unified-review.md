@@ -7,8 +7,8 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 ## 前提、边界与停止条件
 
-- 基线：`main@7c59eecfba9e8652d69e25dae01058ae1df783be`，九个目标 PR
-  （#8/#14/#13/#11/#12/#9/#15/#16/#17）已合并，开放非 Draft PR 再查为空。
+- 基线：`main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`，十个目标 PR
+  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18）已合并，开放非 Draft PR 再查为空。
 - 采用当前独立 worktree、`codex/unified-main-review-20260729`、full Change、TDD 和持续授权。
 - 不改变 CLI/HTTP DTO，不增加无关功能，不修改自动化 schedule，不执行 npm publish 或生产部署。
 - requirement 语义变化执行 `requirements-changed` 回 Spec；任何 Verify finding 默认修复。
@@ -78,17 +78,18 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 此处建议 `/clear`。
 
-## 子阶段 5：requirements-changed 增量——纳入 #15/#16/#17 与最终 main
+## 子阶段 5：requirements-changed 增量——纳入 #15/#16/#17/#18 与最终 main
 
-1. 将 `origin/main@7c59eecf` 合入统一审查分支，冲突只按最终源代码重建生成物解决，禁止手工拼接
+1. 将 `origin/main@607c2ed9` 合入统一审查分支，冲突只按最终源代码重建生成物解决，禁止手工拼接
    Dashboard hash assets。
 2. 将 #15 的 Host Plan desktop catalog/selected context 和 #16 的 document evidence timeline
-   kernel→server→decoder→Dashboard 链，以及 #17 的 Trace session rail/detail workspace 纳入
-   文件→capability 覆盖矩阵。
+   kernel→server→decoder→Dashboard 链、#17 的 Trace session rail/detail workspace，以及 #18 的
+   canonical archive digest 链纳入文件→capability 覆盖矩阵。
 3. 重跑 Host Plan 19 tests、Document timeline kernel/server/UI、Trace workspace 定向测试、全仓测试、Dashboard
    全量测试、build、typecheck、docs、OpenSpec、architecture/comments/hygiene、audit 与 release gates。
 4. 使用 `tenon:design-taste-frontend` 对整个 Dashboard 重跑，不把 #15 的 desktop-only 原 PR
-   或 #17 的 desktop-only Trace 证据当作全 Dashboard 豁免；真实浏览器覆盖成功/加载/空/错误/禁用、
+   或 #17 的 desktop-only Trace 证据当作全 Dashboard 豁免；#18 另以 archive ledger/digest
+   完整性验证。真实浏览器覆盖成功/加载/空/错误/禁用、
    zh/en、主题、键盘和焦点。
 5. 重做完整 pre-Verify Standards + Spec review；任何 C/H/M finding 修复后从本子阶段重新验证。
 
@@ -96,7 +97,30 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 此处建议 `/clear`。
 
-## 子阶段 6：冻结、全量 Verify 与 Ship
+## 子阶段 6：最终组合 finding 收口与 OpenSpec repo-zero
+
+1. 为 Workbench 保存路径建立英文 401 RED；将 401 恢复文案放入现有 zh/en dictionary，
+   `readSaveErrors` 由调用方传入当前 locale 文案，保存和新建 workflow 两条路径共同使用。
+   再为 workflow list 的网络异常和非 JSON HTTP fallback 建立英文 RED，使 View 只按稳定的
+   network/status/invalid-response 事实选择本地化文案，不拼接 transport 的中文 endpoint fallback。
+2. 为 `document-evidence-timeline` 主规格补充只解释既有需求的 Purpose，运行目标与统一 Change
+   strict validation。
+3. 精确枚举 `align-tenon-entry-skill-contract`、`archive-ledger-safe-guidance`、
+   `doctor-active-change-count`、`first-install-onboarding-commands`、
+   `manual-loop-binding-preservation`，确认它们不在 Tenon 活跃清单、phase 为 done/escalated、
+   且没有 proposal/delta。
+4. 记录每个目录的相对路径、文件数和内容摘要；逐个运行
+   `openspec archive <name> --yes --skip-specs --no-validate --json`，再证明日期化 archive 中的
+   文件集合和摘要逐字一致。
+5. 运行 `openspec validate --all --strict --no-interactive`，要求零失败；若 archive 改变任一证据
+   文件或主规格，立即停止并恢复。
+
+验收：英文 401/network/non-JSON HTTP 错误无 CJK 产品文案、目标主规格通过、5 个历史目录证据完整、
+全仓 OpenSpec 全绿。
+
+此处建议 `/clear`。
+
+## 子阶段 7：冻结、全量 Verify 与 Ship
 
 1. 干净 `npm ci` 后运行 root/full Dashboard、CLI、server、hooks/adapters/skills/bundle/oracle、
    typecheck、build、docs、OpenSpec、architecture/comments/hygiene、audit 和 package/tarball gates。

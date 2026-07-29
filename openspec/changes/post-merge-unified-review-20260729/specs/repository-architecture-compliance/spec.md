@@ -33,3 +33,21 @@ Critical 或 High 漏洞 SHALL 阻止发布；Moderate 漏洞 SHOULD 在存在�
 - **WHEN** Vitest、Vite、AJV 与 VitePress 的本次安全组合安装完成
 - **THEN** `npm audit --json` 报告 total 为 0
 - **AND** 不引入 VitePress 2 alpha、Vite 8 或更高 Node engine 要求
+
+### Requirement: 可发布仓库 SHALL 保持 OpenSpec 活跃树可严格验证
+
+`openspec/changes/` SHALL 只包含具有真实 proposal、design、tasks 和 capability delta 的活跃
+Change。已经结束且仅剩 Tenon 状态证据的历史目录 SHALL 通过 OpenSpec 官方 archive 操作完整迁移
+到日期化 archive；不得删除历史证据、手改 canonical state，或补写虚假 delta 以骗过校验。
+
+#### Scenario: 历史 state-only 目录滞留活跃树
+
+- **WHEN** 一个目录不在 Tenon 活跃 Change 清单、phase 已为 `done` 或 `escalated`，且没有 proposal 或 delta
+- **THEN** 使用精确枚举的 OpenSpec archive 操作保留其全部文件并移出活跃树
+- **AND** 迁移前后的逐文件内容摘要和文件数量一致
+
+#### Scenario: 发布候选执行全仓严格校验
+
+- **WHEN** release candidate 运行 `openspec validate --all --strict --no-interactive`
+- **THEN** 所有真实 active Change 和主规格均通过
+- **AND** 不以忽略失败、删除证据或伪造 requirement 作为通过手段

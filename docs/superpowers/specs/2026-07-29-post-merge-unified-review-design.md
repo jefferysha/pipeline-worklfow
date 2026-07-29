@@ -8,8 +8,8 @@
 
 ## 约束与非目标
 
-- 基线固定为 `main@7c59eecfba9e8652d69e25dae01058ae1df783be`；旧 `907dac06`、`c78426e5`
-  frozen baseline 因后续出现并合并 PR #15/#16/#17 已失效。
+- 基线固定为 `main@607c2ed97f2217b8edf44dd9cd872e7e9cceb545`；旧 `907dac06`、`c78426e5`、
+  `7c59eecf` frozen baseline 因后续出现并合并 PR #15/#16/#17/#18 已失效。
 - 审查修复只使用当前独立 worktree/Change/`codex/` 分支。
 - 不改变自动化的每四小时配置，不修改 canonical state 或 `.pipeline.yaml`。
 - 不新增无关产品功能，不发布 npm 包或生产部署。
@@ -28,6 +28,7 @@
 | #15 | `host-target-plan` | compact desktop catalog、selected context、操作选择 | 复用既有只读 Host Plan DTO | full Dashboard design/browser + Host Plan tests |
 | #16 | `document-evidence-timeline` | 文档 disclosure、旧 server unavailable | ledger receipt → snapshot optional DTO、脱敏 | kernel/server/decoder/UI/API/browser |
 | #17 | `trace-timeline` | desktop session rail、selected identity、timeline detail | 复用 metadata-only session/timeline API | concurrency/keyboard/i18n/a11y/full Dashboard |
+| #18 | governed archive | 无 runtime UI 变化 | #17 Change canonical archive ledger | revision/transition/document digest + OpenSpec strict |
 
 `verification-evidence-composer`、`context-bundle-budget-preview`、公开文档和生成物作为相邻组合面纳入
 全量回归。
@@ -39,7 +40,12 @@ Dashboard 68 files/1198 tests 与 exact-head CI run `30452978039` 均通过。�
 
 PR #17 exact head `e4a07718b71d4ee080da57c072a8a35d185dbb82` 的 68 files/1203 Dashboard tests、
 完整构建、生成物重建和 GitHub Actions run `30454247261` 通过，独立全 diff 审查为
-C0/H0/M0/L0。它证明该 PR 可正常合并，但统一 Change 仍须在九 PR 组合基线上重验整个 Dashboard。
+C0/H0/M0/L0。它证明该 PR 可正常合并，但统一 Change 仍须在十 PR 组合基线上重验整个 Dashboard。
+
+PR #18 exact head `fcadf8a35f454290fce68941812c814243cef1ca` 的 CI run `30455424146`
+通过；独立只读审查对 66 条 revision、19 条 transition、66 个 pre-Verify anchor 与 10 份
+document ledger hash 完成验证，C0/H0/M0/L0。该 PR 仅移动已完成 Change 的治理证据，不改变
+runtime，但它的路径、摘要链和 OpenSpec 完整性属于统一基线的一部分。
 
 ## 调研结果
 
@@ -56,6 +62,10 @@ C0/H0/M0/L0。它证明该 PR 可正常合并，但统一 Change 仍须在九 PR
 1. Governance 确认清理依赖 `[row]`，逻辑等价新对象会关闭当前确认。
 2. English Workbench 仍有非技术性中文产品文案和可访问名称。
 3. `npm audit` 为 5 moderate / 1 high / 1 critical。
+4. 最终组合审查发现 Workbench 401、workflow list 网络失败与非 JSON HTTP fallback 仍会在
+   English locale 泄漏中文，#16 主规格缺少 Purpose。
+5. 5 个 phase 已结束的 state-only 历史目录仍滞留 active OpenSpec tree，使全仓 strict validation
+   稳定失败；必须通过官方 archive 完整保留证据，不能删除或伪造 delta。
 
 ### 已验证的依赖候选
 
@@ -71,6 +81,8 @@ override 得到 audit 0、有效依赖树、正式 build、docs check/build 和 
 4. 干净可发布依赖树不允许 Critical/High；本 Change 的目标是 audit 0。
 5. 依赖升级不改变 Node `>=22`、workspace 脚本或 CLI/HTTP 公共契约。
 6. 所有生成物从冻结的最终源码重建，禁止手工拼接 hashed assets 或 bundle。
+7. Active OpenSpec tree 只保留真实可验证 Change；历史 state-only 目录的文件集合与摘要在归档前后
+   必须一致。
 
 ## 升档确认状态机
 
@@ -100,6 +112,8 @@ confirming(snapshot-key)
 - 真实 production Dashboard 覆盖 390/720/1024/1440、zh/en、light/dark、focus、Escape、
   loading/empty/error/success/disabled 与 reduced-motion。
 - 若依赖 override 触发任何 docs/build/test/CI 失败，整组回滚并重新选稳定组合。
+- 若 OpenSpec archive 前后任一状态证据摘要变化，停止发布并恢复该目录；全仓 strict validation
+  必须零失败。
 
 ## 术语与证据边界
 

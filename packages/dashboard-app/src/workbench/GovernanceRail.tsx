@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { LpSlider, WB_TW, type LoopsState } from './LoopCard'
 import { cn } from '@/lib/utils'
 import { ChartNoAxesColumn, CircleAlert, Pencil } from 'lucide-react'
 import { GovernancePromoteDialog } from './GovernancePromoteDialog'
 import { GovernanceRailHead } from './GovernanceRailHead'
+import { GovernanceGraduation } from './GovernanceGraduation'
 import {
   BAND_KEY, BAND_TW, BAR_TW, BUDGET_COMMIT_MS, BUDGET_WARN_RATIO, GCARD_TW,
   GH_B_TW, GH_TW, GNOTE_ERR_TW, GNOTE_HINT_TW, GNOTE_TW, LAMP_TW, LEVELS,
@@ -22,7 +24,7 @@ export interface GovernanceRailProps {
 }
 
 export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const row = loops.selected
   const [levelBusy, setLevelBusy] = useState(false)
   const [levelError, setLevelError] = useState<string | null>(null)
@@ -31,6 +33,10 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   /** token 上限草稿（k 单位）；null = 未拖动，跟随 server 真值。 */
   const [tokK, setTokK] = useState<number | null>(null)
   const [budgetError, setBudgetError] = useState<string | null>(null)
+  useEffect(() => {
+    setLevelError(null)
+    setBudgetError(null)
+  }, [lang])
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 轮询对象换代不撤确认；只有确认文案与裁决前提中的事实变化才撤。
   const promotionFacts = promotionDecisionKey(root, row)
@@ -74,8 +80,9 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
       await postLoopLevel({ root, id: row.id, target })
       loops.reload()
     } catch (err) {
-      // server 的 plan.reason / blockers 原文——不翻译、不改写、不吞并（诚实门③：它才是权威）。
-      setLevelError(t('workbench.lp_level_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      setLevelError(t('workbench.lp_level_fail', {
+        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
+      }))
     } finally {
       setLevelBusy(false)
     }
@@ -92,7 +99,9 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
       loops.reload()
     } catch (err) {
       // 写回失败必须现形：否则用户以为阈值改了、其实没落盘（静默吞错 = 谎报已保存）。
-      setBudgetError(t('workbench.gov_budget_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      setBudgetError(t('workbench.gov_budget_fail', {
+        msg: formatApiError(err, t, { exposeServerDetail: lang === 'zh' }),
+      }))
     }
   }
 
@@ -205,25 +214,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
         <p className={GNOTE_TW} data-testid="wb-gov-grad-note">
           {t('workbench.gov_grad_note', { t1: READY_THRESHOLD, t2: READY_STRONG, runs: MIN_L2_RUNS_FOR_L3 })}
         </p>
-        {graduation !== null && (
-          <div
-            className={cn('mt-2.5 rounded-[10px] border px-3 py-2.5 text-xs', graduation.canGraduate ? 'border-green-b bg-green-t' : 'border-amb-b bg-amb-t')}
-            data-can-graduate={String(graduation.canGraduate)}
-            data-testid="wb-gov-graduation"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <b className="text-text">{graduation.canGraduate ? t('workbench.gov_preflight_ready') : t('workbench.gov_preflight_blocked')}</b>
-              <span className="font-mono text-text-2">{graduation.current} → {graduation.recommended}</span>
-            </div>
-            <p className="mt-1 font-mono text-[11px] text-text-2">runs {graduation.runs} · drift {graduation.driftCount} · fail_streak {graduation.failStreak} · breaker {graduation.breaker}</p>
-            {graduation.blockers.length > 0 && (
-              <ul className="mt-2 space-y-1 pl-4 text-text-2">
-                {graduation.blockers.map((blocker) => <li key={blocker} className="list-disc">{blocker}</li>)}
-              </ul>
-            )}
-            {graduation.demotionSignals.length > 0 && <p className="mt-2 text-red-d">{t('workbench.gov_preflight_demote')}: {graduation.demotionSignals.join('；')}</p>}
-          </div>
-        )}
+        {graduation !== null && <GovernanceGraduation graduation={graduation} lang={lang} t={t} />}
         {graduation === null && predictBlocked && nextLv !== null && score !== null && (
           <p className={GNOTE_HINT_TW} data-tone="hint" data-testid="wb-gov-level-hint">
             {t('workbench.gov_level_hint', { score, need: nextNeed, target: nextLv })}

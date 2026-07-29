@@ -2,12 +2,6 @@ import { Check } from 'lucide-react'
 
 export type StageState = 'done' | 'current' | 'pending'
 
-export function stageStateLabel(state: StageState): string {
-  if (state === 'done') return '已完成'
-  if (state === 'current') return '进行中'
-  return '待处理'
-}
-
 export function StageNode({ state }: { state: StageState }): JSX.Element {
   if (state === 'done') {
     return (

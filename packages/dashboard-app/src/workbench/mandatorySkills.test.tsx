@@ -989,6 +989,91 @@ describe('TrackSettings v3 真实 CRUD', () => {
     })
   })
 
+  it('English Router preview network failure uses localized copy without transport Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') {
+        throw new Error('网络错误：连接被拒绝')
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Network error')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English Router preview malformed success is classified as an invalid response', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') {
+        return new Response('not json', { status: 200 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid server response.')
+  })
+
+  it('English Track save non-JSON HTTP failure uses localized status without endpoint fallback Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') {
+        return new Response('upstream unavailable', { status: 503 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    const alert = await screen.findByTestId('wb-track-editor-error')
+    expect(alert).toHaveTextContent('Request failed (HTTP 503).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English Track failure suppresses server-authored reference and blocker prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: '轨道仍被引用',
+          references: ['生产 Change'],
+          blockers: ['请先完成迁移'],
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    const alert = await screen.findByTestId('wb-track-editor-error')
+    expect(alert).toHaveTextContent('Request failed (HTTP 409).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('内建轨编辑器锁住 ID/policy/delete，只 PATCH label 与 workflow', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {

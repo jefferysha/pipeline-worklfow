@@ -18,6 +18,7 @@ import { ErrorBoundary } from './AppErrorBoundary'
 import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
+import { formatApiError } from './api/transport'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -251,7 +252,7 @@ function AppShell(): JSX.Element {
             data-testid="snapshot-error"
           >
             <h1 className="text-lg font-bold text-text">{t('common.snapshot_error_title')}</h1>
-            <p className="mt-2 break-words text-[13px] leading-6">{error}</p>
+            <p className="mt-2 break-words text-[13px] leading-6">{formatApiError(error, t)}</p>
             <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
             <button
               type="button"
@@ -293,7 +294,7 @@ function AppShell(): JSX.Element {
             <ProgressView
               snapshot={snapshot}
               loading={loading}
-              error={error}
+              error={error ? formatApiError(error, t) : null}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
               onToast={(m) => showFlash('toast', m)}

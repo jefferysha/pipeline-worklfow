@@ -20,6 +20,7 @@
 - [x] 为 `repository-architecture-compliance` 编写依赖安全门与 override 证明 delta。 (spec)
 - [x] 固化最小修复架构、兼容边界、回滚路径和 tracer-bullet 实施计划。 (spec)
 - [x] 建立规则/安全/设计质量/测试/API/浏览器/文档/发布的完整验证矩阵。 (spec)
+- [x] 将 Workbench 401/network/non-JSON locale、主规格 Purpose 和 state-only Change 完整归档门纳入 delta 与计划。 (spec)
 
 ## 实现
 
@@ -49,11 +50,14 @@
 
 ## 最终 main 范围扩展
 
-- [ ] 合入 `main@7c59eecf`，将 PR #15/#16/#17、CI 调度稳定性修复和 Trace session workspace 纳入统一文件→capability 矩阵。 (build)
+- [x] 合入 `main@607c2ed9`，将 PR #15/#16/#17/#18、CI 调度稳定性修复、Trace session workspace 与治理归档纳入统一文件→capability 矩阵。 (build)
 - [ ] 从最终源代码重建 CLI、Server、Dashboard 生成物，并证明连续构建稳定。 (build)
 - [ ] 重跑 Host Plan、document evidence timeline 与 Trace workspace 的 kernel/server/decoder/UI 定向回归及全量门禁。 (build)
 - [ ] 对整个 Dashboard 重做设计质量、可访问性、响应式、主题、语言、状态、键盘和焦点 pre-Verify 审查。 (build)
-- [ ] 更新统一 REVIEW/pre-Verify 报告并冻结覆盖九个合并 PR 的新 Build SHA。 (build)
+- [ ] 更新统一 REVIEW/pre-Verify 报告并冻结覆盖十个合并 PR 的新 Build SHA。 (build)
+- [ ] 修复 Workbench 401、network 与 non-JSON HTTP fallback 的 locale 泄漏并补英文错误回归。 (build)
+- [ ] 补齐 `document-evidence-timeline` Purpose，并通过目标 strict validation。 (build)
+- [ ] 通过 OpenSpec 官方 archive 完整迁移 5 个 state-only 历史目录，使全仓 strict validation 真实全绿。 (build)
 
 ## 验证
 

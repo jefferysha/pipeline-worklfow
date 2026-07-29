@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { ApiError, fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
+import { readErrorDetail } from './workbenchApiDecoders'
 
 export interface SkillTransferModalProps {
   selected: string[]
@@ -27,32 +29,16 @@ const COL_CLS =
 const CHIP_BADGE_CLS =
   'ml-1 flex-none whitespace-nowrap rounded-full border-0 bg-[color-mix(in_oklch,var(--red)_52%,var(--green))] px-1.5 py-px text-[10px] font-bold text-card'
 
-interface ErrorBody {
-  error?: string
-}
-
-/** 非 2xx 响应尽量读出 server 的 { error } 文案；没有 JSON 体就吞掉，回落调用方的通用文案。 */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody
-    if (typeof body?.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
-
 export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransferModalProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [all, setAll] = useState<WbSkillEntry[]>([])
   const [chosen, setChosen] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Bug6：cancelled 守卫（参照 SkillChain/SkillHealthPanel）——effect 依赖 [t]，切语言即重跑
-    // 发起第二发 fetch；先发起的慢响应回来若无守卫会覆盖后发起的快响应，卸载后回来则 setState-after-unmount。
+    // 语言切换只重渲染错误文案，不重拉 registry，也不打断当前选择与焦点。
     let cancelled = false
     fetchSkillsRegistry()
       .then(async (r) => {
@@ -60,19 +46,32 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
         // 统一返回 JSON 信封（{ok:false,error}），非 2xx 时 r.json() 依然会成功 resolve 而不是
         // reject，若不先查 r.ok，.catch() 永远不会触发，本组件会静默拿到 undefined 的 skills
         // 字段，随后 `all.filter(...)` 在下一次 render 直接抛错——无 ErrorBoundary 兜底会白屏。
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || t('skill_transfer.load_error_status', { status: r.status }))
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
+        if (!r.ok) {
+          const detail = await readErrorDetail(r)
+          throw new ApiError(
+            detail || `skill registry request failed (${r.status})`,
+            r.status,
+            detail !== '',
+          )
+        }
+        try {
+          return await r.json() as { skills: WbSkillEntry[] }
+        } catch {
+          throw new ApiError('skill registry response is invalid', r.status)
+        }
       })
       .then((body) => {
         if (!cancelled) setAll(body.skills)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') }))
+        if (!cancelled) {
+          setError(err)
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [t])
+  }, [])
 
   const available = all.filter((e) => !chosen.includes(e.name) && e.name.toLowerCase().includes(query.toLowerCase()))
   // v6 T10：未安装 badge 查询面(chosen 栏条目可能不在 registry——如 manifest 自由 token,查无即不标)。
@@ -165,7 +164,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       />
       <div className="mt-2.5 flex gap-2.5">
         <div className={COL_CLS} data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
-          {error && <div className="m-0 px-0.5 py-1.5 text-[11.5px] font-semibold text-red" data-testid="skill-error" role="alert">{error}</div>}
+          {error !== null && <div className="m-0 px-0.5 py-1.5 text-[11.5px] font-semibold text-red" data-testid="skill-error" role="alert">{t('skill_transfer.load_error', { msg: formatApiError(error, t, { exposeServerDetail: lang === 'zh' }) })}</div>}
           {!error && available.map(({ name: s, installed }) => (
             <button
               key={s}

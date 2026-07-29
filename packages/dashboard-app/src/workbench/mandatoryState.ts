@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchSkillsRegistry, postMandatorySkills, type WbSkillEntry, type WbTrackDefinition } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
   clearMandatoryConfig,
@@ -89,7 +90,7 @@ export function resolveMandatoryCell(
 }
 
 export function useMandatorySkills(root: string): MandatoryState {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [requestedTrack, setRequestedTrack] = useState<MatrixTrack | null>(null)
   const [cfg, setCfg] = useState<MandatoryConfig | null>(() => peekMandatoryConfig(root))
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
@@ -97,6 +98,10 @@ export function useMandatorySkills(root: string): MandatoryState {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  useEffect(() => {
+    setSaveError(null)
+    setSaveErrorKey(null)
+  }, [lang])
   // 保存操作同时绑定发起时的 root 与 cell。只记 cell 会让 root A 的晚到响应覆盖已经切到
   // root B 的同名格子；token 则避免旧操作的 finally 清掉较新的在途状态。
   const rootRef = useRef(root)
@@ -171,10 +176,22 @@ export function useMandatorySkills(root: string): MandatoryState {
         /* 无 JSON 体：走下方通用错误文案 */
       }
       if (!res.ok || body.ok !== true) {
-        throw new Error(body.error || t('workbench.mand_save_failed', { status: res.status }))
+        if (rootRef.current === requestRoot) {
+          setSaveError(
+            lang === 'zh' && body.error
+              ? body.error
+              : t('workbench.mand_save_failed', { status: res.status }),
+          )
+          setSaveErrorKey(cellKey)
+        }
+        return
       }
       if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        throw new Error(t('workbench.mand_save_invalid'))
+        if (rootRef.current === requestRoot) {
+          setSaveError(t('workbench.mand_save_invalid'))
+          setSaveErrorKey(cellKey)
+        }
+        return
       }
       const saved = body.skills ?? skills
       const base = peekMandatoryConfig(requestRoot) ?? requestCfg
@@ -185,7 +202,7 @@ export function useMandatorySkills(root: string): MandatoryState {
       }
     } catch (e) {
       if (rootRef.current === requestRoot) {
-        setSaveError(e instanceof Error ? e.message : String(e))
+        setSaveError(formatApiError(e, t, { exposeServerDetail: lang === 'zh' }))
         setSaveErrorKey(cellKey)
       }
     } finally {
