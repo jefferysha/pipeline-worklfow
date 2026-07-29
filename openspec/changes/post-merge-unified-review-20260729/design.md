@@ -2,9 +2,15 @@
 
 ## 审查基线
 
-- 唯一代码基线为 `origin/main@907dac067c17ed77fb440b91b20d64fd0f24773b`。
-- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9，GitHub Actions run
-  `30435051575` 在该精确 SHA 上成功。
+- 唯一代码基线为 `origin/main@7c59eecfba9e8652d69e25dae01058ae1df783be`。
+- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17；冻结前再次查询以 `main`
+  为 base 的开放非 Draft PR，结果为空。
+- PR #16 的 exact-head GitHub Actions run `30452978039` 在
+  `55b13b50ad8523b33773fe6b23337a2d7afc658a` 成功后才正常合并。最终 `main` push CI
+  仍必须在 Verify/Ship 绑定精确 merge SHA，不在 Spec 阶段预先宣称通过。
+- PR #17 的 exact-head GitHub Actions run `30454247261` 在
+  `e4a07718b71d4ee080da57c072a8a35d185dbb82` 以 8m20s 完整通过后才正常合并；独立只读审查
+  覆盖 174 个文件并得到 C0/H0/M0/L0。
 - 干净 worktree 执行 `npm ci` 后，必须先运行仓库正式 `npm run build` 生成
   `@tenon/kernel`/`@tenon/server` 产物；随后 architecture、comments、repository hygiene、
   docs 与 Dashboard typecheck 均通过。
@@ -21,6 +27,9 @@
 | #11 | Loop scope preview / `loop-scope-preview` | Loop 配置 → server → Governance UI | 项目范围、升档确认、空态和错误边界 |
 | #12 | related session search / `related-session-memory` | project root → bounded search → Progress | root 隔离、空/错/加载、焦点与取消 |
 | #9 | prompt routing bypass / `prompt-routing-bypass` | hook/router/stat portability | 精确路径、Linux stat、fail-closed 与 hook 测试 |
+| #15 | Host Plan desktop clarity / `host-target-plan` | compact catalog → selected context → operation | 桌面密度、键盘、主题、状态和完整 Dashboard 一致性 |
+| #16 | document evidence timeline / `document-evidence-timeline` | ledger receipt → snapshot DTO → disclosure | digest/路径脱敏、旧 server 降级、键盘、空/错/加载 |
+| #17 | Trace session workspace / `trace-timeline` | session rail → selected identity → metadata timeline | 并发隔离、Escape/焦点、桌面响应式、长内容与状态矩阵 |
 
 `verification-evidence-composer` 与 `context-bundle-budget-preview` 已在主干上，作为相邻组合能力继续
 执行回归；它们不是本批次新 requirement。
@@ -86,7 +95,11 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
    路径、补偿控制、时限和 owner，本 Change 不预设例外。
 4. 依赖 override 必须精确、可解释、由 `npm ls`、全量 tests/build/docs/CI 证明，不能用
    `--force` 自动改写或引入 pre-release 文档栈。
-5. #8/#13/#11/#12 的 CLI/server/Dashboard DTO 与错误码继续保持现有向后兼容；本次不扩张 API。
+5. #8/#13/#11/#12/#16/#17 的 CLI/server/Dashboard DTO 与错误码继续保持现有向后兼容；本次不扩张 API。
+6. #15 的 Host Plan 桌面优化不能成为 Dashboard 其余视图的设计豁免；统一视觉轨仍覆盖整个
+   Dashboard 的响应式、主题、语言、状态、键盘和焦点边界。
+7. #17 的 desktop-only Trace workspace 验证不能替代整个 Dashboard 的视觉与浏览器验收；其
+   metadata-only、无隐式 timeline 请求、请求 identity 隔离和 Escape 焦点恢复语义必须保持。
 
 ## 升档确认状态机
 
@@ -119,7 +132,7 @@ key 或显式字段比较，但不得依赖 React row 对象引用。
 
 ## 术语与证据边界
 
-- “最终主干”只指 `907dac067c17ed77fb440b91b20d64fd0f24773b` 及本 Change 后续合并 SHA。
+- “最终主干”只指 `7c59eecfba9e8652d69e25dae01058ae1df783be` 及本 Change 后续合并 SHA。
 - “逻辑等价快照”指影响当前升档决策的字段完全相同，仅对象身份或非决策展示字段变化。
 - “0 vulnerabilities”只由干净安装后的 `npm audit --json` 元数据证明，不由旧 lockfile 或
   `npm audit fix --force` 声明。

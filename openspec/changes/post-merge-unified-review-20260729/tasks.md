@@ -47,6 +47,14 @@
 - [x] 将 AFK 两个 dialog 迁移到共享键盘/focus primitive，并修复 390px Automation 三动作裁切。 (build)
 - [x] 本地化 TrackSelector candidate/inherited tooltip，补齐全部回退 finding 的 RED→GREEN 与全量门禁。 (build)
 
+## 最终 main 范围扩展
+
+- [ ] 合入 `main@7c59eecf`，将 PR #15/#16/#17、CI 调度稳定性修复和 Trace session workspace 纳入统一文件→capability 矩阵。 (build)
+- [ ] 从最终源代码重建 CLI、Server、Dashboard 生成物，并证明连续构建稳定。 (build)
+- [ ] 重跑 Host Plan、document evidence timeline 与 Trace workspace 的 kernel/server/decoder/UI 定向回归及全量门禁。 (build)
+- [ ] 对整个 Dashboard 重做设计质量、可访问性、响应式、主题、语言、状态、键盘和焦点 pre-Verify 审查。 (build)
+- [ ] 更新统一 REVIEW/pre-Verify 报告并冻结覆盖九个合并 PR 的新 Build SHA。 (build)
+
 ## 验证
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

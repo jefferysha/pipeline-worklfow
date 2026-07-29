@@ -7,7 +7,8 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 ## 前提、边界与停止条件
 
-- 基线：`main@907dac067c17ed77fb440b91b20d64fd0f24773b`，六个目标 PR 已合并且最终 CI 成功。
+- 基线：`main@7c59eecfba9e8652d69e25dae01058ae1df783be`，九个目标 PR
+  （#8/#14/#13/#11/#12/#9/#15/#16/#17）已合并，开放非 Draft PR 再查为空。
 - 采用当前独立 worktree、`codex/unified-main-review-20260729`、full Change、TDD 和持续授权。
 - 不改变 CLI/HTTP DTO，不增加无关功能，不修改自动化 schedule，不执行 npm publish 或生产部署。
 - requirement 语义变化执行 `requirements-changed` 回 Spec；任何 Verify finding 默认修复。
@@ -77,7 +78,25 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 此处建议 `/clear`。
 
-## 子阶段 5：冻结、全量 Verify 与 Ship
+## 子阶段 5：requirements-changed 增量——纳入 #15/#16/#17 与最终 main
+
+1. 将 `origin/main@7c59eecf` 合入统一审查分支，冲突只按最终源代码重建生成物解决，禁止手工拼接
+   Dashboard hash assets。
+2. 将 #15 的 Host Plan desktop catalog/selected context 和 #16 的 document evidence timeline
+   kernel→server→decoder→Dashboard 链，以及 #17 的 Trace session rail/detail workspace 纳入
+   文件→capability 覆盖矩阵。
+3. 重跑 Host Plan 19 tests、Document timeline kernel/server/UI、Trace workspace 定向测试、全仓测试、Dashboard
+   全量测试、build、typecheck、docs、OpenSpec、architecture/comments/hygiene、audit 与 release gates。
+4. 使用 `tenon:design-taste-frontend` 对整个 Dashboard 重跑，不把 #15 的 desktop-only 原 PR
+   或 #17 的 desktop-only Trace 证据当作全 Dashboard 豁免；真实浏览器覆盖成功/加载/空/错误/禁用、
+   zh/en、主题、键盘和焦点。
+5. 重做完整 pre-Verify Standards + Spec review；任何 C/H/M finding 修复后从本子阶段重新验证。
+
+验收：新最终主干全部能力组合后 C0/H0/M0，生成物连续构建稳定，repo-zero。
+
+此处建议 `/clear`。
+
+## 子阶段 6：冻结、全量 Verify 与 Ship
 
 1. 干净 `npm ci` 后运行 root/full Dashboard、CLI、server、hooks/adapters/skills/bundle/oracle、
    typecheck、build、docs、OpenSpec、architecture/comments/hygiene、audit 和 package/tarball gates。

@@ -2,7 +2,9 @@
 
 ## Why
 
-2026-07-29 批次的开放非 Draft PR 已按用户最新授权先全部合入 `main`。这些 PR 同时改变了
+2026-07-29 批次的开放非 Draft PR 已按用户最新授权先全部合入 `main`。统一审查第一次冻结后又出现
+PR #15、#16 与 #17，因此旧 `907dac06`、`c78426e5` 基线均已通过 `requirements-changed` 作废；
+最终审查基线改为 `main@7c59eecfba9e8652d69e25dae01058ae1df783be`，且再次查询开放 PR 为空。这些 PR 同时改变了
 Dashboard 交互、CLI、Server 路由、共享解码契约、生成物和 OpenSpec 能力；单个 PR 的绿色检查不能
 替代最终组合状态的系统审查。主干中已经观察到 Dashboard 焦点恢复和 GovernanceRail 确认控件的
 时序波动，因此必须在发布前基于最终 `main` 做一次统一、可追溯、前后端全覆盖的 Review Change，
@@ -39,7 +41,8 @@ Explore 已将 requirement delta 收窄为：
 - `repository-architecture-compliance`：补充干净安装后的依赖安全门，Critical/High 不得进入可发布
   主干，并要求例外、覆盖和升级兼容性具有可复现证据。
 
-`host-target-plan`、`trace-timeline`、`loop-scope-preview`、`related-session-memory`、
+`host-target-plan`（含 #15 桌面 Host Plan 信息层次）、`document-evidence-timeline`、
+`trace-timeline`（含 #17 桌面 session rail 与 timeline detail workspace）、`loop-scope-preview`、`related-session-memory`、
 `prompt-routing-bypass`、`verification-evidence-composer`、`context-bundle-budget-preview` 与
 `open-source-documentation-experience` 仍属于组合回归范围，但本次调研未发现需要改变其 requirement
 语义的证据，因此不虚构 delta。

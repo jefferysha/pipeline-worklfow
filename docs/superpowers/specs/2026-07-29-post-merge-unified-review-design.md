@@ -8,7 +8,8 @@
 
 ## 约束与非目标
 
-- 基线固定为 `main@907dac067c17ed77fb440b91b20d64fd0f24773b`。
+- 基线固定为 `main@7c59eecfba9e8652d69e25dae01058ae1df783be`；旧 `907dac06`、`c78426e5`
+  frozen baseline 因后续出现并合并 PR #15/#16/#17 已失效。
 - 审查修复只使用当前独立 worktree/Change/`codex/` 分支。
 - 不改变自动化的每四小时配置，不修改 canonical state 或 `.pipeline.yaml`。
 - 不新增无关产品功能，不发布 npm 包或生产部署。
@@ -24,9 +25,21 @@
 | #11 | `loop-scope-preview` | Governance 空态与升档确认 | Loop scope DTO | row refresh TDD + browser |
 | #12 | `related-session-memory` | Progress 搜索、焦点与取消 | root-scoped bounded search | decoder/server/UI tests |
 | #9 | `prompt-routing-bypass` | 无新增 UI | hook/router/Linux stat | hook and portability gates |
+| #15 | `host-target-plan` | compact desktop catalog、selected context、操作选择 | 复用既有只读 Host Plan DTO | full Dashboard design/browser + Host Plan tests |
+| #16 | `document-evidence-timeline` | 文档 disclosure、旧 server unavailable | ledger receipt → snapshot optional DTO、脱敏 | kernel/server/decoder/UI/API/browser |
+| #17 | `trace-timeline` | desktop session rail、selected identity、timeline detail | 复用 metadata-only session/timeline API | concurrency/keyboard/i18n/a11y/full Dashboard |
 
 `verification-evidence-composer`、`context-bundle-budget-preview`、公开文档和生成物作为相邻组合面纳入
 全量回归。
+
+冻结前的 GitHub 开放 PR 查询为空。PR #16 因全仓并发限流测试在 CI 负载下使用 2 秒线程调度窗口
+而失败；将窗口改为 30 秒但保留相同强断言后，该测试连续五次、本地全仓 327 files/5741 tests、
+Dashboard 68 files/1198 tests 与 exact-head CI run `30452978039` 均通过。该修复只消除测试
+调度波动，不放宽产品并发门语义。
+
+PR #17 exact head `e4a07718b71d4ee080da57c072a8a35d185dbb82` 的 68 files/1203 Dashboard tests、
+完整构建、生成物重建和 GitHub Actions run `30454247261` 通过，独立全 diff 审查为
+C0/H0/M0/L0。它证明该 PR 可正常合并，但统一 Change 仍须在九 PR 组合基线上重验整个 Dashboard。
 
 ## 调研结果
 
