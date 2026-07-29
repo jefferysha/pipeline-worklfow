@@ -20,13 +20,12 @@ import { readAutomationSettings } from './automationConfig.js'
 import type { CadenceScheduler } from './cadence.js'
 import { readConfigSnapshot } from './config.js'
 import { listDockerImages } from './dockerImages.js'
-import { HOOK_METAS, readHooksMatrix } from './hooksConfig.js'
+import { HOOK_METAS, readHooksConfig } from './hooksConfig.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { buildRunDetail } from './runDetail.js'
 import { buildSecretsResponse } from './secrets.js'
 import { listAllSkillsDetailed } from './skillsRegistry.js'
 import { buildSnapshot, dedupeRoots, type SnapshotDeps } from './snapshot.js'
-import { listTraceSessions, readTraceRecords, type TraceStoreReader } from './traces.js'
 import { readChangeHistory } from './transition.js'
 import type { DashboardServerOptions, ServerPaths } from './types.js'
 import {
@@ -38,6 +37,8 @@ import {
   type WorkflowRootAnchor,
 } from './workflows.js'
 import { handleGetActivityRoutes } from './serverGetActivityRoutes.js'
+import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
+import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 
 type WorkflowRootCheck =
@@ -101,6 +102,7 @@ export async function handleGet(
   const boundPort = deps.boundPort()
   await handleGetActivityRoutes(req, res, path, deps)
   if (res.headersSent) return
+  if (handleGetTraceRoutes(req, res, path, { clock, sendJson, traceStore })) return
   const hostPlan = await resolveHostTargetPlanRoute(req.url ?? '/', path, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime })
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
@@ -108,25 +110,6 @@ export async function handleGet(
       try {
         const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) })
         return sendJson(res, 200, snap)
-      } catch (e) {
-        return sendJson(res, 500, { ok: false, error: errMsg(e) })
-      }
-    }
-    // ── #34d traffic 查看器数据端：TraceStore.listSessions / readRecords（#34e 只读本地、不外发）──
-    if (path === '/api/traces/sessions') {
-      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
-      try {
-        return sendJson(res, 200, listTraceSessions(traceStore, clock))
-      } catch (e) {
-        return sendJson(res, 500, { ok: false, error: errMsg(e) })
-      }
-    }
-    if (path === '/api/traces/records') {
-      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
-      const session = new URL(req.url ?? '/', 'http://localhost').searchParams.get('session')
-      if (!session) return sendJson(res, 400, { ok: false, error: '缺 session 查询参数' })
-      try {
-        return sendJson(res, 200, readTraceRecords(traceStore, session, clock))
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -198,11 +181,11 @@ export async function handleGet(
     //    /api/config、/api/skills/registry：本机回环 GET 不鉴权。
     if (path === '/api/hooks') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix: readHooksMatrix(root) })
+        const { matrix, promptSkipKeyword } = readHooksConfig(rootCheck.anchor)
+        return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

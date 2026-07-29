@@ -6,6 +6,9 @@
  * 注：老仓 docstring 写「19 个」但 tuple 实为 18 项（含空格的 "permissions instructions"）；
  * 以 tuple 为真相源，此处 18 项与之逐字对齐（老仓 dialogue.py:10-29）。
  */
+import type { DialogueTurn } from './types.js'
+
+const HOST_SUMMARY_TURN = Symbol('tenon.mem.host-summary')
 
 export const INJECTION_TAGS = [
   'system-reminder',
@@ -56,4 +59,15 @@ export function stripInjectionTags(text: string): string {
   out = out.replace(AGENTS_RE, '')
   out = out.replace(COLLAPSE_RE, '\n\n')
   return out.trim()
+}
+
+/** Preserve host-summary provenance internally without changing serialized CLI dialogue output. */
+export function hostSummaryTurn(text: string): DialogueTurn {
+  const turn: DialogueTurn = { role: 'user', text }
+  Object.defineProperty(turn, HOST_SUMMARY_TURN, { value: true })
+  return turn
+}
+
+export function isHostSummaryTurn(turn: DialogueTurn): boolean {
+  return Reflect.get(turn, HOST_SUMMARY_TURN) === true
 }

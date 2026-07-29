@@ -1,4 +1,4 @@
-import { ChevronDown, Layers3 } from 'lucide-react'
+import { ChevronDown, Layers3, ShieldCheck } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbWorkflowDef } from './workbenchDefinition'
 import { BTN_DANGER, BTN_GHOST, BTN_SOLID, ERR_NOTE, PILL } from './workbenchStyles'
@@ -46,7 +46,10 @@ export function WorkbenchHeader(props: {
         <button className={BTN_GHOST} data-testid="wb-workflow-new" onClick={() => props.onCreate('new')}>{t('workbench.workflow_new')}</button>
         <button className={BTN_GHOST} data-testid="wb-workflow-copy" onClick={() => props.onCreate('copy')} disabled={!props.def} title={props.readonly ? '保留系统默认流程的阶段与 Skill，创建一个可编辑副本' : '基于当前配置创建另一条工作流'}>{props.readonly ? '创建可编辑副本' : '另存副本'}</button>
         {!props.readonly && <button className={BTN_DANGER} data-testid="wb-workflow-delete" onClick={props.onDelete} disabled={!props.workflowName}>{t('workbench.workflow_delete')}</button>}
-        <button hidden tabIndex={-1} aria-hidden="true" data-testid="wb-governance-open" onClick={props.onGovernance} disabled={!props.def}>运行治理</button>
+        <button className={BTN_GHOST} data-testid="wb-governance-open" onClick={props.onGovernance} disabled={!props.def}>
+          <ShieldCheck className="size-3.5" aria-hidden="true" />
+          {t('workbench.gov_title')}
+        </button>
       </div>
       <span className="flex-1" />
       {props.readonly ? <span className={`${PILL} bg-fill-2 text-text-3`} data-testid="wb-ro-pill">{t('workbench.readonly_pill')}</span> : <>

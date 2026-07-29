@@ -42,8 +42,16 @@ export function AdvancedPanel({ snapshot }: AdvancedPanelProps): JSX.Element {
             const wired = caps[tool.cap] === true
             const Panel = wired ? PANELS[tool.key] : undefined
             return (
-              <li key={tool.key} className="flex items-center gap-2.5 text-[12.5px]" data-testid={`advanced-${tool.key}`}>
-                <span className="min-w-[130px] text-text-2">{t(`advanced.${tool.key}`)}</span>
+              <li
+                key={tool.key}
+                className={Panel
+                  ? 'flex min-w-0 flex-col items-stretch gap-2.5 text-[12.5px]'
+                  : 'flex items-center gap-2.5 text-[12.5px] mobile:flex-col mobile:items-start mobile:gap-1.5'}
+                data-testid={`advanced-${tool.key}`}
+              >
+                <span className={Panel ? 'font-bold text-text-2' : 'min-w-[130px] text-text-2 mobile:min-w-0'}>
+                  {t(`advanced.${tool.key}`)}
+                </span>
                 {Panel ? (
                   // 已接线数据端：真消费面板取代占位徽标
                   <Panel />

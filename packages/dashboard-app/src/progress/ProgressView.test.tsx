@@ -1174,7 +1174,7 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
     await openDrawer('gate-demo')
     fireEvent.click(screen.getByTestId('detail-close'))
     await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 40000 })
-    expect(document.activeElement).toBe(trigger)
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
   }, 50000)
 })
 

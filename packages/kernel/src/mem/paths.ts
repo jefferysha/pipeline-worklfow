@@ -5,7 +5,7 @@
  * claudeProjectDirFromCwd 字节级等于 collector encode_cwd（`[/\\:_.] → -`）。
  */
 import { join, resolve } from 'node:path'
-import type { MemFs } from './fs.js'
+import type { DiscoveryFileSource, MemFs } from './fs.js'
 
 const SEP_RE = /[/\\:_.]/g
 const PI_SEP_RE = /[/\\:]/g
@@ -82,7 +82,8 @@ export function walkDir(fs: MemFs, root: string): string[] {
   if (!fs.exists(root)) return out
   const stack = [root]
   while (stack.length) {
-    const cur = stack.pop()!
+    const cur = stack.pop()
+    if (cur === undefined) break
     for (const e of fs.readDir(cur)) {
       const full = join(cur, e.name)
       if (e.isDirectory) stack.push(full)
@@ -90,4 +91,136 @@ export function walkDir(fs: MemFs, root: string): string[] {
     }
   }
   return out
+}
+
+interface RankedFile {
+  path: string
+  mtime: number
+}
+
+function insertRecentFile(files: RankedFile[], candidate: RankedFile, limit: number): void {
+  let low = 0
+  let high = files.length
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    const current = files[mid]
+    if (current === undefined) break
+    if (candidate.mtime > current.mtime || (
+      candidate.mtime === current.mtime && candidate.path > current.path
+    )) high = mid
+    else low = mid + 1
+  }
+  files.splice(low, 0, candidate)
+  if (files.length > limit) files.pop()
+}
+
+/**
+ * Related Sessions-only bounded discovery. Directory entries are capped at the provider boundary,
+ * traversal prefers newer lexical layout directories, and only a fixed top-K file set is retained.
+ * Ordinary CLI callers keep walkDir's full-recall contract.
+ */
+export function walkDirForRelatedSearch(
+  fs: MemFs,
+  root: string,
+  accept: (path: string) => boolean,
+  fileLimit: number,
+  source: DiscoveryFileSource,
+  shouldDescend: (path: string, depth: number) => boolean = () => true,
+): string[] {
+  const budget = fs.contentReadBudget
+  if (
+    !budget?.remainingDiscoveryEntries
+    || !budget.consumeDiscoveryEntries
+    || !budget.remainingDiscoveryFiles
+    || !budget.consumeDiscoveryFiles
+    || !budget.shouldContinueDiscovery
+    || !budget.noteDiscoveryTruncated
+  ) {
+    return walkDir(fs, root)
+      .filter(accept)
+      .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
+      .slice(0, fileLimit)
+  }
+  if (!fs.exists(root) || fileLimit <= 0) return []
+
+  const files: RankedFile[] = []
+  const remainingFiles = budget.remainingDiscoveryFiles(source)
+  const effectiveFileLimit = Math.min(
+    fileLimit,
+    budget.maxDiscoveryFiles ?? fileLimit,
+    remainingFiles,
+  )
+  if (effectiveFileLimit <= 0) {
+    budget.noteDiscoveryTruncated()
+    return []
+  }
+  const stack: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }]
+  while (stack.length > 0) {
+    if (!budget.shouldContinueDiscovery(source)) {
+      budget.noteDiscoveryTruncated()
+      break
+    }
+    const current = stack.pop()
+    if (current === undefined) break
+    const remaining = budget.remainingDiscoveryEntries(source)
+    if (remaining <= 0) {
+      budget.noteDiscoveryTruncated()
+      break
+    }
+    const bounded = fs.readDirBounded?.(
+      current.path,
+      remaining,
+      () => budget.shouldContinueDiscovery?.(source) === true,
+    )
+    const checked = bounded ?? fs.readDirChecked?.(current.path)
+    const sourceEntries = checked?.entries ?? fs.readDir(current.path)
+    const entries = sourceEntries.slice(0, remaining)
+    if (bounded?.truncated || (!bounded && sourceEntries.length > remaining)) {
+      budget.noteDiscoveryTruncated()
+    }
+
+    const ranked: Array<{ entry: (typeof entries)[number]; path: string; mtime: number }> = []
+    for (const entry of entries) {
+      // Production readDirBounded already checks the wall-clock deadline before returning each
+      // entry. Do not discard those collected entries merely because consuming the exact entry
+      // allowance makes shouldContinueDiscovery false. Legacy injected readers still need the
+      // explicit per-entry deadline check here.
+      if (!bounded && !budget.shouldContinueDiscovery(source)) {
+        budget.noteDiscoveryTruncated()
+        break
+      }
+      budget.consumeDiscoveryEntries(source, 1)
+      const path = join(current.path, entry.name)
+      ranked.push({ entry, path, mtime: entry.isFile ? (fs.mtimeMs(path) ?? 0) : 0 })
+    }
+    ranked.sort((left, right) => {
+      if (left.entry.isDirectory !== right.entry.isDirectory) {
+        return left.entry.isDirectory ? -1 : 1
+      }
+      if (left.entry.isDirectory) return right.entry.name.localeCompare(left.entry.name)
+      return right.mtime - left.mtime || right.entry.name.localeCompare(left.entry.name)
+    })
+
+    const directories: Array<{ path: string; depth: number }> = []
+    for (const item of ranked) {
+      if (item.entry.isFile && accept(item.path)) {
+        if (files.length >= effectiveFileLimit) budget.noteDiscoveryTruncated()
+        insertRecentFile(files, { path: item.path, mtime: item.mtime }, effectiveFileLimit)
+      } else if (item.entry.isDirectory) {
+        const childDepth = current.depth + 1
+        if (!shouldDescend(item.path, childDepth)) continue
+        if (current.depth >= (budget.maxDiscoveryDepth ?? 0)) {
+          budget.noteDiscoveryTruncated()
+        } else {
+          directories.push({ path: item.path, depth: childDepth })
+        }
+      }
+    }
+    for (let index = directories.length - 1; index >= 0; index -= 1) {
+      const directory = directories[index]
+      if (directory !== undefined) stack.push(directory)
+    }
+  }
+  budget.consumeDiscoveryFiles(source, files.length)
+  return files.map((file) => file.path)
 }

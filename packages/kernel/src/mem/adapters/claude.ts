@@ -5,16 +5,20 @@
  * 布局：~/.claude/projects/<sanitized-cwd>/<sessionId>.jsonl，可选 <projectDir>/sessions-index.json
  * 提供 cwd/created/title。extract 只收 user/assistant text，丢 thinking/tool_use。
  */
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso } from '../fs.js'
-import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
+import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { findInJsonl, parseJsonlLines, readJsonlFirst } from '../jsonl.js'
-import { claudeProjectDirFromCwd, claudeProjectsRoot } from '../paths.js'
+import {
+  claudeProjectDirFromCwd,
+  claudeProjectsRoot,
+  walkDirForRelatedSearch,
+} from '../paths.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -24,22 +28,24 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   if (!fs.exists(root)) return []
   const out: MemSession[] = []
 
-  const allDirs = (): string[] => fs.readDir(root).filter((e) => e.isDirectory).map((e) => join(root, e.name))
-
-  // --cwd fast path：派生名不存在则全扫——per-session sameProject 仍兜底，永不静默返 0。
-  let projectDirs: string[]
-  if (f.cwd) {
+  // Only the legacy, unbudgeted CLI path materializes this full-recall directory list. Related
+  // Sessions starts with the bounded walker below, including when the derived project path is absent.
+  const projectDirs = (): string[] => {
+    const allDirs = (): string[] => fs.readDir(root)
+      .filter((entry) => entry.isDirectory)
+      .map((entry) => join(root, entry.name))
+    if (!f.cwd) return allDirs()
     const derived = claudeProjectDirFromCwd(fs, f.cwd)
-    projectDirs = fs.exists(derived) ? [derived] : allDirs()
-  } else {
-    projectDirs = allDirs()
+    return fs.exists(derived) ? [derived] : allDirs()
   }
 
-  for (const d of projectDirs) {
-    const entries = fs.readDir(d)
-
-    const indexRaw = fs.readText(join(d, 'sessions-index.json'))
+  const indexes = new Map<string, Map<string, Json>>()
+  const indexFor = (directory: string): Map<string, Json> => {
+    const cached = indexes.get(directory)
+    if (cached) return cached
     const indexById = new Map<string, Json>()
+    const indexPath = join(directory, 'sessions-index.json')
+    const indexRaw = fs.exists(indexPath) ? fs.readText(indexPath) : undefined
     if (indexRaw) {
       try {
         const index = JSON.parse(indexRaw)
@@ -49,33 +55,71 @@ export function claudeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
         /* 坏 index 忽略，退到 per-session 兜底 */
       }
     }
+    indexes.set(directory, indexById)
+    return indexById
+  }
 
-    for (const e of entries) {
-      if (!e.isFile || !e.name.endsWith('.jsonl')) continue
-      const filePath = join(d, e.name)
-      const sid = e.name.slice(0, -'.jsonl'.length)
-      const idx = indexById.get(sid)
-      let cwd: string | null = idx?.cwd ?? null
-      let created: string | null = idx?.created ?? null
-      const title: string | null = idx?.title ?? null
+  // A descendant cwd is stored in a sibling encoded shard rather than below the exact derived
+  // shard. Related Sessions therefore performs one bounded first-level scan from the provider root
+  // and lets the metadata scope check below admit only the requested project and its descendants.
+  const relatedRoot = root
+  const sessionEntries = fs.contentReadBudget
+    ? walkDirForRelatedSearch(
+      fs,
+      relatedRoot,
+      (file) => file.endsWith('.jsonl'),
+      Math.max(f.limit * 4, f.limit + 1),
+      'claude',
+      (directory) => relatedRoot === root && dirname(directory) === root,
+    ).map((file) => ({
+      directory: dirname(file),
+      entry: { name: basename(file), isFile: true, isDirectory: false },
+    }))
+    : projectDirs()
+      .flatMap((directory) => fs.readDir(directory)
+        .filter((entry) => entry.isFile && entry.name.endsWith('.jsonl'))
+        .map((entry) => ({ directory, entry })))
+      .sort((left, right) => {
+        const leftPath = join(left.directory, left.entry.name)
+        const rightPath = join(right.directory, right.entry.name)
+        return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0)
+      })
 
-      if (!cwd || !created) {
-        const text = fs.readText(filePath)
-        const evt = findInJsonl(text, (o) => typeof (o as Json)?.cwd === 'string', 100) as Json
-        cwd = cwd || (evt?.cwd ?? null)
-        if (!created) {
-          const first = readJsonlFirst(text) as Json
-          created = (evt?.timestamp ?? null) || (first?.timestamp ?? null)
-        }
-      }
-
-      const updated = mtimeIso(fs, filePath)
-      if (updated === undefined) continue
-      if (!inRangeOverlap(created, updated, f)) continue
-      if (f.cwd && cwd && !sameProject(cwd, f.cwd)) continue
-
-      out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
+  for (const { directory, entry } of sessionEntries) {
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted()
+      break
     }
+    const filePath = join(directory, entry.name)
+    const sid = entry.name.slice(0, -'.jsonl'.length)
+    const idx = indexFor(directory).get(sid)
+    let cwd: string | null = idx?.cwd ?? null
+    let created: string | null = idx?.created ?? null
+    const title: string | null = idx?.title ?? null
+
+    if (!cwd || !created) {
+      const metadata = readMemSessionMetadataChecked(fs, filePath)
+      const text = metadata.text
+      const evt = findInJsonl(text, (o) => typeof (o as Json)?.cwd === 'string', 100) as Json
+      cwd = cwd || (evt?.cwd ?? null)
+      if (!created) {
+        const first = readJsonlFirst(text) as Json
+        created = (evt?.timestamp ?? null) || (first?.timestamp ?? null)
+      }
+      if (f.cwd && !cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+    }
+
+    const updated = mtimeIso(fs, filePath)
+    if (updated === undefined) continue
+    if (!inRangeOverlap(created, updated, f)) continue
+    if (f.cwd && cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) continue
+    // The existing unbudgeted CLI historically trusted the exact derived shard when old logs had
+    // no cwd in their first 100 events. Preserve that contract; the privacy-reduced Dashboard scan
+    // visits sibling shards, so unknown cwd must fail closed there.
+    if (f.cwd && !cwd && fs.contentReadBudget) continue
+
+    out.push({ platform: 'claude', id: sid, title, cwd, created, updated, filePath })
+    if (fs.contentReadBudget && out.length >= f.limit) break
   }
   return out
 }
@@ -107,7 +151,7 @@ export function claudeExtractFromLines(lines: readonly Json[]): DialogueTurn[] {
     const msg = obj?.message
     if (t === 'user' && obj?.isCompactSummary === true) {
       const summary = summaryText(msg?.content)
-      turns = summary ? [{ role: 'user', text: `[compact summary]\n${summary}` }] : []
+      turns = summary ? [hostSummaryTurn(`[compact summary]\n${summary}`)] : []
       continue
     }
     if (!msg) continue
@@ -151,7 +195,7 @@ export function collectClaudeTurnsAndEvents(fs: MemFs, s: MemSession): { turns: 
     const msg = o?.message
     if (t === 'user' && o?.isCompactSummary === true) {
       const summary = summaryText(msg?.content)
-      state.turns = summary ? [{ role: 'user', text: `[compact summary]\n${summary}` }] : []
+      state.turns = summary ? [hostSummaryTurn(`[compact summary]\n${summary}`)] : []
       state.events = []
       continue
     }

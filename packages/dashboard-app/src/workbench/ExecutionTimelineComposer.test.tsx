@@ -68,8 +68,12 @@ function hooks(toggle = vi.fn()): HooksConfigState {
     matrix: {},
     loadError: null,
     toggleError: null,
+    promptSkipKeyword: 'no-tenon',
+    promptSkipBusy: false,
+    promptSkipError: null,
     busyKeys: new Set(),
     toggle,
+    savePromptSkipKeyword: vi.fn(async () => true),
     enabledCount: () => 3,
   }
 }

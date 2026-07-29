@@ -63,6 +63,26 @@ export type ConstraintDecision =
       readonly paths?: readonly string[]
     }
 
+export type ConstraintPathExplanation =
+  | {
+      readonly path: string
+      readonly verdict: 'allowed'
+      readonly reason: 'allowlist'
+      readonly matched_pattern: string
+    }
+  | {
+      readonly path: string
+      readonly verdict: 'blocked'
+      readonly reason: 'path-denied'
+      readonly matched_pattern: string
+    }
+  | {
+      readonly path: string
+      readonly verdict: 'blocked'
+      readonly reason: 'path-outside-allowlist'
+      readonly matched_pattern: null
+    }
+
 const EXCEED_ACTIONS = new Set<BudgetExceedAction>(['skip-run', 'pause-loop', 'halt-round'])
 const LEGACY_EXCEED_ACTIONS: Readonly<Record<string, BudgetExceedAction>> = {
   skip: 'skip-run', pause: 'pause-loop', halt: 'halt-round',
@@ -249,15 +269,35 @@ export function validateAutomationPolicySnapshot(input: unknown): AutomationPoli
   return deepFreeze({ ...payload, policy_version: expectedVersion, captured_at: capturedAt })
 }
 
-function pathDecision(
-  allowlist: readonly string[],
-  denylist: readonly string[],
-  input: ConstraintEvaluationInput,
-): ConstraintDecision {
-  const paths = input.paths ?? []
-  const denied = paths.filter((path) => denylist.some((pattern) => input.matches(path, pattern)))
+/** Explain every path without changing the aggregate gate's global deny-first behavior. */
+export function explainConstraintPaths(
+  policy: ConstraintPolicy,
+  operation: 'write' | 'merge',
+  paths: readonly string[],
+  matches: (path: string, pattern: string) => boolean,
+): readonly ConstraintPathExplanation[] {
+  const { allowlist, denylist } = policy[operation]
+  return paths.map((path) => {
+    const deniedBy = denylist.find((pattern) => matches(path, pattern))
+    if (deniedBy !== undefined) {
+      return { path, verdict: 'blocked', reason: 'path-denied', matched_pattern: deniedBy }
+    }
+    const allowedBy = allowlist.find((pattern) => matches(path, pattern))
+    return allowedBy === undefined
+      ? { path, verdict: 'blocked', reason: 'path-outside-allowlist', matched_pattern: null }
+      : { path, verdict: 'allowed', reason: 'allowlist', matched_pattern: allowedBy }
+  })
+}
+
+function pathDecision(policy: ConstraintPolicy, operation: 'write' | 'merge', input: ConstraintEvaluationInput): ConstraintDecision {
+  const explanations = explainConstraintPaths(policy, operation, input.paths ?? [], input.matches)
+  const denied = explanations
+    .filter((item) => item.reason === 'path-denied')
+    .map((item) => item.path)
   if (denied.length > 0) return { allowed: false, reason: 'path-denied', paths: denied }
-  const outside = paths.filter((path) => !allowlist.some((pattern) => input.matches(path, pattern)))
+  const outside = explanations
+    .filter((item) => item.reason === 'path-outside-allowlist')
+    .map((item) => item.path)
   if (outside.length > 0) return { allowed: false, reason: 'path-outside-allowlist', paths: outside }
   return { allowed: true }
 }
@@ -278,6 +318,6 @@ export function evaluateConstraintPolicy(
       : { allowed: true }
   }
   return input.operation === 'write'
-    ? pathDecision(policy.write.allowlist, policy.write.denylist, input)
-    : pathDecision(policy.merge.allowlist, policy.merge.denylist, input)
+    ? pathDecision(policy, 'write', input)
+    : pathDecision(policy, 'merge', input)
 }

@@ -3,13 +3,70 @@
  * 纯逻辑通过此面读磁盘字节；真 fs 缺省（nodeMemFs），mock/测试注入 fake 树。
  * 对位老仓 skills/pipeline/scripts/mem/adapters/internal/{jsonl,paths}.py 的 os 调用面。
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  opendirSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 
 export interface MemDirent {
   name: string
   isFile: boolean
   isDirectory: boolean
+}
+
+/** A text read whose byte ceiling was enforced before bytes entered memory. */
+export interface BoundedTextRead {
+  text: string
+  bytesRead: number
+  truncated: boolean
+  /** Exact source bytes when the provider can expose them, preserving UTF-8 across ranged reads. */
+  rawBytes?: Uint8Array
+}
+
+/** Directory read that distinguishes a successful empty directory from an unavailable source. */
+export interface CheckedDirectoryRead {
+  entries: MemDirent[]
+  unavailable: boolean
+}
+
+/** Directory read capped before entries are materialized in memory. */
+export interface BoundedDirectoryRead extends CheckedDirectoryRead {
+  truncated: boolean
+}
+
+export type DiscoveryFileSource = 'claude' | 'codex' | 'pi'
+
+/**
+ * Request-local content budget for storage adapters that do not read text files (currently OpenCode
+ * SQLite). It keeps their row reads inside the same aggregate budget as readTextBounded.
+ */
+export interface MemContentReadBudget {
+  readonly perSourceBytes: number
+  remainingBytes(): number
+  consume(bytes: number): void
+  noteSourceUnavailable(source: string): void
+  noteSourceTruncated(): void
+  noteTotalExhausted(): void
+  /** Related Sessions could not canonicalize a historical cwd and therefore excluded it. */
+  noteProjectScopeUnavailable?(): void
+  /** Related Sessions filesystem-discovery guard; absent on legacy injected budgets. */
+  remainingDiscoveryEntries?(source: DiscoveryFileSource): number
+  consumeDiscoveryEntries?(source: DiscoveryFileSource, entries: number): void
+  remainingDiscoveryFiles?(source: DiscoveryFileSource): number
+  consumeDiscoveryFiles?(source: DiscoveryFileSource, files: number): void
+  shouldContinueDiscovery?(source: DiscoveryFileSource): boolean
+  readonly maxDiscoveryDepth?: number
+  readonly maxDiscoveryFiles?: number
+  noteDiscoveryTruncated?(): void
 }
 
 export interface MemFs {
@@ -19,34 +76,174 @@ export interface MemFs {
   exists(path: string): boolean
   /** 列目录项（缺失/不可读 → []，对齐老仓 os.scandir 静默跳过） */
   readDir(path: string): MemDirent[]
+  /** 可选的诚实目录读取状态；Related Sessions 用它区分空目录与读取失败。 */
+  readDirChecked?(path: string): CheckedDirectoryRead
+  /** 可选的生产级有界目录读取；maxEntries 之外只探测一个条目以报告截断。 */
+  readDirBounded?(
+    path: string,
+    maxEntries: number,
+    shouldContinue?: () => boolean,
+  ): BoundedDirectoryRead
   /** 整文件文本（缺失/不可读 → undefined）；JSONL 逐行解析在纯逻辑层 */
   readText(path: string): string | undefined
+  /**
+   * 最多读取 maxBytes 个原始字节（缺失/不可读 → undefined）。
+   * 可选以保持既有注入 fake 兼容；生产 nodeMemFs 始终提供真正的读取层上限。
+   */
+  readTextBounded?(path: string, maxBytes: number): BoundedTextRead | undefined
+  /** 从 byte offset 开始的有界读取；生产 Related Sessions 用它避免 metadata 被重复计费。 */
+  readTextRangeBounded?(path: string, offset: number, maxBytes: number): BoundedTextRead | undefined
+  /** Optional request budget consumed by non-text storage adapters. */
+  contentReadBudget?: MemContentReadBudget
+  /** Canonical path lookup used only by privacy-scoped Related Sessions admission. */
+  realPath?(path: string): string | undefined
+  /** Marks a request-local wrapper that requires physical rather than lexical project scope. */
+  enforcePhysicalProjectScope?: boolean
   /** 文件 mtime 毫秒（缺失 → undefined），作 updated 时间源 */
   mtimeMs(path: string): number | undefined
   /** 进程环境变量（Pi 自定义会话目录用；fake 可省 → undefined） */
   env?(name: string): string | undefined
 }
 
+/** Enough for the first JSONL event while keeping foreign-project discovery inside the aggregate budget. */
+export const MEM_SESSION_METADATA_BYTES = 8 * 1024
+
+export interface MemSessionMetadataRead {
+  text: string | undefined
+  truncated: boolean
+}
+
+/**
+ * Related search discovers project identity from a bounded first-event prefix before admitting a
+ * session for full dialogue reads. Ordinary CLI callers retain the existing full-read behavior.
+ */
+export function readMemSessionMetadataChecked(fs: MemFs, path: string): MemSessionMetadataRead {
+  if (fs.contentReadBudget && fs.readTextBounded) {
+    const read = fs.readTextBounded(path, MEM_SESSION_METADATA_BYTES)
+    return { text: read?.text, truncated: read?.truncated === true }
+  }
+  return { text: fs.readText(path), truncated: false }
+}
+
+export function readMemSessionMetadata(fs: MemFs, path: string): string | undefined {
+  return readMemSessionMetadataChecked(fs, path).text
+}
+
 /** 真 node fs 实现（缺省）。homeOverride 供集成测试指向 fixture home 根。 */
 export function nodeMemFs(homeOverride?: string): MemFs {
   const home = homeOverride ?? homedir()
-  return {
-    home,
-    exists: (p) => existsSync(p),
-    readDir: (p) => {
-      try {
-        return readdirSync(p, { withFileTypes: true }).map((e) => ({
+  const readDirectory = (p: string): CheckedDirectoryRead => {
+    try {
+      return {
+        entries: readdirSync(p, { withFileTypes: true }).map((e) => ({
           name: e.name,
           isFile: e.isFile(),
           isDirectory: e.isDirectory(),
-        }))
-      } catch {
-        return []
+        })),
+        unavailable: false,
       }
-    },
+    } catch {
+      return { entries: [], unavailable: true }
+    }
+  }
+  const readDirectoryBounded = (
+    p: string,
+    maxEntries: number,
+    shouldContinue?: () => boolean,
+  ): BoundedDirectoryRead => {
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+      return { entries: [], unavailable: true, truncated: false }
+    }
+    let directory: ReturnType<typeof opendirSync> | undefined
+    try {
+      directory = opendirSync(p)
+      const entries: MemDirent[] = []
+      let truncated = false
+      for (;;) {
+        if (shouldContinue && !shouldContinue()) {
+          truncated = true
+          break
+        }
+        const entry = directory.readSync()
+        if (entry === null) break
+        if (entries.length >= maxEntries) {
+          truncated = true
+          break
+        }
+        entries.push({
+          name: entry.name,
+          isFile: entry.isFile(),
+          isDirectory: entry.isDirectory(),
+        })
+      }
+      return { entries, unavailable: false, truncated }
+    } catch {
+      return { entries: [], unavailable: true, truncated: false }
+    } finally {
+      try {
+        directory?.closeSync()
+      } catch {
+        /* best-effort close after a failed directory read */
+      }
+    }
+  }
+  const readTextRange = (p: string, offset: number, maxBytes: number): BoundedTextRead | undefined => {
+    if (
+      !Number.isSafeInteger(offset)
+      || offset < 0
+      || !Number.isSafeInteger(maxBytes)
+      || maxBytes < 0
+    ) return undefined
+    let fd: number | undefined
+    try {
+      fd = openSync(p, 'r')
+      const size = fstatSync(fd).size
+      const available = Math.max(0, size - offset)
+      const buffer = Buffer.allocUnsafe(Math.min(available, maxBytes))
+      let bytesRead = 0
+      while (bytesRead < buffer.byteLength) {
+        const count = readSync(fd, buffer, bytesRead, buffer.byteLength - bytesRead, offset + bytesRead)
+        if (count === 0) break
+        bytesRead += count
+      }
+      const finalSize = fstatSync(fd).size
+      const rawBytes = buffer.subarray(0, bytesRead)
+      return {
+        text: rawBytes.toString('utf8'),
+        bytesRead,
+        truncated: finalSize > offset + bytesRead,
+        rawBytes,
+      }
+    } catch {
+      return undefined
+    } finally {
+      if (fd !== undefined) {
+        try {
+          closeSync(fd)
+        } catch {
+          /* best-effort close after a failed read */
+        }
+      }
+    }
+  }
+  return {
+    home,
+    exists: (p) => existsSync(p),
+    readDir: (p) => readDirectory(p).entries,
+    readDirChecked: readDirectory,
+    readDirBounded: readDirectoryBounded,
     readText: (p) => {
       try {
         return readFileSync(p, 'utf8')
+      } catch {
+        return undefined
+      }
+    },
+    readTextBounded: (p, maxBytes) => readTextRange(p, 0, maxBytes),
+    readTextRangeBounded: readTextRange,
+    realPath: (p) => {
+      try {
+        return realpathSync(p)
       } catch {
         return undefined
       }

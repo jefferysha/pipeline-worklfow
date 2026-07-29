@@ -68,6 +68,26 @@ export interface SearchResult {
   warnings: MemWarning[]
 }
 
+/** Dashboard related-memory 的隐私收敛结果；刻意不携带 cwd/filePath/assistant 内容。 */
+export interface RelatedSessionMatch {
+  platform: MemPlatform
+  sessionId: string
+  title: string | null
+  updatedAt: string | null
+  score: number
+  hitCount: number
+  excerpt: string
+  descendantsMerged: number
+}
+
+export interface RelatedSessionSearchResult {
+  query: string
+  platform: MemPlatformFilter
+  partial: boolean
+  warnings: MemWarning[]
+  matches: RelatedSessionMatch[]
+}
+
 export interface ContextTurn {
   idx: number
   role: 'user' | 'assistant'

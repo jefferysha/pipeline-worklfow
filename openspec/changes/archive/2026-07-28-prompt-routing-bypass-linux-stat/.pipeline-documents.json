@@ -1,0 +1,409 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-28T08:41:09Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/prompt-routing-bypass-linux-stat/proposal.md",
+      "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T08:42:25Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T08:43:57Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T08:45:55Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T08:53:24Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T08:57:16Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "18c80302440ae43a148250a817b513f075b9e5e837871cdb6fe4dac64045393e",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-28-prompt-routing-bypass-linux-stat-design.md",
+      "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-28T08:43:56Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T08:45:55Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T08:53:25Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T08:57:16Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c6cff85dcb50cc8e0cc3c053c97aa1f7cb29d29ae5e6184eda56afc6c795f903",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-28-prompt-routing-bypass-linux-stat-explore.md",
+      "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-28T08:43:56Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T08:45:55Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T08:53:25Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T08:57:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1158021a3dbf85c81261360dc16a891578de046774b07e4d38279fd2861f3f9a",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/prompt-routing-bypass-linux-stat/design.md",
+      "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-28T08:43:56Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T08:43:57Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T08:45:55Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T08:53:25Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T08:57:16Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5574728d0ecef96068f5e31d3c7f163dd84e3c95ddf412f7b4b434b5976a9fae",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/prompt-routing-bypass-linux-stat/specs/prompt-routing-bypass/spec.md",
+      "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-28T08:45:54Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T08:53:26Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T08:57:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "000a24ff9aed4e58c328c467164fbaabdf167c6a3c208e0b7bde78ce19b989ff",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-prompt-routing-bypass-linux-stat.md",
+      "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T08:45:55Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:53:26Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:57:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-28-prompt-routing-bypass-linux-stat.md",
+      "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-28T08:45:55Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:47:28Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:53:26Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T08:57:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:10:35Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "bd41ddc6391a551ade9a4dc83d336a9ced07f197c08a096b9da18ecffd696f35",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-28-prompt-routing-bypass-linux-stat-verify.md",
+      "sha256": "f4fd6bf272e807dae55263f5058acfa397d2357a5dc19c072e1ef4e83f252850",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-28T09:10:34Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "f4fd6bf272e807dae55263f5058acfa397d2357a5dc19c072e1ef4e83f252850",
+          "readAt": "2026-07-28T09:12:17Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",7]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f4fd6bf272e807dae55263f5058acfa397d2357a5dc19c072e1ef4e83f252850",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/prompt-routing-bypass-linux-stat/applied-spec.md",
+      "sha256": "054063f017ef53384fec3e4e7e3fcee8a0473fb156c33f27211d6f9ccba62b78",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-28T09:11:40Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "054063f017ef53384fec3e4e7e3fcee8a0473fb156c33f27211d6f9ccba62b78",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/prompt-routing-bypass-linux-stat/tasks.md",
+      "sha256": "b4c6c3e154978e7045173f22561473948eb41886003207fcf17b9d34c04f1afa",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-28T09:12:39Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "b4c6c3e154978e7045173f22561473948eb41886003207fcf17b9d34c04f1afa",
+          "readAt": "2026-07-28T09:12:40Z",
+          "visitId": "[\"e273be89-232a-443d-8b8d-eb36757728c4\",8]"
+        }
+      ]
+    }
+  ]
+}

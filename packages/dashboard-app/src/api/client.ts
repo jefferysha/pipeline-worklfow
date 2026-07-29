@@ -20,6 +20,7 @@ export {
   patchTrackDefinition,
   postCreateChange,
   postHookToggle,
+  postPromptRoutingBypass,
   postMandatorySkills,
   postRouterPreview,
   postTrackDefinition,
@@ -29,6 +30,12 @@ export {
 } from './governanceClient'
 
 export { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate } from './loopsClient'
+export { postLoopScopePreview } from './loopScopePreview'
+export type {
+  LoopScopePreviewItem,
+  LoopScopePreviewReason,
+  LoopScopePreviewResponse,
+} from './loopScopePreview'
 
 export {
   ContextBundlePreviewApiError,
@@ -64,8 +71,10 @@ export {
   fetchSessionLinks,
   fetchTraceRecords,
   fetchTraceSessions,
+  fetchTraceTimeline,
 } from './auditClient'
 
+export { searchRelatedSessions } from './memoryClient'
 export {
   postVerificationEvidenceCompose,
   VerificationEvidenceApiError,
@@ -110,6 +119,13 @@ export type {
   TraceRecordsResponse,
   TraceSessionRow,
   TraceSessionsResponse,
+  TraceTimelineEntry,
+  TraceTimelineIntegrity,
+  TraceTimelineOutcome,
+  TraceTimelineResponse,
+  TraceTimelineSession,
+  TraceTimelineSummary,
+  TraceTimelineWarning,
   WbAttemptContext,
   WbLedgerRecord,
   WbRunDetail,
@@ -117,6 +133,13 @@ export type {
   WbRunRevision,
   WbTransitionRecord,
 } from './auditTypes'
+
+export type {
+  RelatedSessionMatch,
+  RelatedSessionPlatform,
+  RelatedSessionSearchInput,
+  RelatedSessionSearchResponse,
+} from './memoryTypes'
 
 export type {
   ContextBundleMode,

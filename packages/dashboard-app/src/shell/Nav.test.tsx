@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { Nav, PRIMARY_VIEWS } from './Nav'
 
@@ -182,8 +182,24 @@ describe('Nav 交互 + 徽标', () => {
   it('主题切换 light→dark', () => {
     const props = renderNav({ theme: 'light' })
     fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：浅色' })).toBe(screen.getByTestId('theme-toggle'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
     expect(props.onTheme).toHaveBeenCalledWith('dark')
+  })
+
+  it('主题切换 system→light，并以双语可见文本呈现系统主题', () => {
+    const props = renderNav({ theme: 'system' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByTestId('theme-toggle')).toHaveTextContent('系统')
+    expect(screen.getByRole('button', { name: '主题：系统' })).toBe(screen.getByTestId('theme-toggle'))
+    fireEvent.click(screen.getByTestId('theme-toggle'))
+    expect(props.onTheme).toHaveBeenCalledWith('light')
+  })
+
+  it('深色主题在操作前向屏幕阅读器朗读当前值', () => {
+    renderNav({ theme: 'dark' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    expect(screen.getByRole('button', { name: '主题：深色' })).toBe(screen.getByTestId('theme-toggle'))
   })
 
   it('decisionCount>0 徽标挂在「进度」项内显示计数（progress-badge）', () => {
@@ -231,6 +247,43 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(conn).toHaveAttribute('title', '实时已连接')
     expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
     expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
+  })
+
+  it('电脑端非模态设置浮层聚焦首控件，Escape 关闭并归还入口焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+
+    const theme = screen.getByTestId('theme-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('modal Dialog 位于设置浮层之上时，Escape 不关闭设置或抢走焦点', async () => {
+    renderNav()
+    const trigger = screen.getByTestId('nav-settings')
+    fireEvent.click(trigger)
+
+    const theme = screen.getByTestId('theme-toggle')
+    await waitFor(() => expect(theme).toHaveFocus())
+
+    const modal = document.createElement('div')
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    document.body.append(modal)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByTestId('nav-settings-panel')).toBeInTheDocument()
+    expect(theme).toHaveFocus()
+    expect(trigger).not.toHaveFocus()
+
+    modal.remove()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('nav-settings-panel')).toBeNull()
+    expect(trigger).toHaveFocus()
   })
 
   it('离线状态只在设置浮层内呈现', () => {

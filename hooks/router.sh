@@ -89,6 +89,9 @@ ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 . "$ROOT_HELPER"
 PROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$PROOT" ] || exit 0
+if [ -r "$INTENT_HELPER" ] && pipeline_prompt_should_skip_routing "$PROOT" "$PROMPT"; then
+  exit 0
+fi
 
 CHANGE_NAME="" CHANGE_PHASE="" CHANGE_TRACK="" CHANGE_WORKFLOW=""
 SESSION_CHANGE_NAME="" SESSION_CHANGE_PHASE="" SESSION_CHANGE_TRACK="" SESSION_CHANGE_WORKFLOW=""
@@ -252,13 +255,9 @@ else
   CHANGE_WORKFLOW=""
 fi
 
-hook_disabled() { # $1=root $2=hook $3=phase
-  [ -n "$1" ] && [ -n "$3" ] || return 1
-  grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
-}
 # 禁用判定必须早于任何冷生成解释器。
 ROUTER_PHASE="${CHANGE_PHASE:-open}"
-if hook_disabled "$PROOT" router "$ROUTER_PHASE"; then exit 0; fi
+if pipeline_hook_disabled "$PROOT" router "$ROUTER_PHASE"; then exit 0; fi
 
 PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
 MANIFEST="$PLUGIN_ROOT/templates/manifest.yaml"

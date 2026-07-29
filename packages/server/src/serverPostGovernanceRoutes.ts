@@ -44,7 +44,12 @@ import {
   writeChangeTaskPrompt,
 } from './changeLaunch.js'
 import { validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
-import { validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
+import {
+  validateHookToggleBody,
+  validatePromptRoutingBypassBody,
+  writeHookToggle,
+  writePromptRoutingBypass,
+} from './hooksConfig.js'
 import { applyLoopsUpdate, type LoopActivationValidator } from './loops.js'
 import { parsePipelineCliJson, type PipelineCliRunner } from './operations.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
@@ -172,16 +177,35 @@ export async function handlePostGovernanceRoutes(
       if (!root) {
         return sendJson(res, 400, { ok: false, error: 'root 必填' })
       }
-      // 信任锚：同 /api/loops/level、/api/workflows/:name 共用的「两侧规范化再比较」模式。
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        writeHookToggle(root, validated.value)
+        await writeHookToggle(rootCheck.anchor, validated.value)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
       return sendJson(res, 200, { ok: true, ...validated.value })
+    }
+
+    if (path === '/api/hooks/prompt-routing-bypass') {
+      const rawBody = await readJsonBody(req)
+      const validated = validatePromptRoutingBypassBody(rawBody)
+      if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error })
+      const root = typeof (rawBody as Record<string, unknown>).root === 'string'
+        ? (rawBody as Record<string, unknown>).root as string
+        : ''
+      if (!root) return sendJson(res, 400, { ok: false, error: 'root 必填' })
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        await writePromptRoutingBypass(rootCheck.anchor, validated.value)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        prompt_skip_keyword: validated.value.promptSkipKeyword,
+      })
     }
 
     // ── T21：POST /api/automation —— AFK 执行参数写回（.pipeline/automation.json）──

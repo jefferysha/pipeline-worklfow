@@ -7,6 +7,8 @@ import type {
   FieldName,
   FlowEngine,
   MemFs,
+  MemPlatform,
+  MemPlatformFilter,
   Phase,
   PipelineTodoProjection,
   ProductPaths,
@@ -179,8 +181,9 @@ export interface DashboardServerOptions {
    */
   webRoot?: string
   /**
-   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore（只读 listSessions/
-   * readRecords）则 GET /api/traces/* 供给本地捕获 + capabilities.traffic=true；未注入则占位（不谎报）。
+   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore 后保留旧 sessions/
+   * records API；仅当 adapter 同时支持 timeline reader 时 capabilities.traffic=true，避免新 Dashboard
+   * 对旧 records-only adapter 谎报可用。
    * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
    */
   traceStore?: TraceStoreReader
@@ -189,6 +192,12 @@ export interface DashboardServerOptions {
    * 显式 hostHome 构造 nodeMemFs(hostHome)，不重新读取 OS home。测试可注入 fixture adapter。
    */
   memFs?: MemFs
+  /**
+   * Related-session search application seam. Production leaves this unset and the server
+   * adapts the bounded kernel use case; HTTP integration tests can inject a controllable
+   * runner to prove concurrency and error mapping without depending on host session formats.
+   */
+  relatedSessionSearch?: RelatedSessionSearchRunner
   /** H11：starter 激活候选的完整运行接线校验；缺省由 manifest + runner roots 生产装配。 */
   validateLoopActivation?: LoopActivationValidator
   /**
@@ -214,5 +223,35 @@ export interface DashboardServer {
   listen(port?: number, host?: string): Promise<{ port: number; host: string }>
   close(): Promise<void>
 }
+
+export interface RelatedSessionSearchRequest {
+  root: string
+  query: string
+  platform: MemPlatformFilter
+}
+
+export interface RelatedSessionSearchMatch {
+  platform: MemPlatform
+  session_id: string
+  title?: string
+  updated_at?: string
+  score: number
+  hit_count: number
+  excerpt: string
+  descendants_merged: number
+}
+
+export interface RelatedSessionSearchResponse {
+  protocol: 'tenon-related-session-memory/v1'
+  query: string
+  platform: MemPlatformFilter
+  partial: boolean
+  warnings: Array<{ code: string; message: string }>
+  matches: RelatedSessionSearchMatch[]
+}
+
+export type RelatedSessionSearchRunner = (
+  request: RelatedSessionSearchRequest,
+) => RelatedSessionSearchResponse | Promise<RelatedSessionSearchResponse>
 
 export type { FieldName, FlowEngine, Phase, StateStore }

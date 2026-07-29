@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ApiError, fetchSnapshot, getToken, postTransition, subscribeSnapshot } from './client'
+import {
+  ApiError,
+  fetchSnapshot,
+  fetchTraceTimeline,
+  getToken,
+  postTransition,
+  subscribeSnapshot,
+} from './client'
 import { lastEventSource, resetEventSources } from '../test-setup'
 import { makeSnapshot } from '../testkit'
 
@@ -71,6 +78,76 @@ describe('fetchSnapshot', () => {
   it('!ok → ApiError 带状态码', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }))
     await expect(fetchSnapshot()).rejects.toThrow('500')
+  })
+})
+
+describe('fetchTraceTimeline', () => {
+  const timeline = {
+    generated_at: '2026-07-29T00:00:00.000Z',
+    outbound: 'local-only',
+    content: 'metadata-only',
+    session: {
+      id: 'session a',
+      client: 'codex',
+      proxy_mode: 'forward',
+      status: 'complete',
+      started_at: '2026-07-29T00:00:00.000Z',
+      updated_at: '2026-07-29T00:00:01.000Z',
+    },
+    total_count: 0,
+    returned_count: 0,
+    skipped_count: 0,
+    truncated: false,
+    integrity: 'complete',
+    warnings: [],
+    summary: {
+      success_count: 0,
+      error_count: 0,
+      unknown_count: 0,
+      total_duration_ms: null,
+      input_tokens: null,
+      output_tokens: null,
+      cached_input_tokens: null,
+    },
+    entries: [],
+  }
+
+  it('GETs the encoded session from the metadata-only endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => timeline,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchTraceTimeline('session a')).resolves.toEqual(timeline)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/traces/timeline?session=session%20a',
+      { headers: { Accept: 'application/json' } },
+    )
+  })
+
+  it('rejects HTTP failures and malformed disclosure responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'unknown session' }),
+    }))
+    await expect(fetchTraceTimeline('missing')).rejects.toThrow('404')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...timeline, outbound: 'remote' }),
+    }))
+    await expect(fetchTraceTimeline('session a')).rejects.toThrow('响应形状无效')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...timeline, session: { ...timeline.session, id: 'different-session' } }),
+    }))
+    await expect(fetchTraceTimeline('session a')).rejects.toThrow('响应形状无效')
   })
 })
 

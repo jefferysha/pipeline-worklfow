@@ -5,6 +5,111 @@
 # 继续（或点名 change）时，调用方才可把该候选注入为当前任务。这里仅做 shell
 # pattern 判定；用户文本始终保持数据，绝不 eval/source。
 
+HOOKS_CONFIG_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/hooks-config.sh"
+[ -r "$HOOKS_CONFIG_HELPER" ] || return 0 2>/dev/null || exit 0
+# shellcheck source=hooks-config.sh
+. "$HOOKS_CONFIG_HELPER"
+
+pipeline_prompt_skip_keyword_from_snapshot() { # stdout=有效 keyword（空表示显式禁用）
+  local line trimmed raw value keyword='no-tenon'
+  {
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  [ "$trimmed" = '{' ] || {
+    printf 'no-tenon'
+    return 0
+  }
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  [ "$trimmed" = '"version": 1,' ] || {
+    printf 'no-tenon'
+    return 0
+  }
+  IFS= read -r line || {
+    printf 'no-tenon'
+    return 0
+  }
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  case "$trimmed" in
+    '"prompt_skip_keyword": '*',') raw="${trimmed#'"prompt_skip_keyword": '}"; raw="${raw%,}" ;;
+    *)
+      printf 'no-tenon'
+      return 0
+      ;;
+  esac
+  case "$raw" in
+    '""') keyword='' ;;
+    \"*\")
+      value="${raw#\"}"
+      value="${value%\"}"
+      [ "$raw" = "\"$value\"" ] || {
+        printf 'no-tenon'
+        return 0
+      }
+      case "$value" in
+        [A-Za-z0-9]*)
+          case "$value" in *[!A-Za-z0-9_-]*) value='' ;; esac
+          ;;
+        *) value='' ;;
+      esac
+      [ -n "$value" ] && [ "${#value}" -le 32 ] || {
+        printf 'no-tenon'
+        return 0
+      }
+      keyword="$value"
+      ;;
+    *)
+      printf 'no-tenon'
+      return 0
+      ;;
+  esac
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    case "$trimmed" in
+      '"prompt_skip_keyword": '*)
+        printf 'no-tenon'
+        return 0
+        ;;
+    esac
+  done
+  printf '%s' "$keyword"
+  } <<< "$PIPELINE_HOOKS_CONFIG_SNAPSHOT"
+}
+
+pipeline_prompt_skip_keyword() { # $1=项目根；stdout=有效 keyword（空表示显式禁用）
+  pipeline_hooks_config_snapshot "${1:-}" || {
+    printf 'no-tenon'
+    return 0
+  }
+  pipeline_prompt_skip_keyword_from_snapshot
+}
+
+pipeline_prompt_should_skip_routing() { # $1=项目根 $2=prompt；0=只抑制本轮 router/breadcrumb
+  local root="${1:-}" prompt="${2:-}" keyword regex matched=1 restore_nocasematch=0
+  pipeline_hooks_config_snapshot "$root" || true
+  keyword="$(pipeline_prompt_skip_keyword_from_snapshot)"
+  [ -n "$keyword" ] || return 1
+  local LC_ALL=C
+  regex="(^|[^A-Za-z0-9_-])${keyword}($|[^A-Za-z0-9_-])"
+  if ! shopt -q nocasematch; then
+    shopt -s nocasematch
+    restore_nocasematch=1
+  fi
+  [[ "$prompt" =~ $regex ]] && matched=0
+  [ "$restore_nocasematch" -eq 0 ] || shopt -u nocasematch
+  return "$matched"
+}
+
 pipeline_prompt_rejects_resume() { # $1=prompt；0=明确要求新主题，不得恢复任何旧 change
   local prompt="${1:-}"
   [ -n "$prompt" ] || return 1

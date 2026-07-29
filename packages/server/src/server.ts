@@ -11,7 +11,7 @@ import {
   BUILTIN_TRACK_DEFINITIONS, BuiltinTrackDeleteError, BuiltinTrackPolicyError, ChangeScanFailedError, createBreadcrumbWriter, createFlowEngine,
   decodeWorkflowDef, createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createStateStore, machineStateScopeId,
   createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, listMemSessions, loadManifest,
-  listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, nodeMemFs, readRegistrySnapshot, RegistryRevisionConflictError,
+  listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, readRegistrySnapshot, RegistryRevisionConflictError,
   requireTrack, TrackAlreadyExistsError, TrackNotFoundError, TrackReferencedError, TrackReferencesInvalidatedError, updateTrack,
   validateWorkflow,
   stateStorageExistsSync, validateWorkflowTrackReferences, withRegistryGovernanceLock, withTrackRegistryLock,
@@ -19,7 +19,7 @@ import {
 } from '@tenon/kernel'
 import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@tenon/automation'
 import type {
-  ChangeRefScan, CreateTrackSpec, ExtendedManifestData, FlowEngine, GraduationFs, MemFs, StateStore, TrackDefinition,
+  ChangeRefScan, CreateTrackSpec, ExtendedManifestData, FlowEngine, GraduationFs, StateStore, TrackDefinition,
   ProjectTrackConfig, TrackRegistry, TrackValidationContext, UpdateTrackPatch, WorkflowDef,
 } from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
@@ -42,7 +42,7 @@ import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } fro
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { buildAfkReadiness } from './afkReadiness.js'
 import { listDockerImages } from './dockerImages.js'
-import { listTraceSessions, readTraceRecords } from './traces.js'
+import { hasTraceTimelineReader, listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition, readChangeHistory } from './transition.js'
 import { buildRunDetail } from './runDetail.js'
 import {
@@ -72,8 +72,8 @@ import {
 import { createServerTransport } from './serverTransport.js'
 import { createServerGovernance } from './serverGovernance.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
+import { createRelatedSessionMemoryServices } from './relatedSessionMemory.js'
 import { SERVER_VERSION } from './version.js'
-
 const MAX_POST_BODY = 64 * 1024
 const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
 
@@ -160,14 +160,13 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   const gitHeadSha = options.gitHeadSha
   const workspaceFingerprint = options.workspaceFingerprint
   const traceStore = options.traceStore
-  // v9-I：mem 会话检索 fs（只读宿主会话历史根，绝不写）。默认值必须绑定显式 hostHome；
-  // 无参数 nodeMemFs() 会重新读取 OS home，形成 paths.homeDir/hostHome 之外的第三作用域。
-  const memFs: MemFs = options.memFs ?? nodeMemFs(hostHome)
+  const { memFs, executor: relatedSessionSearch } =
+    createRelatedSessionMemoryServices({ hostHome, memFs: options.memFs, runner: options.relatedSessionSearch })
   // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
   // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
   const manifestPath = options.manifestPath
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
-  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）；
+  // traffic 仅注入 timeline-capable traceStore 时为真（旧 records-only adapter 不谎报新 UI 能力）；
   // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
   const operationRunner: PipelineCliRunner = options.runPipelineCli ?? runPipelineCli
   const operationsAvailable = options.runPipelineCli !== undefined || pipelineCliAvailable()
@@ -185,7 +184,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
     afk: true,
     loops: true,
     operations: operationsAvailable,
-    traffic: Boolean(traceStore),
+    traffic: traceStore !== undefined && hasTraceTimelineReader(traceStore),
     config: Boolean(manifestPath),
     router_preview: true,
     cadence: cadenceScheduler !== null,
@@ -321,6 +320,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       workspaceFingerprint, breadcrumb, manifestPath, paths, validateLoopActivation,
       mutateTrackForApi: mutateTrackForRoutes, trackRegistryBody, sendTrackError, errMsg,
       realGraduationFs: REAL_GRADUATION_FS,
+      relatedSessionSearch,
     })
   const mutationRouteDeps = {
     isLocalHost,

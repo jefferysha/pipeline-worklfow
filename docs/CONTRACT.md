@@ -319,6 +319,11 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 3. TypeScript strict、ESM、NodeNext；node ≥22。
 4. hook 热路径（PreToolUse/UserPromptSubmit shim）纯 bash：只做文件存在性/读缓存，**禁 spawn node**。
    breadcrumb 缓存由 CLI 在 transition 时写 `openspec/changes/<name>/.breadcrumb`，shim 只 cat。
+   `.pipeline/hooks.json` version 1 同时承载 `prompt_skip_keyword`：缺字段/非法值回退
+   `no-tenon`，显式 `""` 禁用。`router.sh` 与 `breadcrumb.sh` 只用 Bash 3.2 兼容逻辑做
+   ASCII 大小写不敏感的独立 token 匹配；命中仅抑制当前轮两类上下文输出，不影响
+   review acknowledgement、confirm、PreToolUse、安全门、Skill 证据或 Change 状态。server
+   的 Hook toggle 与 keyword 写回必须原子替换完整 canonical JSON 并互相保留字段。
    **唯一披露的窄例外**（2026-07-07，GOAL 清单 E6，`workflow-customization-engine` 计划
    Task 9）：`hooks/gate.sh` 在"当前 change 存在 + 声明的 `workflow` 字段非 `default`/未设 +
    本次调用是 `Skill` 工具"三条同时成立时，委托 `node .../pipeline.mjs internal-skill-gate`

@@ -12,9 +12,9 @@ function block(selector: string): string {
 }
 
 function hexToken(source: string, name: string): string {
-  const match = source.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))
-  if (!match?.[1]) throw new Error(`missing hex token: --${name}`)
-  return match[1]
+  const match = source.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6}|var\\(--([a-z0-9-]+)\\))`, 'i'))
+  if (!match?.[1]) throw new Error(`missing color token: --${name}`)
+  return match[2] ? hexToken(source, match[2]) : match[1]
 }
 
 function rgb(hex: string): [number, number, number] {

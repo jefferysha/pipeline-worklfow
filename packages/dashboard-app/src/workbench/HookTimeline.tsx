@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { fetchHooksConfig, postHookToggle, type WbHookEvent, type WbHookMeta } from '../api/client'
+import {
+  fetchHooksConfig,
+  postHookToggle,
+  postPromptRoutingBypass,
+  type WbHookEvent,
+  type WbHookMeta,
+} from '../api/client'
 import { useT } from '../i18n'
 
 /**
@@ -45,9 +51,13 @@ export interface HooksConfigState {
   matrix: Record<string, false>
   loadError: string | null
   toggleError: string | null
+  promptSkipKeyword: string | null
+  promptSkipBusy: boolean
+  promptSkipError: string | null
   /** 在途写回的 `<hook>.<阶段>` 键：对应开关禁用，防同键乱序竞态。 */
   busyKeys: ReadonlySet<string>
   toggle: (hook: string, phase: string, enabled: boolean) => void
+  savePromptSkipKeyword: (keyword: string) => Promise<boolean>
   /** 某阶段的启用 hook 数（含强制常开——它们真的在跑）；数据未就绪 → undefined。 */
   enabledCount: (phase: string) => number | undefined
 }
@@ -61,33 +71,44 @@ export interface HooksConfigState {
  */
 export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
   const { t } = useT()
+  const tRef = useRef(t)
+  tRef.current = t
   const [hooks, setHooks] = useState<WbHookMeta[] | null>(null)
   const [matrix, setMatrix] = useState<Record<string, false>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
   const [toggleError, setToggleError] = useState<string | null>(null)
+  const [promptSkipKeyword, setPromptSkipKeyword] = useState<string | null>(null)
+  const [promptSkipBusy, setPromptSkipBusy] = useState(false)
+  const [promptSkipError, setPromptSkipError] = useState<string | null>(null)
+  const promptSkipGeneration = useRef(0)
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
+    promptSkipGeneration.current += 1
     setHooks(null)
     setMatrix({})
     setLoadError(null)
     setToggleError(null)
+    setPromptSkipKeyword(null)
+    setPromptSkipBusy(false)
+    setPromptSkipError(null)
     fetchHooksConfig(root)
       .then((body) => {
         if (cancelled) return
         setHooks(body.hooks)
         setMatrix(body.matrix)
+        setPromptSkipKeyword(body.promptSkipKeyword)
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         // 加载失败不挡工作台其余区块：计数回落 '—' 占位、时序线区行内报错。
         if (cancelled) return
-        setLoadError(t('workbench.hk_load_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        setLoadError(tRef.current('workbench.hk_load_error'))
       })
     return () => {
       cancelled = true
     }
-  }, [root, t])
+  }, [root])
 
   // 故意不 useCallback：闭包要读最新 busyKeys 守卫（WorkbenchView 脏守卫四件套的同一条
   // React 记忆化纪律——冻结的快照会放行同键并发写）。
@@ -112,7 +133,9 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
           else delete next[key]
           return next
         })
-        const msg = t('workbench.hk_toggle_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') })
+        const msg = tRef.current('workbench.hk_toggle_error', {
+          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
+        })
         if (onError) onError(msg)
         else setToggleError(msg)
       })
@@ -125,12 +148,43 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       })
   }
 
+  async function savePromptSkipKeyword(keyword: string): Promise<boolean> {
+    if (promptSkipBusy) return false
+    const generation = promptSkipGeneration.current
+    setPromptSkipBusy(true)
+    setPromptSkipError(null)
+    try {
+      const saved = await postPromptRoutingBypass(root, keyword)
+      if (generation !== promptSkipGeneration.current) return false
+      setPromptSkipKeyword(saved)
+      return true
+    } catch {
+      if (generation !== promptSkipGeneration.current) return false
+      setPromptSkipError(tRef.current('workbench.hk_bypass_save_error'))
+      return false
+    } finally {
+      if (generation === promptSkipGeneration.current) setPromptSkipBusy(false)
+    }
+  }
+
   function enabledCount(phase: string): number | undefined {
     if (hooks === null) return undefined
     return hooks.filter((h) => !(`${h.id}.${phase}` in matrix)).length
   }
 
-  return { hooks, matrix, loadError, toggleError, busyKeys, toggle, enabledCount }
+  return {
+    hooks,
+    matrix,
+    loadError,
+    toggleError,
+    promptSkipKeyword,
+    promptSkipBusy,
+    promptSkipError,
+    busyKeys,
+    toggle,
+    savePromptSkipKeyword,
+    enabledCount,
+  }
 }
 
 export interface HookTimelineProps {
