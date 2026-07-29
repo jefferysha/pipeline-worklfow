@@ -14,6 +14,10 @@ function Subject({ onDeckTab = () => {} }: { onDeckTab?: (tab: DeckTab) => void 
       rowCount={4}
       deckTab={deckTab}
       deckCounts={{ all: 4, need: 1, run: 1, queue: 2 }}
+      filterSummary={{
+        shown: deckCountsFor(deckTab),
+        context: 4 - deckCountsFor(deckTab),
+      }}
       workflows={['default']}
       workflow="all"
       onDeckTab={(tab) => {
@@ -102,6 +106,10 @@ function SummarySubject({ deckTab }: { deckTab: DeckTab }): JSX.Element {
       rowCount={4}
       deckTab={deckTab}
       deckCounts={{ all: 4, need: 1, run: 0, queue: 3 }}
+      filterSummary={{
+        shown: deckTab === 'need' ? 1 : deckTab === 'run' ? 0 : deckTab === 'queue' ? 3 : 4,
+        context: deckTab === 'need' ? 3 : deckTab === 'run' ? 4 : deckTab === 'queue' ? 1 : 0,
+      }}
       workflows={[]}
       workflow="all"
       onDeckTab={() => {}}
@@ -109,4 +117,8 @@ function SummarySubject({ deckTab }: { deckTab: DeckTab }): JSX.Element {
       onCreate={() => {}}
     />
   )
+}
+
+function deckCountsFor(tab: DeckTab): number {
+  return { all: 4, need: 1, run: 1, queue: 2 }[tab]
 }

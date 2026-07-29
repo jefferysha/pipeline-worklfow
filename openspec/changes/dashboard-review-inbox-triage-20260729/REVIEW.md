@@ -26,3 +26,19 @@ Change: `dashboard-review-inbox-triage-20260729`
 - 禁用卡视觉仍保留 Workflow 阶段语境，但交互层级明确；筛选摘要与 tablist 形成紧凑、克制的分诊层。
 
 复评结论：CRITICAL/HIGH/MEDIUM 均为 0；LOW 无待处理项。
+
+## Verify 返工与第二轮 Build 复评
+
+首轮 Verify 的 Codex CLI 轨发现一个 MEDIUM：workflow 下拉会缩小画布范围，但新增摘要继续使用
+全项目 `deckCounts/rowCount`，组合筛选时可能播报当前画布中不存在的任务。
+
+- 红：新增 `release-train + 运行中` 组合测试，期望“匹配 0 个 · 上下文 1 个”，实际为
+  “匹配 1 个 · 上下文 5 个”。
+- 绿：页签徽标继续使用全项目 `deckCounts`；新增 `filterSummary` 单独从 `effectiveWf` 范围计算，
+  保持既有徽标契约并让 live summary 与当前画布一致。
+- 复评：组合测试通过；三份 Progress 定向测试 84/84、前端全量 1205/1205、全仓 build、
+  comments、architecture、repository hygiene 与 `git diff --check` 全部通过。
+
+第二轮 Build 复评结论：CRITICAL/HIGH/MEDIUM 均为 0。仍保留首轮 Reviewer 提出的 LOW：
+禁用上下文卡会以低透明度显示“打开 / Open”，但卡片不可点击、不可聚焦、不进入无障碍树且无
+hover 位移；它不影响当前分诊正确性，留给后续连贯文案批次评估。

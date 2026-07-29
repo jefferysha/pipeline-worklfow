@@ -542,7 +542,7 @@ describe('ProgressView workflow 筛选下拉', () => {
     expect(screen.queryByTestId('prg-wfpills')).toBeNull()
   })
 
-  it('选 release-train：画布只剩该组；页签计数不变；选全部还原', async () => {
+  it('选 release-train：画布只剩该组，页签徽标保持全局而状态摘要只统计当前画布', async () => {
     renderView()
     await act(async () => {})
     fireEvent.change(screen.getByTestId('prg-workflow-select'), { target: { value: 'release-train' } })
@@ -550,6 +550,9 @@ describe('ProgressView workflow 筛选下拉', () => {
     expect(screen.queryByTestId('prg-cv-group-proj-a-default')).toBeNull()
     expect(screen.getByTestId('prg-cv-group-proj-a-release-train')).toBeInTheDocument()
     expect(screen.getByTestId('prg9t-n-all').textContent).toBe('6')
+    fireEvent.click(screen.getByTestId('prg9t-tab-run'))
+    expect(screen.getByTestId('prg9t-n-run').textContent).toBe('1')
+    expect(screen.getByTestId('prg-filter-status')).toHaveTextContent('匹配 0 个 · 上下文 1 个')
     fireEvent.change(screen.getByTestId('prg-workflow-select'), { target: { value: 'all' } })
     expect(screen.getByTestId('prg-cv-group-proj-a-default')).toBeInTheDocument()
   })

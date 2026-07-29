@@ -26,3 +26,20 @@
 {"ts":"2026-07-29T13:35:34Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-29T13:35:35Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-07-29T13:48:07Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T13:51:54Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T13:52:28Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T13:52:28Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-29T13:52:28Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T13:52:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T13:52:28Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"6c7fcca4-6bed-4468-891b-1aef0cbc70ab"}
+{"ts":"2026-07-29T14:10:44Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-dashboard-review-inbox-triage-20260729-verify-fail.md"}
+{"ts":"2026-07-29T14:11:05Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-dashboard-review-inbox-triage-20260729-verify-fail.md"}
+{"ts":"2026-07-29T14:11:05Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T14:11:05Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-29T14:11:06Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T14:11:06Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T13:35:34Z authority_host_session=019fae04-b9db-7791-9ce6-51000e9ecb9b"}
+{"ts":"2026-07-29T14:11:07Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-29T14:11:33Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-29T14:11:33Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-29T14:11:33Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-29T14:11:33Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b55c2e24-b7df-4b5c-bda3-106836edf7a0"}

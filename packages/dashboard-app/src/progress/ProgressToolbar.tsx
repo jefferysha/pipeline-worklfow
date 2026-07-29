@@ -8,6 +8,7 @@ export interface ProgressToolbarProps {
   rowCount: number
   deckTab: DeckTab
   deckCounts: Record<DeckTab, number>
+  filterSummary: { shown: number; context: number }
   workflows: readonly string[]
   workflow: string
   onDeckTab: (tab: DeckTab) => void
@@ -20,6 +21,7 @@ export function ProgressToolbar({
   rowCount,
   deckTab,
   deckCounts,
+  filterSummary,
   workflows,
   workflow,
   onDeckTab,
@@ -134,8 +136,8 @@ export function ProgressToolbar({
             >
               <ListFilter className="h-3.5 w-3.5 text-(--accent)" aria-hidden="true" />
               {t('progress.filter_summary', {
-                shown: deckCounts[deckTab],
-                context: rowCount - deckCounts[deckTab],
+                shown: filterSummary.shown,
+                context: filterSummary.context,
               })}
             </p>
           )}
