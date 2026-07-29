@@ -34,12 +34,9 @@
   与 `aria-live="polite"`；零项目显示教学式 H1 与两条可复制命令；SSE 失败显示离线 status；
   不可达项目为非按钮元素并带 `aria-disabled="true"`。
 
-截图：
-
-- `docs/ux/shots/dashboard-ui-ux-overhaul-reconcile-20260729/final-overview-1024-light.png`
-- `docs/ux/shots/dashboard-ui-ux-overhaul-reconcile-20260729/final-projects-1440-light.png`
-- `docs/ux/shots/dashboard-ui-ux-overhaul-reconcile-20260729/final-projects-1920-dark.png`
-- `docs/ux/shots/dashboard-ui-ux-overhaul-reconcile-20260729/final-error-1200-dark.png`
+原始截图按仓库图片卫生规则保存在仓库外的验收证据目录；最终 Verify 轨使用
+`/tmp/tenon-final-track4.09sLXu/report-final.json` 统一登记截图清单、视口、页面身份和断言。
+仓库不提交 `docs/ux/shots/**` QA PNG，避免把临时验收图冒充正式文档资产。
 
 ## 第二轮复评
 

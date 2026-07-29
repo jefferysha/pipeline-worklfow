@@ -114,3 +114,4 @@
 {"ts":"2026-07-29T07:04:24Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"dcccf182-a32f-4d51-a166-56440cbf91b4"}
 {"ts":"2026-07-29T07:04:56Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fac27-200c-7fc3-b6a3-7c878da8551e"}
 {"ts":"2026-07-29T07:07:13Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-29T07:09:15Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/14"}
