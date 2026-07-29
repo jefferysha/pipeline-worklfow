@@ -1,25 +1,29 @@
-/**
- * trafficData —— tap 流量查看器数据端（#34d）。fetch 函数与响应形状随 dashboard-client-seam
- * 收拢迁入 api/client.ts（单一 HTTP 接缝），本模块 re-export 保持 TrafficPanel 的 import 面
- * 不变，并保留纯展示工具 recordSummary。#34e 护栏（只读本地捕获、GET-only、outbound=local-only）
- * 与错误文案均在 client 侧逐字保持。
- */
-
 export {
-  fetchTraceRecords,
   fetchTraceSessions,
-  type TraceRecordsResponse,
+  fetchTraceTimeline,
   type TraceSessionRow,
   type TraceSessionsResponse,
+  type TraceTimelineEntry,
+  type TraceTimelineOutcome,
+  type TraceTimelineResponse,
 } from '../api/client'
 
-/** 从一条记录抽取人读摘要（path + status；容错未知形状）。 */
-export function recordSummary(r: Record<string, unknown>): string {
-  const req = (r.request ?? {}) as Record<string, unknown>
-  const resp = (r.response ?? {}) as Record<string, unknown>
-  const method = typeof req.method === 'string' ? req.method : ''
-  const path = typeof req.path === 'string' ? req.path : ''
-  const status = resp.status != null ? String(resp.status) : ''
-  const id = typeof r.request_id === 'string' ? r.request_id : ''
-  return [id, `${method} ${path}`.trim(), status && `→ ${status}`].filter(Boolean).join('  ')
+import type { TraceTimelineEntry, TraceTimelineOutcome } from '../api/client'
+
+export type TraceTimelineFilter = 'all' | Extract<TraceTimelineOutcome, 'success' | 'error'>
+
+export function filterTimelineEntries(
+  entries: TraceTimelineEntry[],
+  filter: TraceTimelineFilter,
+): TraceTimelineEntry[] {
+  if (filter === 'all') return entries
+  return entries.filter((entry) => entry.outcome === filter)
+}
+
+export function actualTokenTotal(
+  entry: Pick<TraceTimelineEntry, 'input_tokens' | 'output_tokens'>,
+): number | null {
+  const { input_tokens: input, output_tokens: output } = entry
+  if (input === null || output === null) return null
+  return Math.min(Number.MAX_SAFE_INTEGER, input + output)
 }

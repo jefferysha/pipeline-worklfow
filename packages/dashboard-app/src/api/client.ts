@@ -64,6 +64,7 @@ export {
   fetchSessionLinks,
   fetchTraceRecords,
   fetchTraceSessions,
+  fetchTraceTimeline,
 } from './auditClient'
 
 export {
@@ -110,6 +111,13 @@ export type {
   TraceRecordsResponse,
   TraceSessionRow,
   TraceSessionsResponse,
+  TraceTimelineEntry,
+  TraceTimelineIntegrity,
+  TraceTimelineOutcome,
+  TraceTimelineResponse,
+  TraceTimelineSession,
+  TraceTimelineSummary,
+  TraceTimelineWarning,
   WbAttemptContext,
   WbLedgerRecord,
   WbRunDetail,

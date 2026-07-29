@@ -4,7 +4,7 @@
  * 老仓真相源：trace_store.py create_session/get_or_create_session/append_record/finalize_session。
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createTraceStore } from './trace-store.js'
 import { rmDir, tempTapDir } from './test-support.js'
@@ -58,6 +58,122 @@ describe('appendRecord —— 真 JSONL 落盘', () => {
     const raw = readFileSync(join(dir, 'records', `${id}.jsonl`), 'utf8')
     expect(raw.endsWith('\n')).toBe(true)
     expect(() => JSON.parse(raw.trim())).not.toThrow()
+  })
+})
+
+describe('readRecordWindow —— 最近记录的有界、诚实窗口', () => {
+  it('长会话只返回最近 200 条，保持捕获顺序并标记 record-limit', async () => {
+    const { store } = await freshStore()
+    const id = store.createSession()
+    for (let turn = 1; turn <= 205; turn += 1) {
+      store.appendRecord(id, { turn })
+    }
+
+    const window = store.readRecordWindow(id)
+
+    expect(window.records).toHaveLength(200)
+    expect(window.records[0]?.turn).toBe(6)
+    expect(window.records[199]?.turn).toBe(205)
+    expect(window).toMatchObject({
+      total_count: 205,
+      returned_count: 200,
+      skipped_count: 0,
+      truncated: true,
+      integrity: 'complete',
+      warnings: ['record-limit'],
+    })
+  })
+
+  it('损坏行不伪装成完整数据，按稳定 warning code 报告', async () => {
+    const { store, dir } = await freshStore()
+    const id = store.createSession()
+    store.appendRecord(id, { turn: 1 })
+    store.appendRecord(id, { turn: 2 })
+    writeFileSync(
+      join(dir, 'records', `${id}.jsonl`),
+      `${JSON.stringify({ turn: 1 })}\nnot-json\n`,
+      'utf8',
+    )
+
+    const window = store.readRecordWindow(id)
+
+    expect(window.records.map((record) => record.turn)).toEqual([1])
+    expect(window).toMatchObject({
+      total_count: 2,
+      returned_count: 1,
+      skipped_count: 1,
+      truncated: false,
+      integrity: 'partial',
+      warnings: ['malformed-record'],
+    })
+  })
+
+  it('sidecar 与可见文件计数不一致时 total_count 保持已知下界且显式 partial', async () => {
+    const { store, dir } = await freshStore()
+    const id = store.createSession()
+    store.appendRecord(id, { turn: 1 })
+    writeFileSync(
+      join(dir, 'records', `${id}.jsonl`),
+      `${JSON.stringify({ turn: 1 })}\n${JSON.stringify({ turn: 2 })}\n`,
+      'utf8',
+    )
+
+    const window = store.readRecordWindow(id)
+
+    expect(window.total_count).toBe(2)
+    expect(window.returned_count).toBe(2)
+    expect(window.integrity).toBe('partial')
+    expect(window.warnings).toEqual(['count-mismatch'])
+  })
+
+  it('单条超大记录越过 8 MiB 时不无界读取并报告 byte-limit', async () => {
+    const { store, dir } = await freshStore()
+    const id = store.createSession()
+    store.appendRecord(id, { turn: 1 })
+    writeFileSync(
+      join(dir, 'records', `${id}.jsonl`),
+      `${JSON.stringify({ turn: 1, payload: 'x'.repeat(8 * 1024 * 1024) })}\n`,
+      'utf8',
+    )
+
+    const window = store.readRecordWindow(id)
+
+    expect(window.records).toEqual([])
+    expect(window.returned_count).toBe(0)
+    expect(window.truncated).toBe(true)
+    expect(window.integrity).toBe('partial')
+    expect(window.warnings).toEqual(['byte-limit'])
+  })
+
+  it('已知空会话返回完整空窗口，未知会话也保持 store 兼容空结果', async () => {
+    const { store } = await freshStore()
+    const id = store.createSession()
+
+    expect(store.readRecordWindow(id)).toMatchObject({
+      total_count: 0,
+      returned_count: 0,
+      skipped_count: 0,
+      truncated: false,
+      integrity: 'complete',
+      warnings: [],
+      records: [],
+    })
+    expect(store.readRecordWindow('missing')).toMatchObject({
+      total_count: 0,
+      returned_count: 0,
+      records: [],
+    })
+  })
+
+  it('拒绝 records 符号链接越过 trace root', async () => {
+    const { store, dir } = await freshStore()
+    const id = store.createSession()
+    const outside = join(dir, '..', `${id}-outside.jsonl`)
+    writeFileSync(outside, `${JSON.stringify({ turn: 99 })}\n`, 'utf8')
+    dirs.push(outside)
+    symlinkSync(outside, join(dir, 'records', `${id}.jsonl`))
+
+    expect(() => store.readRecordWindow(id)).toThrow('unsafe trace records path')
   })
 })
 

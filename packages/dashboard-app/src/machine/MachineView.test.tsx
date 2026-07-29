@@ -22,6 +22,31 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('MachineView 统一就绪与跨项目风险', () => {
+  it('把已接线 Trace timeline 暴露在真实机器页诊断入口', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/traces/sessions') {
+        return new Response(JSON.stringify({
+          generated_at: 'now',
+          outbound: 'local-only',
+          count: 0,
+          sessions: [],
+        }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    const snapshot = makeSnapshot([makeProject(ROOT, [])], {
+      capabilities: { operations: true, traffic: true },
+    })
+    render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    expect(await screen.findByTestId('machine-diagnostics')).toContainElement(screen.getByTestId('advanced-panel'))
+    expect(screen.getByTestId('advanced-traffic')).toHaveTextContent('Trace 时间线')
+    expect(await screen.findByTestId('traffic-empty')).toHaveTextContent('暂无捕获会话')
+  })
+
   it('集中显示 Docker/镜像/Codex/技能事实，缺镜像与未装技能形成可行动 blocker', async () => {
     const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
