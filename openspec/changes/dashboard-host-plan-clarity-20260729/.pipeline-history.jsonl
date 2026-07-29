@@ -41,3 +41,4 @@
 {"ts":"2026-07-29T08:28:49Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-29T08:28:49Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"e7fa15f7-0a50-466b-b258-bacd2b16a042"}
 {"ts":"2026-07-29T08:30:11Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-29T08:31:59Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/15"}

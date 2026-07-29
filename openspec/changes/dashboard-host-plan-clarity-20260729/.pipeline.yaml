@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/15
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -41,7 +41,7 @@ automation_cause: ""
 pipeline_run_id: 7882fb8a-4ead-4600-b62f-599018880ae1
 pipeline_transition_sequence: 5
 pipeline_transition_head: e7fa15f7-0a50-466b-b258-bacd2b16a042
-pipeline_state_revision: 21
-pipeline_state_revision_id: 374d12c1-cdf9-4973-8a16-c331373a6bc5
-pipeline_state_digest: a4cce141c6bac754c943f679195cff3e583527ca3c38e236e6a11dc67777c229
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjEsInJldmlzaW9uSWQiOiIzNzRkMTJjMS1jZGY5LTQ5NzMtOGExNi1jMzMxMzczYTZiYzUiLCJwYXlsb2FkRGlnZXN0IjoiYTEzOTQ4N2RlZWE4Zjk3YmUzMjU2ZTMwNmQxZGNjZTlmYWYzNWZjN2ZkZmRjZGFjY2ZjOWI1YTVjNzc4NzMzYiJ9
+pipeline_state_revision: 22
+pipeline_state_revision_id: 9cbbed8d-651e-42c5-a976-69c83204e68e
+pipeline_state_digest: ffe76ec6e1465f073f3f7550a0fdc7342722f42039c2185cc97110fe9287b4be
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjIsInJldmlzaW9uSWQiOiI5Y2JiZWQ4ZC02NTFlLTQyYzUtYTk3Ni02OWM4MzIwNGU2OGUiLCJwYXlsb2FkRGlnZXN0IjoiMGVkMGJhNDNjZTlmZWFkNTYzMmM4MjMwMDczNmZkYTkxZjUwMTI0NGIyYzMwYTZkMTJiN2M1MmI4ZTE3Yjg0NSJ9
