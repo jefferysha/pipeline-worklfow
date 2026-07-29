@@ -302,14 +302,18 @@ describe('ProgressView 状态页签（默认全部/计数=分类总数/等待中
     await act(async () => {})
   })
 
-  it('切「运行中」：画布未命中的小卡 data-dim 淡出（不移除）；页签计数不随筛选变', async () => {
+  it('切「运行中」：未命中卡保留上下文但不可交互或被辅助技术读取，并公开精确摘要', async () => {
     renderView()
     fireEvent.click(screen.getByTestId('prg9t-tab-run'))
     expect(screen.getByTestId('prg9t-tab-run').getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('prg-cv-chg-afk-demo').getAttribute('data-dim')).toBeNull()
     for (const name of ['gate-demo', 'hotfix-login', 'board-demo', 'changelog-cn']) {
-      expect(screen.getByTestId(`prg-cv-chg-${name}`)).toHaveAttribute('data-dim', 'true')
+      const card = screen.getByTestId(`prg-cv-chg-${name}`)
+      expect(card).toHaveAttribute('data-dim', 'true')
+      expect(card).toBeDisabled()
+      expect(card).toHaveAttribute('aria-hidden', 'true')
     }
+    expect(screen.getByTestId('prg-filter-status')).toHaveTextContent('匹配 1 个 · 上下文 5 个')
     expect(screen.getByTestId('prg9t-n-all').textContent).toBe('6')
     expect(screen.getByTestId('prg9t-n-need').textContent).toBe('3')
     await act(async () => {})

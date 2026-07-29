@@ -287,8 +287,10 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     data-sbx={change.sandbox || undefined}
                                     data-dim={change.dimmed || undefined}
                                     data-on={change.selected || undefined}
+                                    disabled={change.dimmed}
+                                    aria-hidden={change.dimmed || undefined}
                                     onClick={(event) => onOpen(change.key, event.currentTarget)}
-                                    className="group relative flex min-h-[196px] w-full flex-col overflow-hidden rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-border-2 hover:shadow-md active:translate-y-0 data-[dim=true]:opacity-30 data-[on=true]:border-(--accent) data-[on=true]:ring-1 data-[on=true]:ring-ring motion-reduce:transform-none mobile:min-h-[184px]"
+                                    className="group relative flex min-h-[196px] w-full flex-col overflow-hidden rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-border-2 hover:shadow-md active:translate-y-0 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:border-border disabled:hover:shadow-xs data-[dim=true]:opacity-30 data-[on=true]:border-(--accent) data-[on=true]:ring-1 data-[on=true]:ring-ring motion-reduce:transform-none mobile:min-h-[184px]"
                                   >
                                     <span className="flex items-center justify-between gap-2">
                                       <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[9px] font-bold tracking-[.08em] ${meta.chip}`}>

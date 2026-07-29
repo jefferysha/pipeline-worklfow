@@ -1,4 +1,5 @@
-import { ChevronDown, Plus } from 'lucide-react'
+import { useRef, type KeyboardEvent } from 'react'
+import { ChevronDown, ListFilter, Plus } from 'lucide-react'
 import { PageHeader } from '../shared/PageHeader'
 import { DECK_TABS, type DeckTab, type Tr } from './progressViewModel'
 
@@ -25,6 +26,32 @@ export function ProgressToolbar({
   onWorkflow,
   onCreate,
 }: ProgressToolbarProps): JSX.Element {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number): void {
+    let nextIndex: number
+    switch (event.key) {
+      case 'ArrowRight':
+        nextIndex = (index + 1) % DECK_TABS.length
+        break
+      case 'ArrowLeft':
+        nextIndex = (index - 1 + DECK_TABS.length) % DECK_TABS.length
+        break
+      case 'Home':
+        nextIndex = 0
+        break
+      case 'End':
+        nextIndex = DECK_TABS.length - 1
+        break
+      default:
+        return
+    }
+    event.preventDefault()
+    const nextTab = DECK_TABS[nextIndex]
+    onDeckTab(nextTab)
+    tabRefs.current[nextIndex]?.focus()
+  }
+
   return (
     <>
       <PageHeader
@@ -51,46 +78,66 @@ export function ProgressToolbar({
         )}
       />
       {rowCount > 0 && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
-          <div className="min-w-0 max-w-full overflow-x-auto pb-1 [scrollbar-width:thin]">
-            <div
-              className="inline-flex w-max items-center gap-1 rounded-xl bg-fill p-1"
-              role="tablist"
-              aria-label={t('progress.tabs_label')}
-              data-testid="prg9t-tabs"
-            >
-              {DECK_TABS.map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
-                  aria-selected={deckTab === tab}
-                  data-testid={`prg9t-tab-${tab}`}
-                  onClick={() => onDeckTab(tab)}
-                >
-                  {t(`progress.tab_${tab}`)}
-                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-btn-fg" data-testid={`prg9t-n-${tab}`}>
-                    {deckCounts[tab]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-          {workflows.length > 0 && (
-            <label className="relative max-[760px]:basis-full">
-              <span className="sr-only">{t('progress.workflow_filter')}</span>
-              <select
-                className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
-                data-testid="prg-workflow-select"
-                value={workflow}
-                onChange={(event) => onWorkflow(event.target.value)}
+        <div className="mb-5" data-anim="prg-chrome" data-testid="prg-filterbar">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 max-w-full overflow-x-auto pb-1 [scrollbar-width:thin]">
+              <div
+                className="inline-flex w-max items-center gap-1 rounded-xl bg-fill p-1"
+                role="tablist"
+                aria-label={t('progress.tabs_label')}
+                data-testid="prg9t-tabs"
               >
-                <option value="all">{t('progress.wf_all')}</option>
-                {workflows.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
-            </label>
+                {DECK_TABS.map((tab, index) => (
+                  <button
+                    key={tab}
+                    ref={(node) => { tabRefs.current[index] = node }}
+                    type="button"
+                    role="tab"
+                    tabIndex={deckTab === tab ? 0 : -1}
+                    className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
+                    aria-selected={deckTab === tab}
+                    data-testid={`prg9t-tab-${tab}`}
+                    onClick={() => onDeckTab(tab)}
+                    onKeyDown={(event) => handleTabKeyDown(event, index)}
+                  >
+                    {t(`progress.tab_${tab}`)}
+                    <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-btn-fg" data-testid={`prg9t-n-${tab}`}>
+                      {deckCounts[tab]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {workflows.length > 0 && (
+              <label className="relative max-[760px]:basis-full">
+                <span className="sr-only">{t('progress.workflow_filter')}</span>
+                <select
+                  className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
+                  data-testid="prg-workflow-select"
+                  value={workflow}
+                  onChange={(event) => onWorkflow(event.target.value)}
+                >
+                  <option value="all">{t('progress.wf_all')}</option>
+                  {workflows.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
+              </label>
+            )}
+          </div>
+          {deckTab !== 'all' && (
+            <p
+              className="mt-2 flex items-center gap-1.5 px-1 text-xs font-medium text-text-3"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              data-testid="prg-filter-status"
+            >
+              <ListFilter className="h-3.5 w-3.5 text-(--accent)" aria-hidden="true" />
+              {t('progress.filter_summary', {
+                shown: deckCounts[deckTab],
+                context: rowCount - deckCounts[deckTab],
+              })}
+            </p>
           )}
         </div>
       )}
