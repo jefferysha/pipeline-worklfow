@@ -56,7 +56,7 @@ describe('AdvancedPanel（病灶③：debug 工具降级为折叠占位）', () 
     for (const key of ['traffic', 'runtime']) {
       expect(screen.getByTestId(`advanced-status-${key}`).textContent).toContain('占位')
     }
-    expect(screen.getByTestId('advanced-traffic').textContent).toMatch(/M8/)
+    expect(screen.getByTestId('advanced-traffic').textContent).toContain('metadata-only')
   })
 
   it('Task 8：afk 已升格为一级导航 <旧 AFK 工作台/>，即便 server 声明 afk=true，Advanced 折叠面也不再渲染 afk 摘要/占位（避免两份视图打架）', () => {
@@ -81,5 +81,6 @@ describe('AdvancedPanel（病灶③：debug 工具降级为折叠占位）', () 
     expect(await screen.findByTestId('traffic-panel')).toBeInTheDocument()
     expect(screen.queryByTestId('advanced-status-traffic')).toBeNull()
     expect(screen.getByTestId('advanced-status-runtime').textContent).toContain('占位')
+    expect(screen.getByTestId('advanced-runtime')).toHaveClass('mobile:flex-col', 'mobile:items-start')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { Onboarding } from './Onboarding'
 
@@ -7,6 +7,8 @@ beforeEach(() => {
   localStorage.clear()
 })
 afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -27,6 +29,7 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
   it('渲染标题 + 诚实框架，不再要求用户输入本机绝对路径', () => {
     renderOb()
     const card = screen.getByTestId('onboard-no-project')
+    expect(screen.getByRole('heading', { level: 1, name: '还没有注册任何项目' })).toBeInTheDocument()
     expect(card).toBeInTheDocument()
     expect(card.textContent).toContain('终端')
     expect(screen.queryByTestId('project-register-form')).toBeNull()
@@ -46,6 +49,8 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     // 每条都有独立复制钮
     expect(screen.getByTestId('onboard-copy')).toBeInTheDocument()
     expect(screen.getByTestId('onboard-copy-doctor')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '复制命令：tenon init my-change --track chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '复制命令：tenon doctor' })).toBeInTheDocument()
     expect(screen.queryByTestId('onboard-cmd-setup')).toBeNull()
     expect(screen.getByTestId('onboard-no-project')).not.toHaveTextContent('tenon setup')
   })
@@ -56,9 +61,70 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     renderOb()
     fireEvent.click(screen.getByTestId('onboard-copy'))
     await waitFor(() => expect(screen.getByTestId('onboard-copy').textContent).toContain('已复制'))
+    expect(screen.getByTestId('onboard-copy')).not.toHaveTextContent('✓')
+    expect(screen.getByTestId('onboard-copy').querySelector('svg')).not.toBeNull()
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('tenon init'))
     fireEvent.click(screen.getByTestId('onboard-copy-doctor'))
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('tenon doctor'))
+  })
+
+  it('重复复制以最后一次为准，并在命令行卸载时清理反馈 timer', async () => {
+    vi.useFakeTimers()
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-project" />
+      </I18nProvider>,
+    )
+    const copy = screen.getByTestId('onboard-copy')
+
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+    })
+    act(() => vi.advanceTimersByTime(1000))
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+    })
+    act(() => vi.advanceTimersByTime(1001))
+    expect(copy).toHaveTextContent('已复制')
+
+    result.unmount()
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('剪贴板写入在命令行卸载后才完成时，不再创建反馈 timer', async () => {
+    vi.useFakeTimers()
+    let resolveWrite: (() => void) | undefined
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: {
+        writeText: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveWrite = resolve
+            }),
+        ),
+      },
+    })
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-project" />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('onboard-copy'))
+    expect(resolveWrite).toBeTypeOf('function')
+    result.unmount()
+    await act(async () => {
+      resolveWrite?.()
+      await Promise.resolve()
+    })
+
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('项目来源只给自动登记的真实 init 路径，不再发送 POST /api/projects', () => {
@@ -78,7 +144,7 @@ describe('Onboarding no-change（有项目零 change：Route Lock 主入口 + CL
       throw new Error(`unexpected fetch ${url}`)
     }))
     renderOb({ kind: 'no-change', root: '/Users/me/code/proj' })
-    expect(screen.getByText('这个项目还没有 change')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: '这个项目还没有 change' })).toBeInTheDocument()
     expect(screen.getByTestId('onboard-no-change')).not.toHaveTextContent('⧉')
     expect(screen.getByTestId('onboard-cli').textContent).toContain('tenon init')
     expect(screen.getByTestId('onboard-cli').textContent).toContain('/Users/me/code/proj')

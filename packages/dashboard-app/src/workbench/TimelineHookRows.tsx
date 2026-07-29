@@ -21,7 +21,7 @@ export function sourceLabel(source: WbSkillEntry['source']): string {
 }
 
 export function statusTone(installed: boolean | undefined): string {
-  if (installed === true) return 'text-green'
+  if (installed === true) return 'text-green-d'
   if (installed === false) return 'text-amb-d'
   return 'text-text-3'
 }
@@ -44,12 +44,12 @@ export function HookRows({
       return <p className="text-xs leading-5 text-red-d" role="alert">{config.loadError}</p>
     }
     return (
-      <span className="text-xs text-text-3">
+      <span className="text-xs text-text-3" role="status" aria-live="polite">
         {config.loadError ? '—' : t('workbench.hk_config_loading')}
       </span>
     )
   }
-  if (hooks.length === 0) return <span className="text-xs text-text-3">此时点没有已注册 Hook</span>
+  if (hooks.length === 0) return <span className="text-xs text-text-3" role="status" aria-live="polite">此时点没有已注册 Hook</span>
   return (
     <div className="flex min-w-0 flex-1 flex-col divide-y divide-border max-[720px]:w-full">
       {hooks.map((hook) => {
@@ -79,7 +79,7 @@ export function HookRows({
                 aria-label={`${name}（${hook.id}） · ${EVENT_META[event].title}`}
                 data-testid={`wb-lane-hk-sw-${stageId}-${hook.id}`}
                 disabled={config.busyKeys.has(key)}
-                className="relative h-[22px] w-9 flex-none rounded-full bg-fill-2 transition-colors duration-150 aria-checked:bg-green disabled:opacity-50 motion-reduce:transition-none after:absolute after:top-[3px] after:left-[3px] after:h-4 after:w-4 after:rounded-full after:bg-card after:shadow-sm after:transition-transform after:duration-150 after:content-[''] aria-checked:after:translate-x-[14px] motion-reduce:after:transition-none"
+                className="relative h-[22px] w-9 flex-none rounded-full bg-fill-2 transition-colors duration-150 aria-checked:bg-(--accent) disabled:opacity-50 motion-reduce:transition-none after:absolute after:top-[3px] after:left-[3px] after:h-4 after:w-4 after:rounded-full after:bg-card after:shadow-sm after:transition-transform after:duration-150 after:content-[''] aria-checked:after:translate-x-[14px] motion-reduce:after:transition-none"
                 onClick={() => config.toggle(hook.id, stageId, !enabled)}
               />
             )}
@@ -87,7 +87,7 @@ export function HookRows({
               <div className="flex items-center gap-2"><span className="truncate text-[13px] font-semibold text-text">{name}</span><span className="rounded-full bg-fill-2 px-2 py-0.5 text-[10px] font-semibold text-text-3">内置 Hook</span></div>
               <p className="mt-0.5 text-[11px] leading-4 text-text-3">{description}</p>
             </div>
-            <span className={`text-xs font-semibold ${enabled ? 'text-green' : 'text-text-3'}`}>{enabled ? '启用' : '停用'}</span>
+            <span className={`text-xs font-semibold ${enabled ? 'text-accent-d' : 'text-text-3'}`}>{enabled ? '启用' : '停用'}</span>
           </div>
         )
       })}
@@ -228,7 +228,7 @@ export function TimelineHookNodes({
           <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3">
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
-          <div className="flex min-w-0 items-start gap-4 max-[720px]:flex-col">
+          <div className="flex min-w-0 items-start gap-4 mobile:flex-col">
             <div className="w-32 flex-none pt-1">
               <h3 className="text-sm font-semibold text-text">{meta.title}</h3>
               <p className="mt-0.5 font-mono text-[10px] text-text-3">{meta.hint}</p>

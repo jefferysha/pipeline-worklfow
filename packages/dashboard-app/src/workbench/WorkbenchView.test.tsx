@@ -235,6 +235,7 @@ function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}, _o
 async function openGovernance(): Promise<HTMLElement> {
   const button = await screen.findByTestId('wb-governance-open')
   await waitFor(() => expect(button).toBeEnabled())
+  expect(button).toBeVisible()
   fireEvent.click(button)
   return screen.findByTestId('wb-side-col')
 }
@@ -742,6 +743,7 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
     fireEvent.click(screen.getByTestId('wb-save'))
     await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+    expect(screen.getByTestId('wb-save-ok')).toHaveAttribute('role', 'status')
     const body = lastSaveCall()?.body as { steps: Array<Record<string, unknown>> }
     expect(body.steps[0]).toEqual({ ...RELEASE_TRAIN.steps[0], prompt: 'Implement and run browser E2E.' })
     expect(body.steps[1]).toEqual(RELEASE_TRAIN.steps[1])
@@ -833,6 +835,7 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     editLaneName('draft', '初稿')
     fireEvent.click(screen.getByTestId('wb-save'))
     await waitFor(() => expect(screen.getByTestId('wb-save-errors')).toBeInTheDocument())
+    expect(screen.getByTestId('wb-save-errors')).toHaveAttribute('role', 'alert')
     // kernel validate 错误逐条原文展示（不翻译、不吞并）
     expect(screen.getByText("step 'draft': 循环依赖：a -> b -> a")).toBeInTheDocument()
     expect(screen.getByText(/skill id 'x y' 含非法字符/)).toBeInTheDocument()
@@ -892,6 +895,19 @@ describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
 })
 
 describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③）', () => {
+  it('body portal 中的切换确认框仍能被 GSAP 定位且不产生空目标警告', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', '初稿')
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+
+    expect(screen.getByTestId('wb-switch-confirm').parentElement).toBe(document.body)
+    expect(warn.mock.calls.flat().join('\n')).not.toContain('GSAP target')
+  })
+
   it('dirty 时切 workflow → 共享 Dialog 确认；取消停留原 workflow，确认丢弃并切换', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')

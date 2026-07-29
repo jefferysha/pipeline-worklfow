@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 import {
   deleteTrackDefinition,
   patchTrackDefinition,
@@ -55,7 +56,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   const [routePreview, setRoutePreview] = useState<WbRouterPreview | null>(null)
   const [routePreviewBusy, setRoutePreviewBusy] = useState(false)
   const [routePreviewError, setRoutePreviewError] = useState('')
-  const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-green focus-visible:outline-none disabled:opacity-60'
+  const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
 
   function openCreate(): void {
     const template = state.tracks.find((track) => track.id === 'frontend') ?? state.tracks[0]
@@ -218,12 +219,12 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
             </div>
             <div className="flex items-center gap-2">
               <button type="button" className={ADD_CLS} data-testid="wb-track-create" onClick={openCreate}>新增轨道</button>
-              <button type="button" className="grid size-9 place-items-center rounded-lg border border-border text-lg text-text-3 hover:bg-fill hover:text-text" aria-label="关闭轨道设置" onClick={() => setOpen(false)}>×</button>
+              <button type="button" className="grid size-9 place-items-center rounded-lg border border-border text-text-3 hover:bg-fill hover:text-text" aria-label="关闭轨道设置" onClick={() => setOpen(false)}><X className="size-4" aria-hidden="true" /></button>
             </div>
           </div>
           {editor && (
             <form
-              className="mb-3 rounded-xl border border-green-b bg-green-t/35 p-3"
+              className="mb-3 rounded-xl border border-accent-b bg-accent-t/35 p-3"
               data-testid="wb-track-editor"
               onSubmit={(event) => { event.preventDefault(); void saveTrack() }}
             >

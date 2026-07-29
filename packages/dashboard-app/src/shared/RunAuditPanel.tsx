@@ -128,7 +128,7 @@ export function RunAuditPanel({ root, change, refreshKey = '' }: RunAuditPanelPr
   if (error !== null) {
     return (
       <section className="border-b border-border py-3" data-testid="run-audit-error">
-        <p className="rounded-xl border border-red-b bg-red-t px-3 py-2.5 text-xs font-semibold text-red-d">
+        <p className="rounded-xl border border-red-b bg-red-t px-3 py-2.5 text-xs font-semibold text-red-d" role="alert">
           运行记录获取失败：{error}
         </p>
       </section>
@@ -136,7 +136,7 @@ export function RunAuditPanel({ root, change, refreshKey = '' }: RunAuditPanelPr
   }
 
   if (detail === null) {
-    return <section className="border-b border-border py-3 text-xs text-text-3" data-testid="run-audit-loading">正在读取运行记录…</section>
+    return <section className="border-b border-border py-3 text-xs text-text-3" data-testid="run-audit-loading" role="status" aria-live="polite">正在读取运行记录…</section>
   }
 
   const run = detail.workflow_run

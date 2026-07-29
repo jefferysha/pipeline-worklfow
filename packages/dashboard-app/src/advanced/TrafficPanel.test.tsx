@@ -1,55 +1,148 @@
-/**
- * TrafficPanel.test —— #34d traffic 查看器前端真 render（GOAL C9 / A7）。
- * @testing-library 真挂载 + 真 fetch stub 喂 /api/traces/* 数据端形状 → 断言真实 DOM：
- * 会话列表、点选会话拉记录、明细渲染、local-only 护栏提示。非 mock 返回。
- */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nProvider } from '../i18n'
 import { TrafficPanel } from './TrafficPanel'
 
 const SESSIONS = {
-  generated_at: '2026-07-07T00:00:00Z',
+  generated_at: '2026-07-29T00:00:00Z',
   outbound: 'local-only',
   count: 2,
   sessions: [
-    { id: 'sess-A', started_at: '2026-07-07T00:00:00Z', updated_at: '2026-07-07T00:00:02Z', date_key: '2026-07-07', client: 'claude', proxy_mode: 'reverse', status: 'complete', record_count: 2, summary: null },
-    { id: 'sess-B', started_at: '2026-07-07T01:00:00Z', updated_at: '2026-07-07T01:00:01Z', date_key: '2026-07-07', client: 'codex', proxy_mode: 'forward', status: 'active', record_count: 1, summary: null },
+    {
+      id: 'sess-A',
+      started_at: '2026-07-29T00:00:00Z',
+      updated_at: '2026-07-29T00:00:02Z',
+      date_key: '2026-07-29',
+      client: 'claude',
+      proxy_mode: 'reverse',
+      status: 'complete',
+      record_count: 3,
+      summary: null,
+    },
+    {
+      id: 'sess-B',
+      started_at: '2026-07-29T01:00:00Z',
+      updated_at: '2026-07-29T01:00:01Z',
+      date_key: '2026-07-29',
+      client: 'codex',
+      proxy_mode: 'forward',
+      status: 'active',
+      record_count: 0,
+      summary: null,
+    },
   ],
 }
-const RECORDS_A = {
-  generated_at: '2026-07-07T00:00:00Z',
-  outbound: 'local-only',
-  session: 'sess-A',
-  count: 2,
-  records: [
-    { request_id: 'req-1', request: { path: '/v1/messages', method: 'POST' }, response: { status: 200 } },
-    { request_id: 'req-2', request: { path: '/v1/messages', method: 'POST' }, response: { status: 429 } },
-  ],
+
+function timeline(
+  session = 'sess-A',
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  return {
+    generated_at: '2026-07-29T00:00:03Z',
+    outbound: 'local-only',
+    content: 'metadata-only',
+    session: {
+      id: session,
+      client: session === 'sess-B' ? 'codex' : 'claude',
+      proxy_mode: session === 'sess-B' ? 'forward' : 'reverse',
+      status: 'complete',
+      started_at: '2026-07-29T00:00:00Z',
+      updated_at: '2026-07-29T00:00:03Z',
+    },
+    total_count: 3,
+    returned_count: 3,
+    skipped_count: 0,
+    truncated: false,
+    integrity: 'complete',
+    warnings: [],
+    summary: {
+      success_count: 1,
+      error_count: 1,
+      unknown_count: 1,
+      total_duration_ms: 1625,
+      input_tokens: 18,
+      output_tokens: 9,
+      cached_input_tokens: 4,
+    },
+    entries: [
+      {
+        sequence: 1,
+        request_id: 'req-1',
+        turn: 1,
+        timestamp: '2026-07-29T00:00:01Z',
+        duration_ms: 400,
+        transport: 'sse',
+        method: 'POST',
+        path: '/v1/messages',
+        status_code: 200,
+        outcome: 'success',
+        model: 'claude-sonnet-4',
+        input_tokens: 18,
+        output_tokens: 9,
+        cached_input_tokens: 4,
+        stream_event_count: 5,
+      },
+      {
+        sequence: 2,
+        request_id: 'req-2',
+        turn: 2,
+        timestamp: '2026-07-29T00:00:02Z',
+        duration_ms: 1200,
+        transport: 'sse',
+        method: 'POST',
+        path: '/v1/messages',
+        status_code: 429,
+        outcome: 'error',
+        model: null,
+        input_tokens: null,
+        output_tokens: null,
+        cached_input_tokens: null,
+        stream_event_count: 2,
+      },
+      {
+        sequence: 3,
+        request_id: null,
+        turn: null,
+        timestamp: null,
+        duration_ms: 25,
+        transport: null,
+        method: 'GET',
+        path: '/unknown',
+        status_code: null,
+        outcome: 'unknown',
+        model: null,
+        input_tokens: null,
+        output_tokens: null,
+        cached_input_tokens: null,
+        stream_event_count: null,
+      },
+    ],
+    ...overrides,
+  }
 }
 
-function stubFetch(opts: { sessionsOk?: boolean } = {}): void {
-  const sessionsOk = opts.sessionsOk ?? true
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string) => {
-      const u = String(url)
-      if (u.includes('/api/traces/sessions')) {
-        return { ok: sessionsOk, status: sessionsOk ? 200 : 500, json: async () => SESSIONS } as unknown as Response
-      }
-      if (u.includes('/api/traces/records')) {
-        return { ok: true, status: 200, json: async () => RECORDS_A } as unknown as Response
-      }
-      throw new Error(`unexpected fetch ${u}`)
-    }),
-  )
+function response(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response
 }
 
-beforeEach(() => localStorage.clear())
-afterEach(() => vi.unstubAllGlobals())
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
-function renderTraffic(): void {
+function renderTraffic(lang: 'zh' | 'en' = 'zh'): void {
+  localStorage.setItem('tenon-dashboard-lang', lang)
   render(
     <I18nProvider>
       <TrafficPanel />
@@ -57,38 +150,278 @@ function renderTraffic(): void {
   )
 }
 
-describe('TrafficPanel（#34d 真消费 /api/traces/*）', () => {
-  it('真 fetch /api/traces/sessions → 渲染两条会话（client/记录数/状态）', async () => {
-    stubFetch()
+beforeEach(() => localStorage.clear())
+afterEach(() => vi.unstubAllGlobals())
+
+describe('TrafficPanel metadata-only timeline', () => {
+  it('shows session loading, local-only sessions, summary, and ordered metadata without raw query', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/traces/sessions') return response(SESSIONS)
+      if (url.includes('/api/traces/timeline')) return response(timeline())
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
     renderTraffic()
-    expect(await screen.findByTestId('traffic-session-sess-A')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-session-sess-B')).toBeInTheDocument()
-    const a = screen.getByTestId('traffic-session-sess-A')
-    expect(a.textContent).toContain('claude')
-    expect(a.textContent).toContain('2')
+
+    expect(screen.getByTestId('traffic-sessions-loading')).toHaveTextContent('加载捕获会话')
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    expect(screen.getByTestId('traffic-note')).toHaveTextContent('local-only')
+    expect(sessionButton.className).toContain('focus-visible:ring-[3px]')
+    expect(sessionButton).toHaveTextContent('已完成')
+    expect(sessionButton).not.toHaveTextContent('complete')
+    await userEvent.click(sessionButton)
+
+    const rows = await screen.findAllByTestId(/traffic-entry-/)
+    expect(screen.getByRole('button', { name: /失败/ }).className).toContain('focus-visible:ring-[3px]')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveTextContent('/v1/messages')
+    expect(rows[0]).toHaveTextContent('缓存输入 4')
+    expect(rows[0]).toHaveTextContent('流事件 5')
+    expect(rows[0]).not.toHaveTextContent('cached')
+    expect(rows[1]).toHaveTextContent('429')
+    expect(rows[1]).toHaveTextContent('失败')
+    expect(rows[2]).toHaveTextContent('未知')
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('3')
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('未知状态 1')
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('1,625')
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('27')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/traces/timeline?session=sess-A',
+      { headers: { Accept: 'application/json' } },
+    )
+    expect(document.body.textContent).not.toContain('?api_key=')
   })
 
-  it('#34e 护栏提示：显式标注本地捕获 / 不外发（local-only）', async () => {
-    stubFetch()
+  it('filters failures and distinguishes filter-empty from an empty session', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions' ? response(SESSIONS) : response(timeline())
+    )))
     renderTraffic()
-    expect(await screen.findByTestId('traffic-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-note').textContent?.toLowerCase()).toContain('local-only')
+    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+
+    await userEvent.click(await screen.findByRole('button', { name: /失败/ }))
+    expect(screen.getAllByTestId(/traffic-entry-/)).toHaveLength(1)
+    expect(screen.getByTestId('traffic-entry-2')).toHaveTextContent('429')
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('3')
+
+    const successOnly = timeline('sess-A', {
+      summary: {
+        success_count: 1,
+        error_count: 0,
+        unknown_count: 0,
+        total_duration_ms: 1,
+        input_tokens: null,
+        output_tokens: null,
+        cached_input_tokens: null,
+      },
+      entries: [{
+        sequence: 1,
+        request_id: null,
+        turn: null,
+        timestamp: null,
+        duration_ms: 1,
+        transport: null,
+        method: 'GET',
+        path: '/health',
+        status_code: 200,
+        outcome: 'success',
+        model: null,
+        input_tokens: null,
+        output_tokens: null,
+        cached_input_tokens: null,
+        stream_event_count: null,
+      }],
+      total_count: 1,
+      returned_count: 1,
+    })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions' ? response(SESSIONS) : response(successOnly)
+    )))
+    renderTraffic()
+    const sessionButtons = await screen.findAllByRole('button', { name: /claude/ })
+    await userEvent.click(sessionButtons.at(-1)!)
+    const failureButtons = await screen.findAllByRole('button', { name: /失败/ })
+    await userEvent.click(failureButtons.at(-1)!)
+    expect(screen.getByTestId('traffic-filter-empty')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /清除筛选/ }))
+    expect(screen.queryByTestId('traffic-filter-empty')).not.toBeInTheDocument()
   })
 
-  it('点选会话 → 真 fetch /api/traces/records → 渲染两条记录（path/status）', async () => {
-    stubFetch()
+  it('supports independent sessions error retry and empty states', async () => {
+    let attempts = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      attempts += 1
+      return attempts === 1 ? response({ error: 'offline' }, 500) : response({ ...SESSIONS, count: 0, sessions: [] })
+    }))
     renderTraffic()
-    const btn = await screen.findByTestId('traffic-session-sess-A')
-    await userEvent.click(within(btn).getByRole('button'))
-    expect(await screen.findByTestId('traffic-records')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-record-0').textContent).toContain('/v1/messages')
-    expect(screen.getByTestId('traffic-record-1').textContent).toContain('429')
+
+    expect(await screen.findByTestId('traffic-error')).toHaveAttribute('role', 'alert')
+    await userEvent.click(screen.getByRole('button', { name: /重试/ }))
+    expect(await screen.findByTestId('traffic-empty')).toHaveTextContent('暂无捕获会话')
   })
 
-  it('数据端失败 → 呈现错误态而非崩溃', async () => {
-    stubFetch({ sessionsOk: false })
+  it('supports timeline loading, failure retry, known-empty, and partial/truncated notices', async () => {
+    let timelineAttempts = 0
+    const firstTimeline = deferred<Response>()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/traces/sessions') return response(SESSIONS)
+      timelineAttempts += 1
+      if (timelineAttempts === 1) return firstTimeline.promise
+      return response(timeline('sess-A', {
+        integrity: 'partial',
+        truncated: true,
+        skipped_count: 1,
+        warnings: ['record-limit', 'malformed-record'],
+      }))
+    }))
     renderTraffic()
-    expect(await screen.findByTestId('traffic-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-error')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+    expect(screen.getByTestId('traffic-timeline-loading')).toHaveTextContent('加载')
+    firstTimeline.resolve(response({ error: 'read failed' }, 500))
+    expect(await screen.findByTestId('traffic-timeline-error')).toHaveAttribute('role', 'alert')
+    await userEvent.click(screen.getByRole('button', { name: /重试时间线/ }))
+    expect(await screen.findByTestId('traffic-integrity')).toHaveTextContent('不完整')
+    expect(screen.getByTestId('traffic-integrity')).toHaveTextContent('截断')
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions'
+        ? response(SESSIONS)
+        : response(timeline('sess-B', {
+          total_count: 0,
+          returned_count: 0,
+          summary: {
+            success_count: 0,
+            error_count: 0,
+            unknown_count: 0,
+            total_duration_ms: null,
+            input_tokens: null,
+            output_tokens: null,
+            cached_input_tokens: null,
+          },
+          entries: [],
+        }))
+    )))
+    renderTraffic()
+    const codexButtons = await screen.findAllByRole('button', { name: /codex/ })
+    await userEvent.click(codexButtons.at(-1)!)
+    expect(await screen.findByTestId('traffic-timeline-empty')).toHaveTextContent('尚无捕获请求')
+  })
+
+  it('does not describe a partial window with no visible entries as an empty session', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions'
+        ? response(SESSIONS)
+        : response(timeline('sess-A', {
+          total_count: 1,
+          returned_count: 0,
+          skipped_count: 1,
+          truncated: true,
+          integrity: 'partial',
+          warnings: ['byte-limit'],
+          summary: {
+            success_count: 0,
+            error_count: 0,
+            unknown_count: 0,
+            total_duration_ms: null,
+            input_tokens: null,
+            output_tokens: null,
+            cached_input_tokens: null,
+          },
+          entries: [],
+        }))
+    )))
+    renderTraffic()
+    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+    expect(await screen.findByTestId('traffic-timeline-unavailable')).toHaveTextContent('会话并非空')
+    expect(screen.queryByTestId('traffic-timeline-empty')).not.toBeInTheDocument()
+  })
+
+  it('does not infer an actual token total when one usage direction is unknown', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions'
+        ? response(SESSIONS)
+        : response(timeline('sess-A', {
+          summary: {
+            success_count: 1,
+            error_count: 1,
+            unknown_count: 1,
+            total_duration_ms: 1625,
+            input_tokens: 18,
+            output_tokens: null,
+            cached_input_tokens: 4,
+          },
+        }))
+    )))
+    renderTraffic()
+    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+    expect(await screen.findByTestId('traffic-summary')).toHaveTextContent('实际 Tokens未知')
+  })
+
+  it('does not let an older session response overwrite a newer selection', async () => {
+    const old = deferred<Response>()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/traces/sessions') return response(SESSIONS)
+      if (url.includes('sess-A')) return old.promise
+      return response(timeline('sess-B', {
+        total_count: 0,
+        returned_count: 0,
+        summary: {
+          success_count: 0,
+          error_count: 0,
+          unknown_count: 0,
+          total_duration_ms: null,
+          input_tokens: null,
+          output_tokens: null,
+          cached_input_tokens: null,
+        },
+        entries: [],
+      }))
+    }))
+    renderTraffic()
+    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+    await userEvent.click(screen.getByRole('button', { name: /codex/ }))
+    expect(await screen.findByTestId('traffic-timeline-empty')).toBeInTheDocument()
+    old.resolve(response(timeline('sess-A')))
+    await waitFor(() => expect(screen.queryByTestId('traffic-entry-1')).not.toBeInTheDocument())
+  })
+
+  it('Escape closes the timeline and restores focus to the selected session button', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions' ? response(SESSIONS) : response(timeline())
+    )))
+    renderTraffic()
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    await userEvent.click(sessionButton)
+    const errorFilter = await screen.findByRole('button', { name: /失败/ })
+    errorFilter.focus()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByTestId('traffic-timeline')).not.toBeInTheDocument()
+    expect(sessionButton).toHaveFocus()
+  })
+
+  it('renders all new visible copy in English', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      url === '/api/traces/sessions'
+        ? response({
+          ...SESSIONS,
+          count: 1,
+          sessions: [{ ...SESSIONS.sessions[0], record_count: 1 }],
+        })
+        : response(timeline('sess-A', {
+          integrity: 'partial',
+          truncated: true,
+          warnings: ['byte-limit'],
+        }))
+    )))
+    renderTraffic('en')
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    expect(sessionButton).toHaveTextContent('1 record')
+    expect(sessionButton).not.toHaveTextContent('1 records')
+    expect(sessionButton).toHaveTextContent('Complete')
+    await userEvent.click(sessionButton)
+    expect(await screen.findByRole('button', { name: 'Errors' })).toBeInTheDocument()
+    expect(screen.getByTestId('traffic-summary')).toHaveTextContent('HTTP errors')
+    expect(screen.getByTestId('traffic-integrity')).toHaveTextContent('partial')
+    expect(screen.getByRole('button', { name: 'Retry timeline' })).toBeInTheDocument()
   })
 })

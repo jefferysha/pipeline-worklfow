@@ -72,6 +72,9 @@ import { handlePostChangesRoutes } from './serverPostChangesRoutes.js'
 import { handlePostExecutionRoutes } from './serverPostExecutionRoutes.js'
 import { handlePostGovernanceRoutes } from './serverPostGovernanceRoutes.js'
 import { handlePostOperationsRoutes } from './serverPostOperationsRoutes.js'
+import { handlePostMemoryRoutes } from './serverPostMemoryRoutes.js'
+import type { RelatedSessionSearchExecutor } from './relatedSessionMemory.js'
+import { handlePostVerificationRoutes } from './serverPostVerificationRoutes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -117,6 +120,7 @@ export interface PostRouteDeps {
   sendTrackError: (res: ServerResponse, error: unknown) => void
   errMsg: (error: unknown) => string
   realGraduationFs: GraduationFs
+  relatedSessionSearch: RelatedSessionSearchExecutor
 }
 
 export async function handlePostRoute(
@@ -159,9 +163,13 @@ export async function handlePostRoute(
     // JSON 三闸保护。响应保留全部候选分数，suppressed_reason 非空时 winner=null，显式创建 UI 仍可手选。
   await handlePostOperationsRoutes(req, res, path, deps)
   if (res.writableEnded) return
+  await handlePostVerificationRoutes(req, res, path, deps)
+  if (res.writableEnded) return
   await handlePostChangesRoutes(req, res, path, deps)
   if (res.writableEnded) return
   await handlePostGovernanceRoutes(req, res, path, deps)
+  if (res.writableEnded) return
+  await handlePostMemoryRoutes(req, res, path, deps)
   if (res.writableEnded) return
   await handlePostExecutionRoutes(req, res, path, deps)
   if (res.writableEnded) return

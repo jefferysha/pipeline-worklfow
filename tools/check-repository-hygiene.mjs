@@ -20,6 +20,39 @@ const FORBIDDEN_REFERENCE_IDENTITIES = [
     97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
   ),
 ]
+const HOST_TARGET_PLAN_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const HOST_TARGET_PLAN_REFERENCE_DOCS = new Set([
+  'docs/adr/host-target-plan-dashboard.md',
+  'docs/superpowers/plans/2026-07-28-host-target-plan-dashboard.md',
+  'docs/superpowers/reports/2026-07-28-host-target-plan-dashboard-verify.md',
+  `docs/superpowers/specs/2026-07-28-host-target-plan-${FORBIDDEN_REFERENCE_IDENTITIES[1]}-platform-research.md`,
+  'docs/superpowers/specs/2026-07-28-host-target-plan-tenon-current-state-research.md',
+  `docs/superpowers/specs/2026-07-28-host-target-plan-${FORBIDDEN_REFERENCE_IDENTITIES[0]}-context-research.md`,
+  'docs/superpowers/specs/host-target-plan-dashboard-design.md',
+  'openspec/specs/host-target-plan/spec.md',
+])
+const HOST_TARGET_PLAN_CHANGE_REFERENCE_FILES = new Set([
+  'REVIEW.md',
+  'applied-spec.md',
+  'design.md',
+  'proposal.md',
+  'specs/host-target-plan/spec.md',
+  'tasks.md',
+])
+const HOST_TARGET_PLAN_CHANGE_PATH =
+  /^openspec\/changes\/(?:host-target-plan-dashboard|archive\/\d{4}-\d{2}-\d{2}-host-target-plan-dashboard)\/(.+)$/
+const TRACE_TIMELINE_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const TRACE_TIMELINE_REFERENCE_DOCS = new Set([
+  'docs/adr/trace-timeline.md',
+  'docs/superpowers/specs/2026-07-29-trace-timeline-tenon-upstreams-research.md',
+  'docs/superpowers/specs/trace-timeline-design.md',
+])
+const TRACE_TIMELINE_CHANGE_REFERENCE_FILES = new Set([
+  'proposal.md',
+  'tasks.md',
+])
+const TRACE_TIMELINE_CHANGE_PATH =
+  /^openspec\/changes\/(?:trace-timeline|archive\/\d{4}-\d{2}-\d{2}-trace-timeline)\/(.+)$/
 const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
   String.fromCharCode(
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
@@ -69,18 +102,57 @@ function redactIdentities(value, identities) {
   return redacted
 }
 
+function allowedHostTargetPlanReference(rel, identity) {
+  const changeMatch = rel.match(HOST_TARGET_PLAN_CHANGE_PATH)
+  return (
+    HOST_TARGET_PLAN_REFERENCE_IDENTITIES.has(identity)
+    && (
+      HOST_TARGET_PLAN_REFERENCE_DOCS.has(rel)
+      || (
+        changeMatch !== null
+        && HOST_TARGET_PLAN_CHANGE_REFERENCE_FILES.has(changeMatch[1] ?? '')
+      )
+    )
+  )
+}
+
+function allowedTraceTimelineReference(rel, identity) {
+  const changeMatch = rel.match(TRACE_TIMELINE_CHANGE_PATH)
+  return (
+    TRACE_TIMELINE_REFERENCE_IDENTITIES.has(identity)
+    && (
+      TRACE_TIMELINE_REFERENCE_DOCS.has(rel)
+      || (
+        changeMatch !== null
+        && TRACE_TIMELINE_CHANGE_REFERENCE_FILES.has(changeMatch[1] ?? '')
+      )
+    )
+  )
+}
+
+function disallowedReferenceIdentity(rel, value) {
+  const normalized = value.toLowerCase()
+  return FORBIDDEN_REFERENCE_IDENTITIES.find(
+    (identity) => (
+      normalized.includes(identity)
+      && !allowedHostTargetPlanReference(rel, identity)
+      && !allowedTraceTimelineReference(rel, identity)
+    ),
+  )
+}
+
 export function checkReferenceIdentities(root, tracked) {
   const failures = []
   for (const file of tracked) {
     const rel = posixPath(file)
-    if (matchingIdentity(rel, FORBIDDEN_REFERENCE_IDENTITIES)) {
+    if (disallowedReferenceIdentity(rel, rel)) {
       failures.push(`受管理路径包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
     }
     const absolute = join(root, rel)
     if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
     const bytes = readFileSync(absolute)
     if (bytes.includes(0)) continue
-    if (matchingIdentity(bytes.toString('utf8'), FORBIDDEN_REFERENCE_IDENTITIES)) {
+    if (disallowedReferenceIdentity(rel, bytes.toString('utf8'))) {
       failures.push(`受管理文本包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
     }
   }

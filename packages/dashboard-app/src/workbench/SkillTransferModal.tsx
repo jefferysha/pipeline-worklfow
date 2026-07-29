@@ -165,7 +165,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       />
       <div className="mt-2.5 flex gap-2.5">
         <div className={COL_CLS} data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
-          {error && <div className="m-0 px-0.5 py-1.5 text-[11.5px] font-semibold text-red" data-testid="skill-error">{error}</div>}
+          {error && <div className="m-0 px-0.5 py-1.5 text-[11.5px] font-semibold text-red" data-testid="skill-error" role="alert">{error}</div>}
           {!error && available.map(({ name: s, installed }) => (
             <button
               key={s}

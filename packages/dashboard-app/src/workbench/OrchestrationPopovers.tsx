@@ -44,7 +44,7 @@ export function SkillCandidatePopover({ lane, candidates, registry, onChoose }: 
   const { t } = useT()
   return (
     <div className={SK_POP} data-testid={`wb-lane-sk-pop-${lane.id}`} role="group" aria-label={`${t('workbench.board_sk_add')} · ${lane.name}`}>
-      {candidates.length === 0 ? <p className="px-2 py-1.5 text-[12.5px] text-text-3">{t('workbench.board_skills_empty')}</p> : candidates.map((candidate) => {
+      {candidates.length === 0 ? <p className="px-2 py-1.5 text-[12.5px] text-text-3" role="status" aria-live="polite">{t('workbench.board_skills_empty')}</p> : candidates.map((candidate) => {
         const name = splitName(candidate)
         return <button key={candidate} type="button" className={DEP_OPT} data-testid={`wb-lane-sk-opt-${lane.id}-${candidate}`} onClick={(event) => { event.stopPropagation(); onChoose(candidate) }}>
           <span className="font-mono whitespace-nowrap">{name.ns !== '' && <span className="text-text-3">{name.ns}</span>}{name.base}</span>

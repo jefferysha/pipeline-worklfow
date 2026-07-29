@@ -166,13 +166,18 @@ export function withTrustedDirectoryChain<T>(
   create: boolean,
   onMissing: () => T,
   use: (directory: OpenDirectory) => T,
+  expected?: { readonly depth: number; readonly identity: FileIdentity },
 ): T {
   const opened: OpenDirectory[] = []
   try {
     let parent = rootDirectory(root)
-    for (const name of names) {
+    for (const [depth, name] of names.entries()) {
       const child = openTrustedChildDirectory(root, parent, name, create)
       if (!child) return onMissing()
+      if (expected?.depth === depth && !sameIdentity(child, expected.identity)) {
+        safeClose(child.fd)
+        throw new Error(`workflow 目录与请求捕获身份不一致: ${child.lexicalPath}`)
+      }
       opened.push(child)
       parent = child
     }

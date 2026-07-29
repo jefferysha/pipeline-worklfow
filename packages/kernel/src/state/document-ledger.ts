@@ -24,6 +24,7 @@ import {
   deltaSpecSlot,
   documentSlot,
   DocumentLedgerError,
+  isSafeProjectRelativePath,
   resolveDocument,
 } from './document-path.js'
 import { HISTORY_FILE } from './history.js'
@@ -110,7 +111,11 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
   const producer = string(item.producer)
   const recordedAt = string(item.recordedAt)
   if (!kind || !isDocumentKind(kind)) throw new DocumentLedgerError(`document ledger records[${index}].kind 非法`)
-  if (!path) throw new DocumentLedgerError(`document ledger records[${index}].path 必须是非空字符串`)
+  if (!path || !isSafeProjectRelativePath(path)) {
+    throw new DocumentLedgerError(
+      `document ledger records[${index}].path 必须是安全的项目相对路径`,
+    )
+  }
   if (!digest || !validDigest(digest)) throw new DocumentLedgerError(`document ledger records[${index}].sha256 非法`)
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer 非法`)
@@ -135,7 +140,7 @@ export async function currentDocumentStepVisitId(changeDir: string): Promise<str
   return JSON.stringify([metadata.runId, metadata.transitionSequence])
 }
 
-function parseLedger(raw: string): DocumentLedger {
+export function parseDocumentLedger(raw: string): DocumentLedger {
   let value: unknown
   try {
     value = JSON.parse(raw)
@@ -175,7 +180,7 @@ async function ledgerText(changeDir: string): Promise<string | undefined> {
 
 export async function readDocumentLedger(changeDir: string): Promise<DocumentLedger | undefined> {
   const raw = await ledgerText(changeDir)
-  return raw === undefined ? undefined : parseLedger(raw)
+  return raw === undefined ? undefined : parseDocumentLedger(raw)
 }
 
 export function initialDocumentLedgerContent(createdAt: string): string {
@@ -203,7 +208,7 @@ async function writeDocumentLedger(changeDir: string, ledger: DocumentLedger): P
   // Re-parse serialized bytes before publication, so callers cannot accidentally introduce an
   // invalid in-memory shape through future extension code.
   const content = `${JSON.stringify(ledger, null, 2)}\n`
-  parseLedger(content)
+  parseDocumentLedger(content)
   await atomicReplaceFile(join(changeDir, DOCUMENT_LEDGER_FILE), content)
 }
 

@@ -1,11 +1,17 @@
+import { X } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot } from '../types'
 
 export interface TaskDocumentsSectionProps {
   documents: NonNullable<ChangeSnapshot['documents']>
+  extra?: ReactNode
 }
 
-export function TaskDocumentsSection({ documents }: TaskDocumentsSectionProps): JSX.Element {
+export function TaskDocumentsSection({
+  documents,
+  extra,
+}: TaskDocumentsSectionProps): JSX.Element {
   const { t } = useT()
   return (
     <div className="border-b border-border py-[13px] last:border-b-0" data-testid="dt-documents">
@@ -41,11 +47,16 @@ export function TaskDocumentsSection({ documents }: TaskDocumentsSectionProps): 
       )}
       {documents.blockers.length > 0 && (
         <ul className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs text-red-d" data-testid="dt-document-blockers">
-          {documents.blockers.map((blocker) => <li key={blocker}>× {blocker}</li>)}
+          {documents.blockers.map((blocker) => <li className="flex items-start gap-1.5" key={blocker}><X className="mt-0.5 size-3 flex-none" strokeWidth={1.75} aria-hidden="true" />{blocker}</li>)}
         </ul>
       )}
       {documents.items.length === 0 && documents.blockers.length === 0 && (
-        <p className="m-0 text-xs text-text-3">{t('detail.docs_empty')}</p>
+        <p className="m-0 text-xs text-text-3" role="status" aria-live="polite">{t('detail.docs_empty')}</p>
+      )}
+      {extra !== undefined && (
+        <div className="mt-3 border-t border-border pt-3">
+          {extra}
+        </div>
       )}
     </div>
   )

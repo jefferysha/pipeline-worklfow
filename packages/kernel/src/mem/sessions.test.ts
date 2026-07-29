@@ -3,10 +3,14 @@
  * 真实磁盘对位在 packages/cli/src/mem.integration.test.ts（nodeMemFs 真读真文件）。
  * 对位老仓 skills/pipeline/scripts/mem/{sessions,adapters/claude,adapters/codex}.py。
  */
-import { basename, dirname } from 'node:path'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import type { MemDirent, MemFs } from './fs.js'
+import { nodeMemFs, type MemDirent, type MemFs } from './fs.js'
 import {
+  buildChildIndex,
   extractMemDialogue,
   findSessionById,
   listMemSessions,
@@ -48,6 +52,10 @@ const CLAUDE_DIR = '/home/u/.claude/projects/-home-u-work-proj'
 const CLAUDE_FILE = `${CLAUDE_DIR}/sess-abc123.jsonl`
 const CODEX_FILE = '/home/u/.codex/sessions/2026/07/rollout-2026-07-02T09-00-00-cdx789.jsonl'
 
+type SqliteNS = typeof import('node:sqlite')
+const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as SqliteNS
+type DatabaseSyncInstance = InstanceType<SqliteNS['DatabaseSync']>
+
 const claudeLines = [
   JSON.stringify({
     type: 'user',
@@ -73,6 +81,65 @@ function fs2(): MemFs {
     { [CLAUDE_FILE]: claudeLines, [CODEX_FILE]: codexLines },
     { [CLAUDE_FILE]: Date.parse('2026-07-05T00:00:00Z'), [CODEX_FILE]: Date.parse('2026-07-04T00:00:00Z') },
   )
+}
+
+async function openOpenCodeFixture(home: string): Promise<DatabaseSyncInstance> {
+  const path = join(home, '.local', 'share', 'opencode', 'opencode.db')
+  await mkdir(dirname(path), { recursive: true })
+  const db = new DatabaseSync(path)
+  db.exec(`
+    CREATE TABLE session (
+      id text PRIMARY KEY,
+      project_id text NOT NULL,
+      workspace_id text,
+      parent_id text,
+      slug text NOT NULL,
+      directory text NOT NULL,
+      path text,
+      title text NOT NULL,
+      version text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL
+    );
+    CREATE TABLE message (
+      id text PRIMARY KEY,
+      session_id text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL,
+      data text NOT NULL
+    );
+    CREATE TABLE part (
+      id text PRIMARY KEY,
+      message_id text NOT NULL,
+      session_id text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL,
+      data text NOT NULL
+    );
+  `)
+  return db
+}
+
+function insertOpenCodeSearchSession(
+  db: DatabaseSyncInstance,
+  id: string,
+  parentId: string | null,
+): void {
+  const time = Date.parse('2026-07-05T10:00:00Z')
+  db.prepare(
+    `INSERT INTO session
+       (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
+     VALUES (?, 'global', ?, 'test', '/project', ?, '1.17.14', ?, ?)`,
+  ).run(id, parentId, id, time, time)
+  const messageId = `message-${id}`
+  db.prepare(
+    `INSERT INTO message (id, session_id, time_created, time_updated, data)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(messageId, id, time, time, JSON.stringify({ role: 'user' }))
+  db.prepare(
+    `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(`part-${id}`, messageId, id, time, time, JSON.stringify({ type: 'text', text: `needle ${id}` }))
 }
 
 describe('listMemSessions —— fan-out 跨 runtime（老仓 list_all:58）', () => {
@@ -114,6 +181,169 @@ describe('searchMemSessions —— 跨 runtime 检索 + 评分排序（老仓 se
     const res = searchMemSessions(fs2(), { keyword: 'zzznomatch', filter: { cwd: null } })
     expect(res.matches).toEqual([])
     expect(res.totalMatches).toBe(0)
+  })
+
+  test('OpenCode child cycles choose one deterministic searchable root without duplicate sessions', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'sessions-cycle-'))
+    try {
+      const db = await openOpenCodeFixture(home)
+      insertOpenCodeSearchSession(db, 'normal-parent', null)
+      insertOpenCodeSearchSession(db, 'normal-child', 'normal-parent')
+      insertOpenCodeSearchSession(db, 'cycle-a', 'cycle-b')
+      insertOpenCodeSearchSession(db, 'cycle-b', 'cycle-a')
+      insertOpenCodeSearchSession(db, 'self', 'self')
+      db.close()
+      const base = nodeMemFs(home)
+      const fs = { ...base, env: () => undefined }
+
+      const res = searchMemSessions(fs, {
+        keyword: 'needle',
+        filter: { platform: 'opencode', cwd: '/project' },
+        includeChildren: true,
+      })
+
+      const ids = res.matches.map((match) => match.session.id)
+      expect(ids.sort()).toEqual(['cycle-a', 'normal-parent', 'self'])
+      expect(new Set(ids).size).toBe(ids.length)
+      expect(res.matches.find((match) => match.session.id === 'normal-parent')?.descendantsMerged).toBe(1)
+      expect(res.matches.find((match) => match.session.id === 'normal-parent')?.hit.count).toBe(2)
+      expect(res.matches.find((match) => match.session.id === 'cycle-a')?.descendantsMerged).toBe(1)
+      expect(res.matches.find((match) => match.session.id === 'cycle-a')?.hit.count).toBe(2)
+      expect(res.matches.find((match) => match.session.id === 'self')?.descendantsMerged).toBe(0)
+      expect(res.matches.find((match) => match.session.id === 'self')?.hit.count).toBe(1)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('buildChildIndex —— platform-scoped OpenCode parent identity', () => {
+  test('does not attach an OpenCode child to a Codex session with the same bare id', () => {
+    const codex = {
+      platform: 'codex' as const,
+      id: 'shared',
+      filePath: '/codex/shared.jsonl',
+    }
+    const opencodeParent = {
+      platform: 'opencode' as const,
+      id: 'shared',
+      filePath: '/opencode.db',
+    }
+    const opencodeChild = {
+      platform: 'opencode' as const,
+      id: 'child',
+      parent_id: 'shared',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([codex, opencodeParent, opencodeChild])
+
+    expect(index.get('codex:shared')).toBeUndefined()
+    expect(index.get('opencode:shared')).toEqual([opencodeChild])
+  })
+
+  test('does not let a legacy bare alias overwrite a canonical OpenCode parent key', () => {
+    const actualParent = {
+      platform: 'opencode' as const,
+      id: 'x',
+      filePath: '/opencode.db',
+    }
+    const canonicalChild = {
+      platform: 'opencode' as const,
+      id: 'canonical-child',
+      parent_id: 'x',
+      filePath: '/opencode.db',
+    }
+    const collidingAliasChild = {
+      platform: 'opencode' as const,
+      id: 'alias-child',
+      parent_id: 'opencode:x',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([actualParent, canonicalChild, collidingAliasChild])
+
+    expect(index.get('opencode:x')).toEqual([canonicalChild])
+    expect(index.get('opencode:opencode:x')).toEqual([collidingAliasChild])
+  })
+
+  test('does not create a bare alias that impersonates an actual canonical session key', () => {
+    const actualParent = {
+      platform: 'opencode' as const,
+      id: 'x',
+      filePath: '/opencode.db',
+    }
+    const collidingAliasChild = {
+      platform: 'opencode' as const,
+      id: 'alias-child',
+      parent_id: 'opencode:x',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([actualParent, collidingAliasChild])
+
+    expect(index.get('opencode:x')).toBeUndefined()
+    expect(index.get('opencode:opencode:x')).toEqual([collidingAliasChild])
+  })
+
+  test('preserves an ordinary OpenCode parent-child-grandchild chain', () => {
+    const parent = {
+      platform: 'opencode' as const,
+      id: 'parent',
+      filePath: '/opencode.db',
+    }
+    const child = {
+      platform: 'opencode' as const,
+      id: 'child',
+      parent_id: 'parent',
+      filePath: '/opencode.db',
+    }
+    const grandchild = {
+      platform: 'opencode' as const,
+      id: 'grandchild',
+      parent_id: 'child',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([parent, child, grandchild])
+
+    expect(index.get('opencode:parent')?.map((session) => session.id)).toEqual(['child', 'grandchild'])
+    expect(index.get('opencode:child')?.map((session) => session.id)).toEqual(['grandchild'])
+    expect(index.get('parent')?.map((session) => session.id)).toEqual(['child', 'grandchild'])
+    expect(index.get('child')?.map((session) => session.id)).toEqual(['grandchild'])
+  })
+
+  test('terminates a two-node cycle without including the root or duplicate descendants', () => {
+    const first = {
+      platform: 'opencode' as const,
+      id: 'first',
+      parent_id: 'second',
+      filePath: '/opencode.db',
+    }
+    const second = {
+      platform: 'opencode' as const,
+      id: 'second',
+      parent_id: 'first',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([first, second])
+
+    expect(index.get('opencode:first')?.map((session) => session.id)).toEqual(['second'])
+    expect(index.get('opencode:second')?.map((session) => session.id)).toEqual(['first'])
+  })
+
+  test('terminates a self-cycle without including the session as its own descendant', () => {
+    const session = {
+      platform: 'opencode' as const,
+      id: 'self',
+      parent_id: 'self',
+      filePath: '/opencode.db',
+    }
+
+    const index = buildChildIndex([session])
+
+    expect(index.get('opencode:self')).toEqual([])
   })
 })
 

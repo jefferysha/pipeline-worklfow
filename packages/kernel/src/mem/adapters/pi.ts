@@ -8,43 +8,64 @@
 import { basename, join, resolve } from 'node:path'
 import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
-import { mtimeIso } from '../fs.js'
-import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { mtimeIso, readMemSessionMetadataChecked } from '../fs.js'
+import { hostSummaryTurn, isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
-import { piAgentDir, piProjectDirFromCwd, piSessionRoots, walkDir } from '../paths.js'
+import {
+  piAgentDir,
+  piProjectDirFromCwd,
+  piSessionRoots,
+  walkDir,
+  walkDirForRelatedSearch,
+} from '../paths.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
 
 export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const out: MemSession[] = []
-  for (const filePath of candidateFiles(fs, f)) {
-    const header = readJsonlFirst(fs.readText(filePath)) as Json
-    if (!header || header.type !== 'session') continue
+  const files = candidateFiles(fs, f)
+    .sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0))
+  for (const filePath of files) {
+    if (fs.contentReadBudget && fs.contentReadBudget.remainingBytes() <= 0) {
+      fs.contentReadBudget.noteTotalExhausted()
+      break
+    }
+    const metadata = readMemSessionMetadataChecked(fs, filePath)
+    const header = readJsonlFirst(metadata.text) as Json
+    if (!header || header.type !== 'session') {
+      if (metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+      continue
+    }
 
     const sid: string = typeof header.id === 'string' ? header.id : idFromFile(filePath)
     const cwd: string | null = typeof header.cwd === 'string' ? header.cwd : null
-    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+    if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
+      if (!cwd && metadata.truncated) fs.contentReadBudget?.noteSourceTruncated()
+      continue
+    }
 
     let title: string | null = null
     let lastMs: number | null = null
-    for (const entry of parseJsonlLines(fs.readText(filePath))) {
-      const e = entry as Json
-      if (e?.type === 'session_info') {
-        const name = e.name
-        title = typeof name === 'string' && name.trim() ? name.trim() : null
-        continue
+    if (!fs.contentReadBudget) {
+      for (const entry of parseJsonlLines(fs.readText(filePath))) {
+        const e = entry as Json
+        if (e?.type === 'session_info') {
+          const name = e.name
+          title = typeof name === 'string' && name.trim() ? name.trim() : null
+          continue
+        }
+        if (e?.type !== 'message') continue
+        const msg = e.message ?? {}
+        const role = msg.role
+        if (role !== 'user' && role !== 'assistant') continue
+        let activity = timestampMs(msg.timestamp)
+        if (activity === null) activity = timestampMs(e.timestamp)
+        if (activity !== null) lastMs = Math.max(lastMs ?? 0, activity)
       }
-      if (e?.type !== 'message') continue
-      const msg = e.message ?? {}
-      const role = msg.role
-      if (role !== 'user' && role !== 'assistant') continue
-      let activity = timestampMs(msg.timestamp)
-      if (activity === null) activity = timestampMs(e.timestamp)
-      if (activity !== null) lastMs = Math.max(lastMs ?? 0, activity)
     }
 
     let updated: string | undefined
@@ -54,6 +75,7 @@ export function piListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     if (!inRangeOverlap(created, updated, f)) continue
 
     out.push({ platform: 'pi', id: sid, title, cwd, created, updated: updated ?? null, filePath })
+    if (fs.contentReadBudget && out.length >= f.limit) break
   }
   return out
 }
@@ -62,9 +84,18 @@ function candidateFiles(fs: MemFs, f: MemFilter): string[] {
   const defaultRoot = join(piAgentDir(fs), 'sessions')
   const seen = new Set<string>()
   const out: string[] = []
-  const pushJsonl = (root: string): void => {
+  const pushJsonl = (root: string, fileLimit: number): void => {
     if (!fs.exists(root)) return
-    for (const file of walkDir(fs, root)) {
+    const discovered = fs.contentReadBudget
+      ? walkDirForRelatedSearch(
+        fs,
+        root,
+        (file) => file.endsWith('.jsonl'),
+        fileLimit,
+        'pi',
+      )
+      : walkDir(fs, root)
+    for (const file of discovered) {
       if (!file.endsWith('.jsonl')) continue
       const normalized = resolve(file)
       if (seen.has(normalized)) continue
@@ -72,9 +103,27 @@ function candidateFiles(fs: MemFs, f: MemFilter): string[] {
       out.push(file)
     }
   }
-  for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve(root) === resolve(defaultRoot)) pushJsonl(piProjectDirFromCwd(fs, f.cwd))
-    else pushJsonl(root)
+  const roots = piSessionRoots(fs)
+  const normalLimit = Math.max(f.limit * 4, f.limit + 1)
+  for (let index = 0; index < roots.length; index += 1) {
+    const root = roots[index]
+    if (root === undefined) continue
+    const remainingRoots = roots.length - index
+    const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.('pi')
+    const fairLimit = remainingFiles === undefined
+      ? normalLimit
+      : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots))
+    if (f.cwd && resolve(root) === resolve(defaultRoot)) {
+      // Descendant cwd values live in sibling encoded shards, not under the exact project shard.
+      // The related-search path scans this provider root with hard discovery limits, then the
+      // metadata sameProject check admits only the requested project tree.
+      pushJsonl(
+        fs.contentReadBudget ? root : piProjectDirFromCwd(fs, f.cwd),
+        fairLimit,
+      )
+    } else {
+      pushJsonl(root, fairLimit)
+    }
   }
   return out
 }
@@ -185,7 +234,7 @@ function syntheticTurn(prefix: string, raw: unknown): DialogueTurn | null {
   if (typeof raw !== 'string') return null
   const text = stripInjectionTags(raw)
   if (!text) return null
-  return { role: 'user', text: `${prefix}\n${text}` }
+  return hostSummaryTurn(`${prefix}\n${text}`)
 }
 
 function buildTurn(role: 'user' | 'assistant', content: Json): DialogueTurn | null {

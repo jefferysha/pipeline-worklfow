@@ -207,7 +207,7 @@ export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element 
       </div>
       <p className="-mt-0.5 mb-3.5 text-xs leading-[1.55] text-text-3">{t('workbench.hk_note')}</p>
       {config.loadError && (
-        <p className="p-5 text-[13px] text-red" data-testid="wb-hk-load-error">{config.loadError}</p>
+        <p className="p-5 text-[13px] text-red" data-testid="wb-hk-load-error" role="alert">{config.loadError}</p>
       )}
       {config.toggleError && (
         <p className="p-5 text-[13px] text-red" role="alert" data-testid="wb-hk-toggle-error">{config.toggleError}</p>

@@ -6,6 +6,7 @@ import { useT } from '../i18n'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
 import { isPhase } from '../types'
 import { revealDialog, revealList } from '../shared/motion'
+import { PageHeader } from '../shared/PageHeader'
 import './workbench.css'
 import { LOCKED_IDS, useHooksConfig } from './HookTimeline'
 import { useLoops } from './LoopCard'
@@ -382,10 +383,12 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   }, { scope: rootRef, dependencies: [def?.name] })
   useGSAP(() => {
     if (pendingSwitch !== null) {
-      revealDialog(
-        '[data-testid="wb-switch-confirm"]',
-        '[data-testid="wb-switch-confirm"] [role="dialog"]',
-      )
+      // Shared Dialogs live in a document.body portal, outside rootRef's GSAP selector scope.
+      // Resolve the portal nodes explicitly so the animation keeps working without widening
+      // the workbench context or handing GSAP an empty scoped selector.
+      const backdrop = document.querySelector<HTMLElement>('[data-testid="wb-switch-confirm"]')
+      const content = backdrop?.querySelector<HTMLElement>('[role="dialog"]')
+      if (backdrop && content) revealDialog(backdrop, content)
     }
   }, { scope: rootRef, dependencies: [pendingSwitch] })
   const stepName = useCallback(
@@ -437,38 +440,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     })
   }, [def, stepName, hookCountOf, hookLockedOf, ambientByStage, readonlyWf])
   const selectedStep = def?.steps.find((step) => step.id === stageId) ?? null
-  const runningKey = boardLanes.filter((s) => s.running).map((s) => s.id).join(',')
-  useGSAP(
-    () => {
-      const el = rootRef.current
-      if (!el || typeof window.matchMedia !== 'function') return
-      const mm = gsap.matchMedia()
-      mm.add(
-        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
-        (ctx) => {
-          const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-          const glosses = Array.from(el.querySelectorAll<HTMLElement>('[data-anim="wb-gloss"]'))
-          if (glosses.length === 0) return // 常见态（无 running 阶段）：不喂空数组给 gsap.set，避免控制台噪音
-          if (reduce) {
-            gsap.set(glosses, { autoAlpha: 0 })
-            return
-          }
-          for (const gloss of glosses) {
-            const seg = gloss.parentElement
-            const glossW = gloss.offsetWidth || 46
-            gsap
-              .timeline({ repeat: -1, repeatDelay: 0.5 })
-              .fromTo(
-                gloss,
-                { x: -glossW, autoAlpha: 0.9 },
-                { x: () => (seg?.offsetWidth ?? 160) + glossW, duration: 1.1, ease: 'power1.inOut' },
-              )
-          }
-        },
-      )
-    },
-    { scope: rootRef, dependencies: [runningKey], revertOnUpdate: true },
-  )
   const summary = useMemo(() => {
     if (!def) return null
     const skillIds = new Set<string>()
@@ -484,14 +455,13 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   }, [def, hookMetas, hookMatrix])
   const { rules: rulesByKey } = useWorkflowRulesMulti(names && names.length > 0 ? [{ root, names }] : [])
   const menuNames = useMemo(() => [...(names ?? []), 'default'], [names])
-  function stagesCountOf(name: string): number | null {
-    if (name === 'default') return DEFAULT_RULES.steps.length
-    return rulesByKey.get(rulesKey(root, name))?.steps.length ?? null
-  }
+  const stagesCountOf = (name: string): number | null =>
+    name === 'default' ? DEFAULT_RULES.steps.length : rulesByKey.get(rulesKey(root, name))?.steps.length ?? null
   const currentStages = def?.steps.length ?? (wfName ? stagesCountOf(wfName) : null)
   const selectedLane = boardLanes.find((lane) => lane.id === stageId)
   return (
     <section data-testid="workbench-view" data-page-frame="standard" ref={rootRef} className="mx-auto w-full max-w-[1088px] pt-7 pb-5">
+      <PageHeader eyebrow={root.split('/').filter(Boolean).at(-1) ?? root} title={t('workbench.title')} description={t('workbench.subtitle')} className="mb-5" />
       <WorkbenchHeader
         workflowName={wfName}
         currentStages={currentStages}
@@ -546,7 +516,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
           />
         </>
       )}
-      {!def && !defError && <p className="p-5 text-[13px] text-text-3">{t('common.loading')}</p>}
+      {!def && !defError && <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
       {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} />}
       {skillEditorOpen && selectedLane && (
         <SkillOrchestrationDialog

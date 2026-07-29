@@ -43,13 +43,21 @@
  *   compaction part 本身无文本会被自然丢弃，其余消息仍按线性全量呈现（不丢数据，只是不做
  *   「折叠去重」这层优化）。
  */
+import { statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { DialogueTurn, MemFilter, MemSession, SearchHit } from '../types.js'
 import type { MemFs } from '../fs.js'
 import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
-import { inRangeOverlap, sameProject } from '../filter.js'
+import { inRangeOverlap, sameProjectForMemFs } from '../filter.js'
 import { searchInDialogue } from '../search.js'
+import {
+  readBoundedSessionRowById,
+  readBoundedSessionRows,
+  sqliteSourceBudget,
+} from './opencode-budget.js'
+import { readBoundedSqliteRows } from './opencode-dialogue-budget.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -81,6 +89,52 @@ function opencodeDbPath(fs: MemFs): string {
   return join(dataHome, 'opencode', 'opencode.db')
 }
 
+interface OpenCodeImmutableTarget {
+  path: string
+  unchanged: () => boolean
+}
+
+/**
+ * Related Sessions must not open OpenCode's host database directly: even a read-only
+ * DatabaseSync connection creates WAL/SHM sidecars for a WAL-mode database. An immutable URI
+ * reads only a sidecar-free checkpointed main file; identity and sidecars are checked again
+ * after the bounded query so a concurrent writer makes the result fail closed. The unbudgeted
+ * legacy CLI path intentionally keeps its historical direct-reader behavior.
+ */
+function createRelatedImmutableTarget(fs: MemFs, dbPath: string): OpenCodeImmutableTarget | null {
+  const walPath = `${dbPath}-wal`
+  const shmPath = `${dbPath}-shm`
+  const journalPath = `${dbPath}-journal`
+  const hasSidecar = (): boolean => (
+    fs.exists(walPath) || fs.exists(shmPath) || fs.exists(journalPath)
+  )
+  if (hasSidecar()) return null
+
+  try {
+    const before = statSync(dbPath, { bigint: true })
+    const uri = pathToFileURL(dbPath)
+    uri.searchParams.set('immutable', '1')
+    return {
+      path: uri.href,
+      unchanged: () => {
+        if (hasSidecar()) return false
+        try {
+          const after = statSync(dbPath, { bigint: true })
+          return before.dev === after.dev
+            && before.ino === after.ino
+            && before.size === after.size
+            && before.mtimeNs === after.mtimeNs
+            && before.ctimeNs === after.ctimeNs
+        } catch {
+          return false
+        }
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * 开库 → 跑 fn → 关库；任何一步失败（sqlite 不可用/文件不存在/非法 sqlite 文件/schema 不符
  * 预期——例如未来 OpenCode 改列名）一律诚实降级回 fallback，绝不向上抛。
@@ -90,12 +144,24 @@ function withOpenCodeDb<T>(fs: MemFs, fallback: T, fn: (db: SqliteDb) => T): T {
   const dbPath = opencodeDbPath(fs)
   if (!fs.exists(dbPath)) return fallback
   const sqlite = loadSqlite()
-  if (!sqlite) return fallback
+  if (!sqlite) {
+    fs.contentReadBudget?.noteSourceUnavailable('opencode')
+    return fallback
+  }
+  const immutableTarget = fs.contentReadBudget
+    ? createRelatedImmutableTarget(fs, dbPath)
+    : null
+  if (fs.contentReadBudget && !immutableTarget) {
+    fs.contentReadBudget.noteSourceUnavailable('opencode')
+    return fallback
+  }
   let db: SqliteDb | undefined
+  let result: T
   try {
-    db = new sqlite.DatabaseSync(dbPath, { readOnly: true })
-    return fn(db)
+    db = new sqlite.DatabaseSync(immutableTarget?.path ?? dbPath, { readOnly: true })
+    result = fn(db)
   } catch {
+    fs.contentReadBudget?.noteSourceUnavailable('opencode')
     return fallback
   } finally {
     if (db) {
@@ -106,6 +172,11 @@ function withOpenCodeDb<T>(fs: MemFs, fallback: T, fn: (db: SqliteDb) => T): T {
       }
     }
   }
+  if (immutableTarget && !immutableTarget.unchanged()) {
+    fs.contentReadBudget?.noteSourceUnavailable('opencode')
+    return fallback
+  }
+  return result
 }
 
 function parseJson(raw: unknown): Json {
@@ -121,31 +192,90 @@ function msToIso(ms: unknown): string | null {
   return typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : null
 }
 
+function sessionFromRow(row: Json, dbPath: string): MemSession {
+  return {
+    platform: 'opencode',
+    id: String(row.id),
+    title: typeof row.title === 'string' && row.title ? row.title : null,
+    cwd: typeof row.directory === 'string' && row.directory ? row.directory : null,
+    created: msToIso(row.time_created),
+    updated: msToIso(row.time_updated),
+    filePath: dbPath,
+    parent_id: typeof row.parent_id === 'string' && row.parent_id ? row.parent_id : null,
+  }
+}
+
 export function opencodeListSessions(fs: MemFs, f: MemFilter): MemSession[] {
   const dbPath = opencodeDbPath(fs)
   return withOpenCodeDb(fs, [] as MemSession[], (db) => {
-    const rows = db
-      .prepare('SELECT id, directory, title, parent_id, time_created, time_updated FROM session')
-      .all() as Json[]
+    const rows = fs.contentReadBudget
+      ? readBoundedSessionRows(fs, db, f, sqliteSourceBudget(fs, dbPath))
+      : db
+        .prepare('SELECT id, directory, title, parent_id, time_created, time_updated FROM session')
+        .all() as Json[]
     const out: MemSession[] = []
     for (const row of rows) {
       const cwd: string | null = typeof row.directory === 'string' && row.directory ? row.directory : null
-      if (f.cwd && !sameProject(cwd, f.cwd)) continue
+      if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) continue
       const created = msToIso(row.time_created)
       const updated = msToIso(row.time_updated)
       if (!inRangeOverlap(created, updated, f)) continue
-      out.push({
-        platform: 'opencode',
-        id: String(row.id),
-        title: typeof row.title === 'string' && row.title ? row.title : null,
-        cwd,
-        created,
-        updated,
-        filePath: dbPath,
-        parent_id: typeof row.parent_id === 'string' && row.parent_id ? row.parent_id : null,
-      })
+      out.push(sessionFromRow(row, dbPath))
     }
     return out
+  })
+}
+
+/**
+ * Resolve only the parent metadata needed to build a correct graph around already-admitted recent
+ * candidates. Every lookup uses the session primary key, shares the request byte budget, stays in
+ * project scope, and never makes these older support nodes searchable on their own.
+ */
+export function opencodeResolveParentSessions(
+  fs: MemFs,
+  candidates: readonly MemSession[],
+  f: MemFilter,
+  maxAncestors: number,
+): MemSession[] {
+  const budget = fs.contentReadBudget
+  if (!budget || maxAncestors <= 0) return []
+  const dbPath = opencodeDbPath(fs)
+  return withOpenCodeDb(fs, [] as MemSession[], (db) => {
+    const source = sqliteSourceBudget(fs, dbPath)
+    const seen = new Set(
+      candidates
+        .filter((session) => session.platform === 'opencode')
+        .map((session) => session.id),
+    )
+    const queued = new Set<string>()
+    const queue: string[] = []
+    const enqueue = (id: string | null | undefined): void => {
+      if (!id || seen.has(id) || queued.has(id)) return
+      queued.add(id)
+      queue.push(id)
+    }
+    for (const session of candidates) {
+      if (session.platform === 'opencode') enqueue(session.parent_id)
+    }
+
+    const ancestors: MemSession[] = []
+    while (queue.length > 0 && ancestors.length < maxAncestors) {
+      const id = queue.shift()
+      if (id === undefined) break
+      queued.delete(id)
+      if (seen.has(id)) continue
+      seen.add(id)
+      const row = readBoundedSessionRowById(fs, db, f, source, id)
+      if (!row) continue
+      const ancestor = sessionFromRow(row, dbPath)
+      ancestors.push(ancestor)
+      enqueue(ancestor.parent_id)
+    }
+    if (queue.length > 0) {
+      budget.noteDiscoveryTruncated?.()
+      source.truncated = true
+    }
+    return ancestors
   })
 }
 
@@ -160,14 +290,57 @@ function roleOf(data: Json): 'user' | 'assistant' | null {
  */
 export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[] {
   return withOpenCodeDb(fs, [] as DialogueTurn[], (db) => {
-    const messageRows = db
-      .prepare('SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id')
-      .all(s.id) as Json[]
+    const sourceBudget = sqliteSourceBudget(fs, opencodeDbPath(fs))
+    const messageRows = fs.contentReadBudget
+      ? readBoundedSqliteRows(
+        fs,
+        db,
+        {
+          sql: `SELECT CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS id_full_bytes,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
+         FROM message
+         WHERE session_id = ?
+         LIMIT ?`,
+          hasMoreSql: 'SELECT 1 AS present FROM message WHERE session_id = ? LIMIT 1 OFFSET ?',
+          scopeId: s.id,
+          relationFields: ['id'],
+          orderField: 'id',
+        },
+        sourceBudget,
+      )
+      : db
+        .prepare('SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created, id')
+        .all(s.id) as Json[]
     if (!messageRows.length) return []
 
-    const partRows = db
-      .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
-      .all(s.id) as Json[]
+    const partRows = fs.contentReadBudget
+      ? readBoundedSqliteRows(
+        fs,
+        db,
+        {
+          sql: `SELECT CAST(substr(CAST(message_id AS blob), 1, ?) AS text) AS message_id,
+                length(CAST(message_id AS blob)) AS message_id_full_bytes,
+                CAST(substr(CAST(id AS blob), 1, ?) AS text) AS id,
+                length(CAST(id AS blob)) AS id_full_bytes,
+                CAST(substr(CAST(data AS blob), 1, ?) AS text) AS data,
+                length(CAST(data AS blob)) AS full_bytes,
+                time_created
+         FROM part
+         WHERE session_id = ?
+         LIMIT ?`,
+          hasMoreSql: 'SELECT 1 AS present FROM part WHERE session_id = ? LIMIT 1 OFFSET ?',
+          scopeId: s.id,
+          relationFields: ['message_id', 'id'],
+          orderField: 'id',
+        },
+        sourceBudget,
+      )
+      : db
+        .prepare('SELECT id, message_id, data FROM part WHERE session_id = ? ORDER BY time_created, id')
+        .all(s.id) as Json[]
     const partsByMessage = new Map<string, Json[]>()
     for (const p of partRows) {
       const mid = String(p.message_id)

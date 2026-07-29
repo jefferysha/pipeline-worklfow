@@ -14,6 +14,8 @@
 #   · check 的 stdout 是人读 guard 报告（CONTRACT §3），stdout 面记 SKIP、exit 面照比。
 #   · G1 canonical cutover 的 `pipeline_state_revision/_id/_digest` 是 YAML adapter 指向唯一
 #     current 的投影元数据；老内核没有 canonical store，三行整行剥除后再比业务投影。
+#   · `tenon-internal-transition-head-v1` 是当前运行时写入 YAML opaque tail 的 canonical head
+#     digest anchor；老内核没有该完整性元数据，整行剥除后仍严格比较全部业务投影。
 #   · 早期开发快照曾把 `pipeline_document_profile` 等治理身份写入 YAML；当前正式实现把它们
 #     移到回滚兼容 sidecar。Oracle 仍剥除这些历史字段，以验证旧 fixture 的迁移读路径。
 #   · `.pipeline-document-locale.json` 固定新 Change 的人读文档语言；老内核没有文档呈现层。
@@ -141,12 +143,23 @@ is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 #                                                  老脚本 oracle 不产出。
 #   · tenon-internal-pre-verify-review-v1 comment —— companion 内容的 N-1 rollback anchor；
 #                                                    业务值由真实 N-1 双向 bundle 门验证。
+#   · tenon-internal-transition-head-v1 comment —— canonical head digest anchor；完整性与 N-1
+#                                                   兼容由 kernel 对抗测试和 bundle 门验证。
 #   · 已声明的状态演进（目前仅 pm-history 的 `spec-complete` 自动 AFK 入队）：harness 先逐字
 #     验证 old=`off`、new=`queued` 和 new 的入队时间戳，再仅从该单步的 YAML 比较中剥除这两个字段。
 #     这不是泛化豁免；没有 fixture sidecar 的任何 automation 差异仍会失败。
 normalize_yaml() {
   local omit_declared_automation="${2:-0}"
-  awk -v omit_declared_automation="$omit_declared_automation" '
+  local strip_transition_head=0 anchor_validation_rc=0
+  node "$ORACLE_DIR/validate-transition-head-anchor.mjs" "$1" >/dev/null 2>&1 \
+    || anchor_validation_rc=$?
+  case "$anchor_validation_rc" in
+    0) strip_transition_head=1 ;;
+    2|3) ;;
+    *) return 2 ;;
+  esac
+  awk -v omit_declared_automation="$omit_declared_automation" \
+      -v strip_transition_head="$strip_transition_head" '
     /^(tools_history|prompts_history|transitions_history):/ { inhist = 1; next }
     {
       if (inhist) {
@@ -154,6 +167,7 @@ normalize_yaml() {
         inhist = 0
       }
       if ($0 ~ /^# tenon-internal-pre-verify-review-v1: [A-Za-z0-9_-]+$/) next
+      if (strip_transition_head == "1" && $0 ~ /^# tenon-internal-transition-head-v1: [A-Za-z0-9_-]+$/) next
       if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_locale|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause|review_gate_phase|review_gate_status|review_gate_event|review_requested_at|review_acknowledged_at|pre_verify_review_result):/) next
       if (omit_declared_automation == "1" && $0 ~ /^(automation|automation_queued_at):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
@@ -595,9 +609,16 @@ run_step_dual() {
         printf '已声明状态演进验证失败：%s\n' "$state_extension" > "$step_dir/yaml.diff"
         ;;
     esac
-    normalize_yaml "$oy" "$omit_declared_automation" > "$step_dir/old.norm"
-    normalize_yaml "$ny" "$omit_declared_automation" > "$step_dir/new.norm"
-    if [ "$state_extension_rc" -ne 2 ]; then
+    local old_normalize_rc=0 new_normalize_rc=0
+    normalize_yaml "$oy" "$omit_declared_automation" > "$step_dir/old.norm" \
+      || old_normalize_rc=$?
+    normalize_yaml "$ny" "$omit_declared_automation" > "$step_dir/new.norm" \
+      || new_normalize_rc=$?
+    if [ "$old_normalize_rc" -ne 0 ] || [ "$new_normalize_rc" -ne 0 ]; then
+      f_yaml=FAIL
+      printf 'YAML 归一化失败: old=%s new=%s\n' \
+        "$old_normalize_rc" "$new_normalize_rc" > "$step_dir/yaml.diff"
+    elif [ "$state_extension_rc" -ne 2 ]; then
       if diff -u "$step_dir/old.norm" "$step_dir/new.norm" > "$step_dir/yaml.diff" 2>&1; then
         if [ "$state_extension_rc" -eq 0 ]; then f_yaml=KNOWN; else f_yaml=PASS; fi
       else

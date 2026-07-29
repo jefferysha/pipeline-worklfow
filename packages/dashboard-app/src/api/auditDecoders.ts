@@ -1,8 +1,5 @@
 import type {
   SessionLink,
-  TraceRecordsResponse,
-  TraceSessionRow,
-  TraceSessionsResponse,
   WbAttemptContext,
   WbLedgerRecord,
   WbRunDetail,
@@ -11,6 +8,8 @@ import type {
   WbTransitionRecord,
 } from './auditTypes'
 import { isRecord, nullableString, optionalString, stringArray } from './transport'
+
+export { decodeTraceRecords, decodeTraceSessions, decodeTraceTimeline } from './traceDecoders'
 
 function decodeRunIdentity(value: unknown): WbRunIdentity | null {
   if (!isRecord(value)
@@ -186,56 +185,6 @@ export function decodeRunDetail(value: unknown): WbRunDetail | null {
 
 function isPresent<T>(value: T | null): value is T {
   return value !== null
-}
-
-export function decodeTraceSessions(value: unknown): TraceSessionsResponse | null {
-  if (!isRecord(value)
-    || typeof value.generated_at !== 'string'
-    || typeof value.outbound !== 'string'
-    || typeof value.count !== 'number'
-    || !Array.isArray(value.sessions)) return null
-  const sessions: TraceSessionRow[] = []
-  for (const session of value.sessions) {
-    if (!isRecord(session)
-      || typeof session.id !== 'string'
-      || typeof session.started_at !== 'string'
-      || typeof session.updated_at !== 'string'
-      || typeof session.date_key !== 'string'
-      || typeof session.client !== 'string'
-      || typeof session.proxy_mode !== 'string'
-      || typeof session.status !== 'string'
-      || typeof session.record_count !== 'number'
-      || (session.summary !== null && !isRecord(session.summary))) return null
-    sessions.push({
-      id: session.id,
-      started_at: session.started_at,
-      updated_at: session.updated_at,
-      date_key: session.date_key,
-      client: session.client,
-      proxy_mode: session.proxy_mode,
-      status: session.status,
-      record_count: session.record_count,
-      summary: session.summary,
-    })
-  }
-  return { generated_at: value.generated_at, outbound: value.outbound, count: value.count, sessions }
-}
-
-export function decodeTraceRecords(value: unknown): TraceRecordsResponse | null {
-  if (!isRecord(value)
-    || typeof value.generated_at !== 'string'
-    || typeof value.outbound !== 'string'
-    || typeof value.session !== 'string'
-    || typeof value.count !== 'number'
-    || !Array.isArray(value.records)
-    || !value.records.every(isRecord)) return null
-  return {
-    generated_at: value.generated_at,
-    outbound: value.outbound,
-    session: value.session,
-    count: value.count,
-    records: value.records,
-  }
 }
 
 export function decodeSessionLink(value: unknown): SessionLink | null {

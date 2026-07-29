@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,10 +18,56 @@ function renderSolution(lang: 'zh' | 'en' = 'zh'): void {
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  window.history.replaceState(null, '', '/')
   vi.unstubAllGlobals()
 })
 
 describe('SolutionView 开源产品概览', () => {
+  it('为七个电脑端概览章节提供键盘可达的页内导航和真实标题目标', () => {
+    renderSolution()
+
+    const sectionNav = screen.getByRole('navigation', { name: 'Tenon 概览' })
+    const links = within(sectionNav).getAllByRole('link')
+    expect(links).toHaveLength(7)
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '#solution-modes',
+      '#solution-workflow',
+      '#solution-evidence',
+      '#solution-modules',
+      '#solution-install',
+      '#solution-safety',
+      '#solution-community',
+    ])
+
+    for (const link of links) {
+      const href = link.getAttribute('href')
+      expect(href).not.toBeNull()
+      const target = document.querySelector(href ?? '')
+      expect(target).toBeInTheDocument()
+      expect(target).toHaveAttribute('aria-labelledby')
+    }
+  })
+
+  it('根据 URL hash 向辅助技术和视觉样式标记当前章节', () => {
+    window.history.replaceState(null, '', '#solution-evidence')
+    renderSolution()
+
+    const sectionNav = screen.getByRole('navigation', { name: 'Tenon 概览' })
+    const evidenceLink = within(sectionNav).getByRole('link', { name: /证明/ })
+    const installLink = within(sectionNav).getByRole('link', { name: /安装/ })
+    expect(evidenceLink).toHaveAttribute('aria-current', 'location')
+    expect(evidenceLink).toHaveClass('bg-fill', 'text-text')
+    expect(installLink).not.toHaveAttribute('aria-current')
+
+    act(() => {
+      window.history.replaceState(null, '', '#solution-install')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    expect(installLink).toHaveAttribute('aria-current', 'location')
+    expect(evidenceLink).not.toHaveAttribute('aria-current')
+  })
+
   it('以单一 h1 和完整 adoption 路径呈现产品，不伪造运行状态', () => {
     renderSolution()
 
@@ -61,6 +107,22 @@ describe('SolutionView 开源产品概览', () => {
     for (const evidence of ['Skill 访问', '文档摘要', '读取收据', '复核收据', '状态转换']) {
       expect(screen.getByText(evidence)).toBeInTheDocument()
     }
+  })
+
+  it('720px 临界点的内容网格只使用共享 desktop 变体', () => {
+    renderSolution()
+
+    const evidence = screen.getByTestId('solution-evidence')
+    const modules = screen.getByTestId('solution-modules')
+    const legacyBreakpoint = ['min', '[720px]:'].join('-')
+    expect(evidence).toHaveClass('desktop:grid-cols-5')
+    expect(modules).toHaveClass('desktop:grid-cols-2')
+    expect(evidence.className).not.toContain(legacyBreakpoint)
+    expect(modules.className).not.toContain(legacyBreakpoint)
+
+    const dir = dirname(fileURLToPath(import.meta.url))
+    const css = readFileSync(join(dir, '..', 'index.css'), 'utf8')
+    expect(css).toContain('@custom-variant desktop (@media (min-width: 720.02px));')
   })
 
   it('覆盖公共模块、安装边界、主机能力分级和可选前置条件', () => {
@@ -123,7 +185,7 @@ describe('SolutionView 开源产品概览', () => {
 
     expect(screen.getByText('本地优先的 Agent 交付控制面')).toHaveClass('max-w-full', 'shrink', 'whitespace-normal')
     for (const eyebrow of ['路由', '治理', '证明', '运行', '安装', '信任', '社区']) {
-      expect(screen.getByText(new RegExp(`· ${eyebrow}$`))).toBeInTheDocument()
+      expect(screen.getAllByText(new RegExp(`· ${eyebrow}$`))).toHaveLength(2)
     }
     for (const link of screen.getAllByRole('link')) {
       expect(link).toHaveClass('motion-reduce:transition-none')

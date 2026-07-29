@@ -27,6 +27,13 @@ function inside(base: string, candidate: string): boolean {
     && !isAbsolute(pathFromBase)
 }
 
+export function isSafeProjectRelativePath(value: string): boolean {
+  if (value.startsWith('/') || value.includes('\\') || value.includes('\0')
+    || /^[A-Za-z]:/.test(value)) return false
+  return value.split('/').every((segment) =>
+    segment !== '' && segment !== '.' && segment !== '..')
+}
+
 export function deltaSpecSlot(path: string, changeDir: string): string | undefined {
   const parts = path.split('/')
   const changeName = basename(resolve(changeDir))

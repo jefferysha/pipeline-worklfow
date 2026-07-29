@@ -30,6 +30,7 @@ export function useProgressDrawer({
   const drawerRef = useRef<HTMLElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
+  const returnKeyRef = useRef<string | null>(null)
   const closingRef = useRef(false)
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
   const rowByKey = useMemo(() => new Map(rows.map((row) => [row.key, row])), [rows])
@@ -58,11 +59,11 @@ export function useProgressDrawer({
       return
     }
     closingRef.current = true
-    gsap.to(scrim, { autoAlpha: 0, duration: 0.2, ease: 'power1.in' })
+    gsap.to(scrim, { autoAlpha: 0, duration: 0.2, ease: 'power1.out' })
     gsap.to(drawer, {
       xPercent: 103,
       duration: 0.24,
-      ease: 'power3.in',
+      ease: 'power3.out',
       onComplete: () => {
         closingRef.current = false
         setDrawerKey(null)
@@ -81,15 +82,24 @@ export function useProgressDrawer({
   }, [onSelectedChange])
 
   useEffect(() => {
+    if (drawerOpen) returnKeyRef.current = drawerKey
+  }, [drawerKey, drawerOpen])
+
+  useEffect(() => {
     if (!drawerOpen) return
     document.documentElement.classList.add('prg9-lock')
     function onKey(event: KeyboardEvent): void {
+      // A nested modal owns its complete keyboard boundary. Let its focus trap and Escape
+      // handler run without the surrounding drawer moving focus or closing underneath it.
+      const drawer = drawerRef.current
+      const hasChildModal = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')]
+        .some((modal) => modal !== drawer)
+      if (hasChildModal) return
       if (event.key === 'Escape') {
         closeDrawer()
         return
       }
       if (event.key !== 'Tab') return
-      const drawer = drawerRef.current
       if (!drawer) return
       const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SEL))
       const first = focusables[0]
@@ -114,7 +124,17 @@ export function useProgressDrawer({
       document.documentElement.classList.remove('prg9-lock')
       document.removeEventListener('keydown', onKey)
       const trigger = triggerRef.current
-      if (trigger?.isConnected) trigger.focus()
+      const returnKey = returnKeyRef.current ?? trigger?.dataset.drawerTriggerKey ?? null
+      const connectedTrigger = trigger?.isConnected
+        && trigger.dataset.drawerTriggerKey === returnKey
+        ? trigger
+        : null
+      const replacement = returnKey === null || rootRef.current === null
+        ? null
+        : [...rootRef.current.querySelectorAll<HTMLElement>('[data-drawer-trigger-key]')]
+            .find((candidate) => candidate.dataset.drawerTriggerKey === returnKey)
+      const returnTarget = connectedTrigger ?? replacement
+      returnTarget?.focus()
     }
   }, [closeDrawer, drawerOpen])
 
@@ -139,7 +159,7 @@ export function useProgressDrawer({
       return
     }
     gsap.fromTo(scrim, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'power1.out' })
-    gsap.fromTo(drawer, { x: 0, xPercent: 103 }, { xPercent: 0, duration: 0.3, ease: 'expo.out' })
+    gsap.fromTo(drawer, { x: 0, xPercent: 103 }, { xPercent: 0, duration: 0.26, ease: 'power3.out' })
   }, { scope: rootRef, dependencies: [drawerKey] })
 
   return { drawerRef, scrimRef, drawerKey, drawerRow, openDrawer, closeDrawer }

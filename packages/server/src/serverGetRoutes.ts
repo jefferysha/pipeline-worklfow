@@ -26,7 +26,6 @@ import { buildRunDetail } from './runDetail.js'
 import { buildSecretsResponse } from './secrets.js'
 import { listAllSkillsDetailed } from './skillsRegistry.js'
 import { buildSnapshot, dedupeRoots, type SnapshotDeps } from './snapshot.js'
-import { listTraceSessions, readTraceRecords, type TraceStoreReader } from './traces.js'
 import { readChangeHistory } from './transition.js'
 import type { DashboardServerOptions, ServerPaths } from './types.js'
 import {
@@ -38,6 +37,9 @@ import {
   type WorkflowRootAnchor,
 } from './workflows.js'
 import { handleGetActivityRoutes } from './serverGetActivityRoutes.js'
+import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
+import type { TraceStoreReader } from './traces.js'
+import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -48,7 +50,7 @@ export interface GetRouteDeps {
   sendJson: (res: ServerResponse, code: number, body: unknown) => void
   sendHtml: (res: ServerResponse, code: number, body: string) => void
   serveIndexWithToken: (res: ServerResponse) => boolean
-  serveAsset: (res: ServerResponse, path: string) => boolean
+  serveAsset: (req: IncomingMessage, res: ServerResponse, path: string) => boolean
   indexHtml: (token: string) => string
   token: string
   version: string
@@ -71,8 +73,8 @@ export interface GetRouteDeps {
   trackRegistryBody: (registry: TrackRegistry) => Record<string, unknown>
   manifestPath?: string
   paths: ServerPaths
-  hostHome: string
-  options: DashboardServerOptions
+  hostHome: string; operationsAvailable: boolean; hostTargetPlanRuntime: import('./serverGetHostTargetPlanRoutes.js').HostTargetPlanRuntime
+  options: DashboardServerOptions; operationRunner: import('./operations.js').PipelineCliRunner
   resolveSessionLink: (root: string, name: string) => Promise<Record<string, unknown>>
   errMsg: (error: unknown) => string
 }
@@ -80,7 +82,6 @@ export interface GetRouteDeps {
 function repoRootForSkills(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 }
-
 function isWorkflowName(name: string): boolean {
   return name !== '' && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name)
 }
@@ -95,36 +96,20 @@ export async function handleGet(
     cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
     version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
-    trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, options, resolveSessionLink,
-    errMsg,
+    trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, operationsAvailable,
+    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
   } = deps
   const boundPort = deps.boundPort()
   await handleGetActivityRoutes(req, res, path, deps)
   if (res.headersSent) return
+  if (handleGetTraceRoutes(req, res, path, { clock, sendJson, traceStore })) return
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? '/', path, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime })
+  if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
       try {
         const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) })
         return sendJson(res, 200, snap)
-      } catch (e) {
-        return sendJson(res, 500, { ok: false, error: errMsg(e) })
-      }
-    }
-    // ── #34d traffic 查看器数据端：TraceStore.listSessions / readRecords（#34e 只读本地、不外发）──
-    if (path === '/api/traces/sessions') {
-      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
-      try {
-        return sendJson(res, 200, listTraceSessions(traceStore, clock))
-      } catch (e) {
-        return sendJson(res, 500, { ok: false, error: errMsg(e) })
-      }
-    }
-    if (path === '/api/traces/records') {
-      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
-      const session = new URL(req.url ?? '/', 'http://localhost').searchParams.get('session')
-      if (!session) return sendJson(res, 400, { ok: false, error: '缺 session 查询参数' })
-      try {
-        return sendJson(res, 200, readTraceRecords(traceStore, session, clock))
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

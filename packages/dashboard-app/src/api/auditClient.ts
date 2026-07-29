@@ -2,6 +2,7 @@ import type {
   SessionLink,
   TraceRecordsResponse,
   TraceSessionsResponse,
+  TraceTimelineResponse,
   WbRunDetail,
 } from './auditTypes'
 import {
@@ -10,6 +11,7 @@ import {
   decodeSessionLinks,
   decodeTraceRecords,
   decodeTraceSessions,
+  decodeTraceTimeline,
 } from './auditDecoders'
 import { ApiError, readJson, throwApiError, wrapNetwork } from './transport'
 
@@ -51,6 +53,16 @@ export async function fetchTraceRecords(session: string): Promise<TraceRecordsRe
   if (!response.ok) throw new Error(`traces 记录获取失败（${response.status}）`)
   const decoded = decodeTraceRecords(await readJson(response))
   if (!decoded) throw new Error('traces 记录响应形状无效')
+  return decoded
+}
+
+export async function fetchTraceTimeline(session: string): Promise<TraceTimelineResponse> {
+  const response = await fetch(`/api/traces/timeline?session=${encodeURIComponent(session)}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`trace timeline 获取失败（${response.status}）`)
+  const decoded = decodeTraceTimeline(await readJson(response))
+  if (!decoded || decoded.session.id !== session) throw new Error('trace timeline 响应形状无效')
   return decoded
 }
 

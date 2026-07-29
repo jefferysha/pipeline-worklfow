@@ -8,7 +8,7 @@ export interface StepPolicyEditorProps {
   onChange: (step: WbStepDef) => void
 }
 
-const INPUT = 'min-h-9 w-full rounded-md border border-border bg-bg px-2.5 py-2 text-[12.5px] text-text outline-none focus:border-green focus:ring-2 focus:ring-green-t disabled:cursor-not-allowed disabled:bg-fill disabled:text-text-3'
+const INPUT = 'min-h-9 w-full rounded-md border border-border bg-bg px-2.5 py-2 text-[12.5px] text-text outline-none focus:border-(--accent) focus:ring-2 focus:ring-accent-t disabled:cursor-not-allowed disabled:bg-fill disabled:text-text-3'
 const SELECT = `${INPUT} cursor-pointer disabled:cursor-not-allowed`
 const MINI = 'rounded-md border border-border bg-card px-2 py-1.5 text-[11.5px] font-semibold text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-50'
 const DANGER = 'rounded-md border border-red-b bg-transparent px-2 py-1.5 text-[11.5px] font-semibold text-red-d hover:bg-red-t disabled:cursor-not-allowed disabled:opacity-50'
@@ -65,7 +65,7 @@ function GuardRow({ guard, readonly, label, onChange, onRemove }: {
         <span className="min-w-0 flex-1 font-mono text-[11.5px] font-bold text-accent-d">{label}</span>
         {!readonly && <button className={DANGER} type="button" onClick={onRemove}>{t('workbench.step_remove')}</button>}
       </div>
-      <div className="grid grid-cols-2 gap-2 max-[720px]:grid-cols-1">
+      <div className="grid grid-cols-2 gap-2 mobile:grid-cols-1">
         {guard.type === 'tasks-at-least' && (
           <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">
             {t('workbench.step_task_count')}
@@ -94,10 +94,10 @@ function GuardRow({ guard, readonly, label, onChange, onRemove }: {
         )}
         {guard.type === 'build-head-unchanged' && <p className="text-xs text-text-3">build_sha</p>}
         {(guard.type === 'nonempty-output' || guard.type === 'full-direct-override') && (
-          <p className="col-span-2 text-xs leading-relaxed text-text-3 max-[720px]:col-span-1">{t(`workbench.step_guard_note_${guard.type}`)}</p>
+          <p className="col-span-2 text-xs leading-relaxed text-text-3 mobile:col-span-1">{t(`workbench.step_guard_note_${guard.type}`)}</p>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 max-[720px]:grid-cols-1">
+      <div className="mt-2 grid grid-cols-2 gap-2 mobile:grid-cols-1">
         <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">
           {t('workbench.step_track_scope')}
           <select
@@ -139,7 +139,7 @@ function GuardList({ guards, readonly, addLabel, onChange }: {
   const { t } = useT()
   return (
     <div className="grid gap-2">
-      {guards.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_none')}</p>}
+      {guards.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
       {guards.map((guard, index) => (
         <GuardRow
           key={`${guard.type}-${index}`}
@@ -173,7 +173,7 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
   const renderRefs = (kind: 'inputs' | 'outputs', refs: WbFieldRef[]): JSX.Element => (
     <div className="grid gap-2">
       {refs.map((ref, index) => (
-        <div key={`${ref.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_150px_auto] gap-2 max-[720px]:grid-cols-1">
+        <div key={`${ref.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_150px_auto] gap-2 mobile:grid-cols-1">
           <input className={INPUT} aria-label={`${ref.field} ${t('workbench.step_field')}`} value={ref.field} disabled={readonly} onChange={(event) => updateRefs(kind, refs.map((item, i) => i === index ? { ...item, field: event.target.value } : item))} />
           <select
             className={SELECT}
@@ -233,9 +233,9 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
         <div className={`${CARD} mt-3`}>
           <h4 className="mb-2 text-[12.5px] font-bold">落盘文件</h4>
           <div className="grid gap-2">
-            {artifacts.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_none')}</p>}
+            {artifacts.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
             {artifacts.map((artifact, index) => (
-              <div key={`${artifact.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_190px_140px_minmax(0,1fr)_auto] gap-2 max-[1000px]:grid-cols-2 max-[720px]:grid-cols-1">
+              <div key={`${artifact.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_190px_140px_minmax(0,1fr)_auto] gap-2 max-[1000px]:grid-cols-2 mobile:grid-cols-1">
                 <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={`${artifact.field} artifact`} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
                 <select className={SELECT} value={artifact.producerPolicy} disabled={readonly} aria-label={`${artifact.field} producer policy`} onChange={(event) => updateArtifact(index, { ...artifact, producerPolicy: event.target.value as WbArtifactConfig['producerPolicy'] })}>
                   <option value="effective-step-skills">effective-step-skills</option>
@@ -266,12 +266,12 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
       <details className="border-t border-border">
         <summary className={SUMMARY}>{t('workbench.step_transitions_title', { n: step.transitions.length })}</summary>
         <div className="grid gap-3">
-          {step.transitions.length === 0 && <p className="text-xs text-text-3">{t('workbench.step_terminal')}</p>}
+          {step.transitions.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_terminal')}</p>}
           {step.transitions.map((transition, index) => {
             const update = (patch: Partial<typeof transition>): void => onChange({ ...step, transitions: step.transitions.map((item, i) => i === index ? { ...item, ...patch } : item) })
             return (
               <div className={CARD} key={`${transition.event}-${index}`}>
-                <div className="grid grid-cols-[minmax(0,1fr)_180px_auto] gap-2 max-[720px]:grid-cols-1">
+                <div className="grid grid-cols-[minmax(0,1fr)_180px_auto] gap-2 mobile:grid-cols-1">
                   <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">Event<input className={INPUT} value={transition.event} disabled={readonly} aria-label={`${transition.event} event`} onChange={(event) => update({ event: event.target.value })} /></label>
                   <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">{t('workbench.step_target')}<select className={SELECT} value={transition.to} disabled={readonly} aria-label={`${transition.event} ${t('workbench.step_target')}`} onChange={(event) => update({ to: event.target.value })}>{allStepIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
                   {!readonly && <button className={`${DANGER} self-end`} type="button" onClick={() => onChange({ ...step, transitions: step.transitions.filter((_, i) => i !== index) })}>{t('workbench.step_remove')}</button>}

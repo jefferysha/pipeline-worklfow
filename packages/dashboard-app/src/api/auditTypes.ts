@@ -91,7 +91,7 @@ export interface TraceSessionRow {
 
 export interface TraceSessionsResponse {
   generated_at: string
-  outbound: string
+  outbound: 'local-only'
   count: number
   sessions: TraceSessionRow[]
 }
@@ -102,6 +102,66 @@ export interface TraceRecordsResponse {
   session: string
   count: number
   records: Array<Record<string, unknown>>
+}
+
+export type TraceTimelineIntegrity = 'complete' | 'partial'
+export type TraceTimelineOutcome = 'success' | 'error' | 'unknown'
+export type TraceTimelineWarning =
+  | 'record-limit'
+  | 'byte-limit'
+  | 'malformed-record'
+  | 'count-mismatch'
+
+export interface TraceTimelineSession {
+  id: string
+  client: string
+  proxy_mode: string
+  status: string
+  started_at: string
+  updated_at: string
+}
+
+export interface TraceTimelineSummary {
+  success_count: number
+  error_count: number
+  unknown_count: number
+  total_duration_ms: number | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cached_input_tokens: number | null
+}
+
+export interface TraceTimelineEntry {
+  sequence: number
+  request_id: string | null
+  turn: number | null
+  timestamp: string | null
+  duration_ms: number | null
+  transport: string | null
+  method: string | null
+  path: string | null
+  status_code: number | null
+  outcome: TraceTimelineOutcome
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cached_input_tokens: number | null
+  stream_event_count: number | null
+}
+
+export interface TraceTimelineResponse {
+  generated_at: string
+  outbound: 'local-only'
+  content: 'metadata-only'
+  session: TraceTimelineSession
+  total_count: number
+  returned_count: number
+  skipped_count: number
+  truncated: boolean
+  integrity: TraceTimelineIntegrity
+  warnings: TraceTimelineWarning[]
+  summary: TraceTimelineSummary
+  entries: TraceTimelineEntry[]
 }
 
 export interface SessionLink {

@@ -105,16 +105,16 @@ export function SkillHealthPanel(): JSX.Element {
       <div className="side-card__body pt-0.5 pb-1">
         {/* fail-soft：fetch 失败——行内错误，不谎报全绿。 */}
         {regError && (
-          <p className="p-5 text-[13px] text-red" data-testid="skh-error">
+          <p className="p-5 text-[13px] text-red" data-testid="skh-error" role="alert">
             {regError}
           </p>
         )}
 
-        {!regError && registry === null && <p className={NOTE_CLS}>{t('common.loading')}</p>}
+        {!regError && registry === null && <p className={NOTE_CLS} role="status" aria-live="polite">{t('common.loading')}</p>}
 
         {/* registry 空/未就绪：不谎报「已装齐」，导向终端 doctor（对齐 doctor「不误报 green」）。 */}
         {!regError && registry !== null && registry.length === 0 && (
-          <div data-testid="skh-unready">
+          <div data-testid="skh-unready" role="status" aria-live="polite">
             <p className={NOTE_CLS}>{t('workbench.skh_unready')}</p>
             {cmdButton(DOCTOR_CMD, 'skh-copy-doctor')}
           </div>

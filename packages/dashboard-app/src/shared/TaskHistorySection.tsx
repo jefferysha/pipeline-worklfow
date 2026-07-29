@@ -18,7 +18,7 @@ export function TaskHistorySection({ entries }: TaskHistorySectionProps): JSX.El
         {t('detail.history_heading')} <span className="text-xs font-normal text-text-3">{t('detail.hist_flow_hint')}</span>
       </div>
       {flowEntries !== null && (flowEntries.length === 0 ? (
-        <p className="m-0 text-xs text-text-3">{t('detail.history_empty')}</p>
+        <p className="m-0 text-xs text-text-3" role="status" aria-live="polite">{t('detail.history_empty')}</p>
       ) : (
         <ol className="m-0 flex max-h-[180px] list-none flex-col gap-[5px] overflow-y-auto p-0" data-testid="dt-hist">
           {flowEntries.map((entry, index) => (

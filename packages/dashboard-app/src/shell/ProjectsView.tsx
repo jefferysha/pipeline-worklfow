@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WorkflowRules } from '../model/workflowModel'
+import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { buildProjectRows, compareProjectRows, type PhaseCell, type ProjectRow } from './projectsModel'
 
@@ -135,26 +136,30 @@ function HealthSummary({
 
 /** 单个可达项目行（整行 button，可点钻进）。need 分区高亮 = accent 点 + 极轻 tint（无左边框）。 */
 function ProjectRowButton({
+  rowId,
   row,
+  visibleRoot,
   need,
   onOpen,
   t,
 }: {
+  rowId: string
   row: ProjectRow
+  visibleRoot: string
   /** 是否归「需要你动手」分区（决定高亮）。 */
   need: boolean
   onOpen: (root: string) => void
   t: (k: string, vars?: Record<string, string | number>) => string
 }): JSX.Element {
-  const rowId = `project-row-${row.basename}`
   return (
     <button
       type="button"
+      id={`project-row-${encodeURIComponent(row.root)}`}
       data-anim="pv-item"
       data-testid={rowId}
       data-ok="true"
       data-need={need}
-      aria-label={t('projects.open_aria', { name: row.basename })}
+      aria-label={t('projects.open_aria', { name: row.basename, root: row.root })}
       onClick={() => onOpen(row.root)}
       className={`group grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-[border-color,background-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) active:scale-[.995] motion-reduce:transform-none sm:flex sm:flex-nowrap sm:gap-4 sm:px-5 ${
         need ? 'border-accent-b bg-accent-t hover:border-(--accent)' : 'border-border bg-card hover:border-border-2 hover:bg-fill'
@@ -164,11 +169,13 @@ function ProjectRowButton({
         aria-hidden="true"
         className={`col-start-1 row-start-1 h-2 w-2 flex-none rounded-full ${need ? 'bg-(--accent)' : 'border border-border-2 bg-transparent'}`}
       />
-      <span
-        className="col-start-2 row-start-1 min-w-0 truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent) sm:min-w-[190px] sm:flex-none"
-        title={row.root}
-      >
-        {row.basename}
+      <span className="col-start-2 row-start-1 flex min-w-0 flex-col sm:w-[240px] sm:flex-none">
+        <span className="truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent)">
+          {row.basename}
+        </span>
+        <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
+          {visibleRoot}
+        </span>
       </span>
       <MiniTrack rowId={rowId} cells={row.cells} t={t} />
       <HealthSummary rowId={rowId} wip={row.wip} need={row.need} running={row.running} t={t} />
@@ -200,6 +207,36 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   const [unreachableOpen, setUnreachableOpen] = useState(false)
 
   const rows = useMemo(() => buildProjectRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
+  const duplicateBasenames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of rows) counts.set(row.basename, (counts.get(row.basename) ?? 0) + 1)
+    return new Set([...counts].filter(([, count]) => count > 1).map(([basename]) => basename))
+  }, [rows])
+  const visibleRoots = useMemo(() => {
+    const labels = new Map(rows.map((row) => [row.root, row.root]))
+    const groups = new Map<string, ProjectRow[]>()
+    for (const row of rows) {
+      const group = groups.get(row.basename) ?? []
+      group.push(row)
+      groups.set(row.basename, group)
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const segments = group.map((row) => row.root.replace(/\\/g, '/').split('/').filter(Boolean))
+      const maxDepth = Math.max(...segments.map((parts) => parts.length))
+      for (let depth = 2; depth <= maxDepth; depth += 1) {
+        const suffixes = segments.map((parts) => parts.slice(-depth).join('/'))
+        if (new Set(suffixes).size !== group.length) continue
+        group.forEach((row, index) => labels.set(row.root, `…/${suffixes[index]}`))
+        break
+      }
+    }
+    return labels
+  }, [rows])
+  const rowId = (row: ProjectRow) =>
+    duplicateBasenames.has(row.basename)
+      ? `project-row-${row.basename}-${encodeURIComponent(row.root)}`
+      : `project-row-${row.basename}`
   const { needRows, restRows, unreachable, needCount } = useMemo(() => {
     const reachable = rows.filter((r) => r.ok)
     const need = reachable.filter((r) => r.need > 0).sort(compareProjectRows)
@@ -209,7 +246,7 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   }, [rows])
 
   // 入场动画依赖键 = 行/分区成员指纹（增删项目才重放 stagger；展开读不到区不整列重播）。
-  const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.basename}`).sort().join('|')
+  const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.root}`).sort().join('|')
   useGSAP(
     () => {
       const el = rootRef.current
@@ -238,17 +275,13 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
 
   return (
     <section ref={rootRef} data-testid="projects-view" data-page-frame="standard" aria-label={t('projects.title')} className="mx-auto w-full max-w-[1088px] pt-7 pb-5">
-      <header className="mb-8 flex flex-wrap items-start gap-4">
-        <div className="mr-auto">
-          <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">{t('projects.title')}</h1>
-          <p className="mt-2 text-[13px] leading-5 text-text-3" data-testid="projects-summary">
-            {t('projects.count_summary', { n: rows.length, need: needCount })}
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={t('projects.title')}
+        description={<span data-testid="projects-summary">{t('projects.count_summary', { n: rows.length, need: needCount })}</span>}
+      />
 
       {snapshot === null ? (
-        <p className="text-[14px] text-text-3">{t('common.loading')}</p>
+        <p className="text-[14px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
       ) : (
         <div className="flex flex-col gap-7">
           {needRows.length > 0 && (
@@ -256,7 +289,15 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_need')} tone="need" />
               <div className="flex flex-col gap-2.5">
                 {needRows.map((row) => (
-                  <ProjectRowButton key={row.root} row={row} need onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton
+                    key={row.root}
+                    rowId={rowId(row)}
+                    row={row}
+                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
+                    need
+                    onOpen={onOpenProject}
+                    t={t}
+                  />
                 ))}
               </div>
             </div>
@@ -267,7 +308,15 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               <SectionHead label={t('projects.section_rest')} tone="quiet" />
               <div className="flex flex-col gap-2.5">
                 {restRows.map((row) => (
-                  <ProjectRowButton key={row.root} row={row} need={false} onOpen={onOpenProject} t={t} />
+                  <ProjectRowButton
+                    key={row.root}
+                    rowId={rowId(row)}
+                    row={row}
+                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
+                    need={false}
+                    onOpen={onOpenProject}
+                    t={t}
+                  />
                 ))}
               </div>
             </div>
@@ -292,12 +341,16 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               {unreachableOpen && (
                 <div className="mt-2 flex flex-col gap-1">
                   {unreachable.map((row) => {
-                    const rowId = `project-row-${row.basename}`
+                    const id = rowId(row)
                     return (
                       <div
                         key={row.root}
-                        data-testid={rowId}
+                        id={`project-row-${encodeURIComponent(row.root)}`}
+                        data-testid={id}
+                        data-anim="pv-item"
                         data-ok="false"
+                        role="group"
+                        aria-label={t('projects.unreachable_aria', { name: row.basename, root: row.root })}
                         aria-disabled="true"
                         className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5 opacity-70"
                       >
@@ -305,8 +358,11 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
                           aria-hidden="true"
                           className="h-2 w-2 flex-none rounded-full border border-border-2 bg-transparent"
                         />
-                        <span className="min-w-0 flex-1 truncate font-mono text-[14px] text-text-3" title={row.root}>
-                          {row.basename}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate font-mono text-[14px] text-text-3">{row.basename}</span>
+                          <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
+                            {visibleRoots.get(row.root) ?? row.root}
+                          </span>
                         </span>
                         <span className="flex-none text-[12px] font-semibold text-text-3">{t('projects.unreachable')}</span>
                       </div>

@@ -126,13 +126,13 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
           if (cards.length > 0) {
             gsap.fromTo(
               cards,
-              { autoAlpha: 0, y: 14 },
+              { autoAlpha: 0, y: 6 },
               {
                 autoAlpha: 1,
                 y: 0,
-                duration: 0.42,
+                duration: 0.22,
                 ease: 'power2.out',
-                stagger: 0.08,
+                stagger: 0.04,
                 clearProps: 'transform,opacity,visibility',
               },
             )
@@ -176,11 +176,12 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
             <section
               data-anim="prg-card"
               data-testid={`prg-cv-group-${group.projName}-${group.workflow}`}
-              className="min-h-[655px] rounded-[22px] border border-border bg-card p-6 shadow-xs"
+              data-responsive="summary-track-cards"
+              className="min-h-[420px] rounded-[22px] border border-border bg-card p-5 shadow-xs mobile:min-h-0 mobile:rounded-2xl mobile:p-4"
             >
-                <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="max-w-full break-words text-[18px] font-black tracking-[-0.015em] text-text" data-testid={`prg-cv-project-${group.projName}-${group.workflow}`} title={group.projName}>
+                <header className="mb-5 flex flex-wrap items-center justify-between gap-4 mobile:items-start">
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
+                    <span className="max-w-full break-words text-[18px] font-black tracking-[-0.015em] text-text mobile:basis-full mobile:text-[17px]" data-testid={`prg-cv-project-${group.projName}-${group.workflow}`} title={group.projName}>
                       {t('progress.canvas_project')} · {group.projName}
                     </span>
                     <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-fill px-3 py-1.5 font-mono text-[13px] font-semibold text-text">
@@ -189,7 +190,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                     </span>
                     <span className="text-[13px] text-text-3">{t('progress.canvas_meta', { n, m: group.changes.length })}</span>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[.16em] text-text-3 uppercase">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[.16em] text-text-3 uppercase mobile:hidden">
                     <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                     {t('progress.canvas_process')}
                   </span>
@@ -204,7 +205,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                   <div
                     data-testid={`prg-cv-track-${group.projName}-${group.workflow}`}
                     className="relative"
-                    style={{ minWidth: `${Math.max(n * 260, 520)}px` }}
+                    style={{ minWidth: `${Math.max(n * 232, 464)}px` }}
                   >
                   <div className="relative h-8">
                     {n >= 2 && (
@@ -281,14 +282,14 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     key={change.key}
                                     type="button"
                                     data-testid={`prg-cv-chg-${change.name}`}
+                                    data-drawer-trigger-key={change.key}
                                     data-state={change.state}
                                     data-sbx={change.sandbox || undefined}
                                     data-dim={change.dimmed || undefined}
                                     data-on={change.selected || undefined}
                                     onClick={(event) => onOpen(change.key, event.currentTarget)}
-                                    className="group relative flex min-h-[214px] w-full flex-col overflow-hidden rounded-xl border border-border bg-card p-4 pl-5 text-left shadow-xs transition-[transform,border-color,box-shadow] hover:-translate-y-0.5 hover:border-border-2 hover:shadow-md active:translate-y-0 data-[dim=true]:opacity-30 data-[on=true]:border-(--accent) data-[on=true]:ring-1 data-[on=true]:ring-ring motion-reduce:transform-none"
+                                    className="group relative flex min-h-[196px] w-full flex-col overflow-hidden rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-border-2 hover:shadow-md active:translate-y-0 data-[dim=true]:opacity-30 data-[on=true]:border-(--accent) data-[on=true]:ring-1 data-[on=true]:ring-ring motion-reduce:transform-none mobile:min-h-[184px]"
                                   >
-                                    <span className={`absolute inset-y-0 left-0 w-1 ${meta.accent}`} aria-hidden="true" />
                                     <span className="flex items-center justify-between gap-2">
                                       <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[9px] font-bold tracking-[.08em] ${meta.chip}`}>
                                         <span className={`h-1.5 w-1.5 rounded-full ${DOT_TONE_CLS[change.tone]}`} data-pulse={change.running || undefined} aria-hidden="true" />

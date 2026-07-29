@@ -47,6 +47,21 @@ function makeRow(over: Record<string, unknown> = {}): Record<string, unknown> {
   }
 }
 
+function scopeResponse(loopId: string): Record<string, unknown> {
+  return {
+    ok: true,
+    schema_version: 1,
+    loop_id: loopId,
+    loop_status: 'active',
+    autonomy_level: 'L1',
+    enforced_for_unattended_merge: false,
+    summary: { total: 1, allowed: 1, blocked: 0 },
+    items: [
+      { path: 'src/styles/app.css', verdict: 'allowed', reason: 'allowlist', matched_pattern: 'src/styles/**' },
+    ],
+  }
+}
+
 let rows: Record<string, unknown>[]
 
 /** 快照 + 两写端点的可驱动 mock：update 真把 patch 应用到 rows（reload 读到新真值）。 */
@@ -178,6 +193,30 @@ describe('LoopCard 读回显（验收①）', () => {
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
+  it('仅路径策略未保存时阻止预检，其他草稿不阻断；保存回读后重新启用', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const preview = screen.getByTestId('lp-scope-open')
+    expect(preview).toBeEnabled()
+
+    fireEvent.change(screen.getByTestId('lp-goal'), { target: { value: '仅修改目标' } })
+    expect(preview).toBeEnabled()
+    expect(screen.queryByTestId('lp-scope-dirty-policy')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增允许路径' }))
+    const input = screen.getByLabelText('新增允许路径')
+    fireEvent.change(input, { target: { value: 'docs/**' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(preview).toBeDisabled()
+    expect(screen.getByTestId('lp-scope-dirty-policy')).toHaveTextContent('先保存路径策略，再运行预检')
+
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    expect(preview).toBeEnabled()
+    expect(screen.queryByTestId('lp-scope-dirty-policy')).toBeNull()
+  })
+
   it('拖滑杆 → 未保存 chip；保存 body 只带被改字段；成功后 reload 清脏 + 已保存', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
@@ -515,6 +554,66 @@ describe('LoopCard 多 loop 下拉 / 空态', () => {
     // dirty → 下拉禁用（切 loop 会重置草稿，先保存）
     fireEvent.change(screen.getByTestId('lp-goal'), { target: { value: '改了' } })
     expect(screen.getByTestId('lp-loop-select')).toBeDisabled()
+  })
+
+  it('切换 Loop 时不会把已完成的旧预检结果显示在新 Loop 下', async () => {
+    rows = [makeRow(), makeRow({ id: 'docs-loop', goal: '文档巡检', autonomy_level: 'L2' })]
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({ generated_at: '2026-07-11T00:00:00Z', rows }), { status: 200 })
+      }
+      if (url === '/api/loops/scope-preview' && init?.method === 'POST') {
+        return new Response(JSON.stringify(scopeResponse('restyle-loop')), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    fireEvent.click(screen.getByTestId('lp-scope-open'))
+    fireEvent.change(screen.getByTestId('lp-scope-input'), { target: { value: 'src/styles/app.css' } })
+    fireEvent.click(screen.getByTestId('lp-scope-submit'))
+    await screen.findByTestId('lp-scope-summary')
+
+    fireEvent.change(screen.getByTestId('lp-loop-select'), { target: { value: 'docs-loop' } })
+    expect(screen.getByTestId('lp-goal')).toHaveValue('文档巡检')
+    expect(screen.queryByTestId('lp-scope-dialog')).toBeNull()
+    expect(screen.queryByTestId('lp-scope-summary')).toBeNull()
+  })
+
+  it('切换 Loop 会取消旧预检，并拒绝迟到响应落入新 Loop', async () => {
+    rows = [makeRow(), makeRow({ id: 'docs-loop', goal: '文档巡检', autonomy_level: 'L2' })]
+    let resolvePreview: ((value: Response) => void) | undefined
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return Promise.resolve(new Response(JSON.stringify({
+          generated_at: '2026-07-11T00:00:00Z',
+          rows,
+        }), { status: 200 }))
+      }
+      if (url === '/api/loops/scope-preview' && init?.method === 'POST') {
+        return new Promise<Response>((resolve) => { resolvePreview = resolve })
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`))
+    }) as unknown as typeof fetch
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    fireEvent.click(screen.getByTestId('lp-scope-open'))
+    fireEvent.change(screen.getByTestId('lp-scope-input'), { target: { value: 'src/styles/app.css' } })
+    fireEvent.click(screen.getByTestId('lp-scope-submit'))
+    const previewCall = vi.mocked(global.fetch).mock.calls.find(([url]) => url === '/api/loops/scope-preview')
+    const signal = previewCall?.[1]?.signal
+    expect(signal?.aborted).toBe(false)
+
+    fireEvent.change(screen.getByTestId('lp-loop-select'), { target: { value: 'docs-loop' } })
+    expect(screen.getByTestId('lp-goal')).toHaveValue('文档巡检')
+    expect(signal?.aborted).toBe(true)
+    expect(screen.queryByTestId('lp-scope-dialog')).toBeNull()
+
+    resolvePreview?.(new Response(JSON.stringify(scopeResponse('restyle-loop')), { status: 200 }))
+    await Promise.resolve()
+    expect(screen.queryByTestId('lp-scope-summary')).toBeNull()
   })
 
   it('单 loop：不渲染下拉', async () => {

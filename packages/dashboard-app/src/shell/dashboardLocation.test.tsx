@@ -7,6 +7,15 @@ describe('dashboard URL 深链路', () => {
     expect(dashboardSearch('?debug=1', { view: 'overview', root: '', change: null })).toBe('?debug=1&view=overview')
   })
 
+  it('接受 hostPlan 作为无项目依赖的机器级深链', () => {
+    expect(parseDashboardLocation('?debug=1&view=hostPlan')).toEqual({ view: 'hostPlan' })
+    expect(dashboardSearch('?debug=1&root=%2Frepo&change=old', {
+      view: 'hostPlan',
+      root: '',
+      change: null,
+    })).toBe('?debug=1&view=hostPlan')
+  })
+
   it('只接受已知 view，并逐字保留 root/change', () => {
     expect(parseDashboardLocation('?view=progress&root=%2Frepo%2Fa&change=fix-login')).toEqual({
       view: 'progress', root: '/repo/a', change: 'fix-login',

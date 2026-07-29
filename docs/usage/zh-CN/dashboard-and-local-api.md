@@ -72,12 +72,12 @@ Dashboard `zh/en` 存在浏览器 `localStorage`，只控制 UI。治理文档 l
 
 进度页沿真实 Workflow 展示阶段与 Change。`running` 是显示状态，执行来源则独立标记为终端或自动化，避免同一个任务在不同页面出现互相矛盾的身份。
 
-## 五个操作视图
+## 操作视图
 
 主导航按实现顺序提供：
 
 ```text
-projects → progress → afk → workbench → machine
+projects → progress → afk → workbench → machine → hostPlan
 ```
 
 - `projects`：项目与 Change 汇总；
@@ -85,8 +85,10 @@ projects → progress → afk → workbench → machine
 - `afk`：AFK 队列、worker、预算与停止原因；
 - `workbench`：Workflow、Track、hook、automation 和 loop；
 - `machine`：运行时身份、流量和高级诊断。
+- `hostPlan`：选择 Tenon 已注册宿主，预览零副作用的 setup/update
+  命令与有序步骤。适配器计划固定使用 `--target .`，复制后运行前必须先进入目标项目目录。
 
-`overview` 独立于五个操作视图，避免把产品介绍混进日常控制面导航。
+`overview` 独立于操作视图，避免把产品介绍混进日常控制面导航。
 
 ### 自动运行
 
@@ -103,6 +105,15 @@ projects → progress → afk → workbench → machine
 ## 本地 API 边界
 
 mutation 端点必须经过 CLI 相同的 schema、CAS、review 和 guard。前端不能直接编辑 canonical JSON 或 `.pipeline.yaml`。
+
+`GET /api/host-targets` 与
+`GET /api/host-target-plan?host=codex&operation=setup` 是严格只读端点，只接受
+Tenon 已注册宿主以及 `setup`/`update` 操作，返回
+`host-target-plan/v1`，不会执行预览命令。原生宿主计划面向用户级安装；适配器宿主计划使用
+当前项目目录（`--target .`），不会输出可被 shell 误解的占位符。
+
+生产 server 会为可压缩的生成资源协商 gzip，并返回 `Vary: Accept-Encoding`；明确拒绝 gzip
+的客户端仍获得原始字节，API JSON 继续使用 `no-store`。
 
 ```bash
 lsof -nP -iTCP:18765 -sTCP:LISTEN

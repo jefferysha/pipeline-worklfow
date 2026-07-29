@@ -1,4 +1,5 @@
 import { ChevronDown, Plus } from 'lucide-react'
+import { PageHeader } from '../shared/PageHeader'
 import { DECK_TABS, type DeckTab, type Tr } from './progressViewModel'
 
 export interface ProgressToolbarProps {
@@ -26,26 +27,29 @@ export function ProgressToolbar({
 }: ProgressToolbarProps): JSX.Element {
   return (
     <>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4" data-anim="prg-chrome" data-testid="prg-hero">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">{t('progress.title')}</h1>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-text-3">
-              <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
-              {t('progress.realtime_sync')}
-            </span>
-          </div>
-          <p className="mt-2 text-[13px] leading-5 text-text-3">{t('progress.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white shadow-sm transition-[transform,box-shadow] hover:shadow-md active:translate-y-px motion-reduce:transform-none"
-          data-testid="progress-new-change"
-          onClick={onCreate}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" /> {t('change_create.create')}
-        </button>
-      </div>
+      <PageHeader
+        title={t('progress.title')}
+        description={t('progress.subtitle')}
+        className="mb-6"
+        testId="prg-hero"
+        animation="prg-chrome"
+        status={(
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-green-b bg-green-t px-2.5 py-1 text-[11px] font-semibold text-green-d">
+            <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
+            {t('progress.realtime_sync')}
+          </span>
+        )}
+        actions={(
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-btn-bg px-4 text-sm font-semibold text-btn-fg shadow-sm transition-[background-color,transform,box-shadow] duration-150 hover:bg-btn-hover hover:shadow-md active:translate-y-px motion-reduce:transform-none"
+            data-testid="progress-new-change"
+            onClick={onCreate}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" /> {t('change_create.create')}
+          </button>
+        )}
+      />
       {rowCount > 0 && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
           <div className="min-w-0 max-w-full overflow-x-auto pb-1 [scrollbar-width:thin]">
@@ -66,7 +70,7 @@ export function ProgressToolbar({
                   onClick={() => onDeckTab(tab)}
                 >
                   {t(`progress.tab_${tab}`)}
-                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tab}`}>
+                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-btn-fg" data-testid={`prg9t-n-${tab}`}>
                     {deckCounts[tab]}
                   </span>
                 </button>
