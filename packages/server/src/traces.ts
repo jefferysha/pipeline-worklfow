@@ -178,13 +178,25 @@ function usageFromResponse(response: Record<string, unknown> | null): {
   }
 }
 
+function metadataPath(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length === 0) return null
+  let path = value.split(/[?#]/, 1)[0] ?? ''
+  const absoluteForm = /^[A-Za-z][A-Za-z\d+.-]*:/.test(value) || value.startsWith('//')
+  if (absoluteForm) {
+    try {
+      path = new URL(value.startsWith('//') ? `http:${value}` : value).pathname
+    } catch {
+      return null
+    }
+  }
+  return path.length > 0 && path.length <= 2048 ? path : null
+}
+
 function projectEntry(record: unknown, sequence: number): TraceTimelineEntry {
   const source = isObject(record) ? record : {}
   const request = objectField(source, 'request')
   const response = objectField(source, 'response')
   const requestBody = objectField(request, 'body')
-  const rawPath = typeof request?.path === 'string' ? request.path : null
-  const pathWithoutQuery = rawPath === null ? null : (rawPath.split('?', 1)[0] ?? '')
   const status = httpStatus(response?.status)
   const usage = usageFromResponse(response)
   const streamEvents = response?.sse_events
@@ -196,9 +208,7 @@ function projectEntry(record: unknown, sequence: number): TraceTimelineEntry {
     duration_ms: nonNegativeSafeInteger(source.duration_ms),
     transport: boundedString(source.transport, 64),
     method: boundedString(request?.method, 32),
-    path: pathWithoutQuery !== null && pathWithoutQuery.length <= 2048 && pathWithoutQuery.length > 0
-      ? pathWithoutQuery
-      : null,
+    path: metadataPath(request?.path),
     status_code: status,
     outcome: outcomeOf(status),
     model: boundedString(requestBody?.model, 256),

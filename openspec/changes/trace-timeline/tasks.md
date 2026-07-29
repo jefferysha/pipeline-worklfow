@@ -27,8 +27,8 @@
 
 ## 验证
 
-- [ ] 运行定向测试、全仓测试、类型检查与构建门禁。 (verify)
-- [ ] 使用真实 Tenon Dashboard 和真实本地 Trace 数据做浏览器验收。 (verify)
+- [x] 运行定向测试、全仓测试、类型检查与构建门禁。 (verify)
+- [x] 使用真实 Tenon Dashboard 和真实本地 Trace 数据做浏览器验收。 (verify)
 - [ ] 登记验证报告并完成精确事件评审。 (verify)
 
 ## 交付

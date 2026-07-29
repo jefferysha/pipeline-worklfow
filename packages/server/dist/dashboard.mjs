@@ -16837,13 +16837,24 @@ function usageFromResponse(response) {
     )
   };
 }
+function metadataPath(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  let path7 = value.split(/[?#]/, 1)[0] ?? "";
+  const absoluteForm = /^[A-Za-z][A-Za-z\d+.-]*:/.test(value) || value.startsWith("//");
+  if (absoluteForm) {
+    try {
+      path7 = new URL(value.startsWith("//") ? `http:${value}` : value).pathname;
+    } catch {
+      return null;
+    }
+  }
+  return path7.length > 0 && path7.length <= 2048 ? path7 : null;
+}
 function projectEntry(record2, sequence) {
   const source = isObject2(record2) ? record2 : {};
   const request = objectField(source, "request");
   const response = objectField(source, "response");
   const requestBody = objectField(request, "body");
-  const rawPath = typeof request?.path === "string" ? request.path : null;
-  const pathWithoutQuery = rawPath === null ? null : rawPath.split("?", 1)[0] ?? "";
   const status = httpStatus(response?.status);
   const usage = usageFromResponse(response);
   const streamEvents = response?.sse_events;
@@ -16855,7 +16866,7 @@ function projectEntry(record2, sequence) {
     duration_ms: nonNegativeSafeInteger(source.duration_ms),
     transport: boundedString(source.transport, 64),
     method: boundedString(request?.method, 32),
-    path: pathWithoutQuery !== null && pathWithoutQuery.length <= 2048 && pathWithoutQuery.length > 0 ? pathWithoutQuery : null,
+    path: metadataPath(request?.path),
     status_code: status,
     outcome: outcomeOf(status),
     model: boundedString(requestBody?.model, 256),

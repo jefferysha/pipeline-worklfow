@@ -66,3 +66,33 @@ Screenshots:
 - `docs/ux/shots/trace-timeline/partial.png`
 - `docs/ux/shots/trace-timeline/error.png`
 - `docs/ux/shots/trace-timeline/mobile-en.png`
+
+## Verify-fail repair round
+
+The first frozen Verify round correctly failed two hard boundaries:
+
+1. OpenSpec strict validation rejected six Requirements whose uppercase SHALL appeared only in the
+   heading. The Change returned through `verify-fail → build → requirements-changed → spec`; the
+   body statements now contain SHALL and strict validation passes without changing requirement
+   semantics.
+2. The Codex source track reproduced an absolute-form request target containing authority and
+   userinfo. Query stripping alone retained that upstream URL. A red test now proves the leak;
+   the projector normalizes absolute-form and scheme-relative targets to pathname only and the
+   test passes.
+
+The same repair round added the timeline route to the common DNS-rebinding Host-guard regression
+matrix and localized visible session status, English singular record count, cached input, and
+stream-event labels. Focused backend and Dashboard tests plus `typecheck:web` pass on the repaired
+tree. A full build and independent re-review are required before the next freeze.
+
+### Repair re-review
+
+- Independent full-diff review: PASS, with no Critical, High, Medium, or Low findings. The reviewer
+  reproduced strict OpenSpec validation, verified absolute-form and scheme-relative request targets
+  project to pathname only, and reran backend, Web, typecheck, architecture, and comment gates.
+- Isolated real-browser review: PASS on the Tenon Dashboard. It reconfirmed success, loading, known
+  empty, partial, real 500 then retry, Enter/Space/Escape, and 390 px Chinese/English paths.
+- The browser re-review confirmed English `1 record`, localized session states, Chinese cached-input
+  and stream-event labels, no sensitive query rendering, no horizontal overflow, and no unexpected
+  page errors.
+- Isolated browser evidence: `/tmp/tenon-trace-final-browser-e8PPXh/qa-output/`.

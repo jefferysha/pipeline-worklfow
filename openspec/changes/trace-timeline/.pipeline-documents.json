@@ -39,6 +39,24 @@
           "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "aec48c05d22ec041f2e0161df0d1f0566d57791d7dc2b7c304fe51bf03733d7a",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
@@ -78,6 +96,24 @@
           "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4c835f5bc5d7438af7d2f96981015649bef3532b6177b3a878837d0fff39ef3d",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
@@ -111,27 +147,24 @@
           "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/trace-timeline/specs/trace-timeline/spec.md",
-      "sha256": "c55f6d9cd225aa4e88250cd4aa43020361552a79ee41c60aac9ac9205c0b5852",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-29T04:57:19Z",
-      "reads": [
+        },
         {
-          "phase": "build",
-          "sha256": "c55f6d9cd225aa4e88250cd4aa43020361552a79ee41c60aac9ac9205c0b5852",
-          "readAt": "2026-07-29T04:57:47Z",
-          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",3]"
+          "phase": "verify",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
         },
         {
           "phase": "build",
-          "sha256": "c55f6d9cd225aa4e88250cd4aa43020361552a79ee41c60aac9ac9205c0b5852",
-          "readAt": "2026-07-29T05:47:44Z",
-          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+          "sha256": "757c507e9667bd3fa180a6fbdafaebefb6a86a8f60478ba7cafa2ead8efd55cb",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
@@ -165,6 +198,47 @@
           "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb23d80bbae84256c806fca3baa97d3a2cc0bf764e4ad9fa097f3d7dd2a92a0e",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-29-trace-timeline-verify.md",
+      "sha256": "3ab7c88a5a486603fa4b116c152d1c0752c9796c5517426ca5a3a9b718690200",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-29T06:03:31Z",
+      "reads": []
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/trace-timeline/specs/trace-timeline/spec.md",
+      "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-29T06:05:07Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "9121c3d5acbccfdcdc39ef950c1e9049b12e635efc1677e9d41fc4d728f20014",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
@@ -173,13 +247,25 @@
       "path": "docs/superpowers/plans/trace-timeline.md",
       "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-29T05:32:11Z",
+      "recordedAt": "2026-07-29T06:05:07Z",
       "reads": [
         {
           "phase": "build",
           "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
@@ -188,34 +274,52 @@
       "path": "docs/superpowers/plans/trace-timeline.md",
       "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-29T05:32:21Z",
+      "recordedAt": "2026-07-29T06:05:08Z",
       "reads": [
         {
           "phase": "build",
           "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
           "readAt": "2026-07-29T05:47:44Z",
           "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cb14b1a2c552585290bad8c65fe1d2fbaf1483213f08435c48ec150890f30862",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/trace-timeline/tasks.md",
-      "sha256": "e183f97a5132e9d85fecde110a6f94570d4c8c0294a4f929e9d4b33b57440ef2",
+      "sha256": "aff1af3f22a82ea2f4b6ca4739690e567fae0adfb68da5121e7b0938b085e4e0",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-29T05:47:44Z",
+      "recordedAt": "2026-07-29T06:16:29Z",
       "reads": [
         {
+          "phase": "verify",
+          "sha256": "aff1af3f22a82ea2f4b6ca4739690e567fae0adfb68da5121e7b0938b085e4e0",
+          "readAt": "2026-07-29T06:03:31Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",6]"
+        },
+        {
           "phase": "spec",
-          "sha256": "e183f97a5132e9d85fecde110a6f94570d4c8c0294a4f929e9d4b33b57440ef2",
-          "readAt": "2026-07-29T05:32:39Z",
-          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",4]"
+          "sha256": "aff1af3f22a82ea2f4b6ca4739690e567fae0adfb68da5121e7b0938b085e4e0",
+          "readAt": "2026-07-29T06:05:08Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",8]"
         },
         {
           "phase": "build",
-          "sha256": "e183f97a5132e9d85fecde110a6f94570d4c8c0294a4f929e9d4b33b57440ef2",
-          "readAt": "2026-07-29T05:47:44Z",
-          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",5]"
+          "sha256": "aff1af3f22a82ea2f4b6ca4739690e567fae0adfb68da5121e7b0938b085e4e0",
+          "readAt": "2026-07-29T06:16:29Z",
+          "visitId": "[\"af4cae0d-b3e2-465e-b9a4-34de04cc4c88\",9]"
         }
       ]
     }

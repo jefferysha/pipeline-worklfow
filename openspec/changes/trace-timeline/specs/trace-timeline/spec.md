@@ -2,9 +2,9 @@
 
 ## ADDED Requirements
 
-### Requirement: TraceStore SHALL 提供有界的最近记录窗口
+### Requirement: TraceStore 提供有界的最近记录窗口
 
-TraceStore 必须在不改变现有 JSONL/sidecar 持久化格式的前提下，提供只读的最近记录窗口。窗口最多
+TraceStore SHALL 在不改变现有 JSONL/sidecar 持久化格式的前提下，提供只读的最近记录窗口。窗口最多
 返回 200 条合法记录，最多从文件尾部读取 8 MiB，并保持所返回记录的原始捕获顺序。
 
 窗口必须返回 `total_count`、`returned_count`、`skipped_count`、`truncated`、`integrity` 与稳定
@@ -31,9 +31,9 @@ warning code。损坏行、字节预算造成的不完整首行或 sidecar/文�
 - **THEN** 不得继续无界读取
 - **AND** 返回 `integrity=partial`、`truncated=true` 与 `byte-limit`
 
-### Requirement: Server SHALL 输出 metadata-only Trace Timeline
+### Requirement: Server 输出 metadata-only Trace Timeline
 
-server 必须新增 `GET /api/traces/timeline?session=<id>`。成功响应必须精确声明
+server SHALL 新增 `GET /api/traces/timeline?session=<id>`。成功响应必须精确声明
 `outbound: "local-only"` 与 `content: "metadata-only"`，且只能返回规格定义的 session、完整性、
 summary 与 entry 白名单字段。
 
@@ -55,9 +55,9 @@ record key 都不得进入响应。
 - **WHEN** projector 构造 entry
 - **THEN** 只输出白名单字段
 
-### Requirement: Timeline SHALL 诚实归一化结果与实际 usage
+### Requirement: Timeline 诚实归一化结果与实际 usage
 
-HTTP status `200–399` 必须映射为 `success`，`>=400` 映射为 `error`，缺失、负数、超出 HTTP
+Timeline SHALL 把 HTTP status `200–399` 映射为 `success`，`>=400` 映射为 `error`，缺失、负数、超出 HTTP
 范围或类型不符映射为 `unknown`。该 outcome 只能描述 transport，不得写回 Workflow 或表示模型、
 工具、verification 成功。
 
@@ -77,9 +77,9 @@ unknown count。
 - **WHEN** projector 生成 summary
 - **THEN** success/error/unknown count 分别为 1/1/1
 
-### Requirement: Timeline HTTP 语义 SHALL 区分未知、空与失败
+### Requirement: Timeline HTTP 语义区分未知、空与失败
 
-缺少 `session` 查询参数必须返回 400；未知 session 必须返回 404；已知但无记录的 session 必须返回
+Timeline HTTP 语义 SHALL 让缺少 `session` 查询参数返回 400；未知 session 必须返回 404；已知但无记录的 session 必须返回
 200 和空 entries；reader/projector 异常必须返回 500。新路由只允许 GET。旧 sessions/records 路由
 及其响应必须保持兼容。
 
@@ -95,9 +95,9 @@ unknown count。
 - **WHEN** 请求 timeline
 - **THEN** 返回 404，而不是 `200 + []`
 
-### Requirement: Dashboard SHALL 提供可筛选的 Trace Timeline
+### Requirement: Dashboard 提供可筛选的 Trace Timeline
 
-现有 Advanced → Traffic 入口必须使用 timeline API。选中 session 后，界面必须显示调用、HTTP
+Dashboard SHALL 让现有 Advanced → Traffic 入口使用 timeline API。选中 session 后，界面必须显示调用、HTTP
 失败、总耗时与实际 token 摘要，并按捕获顺序呈现 turn/time、endpoint、status/outcome、duration、
 transport 以及存在时的 model/usage/stream count。
 
@@ -118,9 +118,9 @@ transport 以及存在时的 model/usage/stream count。
 - **THEN** 使用文字提示完整性边界与可重试动作
 - **AND** 不只用颜色表达
 
-### Requirement: Traffic 交互 SHALL 完整覆盖状态、i18n 与键盘
+### Requirement: Traffic 交互完整覆盖状态、i18n 与键盘
 
-sessions 与 timeline 必须分别具有 loading、empty、error、retry 状态；timeline 还必须区分已知空
+Traffic 交互 SHALL 让 sessions 与 timeline 分别具有 loading、empty、error、retry 状态；timeline 还必须区分已知空
 session 和 filter empty。所有新增及现存 Traffic 可见文案必须同时提供中文和英文。
 
 Session、filter、retry、clear 操作必须使用原生可聚焦控件。Tab 可按界面顺序遍历；Enter/Space 可

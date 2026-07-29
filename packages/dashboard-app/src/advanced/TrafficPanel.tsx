@@ -14,6 +14,13 @@ import { useT } from '../i18n'
 const buttonClass =
   'cursor-pointer rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-text transition-colors hover:border-accent-b aria-pressed:border-(--accent) aria-pressed:bg-accent-t'
 
+const SESSION_STATUS_KEYS: Readonly<Record<string, string>> = {
+  active: 'traffic_status_active',
+  complete: 'traffic_status_complete',
+  empty: 'traffic_status_empty',
+  error: 'traffic_status_error',
+}
+
 function TimelineEntry({
   entry,
   formatNumber,
@@ -193,13 +200,18 @@ export function TrafficPanel(): JSX.Element {
                   {session.client || t('advanced.traffic_unknown_client')}
                 </span>
                 <span className="font-mono text-[11px] text-text-3">
-                  {t('advanced.traffic_session_count', { n: formatNumber(session.record_count) })}
+                  {t(
+                    session.record_count === 1
+                      ? 'advanced.traffic_session_count_one'
+                      : 'advanced.traffic_session_count_many',
+                    { n: formatNumber(session.record_count) },
+                  )}
                 </span>
                 <span
                   className="ml-auto rounded-full bg-fill px-[7px] py-0.5 text-[10.5px] font-bold text-text-3 data-[state=active]:bg-green-t data-[state=active]:text-green-d"
                   data-state={session.status}
                 >
-                  {session.status}
+                  {t(`advanced.${SESSION_STATUS_KEYS[session.status] ?? 'traffic_status_unknown'}`)}
                 </span>
               </button>
             </li>

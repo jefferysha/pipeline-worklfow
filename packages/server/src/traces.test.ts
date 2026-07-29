@@ -93,7 +93,7 @@ describe('GET /api/traces/timeline —— 有界 metadata-only 投影', () => {
       unknown_extension: { sentinel_unknown: 'sentinel-private-value' },
       request: {
         method: 'POST',
-        path: '/v1/messages?token=sentinel-query-value',
+        path: 'https://sentinel-user:sentinel-password@sentinel-authority.example/v1/messages?token=sentinel-query-value',
         headers: { authorization: 'sentinel-header-value' },
         body: {
           model: 'claude-sonnet-4',
@@ -186,6 +186,7 @@ describe('GET /api/traces/timeline —— 有界 metadata-only 投影', () => {
     const serialized = JSON.stringify(body)
     for (const sentinel of [
       'sentinel-upstream', 'sentinel_unknown', 'sentinel-private-value', 'sentinel-query-value',
+      'sentinel-user', 'sentinel-password', 'sentinel-authority',
       'sentinel-header-value', 'sentinel-prompt-value', 'sentinel-tool-value',
       'sentinel-response-header', 'sentinel-response-value',
     ]) {

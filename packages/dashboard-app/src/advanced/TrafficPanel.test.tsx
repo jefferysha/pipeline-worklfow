@@ -166,11 +166,16 @@ describe('TrafficPanel metadata-only timeline', () => {
     expect(screen.getByTestId('traffic-sessions-loading')).toHaveTextContent('加载捕获会话')
     const sessionButton = await screen.findByRole('button', { name: /claude/ })
     expect(screen.getByTestId('traffic-note')).toHaveTextContent('local-only')
+    expect(sessionButton).toHaveTextContent('已完成')
+    expect(sessionButton).not.toHaveTextContent('complete')
     await userEvent.click(sessionButton)
 
     const rows = await screen.findAllByTestId(/traffic-entry-/)
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('/v1/messages')
+    expect(rows[0]).toHaveTextContent('缓存输入 4')
+    expect(rows[0]).toHaveTextContent('流事件 5')
+    expect(rows[0]).not.toHaveTextContent('cached')
     expect(rows[1]).toHaveTextContent('429')
     expect(rows[1]).toHaveTextContent('失败')
     expect(rows[2]).toHaveTextContent('未知')
@@ -395,7 +400,11 @@ describe('TrafficPanel metadata-only timeline', () => {
   it('renders all new visible copy in English', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (
       url === '/api/traces/sessions'
-        ? response(SESSIONS)
+        ? response({
+          ...SESSIONS,
+          count: 1,
+          sessions: [{ ...SESSIONS.sessions[0], record_count: 1 }],
+        })
         : response(timeline('sess-A', {
           integrity: 'partial',
           truncated: true,
@@ -403,7 +412,11 @@ describe('TrafficPanel metadata-only timeline', () => {
         }))
     )))
     renderTraffic('en')
-    await userEvent.click(await screen.findByRole('button', { name: /claude/ }))
+    const sessionButton = await screen.findByRole('button', { name: /claude/ })
+    expect(sessionButton).toHaveTextContent('1 record')
+    expect(sessionButton).not.toHaveTextContent('1 records')
+    expect(sessionButton).toHaveTextContent('Complete')
+    await userEvent.click(sessionButton)
     expect(await screen.findByRole('button', { name: 'Errors' })).toBeInTheDocument()
     expect(screen.getByTestId('traffic-summary')).toHaveTextContent('HTTP errors')
     expect(screen.getByTestId('traffic-integrity')).toHaveTextContent('partial')
