@@ -117,6 +117,35 @@ describe('HostTargetPlanView', () => {
     expect(loadTargets).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps catalog rows compact and moves complete host context into the selected detail', async () => {
+    const loadPlan = vi.fn()
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadPlan,
+    })
+
+    const selectCodex = await screen.findByRole('button', { name: '选择 Codex' })
+    const codexRow = screen.getByRole('heading', { name: 'Codex' }).closest('article')
+    if (!codexRow) throw new Error('Codex catalog row missing')
+
+    expect(within(codexRow).getByText('--codex')).toBeInTheDocument()
+    expect(within(codexRow).getByText('原生')).toBeInTheDocument()
+    expect(within(codexRow).getByText('用户范围')).toBeInTheDocument()
+    expect(within(codexRow).queryByText('原生 marketplace')).toBeNull()
+    expect(within(codexRow).queryByText('内置 Skills')).toBeNull()
+
+    fireEvent.click(selectCodex)
+
+    const selectedContext = screen.getByTestId('host-selected-context')
+    expect(selectedContext).toHaveTextContent('--codex')
+    expect(selectedContext).toHaveTextContent('原生')
+    expect(selectedContext).toHaveTextContent('用户范围')
+    expect(selectedContext).toHaveTextContent('原生 marketplace')
+    expect(selectedContext).toHaveTextContent('内置 Skills')
+    expect(selectedContext).toHaveTextContent('自动更新')
+    expect(loadPlan).not.toHaveBeenCalled()
+  })
+
   it('selects a target and operation, announces plan loading, localizes tokens, and clears stale plans', async () => {
     let resolvePlan: ((value: HostTargetPlan) => void) | undefined
     const loadPlan = vi.fn(() => new Promise<HostTargetPlan>((resolve) => {
@@ -131,8 +160,10 @@ describe('HostTargetPlanView', () => {
     const nativeCard = screen.getByRole('heading', { name: 'Codex' }).closest('article')
     if (!nativeCard) throw new Error('Codex card missing')
     expect(within(nativeCard).getByText('用户范围')).toBeInTheDocument()
-    expect(within(nativeCard).getByText('原生 marketplace')).toBeInTheDocument()
-    expect(within(nativeCard).getByText('内置 Skills')).toBeInTheDocument()
+    expect(within(screen.getByTestId('host-selected-context')).getByText('原生 marketplace'))
+      .toBeInTheDocument()
+    expect(within(screen.getByTestId('host-selected-context')).getByText('内置 Skills'))
+      .toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
 
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
@@ -353,8 +384,9 @@ describe('HostTargetPlanView', () => {
 
     expect(await screen.findByRole('heading', { name: 'Host target plans' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Select Codex' }))
-    expect(screen.getByText('User scope')).toBeInTheDocument()
-    expect(screen.getByText('Native marketplace')).toBeInTheDocument()
+    const selectedContext = screen.getByTestId('host-selected-context')
+    expect(selectedContext).toHaveTextContent('User scope')
+    expect(selectedContext).toHaveTextContent('Native marketplace')
     fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
 
     const view = await screen.findByTestId('host-plan-view')

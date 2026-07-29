@@ -222,37 +222,29 @@ export function HostTargetPlanView({
               return (
                 <article
                   key={target.id}
-                  className={`min-w-0 rounded-2xl border bg-card p-4 shadow-sm ${
+                  className={`min-w-0 rounded-xl border bg-card p-2 ${
                     selected ? 'border-(--accent) ring-1 ring-(--accent)' : 'border-border'
                   }`}
                   data-kind={target.kind}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-base font-bold text-text">{name}</h2>
-                      <p className="mt-1 font-mono text-xs text-text-3">{target.cli_flag}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                      <h2 className="truncate text-sm font-bold text-text">{name}</h2>
+                      <p className="shrink-0 font-mono text-[11px] text-text-3">{target.cli_flag}</p>
                     </div>
-                    <span className="rounded-full border border-border bg-fill px-2 py-1 text-[11px] font-semibold text-text-2">
-                      {t(`hostPlan.kind.${target.kind}`)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-full border border-border bg-bg px-2 py-1 text-[11px] font-semibold text-text-3">
-                      {t(`hostPlan.scope.${target.target_scope}`)}
-                    </span>
-                    {target.capabilities.map((capability) => (
-                      <span
-                        key={capability}
-                        className="rounded-full border border-blue-b bg-blue-t px-2 py-1 text-[11px] font-semibold text-blue-d"
-                      >
-                        {t(`hostPlan.capability.${capability}`)}
+                    <div className="flex shrink-0 gap-1">
+                      <span className="rounded-full border border-border bg-fill px-1.5 py-1 text-[11px] font-semibold text-text-2">
+                        {t(`hostPlan.kind.${target.kind}`)}
                       </span>
-                    ))}
+                      <span className="rounded-full border border-border bg-bg px-1.5 py-1 text-[11px] font-semibold text-text-3">
+                        {t(`hostPlan.scope.${target.target_scope}`)}
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"
                     aria-pressed={selected}
-                    className="mt-4 w-full rounded-lg border border-border-2 bg-bg px-3.5 py-2 text-sm font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent)"
+                    className="mt-1.5 w-full rounded-lg border border-border-2 bg-bg px-3 py-1.5 text-xs font-bold text-text outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-(--accent)"
                     onClick={() => selectHost(target.id)}
                   >
                     {selected
