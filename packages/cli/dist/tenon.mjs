@@ -3581,12 +3581,23 @@ function validateAutomationPolicySnapshot(input) {
     throw new Error("AutomationPolicy.captured_at: invalid timestamp");
   return deepFreeze({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
 }
-function pathDecision(allowlist, denylist, input) {
-  const paths = input.paths ?? [];
-  const denied = paths.filter((path9) => denylist.some((pattern) => input.matches(path9, pattern)));
+function explainConstraintPaths(policy, operation, paths, matches) {
+  const { allowlist, denylist } = policy[operation];
+  return paths.map((path9) => {
+    const deniedBy = denylist.find((pattern) => matches(path9, pattern));
+    if (deniedBy !== void 0) {
+      return { path: path9, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
+    }
+    const allowedBy = allowlist.find((pattern) => matches(path9, pattern));
+    return allowedBy === void 0 ? { path: path9, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path9, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
+  });
+}
+function pathDecision(policy, operation, input) {
+  const explanations = explainConstraintPaths(policy, operation, input.paths ?? [], input.matches);
+  const denied = explanations.filter((item2) => item2.reason === "path-denied").map((item2) => item2.path);
   if (denied.length > 0)
     return { allowed: false, reason: "path-denied", paths: denied };
-  const outside = paths.filter((path9) => !allowlist.some((pattern) => input.matches(path9, pattern)));
+  const outside = explanations.filter((item2) => item2.reason === "path-outside-allowlist").map((item2) => item2.path);
   if (outside.length > 0)
     return { allowed: false, reason: "path-outside-allowlist", paths: outside };
   return { allowed: true };
@@ -3600,7 +3611,7 @@ function evaluateConstraintPolicy(policy, input) {
     const humanGateApplies = input.transitionTarget === void 0 ? policy.transition.human_gates.length > 0 : policy.transition.human_gates.includes(input.transitionTarget);
     return humanGateApplies && input.humanGateSatisfied !== true ? { allowed: false, reason: "human-gate-required" } : { allowed: true };
   }
-  return input.operation === "write" ? pathDecision(policy.write.allowlist, policy.write.denylist, input) : pathDecision(policy.merge.allowlist, policy.merge.denylist, input);
+  return input.operation === "write" ? pathDecision(policy, "write", input) : pathDecision(policy, "merge", input);
 }
 
 // packages/kernel/dist/state/run-metadata.js

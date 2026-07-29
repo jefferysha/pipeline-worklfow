@@ -2220,6 +2220,175 @@ loops:
     autonomy_level: L1
 `
 
+describe('POST /api/loops/scope-preview —— 真实 Loop 路径策略预检', () => {
+  it('复用受保护 POST 与生产 glob，返回逐路径解释且不改盘', async () => {
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    const yaml = `${SEED_LOOP_YAML_READY_FOR_L2.trimEnd()}
+    allowlist:
+      - src/**
+      - docs/**
+    denylist:
+      - src/secrets/**
+`
+    const registryPath = join(h.root, '.pipeline', 'loops.yaml')
+    await writeFile(registryPath, yaml, 'utf8')
+    const before = await readFile(registryPath, 'utf8')
+
+    const response = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root,
+      loop_id: 'build-loop',
+      paths: ['src/app.ts', 'src/secrets/key.txt', 'assets/logo.svg'],
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toMatchObject({
+      ok: true,
+      schema_version: 1,
+      loop_id: 'build-loop',
+      loop_status: 'active',
+      autonomy_level: 'L1',
+      enforced_for_unattended_merge: false,
+      summary: { total: 3, allowed: 1, blocked: 2 },
+      items: [
+        { path: 'src/app.ts', verdict: 'allowed', reason: 'allowlist', matched_pattern: 'src/**' },
+        { path: 'src/secrets/key.txt', verdict: 'blocked', reason: 'path-denied', matched_pattern: 'src/secrets/**' },
+        { path: 'assets/logo.svg', verdict: 'blocked', reason: 'path-outside-allowlist', matched_pattern: null },
+      ],
+    })
+    expect(await readFile(registryPath, 'utf8')).toBe(before)
+  })
+
+  it('稳定区分无效请求、未知 root、未知 Loop 与损坏 registry', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+
+    const invalid = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['../secret'],
+    }, auth)
+    expect(invalid.status).toBe(400)
+    expect(invalid.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const windowsAbsolute = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['C:/Windows/system32'],
+    }, auth)
+    expect(windowsAbsolute.status).toBe(400)
+    expect(windowsAbsolute.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const transportUnsafe = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/\"quoted\".ts'],
+    }, auth)
+    expect(transportUnsafe.status).toBe(400)
+    expect(transportUnsafe.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const surrogateExpansionPaths = Array.from({ length: 32 }, (_, index) => {
+      const prefix = `src/${index}-`
+      return `${prefix}${'\ud800'.repeat(Math.floor((1024 - Buffer.byteLength(prefix)) / 3))}`
+    })
+    const surrogateExpansion = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: surrogateExpansionPaths,
+    }, auth)
+    expect(surrogateExpansion.status).toBe(400)
+    expect(surrogateExpansion.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+    const trailingSurrogate = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/trailing-\ud800'],
+    }, auth)
+    expect(trailingSurrogate.status).toBe(400)
+    expect(trailingSurrogate.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID' })
+
+    const unknownRoot = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: '/tmp/not-registered', loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(unknownRoot.status).toBe(404)
+    expect(unknownRoot.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_NOT_FOUND' })
+
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    const posixColon = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['a:b', 'C:notes.txt'],
+    }, auth)
+    expect(posixColon.status).toBe(200)
+    const maxBudgetPaths = Array.from({ length: 32 }, (_, index) => {
+      const prefix = `src/${index}-`
+      return `${prefix}${'a'.repeat(1024 - Buffer.byteLength(prefix))}`
+    })
+    const maxBudget = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: maxBudgetPaths,
+    }, auth)
+    expect(maxBudget.status).toBe(200)
+    expect(maxBudget.json()).toMatchObject({ summary: { total: 32 } })
+    const unknownLoop = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'missing-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(unknownLoop.status).toBe(404)
+    expect(unknownLoop.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_LOOP_NOT_FOUND' })
+
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), 'version: 1\nloops: invalid\n', 'utf8')
+    const invalidRegistry = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, auth)
+    expect(invalidRegistry.status).toBe(409)
+    expect(invalidRegistry.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_REGISTRY_INVALID' })
+  })
+
+  it('将 registry I/O 故障与无效策略分开，返回稳定的 500 错误码', async () => {
+    const h = await start()
+    const pipelineDir = join(h.root, '.pipeline')
+    const registryPath = join(pipelineDir, 'loops.yaml')
+    await mkdir(pipelineDir, { recursive: true })
+    await mkdir(registryPath)
+    const response = await reqPost(h.port, '/api/loops/scope-preview', {
+      root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(response.status).toBe(500)
+    expect(response.json()).toEqual({
+      ok: false,
+      code: 'LOOP_SCOPE_REGISTRY_READ_FAILED',
+      error: 'Loop registry 读取失败',
+    })
+  })
+
+  it('拒绝 .pipeline 或 loops.yaml symlink，且不读取 root 外策略', async () => {
+    const { mkdtemp, rm, symlink } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const authFor = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } })
+
+    const pipelineLinked = await start()
+    const outsidePipeline = await mkdtemp(join(tmpdir(), 'loop-scope-pipeline-link-'))
+    await writeFile(join(outsidePipeline, 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await symlink(outsidePipeline, join(pipelineLinked.root, '.pipeline'), 'dir')
+    const pipelineResponse = await reqPost(pipelineLinked.port, '/api/loops/scope-preview', {
+      root: pipelineLinked.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, authFor(pipelineLinked.token))
+    expect(pipelineResponse.status).toBe(403)
+    expect(pipelineResponse.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_UNTRUSTED' })
+
+    const fileLinked = await start()
+    const outsideFileDir = await mkdtemp(join(tmpdir(), 'loop-scope-file-link-'))
+    const outsideFile = join(outsideFileDir, 'loops.yaml')
+    await writeFile(outsideFile, SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await mkdir(join(fileLinked.root, '.pipeline'))
+    await symlink(outsideFile, join(fileLinked.root, '.pipeline', 'loops.yaml'), 'file')
+    const fileResponse = await reqPost(fileLinked.port, '/api/loops/scope-preview', {
+      root: fileLinked.root, loop_id: 'build-loop', paths: ['src/app.ts'],
+    }, authFor(fileLinked.token))
+    expect(fileResponse.status).toBe(403)
+    expect(fileResponse.json()).toMatchObject({ ok: false, code: 'LOOP_SCOPE_ROOT_UNTRUSTED' })
+
+    await rm(outsidePipeline, { recursive: true, force: true })
+    await rm(outsideFileDir, { recursive: true, force: true })
+  })
+
+  it('沿用公共 POST 的 token 与 JSON content-type 安全闸', async () => {
+    const h = await start()
+    const body = { root: h.root, loop_id: 'build-loop', paths: ['src/app.ts'] }
+    expect((await reqPost(h.port, '/api/loops/scope-preview', body)).status).toBe(401)
+    expect((await reqPost(h.port, '/api/loops/scope-preview', body, {
+      headers: {
+        Authorization: `Bearer ${h.token}`,
+        'Content-Type': 'text/plain',
+      },
+    })).status).toBe(400)
+  })
+})
+
 describe('POST /api/loops/level —— 升降档写回', () => {
   it('对 token + root 在注册表里 → 200 且真改盘 loops.yaml', async () => {
     const { mkdir, writeFile } = await import('node:fs/promises')

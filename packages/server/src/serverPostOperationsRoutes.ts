@@ -13,6 +13,7 @@ import {
   loadTrackRegistry,
   loadWorkflow,
   requireTrack,
+  RegistryReadError,
   stateStorageExistsSync,
   validateWorkflow,
   validateWorkflowTrackReferences,
@@ -29,6 +30,7 @@ import {
   type WorkflowDef,
   type WorkflowRunRepository,
 } from '@tenon/kernel'
+import { matchesPathGlob } from '@tenon/automation'
 import {
   cancelAfkRun,
   dismissAfkRun,
@@ -45,6 +47,13 @@ import {
 } from './changeLaunch.js'
 import { validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
+import {
+  buildLoopScopePreviewResponse,
+  LoopScopePreviewInputError,
+  LoopScopePreviewRootUntrustedError,
+  parseLoopScopePreviewRequest,
+  readTrustedLoopRegistry,
+} from './loopScopePreview.js'
 import { applyLoopsUpdate, type LoopActivationValidator } from './loops.js'
 import { parsePipelineCliJson, type PipelineCliRunner } from './operations.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
@@ -89,6 +98,60 @@ export async function handlePostOperationsRoutes(
   function isWorkflowName(name: string): boolean {
     return name !== '' && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name)
   }
+  function sendLoopScopeUntrustedRoot(): void {
+    sendJson(res, 403, {
+      ok: false,
+      code: 'LOOP_SCOPE_ROOT_UNTRUSTED',
+      error: 'root 信任锚已失效',
+    })
+  }
+    if (path === '/api/loops/scope-preview') {
+      const raw = await readJsonBody(req)
+      let input
+      try {
+        input = parseLoopScopePreviewRequest(raw)
+      } catch (error) {
+        if (!(error instanceof LoopScopePreviewInputError)) throw error
+        return sendJson(res, 400, { ok: false, code: 'LOOP_SCOPE_REQUEST_INVALID', error: error.message })
+      }
+      const rootCheck = workflowRootForRequest(input.root)
+      if (!rootCheck.ok) {
+        return sendJson(res, rootCheck.code, {
+          ok: false,
+          code: rootCheck.code === 404 ? 'LOOP_SCOPE_ROOT_NOT_FOUND' : 'LOOP_SCOPE_ROOT_UNTRUSTED',
+          error: rootCheck.error,
+        })
+      }
+      let loaded
+      try {
+        loaded = readTrustedLoopRegistry(rootCheck.anchor)
+      } catch (error) {
+        if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot()
+        if (!(error instanceof RegistryReadError)) throw error
+        return sendJson(res, 500, {
+          ok: false,
+          code: 'LOOP_SCOPE_REGISTRY_READ_FAILED',
+          error: 'Loop registry 读取失败',
+        })
+      }
+      if (loaded.data === null || loaded.errors.length > 0) {
+        return sendJson(res, 409, {
+          ok: false,
+          code: 'LOOP_SCOPE_REGISTRY_INVALID',
+          error: 'Loop registry 无法形成可信策略',
+        })
+      }
+      const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId)
+      if (loop === undefined) {
+        return sendJson(res, 404, {
+          ok: false,
+          code: 'LOOP_SCOPE_LOOP_NOT_FOUND',
+          error: 'Loop 不存在',
+        })
+      }
+      return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob))
+    }
+
     if (path === '/api/router/preview') {
       const raw = await readJsonBody(req)
       if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {

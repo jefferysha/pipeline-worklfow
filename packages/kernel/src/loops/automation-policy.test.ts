@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compileAutomationPolicySnapshot, evaluateConstraintPolicy, validateAutomationPolicySnapshot } from './automation-policy.js'
+import {
+  compileAutomationPolicySnapshot,
+  evaluateConstraintPolicy,
+  explainConstraintPaths,
+  validateAutomationPolicySnapshot,
+} from './automation-policy.js'
 import type { LoopEntry } from './types.js'
 
 const loop = (overrides: Partial<LoopEntry> = {}): LoopEntry => ({
@@ -76,5 +81,47 @@ describe('AutomationPolicySnapshot · H4/H5/H6/H8', () => {
       allowed: false, reason: 'human-gate-required',
     })
     expect(evaluateConstraintPolicy(constraints, { operation: 'merge', active: true, paths: ['src/app.ts'], humanGateSatisfied: true, matches })).toEqual({ allowed: true })
+  })
+
+  it('explains every merge path with deny-first, first-pattern, and fail-closed allowlist semantics', () => {
+    const constraints = compileAutomationPolicySnapshot(loop({
+      allowlist: ['src/**', '**/*.md'],
+      denylist: ['src/secrets/**', '**/secrets/**'],
+    }), { capturedAt: '2026-07-19T00:00:00Z' }).constraints
+    const matches = (path: string, glob: string): boolean => {
+      if (glob === 'src/**') return path.startsWith('src/')
+      if (glob === '**/*.md') return path.endsWith('.md')
+      if (glob === 'src/secrets/**') return path.startsWith('src/secrets/')
+      if (glob === '**/secrets/**') return path.includes('/secrets/')
+      return false
+    }
+
+    expect(explainConstraintPaths(constraints, 'merge', [
+      'src/app.ts', 'src/secrets/key.md', 'docs/guide.md', 'assets/logo.svg',
+    ], matches)).toEqual([
+      { path: 'src/app.ts', verdict: 'allowed', reason: 'allowlist', matched_pattern: 'src/**' },
+      { path: 'src/secrets/key.md', verdict: 'blocked', reason: 'path-denied', matched_pattern: 'src/secrets/**' },
+      { path: 'docs/guide.md', verdict: 'allowed', reason: 'allowlist', matched_pattern: '**/*.md' },
+      { path: 'assets/logo.svg', verdict: 'blocked', reason: 'path-outside-allowlist', matched_pattern: null },
+    ])
+
+    expect(explainConstraintPaths({ ...constraints, merge: { ...constraints.merge, allowlist: [] } }, 'merge', [
+      'src/app.ts',
+    ], matches)).toEqual([
+      { path: 'src/app.ts', verdict: 'blocked', reason: 'path-outside-allowlist', matched_pattern: null },
+    ])
+  })
+
+  it('keeps aggregate deny priority when explanations contain deny and outside results', () => {
+    const constraints = compileAutomationPolicySnapshot(loop(), { capturedAt: '2026-07-19T00:00:00Z' }).constraints
+    const matches = (path: string, glob: string): boolean => glob === 'src/**'
+      ? path.startsWith('src/')
+      : glob === 'src/secrets/**' && path.startsWith('src/secrets/')
+    expect(evaluateConstraintPolicy(constraints, {
+      operation: 'merge',
+      active: true,
+      paths: ['docs/guide.md', 'src/secrets/key'],
+      matches,
+    })).toEqual({ allowed: false, reason: 'path-denied', paths: ['src/secrets/key'] })
   })
 })

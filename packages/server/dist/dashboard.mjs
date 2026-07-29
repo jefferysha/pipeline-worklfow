@@ -858,6 +858,15 @@ function deepFreeze(value) {
     deepFreeze(child);
   return Object.freeze(value);
 }
+function compileConstraintPolicy(loop) {
+  return deepFreeze({
+    schema_version: 1,
+    admission: { require_active: true },
+    write: { allowlist: [...loop.allowlist], denylist: [...loop.denylist] },
+    transition: { require_active: true, human_gates: [...loop.human_gates] },
+    merge: { require_active: true, allowlist: [...loop.allowlist], denylist: [...loop.denylist] }
+  });
+}
 function validateAutomationPolicySnapshot(input) {
   if (!isRecord2(input))
     throw new Error("AutomationPolicy: expected object");
@@ -970,12 +979,23 @@ function validateAutomationPolicySnapshot(input) {
     throw new Error("AutomationPolicy.captured_at: invalid timestamp");
   return deepFreeze({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
 }
-function pathDecision(allowlist, denylist, input) {
-  const paths = input.paths ?? [];
-  const denied = paths.filter((path7) => denylist.some((pattern) => input.matches(path7, pattern)));
+function explainConstraintPaths(policy, operation, paths, matches) {
+  const { allowlist, denylist } = policy[operation];
+  return paths.map((path7) => {
+    const deniedBy = denylist.find((pattern) => matches(path7, pattern));
+    if (deniedBy !== void 0) {
+      return { path: path7, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
+    }
+    const allowedBy = allowlist.find((pattern) => matches(path7, pattern));
+    return allowedBy === void 0 ? { path: path7, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path7, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
+  });
+}
+function pathDecision(policy, operation, input) {
+  const explanations = explainConstraintPaths(policy, operation, input.paths ?? [], input.matches);
+  const denied = explanations.filter((item2) => item2.reason === "path-denied").map((item2) => item2.path);
   if (denied.length > 0)
     return { allowed: false, reason: "path-denied", paths: denied };
-  const outside = paths.filter((path7) => !allowlist.some((pattern) => input.matches(path7, pattern)));
+  const outside = explanations.filter((item2) => item2.reason === "path-outside-allowlist").map((item2) => item2.path);
   if (outside.length > 0)
     return { allowed: false, reason: "path-outside-allowlist", paths: outside };
   return { allowed: true };
@@ -989,7 +1009,7 @@ function evaluateConstraintPolicy(policy, input) {
     const humanGateApplies = input.transitionTarget === void 0 ? policy.transition.human_gates.length > 0 : policy.transition.human_gates.includes(input.transitionTarget);
     return humanGateApplies && input.humanGateSatisfied !== true ? { allowed: false, reason: "human-gate-required" } : { allowed: true };
   }
-  return input.operation === "write" ? pathDecision(policy.write.allowlist, policy.write.denylist, input) : pathDecision(policy.merge.allowlist, policy.merge.denylist, input);
+  return input.operation === "write" ? pathDecision(policy, "write", input) : pathDecision(policy, "merge", input);
 }
 
 // packages/kernel/dist/state/run-metadata.js
@@ -15328,6 +15348,37 @@ var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA25
 // packages/automation/dist/lifecycle/worktree.js
 var CANCEL_MARKER_FILE = ".cancel-requested";
 
+// packages/automation/dist/lifecycle/denylist.js
+var globToRegExp = (glob) => {
+  let re = "";
+  let i = 0;
+  while (i < glob.length) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        if (glob[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 3;
+        } else {
+          re += ".*";
+          i += 2;
+        }
+      } else {
+        re += "[^/]*";
+        i += 1;
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+      i += 1;
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      i += 1;
+    }
+  }
+  return new RegExp(`^${re}$`);
+};
+var matchesPathGlob = (path7, glob) => globToRegExp(glob).test(path7);
+
 // packages/automation/dist/verifier/git-revision-verifier.js
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
   kind: "host-verifier",
@@ -21602,6 +21653,191 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 // packages/server/src/serverPostOperationsRoutes.ts
 import { lstatSync as lstatSync9 } from "node:fs";
 import { join as join49 } from "node:path";
+
+// packages/server/src/loopScopePreview.ts
+import {
+  constants as constants9,
+  fstatSync as fstatSync6,
+  openSync as openSync7,
+  readFileSync as readFileSync22
+} from "node:fs";
+import { posix as posix4 } from "node:path";
+var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
+var MAX_PATHS = 100;
+var MAX_PATH_BYTES = 1024;
+var MAX_TOTAL_PATH_BYTES = 32768;
+var LoopScopePreviewInputError = class extends Error {
+  name = "LoopScopePreviewInputError";
+};
+var LoopScopePreviewRootUntrustedError = class extends Error {
+  constructor(stage, cause) {
+    super(`Loop scope root trust failed ${stage}`);
+    this.stage = stage;
+    this.cause = cause;
+  }
+  stage;
+  cause;
+  name = "LoopScopePreviewRootUntrustedError";
+};
+function registryReadError(error) {
+  const code = error.code ?? "IO";
+  const detail = error instanceof Error ? error.message : String(error);
+  return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
+}
+function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync22(fd, "utf8")) {
+  return readWithLoopScopeRootTrust(
+    () => assertWorkflowRootAnchor(anchor),
+    () => {
+      try {
+        return withTrustedDirectoryChain(
+          anchor,
+          [".pipeline"],
+          false,
+          () => loadRegistry(anchor.path, { readText: () => null }),
+          (pipeline) => {
+            assertDirectoryStillTrusted(pipeline, anchor);
+            const paths = childEntry(pipeline, "loops.yaml");
+            const before = lstatIfExists(paths.operation);
+            if (before === void 0) {
+              assertDirectoryStillTrusted(pipeline, anchor);
+              return loadRegistry(anchor.path, { readText: () => null });
+            }
+            if (before.isSymbolicLink()) {
+              throw new LoopScopePreviewRootUntrustedError(
+                "during-read",
+                new Error(`loops registry \u4E0D\u5F97\u662F symlink: ${paths.lexical}`)
+              );
+            }
+            if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
+            let fd;
+            try {
+              fd = openSync7(paths.operation, constants9.O_RDONLY | constants9.O_NOFOLLOW);
+            } catch (error) {
+              const code = error.code;
+              if (code === "ELOOP" || code === "ENOENT") {
+                throw new LoopScopePreviewRootUntrustedError("during-read", error);
+              }
+              throw registryReadError(error);
+            }
+            try {
+              const opened = fstatSync6(fd);
+              if (!opened.isFile() || !sameIdentity(opened, before)) {
+                throw new LoopScopePreviewRootUntrustedError(
+                  "during-read",
+                  new Error(`loops registry \u5728\u6253\u5F00\u671F\u95F4\u88AB\u66FF\u6362: ${paths.lexical}`)
+                );
+              }
+              const identity = { dev: opened.dev, ino: opened.ino };
+              assertEntryMatches(paths, identity, "loops registry");
+              assertDirectoryStillTrusted(pipeline, anchor);
+              let text2;
+              try {
+                text2 = readFile23(fd);
+              } catch (error) {
+                throw registryReadError(error);
+              }
+              assertEntryMatches(paths, identity, "loops registry");
+              assertDirectoryStillTrusted(pipeline, anchor);
+              return loadRegistry(anchor.path, { readText: () => text2 });
+            } finally {
+              safeClose(fd);
+            }
+          }
+        );
+      } catch (error) {
+        if (error instanceof LoopScopePreviewRootUntrustedError || error instanceof RegistryReadError) throw error;
+        throw new LoopScopePreviewRootUntrustedError("during-read", error);
+      }
+    }
+  );
+}
+function invalid(message) {
+  throw new LoopScopePreviewInputError(message);
+}
+function hasLoneSurrogate(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 55296 && code <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 56320 && next <= 57343)) return true;
+      index += 1;
+    } else if (code >= 56320 && code <= 57343) {
+      return true;
+    }
+  }
+  return false;
+}
+function readWithLoopScopeRootTrust(assertTrusted, read) {
+  try {
+    assertTrusted();
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError("before-read", error);
+  }
+  const result = read();
+  try {
+    assertTrusted();
+  } catch (error) {
+    throw new LoopScopePreviewRootUntrustedError("after-read", error);
+  }
+  return result;
+}
+function isCanonicalRelativePath(path7) {
+  if (path7 === "" || /[\u0000-\u001f]/.test(path7) || hasLoneSurrogate(path7) || path7.includes('"') || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/") || /^[A-Za-z]:\//.test(path7)) return false;
+  const segments = path7.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return false;
+  return posix4.normalize(path7) === path7;
+}
+function parseLoopScopePreviewRequest(input) {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) invalid("\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61");
+  const body = input;
+  for (const key of Object.keys(body)) if (!REQUEST_KEYS.has(key)) invalid(`\u672A\u77E5\u5B57\u6BB5 '${key}'`);
+  if (typeof body.root !== "string" || body.root === "") invalid("root \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
+  if (typeof body.loop_id !== "string" || body.loop_id.trim() === "") invalid("loop_id \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
+  if (!Array.isArray(body.paths) || body.paths.length === 0 || body.paths.length > MAX_PATHS) {
+    invalid(`paths \u5FC5\u987B\u5305\u542B 1-${MAX_PATHS} \u6761\u8DEF\u5F84`);
+  }
+  let totalBytes = 0;
+  const paths = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of body.paths) {
+    if (typeof value !== "string" || !isCanonicalRelativePath(value)) invalid("paths \u53EA\u63A5\u53D7 canonical \u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84");
+    const bytes = Buffer.byteLength(value, "utf8");
+    if (bytes > MAX_PATH_BYTES) invalid(`\u5355\u6761\u8DEF\u5F84\u4E0D\u5F97\u8D85\u8FC7 ${MAX_PATH_BYTES} UTF-8 bytes`);
+    totalBytes += bytes;
+    if (totalBytes > MAX_TOTAL_PATH_BYTES) invalid(`\u8DEF\u5F84\u603B\u8BA1\u4E0D\u5F97\u8D85\u8FC7 ${MAX_TOTAL_PATH_BYTES} UTF-8 bytes`);
+    if (!seen.has(value)) {
+      seen.add(value);
+      paths.push(value);
+    }
+  }
+  return { root: body.root, loopId: body.loop_id.trim(), paths };
+}
+function buildLoopScopePreviewResponse(loop, paths, matches) {
+  const items = explainConstraintPaths(
+    compileConstraintPolicy(loop),
+    "merge",
+    paths,
+    matches
+  ).map((item2) => ({
+    path: item2.path,
+    verdict: item2.verdict,
+    reason: item2.reason,
+    matched_pattern: item2.matched_pattern
+  }));
+  const allowed = items.filter((item2) => item2.verdict === "allowed").length;
+  return {
+    ok: true,
+    schema_version: 1,
+    loop_id: loop.id,
+    loop_status: loop.status,
+    autonomy_level: loop.autonomy_level,
+    enforced_for_unattended_merge: loop.status === "active" && loop.autonomy_level === "L3",
+    summary: { total: items.length, allowed, blocked: items.length - allowed },
+    items
+  };
+}
+
+// packages/server/src/serverPostOperationsRoutes.ts
 async function handlePostOperationsRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -21636,6 +21872,59 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
   const REAL_GRADUATION_FS2 = deps.realGraduationFs;
   function isWorkflowName4(name) {
     return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
+  }
+  function sendLoopScopeUntrustedRoot() {
+    sendJson(res, 403, {
+      ok: false,
+      code: "LOOP_SCOPE_ROOT_UNTRUSTED",
+      error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
+    });
+  }
+  if (path7 === "/api/loops/scope-preview") {
+    const raw = await readJsonBody(req);
+    let input;
+    try {
+      input = parseLoopScopePreviewRequest(raw);
+    } catch (error) {
+      if (!(error instanceof LoopScopePreviewInputError)) throw error;
+      return sendJson(res, 400, { ok: false, code: "LOOP_SCOPE_REQUEST_INVALID", error: error.message });
+    }
+    const rootCheck = workflowRootForRequest(input.root);
+    if (!rootCheck.ok) {
+      return sendJson(res, rootCheck.code, {
+        ok: false,
+        code: rootCheck.code === 404 ? "LOOP_SCOPE_ROOT_NOT_FOUND" : "LOOP_SCOPE_ROOT_UNTRUSTED",
+        error: rootCheck.error
+      });
+    }
+    let loaded;
+    try {
+      loaded = readTrustedLoopRegistry(rootCheck.anchor);
+    } catch (error) {
+      if (error instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot();
+      if (!(error instanceof RegistryReadError)) throw error;
+      return sendJson(res, 500, {
+        ok: false,
+        code: "LOOP_SCOPE_REGISTRY_READ_FAILED",
+        error: "Loop registry \u8BFB\u53D6\u5931\u8D25"
+      });
+    }
+    if (loaded.data === null || loaded.errors.length > 0) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: "LOOP_SCOPE_REGISTRY_INVALID",
+        error: "Loop registry \u65E0\u6CD5\u5F62\u6210\u53EF\u4FE1\u7B56\u7565"
+      });
+    }
+    const loop = loaded.data.loops.find((candidate) => candidate.id === input.loopId);
+    if (loop === void 0) {
+      return sendJson(res, 404, {
+        ok: false,
+        code: "LOOP_SCOPE_LOOP_NOT_FOUND",
+        error: "Loop \u4E0D\u5B58\u5728"
+      });
+    }
+    return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob));
   }
   if (path7 === "/api/router/preview") {
     const raw = await readJsonBody(req);
@@ -21985,21 +22274,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync22 } from "node:fs";
+import { readFileSync as readFileSync23 } from "node:fs";
 import { dirname as dirname11, join as join50 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join50(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync23(join50(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join50(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync23(join50(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -22053,7 +22342,7 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync23 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { join as join51 } from "node:path";
 import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
@@ -22220,7 +22509,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join51(webRoot, "index.html"), "utf8");
+      let html = readFileSync24(join51(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -22237,7 +22526,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     const abs = join51(webRoot, rel);
     if (!abs.startsWith(join51(webRoot, "assets"))) return false;
     try {
-      const source = readFileSync23(abs);
+      const source = readFileSync24(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
       const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
@@ -22445,7 +22734,7 @@ function createServerGovernance(options) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync25 } from "node:fs";
 import { basename as basename4, dirname as dirname12, join as join53 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
@@ -22455,7 +22744,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative7 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join53(pluginRoot2, relative7), "utf8"));
+      const parsed = JSON.parse(readFileSync25(join53(pluginRoot2, relative7), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -22790,7 +23079,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile4 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync25 } from "node:fs";
+import { readFileSync as readFileSync26 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -22827,7 +23116,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync26(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {

@@ -29,6 +29,12 @@ export {
 } from './governanceClient'
 
 export { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate } from './loopsClient'
+export { postLoopScopePreview } from './loopScopePreview'
+export type {
+  LoopScopePreviewItem,
+  LoopScopePreviewReason,
+  LoopScopePreviewResponse,
+} from './loopScopePreview'
 
 export {
   ContextBundlePreviewApiError,
