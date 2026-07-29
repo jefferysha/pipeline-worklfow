@@ -46,7 +46,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   const [previewError, setPreviewError] = useState<unknown | null>(null)
   const [selectedTrack, setSelectedTrack] = useState('')
   const [selectedWorkflow, setSelectedWorkflow] = useState('')
-  const [firstStep, setFirstStep] = useState('')
+  const [firstStep, setFirstStep] = useState<string | null>(null)
   const [firstStepError, setFirstStepError] = useState<unknown | null>(null)
   const [firstStepState, setFirstStepState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [busy, setBusy] = useState(false)
@@ -79,7 +79,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     setPreviewError(null)
     setSelectedTrack('')
     setSelectedWorkflow('')
-    setFirstStep('')
+    setFirstStep(null)
     setFirstStepError(null)
     setFirstStepState('idle')
     setBusy(false)
@@ -150,7 +150,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   useEffect(() => {
     let active = true
     if (selectedWorkflow === '') {
-      setFirstStep('')
+      setFirstStep(null)
       setFirstStepError(null)
       setFirstStepState('idle')
       return () => { active = false }
@@ -162,11 +162,11 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       return () => { active = false }
     }
     setFirstStepState('loading')
-    setFirstStep('')
+    setFirstStep(null)
     setFirstStepError(null)
     void fetchWorkflow(selectedWorkflow, root)
       .then((body) => {
-        const first = body.steps[0]?.id ?? '__workflow_empty__'
+        const first = body.steps[0]?.id ?? null
         if (active) {
           setFirstStep(first)
           setFirstStepState('ready')
@@ -174,7 +174,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       })
       .catch((error) => {
         if (active) {
-          setFirstStep('')
+          setFirstStep(null)
           setFirstStepError(error)
           setFirstStepState('error')
         }
@@ -187,6 +187,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     && selectedCandidate !== undefined
     && selectedWorkflow !== ''
     && firstStepState === 'ready'
+    && firstStep !== null
     && !busy
 
   async function create(): Promise<void> {
@@ -363,10 +364,10 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                         {firstStepState === 'loading'
                           ? t('change_create.step_loading')
                           : t('change_create.first_step', {
-                              step: firstStep === '__workflow_empty__'
+                              step: firstStepState === 'ready' && firstStep === null
                                 ? t('change_create.workflow_empty', { workflow: selectedWorkflow })
                                 : firstStepError === null
-                                  ? firstStep || '—'
+                                  ? firstStep ?? '—'
                                   : formatApiError(firstStepError, t, { exposeServerDetail: lang === 'zh' }),
                             })}
                       </span>

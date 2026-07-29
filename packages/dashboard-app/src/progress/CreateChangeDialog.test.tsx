@@ -134,8 +134,8 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
 
     fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Build a responsive UI' } })
     expect(await screen.findByTestId('route-winner')).toHaveTextContent('Frontend')
-    expect(screen.getByTestId('route-winner')).toHaveTextContent('score 2')
-    expect(screen.getByTestId('route-winner')).toHaveTextContent('priority 300')
+    expect(screen.getByTestId('route-winner')).toHaveTextContent('得分 2')
+    expect(screen.getByTestId('route-winner')).toHaveTextContent('优先级 300')
     expect(screen.getByTestId('route-policy')).toHaveTextContent('frontend')
     const call = fetchMock.mock.calls.find(([url]) => url === '/api/router/preview')
     expect(call?.[1]).toMatchObject({
@@ -252,6 +252,48 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
     expect(await screen.findByTestId('route-first-step')).toHaveTextContent('服务端响应格式无效')
     expect(screen.getByTestId('route-first-step')).not.toHaveTextContent('网络')
     expect(screen.getByTestId('change-create')).toBeDisabled()
+  })
+
+  it('自定义 Workflow 没有首 Step 时禁止创建，不向后端提交必然失败的 Change', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url.startsWith('/api/workflows/release?')) return okJson({ name: 'release', steps: [] })
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'empty-workflow' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Backend release endpoint' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('route-candidate-backend'))
+
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('没有首 Step')
+    expect(screen.getByTestId('change-create')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('change-create'))
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/changes')).toBe(false)
+  })
+
+  it('合法首 Step id 恰为 __workflow_empty__ 时仍可创建，不与空 Workflow 状态混淆', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url.startsWith('/api/workflows/release?')) return okJson(workflow('release', '__workflow_empty__'))
+      if (url === '/api/changes') return okJson({ ok: true, name: 'sentinel-step' })
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'sentinel-step' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Backend release endpoint' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('route-candidate-backend'))
+
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('__workflow_empty__')
+    expect(screen.getByTestId('route-first-step')).not.toHaveTextContent('没有首 Step')
+    expect(screen.getByTestId('change-create')).toBeEnabled()
   })
 
   it('StrictMode 双 effect 周期不吞掉成功创建回调', async () => {

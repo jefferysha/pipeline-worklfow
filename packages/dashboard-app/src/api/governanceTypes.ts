@@ -59,12 +59,14 @@ export type WbGuardConfig = (
   | { type: 'field-in'; field: string; values: [string, ...string[]] }
   | { type: 'full-direct-override' }
   | { type: 'build-head-unchanged'; field: 'build_sha' }
+  | { type: 'spec-migration-applied' }
 ) & { when?: WbTrackPredicate }
 
 export type WbActionConfig =
   | { type: 'freeze-build-sha' }
   | { type: 'mark-verification-passed' }
   | { type: 'mark-verification-failed' }
+  | { type: 'reset-pre-verify-review' }
   | { type: 'archive-run' }
 
 export interface WbArtifactConfig {

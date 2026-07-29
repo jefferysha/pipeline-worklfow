@@ -77,6 +77,8 @@ export function TaskDetail({
   onToast,
 }: TaskDetailProps): JSX.Element {
   const { t } = useT()
+  const tRef = useRef(t)
+  tRef.current = t
   const scopeRef = useRef<HTMLElement>(null)
   const [entries, setEntries] = useState<ChangeHistoryEntry[] | null>(null)
   useEffect(() => {
@@ -102,7 +104,7 @@ export function TaskDetail({
   )
   function copy(value: string): void {
     void navigator.clipboard?.writeText(value).then(() => {
-      onToast?.(t('detail.copied', { value }))
+      onToast?.(tRef.current('detail.copied', { value }))
     })
   }
   const state: ProgressState = changeProgressState(change, rules)

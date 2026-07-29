@@ -11,6 +11,7 @@ import type {
   WbStepDef,
   WbWorkflowDef,
 } from '../api/governanceTypes'
+import type { LanePatch } from './orchestrationBoardModel'
 export type {
   WbActionConfig,
   WbArtifactConfig,
@@ -23,6 +24,29 @@ export type {
   WbTransition,
   WbWorkflowDef,
 } from '../api/governanceTypes'
+
+export function editLaneInDef(
+  def: WbWorkflowDef,
+  laneId: string,
+  patch: LanePatch,
+): WbWorkflowDef {
+  return {
+    ...def,
+    steps: def.steps.map((step) => {
+      if (step.id !== laneId) return step
+      const updated: WbStepDef = { ...step }
+      if (patch.label !== undefined) updated.label = patch.label
+      if (patch.gate !== undefined) updated.gate = patch.gate
+      if (patch.outputs !== undefined) {
+        const outputsByField = new Map(step.outputs.map((output) => [output.field, output]))
+        updated.outputs = patch.outputs.map(
+          (field) => outputsByField.get(field) ?? { field, type: 'string' as const },
+        )
+      }
+      return updated
+    }),
+  }
+}
 
 const GOVERNED_PHASE_SKILLS: Readonly<Record<string, readonly string[]>> = {
   open: ['tenon-open', 'openspec-propose'],

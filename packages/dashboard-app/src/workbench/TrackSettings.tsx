@@ -285,7 +285,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
                   {t('workbench.track_id')}
-                  <input aria-label="Track ID" className={fieldClass} value={editor.draft.id} disabled={editor.mode === 'edit'} onChange={(event) => updateDraft({ id: event.target.value })} />
+                  <input className={fieldClass} value={editor.draft.id} disabled={editor.mode === 'edit'} onChange={(event) => updateDraft({ id: event.target.value })} />
                 </label>
                 <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
                   {t('workbench.track_label')}
@@ -328,23 +328,23 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                   <summary className="cursor-pointer text-xs font-bold text-text-2">{t('workbench.track_policy_details')}</summary>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_review_seed')}
-                      <select aria-label="reviewSeed" className={fieldClass} value={editor.draft.policyProfile.reviewSeed} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, reviewSeed: event.target.value as 'pending' | 'skipped' } })}>
+                      <select className={fieldClass} value={editor.draft.policyProfile.reviewSeed} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, reviewSeed: event.target.value as 'pending' | 'skipped' } })}>
                         <option value="pending">{t('workbench.track_review_pending')}</option><option value="skipped">{t('workbench.track_review_skipped')}</option>
                       </select>
                     </label>
                     <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_coverage')}
-                      <select aria-label="coverageProfile" className={fieldClass} value={editor.draft.policyProfile.coverageProfile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, coverageProfile: event.target.value as 'none' | 'pm' | 'frontend' | 'backend' } })}>
+                      <select className={fieldClass} value={editor.draft.policyProfile.coverageProfile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, coverageProfile: event.target.value as 'none' | 'pm' | 'frontend' | 'backend' } })}>
                         <option value="none">{t('workbench.track_coverage_none')}</option><option value="pm">{t('workbench.track_coverage_pm')}</option><option value="frontend">{t('workbench.track_coverage_frontend')}</option><option value="backend">{t('workbench.track_coverage_backend')}</option>
                       </select>
                     </label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="automationEligible" type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />{t('workbench.track_afk_manual')}</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="autoEnqueueOnSpecComplete" type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />{t('workbench.track_afk_auto')}</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="skills.matrix" type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />{t('workbench.track_skills_matrix')}</label>
-                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_skills_profile')}<input aria-label="skills.profile" className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="routing.enabled" type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />{t('workbench.track_routing_enabled')}</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />{t('workbench.track_afk_manual')}</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />{t('workbench.track_afk_auto')}</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />{t('workbench.track_skills_matrix')}</label>
+                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_skills_profile')}<input className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />{t('workbench.track_routing_enabled')}</label>
                     {editor.draft.policyProfile.routing.enabled && <>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_pattern')}<input aria-label="routing.pattern" className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_exclude')}<input aria-label="routing.excludePattern" className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_pattern')}<input className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_exclude')}<input className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
                         const routing = editor.draft.policyProfile.routing as { enabled: true; pattern: string; excludePattern?: string; priority: number }
                         const excludePattern = event.target.value
                         updateDraft({
@@ -356,7 +356,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
                           },
                         })
                       }} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_priority')}<input aria-label="routing.priority" type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
+                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_priority')}<input type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
                     </>}
                   </div>
                 </details>

@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
 import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
@@ -47,6 +47,7 @@ function stubMatchMedia(reduceMatches: boolean): void {
 let histEntries: ChangeHistoryEntry[] = []
 
 beforeEach(() => {
+  localStorage.clear()
   histEntries = []
   global.fetch = vi.fn(async (url: string) => {
     if (/\/api\/change\/[^/]+\/history\?root=/.test(url)) {
@@ -56,6 +57,7 @@ beforeEach(() => {
   }) as unknown as typeof fetch
 })
 afterEach(() => {
+  localStorage.clear()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -78,6 +80,10 @@ const CN_RULES = rulesFromDef({
 })
 
 async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="task-language-en" onClick={() => setLang('en')}>en</button>
+  }
   const props = {
     root: '/repo',
     change: makeChange('c1', 'verify', {
@@ -98,6 +104,7 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
   }
   const { container, rerender } = render(
     <I18nProvider>
+      <LanguageToggle />
       <TaskDetail {...props} />
     </I18nProvider>,
   )
@@ -192,6 +199,19 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
     fireEvent.click(chip)
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('docs/design.md'))
     expect(props.onToast).toHaveBeenCalled()
+  })
+
+  it('产物复制晚到且期间切为英文时，toast 使用当前语言', async () => {
+    let releaseCopy!: () => void
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { releaseCopy = resolve }))
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    const props = await renderDetail()
+
+    fireEvent.click(screen.getByTestId('dtl-chip-design_doc'))
+    fireEvent.click(screen.getByTestId('task-language-en'))
+    releaseCopy()
+
+    await waitFor(() => expect(props.onToast).toHaveBeenCalledWith('Copied: docs/design.md'))
   })
 
   it('OpenSpec tasks.md 投影的 checkbox 只显示在其 pipeline phase，不从原始需求另造通用 Todo', async () => {

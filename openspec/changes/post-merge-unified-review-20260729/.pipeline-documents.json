@@ -4,14 +4,6 @@
   "createdAt": "2026-07-29T08:23:16Z",
   "records": [
     {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-3.md",
-      "sha256": "04005dc64f307ed4977e94abde257a2e063a65cac89c3f221e858d487aec5fe6",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-29T12:39:27Z",
-      "reads": []
-    },
-    {
       "kind": "adr",
       "path": "docs/adr/2026-07-29-post-merge-unified-review-explore.md",
       "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
@@ -83,6 +75,18 @@
           "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "34ee341ce8d1dd649b48e9575adee6092897a24603289126c14cf2765c05c91d",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -116,6 +120,18 @@
           "sha256": "20c388bb688e887bbb9a24ad69dbbd700a82123f4d4cbf47d27cbb0f3f0500b6",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "20c388bb688e887bbb9a24ad69dbbd700a82123f4d4cbf47d27cbb0f3f0500b6",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "20c388bb688e887bbb9a24ad69dbbd700a82123f4d4cbf47d27cbb0f3f0500b6",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -137,6 +153,18 @@
           "sha256": "d274d98b2bcce84a40a249fdcefe4df0f89216f41dbebdd79bf38c3cd393c5ff",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d274d98b2bcce84a40a249fdcefe4df0f89216f41dbebdd79bf38c3cd393c5ff",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d274d98b2bcce84a40a249fdcefe4df0f89216f41dbebdd79bf38c3cd393c5ff",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -158,6 +186,18 @@
           "sha256": "1feac0a6f55c25c3fd196daf5933e742a878c4b363f2d7a4d83ede53062cc1be",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1feac0a6f55c25c3fd196daf5933e742a878c4b363f2d7a4d83ede53062cc1be",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1feac0a6f55c25c3fd196daf5933e742a878c4b363f2d7a4d83ede53062cc1be",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -173,6 +213,18 @@
           "sha256": "925796c8c0b3df6c55bc5a3ad03efaa5a4cd91cbd65ececae033168b00ac66f0",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "925796c8c0b3df6c55bc5a3ad03efaa5a4cd91cbd65ececae033168b00ac66f0",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "925796c8c0b3df6c55bc5a3ad03efaa5a4cd91cbd65ececae033168b00ac66f0",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -188,6 +240,18 @@
           "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -203,6 +267,18 @@
           "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "002007079bbac612c09cf6785b70b3e065f2deb9bdb508ec0e2aaf7dd2ebb49c",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
@@ -224,21 +300,41 @@
           "sha256": "3b251c3a7364e8748682446d52f9e64f11d483795a04869e06369a7b2f0de867",
           "readAt": "2026-07-29T16:11:08Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3b251c3a7364e8748682446d52f9e64f11d483795a04869e06369a7b2f0de867",
+          "readAt": "2026-07-29T16:39:20Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3b251c3a7364e8748682446d52f9e64f11d483795a04869e06369a7b2f0de867",
+          "readAt": "2026-07-29T16:40:06Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     },
     {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-4.md",
+      "sha256": "d53b1e1e799413a5942e0be2e90bb0f9d0f36b8a22bfab94184f8c56d3a13d8a",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-29T16:39:20Z",
+      "reads": []
+    },
+    {
       "kind": "tasks",
       "path": "openspec/changes/post-merge-unified-review-20260729/tasks.md",
-      "sha256": "bbe467b2c6239b80855df78b2bd5ccb526fe87fa608a0e82812aa58e85bf8142",
+      "sha256": "9ed9b7ae7fe03f782a32ffefc6702a886f41bc1f67de6f348688f99de2d29db8",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-29T16:11:08Z",
+      "recordedAt": "2026-07-29T17:23:11Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "bbe467b2c6239b80855df78b2bd5ccb526fe87fa608a0e82812aa58e85bf8142",
-          "readAt": "2026-07-29T16:11:08Z",
-          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",25]"
+          "sha256": "9ed9b7ae7fe03f782a32ffefc6702a886f41bc1f67de6f348688f99de2d29db8",
+          "readAt": "2026-07-29T17:23:19Z",
+          "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",27]"
         }
       ]
     }

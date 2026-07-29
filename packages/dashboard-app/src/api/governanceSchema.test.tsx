@@ -33,4 +33,36 @@ describe('decodeWorkflowDefinition', () => {
       steps: [step],
     })).toBeNull()
   })
+
+  it('accepts every canonical default-workflow guard and action used by the kernel', () => {
+    const decoded = decodeWorkflowDefinition({
+      name: 'default',
+      openspecContract: 'required',
+      steps: [{
+        ...step,
+        transitions: [{
+          event: 'verify-fail',
+          to: 'build',
+          actions: [{ type: 'reset-pre-verify-review' }],
+        }, {
+          event: 'ship-complete',
+          to: 'archive',
+          guards: [{ type: 'spec-migration-applied' }],
+        }],
+      }],
+    })
+
+    expect(decoded?.steps[0]?.transitions).toEqual([
+      {
+        event: 'verify-fail',
+        to: 'build',
+        actions: [{ type: 'reset-pre-verify-review' }],
+      },
+      {
+        event: 'ship-complete',
+        to: 'archive',
+        guards: [{ type: 'spec-migration-applied' }],
+      },
+    ])
+  })
 })

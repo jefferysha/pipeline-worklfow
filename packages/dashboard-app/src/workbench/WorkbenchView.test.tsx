@@ -4,6 +4,7 @@ import { I18nProvider, useT } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
 import { invalidateMandatoryConfig } from './mandatorySkills'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { decodeWorkflowDeleteError, decodeWorkflowDeleteSuccess } from './workbenchApiDecoders'
 import {
   moveSkillInDef,
   removeStageFromDef,
@@ -15,6 +16,29 @@ import {
 } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
+
+describe('decodeWorkflowDeleteError', () => {
+  it.each([
+    {},
+    { ok: false },
+    { ok: false, code: 'WORKFLOW_REFERENCED', workflow: 'release-train', references: [{}] },
+    { ok: false, code: 'WORKFLOW_REFERENCED', workflow: 'release-train', references: [{ kind: 'future-kind', source: 'x' }] },
+  ])('rejects malformed or open-ended envelopes %#', (value) => {
+    expect(decodeWorkflowDeleteError(value)).toBeNull()
+  })
+
+  it.each([
+    {},
+    { ok: false },
+    { ok: true, deleted: 'release-train' },
+  ])('requires the exact workflow delete success envelope %#', (value) => {
+    expect(decodeWorkflowDeleteSuccess(value)).toBe(false)
+  })
+
+  it('accepts the exact workflow delete success envelope', () => {
+    expect(decodeWorkflowDeleteSuccess({ ok: true })).toBe(true)
+  })
+})
 
 // T12 fixture：对照 design-demos/v5-progress-workbench.html 的 release-train 三阶段示例，
 // 但形状是真实 server 契约（GET /api/workflows/:name 的 { name, steps: StepDef[] }，同
@@ -695,6 +719,31 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(remove?.[1]?.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer studio-token' }))
   })
 
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('删除：HTTP 200 %s 仍视为无效响应并保留当前 workflow', async (_label, makeResponse) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return makeResponse()
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    expect(await within(dialog).findByTestId('wb-workflow-delete-error')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
+    expect(workflowDefs['release-train']).toBeDefined()
+  })
+
   it('删除被引用 workflow：409 引用来源逐条展示，定义与当前选择保持不变', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
@@ -732,9 +781,9 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
         return new Response(JSON.stringify({
           ok: false,
           code: 'WORKFLOW_REFERENCED',
+          workflow: 'release-train',
           error: '该流程仍被生产轨道引用',
           references: [{ kind: 'track-default', source: '前端默认流程' }],
-          blockers: [{ source: '生产轨道', detail: '请先修改轨道绑定' }],
         }), { status: 409 })
       }
       return baseFetch(url, opts)
@@ -749,6 +798,31 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     const alert = await within(dialog).findByTestId('wb-workflow-delete-error')
     expect(alert).toHaveTextContent('This workflow is still referenced and was not deleted.')
     expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('删除错误信封字段类型畸形时显示无效响应，不把对象或伪引用交给 React 渲染', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: {},
+          references: [{ kind: 42, source: {} }],
+          blockers: 'not-an-array',
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    const alert = await within(dialog).findByTestId('wb-workflow-delete-error')
+    expect(alert).toHaveTextContent('服务端响应格式无效')
+    expect(alert).not.toHaveTextContent('[object Object]')
   })
 
   it('default 只读：复制入口并入顶部操作区，不再插入突兀说明横幅', async () => {
@@ -1025,6 +1099,43 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     const errors = await screen.findByTestId('wb-save-errors')
     expect(errors).toHaveTextContent('Your save credentials have expired. Refresh the page and try again.')
     expect(errors.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('保存 A 在途时切到 B：迟到响应不能覆盖 B 的快照、dirty 或保存状态', async () => {
+    workflowDefs['z-next'] = {
+      ...structuredClone(RELEASE_TRAIN),
+      name: 'z-next',
+      steps: RELEASE_TRAIN.steps.map((step, index) => index === 0 ? { ...step, label: 'Z draft' } : { ...step }),
+    }
+    const baseFetch = global.fetch
+    let releaseSave!: (response: Response) => void
+    const pendingSave = new Promise<Response>((resolve) => { releaseSave = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') return pendingSave
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'A changed')
+    fireEvent.click(screen.getByTestId('wb-save'))
+    expect(screen.getByTestId('wb-workflow-new')).toBeDisabled()
+    expect(screen.getByTestId('wb-workflow-copy')).toBeDisabled()
+    expect(screen.getByTestId('wb-workflow-delete')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-z-next'))
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并切换' }))
+    await waitFor(() => expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('z-next'))
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Z draft')
+
+    releaseSave(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await pendingSave
+    await waitFor(() => expect(screen.getByTestId('wb-workflow-new')).toBeEnabled())
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(screen.queryByTestId('wb-save-ok')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeDisabled()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Z draft')
   })
 
   it('English workflow save validation failure masks endpoint-authored Chinese prose', async () => {

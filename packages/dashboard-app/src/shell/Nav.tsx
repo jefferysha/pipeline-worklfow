@@ -52,7 +52,7 @@ interface NavProps {
 const RAIL_BTN_CLS =
   'group relative flex min-h-11 w-[72px] cursor-pointer flex-col items-center justify-center gap-[3px] rounded-xl border border-transparent px-1 py-1.5 text-text-3 outline-none transition-[background-color,border-color,color,transform] duration-150 motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) active:scale-[.98] motion-reduce:active:scale-100 mobile:h-14 mobile:min-w-11 mobile:flex-1 mobile:rounded-lg mobile:px-0.5 mobile:py-1'
 /** rail / bottom-nav 按钮短标签；移动端也可见，避免纯图标入口依赖记忆。 */
-const RAIL_LB_CLS = 'max-w-full truncate text-[11px] font-medium leading-[1.2] mobile:text-[10px]'
+const RAIL_LB_CLS = 'max-w-full text-center text-[11px] font-medium leading-[1.2] mobile:whitespace-normal mobile:text-[9px] mobile:leading-[1.05]'
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -112,7 +112,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
       <div className="my-1.5 w-14 flex-none border-t border-border mobile:hidden" aria-hidden="true" />
 
-      <nav className="flex flex-col gap-1 mobile:min-w-0 mobile:flex-1 mobile:flex-row mobile:justify-around mobile:overflow-x-auto mobile:overscroll-x-contain mobile:[scrollbar-width:none]" aria-label="primary" data-testid="primary-nav">
+      <nav className="flex flex-col gap-1 mobile:min-w-0 mobile:flex-1 mobile:flex-row mobile:justify-around mobile:overflow-x-auto mobile:overscroll-x-contain mobile:[scrollbar-width:none]" aria-label={t('nav.primary_label')} data-testid="primary-nav">
         {PRIMARY_VIEWS.map((v) => {
           const IconCmp = VIEW_ICONS[v]
           return (

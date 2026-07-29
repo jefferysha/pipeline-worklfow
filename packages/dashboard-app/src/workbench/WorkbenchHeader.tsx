@@ -106,9 +106,9 @@ export function WorkbenchHeader(props: {
         </div>}
       </div>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t('workbench.workflow_actions')}>
-        <button className={BTN_GHOST} data-testid="wb-workflow-new" onClick={() => props.onCreate('new')}>{t('workbench.workflow_new')}</button>
-        <button className={BTN_GHOST} data-testid="wb-workflow-copy" onClick={() => props.onCreate('copy')} disabled={!props.def} title={t(props.readonly ? 'workbench.workflow_copy_readonly_title' : 'workbench.workflow_copy_editable_title')}>{t(props.readonly ? 'workbench.workflow_copy_readonly' : 'workbench.workflow_copy_editable')}</button>
-        {!props.readonly && <button className={BTN_DANGER} data-testid="wb-workflow-delete" onClick={props.onDelete} disabled={!props.workflowName}>{t('workbench.workflow_delete')}</button>}
+        <button className={BTN_GHOST} data-testid="wb-workflow-new" onClick={() => props.onCreate('new')} disabled={props.saving}>{t('workbench.workflow_new')}</button>
+        <button className={BTN_GHOST} data-testid="wb-workflow-copy" onClick={() => props.onCreate('copy')} disabled={!props.def || props.saving} title={t(props.readonly ? 'workbench.workflow_copy_readonly_title' : 'workbench.workflow_copy_editable_title')}>{t(props.readonly ? 'workbench.workflow_copy_readonly' : 'workbench.workflow_copy_editable')}</button>
+        {!props.readonly && <button className={BTN_DANGER} data-testid="wb-workflow-delete" onClick={props.onDelete} disabled={!props.workflowName || props.saving}>{t('workbench.workflow_delete')}</button>}
         <button className={BTN_GHOST} data-testid="wb-governance-open" onClick={props.onGovernance} disabled={!props.def}>
           <ShieldCheck className="size-3.5" aria-hidden="true" />
           {t('workbench.gov_title')}

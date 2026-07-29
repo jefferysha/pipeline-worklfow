@@ -17,11 +17,46 @@ function keyPaths(d: Dict, prefix = ''): string[] {
   return out
 }
 
+function stringLeaves(d: Dict, prefix = '', out: Record<string, string> = {}): Record<string, string> {
+  for (const [key, value] of Object.entries(d)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    if (typeof value === 'string') out[path] = value
+    else stringLeaves(value, path, out)
+  }
+  return out
+}
+
 describe('i18n completeness（zh / en 键结构逐一对齐）', () => {
   it('zh 与 en 键集合完全一致', () => {
     const zhKeys = keyPaths(zh).sort()
     const enKeys = keyPaths(en).sort()
     expect(zhKeys).toEqual(enKeys)
+  })
+
+  it('中英文相同值仅允许品牌、命令、协议 token 与纯占位符，不把英文产品文案漏进中文词典', () => {
+    const allowed = new Set([
+      'solution.setup_cmd',
+      'machine.docker',
+      'common.switch_to_english',
+      'inbox.act_forward',
+      'inbox.act_backward',
+      'detail.related_sessions.platform_claude',
+      'detail.related_sessions.platform_codex',
+      'detail.related_sessions.platform_opencode',
+      'detail.related_sessions.platform_pi',
+      'advanced.traffic_duration_ms',
+      'operations.result_loop_doc_cas',
+      'onboard.register_placeholder',
+      'workbench.lp_scope_placeholder',
+      'workbench.afk_rd_docker',
+      'progress.act_fail_http',
+    ])
+    const zhLeaves = stringLeaves(zh)
+    const enLeaves = stringLeaves(en)
+    const identical = Object.keys(zhLeaves)
+      .filter((key) => zhLeaves[key] !== '' && zhLeaves[key] === enLeaves[key])
+      .sort()
+    expect(identical).toEqual([...allowed].sort())
   })
 })
 

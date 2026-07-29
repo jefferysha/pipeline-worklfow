@@ -12,10 +12,9 @@ import './workbench.css'
 import { useHooksConfig } from './HookTimeline'
 import { useLoops } from './LoopCard'
 import { LaneMandatorySkills, TrackSelector, useMandatorySkills } from './mandatorySkills'
-import { type LanePatch } from './OrchestrationBoard'
 import { ExecutionTimelineComposer } from './ExecutionTimelineComposer'
 import { SkillOrchestrationDialog } from './SkillOrchestrationDialog'
-import { readSaveErrors, STAGE_ID_RE } from './workbenchApiDecoders'
+import { readSaveErrors, readWorkflowDeleteResponse, STAGE_ID_RE } from './workbenchApiDecoders'
 import { useRecentWorkflowHistory } from './useRecentWorkflowHistory'
 import { WorkbenchDialogs } from './WorkbenchDialogs'
 import { WorkbenchHeader } from './WorkbenchHeader'
@@ -25,6 +24,7 @@ import { useWorkbenchBoard } from './useWorkbenchBoard'
 import {
   addSkillToDef,
   buildDefaultDef,
+  editLaneInDef,
   moveSkillInDef,
   removeSkillFromDef,
   removeStageFromDef,
@@ -95,10 +95,14 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   } | null>(null)
   const workflowNameRef = useRef<HTMLInputElement>(null); const rootRef = useRef<HTMLElement>(null)
   const rootIdentity = useRef(root)
-  const operationGeneration = useRef(0)
+  const workflowIdentity = useRef<string | null>(null)
+  const saveGeneration = useRef(0)
+  const createGeneration = useRef(0)
+  const deleteGeneration = useRef(0)
   const namesGeneration = useRef(0)
   const localeIdentity = useRef({ t, lang })
   rootIdentity.current = root
+  workflowIdentity.current = wfName
   localeIdentity.current = { t, lang }
   const [advancedOpen, setAdvancedOpen] = useState(false); const [skillEditorOpen, setSkillEditorOpen] = useState(false)
   const defSnapshotRef = useRef<string | null>(null)
@@ -114,7 +118,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   useEffect(() => {
     const targetRoot = root
     const generation = ++namesGeneration.current
-    ++operationGeneration.current
+    ++saveGeneration.current
+    ++createGeneration.current
+    ++deleteGeneration.current
     setNames(null)
     setNamesError(null)
     setWfName(null)
@@ -151,7 +157,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     return () => {
       cancelled = true
       ++namesGeneration.current
-      ++operationGeneration.current
+      ++saveGeneration.current
+      ++createGeneration.current
+      ++deleteGeneration.current
     }
   }, [root])
   useEffect(() => {
@@ -193,24 +201,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
   const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
-  function editLane(laneId: string, patch: LanePatch): void {
-    setDef((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        steps: prev.steps.map((s) => {
-          if (s.id !== laneId) return s
-          const next: WbStepDef = { ...s }
-          if (patch.label !== undefined) next.label = patch.label
-          if (patch.gate !== undefined) next.gate = patch.gate
-          if (patch.outputs !== undefined) {
-            const byField = new Map(s.outputs.map((o) => [o.field, o]))
-            next.outputs = patch.outputs.map((f) => byField.get(f) ?? { field: f, type: 'string' as const })
-          }
-          return next
-        }),
-      }
-    })
+  function editLane(laneId: string, patch: Parameters<typeof editLaneInDef>[2]): void {
+    setDef((prev) => (prev ? editLaneInDef(prev, laneId, patch) : prev))
   }
   function replaceStep(updated: WbStepDef): void {
     setDef((prev) => prev === null
@@ -284,7 +276,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     if (!def || !wfName || readonlyWf || !dirty || saving) return
     const targetRoot = root
     const targetWorkflow = wfName
-    const generation = ++operationGeneration.current
+    const generation = ++saveGeneration.current
     setSaving(true)
     setSaveStatus({ kind: 'idle' })
     try {
@@ -297,28 +289,32 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
           locale.t('common.request_http_error', { status: res.status }),
           locale.lang === 'zh',
         )
-        if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
+        if (generation !== saveGeneration.current || rootIdentity.current !== targetRoot || workflowIdentity.current !== targetWorkflow) return
         setSaveStatus({
           kind: 'error',
           errors,
         })
         return
       }
-      if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
+      if (generation !== saveGeneration.current || rootIdentity.current !== targetRoot || workflowIdentity.current !== targetWorkflow) return
       invalidateWorkflowRules(targetRoot, targetWorkflow)
       defSnapshotRef.current = JSON.stringify(def)
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === saveGeneration.current && rootIdentity.current === targetRoot && workflowIdentity.current === targetWorkflow) {
         setSaveStatus({ kind: 'error', errors: [formatApiError(err, localeIdentity.current.t)] })
       }
     } finally {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === saveGeneration.current && rootIdentity.current === targetRoot && workflowIdentity.current === targetWorkflow) {
         setSaving(false)
       }
     }
   }
   function switchTo(name: string): void {
+    ++saveGeneration.current
+    workflowIdentity.current = name
+    setSaving(false)
+    setSaveStatus({ kind: 'idle' })
     setWfName(name)
     setDef(name === 'default' ? localizedDefaultDef : null)
     setDefError(null)
@@ -341,6 +337,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const workflowNameDuplicate = workflowName.length > 0 && (workflowName === 'default' || (names ?? []).includes(workflowName))
   const canSubmitWorkflow = workflowName.length > 0 && !workflowNameInvalid && !workflowNameDuplicate && !workflowOpBusy
   function openWorkflowCreate(mode: 'new' | 'copy'): void {
+    if (saving) return
     setMenuOpen(false)
     setWorkflowCreateMode(mode)
     setWorkflowDraftName(mode === 'copy' ? `${wfName ?? 'workflow'}-copy` : '')
@@ -356,7 +353,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     if (!canSubmitWorkflow || !workflowCreateMode) return
     if (workflowCreateMode === 'copy' && !def) return
     const targetRoot = root
-    const generation = ++operationGeneration.current
+    const generation = ++createGeneration.current
     const nextDef = workflowForCreate(workflowCreateMode, readonlyWf, def, workflowName, defaultLabels)
     if (nextDef === null) return
     setWorkflowOpBusy(true)
@@ -371,28 +368,28 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
           locale.t('common.request_http_error', { status: res.status }),
           locale.lang === 'zh',
         )
-        if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
+        if (generation !== createGeneration.current || rootIdentity.current !== targetRoot) return
         setWorkflowOpErrors(errors)
         return
       }
-      if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
+      if (generation !== createGeneration.current || rootIdentity.current !== targetRoot) return
       invalidateWorkflowRules(targetRoot, workflowName)
       setNames((prev) => [...new Set([...(prev ?? []), workflowName])].sort())
       setWorkflowCreateMode(null)
       setWorkflowDraftName('')
       switchTo(workflowName)
     } catch (err) {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === createGeneration.current && rootIdentity.current === targetRoot) {
         setWorkflowOpErrors([formatApiError(err, localeIdentity.current.t)])
       }
     } finally {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === createGeneration.current && rootIdentity.current === targetRoot) {
         setWorkflowOpBusy(false)
       }
     }
   }
   function openWorkflowDelete(): void {
-    if (!wfName || wfName === 'default') return
+    if (saving || !wfName || wfName === 'default') return
     setWorkflowDeleteError(null)
     setWorkflowDeleteTarget({ root, name: wfName })
   }
@@ -409,31 +406,27 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     }
     const deleting = target.name
     const targetRoot = target.root
-    const generation = ++operationGeneration.current
+    const generation = ++deleteGeneration.current
     setWorkflowDeleteBusy(true)
     setWorkflowDeleteError(null)
     try {
       const res = await deleteWorkflowDef(deleting, targetRoot)
-      if (!res.ok) {
-        let body: {
-          error?: string
-          code?: string
-          references?: Array<{ kind?: string; source?: string }>
-          blockers?: Array<{ source?: string; detail?: string }>
-        } = {}
-        try { body = await res.json() as typeof body } catch {  }
-        if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
+      const outcome = await readWorkflowDeleteResponse(res)
+      if (generation !== deleteGeneration.current || rootIdentity.current !== targetRoot) return
+      if (outcome.kind !== 'success') {
         const locale = localeIdentity.current
+        const body = outcome.kind === 'error' ? outcome.body : null
         setWorkflowDeleteError({
-          summary: (locale.lang === 'zh' ? body.error : undefined) ?? (body.code === 'WORKFLOW_REFERENCED'
-            ? locale.t('workbench.workflow_delete_referenced')
-            : locale.t('workbench.workflow_delete_failed', { status: res.status })),
-          references: locale.lang === 'zh' && Array.isArray(body.references) ? body.references : [],
-          blockers: locale.lang === 'zh' && Array.isArray(body.blockers) ? body.blockers : [],
+          summary: outcome.kind === 'invalid'
+            ? locale.t('common.invalid_response')
+            : (locale.lang === 'zh' ? body?.error : undefined) ?? (body?.code === 'WORKFLOW_REFERENCED'
+              ? locale.t('workbench.workflow_delete_referenced')
+              : locale.t('workbench.workflow_delete_failed', { status: res.status })),
+          references: locale.lang === 'zh' ? body?.references ?? [] : [],
+          blockers: locale.lang === 'zh' ? body?.blockers ?? [] : [],
         })
         return
       }
-      if (generation !== operationGeneration.current || rootIdentity.current !== targetRoot) return
       invalidateWorkflowRules(targetRoot, deleting)
       const remaining = (names ?? []).filter((name) => name !== deleting)
       setNames(remaining)
@@ -441,7 +434,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       setWorkflowDeleteError(null)
       switchTo(remaining[0] ?? 'default')
     } catch (err) {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === deleteGeneration.current && rootIdentity.current === targetRoot) {
         setWorkflowDeleteError({
           summary: formatApiError(err, localeIdentity.current.t),
           references: [],
@@ -449,7 +442,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         })
       }
     } finally {
-      if (generation === operationGeneration.current && rootIdentity.current === targetRoot) {
+      if (generation === deleteGeneration.current && rootIdentity.current === targetRoot) {
         setWorkflowDeleteBusy(false)
       }
     }

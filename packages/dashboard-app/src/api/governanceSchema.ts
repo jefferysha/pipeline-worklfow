@@ -147,6 +147,8 @@ function decodeGuard(value: unknown): WbGuardConfig | null {
       return item.field === 'build_sha'
         ? withWhen({ type: 'build-head-unchanged', field: 'build_sha' }, when)
         : null
+    case 'spec-migration-applied':
+      return withWhen({ type: 'spec-migration-applied' }, when)
     default:
       return null
   }
@@ -159,6 +161,7 @@ function decodeAction(value: unknown): WbActionConfig | null {
     case 'freeze-build-sha': return { type: 'freeze-build-sha' }
     case 'mark-verification-passed': return { type: 'mark-verification-passed' }
     case 'mark-verification-failed': return { type: 'mark-verification-failed' }
+    case 'reset-pre-verify-review': return { type: 'reset-pre-verify-review' }
     case 'archive-run': return { type: 'archive-run' }
     default: return null
   }

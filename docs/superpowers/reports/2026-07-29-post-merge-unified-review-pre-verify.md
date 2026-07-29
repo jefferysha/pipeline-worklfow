@@ -146,3 +146,28 @@
   repository hygiene、identity、default workflow freshness、dependency audit/tree、document
   templates、npx package 契约测试、512 hook tests、272 adapter tests、13 migration CAS tests、
   golden oracle 与 legacy bridge 全部通过。
+
+## Verify attempt 4 回退与独立复审收口
+
+- attempt 4 在 `f4c79a377e9dc986271778452675d80f9adde718` 上结论为
+  C0/H0/M7/L2，已按 `verify-fail` 回到 Build；该 SHA 的绿色 CI、E2E/API 与视觉执行结果
+  不外推到新候选。
+- 7 个 Medium 与 2 个 Low 均先建立确定性 RED，再完成零 step、canonical guard/action、
+  save/create/delete identity、mandatory/delete runtime decode、pending locale、ARIA/i18n 与
+  390px 标签完整性的修复。
+- 第一轮返工独立复审继续发现 4 个 Medium：合法 sentinel step id、Step Policy ARIA、
+  Workflow delete 错误信封闭集和 mandatory 不同 cell 并发 identity。全部以 RED→GREEN 修复。
+- 第二轮独立复审继续发现 1 个 Medium：删除路径只验证非 2xx 错误体，HTTP 200 的 `{}`、
+  `{ok:false}` 或 non-JSON 仍会误删本地 Workflow。现在 response decoder 对成功与错误统一
+  fail closed，200 只接受精确 `{ok:true}`；三类畸形体均保留当前选择、定义与缓存并显示
+  `common.invalid_response`。
+- `WorkbenchView.tsx` 的新响应处理没有绕过 600 行架构门；纯定义编辑逻辑下沉到
+  `workbenchDefinition.ts`。定向 Workbench 96/96、Dashboard typecheck、architecture 与
+  `git diff --check` 已通过。
+- 最终独立 reviewer 在完整 dirty diff 与 tracked bundle 上结论为
+  **C0/H0/M0/L0，PASS**。`dist/index.html` 只引用 `index-CCGhygZp.js` 与
+  `index-Bi3InOKq.css`；JS SHA-256 为
+  `03bdbbbb5f24f507cef2618ff9ed1c158394001c76b4293f3a8c8e08266227be`，且已在 minified
+  bundle 中确认 exact `{ok:true}` 分支。旧 hash asset 已删除且未被引用。
+- 最终 `test:all`：root 327 files / 5729 passed / 26 honest-skip；Dashboard
+  69 files / 1287 passed。连续两次 full build 产生相同 Dashboard asset 名称和 size。

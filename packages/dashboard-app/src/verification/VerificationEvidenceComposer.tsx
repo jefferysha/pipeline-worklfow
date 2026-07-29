@@ -50,6 +50,8 @@ export function VerificationEvidenceComposer({
   onToast,
 }: VerificationEvidenceComposerProps): JSX.Element {
   const { t } = useT()
+  const tRef = useRef(t)
+  tRef.current = t
   const [open, setOpen] = useState(false)
   const [entries, setEntries] = useState<VerificationEvidenceEditorEntry[]>([])
   const [busy, setBusy] = useState(false)
@@ -204,9 +206,9 @@ export function VerificationEvidenceComposer({
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
       await navigator.clipboard.writeText(markdown)
-      onToast?.(t('detail.evidence_copied'))
+      onToast?.(tRef.current('detail.evidence_copied'))
     } catch {
-      setCopyError(t('detail.evidence_copy_failed'))
+      setCopyError(tRef.current('detail.evidence_copy_failed'))
     }
   }
 

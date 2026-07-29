@@ -18,9 +18,11 @@ const SUMMARY = 'cursor-pointer select-none py-3 text-[13px] font-bold text-text
 const GUARD_TYPES: WbGuardConfig['type'][] = [
   'tasks-at-least', 'nonempty-output', 'field-nonempty', 'file-exists',
   'field-equals', 'field-in', 'full-direct-override', 'build-head-unchanged',
+  'spec-migration-applied',
 ]
 const ACTION_TYPES: WbActionConfig['type'][] = [
-  'freeze-build-sha', 'mark-verification-passed', 'mark-verification-failed', 'archive-run',
+  'freeze-build-sha', 'mark-verification-passed', 'mark-verification-failed',
+  'reset-pre-verify-review', 'archive-run',
 ]
 
 function csv(value: string): string[] {
@@ -37,6 +39,7 @@ function guardFactory(type: WbGuardConfig['type']): WbGuardConfig {
     case 'field-in': return { type, field: 'isolation', values: ['branch'] }
     case 'full-direct-override': return { type }
     case 'build-head-unchanged': return { type, field: 'build_sha' }
+    case 'spec-migration-applied': return { type }
   }
 }
 
@@ -93,7 +96,7 @@ function GuardRow({ guard, readonly, label, onChange, onRemove }: {
           </>
         )}
         {guard.type === 'build-head-unchanged' && <p className="text-xs text-text-3">build_sha</p>}
-        {(guard.type === 'nonempty-output' || guard.type === 'full-direct-override') && (
+        {(guard.type === 'nonempty-output' || guard.type === 'full-direct-override' || guard.type === 'spec-migration-applied') && (
           <p className="col-span-2 text-xs leading-relaxed text-text-3 mobile:col-span-1">{t(`workbench.step_guard_note_${guard.type}`)}</p>
         )}
       </div>
@@ -236,15 +239,15 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
             {artifacts.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
             {artifacts.map((artifact, index) => (
               <div key={`${artifact.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_190px_140px_minmax(0,1fr)_auto] gap-2 max-[1000px]:grid-cols-2 mobile:grid-cols-1">
-                <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={`${artifact.field} artifact`} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
-                <select className={SELECT} value={artifact.producerPolicy} disabled={readonly} aria-label={`${artifact.field} producer policy`} onChange={(event) => updateArtifact(index, { ...artifact, producerPolicy: event.target.value as WbArtifactConfig['producerPolicy'] })}>
+                <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={t('workbench.step_artifact_field_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
+                <select className={SELECT} value={artifact.producerPolicy} disabled={readonly} aria-label={t('workbench.step_artifact_producer_policy_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, producerPolicy: event.target.value as WbArtifactConfig['producerPolicy'] })}>
                   <option value="effective-step-skills">effective-step-skills</option>
                   <option value="effective-phase-skills">effective-phase-skills</option>
                 </select>
                 <select className={SELECT} value={artifact.requiredWhen?.kind ?? ''} disabled={readonly} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: event.target.value === '' ? undefined : { kind: event.target.value as WbTrackPredicate['kind'], values: artifact.requiredWhen?.values ?? ['backend'] } })}>
                   <option value="">{t('workbench.step_all_tracks')}</option><option value="track-in">track-in</option><option value="track-not-in">track-not-in</option>
                 </select>
-                <input className={INPUT} value={artifact.requiredWhen?.values.join(', ') ?? ''} disabled={readonly || !artifact.requiredWhen} aria-label={`${artifact.field} artifact tracks`} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: artifact.requiredWhen ? { ...artifact.requiredWhen, values: csv(event.target.value) } : undefined })} />
+                <input className={INPUT} value={artifact.requiredWhen?.values.join(', ') ?? ''} disabled={readonly || !artifact.requiredWhen} aria-label={t('workbench.step_artifact_tracks_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: artifact.requiredWhen ? { ...artifact.requiredWhen, values: csv(event.target.value) } : undefined })} />
                 {!readonly && <button className={DANGER} type="button" onClick={() => onChange({ ...step, artifacts: artifacts.filter((_, i) => i !== index) })}>{t('workbench.step_remove')}</button>}
               </div>
             ))}

@@ -94,3 +94,28 @@ environment skips, Dashboard 69/1263 tests, OpenSpec 32/32 strict, hooks 512/512
 adapters 272/272, bundle 31/31, migration CAS 13/13, documentation build/smoke and the
 five-fixture oracle are green. Exact-SHA isolated review, E2E/API, visual browser acceptance
 and canonical GitHub CI remain Verify gates.
+
+## Attempt 4 remediation
+
+Verify attempt 4 correctly failed at C0/H0/M7/L2. The Build remediation now closes the empty
+custom-Workflow state, canonical guard/action variants, Workbench operation identity, mandatory
+and delete runtime decoding, pending-locale callbacks, product ARIA/i18n, and the 390px English
+navigation label. Every finding received a deterministic RED before implementation.
+
+Independent review then found four additional Medium issues: collision with a legal
+`__workflow_empty__` step id, hard-coded Step Policy ARIA, permissive Workflow-delete error
+decoding, and cross-cell mandatory operation identity. A second review found that HTTP 200
+delete responses were not validated. The implementation now uses `null` as the only empty
+Workflow discriminator, localizes every Step Policy accessible name, isolates mandatory state by
+exact root+cell+token, and decodes Workflow delete responses as a closed success/error union.
+Only the exact `{ok:true}` success envelope mutates local Workflow state; malformed JSON,
+`{}`, and `{ok:false}` remain in place and surface the active-locale invalid-response message.
+
+The Workbench page remains under the 600-line architecture limit by keeping definition-editing
+pure functions in `workbenchDefinition.ts`. Targeted Workbench 96/96, Dashboard typecheck,
+architecture, and whitespace checks pass. The final independent reviewer examined the complete
+dirty diff and tracked distribution bundle and reports **C0/H0/M0/L0, PASS**. The final
+`test:all` run reports root 327 files / 5729 passed / 26 honest environment skips and Dashboard
+69 files / 1287 passed. Two consecutive full builds produced the same `index-CCGhygZp.js` and
+`index-Bi3InOKq.css`; the old asset is absent and unreferenced. This Build review authorizes
+freezing a new exact SHA; Verify must still rerun every track on that SHA.

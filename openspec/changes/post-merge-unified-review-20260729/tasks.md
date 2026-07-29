@@ -66,6 +66,22 @@
 - [x] 补齐 `document-evidence-timeline` Purpose，并通过目标 strict validation。 (build)
 - [x] 通过 OpenSpec 官方 archive 完整迁移 5 个 state-only 历史目录，使全仓 strict validation 真实全绿。 (build)
 
+## 第四次 Verify 回退修复
+
+- [x] 空 custom Workflow 不得进入可创建状态，并以 RED→GREEN 覆盖零 step 不发送请求。 (build)
+- [x] 同步 Dashboard Workflow runtime decoder 与 kernel canonical guard/action 闭集，并覆盖 default Workflow round-trip。 (build)
+- [x] 将 Workbench save/create/delete 拆分为 exact root+workflow+operation identity，覆盖切换与交错 finally。 (build)
+- [x] 对 mandatory 和 Workflow delete error envelope 做完整 runtime decode，畸形响应进入 invalid-response 而不崩溃。 (build)
+- [x] 修复 mandatory 与 clipboard 回调的在途 locale 竞态，所有迟到结果按当前语言呈现或失效。 (build)
+- [x] 本地化 Track Settings/Nav accessible name 与中文资源中的英文产品标签，并增加技术 token allowlist 语义门。 (build)
+- [x] 修复 390px 英文底部导航标签省略，在无横向溢出的前提下完整呈现。 (build)
+- [x] 重建 Dashboard tracked assets并重跑定向、全量、架构、依赖、文档、OpenSpec 与 release 门禁。 (build)
+- [x] 移除空 Workflow sentinel 冲突，本地化 Step Policy ARIA，并以 runtime 闭集解码 Workflow delete 错误信封。 (build)
+- [x] 将 mandatory 保存身份隔离到 exact root+cell+token，覆盖不同 cell 并发 busy/error/finally。 (build)
+- [x] 严格要求 Workflow delete HTTP 200 返回精确 `{ok:true}`；畸形成功体保留当前定义并显示 invalid-response。 (build)
+- [x] 抽离 Workbench 定义编辑纯函数，保持 page/route 600 行架构硬门并重跑回归。 (build)
+- [x] 对完整返工 diff 重做 Standards+Spec pre-Verify 审查并冻结新 SHA。 (build)
+
 ## 验证
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

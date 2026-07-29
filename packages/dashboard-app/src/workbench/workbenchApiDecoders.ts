@@ -40,3 +40,125 @@ export async function readSaveErrors(
   } catch { /* use the localized status fallback */ }
   return [localizedFallback]
 }
+
+export interface WorkflowDeleteErrorEnvelope {
+  error?: string
+  code?: 'WORKFLOW_REFERENCED' | 'WORKFLOW_REFERENCE_SCAN_FAILED' | 'WORKFLOW_DELETE_STALE'
+  references: Array<{
+    kind: 'track-default' | 'track-allowed' | 'active-change' | 'loop-binding' | 'policy-template-recommended'
+    source: string
+  }>
+  blockers: Array<{ source: string; detail: string }>
+}
+
+export function decodeWorkflowDeleteSuccess(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const body = value as Record<string, unknown>
+  return body.ok === true && Object.keys(body).length === 1
+}
+
+const WORKFLOW_REFERENCE_KINDS = new Set([
+  'track-default',
+  'track-allowed',
+  'active-change',
+  'loop-binding',
+  'policy-template-recommended',
+])
+
+function decodeReferences(value: unknown): WorkflowDeleteErrorEnvelope['references'] | null {
+  if (!Array.isArray(value)) return null
+  const references: WorkflowDeleteErrorEnvelope['references'] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
+    const entry = item as Record<string, unknown>
+    if (
+      typeof entry.kind !== 'string'
+      || !WORKFLOW_REFERENCE_KINDS.has(entry.kind)
+      || typeof entry.source !== 'string'
+    ) return null
+    references.push({
+      kind: entry.kind as WorkflowDeleteErrorEnvelope['references'][number]['kind'],
+      source: entry.source,
+    })
+  }
+  return references
+}
+
+function decodeBlockers(value: unknown): WorkflowDeleteErrorEnvelope['blockers'] | null {
+  if (!Array.isArray(value)) return null
+  const blockers: WorkflowDeleteErrorEnvelope['blockers'] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
+    const entry = item as Record<string, unknown>
+    if (typeof entry.source !== 'string' || typeof entry.detail !== 'string') return null
+    blockers.push({ source: entry.source, detail: entry.detail })
+  }
+  return blockers
+}
+
+export function decodeWorkflowDeleteError(value: unknown): WorkflowDeleteErrorEnvelope | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const body = value as Record<string, unknown>
+  if (body.ok !== false) return null
+  if (body.error !== undefined && typeof body.error !== 'string') return null
+
+  if (body.code === undefined) {
+    if (
+      typeof body.error !== 'string'
+      || body.workflow !== undefined
+      || body.references !== undefined
+      || body.blockers !== undefined
+    ) return null
+    return { error: body.error, references: [], blockers: [] }
+  }
+
+  if (typeof body.workflow !== 'string') return null
+  if (body.code === 'WORKFLOW_REFERENCED') {
+    const references = decodeReferences(body.references)
+    if (references === null || body.blockers !== undefined) return null
+    return {
+      code: body.code,
+      ...(body.error === undefined ? {} : { error: body.error }),
+      references,
+      blockers: [],
+    }
+  }
+  if (body.code === 'WORKFLOW_REFERENCE_SCAN_FAILED') {
+    const references = decodeReferences(body.references)
+    const blockers = decodeBlockers(body.blockers)
+    if (references === null || blockers === null) return null
+    return {
+      code: body.code,
+      ...(body.error === undefined ? {} : { error: body.error }),
+      references,
+      blockers,
+    }
+  }
+  if (body.code === 'WORKFLOW_DELETE_STALE') {
+    if (
+      typeof body.error !== 'string'
+      || body.references !== undefined
+      || body.blockers !== undefined
+    ) return null
+    return { code: body.code, error: body.error, references: [], blockers: [] }
+  }
+  return null
+}
+
+export type WorkflowDeleteResponse =
+  | { kind: 'success' }
+  | { kind: 'error'; body: WorkflowDeleteErrorEnvelope }
+  | { kind: 'invalid' }
+
+export async function readWorkflowDeleteResponse(response: Response): Promise<WorkflowDeleteResponse> {
+  try {
+    const value: unknown = await response.json()
+    if (response.ok) {
+      return decodeWorkflowDeleteSuccess(value) ? { kind: 'success' } : { kind: 'invalid' }
+    }
+    const body = decodeWorkflowDeleteError(value)
+    return body === null ? { kind: 'invalid' } : { kind: 'error', body }
+  } catch {
+    return { kind: 'invalid' }
+  }
+}

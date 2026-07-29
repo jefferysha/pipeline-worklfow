@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WbSkillEntry, WbTrackDefinition } from '../api/client'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import {
   LaneMandatorySkills,
   TrackSelector,
@@ -197,6 +197,14 @@ function Harness({ phases, root = '/repo/default' }: { phases: string[]; root?: 
       ))}
     </>
   )
+}
+
+function LanguageHarness({ phases }: { phases: string[] }): JSX.Element {
+  const { setLang } = useT()
+  return <>
+    <button type="button" data-testid="mandatory-language-en" onClick={() => setLang('en')}>en</button>
+    <Harness phases={phases} />
+  </>
 }
 
 /** 渲染并等到 config 探测落地（table===null 时各列渲染「加载中…」）。 */
@@ -485,6 +493,33 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
     expect(screen.getByTestId('wb-mand-chip-build-frontend-design')).toBeInTheDocument()
   })
 
+  it('错误信封字段类型畸形时按无效响应处理，不把对象渲染成 React child', async () => {
+    postResponse = () => new Response(JSON.stringify({ ok: false, error: {} }), { status: 500 })
+    await renderMatrix(['build'])
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
+    expect(screen.getByTestId('wb-mand-chip-build-frontend-design')).toBeInTheDocument()
+  })
+
+  it('保存响应晚到且期间切为英文时，按当前语言显示失败，不回写发起时的中文文案', async () => {
+    let release!: (response: Response) => void
+    postResponse = () => new Promise<Response>((resolve) => { release = resolve })
+    render(<I18nProvider><LanguageHarness phases={['build']} /></I18nProvider>)
+    await waitFor(() => expect(screen.queryByText('加载中…')).toBeNull())
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
+    fireEvent.click(screen.getByTestId('mandatory-language-en'))
+    release(new Response(JSON.stringify({ ok: false, error: '后端中文错误' }), { status: 500 }))
+
+    const error = await screen.findByTestId('wb-mand-err-build')
+    expect(error).toHaveTextContent('Save failed (500)')
+    expect(error.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('root A 的 POST 晚到时只推进 A cache，绝不覆盖已切换到 root B 的 UI/cache', async () => {
     let releaseA!: (response: Response) => void
     postResponse = () => new Promise<Response>((resolve) => { releaseA = resolve })
@@ -566,6 +601,30 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     release(new Response(JSON.stringify({ ok: true, skills: ['frontend-design'] }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
     expect(screen.queryByTestId('wb-mand-chip-build-prototype|huashu-design')).toBeNull()
+  })
+
+  it('不同 cell 并发各自保留 busy/token，任一迟到结果不能覆盖另一操作', async () => {
+    const releases = new Map<string, (response: Response) => void>()
+    postResponse = (body) => new Promise<Response>((resolve) => {
+      releases.set(body.phase, resolve)
+    })
+    await renderMatrix(['build', 'spec'])
+    await waitAddReady('build')
+    await waitAddReady('spec')
+
+    act(() => probe.setSkills('build', ['frontend-design']))
+    act(() => probe.setSkills('spec', []))
+    expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
+    expect(screen.getByTestId('wb-mand-add-spec')).toBeDisabled()
+
+    releases.get('spec')?.(new Response(JSON.stringify({ ok: true, skills: [] }), { status: 200 }))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-add-spec')).toBeEnabled())
+    expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
+
+    releases.get('build')?.(new Response(JSON.stringify({ ok: false, error: 'build failed' }), { status: 409 }))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('build failed'))
+    expect(screen.queryByTestId('wb-mand-err-spec')).toBeNull()
+    expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled()
   })
 
   it('在途守卫：同 cell 二次 setSkills 直接 no-op，不叠发第二个 POST', async () => {
@@ -918,11 +977,11 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-create'))
     const editor = screen.getByTestId('wb-track-editor')
-    fireEvent.change(within(editor).getByLabelText('Track ID'), { target: { value: 'release' } })
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'release' } })
     fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Release' } })
     fireEvent.change(within(editor).getByLabelText('默认 Workflow'), { target: { value: 'default' } })
     fireEvent.change(within(editor).getByLabelText('Policy 模板'), { target: { value: 'frontend' } })
-    fireEvent.click(within(editor).getByLabelText('autoEnqueueOnSpecComplete'))
+    fireEvent.click(within(editor).getByLabelText('规格完成后自动进入 AFK'))
     fireEvent.click(within(editor).getByTestId('wb-track-editor-save'))
 
     await waitFor(() => expect(configReads).toBeGreaterThan(1))
@@ -963,13 +1022,13 @@ describe('TrackSettings v3 真实 CRUD', () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
-    fireEvent.change(screen.getByLabelText('routing.priority'), { target: { value: '999' } })
-    fireEvent.change(screen.getByLabelText('routing.excludePattern'), { target: { value: '(API|schema)' } })
+    fireEvent.change(screen.getByLabelText('优先级'), { target: { value: '999' } })
+    fireEvent.change(screen.getByLabelText('排除规则（可选）'), { target: { value: '(API|schema)' } })
     fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
     fireEvent.click(screen.getByTestId('wb-track-route-preview'))
     const result = await screen.findByTestId('wb-track-route-result')
     expect(result).toHaveTextContent('Quality')
-    expect(result).toHaveTextContent('score 2')
+    expect(result).toHaveTextContent('得分 2')
     expect(result).toHaveTextContent('Frontend')
     const call = fetchMock().mock.calls.find(([url]) => url === '/api/router/preview')
     expect(JSON.parse(String((call?.[1] as RequestInit).body))).toMatchObject({
@@ -1003,7 +1062,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
     fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
     fireEvent.click(screen.getByTestId('wb-track-route-preview'))
-    fireEvent.change(screen.getByLabelText('routing.priority'), { target: { value: '999' } })
+    fireEvent.change(screen.getByLabelText('优先级'), { target: { value: '999' } })
 
     await act(async () => {
       resolvePreview(new Response(JSON.stringify({
@@ -1118,7 +1177,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     const editor = screen.getByTestId('wb-track-editor')
-    expect(within(editor).getByLabelText('Track ID')).toBeDisabled()
+    expect(within(editor).getByLabelText('轨道 ID')).toBeDisabled()
     expect(within(editor).queryByLabelText('Policy 模板')).toBeNull()
     expect(within(editor).queryByTestId('wb-track-editor-delete')).toBeNull()
     fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Web UI' } })

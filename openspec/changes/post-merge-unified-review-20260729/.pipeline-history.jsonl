@@ -157,3 +157,19 @@
 {"ts":"2026-07-29T15:21:46Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"06c58926-92be-4364-8d71-ac0b7b712630"}
 {"ts":"2026-07-29T16:11:08Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-29T16:11:16Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T16:13:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T16:13:36Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T16:13:37Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"ec4a8cc4-df8a-48a3-8587-1a41e41dd7c1"}
+{"ts":"2026-07-29T16:38:26Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-29T16:38:26Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-29T16:38:26Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-4.md"}
+{"ts":"2026-07-29T16:38:28Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T16:39:01Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T16:39:19Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-4.md"}
+{"ts":"2026-07-29T16:39:19Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T16:39:20Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-29T16:39:32Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T16:39:01Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T16:39:33Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"3631c9cf-3fa8-4d2d-9284-a91740c1ae19"}
+{"ts":"2026-07-29T17:23:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-29T17:23:11Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-29T17:23:11Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

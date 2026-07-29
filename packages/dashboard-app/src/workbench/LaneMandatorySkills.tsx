@@ -25,7 +25,19 @@ export interface LaneMandatorySkillsProps {
 
 export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMandatorySkillsProps): JSX.Element {
   const { lang, t } = useT()
-  const { table, capable, track, tracks, writableProfiles, savingKey, saveError, saveErrorKey, registry } = state
+  const {
+    table,
+    capable,
+    track,
+    tracks,
+    writableProfiles,
+    savingKey,
+    savingKeys,
+    saveError,
+    saveErrors,
+    saveErrorKey,
+    registry,
+  } = state
   const [popOpen, setPopOpen] = useState(false)
   const popWrapRef = useRef<HTMLDivElement>(null)
 
@@ -45,7 +57,9 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
     ? resolveMandatoryCell(table, selectedTrack, phase, writableProfiles)
     : null
   const writeKey = selectedTrack === null ? '' : `${phase}.${selectedTrack.id}`
-  const busy = savingKey === writeKey
+  const busy = savingKeys?.includes(writeKey) ?? savingKey === writeKey
+  const cellSaveError = saveErrors?.[writeKey]
+    ?? (saveErrorKey == null || saveErrorKey === writeKey ? saveError : null)
   const skills = cell?.skills ?? []
   const isArchive = phase === 'archive'
   // 只有 profile===track.id 且 phase.profile 已显式声明的格子可写。继承 profile、_all、空集合、
@@ -203,11 +217,9 @@ export function LaneMandatorySkills({ phase, state, readonly = false }: LaneMand
             )}
             </div>
           </div>
-          {/* saveError 是矩阵级单值：只挂在真出错的那一列（saveErrorKey 缺省时退回全列显示，
-              见 MandatoryState.saveErrorKey 注释）。 */}
-          {saveError !== null && (saveErrorKey == null || saveErrorKey === writeKey) && (
+          {cellSaveError !== null && cellSaveError !== undefined && (
             <p className="mx-0.5 mt-2 text-[12.5px] text-red" data-testid={`wb-mand-err-${phase}`} role="alert">
-              {saveError}
+              {cellSaveError}
             </p>
           )}
         </>

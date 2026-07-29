@@ -39,11 +39,14 @@ describe('Nav 一级导航（rail 六视图：项目 / 进度 / AFK / 工作台 
     expect(shell.className).toContain('mobile:w-full')
 
     const primary = screen.getByTestId('primary-nav')
+    expect(primary).toHaveAccessibleName('主导航')
     expect(primary.className).toContain('mobile:flex-row')
     expect(primary.className).toContain('mobile:overflow-x-auto')
     for (const operational of PRIMARY_VIEWS) {
       const label = screen.getByTestId(`nav-label-${operational}`)
       expect(label.className).not.toContain('mobile:hidden')
+      expect(label.className).not.toContain('truncate')
+      expect(label.className).toContain('mobile:whitespace-normal')
       expect(screen.getByTestId(`nav-${operational}`).className).toContain('mobile:min-w-11')
     }
   })
