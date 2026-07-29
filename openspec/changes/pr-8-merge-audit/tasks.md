@@ -26,7 +26,7 @@
 - [x] 执行 `frontend-design`、`web-design-guidelines`、`design-taste-frontend` 和 production browser 全矩阵，修复全部 C/H/M。
 - [x] 同步源码、测试、正式生成物、OpenSpec、README/CONTRACT/TEST-REALITY/用户文档与回滚事实。
 - [x] 运行定向、前端、后端、全仓、分发、OpenSpec、oracle、hygiene、依赖与 repo-zero 门禁。
-- [ ] 完成独立 pre-Verify Spec、Rules/Architecture/Security、Dashboard 视觉复审，推送并取得精确 head CI。
+- [x] 完成独立 pre-Verify Spec、Rules/Architecture/Security、Dashboard 视觉复审，推送并取得精确 head CI。
 
 ## 验证
 
