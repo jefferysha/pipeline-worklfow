@@ -40,9 +40,9 @@
 
 - [x] 提交并推送替代分支，创建包含证据和回滚说明的非草稿 PR。 (ship)
 - [x] 替代 PR 可审查后关闭 PR #10，并在两处相互链接。 (ship)
-- [ ] 检查 PR/CI 状态并修复范围内问题。 (ship)
+- [x] 检查 PR/CI 状态并修复范围内问题。 (ship)
 
 ## 归档
 
-- [ ] 应用主规格、完成 Archive 检查并归档 Change。 (archive)
-- [ ] 更新 automation memory 为新的 Change、分支、worktree 与替代 PR 身份。 (archive)
+- [x] 应用主规格、完成 Archive 检查并归档 Change。 (archive)
+- [x] 更新 automation memory 为新的 Change、分支、worktree 与替代 PR 身份。 (archive)
