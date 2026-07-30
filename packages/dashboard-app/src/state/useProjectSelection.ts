@@ -8,6 +8,8 @@ export interface ProjectSelectionController {
   readonly currentRoot: string
   readonly selectProject: (root: string, view: View) => void
   readonly applyLocation: (target: DashboardNavigationTarget) => void
+  /** Replays the blocked browser Back only after the compensating Forward has restored the current entry. */
+  readonly confirmPopNavigation: () => void
 }
 
 export interface DashboardNavigationTarget {
@@ -25,9 +27,9 @@ export function useProjectSelection(input: {
   /** Return false after capturing the target to keep the last committed URL/UI in place. */
   readonly onPopAttempt?: (target: DashboardNavigationTarget) => boolean
 }): ProjectSelectionController {
-  const committedUrlRef = useRef(
-    `${window.location.pathname}${window.location.search}${window.location.hash}`,
-  )
+  const restoringBlockedPopRef = useRef(false)
+  const confirmAfterRestoreRef = useRef(false)
+  const allowNextPopRef = useRef(false)
   const [preferredRoot, setPreferredRoot] = useState<string | null>(() => {
     try {
       return parseDashboardLocation(window.location.search).root ?? null
@@ -45,7 +47,6 @@ export function useProjectSelection(input: {
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.pushState(window.history.state, '', next)
-      committedUrlRef.current = next
     } catch {
       // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
     }
@@ -64,7 +65,6 @@ export function useProjectSelection(input: {
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.replaceState(window.history.state, '', next)
-      committedUrlRef.current = next
     } catch {
       // 禁用 history 的宿主只失去可复制 URL，不影响内存中的显式选择。
     }
@@ -84,20 +84,43 @@ export function useProjectSelection(input: {
     input.onSelectedChange(target.change)
   }, [input.onPopView, input.onSelectedChange])
 
+  const confirmPopNavigation = useCallback((): void => {
+    if (restoringBlockedPopRef.current) {
+      confirmAfterRestoreRef.current = true
+      return
+    }
+    allowNextPopRef.current = true
+    window.history.back()
+  }, [])
+
   useEffect(() => {
     const onPopState = (): void => {
+      if (restoringBlockedPopRef.current) {
+        restoringBlockedPopRef.current = false
+        if (confirmAfterRestoreRef.current) {
+          confirmAfterRestoreRef.current = false
+          allowNextPopRef.current = true
+          window.history.back()
+        }
+        return
+      }
       const linked = parseDashboardLocation(window.location.search)
       const target: DashboardNavigationTarget = {
         view: linked.view ?? input.view,
         root: linked.root ?? null,
         change: linked.change ?? null,
       }
+      if (allowNextPopRef.current) {
+        allowNextPopRef.current = false
+        applyLocation(target)
+        return
+      }
       if (input.onPopAttempt?.(target) === false) {
-        try {
-          window.history.replaceState(window.history.state, '', committedUrlRef.current)
-        } catch {
-          // URL restore is best-effort in restricted hosts; in-memory state remains authoritative.
-        }
+        // popstate fires after Back has selected the prior entry. Traverse Forward to the
+        // still-existing current entry instead of rewriting the prior entry with replaceState.
+        // The compensating pop is suppressed above, so UI and URL remain on the dirty Workbench.
+        restoringBlockedPopRef.current = true
+        window.history.forward()
         return
       }
       applyLocation(target)
@@ -106,5 +129,5 @@ export function useProjectSelection(input: {
     return () => window.removeEventListener('popstate', onPopState)
   }, [applyLocation, input.onPopAttempt, input.view])
 
-  return { currentRoot, selectProject, applyLocation }
+  return { currentRoot, selectProject, applyLocation, confirmPopNavigation }
 }

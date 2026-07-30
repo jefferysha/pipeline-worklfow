@@ -126,7 +126,7 @@ function AppShell(): JSX.Element {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
   }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
-  const { currentRoot, selectProject, applyLocation } = useProjectSelection({
+  const { currentRoot, selectProject, confirmPopNavigation } = useProjectSelection({
     snapshot,
     view,
     selectedChange,
@@ -160,9 +160,9 @@ function AppShell(): JSX.Element {
     const pending = pendingNavigation
     setPendingNavigation(null)
     setWorkbenchDirty(false)
-    if (pending.kind === 'pop') applyLocation(pending.target)
+    if (pending.kind === 'pop') confirmPopNavigation()
     else commitView(pending.target.view)
-  }, [applyLocation, commitView, pendingNavigation])
+  }, [commitView, confirmPopNavigation, pendingNavigation])
 
   useEffect(() => {
     if (!workbenchDirty) return

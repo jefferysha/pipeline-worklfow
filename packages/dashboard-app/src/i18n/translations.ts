@@ -1850,7 +1850,7 @@ export const zh: Dict = {
     state_approvable: '可放行',
     state_cancelled: '已取消',
     state_pending: '待推进',
-    review_title: 'Review Handshake',
+    review_title: '复核确认',
     review_unavailable: '复核状态不可用',
     review_unavailable_next: '当前服务未提供复核状态；操作仍由服务端校验。',
     review_not_requested: '尚未记录复核请求',

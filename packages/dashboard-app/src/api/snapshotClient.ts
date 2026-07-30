@@ -44,12 +44,21 @@ export function subscribeSnapshot(
 ): () => void {
   const source = new EventSource('/api/stream')
   const handleSnapshot = (event: Event): void => {
-    if (!isRecord(event) || typeof event.data !== 'string') return
+    if (!isRecord(event) || typeof event.data !== 'string') {
+      onError?.()
+      return
+    }
     try {
       const snapshot = decodeSnapshot(JSON.parse(event.data))
-      if (snapshot) onSnapshot(snapshot)
+      if (snapshot === null) {
+        onError?.()
+        return
+      }
+      onSnapshot(snapshot)
     } catch {
-      // Malformed or truncated SSE frames are ignored; the next snapshot is authoritative.
+      // An invalid frame cannot be treated as an authoritative state update. Surface the same
+      // failure signal as EventSource.onerror so consumers stop presenting stale data as live.
+      onError?.()
     }
   }
   const handleError = (): void => onError?.()

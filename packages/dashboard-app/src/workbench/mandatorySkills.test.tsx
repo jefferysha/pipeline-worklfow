@@ -972,6 +972,22 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(panel).not.toHaveTextContent('routing')
   })
 
+  it('新建 Track 在必填身份为空或非法时禁用保存，填写有效值后才允许提交', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const save = within(editor).getByTestId('wb-track-editor-save')
+
+    expect(save).toBeDisabled()
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'INVALID ID' } })
+    fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Release' } })
+    expect(save).toBeDisabled()
+
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'release' } })
+    expect(save).toBeEnabled()
+  })
+
   it('新建自定义 Track：完整定义连同当前 revision 发往 POST，成功后重拉 config', async () => {
     let configReads = 0
     configResponse = () => {

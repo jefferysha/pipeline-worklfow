@@ -171,3 +171,26 @@
   bundle 中确认 exact `{ok:true}` 分支。旧 hash asset 已删除且未被引用。
 - 最终 `test:all`：root 327 files / 5729 passed / 26 honest-skip；Dashboard
   69 files / 1287 passed。连续两次 full build 产生相同 Dashboard asset 名称和 size。
+
+## 第六次 Build 与最终合并主干范围
+
+- 统一分支已合入 `origin/main@ef728bf6`，范围包含已合并 PR #21 与 #23；旧
+  `main@445aa141` 及其冻结证据不外推到本候选。
+- 第六轮修复覆盖 Default Skill per-cell identity、Track 权威 DTO reconcile、
+  Operations 完整 decision token、AFK normalized settings，以及 Workbench 全草稿导航和
+  unload 守卫；整个桌面 Dashboard 的已记录设计 Low 均已修复。
+- 独立复审继续发现并回退修复 2 个 Medium：畸形 review-handshake SSE 现在触发 stream
+  error 并保留最后已知快照但取消 live；dirty Workbench 取消 Back 现在通过真实 Forward
+  补偿恢复历史项，确认后重放原 Back。最终浏览器交互又发现空的新 Track identity 仍可保存，
+  现已在必填身份为空或非法时禁用 Save。
+- 最终 root 测试：327 files / 5783 passed / 14 honest-skip；Dashboard：73 files /
+  1388 passed。production build 资产为 `index-viHDz-8x.js` 与 `index-YeY6VsN7.css`，
+  SHA-256 分别为 `1e745e7d…5858` 与 `1a4a0f55…8aff1`。
+- 最终 production 浏览器矩阵覆盖 Overview、Projects、Progress、AFK、Workbench、
+  Machine、Host Plan，在 1024/1440/1920 px、中文/英文、明/暗色及 reduced-motion
+  组合下生成 21 张截图，console/page error、横向溢出、可见性和布局失败均为 0。
+  证据目录为 `/private/tmp/tenon-unified-final-browser-20260730`。
+- AFK、Track Settings、Governance 的关键交互复验通过：Dialog 首焦点与触发器焦点恢复正确，
+  无 Loop 时提交禁用，空 Track identity 时 Save 禁用，runtime error 为 0。
+- 本节记录的是最终独立 exact-candidate review 前的 Build 证据；只有复审达到
+  C0/H0/M0/L0 后才允许写入 pre-Verify pass 并冻结 SHA。

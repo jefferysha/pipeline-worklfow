@@ -70,8 +70,10 @@ const EDITABLE_WORKFLOW = {
   ],
 }
 
-function stubEditableWorkbench(): void {
-  window.history.replaceState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+function stubEditableWorkbench(options: { preserveLocation?: boolean } = {}): void {
+  if (!options.preserveLocation) {
+    window.history.replaceState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+  }
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/snapshot') {
       return new Response(JSON.stringify(makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build')])])), { status: 200 })
@@ -106,18 +108,42 @@ function stubEditableWorkbench(): void {
   }))
 }
 
-async function renderDirtyWorkbenchApp(): Promise<void> {
-  stubEditableWorkbench()
+async function renderDirtyWorkbenchApp(options: { preserveLocation?: boolean } = {}): Promise<void> {
+  stubEditableWorkbench(options)
   render(<App />)
   await screen.findByTestId('wb-step-draft')
   fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
-  const input = screen.getByTestId('wb-lane-name-input-draft')
+  const input = await screen.findByTestId('wb-lane-name-input-draft')
   fireEvent.change(input, { target: { value: '未保存草稿' } })
   fireEvent.keyDown(input, { key: 'Enter' })
   await screen.findByTestId('wb-dirty')
 }
 
 describe('App Workbench 未保存草稿离开守卫', () => {
+  it('取消浏览器 Back 用 forward 补偿，不 replace/corrupt 目标历史项；随后仍可确认同一次 Back', async () => {
+    window.history.replaceState({ page: 'overview-target' }, '', '/?view=overview&historyMarker=target')
+    window.history.pushState({ page: 'workbench-current' }, '', '/?view=workbench&root=%2Frepo')
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+
+    const replaceState = vi.spyOn(window.history, 'replaceState')
+    const forward = vi.spyOn(window.history, 'forward')
+    act(() => window.history.back())
+
+    const firstDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    expect(forward).toHaveBeenCalledTimes(1)
+    expect(replaceState).not.toHaveBeenCalled()
+    fireEvent.click(within(firstDialog).getByRole('button', { name: '继续编辑' }))
+
+    act(() => window.history.back())
+    const secondDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    fireEvent.click(within(secondDialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('target'))
+  })
+
   it('一级导航与 Overview 共用可访问 Dialog；取消保留页面、草稿、URL 与触发焦点，确认才离开', async () => {
     await renderDirtyWorkbenchApp()
     const overview = screen.getByTestId('nav-overview')
@@ -162,20 +188,20 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   })
 
   it('浏览器返回先恢复已提交 URL/UI 并弹确认；取消保持一致，确认才应用目标地址', async () => {
-    await renderDirtyWorkbenchApp()
     window.history.replaceState({ page: 'overview' }, '', '/?view=overview')
-    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    window.history.pushState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    act(() => window.history.back())
 
     const dialog = await screen.findByTestId('app-unsaved-navigation')
     expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
-    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
 
     fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
     expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
     expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
 
-    window.history.replaceState({ page: 'overview-again' }, '', '/?view=overview')
-    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    act(() => window.history.back())
     fireEvent.click(within(await screen.findByTestId('app-unsaved-navigation')).getByRole('button', { name: '丢弃并离开' }))
 
     expect(await screen.findByTestId('solution-view')).toBeInTheDocument()

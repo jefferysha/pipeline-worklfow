@@ -2,7 +2,7 @@
 
 ## 审查基线
 
-- 唯一代码基线为 `origin/main@445aa1411d45a2c112d296a9fc3530db0f62e31e`。
+- 唯一代码基线为 `origin/main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`。
 - 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18、#19；冻结前再次查询以 `main`
   为 base 的开放非 Draft PR，结果为空。
 - PR #16 的 exact-head GitHub Actions run `30452978039` 在
@@ -18,6 +18,13 @@
   `bda3b07632786a42da52283518a6875455918a98` 通过后合并；独立复核验证其 39 条 revision、
   11 条 transition 与 10 份 document ledger hash，结果 C0/H0/M0/L0。其 merge commit
   `445aa1411d45a2c112d296a9fc3530db0f62e31e` 是本次统一审查的新最终主干。
+- PR #21 的 merge commit `34816a0c79b97bf30b823d0b83d84e2da7a72021` 将 Codex
+  `custom_tool_call`/completion ABI、current-turn transcript discovery、sibling worktree identity
+  与 fail-closed Skill receipt 边界纳入主干；其 Change 已通过 Verify，但仍处于 Ship pending，
+  必须在统一交付中完成官方治理收尾。
+- PR #23 的 merge commit `ef728bf63f6902251e87fb9495a3dfafe10e42b7` 增加 canonical
+  review-handshake projector、Server snapshot/SSE、严格 Dashboard decoder 与 Progress 只读状态卡；
+  原 Change 已完整归档。该 SHA 是本统一审查的最新最终主干。
 - 干净 worktree 执行 `npm ci` 后，必须先运行仓库正式 `npm run build` 生成
   `@tenon/kernel`/`@tenon/server` 产物；随后 architecture、comments、repository hygiene、
   docs 与 Dashboard typecheck 均通过。
@@ -39,6 +46,8 @@
 | #17 | Trace session workspace / `trace-timeline` | session rail → selected identity → metadata timeline | 并发隔离、Escape/焦点、桌面响应式、长内容与状态矩阵 |
 | #18 | 已完成 Trace Change 治理归档 | canonical Change tree → 日期化 archive | revision/transition/document digest、路径迁移、无 runtime drift |
 | #19 | Progress triage / `dashboard-ui-ux-system` | 状态 tab → workflow context cards → 本地化筛选摘要 | 复用现有 snapshot，无 API 变化 | roving keyboard、禁用/可访问性、i18n、筛选范围、全量 Dashboard/browser |
+| #21 | Codex Skill receipt / `codex-skill-receipt-current-turn` | 无产品 UI | host transcript → trusted completion → Skill ledger | ABI 错型/伪造/跨轮/symlink/I/O fail-closed + hooks |
+| #23 | Review handshake / `review-handshake-status` | Progress Drawer 只读 receipt 状态卡 | canonical state/workflow → snapshot/SSE strict DTO | unknown/partial/old-runtime、i18n、a11y、HTTP/SSE/browser |
 
 `verification-evidence-composer` 与 `context-bundle-budget-preview` 已在主干上，作为相邻组合能力继续
 执行回归；它们不是本批次新 requirement。
@@ -168,6 +177,10 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
     取消另一个通道的 finally，也不得静默保留服务端未接受的乐观值。
 16. 系统生成的默认 Workflow 标签使用创建时当前 locale；已有用户自定义 label 不自动翻译。
 17. HTTP 已到达、JSON/schema 无效与网络不可达是三个不同事实，错误恢复文案不得互相冒充。
+18. Codex Skill receipt 只接受当前 host transcript 中完成且 ABI/调用/输出严格配对的真实调用；
+    枚举、I/O、session/turn/worktree identity 无法证明时必须失败关闭。
+19. Review handshake 只投影 canonical exact-event receipt；unknown、partial、旧 runtime 和
+    review→review 消费旧 receipt 均不得被合成为“已确认”或 readiness。
 
 ## 升档确认状态机
 

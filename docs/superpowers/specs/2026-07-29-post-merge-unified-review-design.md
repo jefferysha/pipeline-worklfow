@@ -8,8 +8,9 @@
 
 ## 约束与非目标
 
-- 基线固定为 `main@445aa1411d45a2c112d296a9fc3530db0f62e31e`；旧 `907dac06`、`c78426e5`、
-  `7c59eecf`、`607c2ed9` frozen baseline 因后续出现并合并 PR #15/#16/#17/#18/#19 已失效。
+- 基线固定为 `main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`；旧 `907dac06`、`c78426e5`、
+  `7c59eecf`、`607c2ed9`、`445aa141` frozen baseline 因后续出现并合并
+  PR #15/#16/#17/#18/#19/#21/#23 已失效。
 - 审查修复只使用当前独立 worktree/Change/`codex/` 分支。
 - 不改变自动化的每四小时配置，不修改 canonical state 或 `.pipeline.yaml`。
 - 不新增无关产品功能，不发布 npm 包或生产部署。
@@ -30,6 +31,8 @@
 | #17 | `trace-timeline` | desktop session rail、selected identity、timeline detail | 复用 metadata-only session/timeline API | concurrency/keyboard/i18n/a11y/full Dashboard |
 | #18 | governed archive | 无 runtime UI 变化 | #17 Change canonical archive ledger | revision/transition/document digest + OpenSpec strict |
 | #19 | `dashboard-ui-ux-system` | Progress 状态 tab、context card 禁用、可见筛选摘要 | 复用 snapshot，无 API 变化 | roving keyboard/a11y/i18n/filter scope/full Dashboard |
+| #21 | `codex-skill-receipt-current-turn` | 无产品 UI | Codex transcript/completion/worktree → Skill ledger | ABI/伪造/跨轮/symlink/I/O fail-closed + hooks |
+| #23 | `review-handshake-status` | Progress Drawer receipt 状态卡 | canonical projector → snapshot/SSE strict DTO | unknown/partial/old-runtime、i18n/a11y/API/browser |
 
 `verification-evidence-composer`、`context-bundle-budget-preview`、公开文档和生成物作为相邻组合面纳入
 全量回归。
@@ -51,7 +54,12 @@ runtime，但它的路径、摘要链和 OpenSpec 完整性属于统一基线的
 PR #19 exact head `bda3b07632786a42da52283518a6875455918a98` 的 GitHub Actions run
 `30462600156` 通过；独立复核其 39 条 revision、11 条 transition 与 10 份 document ledger hash，
 C0/H0/M0/L0。它的 merge commit `445aa1411d45a2c112d296a9fc3530db0f62e31e` 是本统一 Change 的
-新最终主干；原 PR 的通过不替代十一 PR 组合后的完整 Dashboard 验证。
+旧最终主干；原 PR 的通过不替代十三 PR 组合后的完整 Dashboard 验证。
+
+PR #21 merge commit `34816a0c79b97bf30b823d0b83d84e2da7a72021` 与 PR #23 merge commit
+`ef728bf63f6902251e87fb9495a3dfafe10e42b7` 已进入 `main`。#21 扩大 CLI/Hook 的 Skill receipt
+信任边界，#23 同时改变 Server snapshot/SSE 与 Dashboard Progress 状态；二者必须在最新组合基线上
+重新执行定向、全量和浏览器验证，不能沿用各自原 Change 的 PASS。
 
 ## 调研结果
 
@@ -111,6 +119,10 @@ override 得到 audit 0、有效依赖树、正式 build、docs check/build 和 
     变化关闭并清空旧对话框。AFK settings 与 actions 使用独立 generation/busy/error identity。
 13. 系统 default label 按创建时 locale 生成，已有用户 label 不翻译；网络、HTTP、invalid-response
     与 no-project 本地状态保持事实准确。
+14. Codex Skill receipt 的调用 ABI、完成输出、session、turn 与 worktree identity 必须同一可信链；
+    任何枚举/I/O/类型/时序不确定性失败关闭。
+15. Review handshake 仅展示 canonical exact-event receipt；未知/缺字段/旧 runtime 不得被合成为
+    已确认，review→review transition 必须消费旧 receipt。
 
 ## 升档确认状态机
 

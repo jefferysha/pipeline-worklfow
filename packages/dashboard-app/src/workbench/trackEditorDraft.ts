@@ -35,6 +35,12 @@ export function allowedFromTrackDraft(draft: TrackEditorDraft): '*' | string[] {
   return [...new Set(draft.workflowAllowed.split(',').map((value) => value.trim()).filter(Boolean))]
 }
 
+export function trackDraftHasRequiredFields(draft: TrackEditorDraft): boolean {
+  return /^[a-z][a-z0-9_-]{0,31}$/.test(draft.id)
+    && draft.label.trim() !== ''
+    && draft.workflowDefault.trim() !== ''
+}
+
 export function effectiveTrackDraft(draft: TrackEditorDraft): WbTrackDefinition {
   return {
     id: draft.id,

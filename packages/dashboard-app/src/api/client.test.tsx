@@ -8,7 +8,7 @@ import {
   subscribeSnapshot,
 } from './client'
 import { lastEventSource, resetEventSources } from '../test-setup'
-import { makeSnapshot } from '../testkit'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
 import { formatApiError, formatServerProse } from './transport'
 
 beforeEach(() => {
@@ -204,6 +204,29 @@ describe('subscribeSnapshot（真 EventSource stub，组件真收帧）', () => 
     const es = lastEventSource()!
     expect(() => es.emit('snapshot', '{bad json')).not.toThrow()
     expect(received).toHaveLength(0)
+  })
+
+  it('present but malformed reviewHandshake fails closed through the stream error callback', () => {
+    const received: unknown[] = []
+    const errors: unknown[] = []
+    const change = makeChange('review-change', 'explore')
+    ;(change as unknown as { reviewHandshake: unknown }).reviewHandshake = {
+      status: 'pending',
+      event: 'explore-complete',
+      requestedAt: 42,
+    }
+    subscribeSnapshot(
+      (snapshot) => received.push(snapshot),
+      () => errors.push('invalid-stream-snapshot'),
+    )
+
+    const es = lastEventSource()!
+    expect(() => es.emit(
+      'snapshot',
+      JSON.stringify(makeSnapshot([makeProject('/repo', [change])])),
+    )).not.toThrow()
+    expect(received).toHaveLength(0)
+    expect(errors).toEqual(['invalid-stream-snapshot'])
   })
 })
 

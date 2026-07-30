@@ -16,6 +16,7 @@ import {
   allowedFromTrackDraft,
   cloneTrackPolicy,
   effectiveTrackDraft,
+  trackDraftHasRequiredFields,
   trackDraftFromDefinition,
   type TrackEditorDraft,
 } from './trackEditorDraft'
@@ -176,7 +177,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     if (!editor || busy) return
     const draft = editor.draft
     const allowed = allowedFromTrackDraft(draft)
-    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(draft.id) || draft.label.trim() === '' || draft.workflowDefault.trim() === '') {
+    if (!trackDraftHasRequiredFields(draft)) {
       setError(t('workbench.track_fields_invalid'))
       return
     }
@@ -339,7 +340,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
                     ? <button type="button" className="rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-delete-confirm" onClick={() => void removeTrack()} disabled={busy}>{t('workbench.track_delete_confirm')}</button>
                     : <button type="button" className="mr-auto rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-editor-delete" onClick={() => setDeleteConfirm(true)}>{t('workbench.track_delete')}</button>
                 )}
-                <button type="submit" className="rounded-md bg-btn-bg px-4 py-1.5 text-xs font-bold text-btn-fg disabled:opacity-50" data-testid="wb-track-editor-save" disabled={busy}>{busy ? t('workbench.track_saving') : t('workbench.track_save')}</button>
+                <button type="submit" className="rounded-md bg-btn-bg px-4 py-1.5 text-xs font-bold text-btn-fg disabled:opacity-50" data-testid="wb-track-editor-save" disabled={busy || !trackDraftHasRequiredFields(editor.draft)}>{busy ? t('workbench.track_saving') : t('workbench.track_save')}</button>
               </div>
             </form>
           )}

@@ -189,3 +189,32 @@
 {"ts":"2026-07-29T17:58:49Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
 {"ts":"2026-07-29T17:58:49Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-07-29T18:00:13Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T06:55:41Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T06:55:41Z","kind":"tool","raw":"CodexSkillRead: subagent-driven-development"}
+{"ts":"2026-07-30T06:55:41Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T06:55:41Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T06:55:41Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T06:55:44Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T06:56:26Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T06:56:36Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"96cfc075-1871-46ee-8dc5-b518b35b423b"}
+{"ts":"2026-07-30T06:57:07Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T06:57:40Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T06:58:05Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T06:58:34Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T06:58:34Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-29T17:58:20Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-30T06:58:34Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"5183c98b-fb04-4655-87a4-7bf0af6fdb7b"}
+{"ts":"2026-07-30T06:58:46Z","kind":"set","field":"phase_status","to":"in_progress"}
+{"ts":"2026-07-30T07:12:52Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T07:13:34Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T07:13:39Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T07:13:44Z","kind":"tool","raw":"CodexSkillRead: subagent-driven-development"}
+{"ts":"2026-07-30T07:14:14Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T07:14:19Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T07:14:23Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T07:14:29Z","kind":"tool","raw":"CodexSkillRead: react-patterns"}
+{"ts":"2026-07-30T07:14:37Z","kind":"tool","raw":"CodexSkillRead: react-best-practices"}
+{"ts":"2026-07-30T07:14:46Z","kind":"tool","raw":"CodexSkillRead: tailwind-css-patterns"}
+{"ts":"2026-07-30T07:15:13Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-30T07:15:17Z","kind":"tool","raw":"CodexSkillRead: security-review"}
+{"ts":"2026-07-30T07:15:23Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-07-30T07:16:17Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}

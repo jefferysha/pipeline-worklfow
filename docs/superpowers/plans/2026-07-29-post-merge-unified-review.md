@@ -7,8 +7,9 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 ## 前提、边界与停止条件
 
-- 基线：`main@445aa1411d45a2c112d296a9fc3530db0f62e31e`，十一个目标 PR
-  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18/#19）已合并，开放非 Draft PR 再查为空。
+- 基线：`main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`，十三个目标 PR
+  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18/#19/#21/#23）已合并，开放非 Draft PR
+  再查只剩本统一审查 PR #20。
 - 采用当前独立 worktree、`codex/unified-main-review-20260729`、full Change、TDD 和持续授权。
 - 不改变 CLI/HTTP DTO，不增加无关功能，不修改自动化 schedule，不执行 npm publish 或生产部署。
 - requirement 语义变化执行 `requirements-changed` 回 Spec；任何 Verify finding 默认修复。
@@ -139,7 +140,23 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 此处建议 `/clear`。
 
-## 子阶段 7：冻结、全量 Verify 与 Ship
+## 子阶段 7：requirements-changed 增量——纳入 #21/#23 与最新 main
+
+1. 合入 `origin/main@ef728bf6`；对 Dashboard hashed assets 只从合并后源码重建。
+2. 对 #21 逐项复核 custom/function completion ABI、current-turn discovery、session/turn、
+   sibling worktree 与 symlink/I/O fail-closed；运行 CLI receipt、internal gate、stable hook 和
+   Skill source 定向套件。
+3. 对 #23 逐项复核 canonical review handshake projector、snapshot/SSE 一致性、严格 decoder、
+   old-runtime/unknown/partial 降级和 review→review receipt 消费；运行 Server、Dashboard 与 API 套件。
+4. 对 Progress Drawer 在 1024/1440/1920、zh/en、light/dark/system、loading/empty/error/disabled、
+   键盘与焦点状态进行真实 production 浏览器回归；同时复验整个 Dashboard，不给予单页豁免。
+5. 完成 #21 Ship pending Change 的官方治理收尾；更新统一 REVIEW、报告和任务，再冻结新 SHA。
+
+验收：十三 PR 组合 C0/H0/M0/L0，#21 无悬空治理状态，最新主干与统一分支均可追溯。
+
+此处建议 `/clear`。
+
+## 子阶段 8：冻结、全量 Verify 与 Ship
 
 1. 干净 `npm ci` 后运行 root/full Dashboard、CLI、server、hooks/adapters/skills/bundle/oracle、
    typecheck、build、docs、OpenSpec、architecture/comments/hygiene、audit 和 package/tarball gates。
@@ -147,7 +164,7 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
    视口、主题、语言、键盘、焦点与 reduced-motion 矩阵。
 3. 冻结精确 SHA，取得 GitHub Actions 全部必需 job；缺少 repo secret 的 Real-Codex 只能按仓库
    既有 honest-skip 记录，不能伪造通过。
-4. 创建并合并统一修复 PR，确认合并 SHA 的 main CI；再启动独立 release Change。
+4. 创建并合并统一修复 PR #20，确认合并 SHA 的 main CI；再启动独立 release Change。
 
 验收：四轨 C0/H0/M0、主干 CI 成功、OpenSpec delta 可应用、repo-zero。
 

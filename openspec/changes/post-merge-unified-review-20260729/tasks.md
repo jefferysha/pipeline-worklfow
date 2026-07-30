@@ -75,7 +75,7 @@
 - [x] 修复 mandatory 与 clipboard 回调的在途 locale 竞态，所有迟到结果按当前语言呈现或失效。 (build)
 - [x] 本地化 Track Settings/Nav accessible name 与中文资源中的英文产品标签，并增加技术 token allowlist 语义门。 (build)
 - [x] 修复 390px 英文底部导航标签省略，在无横向溢出的前提下完整呈现。 (build)
-- [x] 重建 Dashboard tracked assets并重跑定向、全量、架构、依赖、文档、OpenSpec 与 release 门禁。 (build)
+- [x] 重建 Dashboard tracked assets 并重跑定向、全量、架构、依赖、文档、OpenSpec 与 release 门禁。 (build)
 - [x] 移除空 Workflow sentinel 冲突，本地化 Step Policy ARIA，并以 runtime 闭集解码 Workflow delete 错误信封。 (build)
 - [x] 将 mandatory 保存身份隔离到 exact root+cell+token，覆盖不同 cell 并发 busy/error/finally。 (build)
 - [x] 严格要求 Workflow delete HTTP 200 返回精确 `{ok:true}`；畸形成功体保留当前定义并显示 invalid-response。 (build)
@@ -84,22 +84,38 @@
 
 ## 第五次 Verify 回退修复
 
-- [ ] 将 Operations 危险确认绑定 exact root+operation+全部决策输入，任一输入变化立即失效旧确认。 (build)
-- [ ] 将 Loop 升档确认绑定完整权威决策事实，逻辑等价刷新保持、事实变化关闭且旧确认不可提交。 (build)
-- [ ] 严格解码 Workbench save/create 的 2xx success schema，畸形成功体保留编辑状态并显示当前语言错误。 (build)
-- [ ] 为 Track Settings 与 Default Skill Chain 的同 root 跨实体 mutation 增加完整 operation identity 守卫。 (build)
-- [ ] 严格解码 AFK settings/enqueue/retry/dismiss success envelope，畸形 2xx 不得提交状态或成功反馈。 (build)
-- [ ] 同步权威前端规则到 Vite 6，重建 tracked assets 并完成全量 Standards+Spec pre-Verify 收敛。 (build)
+- [x] 将 Operations 危险确认绑定 exact root+operation+全部决策输入，任一输入变化立即失效旧确认。 (build)
+- [x] 将 Loop 升档确认绑定完整权威决策事实，逻辑等价刷新保持、事实变化关闭且旧确认不可提交。 (build)
+- [x] 严格解码 Workbench save/create 的 2xx success schema，畸形成功体保留编辑状态并显示当前语言错误。 (build)
+- [x] 为 Track Settings 与 Default Skill Chain 的同 root 跨实体 mutation 增加完整 operation identity 守卫。 (build)
+- [x] 严格解码 AFK settings/enqueue/retry/dismiss success envelope，畸形 2xx 不得提交状态或成功反馈。 (build)
+- [x] 同步权威前端规则到 Vite 6，重建 tracked assets并完成全量 Standards+Spec pre-Verify 收敛。 (build)
 
 ## 第六次 pre-Verify 回退修复
 
-- [ ] 将 Default Skill 保存升级为 per-cell revision/token 身份并严格校验服务端回显实体，保证跨 cell 并发成功均可对账。 (build)
-- [ ] 将 Track save/delete 严格解码权威 registry DTO，并在编辑器切换后安全 reconcile 已提交的迟到成功。 (build)
-- [ ] 将 Operations 在途结果绑定完整决策事实与唯一 token，提交后消费危险确认；收紧 AFK normalized settings 值域。 (build)
-- [ ] 为 Workbench 全部真实草稿建立统一站内导航与 browser unload 守卫，取消离开时保留状态和焦点。 (build)
-- [ ] 修复 Machine 双列卡片等高空洞、AFK 重复 CTA、泛化 transition 与输入 autocomplete/name 等全部设计 Low。 (build)
-- [ ] 抽离临界大组件中的身份/解码/状态 helper，恢复架构行数余量并完成全量 RED→GREEN。 (build)
+- [x] 将 Default Skill 保存升级为 per-cell revision/token 身份并严格校验服务端回显实体，保证跨 cell 并发成功均可对账。 (build)
+- [x] 将 Track save/delete 严格解码权威 registry DTO，并在编辑器切换后安全 reconcile 已提交的迟到成功。 (build)
+- [x] 将 Operations 在途结果绑定完整决策事实与唯一 token，提交后消费危险确认；收紧 AFK normalized settings 值域。 (build)
+- [x] 为 Workbench 全部真实草稿建立统一站内导航与 browser unload 守卫，取消离开时保留状态和焦点。 (build)
+- [x] 修复 Machine 双列卡片等高空洞、AFK 重复 CTA、泛化 transition 与输入 autocomplete/name 等全部设计 Low。 (build)
+- [x] 抽离临界大组件中的身份/解码/状态 helper，恢复架构行数余量并完成全量 RED→GREEN。 (build)
 - [ ] 更新 REVIEW、pre-Verify 报告、生成资产与真实浏览器证据，经独立 C0/H0/M0/L0 复审后冻结新 SHA。 (build)
+
+## 最新 main 范围扩展（PR #21 / #23）
+
+- [x] 将 `origin/main@ef728bf6` 合入统一分支并从合并后源码重建 Dashboard 生成物。 (spec)
+- [x] 复核 #21 的 Codex Skill receipt ABI、current-turn、session/turn、worktree 与 fail-closed 安全边界。 (build)
+- [x] 复核 #23 的 canonical review handshake、snapshot/SSE、严格 decoder 与 Progress 状态卡。 (build)
+- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
+- [ ] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
+- [ ] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
+
+## 最终独立复审回退修复
+
+- [x] 将畸形 Review Handshake SSE 帧路由到 stream error，保留最后已知快照但取消实时连接状态。 (build)
+- [x] dirty Workbench 取消浏览器 Back 时用 Forward 补偿恢复当前历史项，确认后重放原 Back。 (build)
+- [x] 新建 Track 必填身份为空或非法时禁用保存，并以浏览器交互与 RED→GREEN 覆盖。 (build)
+- [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证
 

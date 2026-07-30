@@ -119,3 +119,29 @@ dirty diff and tracked distribution bundle and reports **C0/H0/M0/L0, PASS**. Th
 69 files / 1287 passed. Two consecutive full builds produced the same `index-CCGhygZp.js` and
 `index-Bi3InOKq.css`; the old asset is absent and unreferenced. This Build review authorizes
 freezing a new exact SHA; Verify must still rerun every track on that SHA.
+
+## Attempt 6 final merged-main candidate
+
+The review scope now includes the merged `main@ef728bf6`, including PR #21 and PR #23, plus
+all unified remediation on this branch. The earlier `main@445aa141` evidence remains useful
+history but is not treated as evidence for this candidate.
+
+The sixth Build pass closes the remaining cross-entity operation identity, authoritative Track
+DTO reconciliation, Operations decision-token, AFK normalized-settings, and Workbench dirty
+navigation defects. It also removes every recorded design Low across the full desktop Dashboard.
+The final independent review then identified two additional Medium findings: a malformed
+review-handshake SSE frame could leave stale live state, and cancelling browser Back from a dirty
+Workbench route could corrupt the history stack. Both now have deterministic regressions and
+fail closed. A final browser interaction check also found and fixed an empty new-Track identity
+whose Save action had remained enabled.
+
+The final source-built Dashboard uses `index-viHDz-8x.js` and `index-YeY6VsN7.css`. Root tests
+pass 327 files / 5783 tests with 14 environment skips; Dashboard tests pass 73 files / 1388
+tests. Production browser acceptance covers Overview, Projects, Progress, AFK, Workbench,
+Machine, and Host Plan at 1024, 1440, and 1920 px, across English/Chinese, light/dark, and
+reduced-motion settings. All 21 screenshots have zero console/page-error, overflow, visibility,
+or layout failures. AFK, Track Settings, and Governance interaction checks also pass, including
+focus restoration and empty-Track Save remaining disabled.
+
+The complete exact-candidate independent review is the remaining Build freeze gate. Its result
+must be appended here before `pre_verify_review_result=pass` and the Build→Verify transition.
