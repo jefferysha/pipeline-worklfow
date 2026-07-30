@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-30T05:09:42Z",
+  "records": [
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
+      "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T05:45:09Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
+      "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T05:45:09Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/proposal.md",
+      "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T05:45:27Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
+          "readAt": "2026-07-30T05:46:50Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/design.md",
+      "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T05:45:50Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
+          "readAt": "2026-07-30T05:46:50Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md",
+      "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T05:45:50Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
+          "readAt": "2026-07-30T05:46:50Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/frozen-workflow-definition-status-20260730.md",
+      "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T05:45:50Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
+          "readAt": "2026-07-30T05:46:50Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/specs/frozen-workflow-definition-status/spec.md",
+      "sha256": "242c40b0dfe942c3f94cf463bdb805e5d7837a32dfdfc0826d72e664bc6f3566",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-30T05:46:49Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "242c40b0dfe942c3f94cf463bdb805e5d7837a32dfdfc0826d72e664bc6f3566",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/specs/orchestration-graph/spec.md",
+      "sha256": "5e6aff643dafb0ccf3859f528aca9ce11c6c639c5e28992308ecf41c5d53887f",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-30T05:46:49Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "5e6aff643dafb0ccf3859f528aca9ce11c6c639c5e28992308ecf41c5d53887f",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/tasks.md",
+      "sha256": "79fd3a9f9f89adda13b93f8e2ee52687b612b9ba4bc99199ff362223184e87c8",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-30T06:34:58Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "79fd3a9f9f89adda13b93f8e2ee52687b612b9ba4bc99199ff362223184e87c8",
+          "readAt": "2026-07-30T06:34:58Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+        }
+      ]
+    }
+  ]
+}

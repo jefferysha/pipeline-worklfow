@@ -2967,6 +2967,87 @@ describe('GET /api/afk/:name/log —— 单个 change 的原始运行日志文�
   })
 })
 
+describe('GET /api/workflow-definition-status —— frozen/current 只读比较', () => {
+  const route = (root: string, change = 'my-change'): string =>
+    `/api/workflow-definition-status?root=${encodeURIComponent(root)}&change=${encodeURIComponent(change)}`
+
+  it('从真 canonical Change 返回 default current，且读取不修改状态', async () => {
+    const h = await start()
+    const before = await h.store.read(h.changeDir)
+    const response = await reqGet(h.port, route(h.root))
+
+    expect(response.status).toBe(200)
+    const body = response.json<{
+      schema: string
+      workflow: string
+      status: string
+      frozen_fingerprint: string
+      current_fingerprint: string
+    }>()
+    expect(body).toEqual({
+      schema: 'workflow-definition-status/v1',
+      workflow: 'default',
+      status: 'current',
+      frozen_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      current_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
+    expect(body.current_fingerprint).toBe(body.frozen_fingerprint)
+    expect(await h.store.read(h.changeDir)).toEqual(before)
+  })
+
+  it('把旧 Change 诚实投影为 unavailable，并保留输入边界', async () => {
+    const legacy = await start({ legacyWithoutRunIdentity: true })
+    const unavailable = await reqGet(legacy.port, route(legacy.root))
+    expect(unavailable.status).toBe(200)
+    expect(unavailable.json()).toMatchObject({
+      schema: 'workflow-definition-status/v1',
+      workflow: 'default',
+      status: 'unavailable',
+      frozen_fingerprint: null,
+      current_fingerprint: null,
+    })
+
+    const invalid = await reqGet(legacy.port, route(legacy.root, '../escape'))
+    expect(invalid.status).toBe(400)
+    const unregistered = await reqGet(legacy.port, route('/tmp/not-registered'))
+    expect(unregistered.status).toBe(404)
+  })
+})
+
+describe('GET /api/orchestration-graph —— Change 编排图', () => {
+  const route = (root: string, change = 'my-change'): string =>
+    `/api/orchestration-graph?root=${encodeURIComponent(root)}&change=${encodeURIComponent(change)}`
+
+  it('从真 canonical Change/snapshot 返回稳定只读图并嵌入 definition 诊断', async () => {
+    const h = await start()
+    const before = await h.store.read(h.changeDir)
+    const response = await reqGet(h.port, route(h.root))
+
+    expect(response.status).toBe(200)
+    const body = response.json<{
+      schema: string
+      scope: { root: string; change: string }
+      nodes: Array<{ id: string; kind: string; status: string | null }>
+      edges: Array<{ id: string; kind: string; source: string; target: string }>
+    }>()
+    expect(body.schema).toBe('tenon-orchestration-graph/v1')
+    expect(body.scope).toEqual({ root: h.root, change: h.name })
+    expect(body.nodes.find((node) => node.kind === 'workflow')).toMatchObject({ status: 'current' })
+    expect(body.nodes.some((node) => node.kind === 'change')).toBe(true)
+    expect(body.nodes.some((node) => node.kind === 'phase')).toBe(true)
+    expect(body.edges.some((edge) => edge.kind === 'governs')).toBe(true)
+    const ids = new Set(body.nodes.map((node) => node.id))
+    expect(body.edges.every((edge) => ids.has(edge.source) && ids.has(edge.target))).toBe(true)
+    expect(await h.store.read(h.changeDir)).toEqual(before)
+  })
+
+  it('拒绝非法 change 与未注册 root', async () => {
+    const h = await start()
+    expect((await reqGet(h.port, route(h.root, '../escape'))).status).toBe(400)
+    expect((await reqGet(h.port, route('/tmp/not-registered'))).status).toBe(404)
+  })
+})
+
 describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () => {
   it('root 未在注册表 → 404', async () => {
     const h = await start()

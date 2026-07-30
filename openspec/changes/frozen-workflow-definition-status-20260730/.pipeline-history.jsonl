@@ -1,0 +1,38 @@
+{"ts":"2026-07-30T05:09:42Z","kind":"init"}
+{"ts":"2026-07-30T05:09:57Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb168-aa19-7290-b388-ac4cd2f3c23d"}
+{"ts":"2026-07-30T05:11:20Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T05:11:26Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"e60c0b02-77fb-4efc-a3d0-ab41279cdab6"}
+{"ts":"2026-07-30T05:24:42Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md"}
+{"ts":"2026-07-30T05:24:50Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-30T05:25:32Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-30T05:25:49Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-30T05:25:53Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-30T05:09:57Z authority_host_session=019fb168-aa19-7290-b388-ac4cd2f3c23d"}
+{"ts":"2026-07-30T05:25:59Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-30T05:26:11Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-30T05:26:11Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"e2a940c8-8cd8-4a7b-bb76-54c00e4a2d24"}
+{"ts":"2026-07-30T05:27:44Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md"}
+{"ts":"2026-07-30T05:27:52Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T05:27:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T05:27:53Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T05:28:01Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T05:28:05Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-30T05:09:57Z authority_host_session=019fb168-aa19-7290-b388-ac4cd2f3c23d"}
+{"ts":"2026-07-30T05:28:09Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"bb073c80-76e5-4640-abce-2295f62c40f1"}
+{"ts":"2026-07-30T05:28:32Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-30T05:28:32Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-30T05:28:33Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-30T05:37:17Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T05:37:17Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T05:37:17Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T05:37:17Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T05:37:17Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"b127d6ad-450d-45f4-ab15-7b7a80b9c36c"}
+{"ts":"2026-07-30T05:45:09Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T05:45:09Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md"}
+{"ts":"2026-07-30T05:45:09Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T05:45:27Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T05:46:54Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T05:46:55Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-30T05:09:57Z authority_host_session=019fb168-aa19-7290-b388-ac4cd2f3c23d"}
+{"ts":"2026-07-30T05:46:55Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"3326f195-db97-45b4-b4b4-534b05a5f280"}
+{"ts":"2026-07-30T05:47:38Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-30T05:47:38Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-30T05:47:39Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-30T06:34:58Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

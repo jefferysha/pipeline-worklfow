@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname15, join as join56 } from "node:path";
+import { dirname as dirname15, join as join57 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -7581,16 +7581,16 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
   const step = resolveStep(ir, stepId);
   if (!step)
     return { ok: false, kind: "step-not-in-graph", stepId };
-  const edge = step.transitions.find((t) => t.event === event);
-  if (!edge) {
+  const edge2 = step.transitions.find((t) => t.event === event);
+  if (!edge2) {
     return { ok: false, kind: "event-unsupported", stepId, available: step.transitions.map((t) => t.event) };
   }
-  const guards = mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards);
+  const guards = mergeLifecycleGuards([...step.guards, ...edge2.guards], additionalGuards);
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx));
   if (!guardResult.pass) {
     return { ok: false, kind: "guard-failed", stepId, failures: guardResult.failures };
   }
-  return { ok: true, from: stepId, to: edge.to, actions: edge.actions };
+  return { ok: true, from: stepId, to: edge2.to, actions: edge2.actions };
 }
 function applyStepTransition(state, to, clock) {
   return { ...state, fields: { ...state.fields, phase: to, updated_at: clock() } };
@@ -12696,9 +12696,9 @@ function parseTimestamp(raw, now) {
   const full = s.match(TS_FULL_RE);
   if (full)
     return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]));
-  const short = s.match(TS_SHORT_RE);
-  if (short)
-    return mkUTC(now.getUTCFullYear(), +required(short[1]), +required(short[2]), +required(short[3]), +required(short[4]));
+  const short2 = s.match(TS_SHORT_RE);
+  if (short2)
+    return mkUTC(now.getUTCFullYear(), +required(short2[1]), +required(short2[2]), +required(short2[3]), +required(short2[4]));
   return null;
 }
 function sameUTCDate(a, b) {
@@ -12800,9 +12800,9 @@ function parseTimestamp2(raw, now) {
   const full = s.match(TS_FULL_RE2);
   if (full)
     return mkUTC2(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]));
-  const short = s.match(TS_SHORT_RE2);
-  if (short)
-    return mkUTC2(now.getUTCFullYear(), +required(short[1]), +required(short[2]), +required(short[3]), +required(short[4]));
+  const short2 = s.match(TS_SHORT_RE2);
+  if (short2)
+    return mkUTC2(now.getUTCFullYear(), +required(short2[1]), +required(short2[2]), +required(short2[3]), +required(short2[4]));
   return null;
 }
 function sameUTCDate2(a, b) {
@@ -16737,12 +16737,12 @@ function fieldStr4(v) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
 async function planDefaultTransition(state, command, flow, clock, effectivePlan) {
-  const edge = eventEdge(command.event);
-  if (!edge)
+  const edge2 = eventEdge(command.event);
+  if (!edge2)
     return { kind: "unknown-event", event: command.event };
   const current = fieldStr4(state.fields.phase);
-  if (current !== edge.from) {
-    return { kind: "event-source-mismatch", event: command.event, current, expected: edge.from, to: edge.to };
+  if (current !== edge2.from) {
+    return { kind: "event-source-mismatch", event: command.event, current, expected: edge2.from, to: edge2.to };
   }
   const event = command.event;
   const policy = DEFAULT_EVENT_POLICY[event];
@@ -16751,7 +16751,7 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
     return { kind: "precondition-violated", lines: violations };
   let result;
   try {
-    result = flow.transition(state, edge.to, clock);
+    result = flow.transition(state, edge2.to, clock);
   } catch (e) {
     if (e instanceof IllegalTransitionError)
       return { kind: "illegal-transition", from: e.from, to: e.to };
@@ -16971,7 +16971,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join55 } from "node:path";
+import { join as join56 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -19355,7 +19355,7 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync7 } from "node:fs";
-import { dirname as dirname11, join as join45 } from "node:path";
+import { dirname as dirname11, join as join46 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -22587,9 +22587,300 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
   );
 }
 
+// packages/server/src/serverWorkflowDefinitionStatusRoutes.ts
+import { join as join45 } from "node:path";
+
+// packages/server/src/workflowDefinitionStatus.ts
+function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
+  if (frozenFingerprint === null) {
+    return {
+      schema: "workflow-definition-status/v1",
+      workflow,
+      status: "unavailable",
+      frozen_fingerprint: null,
+      current_fingerprint: null
+    };
+  }
+  if (current.kind !== "current") {
+    return {
+      schema: "workflow-definition-status/v1",
+      workflow,
+      status: current.kind,
+      frozen_fingerprint: frozenFingerprint,
+      current_fingerprint: null
+    };
+  }
+  return {
+    schema: "workflow-definition-status/v1",
+    workflow,
+    status: current.fingerprint === frozenFingerprint ? "current" : "changed",
+    frozen_fingerprint: frozenFingerprint,
+    current_fingerprint: current.fingerprint
+  };
+}
+
+// packages/server/src/serverWorkflowDefinitionStatusRoutes.ts
+function isChangeName(name) {
+  return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
+}
+function readCurrentWorkflowDefinition(anchor, workflow) {
+  try {
+    assertWorkflowRootAnchor(anchor);
+    const plan = resolveEffectiveWorkflowPlan(workflow, (name) => {
+      const definition = builtinWorkflow(name) ?? readWorkflowForApi(anchor, name);
+      return compileWorkflow(definition);
+    });
+    if (plan === null) return { kind: "missing" };
+    assertWorkflowRootAnchor(anchor);
+    return { kind: "current", fingerprint: plan.workflowFingerprint };
+  } catch (error) {
+    return error instanceof WorkflowNotFoundError ? { kind: "missing" } : { kind: "invalid" };
+  }
+}
+async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
+  if (path7 !== "/api/workflow-definition-status") return null;
+  const params = new URL(rawUrl, "http://localhost").searchParams;
+  const name = params.get("change") ?? "";
+  if (!isChangeName(name)) {
+    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
+  }
+  const rootCheck = deps.workflowRootForRequest(params.get("root") ?? "");
+  if (!rootCheck.ok) {
+    return { status: rootCheck.code, body: { ok: false, error: rootCheck.error } };
+  }
+  const changeDir = join45(rootCheck.anchor.path, "openspec", "changes", name);
+  if (!deps.stateStorageExists(changeDir)) {
+    return { status: 400, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
+  }
+  let state;
+  try {
+    state = await deps.readState(changeDir);
+  } catch {
+    return { status: 500, body: { ok: false, error: "canonical change \u8BFB\u53D6\u5931\u8D25" } };
+  }
+  const snapshot = state.runMetadata?.workflowPlanSnapshot;
+  const fieldWorkflow = state.fields.workflow;
+  const workflow = snapshot?.workflowId ?? (Array.isArray(fieldWorkflow) ? fieldWorkflow.join(",") : fieldWorkflow) ?? "default";
+  const frozenFingerprint = snapshot?.workflowFingerprint ?? null;
+  const current = frozenFingerprint === null ? { kind: "invalid" } : deps.readCurrent(rootCheck.anchor, workflow);
+  return {
+    status: 200,
+    body: projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current)
+  };
+}
+
+// packages/server/src/orchestrationGraph.ts
+function valueOf(change, key) {
+  const value = change.fields[key];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function short(value) {
+  return value === null ? "" : value.slice(0, 12);
+}
+function edge(kind, source, target, label) {
+  return { id: `${kind}:${source}:${target}`, kind, source, target, label };
+}
+function buildOrchestrationGraph(input) {
+  const { change, definition } = input;
+  const workflowId = `workflow:${definition.workflow}`;
+  const changeId = `change:${change.name}`;
+  const nodes = [{
+    id: workflowId,
+    kind: "workflow",
+    label: definition.workflow,
+    status: definition.status,
+    metadata: [
+      { key: "execution_model", value: change.workflowRules.executionModel },
+      { key: "frozen_fingerprint", value: short(definition.frozen_fingerprint) },
+      { key: "current_fingerprint", value: short(definition.current_fingerprint) }
+    ].filter((item2) => item2.value !== "")
+  }, {
+    id: changeId,
+    kind: "change",
+    label: change.name,
+    status: change.phase_status || change.phase,
+    metadata: [
+      { key: "phase", value: change.phase },
+      { key: "track", value: change.track || "unknown" },
+      { key: "preset", value: change.preset || "unknown" }
+    ]
+  }];
+  const edges = [edge("governs", workflowId, changeId, "governs")];
+  const phaseIds = /* @__PURE__ */ new Set();
+  change.workflowRules.steps.forEach((step, index) => {
+    const id = `phase:${step}`;
+    phaseIds.add(id);
+    const projected = change.todo?.stages.find((stage) => stage.id === step)?.status;
+    const status = projected ?? (step === change.phase ? "current" : "pending");
+    nodes.push({
+      id,
+      kind: "phase",
+      label: change.workflowRules.labelByStep[step] ?? step,
+      status,
+      metadata: [
+        { key: "phase_id", value: step },
+        { key: "order", value: String(index + 1) },
+        { key: "gate", value: change.workflowRules.gateByStep[step] ?? "none" }
+      ]
+    });
+    edges.push(edge("contains", changeId, id, "contains phase"));
+  });
+  for (const [from, transitions] of Object.entries(change.workflowRules.transitions)) {
+    const source = `phase:${from}`;
+    if (!phaseIds.has(source)) continue;
+    for (const transition of transitions) {
+      const target = `phase:${transition.to}`;
+      if (phaseIds.has(target)) edges.push(edge("transitions", source, target, transition.event));
+    }
+  }
+  for (const stage of change.todo?.stages ?? []) {
+    const phaseId = `phase:${stage.id}`;
+    if (!phaseIds.has(phaseId)) continue;
+    stage.tasks.forEach((task, index) => {
+      const id = `task:${stage.id}:${index}`;
+      nodes.push({
+        id,
+        kind: "task",
+        label: task.text,
+        status: task.completed ? "done" : "pending",
+        metadata: [{ key: "phase", value: stage.id }]
+      });
+      edges.push(edge("contains", phaseId, id, "contains task"));
+    });
+  }
+  for (const item2 of change.documents?.items ?? []) {
+    const id = `document:${item2.kind}`;
+    nodes.push({
+      id,
+      kind: "document",
+      label: item2.kind,
+      status: item2.status,
+      metadata: [
+        { key: "required_read", value: String(item2.requiredRead) },
+        { key: "producer_count", value: String(item2.producers.length) }
+      ]
+    });
+    const producer = change.workflowRules.steps.find((step) => (change.workflowRules.outputsByStep[step] ?? []).includes(item2.kind));
+    const source = producer === void 0 ? changeId : `phase:${producer}`;
+    edges.push(edge("produces", source, id, "produces document"));
+  }
+  const reviewFields = [
+    ["pre_verify_review_result", "Pre-verify review"],
+    ["agent_review_result", "Agent review"],
+    ["codex_review_result", "Codex review"]
+  ];
+  for (const [field, label] of reviewFields) {
+    const status = valueOf(change, field);
+    if (status === "") continue;
+    const id = `review:${field}`;
+    nodes.push({
+      id,
+      kind: "review",
+      label,
+      status,
+      metadata: [{ key: "field", value: field }]
+    });
+    const target = phaseIds.has("phase:verify") ? "phase:verify" : changeId;
+    edges.push(edge("reviews", id, target, "reviews"));
+  }
+  if (change.terminalActivity !== void 0) {
+    const id = "session:active";
+    nodes.push({
+      id,
+      kind: "session",
+      label: `Session ${change.terminalActivity.sessionId.slice(0, 8)}`,
+      status: "active",
+      metadata: [
+        { key: "heartbeat_at", value: change.terminalActivity.heartbeatAt },
+        { key: "expires_at", value: change.terminalActivity.expiresAt }
+      ]
+    });
+    edges.push(edge("executes", id, changeId, "executes"));
+  }
+  nodes.sort((a, b) => a.id.localeCompare(b.id));
+  edges.sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    schema: "tenon-orchestration-graph/v1",
+    scope: { root: input.root, change: change.name },
+    coverage: {
+      implemented: ["workflow", "change", "phase", "task", "document", "review", "active-session"],
+      deferred: [
+        "agent",
+        "historical-session-turn",
+        "acceptance-criteria",
+        "task-dependencies",
+        "write-orchestration",
+        "live-refresh"
+      ]
+    },
+    nodes,
+    edges
+  };
+}
+
+// packages/server/src/serverOrchestrationGraphRoutes.ts
+function isChangeName2(name) {
+  return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
+}
+async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
+  if (path7 !== "/api/orchestration-graph") return null;
+  const params = new URL(rawUrl, "http://localhost").searchParams;
+  const name = params.get("change") ?? "";
+  if (!isChangeName2(name)) {
+    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
+  }
+  const rootCheck = deps.workflowRootForRequest(params.get("root") ?? "");
+  if (!rootCheck.ok) return { status: rootCheck.code, body: { ok: false, error: rootCheck.error } };
+  try {
+    const change = await deps.readChange(rootCheck.anchor.path, name);
+    if (change === null) {
+      return { status: 400, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
+    }
+    const definition = await deps.readDefinition(rootCheck.anchor.path, name);
+    return { status: 200, body: buildOrchestrationGraph({ root: rootCheck.anchor.path, change, definition }) };
+  } catch {
+    return { status: 500, body: { ok: false, error: "\u7F16\u6392\u56FE\u8BFB\u53D6\u5931\u8D25" } };
+  }
+}
+
+// packages/server/src/serverOrchestrationRoutes.ts
+async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
+  const graph = await resolveOrchestrationGraphRoute(rawUrl, path7, {
+    workflowRootForRequest: deps.workflowRootForRequest,
+    readChange: async (root, name) => {
+      const snapshot = await buildSnapshot(deps.snapshotDeps());
+      return snapshot.projects.find((project) => project.root === root)?.changes.find((change) => change.name === name) ?? null;
+    },
+    readDefinition: async (root, name) => {
+      const params = new URLSearchParams({ root, change: name });
+      const result = await resolveWorkflowDefinitionStatusRoute(
+        `/api/workflow-definition-status?${params.toString()}`,
+        "/api/workflow-definition-status",
+        {
+          workflowRootForRequest: deps.workflowRootForRequest,
+          stateStorageExists: stateStorageExistsSync,
+          readState: (changeDir) => deps.store.read(changeDir),
+          readCurrent: readCurrentWorkflowDefinition
+        }
+      );
+      if (result?.status !== 200 || typeof result.body !== "object" || result.body === null || !("schema" in result.body) || result.body.schema !== "workflow-definition-status/v1") {
+        throw new Error("workflow definition status unavailable");
+      }
+      return result.body;
+    }
+  });
+  if (graph !== null) return graph;
+  return resolveWorkflowDefinitionStatusRoute(rawUrl, path7, {
+    workflowRootForRequest: deps.workflowRootForRequest,
+    stateStorageExists: stateStorageExistsSync,
+    readState: (changeDir) => deps.store.read(changeDir),
+    readCurrent: readCurrentWorkflowDefinition
+  });
+}
+
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join45(dirname11(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join46(dirname11(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
@@ -22636,6 +22927,12 @@ async function handleGet(req, res, path7, deps) {
   if (handleGetTraceRoutes(req, res, path7, { clock, sendJson, traceStore })) return;
   const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime });
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body);
+  const orchestration = await resolveOrchestrationRoutes(req.url ?? "/", path7, {
+    workflowRootForRequest,
+    snapshotDeps,
+    store
+  });
+  if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body);
   if (path7 === "/api/loops/snapshot") {
     try {
       const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) });
@@ -22652,7 +22949,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync7(join45(rootCheck.anchor.path, ".pipeline"));
+        lstatSync7(join46(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -22675,7 +22972,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync7(join45(rootCheck.anchor.path, ".pipeline"));
+        lstatSync7(join46(rootCheck.anchor.path, ".pipeline"));
       } catch (e) {
         if (e.code === "ENOENT") pipelineExists = false;
         else throw e;
@@ -22695,7 +22992,7 @@ async function handleGet(req, res, path7, deps) {
   }
   if (path7 === "/api/skills/registry") {
     try {
-      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join45(hostHome, ".claude")) });
+      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join46(hostHome, ".claude")) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -22804,7 +23101,7 @@ async function handleGet(req, res, path7, deps) {
       image,
       secretsPath: paths.secretsPath,
       exec: options.execDocker,
-      defaultCodexHome: join45(hostHome, ".codex")
+      defaultCodexHome: join46(hostHome, ".codex")
     });
     return sendJson(res, 200, r);
   }
@@ -22819,7 +23116,7 @@ async function handleGet(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const changeDir = join45(root, "openspec", "changes", name);
+    const changeDir = join46(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(changeDir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -22840,7 +23137,7 @@ async function handleGet(req, res, path7, deps) {
       roots.map(async (root, i) => {
         const name = names[i] ?? "";
         const key = `${name}@${root}`;
-        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join45(root, "openspec", "changes", name));
+        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join46(root, "openspec", "changes", name));
         links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: "invalid" };
       })
     );
@@ -23106,7 +23403,7 @@ import { resolve as resolvePath8 } from "node:path";
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { lstat as lstat15, readFile as readFile22, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
-import { join as join46 } from "node:path";
+import { join as join47 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
 function errorCode7(error) {
@@ -23137,7 +23434,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
   if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     throw new Error("Change \u76EE\u5F55\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF0C\u62D2\u7EDD\u4FDD\u5B58\u4EFB\u52A1\u63D0\u793A\u8BCD");
   }
-  const target = join46(changeDir, CHANGE_TASK_FILE);
+  const target = join47(changeDir, CHANGE_TASK_FILE);
   let targetExists = false;
   try {
     await lstat15(target);
@@ -23146,7 +23443,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
     if (errorCode7(error) !== "ENOENT") throw error;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join46(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID8()}.tmp`);
+  const temporary = join47(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID8()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -23178,7 +23475,7 @@ async function activateChangeSession(input) {
   if (result.exitCode !== 0) {
     return { requested: true, active: false, status: "failed", exit_code: result.exitCode };
   }
-  const pointer = join46(input.repoRoot, ".pipeline-active");
+  const pointer = join47(input.repoRoot, ".pipeline-active");
   try {
     const pointerStat = await lstat15(pointer);
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
@@ -23391,7 +23688,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostExecutionRoutes.ts
-import { join as join48 } from "node:path";
+import { join as join49 } from "node:path";
 async function handlePostExecutionRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -23443,7 +23740,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join48(root2, "openspec", "changes", name2);
+    const dir = join49(root2, "openspec", "changes", name2);
     const result = await cancelAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -23463,7 +23760,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join48(root2, "openspec", "changes", name2);
+    const dir = join49(root2, "openspec", "changes", name2);
     const result = await retryAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -23483,7 +23780,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join48(root2, "openspec", "changes", name2);
+    const dir = join49(root2, "openspec", "changes", name2);
     const result = await dismissAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -23503,7 +23800,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join48(root2, "openspec", "changes", name2);
+    const dir = join49(root2, "openspec", "changes", name2);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -23822,7 +24119,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverPostOperationsRoutes.ts
 import { lstatSync as lstatSync9 } from "node:fs";
-import { join as join49 } from "node:path";
+import { join as join50 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
@@ -24111,7 +24408,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync9(join49(rootCheck.anchor.path, ".pipeline"));
+        lstatSync9(join50(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -24298,7 +24595,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join49(root, "openspec", "changes", name);
+    const dir = join50(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -24322,7 +24619,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostMemoryRoutes.ts
-import { join as join50 } from "node:path";
+import { join as join51 } from "node:path";
 var RELATED_SEARCH_PATH = "/api/mem/related-sessions/search";
 var PLATFORM_VALUES = /* @__PURE__ */ new Set(["all", "claude", "codex", "opencode", "pi"]);
 var CHANGE_NAME_RE3 = /^[a-zA-Z0-9_-]+$/;
@@ -24361,7 +24658,7 @@ async function handlePostMemoryRoutes(req, res, path7, deps) {
   const anchoredRoot = rootCheck.anchor.path;
   let changeExists = false;
   try {
-    changeExists = stateStorageExistsSync(join50(anchoredRoot, "openspec", "changes", name));
+    changeExists = stateStorageExistsSync(join51(anchoredRoot, "openspec", "changes", name));
   } catch {
     return missingTarget(deps, res);
   }
@@ -24516,20 +24813,20 @@ async function handlePostRoute(req, res, path7, deps) {
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync22 } from "node:fs";
-import { dirname as dirname12, join as join51 } from "node:path";
+import { dirname as dirname12, join as join52 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join51(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync22(join52(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join51(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync22(join52(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -24544,7 +24841,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join51(dirname12(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join52(dirname12(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -24584,7 +24881,7 @@ function indexHtml(token) {
 
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { join as join52 } from "node:path";
+import { join as join53 } from "node:path";
 import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
@@ -24750,7 +25047,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join52(webRoot, "index.html"), "utf8");
+      let html = readFileSync23(join53(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -24764,8 +25061,8 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
-    const abs = join52(webRoot, rel);
-    if (!abs.startsWith(join52(webRoot, "assets"))) return false;
+    const abs = join53(webRoot, rel);
+    if (!abs.startsWith(join53(webRoot, "assets"))) return false;
     try {
       const source = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
@@ -24804,7 +25101,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
 
 // packages/server/src/serverGovernance.ts
 import { readdir as readdir5 } from "node:fs/promises";
-import { join as join53, resolve as resolvePath11 } from "node:path";
+import { join as join54, resolve as resolvePath11 } from "node:path";
 function createServerGovernance(options) {
   const { registry, store, sendJson, trackSkillProfiles, operationsAvailable, operationRunner } = options;
   function trackRegistryBody(trackRegistry) {
@@ -24816,7 +25113,7 @@ function createServerGovernance(options) {
     };
   }
   async function scanActiveTrackChanges(root) {
-    const changesRoot = join53(root, "openspec", "changes");
+    const changesRoot = join54(root, "openspec", "changes");
     let entries;
     try {
       entries = await readdir5(changesRoot, { withFileTypes: true });
@@ -24829,7 +25126,7 @@ function createServerGovernance(options) {
     const unreadable = [];
     for (const name of names) {
       try {
-        const state = await store.read(join53(changesRoot, name));
+        const state = await store.read(join54(changesRoot, name));
         const track = state.fields.track;
         const workflow = state.fields.workflow;
         refs.push({
@@ -25024,7 +25321,7 @@ function createRelatedSessionSearchExecutor(runner) {
 
 // packages/server/src/version.ts
 import { readFileSync as readFileSync24 } from "node:fs";
-import { basename as basename5, dirname as dirname13, join as join54 } from "node:path";
+import { basename as basename5, dirname as dirname13, join as join55 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -25033,7 +25330,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative7 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join54(pluginRoot2, relative7), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join55(pluginRoot2, relative7), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -25101,7 +25398,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join55(repoRootForSkills2(), "skills")
+        bundledRoot: join56(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -25186,7 +25483,7 @@ function createDashboardServer(options) {
   });
   let boundPort = 0;
   async function resolveSessionLink(root, name) {
-    const changeDir = join55(root, "openspec", "changes", name);
+    const changeDir = join56(root, "openspec", "changes", name);
     try {
       const wtRaw = await store.get(changeDir, "automation_worktree");
       const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
@@ -25586,10 +25883,10 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join56(dirname15(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join57(dirname15(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join56(pluginRoot(), "templates", "manifest.yaml");
+  return join57(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve13) => {
@@ -25652,7 +25949,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join56(dirname15(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join57(dirname15(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源：只读 sessions/records/timeline；完整 reader 才声明 traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),
