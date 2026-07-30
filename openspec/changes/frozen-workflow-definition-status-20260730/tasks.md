@@ -27,7 +27,7 @@
 
 - [x] 运行受影响 server/web 定向测试、typecheck:web、test:web、build:web/build、npm test。
 - [x] 在真实 production Dashboard 完成 1024/1440/1920 成功/失败/空态、中英文和键盘验收。
-- [ ] 完成 Verify 多轨审查、修复发现并冻结通过基线。
+- [x] 完成 Verify 多轨审查、修复发现并冻结通过基线。
 
 ## 第一轮 Verify 返工
 

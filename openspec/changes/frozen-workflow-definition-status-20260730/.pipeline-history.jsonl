@@ -97,3 +97,25 @@
 {"ts":"2026-07-30T10:40:39Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb0f9-6c3a-7da2-af0b-bcbaa3545e18"}
 {"ts":"2026-07-30T10:40:58Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T11:09:53Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T11:15:34Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T11:15:34Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T11:15:34Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T11:15:34Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T11:15:34Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"e60c3ac4-e984-43eb-916b-c3dfabcba7da"}
+{"ts":"2026-07-30T11:31:04Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-frozen-workflow-definition-status-20260730-verify.md"}
+{"ts":"2026-07-30T11:31:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T11:31:24Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-30T11:31:39Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-30T11:31:39Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-30T11:31:39Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-30T11:31:52Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-30T11:31:55Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-30T10:40:39Z authority_host_session=019fb0f9-6c3a-7da2-af0b-bcbaa3545e18"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: run"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T11:32:00Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-30T11:32:01Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"9f48a880-a7a5-4a81-b9d5-d814ff42fefc"}
+{"ts":"2026-07-30T11:35:20Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
