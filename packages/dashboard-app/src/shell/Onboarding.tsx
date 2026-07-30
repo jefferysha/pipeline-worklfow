@@ -190,7 +190,7 @@ export function Onboarding({ kind, root, onCreated, onToast, copyText = writeCli
           {t('change_create.create')}
         </button>
         <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">{t('onboard.cli_fallback')}</div>
-        <CmdRow cmd={cli} testid="onboard-cli" copyTestid="onboard-copy" copyText={copyText} />
+        <CmdRow key={cli} cmd={cli} testid="onboard-cli" copyTestid="onboard-copy" copyText={copyText} />
         {createOpen && root && (
           <CreateChangeDialog
             root={root}

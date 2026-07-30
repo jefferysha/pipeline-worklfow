@@ -271,4 +271,38 @@ describe('Onboarding no-change（有项目零 change：Route Lock 主入口 + CL
     expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
     expect(screen.getByText('选择执行路线')).toBeInTheDocument()
   })
+
+  it('root 切换会清理旧命令的 pending 与迟到结果', async () => {
+    let resolveOldWrite: (() => void) | undefined
+    const copyText = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOldWrite = resolve
+        }),
+    )
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-change" root="/repo-a" copyText={copyText} />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('onboard-copy'))
+    expect(screen.getByTestId('onboard-copy')).toHaveAttribute('aria-disabled', 'true')
+
+    result.rerender(
+      <I18nProvider>
+        <Onboarding kind="no-change" root="/repo-b" copyText={copyText} />
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('onboard-cli')).toHaveTextContent('cd /repo-b')
+    expect(screen.getByTestId('onboard-copy')).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.queryByRole('status')).toBeNull()
+
+    await act(async () => {
+      resolveOldWrite?.()
+      await Promise.resolve()
+    })
+    expect(screen.getByTestId('onboard-copy')).toHaveTextContent('复制')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
 })

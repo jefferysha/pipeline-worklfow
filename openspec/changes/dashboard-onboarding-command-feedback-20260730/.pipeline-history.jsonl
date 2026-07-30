@@ -50,3 +50,18 @@
 {"ts":"2026-07-30T03:44:09Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-30T03:44:09Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"7b1974a0-0267-4e79-81f7-4a83dc4b523f"}
 {"ts":"2026-07-30T03:47:57Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T03:51:35Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T03:51:35Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T03:51:35Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T03:51:35Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T03:51:35Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"21a15ff1-6d13-46e7-a788-6564c045c5c5"}
+{"ts":"2026-07-30T03:57:59Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-dashboard-onboarding-command-feedback-20260730-verify-fail-2.md"}
+{"ts":"2026-07-30T03:57:59Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T03:57:59Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-30T03:58:04Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-30T03:13:51Z authority_host_session=019fb0f8-828c-7111-8d51-40e544fd28dc"}
+{"ts":"2026-07-30T03:58:04Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T03:58:04Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T03:58:04Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T03:58:04Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T03:58:04Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"060a3267-8780-41cf-9894-c946216e6f8a"}
+{"ts":"2026-07-30T03:59:35Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

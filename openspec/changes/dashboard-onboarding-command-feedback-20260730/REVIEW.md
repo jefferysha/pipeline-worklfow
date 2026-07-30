@@ -16,6 +16,7 @@
 | --- | --- | --- | --- |
 | HIGH | pending 最初使用原生 `disabled`；Chromium 会把焦点移回页面根，与键盘操作保持焦点的契约冲突 | 键盘用户复制后失去当前位置，无法自然确认结果或重试 | 改为 `aria-disabled=true` 加状态机防重入；真实浏览器确认 pending、success、拒绝和 API 缺失后焦点均留在原按钮 |
 | MEDIUM | 第一轮冻结实现把 920px 宽卡和步骤卡视觉样式应用到所有视口，改变 `<1024px` 既有契约 | 620–1023px 的既有单列宽度和视觉结构发生非目标回归 | Verify 正式回退 Build；用 `min-[1024px]` 门控宽卡、grid、边框、背景和 padding，并新增 class 契约测试 |
+| MEDIUM | 第二轮 Codex 发现 `no-change` root 切换时会复用旧 `CmdRow`，旧 clipboard Promise/反馈 timer 可污染新命令 | 新项目命令可能暂时不可复制，并显示属于旧命令的 success/error | Verify 再次正式回退 Build；以完整命令为 React key，命令改变时复用既有 unmount generation/timer cleanup，并新增 pending 中 rerender 回归测试 |
 
 返工后的 Build 自审已重新核对完整交付面，未发现其他 Critical/High/Medium。低风险观察：
 成功和错误状态保留 2s/4s 后回落，属于规格定义的短暂反馈，不持久化、不调用服务端；
@@ -38,9 +39,11 @@ design 文档三处仍使用宽泛的 `disabled` 术语，但 delta spec、实�
 - TDD 红灯：新增测试在旧实现上 6 项失败，原因覆盖 pending、API 缺失、同步/异步错误和 timer。
 - Verify 回退后的 TDD 红灯：新增 `<1024px` class 契约测试在第一轮冻结实现上 1 项失败；
   门控修复后相邻 Vitest 14/14。
-- Dashboard 全量 Vitest：69 files / 1225 tests。
+- 第二次 Verify 回退后的 TDD 红灯：root 在旧命令 pending 时切换的测试在第二轮冻结实现上
+  观察到新命令仍为 `aria-disabled=true`；命令 key 修复后相邻 Vitest 15/15。
+- Dashboard 全量 Vitest：69 files / 1226 tests。
 - `npm run typecheck:web`：通过。
-- `npm run build`：通过；返工 asset `index-CMqFZGvH.js` / `index-bvENxFTR.css`。
+- `npm run build`：通过；最终返工 asset `index-ClhPblSB.js` / `index-bvENxFTR.css`。
 - `npm run check:architecture`：670 个 production files 通过。
 - `npm run check:comments`：通过。
 - `openspec validate dashboard-onboarding-command-feedback-20260730 --type change --strict --no-interactive`：通过。
