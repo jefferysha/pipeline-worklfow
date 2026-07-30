@@ -32,9 +32,9 @@
 
 ## 验证
 
-- [ ] 冻结 build SHA，完成 Reviewer/Codex/E2E/视觉轨且前后 workspace fingerprint 一致。
-- [ ] 在真实 Tenon Dashboard 以 1440×900、1024×768 验收身份、中英文、升级/加载/空/错误和键盘路径。
-- [ ] 一次性登记 verification report；finding 全部清零。
+- [x] 冻结 build SHA，完成 Reviewer/Codex/E2E/视觉轨且前后 workspace fingerprint 一致。
+- [x] 在真实 Tenon Dashboard 以 1440×900、1024×768 验收身份、中英文、升级/加载/空/错误和键盘路径。
+- [x] 一次性登记 verification report；可行动 finding 全部清零并记录已接受的 Low 残余。
 
 ## 交付
 
