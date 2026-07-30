@@ -18,4 +18,4 @@
 
 - 定位瓶颈由真实 38 项目基线确认，不依赖假数据推断。
 - badge 使用全局计数、live summary 使用当前结果；既有优先排序只在匹配集合内生效。
-- tabs 复用 Progress 的 roving ArrowLeft/ArrowRight/Home/End；清除条件后焦点回搜索框。
+- 状态筛选使用具 `aria-pressed` 的按钮组，并保留 roving ArrowLeft/ArrowRight/Home/End；清除条件后焦点回搜索框。Verify 已证明筛选器不应伪装成缺少关联 panel 的 tabs。

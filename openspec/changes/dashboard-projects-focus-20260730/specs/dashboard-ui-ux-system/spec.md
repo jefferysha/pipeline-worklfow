@@ -30,21 +30,22 @@ Projects MUST 在 1024–1920px 电脑端提供按项目 basename 或完整 root
 
 #### Scenario: 键盘选择状态
 
-- **WHEN** 焦点位于任一状态 tab 且用户按 ArrowLeft、ArrowRight、Home 或 End
-- **THEN** 焦点和选中状态按 roving tab 模型同步移动
-- **AND** 每次只有选中 tab 可通过常规 Tab 顺序到达
+- **WHEN** 焦点位于任一状态筛选按钮且用户按 ArrowLeft、ArrowRight、Home 或 End
+- **THEN** 焦点和按下状态按 roving 按钮组模型同步移动
+- **AND** 按钮组提供明确的可访问名称，每个按钮使用 `aria-pressed` 暴露状态
+- **AND** 每次只有按下按钮可通过常规 Tab 顺序到达
 
 #### Scenario: 清除查询与零结果恢复
 
 - **WHEN** 搜索框有内容且用户按 Escape
-- **THEN** 仅清空查询并保留当前状态 tab
+- **THEN** 仅清空查询并保留当前状态筛选
 - **WHEN** 查询与状态共同产生零结果且用户执行清除条件
 - **THEN** 查询恢复为空、状态恢复为 `all`，焦点回到搜索框
 - **AND** 空态以文字说明原因，不只依靠颜色表达
 
 #### Scenario: 高频筛选与 reduced motion
 
-- **WHEN** 用户连续输入查询或切换状态 tab
+- **WHEN** 用户连续输入查询或切换状态筛选
 - **THEN** Projects 只执行当前项目集合的 O(n) 本地派生，不发起网络请求
 - **AND** 不按每次查询或状态变化重播 GSAP 列表入场
 - **AND** `prefers-reduced-motion: reduce` 下既有集合级动画继续直接呈现终态
@@ -52,6 +53,6 @@ Projects MUST 在 1024–1920px 电脑端提供按项目 basename 或完整 root
 #### Scenario: 四档电脑端兼容性
 
 - **WHEN** 用户在 1024×768、1200×870、1440×900 或 1920×1080 查看 Projects
-- **THEN** 搜索、状态 tabs、结果摘要、项目身份和恢复操作均可见且可操作
+- **THEN** 搜索、状态筛选按钮组、结果摘要、项目身份和恢复操作均可见且可操作
 - **AND** 页面没有横向文档溢出
 - **AND** 本 Change 不新增手机端布局、触控目标或验收要求

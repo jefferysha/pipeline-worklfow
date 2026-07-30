@@ -8,7 +8,7 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 ## 目标与边界
 
 在 Projects 功能域内交付 basename/root 检索、四态状态聚焦、全局计数、当前结果摘要、
-键盘 roving tabs 与可恢复零结果。只覆盖 1024–1920px 电脑端；不修改 Snapshot、API、项目发现、
+键盘 roving 状态按钮组与可恢复零结果。只覆盖 1024–1920px 电脑端；不修改 Snapshot、API、项目发现、
 公共状态或手机端契约，不增加依赖。
 
 技术 prototype 不适用：真实生产 Dashboard 已确认现有 `ProjectRow` 事实、列表分区、动画触发条件、
@@ -18,15 +18,15 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 
 ### Task 1：先锁定查询、状态与计数契约
 
-- 新增 `packages/dashboard-app/src/shell/projectsFocusModel.test.ts`，覆盖 basename/root 大小写与空白、
+- 新增 `packages/dashboard-app/src/shell/projectsFocusModel.test.tsx`，覆盖 basename/root 大小写与空白、
   `all | attention | running | unreachable` 谓词、全局计数、查询与聚焦组合。
 - 新增 `packages/dashboard-app/src/shell/projectsFocusModel.ts`，导出 `ProjectFocus`、
   `countProjectFocus` 与 `selectFocusedProjects`；只消费 `ProjectRow`，保持 O(n) 且无副作用。
-- 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/projectsFocusModel.test.ts`。
+- 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/projectsFocusModel.test.tsx`。
 
 ### Task 2：贯穿一个可见 happy path
 
-- 新增 `packages/dashboard-app/src/shell/ProjectsFocusToolbar.tsx`，先实现搜索输入、状态 tabs 与结果摘要。
+- 新增 `packages/dashboard-app/src/shell/ProjectsFocusToolbar.tsx`，先实现搜索输入、状态筛选按钮组与结果摘要。
 - 修改 `packages/dashboard-app/src/shell/ProjectsView.tsx`，接入模型并让查询命中可达项目这一条路径可用，
   同时保持默认无条件列表输出与现有 GSAP 依赖不变。
 - 修改 `packages/dashboard-app/src/shell/ProjectsView.test.tsx`，先证明输入 basename 后只显示匹配项目。
@@ -38,10 +38,10 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 
 ### Task 3：补齐键盘和恢复路径
 
-- 在 `ProjectsFocusToolbar.tsx` 实现 ArrowLeft/ArrowRight/Home/End roving focus、搜索 Escape、
+- 在 `ProjectsFocusToolbar.tsx` 实现状态按钮组的 ArrowLeft/ArrowRight/Home/End roving focus、搜索 Escape、
   清除条件与搜索焦点恢复。
-- 在 `ProjectsView.test.tsx` 覆盖 tab 焦点/选中同步、Escape 保留状态、零结果清除与焦点回归。
-- 验证每次只有选中 tab 的 `tabIndex=0`，结果摘要使用 `role=status`、`aria-live=polite`。
+- 在 `ProjectsView.test.tsx` 覆盖按钮焦点/按下状态同步、Escape 保留状态、零结果清除与焦点回归。
+- 验证每次只有按下按钮的 `tabIndex=0`，结果摘要使用 `role=status`、`aria-live=polite`。
 - 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/ProjectsView.test.tsx`。
 
 ### Task 4：保持默认分区，揭示筛选后的不可达行
@@ -50,7 +50,7 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
   默认保留折叠按钮，查询命中或 `unreachable` 聚焦时直接展示只读行。
 - 修改 `ProjectsView.tsx` 组合筛选后的 need/rest/unreachable rows，并在零结果时呈现可恢复空态。
 - 保持不可达项目 `role=group`、`aria-disabled=true`，不提供虚假的项目打开动作。
-- 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/ProjectsView.test.tsx packages/dashboard-app/src/shell/projectsFocusModel.test.ts`。
+- 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/ProjectsView.test.tsx packages/dashboard-app/src/shell/projectsFocusModel.test.tsx`。
 
 此处建议 /clear：完整交互、默认兼容和异常恢复已闭环，可在文案与视觉收尾前单独审查。
 
@@ -68,12 +68,12 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 ### Task 6：自动化与真实浏览器验证
 
 - 运行：
-  - `npm run test:web -- --run packages/dashboard-app/src/shell/projectsFocusModel.test.ts packages/dashboard-app/src/shell/ProjectsView.test.tsx`
+  - `npm run test:web -- --run packages/dashboard-app/src/shell/projectsFocusModel.test.tsx packages/dashboard-app/src/shell/ProjectsView.test.tsx`
   - `npm run typecheck:web`
   - `npm run test:web`
   - `npm run build:web`
 - 在标题为 `Tenon Dashboard`、URL 为目标端口、项目 root 为本 worktree 的真实生产 Dashboard 验收：
-  1024×768、1200×870、1440×900、1920×1080；System/Light/Dark；键盘 tablist；搜索成功；
+  1024×768、1200×870、1440×900、1920×1080；System/Light/Dark；键盘状态按钮组；搜索成功；
   零结果清除；不可达只读；离线提示；reduced-motion。
 - 每档检查 `scrollWidth === clientWidth`；不得运行或声称手机端验收。
 

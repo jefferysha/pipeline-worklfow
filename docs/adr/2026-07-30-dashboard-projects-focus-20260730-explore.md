@@ -8,8 +8,8 @@ Snapshot 数据。
 
 ## 决策
 
-在 Projects 功能域内基于 `ProjectRow[]` 增加临时 `query` 与四态 `focus` 投影，采用搜索框、roving
-状态 tabs、live 结果摘要和可恢复零结果。默认无条件时保持现有分区与不可达折叠行为。
+在 Projects 功能域内基于 `ProjectRow[]` 增加临时 `query` 与四态 `focus` 投影，采用搜索框、具
+`aria-pressed` 的 roving 状态按钮组、live 结果摘要和可恢复零结果。默认无条件时保持现有分区与不可达折叠行为。
 
 搜索只匹配 basename 和完整 root；状态事实继续来自 `need`、`running` 与 `ok`。不新增 API、依赖、
 URL 参数、localStorage 或全局快捷键。筛选切换不新增 GSAP，保留现有集合级入场动画。

@@ -34,11 +34,11 @@ function UnreachableRows({
             root: row.root,
           })}
           aria-disabled="true"
-          className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5 opacity-70"
+          className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5"
         >
           <span aria-hidden="true" className="h-2 w-2 flex-none rounded-full border border-border-2 bg-transparent" />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-mono text-[14px] text-text-3">{row.basename}</span>
+            <span className="truncate font-mono text-[14px] text-text-2">{row.basename}</span>
             <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
               {visibleRoots.get(row.root) ?? row.root}
             </span>

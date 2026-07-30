@@ -59,18 +59,20 @@ export function ProjectsFocusToolbar({
   return (
     <div className="mb-7 border-b border-border pb-4" data-testid="projects-focus-toolbar">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="relative min-w-[260px] flex-1">
-          <span className="sr-only">{t('projects.search_label')}</span>
+        <div className="relative min-w-[260px] flex-1">
+          <label className="sr-only" htmlFor="projects-focus-search">
+            {t('projects.search_label')}
+          </label>
           <Search
             aria-hidden="true"
             className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-text-3"
           />
           <input
             ref={searchRef}
+            id="projects-focus-search"
             type="text"
             role="searchbox"
             value={query}
-            aria-label={t('projects.search_label')}
             placeholder={t('projects.search_placeholder')}
             onChange={(event) => onQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -94,11 +96,11 @@ export function ProjectsFocusToolbar({
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
           )}
-        </label>
+        </div>
 
         <div className="max-w-full overflow-x-auto py-0.5 [scrollbar-width:thin]">
           <div
-            role="tablist"
+            role="group"
             aria-label={t('projects.filters_label')}
             className="inline-flex w-max items-center gap-1 rounded-xl bg-fill p-1"
           >
@@ -109,16 +111,15 @@ export function ProjectsFocusToolbar({
                   tabRefs.current[index] = node
                 }}
                 type="button"
-                role="tab"
                 tabIndex={focus === option ? 0 : -1}
-                aria-selected={focus === option}
+                aria-pressed={focus === option}
                 data-testid={`projects-focus-${option}`}
                 onClick={() => onFocus(option)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-1 focus-visible:ring-offset-fill aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
+                className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-1 focus-visible:ring-offset-fill aria-pressed:bg-card aria-pressed:text-text aria-pressed:shadow-sm"
               >
                 {t(`projects.focus_${option}`)}
-                <span className="inline-flex min-w-[19px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[19px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-btn-fg">
+                <span className="inline-flex min-w-[19px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[19px] text-text-3 group-aria-pressed:bg-(--accent) group-aria-pressed:text-btn-fg">
                   {counts[option]}
                 </span>
               </button>

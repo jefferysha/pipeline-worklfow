@@ -15,7 +15,7 @@
 ## 实现
 
 - [x] 以测试先行方式实现 basename/root 查询、四态谓词、全局计数与结果派生模型。 (build)
-- [x] 实现 Projects 聚焦工具栏、roving tabs、live summary、Escape 与清除后焦点恢复。 (build)
+- [x] 实现 Projects 聚焦工具栏、roving 状态按钮组、live summary、Escape 与清除后焦点恢复。 (build)
 - [x] 接入既有 Projects 分区和不可达只读行，补齐零结果、中英文与 1024px 桌面布局。 (build)
 - [x] 运行定向 Vitest、前端类型检查、全量测试与生产构建，修复实现阶段发现的问题。 (build)
 

@@ -43,16 +43,16 @@ Tenon Dashboard 是本地开发者的电脑端操作控制台。真实生产 Das
 
 ### 聚焦工具栏
 
-- 位于 PageHeader 之后、项目结果之前；1024px 起保持搜索框与状态 tabs 同行，空间不足时自然换行。
+- 位于 PageHeader 之后、项目结果之前；1024px 起保持搜索框与状态筛选按钮组同行，空间不足时自然换行。
 - 搜索输入使用 Lucide `Search`，可访问 label 和中英文 placeholder；匹配经过 `trim().toLocaleLowerCase()`，
   同时覆盖 `basename` 与完整 `root`。
-- 状态 tabs 为 `all | attention | running | unreachable`：
+- 状态筛选按钮为 `all | attention | running | unreachable`：
   - `all`：全部项目数，包括不可达项目。
   - `attention`：`ok && need > 0`。
   - `running`：`ok && running > 0`。
   - `unreachable`：`!ok`。
-- badge 计数来自完整 rows，不随查询改变；查询与 tab 共同决定结果摘要。
-- tabs 使用 roving focus；ArrowLeft/ArrowRight/Home/End 同步焦点和选中项。
+- badge 计数来自完整 rows，不随查询改变；查询与状态筛选共同决定结果摘要。
+- 按钮组使用 roving focus；ArrowLeft/ArrowRight/Home/End 同步焦点和 `aria-pressed` 状态。
 
 ### 结果呈现
 
@@ -61,7 +61,7 @@ Tenon Dashboard 是本地开发者的电脑端操作控制台。真实生产 Das
 - 非 `all` 状态直接展示对应结果；不可达结果继续是 `aria-disabled` 的只读 group，不伪装为可点击项目。
 - live summary 使用 `role=status`、`aria-live=polite`，表达“显示 X / 共 Y 个项目”与当前状态。
 - 零结果显示边框虚线空态，说明没有匹配项，并提供“清除条件”；执行后恢复 `all`、清空查询并把焦点返回搜索框。
-- 搜索输入按 Escape 只清空查询，不改变当前状态 tab，避免一次键盘动作丢失两个条件。
+- 搜索输入按 Escape 只清空查询，不改变当前状态筛选，避免一次键盘动作丢失两个条件。
 
 ## 状态与数据流
 
@@ -79,7 +79,7 @@ Snapshot
 
 - `query: string`
 - `focus: 'all' | 'attention' | 'running' | 'unreachable'`
-- `tabRefs` 与 `searchRef` 只管理键盘焦点
+- `focusRefs` 与 `searchRef` 只管理键盘焦点
 
 不把筛选条件写入 URL 或 localStorage：这是临时浏览上下文，离开页面后应自然重置。
 
@@ -92,8 +92,9 @@ Snapshot
 
 ## 可访问性与兼容性
 
-- 搜索使用原生 input；tabs 使用 `role=tablist/tab`、`aria-selected`、单一 `tabIndex=0`。
-- 状态不只靠颜色：每个 tab 有文字、计数和选中形态。
+- 搜索使用原生 input 和显式 `htmlFor/id` 标签；清除按钮与 input 同级，避免复合 label 语义。
+- 状态筛选使用有名称的 `role=group`、原生 button、`aria-pressed` 与单一 `tabIndex=0`，不伪装成缺少关联 panel 的 tabs。
+- 状态不只靠颜色：每个按钮有文字、计数和按下形态。
 - 结果摘要与零结果为可读文字；清除动作是普通按钮。
 - 项目 accessible name 继续包含完整 root；同 basename 的 React key/DOM id 不变。
 - 小于 1024px 的既有布局只做结构防回归，不属于设计或验收范围。
@@ -102,13 +103,13 @@ Snapshot
 
 - 用户已持续授权低风险 UI 细节自主决策，因此采用方案 B，无需扩大 API 或全局快捷键范围。
 - 计数 badge 保持全局，结果摘要反映当前查询与状态；这与 Progress 已验证的“全局 badge + 当前结果摘要”一致。
-- 不可达项目在查询或显式不可达 tab 下直接可见，默认无查询时仍折叠，兼顾扫描密度与可发现性。
-- 搜索不匹配相位/状态文案，避免语言切换、翻译文本和业务事实之间产生漂移；状态由 tabs 负责。
+- 不可达项目在查询或显式不可达筛选下直接可见，默认无查询时仍折叠，兼顾扫描密度与可发现性。
+- 搜索不匹配相位/状态文案，避免语言切换、翻译文本和业务事实之间产生漂移；状态由筛选按钮负责。
 
 ## 红队自检
 
 - 如果“项目很多”假设不成立：工具栏仍是低干扰局部控件，默认输出与现有列表一致。
-- 如果查询隐藏了重要项目：全局计数、live summary、当前 tab 与清除按钮同时暴露过滤事实。
+- 如果查询隐藏了重要项目：全局计数、live summary、当前状态筛选与清除按钮同时暴露过滤事实。
 - 如果不可达项目不能打开：继续使用只读 group 和 `aria-disabled`，不提供虚假主操作。
 - 如果用户快速输入：不触发网络或逐键 GSAP，只进行线性数组过滤。
 - 如果 1024px 空间不足：工具栏允许换行，结果行保持现有已验证布局，不压缩身份与健康摘要。
