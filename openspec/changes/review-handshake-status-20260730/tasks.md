@@ -23,9 +23,9 @@
 
 ## 验证
 
-- [ ] 执行三轨代码/安全/测试审查并修复所有本轮缺陷。 (verify)
-- [ ] 执行全仓门禁与 1024/1440/1920 桌面真实 Dashboard 浏览器验收。 (verify)
-- [ ] 形成 digest-bound verification report 与浏览器证据。 (verify)
+- [x] 执行三轨代码/安全/测试审查并修复所有本轮缺陷。 (verify)
+- [x] 执行全仓门禁与 1024/1440/1920 桌面真实 Dashboard 浏览器验收。 (verify)
+- [x] 形成 digest-bound verification report 与浏览器证据。 (verify)
 
 ## 交付
 

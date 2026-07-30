@@ -60,3 +60,22 @@
 {"ts":"2026-07-30T03:05:50Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"e1a74645-ded4-43e1-9ee1-e33ee48e4558"}
 {"ts":"2026-07-30T03:26:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T03:26:20Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T03:26:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T03:26:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T03:26:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T03:26:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T03:26:44Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"8819d44b-6bb4-482e-b1ad-133d601624fe"}
+{"ts":"2026-07-30T03:41:37Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T03:41:41Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-30T03:41:45Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-30T03:41:46Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-30T03:41:46Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-30T03:41:53Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-30T03:42:07Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-30T01:57:53Z authority_host_session=019fb08a-af35-7580-acfd-3973bff9a17a"}
+{"ts":"2026-07-30T03:42:12Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T03:42:12Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T03:42:12Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T03:42:12Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T03:42:12Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"e26d25db-23e4-4885-8351-8d68f8eb24a1"}
+{"ts":"2026-07-30T03:43:52Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-30T03:43:52Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
