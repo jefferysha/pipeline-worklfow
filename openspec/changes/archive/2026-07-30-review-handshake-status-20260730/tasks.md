@@ -29,9 +29,9 @@
 
 ## 交付
 
-- [ ] 应用 OpenSpec，提交推送并创建含五仓来源、phase、测试与浏览器证据的非草稿 PR。 (ship)
-- [ ] 检查 PR 远端 URL、标签和 CI，修复所有可归因失败。 (ship)
+- [x] 应用 OpenSpec，提交推送并创建含五仓来源、phase、测试与浏览器证据的非草稿 PR。 (ship)
+- [x] 检查 PR 远端 URL、标签和 CI，修复所有可归因失败。 (ship)
 
 ## 归档
 
-- [ ] 归档 Change，并确认 canonical 状态与 PR 文件一致。 (archive)
+- [x] 归档 Change，并确认 canonical 状态与 PR 文件一致。 (archive)
