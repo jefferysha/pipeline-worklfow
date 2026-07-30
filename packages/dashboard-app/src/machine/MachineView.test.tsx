@@ -105,6 +105,32 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers').textContent).toContain('browser-e2e')
   })
 
+  it('Docker daemon 不可用时卡片说明与 blocked 徽章保持同一事实', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/afk/readiness')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          docker: { available: false },
+          image: { configured: 'sandcastle:local', present: false, build_hint: 'npm run sandcastle:build' },
+          credentials: { 'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } }, codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' } } },
+        }), { status: 200 })
+      }
+      if (url === '/api/docker/images') {
+        return new Response(JSON.stringify({ ok: true, available: false, images: [] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'blocked'))
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('Docker daemon unavailable')
+    expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker available')
+  })
+
   it('就绪卡保持非 live 语义并只用一个聚合状态播报，宽屏不会挤成五个重叠窄列', async () => {
     const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
@@ -132,6 +158,26 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-risk-layout')).toHaveClass('items-start')
     fireEvent.click(within(queue).getByTestId('machine-risk-open-broken-loop'))
     expect(onOpenProject).toHaveBeenCalledWith(ROOT)
+  })
+
+  it('同 basename 的跨项目风险显示稳定父目录提示，打开目标不会混淆', async () => {
+    const rootA = '/worktrees/alpha/pipeline-worklfow'
+    const rootB = '/worktrees/beta/pipeline-worklfow'
+    const onOpenProject = vi.fn()
+    const snapshot = makeSnapshot([
+      makeProject(rootA, [], { ok: false, error: 'unreadable' }),
+      makeProject(rootB, [], { ok: false, error: 'unreadable' }),
+    ])
+    render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={onOpenProject} /></I18nProvider>)
+
+    const queue = await screen.findByTestId('machine-risk-queue')
+    expect(queue).toHaveTextContent('…/alpha/pipeline-worklfow')
+    expect(queue).toHaveTextContent('…/beta/pipeline-worklfow')
+    const buttons = within(queue).getAllByRole('button', { name: '打开项目' })
+    fireEvent.click(buttons[0]!)
+    fireEvent.click(buttons[1]!)
+    expect(onOpenProject).toHaveBeenNthCalledWith(1, rootA)
+    expect(onOpenProject).toHaveBeenNthCalledWith(2, rootB)
   })
 
   it('optional 或上游已下架的 skill 仍计入明细，但不把机器误判为 blocked、也不生成 blocker', async () => {

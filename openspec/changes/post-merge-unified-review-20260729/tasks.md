@@ -144,6 +144,8 @@
 - [x] 补齐 future-version sibling 与可读 Change 编排图的交叉集成回归。 (build)
 - [x] 将 Dashboard 重型 route 改为真实 lazy chunks，并拆分 vendor，消除 1.06 MB 单一 JS 与 Vite 500 KiB 告警。 (build)
 - [x] 在修复源码与最新 production assets 上完成 21 场景全 Dashboard 浏览器矩阵。 (build)
+- [x] 修复 Machine Docker badge/detail 事实冲突，并为同 basename 风险行显示有界稳定的父目录提示。 (build)
+- [x] 在 `index-CrqBAgSc.js` 上重跑 21 场景固定桌面视口矩阵并保存可审计 JSON。 (build)
 - [ ] 在新精确提交上完成三轨 C0/H0/M0/L0 独立复审。 (build)
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

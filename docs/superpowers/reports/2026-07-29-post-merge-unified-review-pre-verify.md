@@ -376,3 +376,26 @@ may record PASS.
 - Evidence is stored under
   `/tmp/tenon-unified-final-dashboard-736da232-v2`. A fresh exact-SHA three-track
   review is still mandatory before Build freeze.
+
+### `d02587e0` Machine review rollback
+
+- The Dashboard-design and release/E2E tracks independently rejected the exact
+  candidate because a blocked Docker card still said Docker was available and
+  repeated `pipeline-worklfow` risk rows exposed no stable target distinction.
+  Neither finding was waived.
+- Two RED regressions now prove the contradictions. Docker detail consumes the
+  same daemon/image facts as the badge, and every project/Change/Loop risk shows
+  a bounded `…/<parent>/<basename>` hint while its button retains the exact root.
+- Machine passes 12/12 and Dashboard passes 78 files / 1532 tests. Root tests
+  pass 330 files / 5879 tests with 26 honest skips; architecture 717, strict
+  OpenSpec 38/38, release 24/24, identity, comments, hygiene, docs, typecheck and
+  the full build are green.
+- Production `index-CrqBAgSc.js` passed a new 21-scene fixed-viewport matrix
+  after a 2.7-second settle per route. Every capture has the exact desktop width,
+  requested zh/en, light/dark and motion setting, zero horizontal overflow,
+  busy/loading residue, console errors and CDP exceptions. Progress truthfully
+  retains the expected trusted-reader precheck alert on this non-Linux runtime;
+  no alert was suppressed or reclassified as success.
+- Screenshots and `audit.json` are stored in
+  `/tmp/tenon-unified-final-dashboard-CrqBAgSc-v3`. A new exact commit and three
+  zero-finding reviews remain mandatory.

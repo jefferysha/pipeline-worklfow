@@ -561,3 +561,43 @@ the full accessible list. Evidence is under
 
 This section is pre-freeze evidence. A new exact committed SHA must still pass
 all three independent review tracks; no prior PASS is carried forward.
+
+## `d02587e0` Machine review rollback and remediation
+
+The backend/security track passed the exact candidate, but both the complete
+Dashboard review and release/E2E review independently found the same two
+Machine defects. The candidate was rejected with no waiver:
+
+- Docker readiness could be `BLOCKED` while its supporting sentence still said
+  that Docker was available because the sentence only checked whether the
+  images response object existed;
+- cross-project risk rows displayed only a root basename, so separate
+  `pipeline-worklfow` worktrees had indistinguishable action targets.
+
+New RED regressions reproduce both defects. Docker detail now derives from the
+same daemon and image availability facts as the badge. Every project, Change
+and Loop risk also carries a bounded final-two-segment root hint such as
+`…/f270/pipeline-worklfow`; the full root remains the exact button target but is
+not exposed as hover text. The focused Machine suite passes 12/12 and the
+complete Dashboard suite passes 78 files / 1532 tests. Root tests pass 330 files
+/ 5879 tests with 26 honest environment skips. Architecture scans 717 production
+files; strict OpenSpec is 38/38; release contracts are 24/24; identity, comments,
+repository hygiene, documentation, typecheck and the full production build pass.
+
+The regenerated Dashboard loads `index-CrqBAgSc.js`; the largest initial chunk
+is 291.05 kB and the largest lazy route is 212.29 kB, with no 500 KiB warning.
+The persistent project browser captured a fresh viewport-only 21-scene matrix
+after a 2.7-second settle per route. All seven views use the exact 1024, 1440 or
+1920 CSS-pixel desktop viewport, the requested language/theme/motion setting,
+the new asset, desktop navigation, and zero document overflow, route-loading or
+busy residue, console error or CDP exception. Progress preserves its expected
+source-backed fail-closed precheck alert when the local non-Linux runtime cannot
+provide the trusted directory-fd reader; the other views have no visible alert.
+Manual inspection confirms that the Docker badge/detail agree and repeated
+basenames are distinguished without leaking full paths. Screenshots plus the
+bounded machine-readable audit are stored under
+`/tmp/tenon-unified-final-dashboard-CrqBAgSc-v3`.
+
+This remains pre-freeze evidence. The remediation must be committed and all
+three independent reviewers must return C0/H0/M0/L0 on that exact SHA before
+Build can transition.

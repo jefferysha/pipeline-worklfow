@@ -53,12 +53,18 @@ interface ProjectRisk {
   key: string
   root: string
   title: string
+  rootHint: string
   details: string[]
   testId: string
 }
 
 function rootName(root: string): string {
   return root.split('/').filter(Boolean).pop() ?? root
+}
+
+function rootHint(root: string): string {
+  const segments = root.split('/').filter(Boolean)
+  return segments.length > 2 ? `…/${segments.slice(-2).join('/')}` : root
 }
 
 /** Unknown legacy tier stays conservative; explicit conditional/optional entries are informational. */
@@ -87,6 +93,7 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
         key: `project:${project.root}`,
         root: project.root,
         title: rootName(project.root),
+        rootHint: rootHint(project.root),
         details: [t('machine.risk_project_unreadable', {
           error: formatServerProse(project.error, t, {
             exposeServerDetail,
@@ -100,7 +107,7 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
     for (const change of project.changes) {
       const automation = typeof change.fields.automation === 'string' ? change.fields.automation : ''
       if (change.archived !== 'true' && (automation === 'failed' || automation === 'conflict')) {
-        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
+        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, rootHint: rootHint(project.root), details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
       }
     }
   }
@@ -113,7 +120,7 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
     if (loop.readiness.band === 'not-ready') details.push(t('machine.risk_readiness_not_ready'))
     if (loop.readiness.band === 'mostly-ready') details.push(t('machine.risk_readiness_mostly_ready'))
     if (loop.status === 'active' && loop.skill_bundle_id === null) details.push(t('machine.risk_skill_bundle_missing'))
-    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, details, testId: `machine-risk-open-${loop.id}` })
+    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, rootHint: rootHint(loop.root), details, testId: `machine-risk-open-${loop.id}` })
   }
   return rows
 }
@@ -205,6 +212,11 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const secretSource = readiness?.credentials.codex.OPENAI_API_KEY.source
     ?? readiness?.credentials.codex.CODEX_HOME.source
     ?? (secrets?.OPENAI_API_KEY.set ? 'secrets' : 'not detected')
+  const dockerDetail = images === null
+    ? t('machine.loading_signal')
+    : images.available === false || readiness?.docker.available === false
+      ? t('machine.docker_unavailable_detail')
+      : t('machine.docker_detail', { count: images.images.length })
 
   return (
     <section className="mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="machine-view" data-page-frame="standard">
@@ -225,7 +237,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
           {t('machine.readiness_summary', readinessCounts)}
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="machine-readiness-grid">
-          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={images ? t('machine.docker_detail', { count: images.images.length }) : t('machine.loading_signal')} testId="machine-docker" />
+          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={dockerDetail} testId="machine-docker" />
           <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
           <ReadinessCard icon={KeyRound} label={t('machine.codex')} state={codexState} detail={t('machine.codex_detail', { source: credentialSourceLabel(secretSource, t) })} testId="machine-codex" />
           <ReadinessCard icon={BrainCircuit} label={t('machine.skills')} state={skillState} detail={skills ? t('machine.skills_detail', { installed: installedSkills, total: skills.length }) : t('machine.loading_signal')} testId="machine-skills" />
@@ -254,6 +266,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
                   <span className="h-8 w-1 flex-none rounded-full bg-red" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <div className="break-words font-bold text-text [overflow-wrap:anywhere]">{risk.title}</div>
+                    <div className="break-words font-mono text-[10.5px] text-text-3 [overflow-wrap:anywhere]">{risk.rootHint}</div>
                     <div className="mt-0.5 break-words text-xs text-text-3 [overflow-wrap:anywhere]">{risk.details.join(' · ')}</div>
                   </div>
                   <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
