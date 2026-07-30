@@ -43,6 +43,8 @@ export interface ChangeSnapshot {
   workflowRules: WorkflowRulesSnapshot
   /** Change/Track-effective guard projection; intentionally not part of immutable plan identity. */
   workflowExecution: WorkflowExecutionSnapshot
+  /** Current canonical exact-event review receipt, projected without authority or host details. */
+  reviewHandshake: ReviewHandshakeSnapshot
   /** OpenSpec tasks.md projected onto the workflow stages; omitted only for an older server response. */
   todo?: PipelineTodoProjection
   /** Governed OpenSpec artifact/reader evidence, calculated from the immutable document ledger. */
@@ -53,6 +55,16 @@ export interface ChangeSnapshot {
    */
   terminalActivity?: TerminalActivitySnapshot
 }
+
+export type ReviewHandshakeSnapshot =
+  | { status: 'not-requested' }
+  | { status: 'pending'; event: string; requestedAt: string }
+  | {
+      status: 'approved'
+      event: string
+      requestedAt: string
+      acknowledgedAt: string
+    }
 
 export interface TerminalActivitySnapshot {
   sessionId: string

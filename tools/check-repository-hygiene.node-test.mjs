@@ -125,6 +125,33 @@ test('allows fixed trace-timeline research and governance paths but rejects sour
   }
 })
 
+test('allows review-handshake upstream identities only in its fixed research and design evidence', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const allowed = [
+    'docs/superpowers/specs/2026-07-30-review-handshake-upstream-research.md',
+    'docs/superpowers/specs/2026-07-30-review-handshake-status-design.md',
+  ]
+  const rejected = [
+    'packages/server/src/reviewHandshake.ts',
+    'docs/superpowers/specs/2026-07-30-other-feature.md',
+    'openspec/changes/review-handshake-status-20260730/proposal.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(join(root, path), `Fixed research: ${firstIdentity} and ${secondIdentity}.\n`)
+  }
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    const failures = checkReferenceIdentities(root, rejected)
+    assert.equal(failures.length, rejected.length)
+    assert.ok(failures.every((failure) => /受管理文本/.test(failure)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('allows fixed host-target-plan research and governance paths but rejects source and unrelated docs', async () => {
   const root = await fixture()
   const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
