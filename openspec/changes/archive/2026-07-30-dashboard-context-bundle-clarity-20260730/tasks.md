@@ -30,14 +30,14 @@
 
 - [x] 对冻结 SHA 完成 Reviewer、E2E、Codex 与视觉、可访问性四轨复核。
 - [x] 在 1024×768、1200×870、1440×900、1920×1080 验收全部目标状态和主题。
-- [ ] 修复全部范围内发现后重新冻结与完整验证，登记 verification report 并完成 exact-event review。
+- [x] 修复全部范围内发现后重新冻结与完整验证，登记 verification report 并完成 exact-event review。
 
 ## 交付
 
-- [ ] 应用已验证 spec，提交、普通 push 并创建非草稿 PR。
-- [ ] 完成 PR 说明、标签审计、review/comment 审计与 exact-head CI 终态。
+- [x] 应用已验证 spec，提交、普通 push 并创建非草稿 PR。
+- [x] 完成 PR 说明、标签审计、review/comment 审计与 exact-head CI 终态。
 
 ## 归档
 
-- [ ] 读取全部治理证据并以官方 Tenon/OpenSpec 路径归档 Change。
-- [ ] 提交并推送归档状态，等待最终 exact-head CI 终态并更新 automation memory。
+- [x] 读取全部治理证据并以官方 Tenon/OpenSpec 路径归档 Change。
+- [x] 提交并推送归档状态，等待最终 exact-head CI 终态并更新 automation memory。
