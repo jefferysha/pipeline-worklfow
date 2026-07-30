@@ -66,23 +66,23 @@ export function ReviewHandshakeStatus({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">{t('progress.review_title')}</h2>
           <p className="mt-1 text-sm font-semibold">{presentation.title}</p>
-          <p className="mt-1 text-xs leading-5 opacity-85">{presentation.detail}</p>
+          <p className="mt-1 text-xs leading-5">{presentation.detail}</p>
         </div>
       </div>
 
       {handshake !== undefined && handshake.status !== 'not-requested' && (
         <dl className="mt-3 grid gap-2 border-t border-current/15 pt-3 text-xs">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <dt className="opacity-75">{t('progress.review_event')}</dt>
+            <dt>{t('progress.review_event')}</dt>
             <dd className="break-all font-mono font-semibold">{handshake.event}</dd>
           </div>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <dt className="opacity-75">{t('progress.review_requested_at')}</dt>
+            <dt>{t('progress.review_requested_at')}</dt>
             <dd><time className="font-mono" dateTime={handshake.requestedAt}>{handshake.requestedAt}</time></dd>
           </div>
           {handshake.status === 'approved' && (
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <dt className="opacity-75">{t('progress.review_acknowledged_at')}</dt>
+              <dt>{t('progress.review_acknowledged_at')}</dt>
               <dd>
                 <time className="font-mono" dateTime={handshake.acknowledgedAt}>
                   {handshake.acknowledgedAt}

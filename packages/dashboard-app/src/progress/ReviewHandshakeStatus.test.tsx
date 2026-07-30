@@ -58,7 +58,8 @@ describe('ReviewHandshakeStatus', () => {
         })} />
       </I18nProvider>,
     )
-    expect(screen.getByRole('status')).toHaveTextContent('已确认，可继续')
+    expect(screen.getByRole('status')).toHaveTextContent('已记录精确事件确认')
+    expect(screen.getByRole('status')).toHaveTextContent('transition 仍由服务端 guards 校验')
     expect(screen.getByText('verify-fail')).toBeInTheDocument()
 
     pending.rerender(
@@ -68,8 +69,23 @@ describe('ReviewHandshakeStatus', () => {
         })} />
       </I18nProvider>,
     )
-    expect(screen.getByRole('status')).toHaveTextContent('尚未发起复核请求')
+    expect(screen.getByRole('status')).toHaveTextContent('尚未记录复核请求')
+    expect(screen.getByRole('status')).toHaveTextContent('补齐当前出口所需证据后')
     expect(screen.queryByText('verify-fail')).not.toBeInTheDocument()
+  })
+
+  it('浅色状态色上的 12px 正文和字段标签不通过 opacity 降低对比度', () => {
+    renderStatus('verify', {
+      status: 'approved',
+      event: 'verify-pass',
+      requestedAt: '2026-07-30T02:00:00Z',
+      acknowledgedAt: '2026-07-30T02:01:00Z',
+    })
+    expect(screen.getByText('下列 exact event 已确认；transition 仍由服务端 guards 校验。'))
+      .not.toHaveClass('opacity-85')
+    for (const label of ['精确事件', '请求时间', '确认时间']) {
+      expect(screen.getByText(label)).not.toHaveClass('opacity-75')
+    }
   })
 
   it('英文文案不翻译 exact event identity', () => {

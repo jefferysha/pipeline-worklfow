@@ -4,7 +4,7 @@
 
 ### Requirement: Server 必须投影 canonical Review Handshake
 
-Server 必须在现有 `tenon-snapshot/v2` 的每个 `ChangeSnapshot` 中返回必有的
+Server MUST 在现有 `tenon-snapshot/v2` 的每个 `ChangeSnapshot` 中返回必有的
 `reviewHandshake` 判别联合。该投影必须只从 `StateStore` 读取的 canonical Change state 与该
 Change 冻结的 workflow plan 派生，不得解析 YAML 文本或由 Dashboard 解释 raw receipt fields。
 
@@ -35,7 +35,7 @@ Change 冻结的 workflow plan 派生，不得解析 YAML 文本或由 Dashboard
 
 ### Requirement: Snapshot 扩展必须保持滚动兼容且失败关闭
 
-Server 必须继续声明 `tenon-snapshot/v2`，同版本 HTTP 与 SSE 必须输出相同投影。Dashboard 在滚动
+Server MUST 继续声明 `tenon-snapshot/v2`，同版本 HTTP 与 SSE 必须输出相同投影。Dashboard 在滚动
 升级窗口内必须允许整个 `reviewHandshake` 属性缺失，但属性一旦出现就必须按判别联合和当前冻结
 workflow 规则严格解码。
 
@@ -63,7 +63,7 @@ workflow 规则严格解码。
 
 ### Requirement: Progress Drawer 必须区分 readiness 与 receipt
 
-Dashboard 必须在当前 Change 的 Progress Drawer 当前阶段区显示只读 Review Handshake 状态卡，并
+Dashboard MUST 在当前 Change 的 Progress Drawer 当前阶段区显示只读 Review Handshake 状态卡，并
 保持 transition guard readiness、canonical receipt 与 Dashboard direct transition 三种语义互不
 替代。
 
@@ -81,7 +81,8 @@ Dashboard 必须在当前 Change 的 Progress Drawer 当前阶段区显示只读
 #### Scenario: 三种 canonical 状态
 
 - **WHEN** 当前 review step 分别收到 `not-requested`、`pending` 或 `approved`
-- **THEN** 状态卡必须分别显示尚未发起、等待明确确认或已确认可继续的中英文状态与下一步
+- **THEN** 状态卡必须分别显示尚未记录请求、等待明确确认或已记录 exact-event 确认的中英文事实状态与下一步
+- **AND** 文案不得把 receipt 描述为 transition readiness；服务端 guards 仍是唯一 readiness 权威
 - **AND** pending/approved 必须以不翻译的 monospace 原文展示 exact event
 - **AND** not-requested 不得制造默认 event
 
@@ -94,7 +95,7 @@ Dashboard 必须在当前 Change 的 Progress Drawer 当前阶段区显示只读
 
 ### Requirement: 现有动作、状态路径与可访问性必须保持
 
-Review Handshake 状态卡必须是只读、无独立 fetch、无本地 receipt 缓存的 snapshot 投影。它不得
+Review Handshake 状态卡 MUST 是只读、无独立 fetch、无本地 receipt 缓存的 snapshot 投影。它不得
 改变现有 Dashboard transition 的 host-bound 人工批准、busy、回滚、键盘或焦点语义。
 
 #### Scenario: 多出口 review step
