@@ -89,7 +89,15 @@ describe('ContextBundlePreview', () => {
     expect(progress).toHaveAttribute('aria-valuemax', '120000')
     expect(progress).toHaveAttribute('aria-valuenow', '640')
     expect(progress).toHaveAttribute('aria-valuetext', '640 / 120,000 bytes，已使用 1%')
-    expect(screen.getByTestId('context-bundle-budget-fill')).toHaveStyle({ width: '0.5333333333333333%' })
+    const fill = screen.getByTestId('context-bundle-budget-fill')
+    expect(fill).toHaveStyle({ transform: 'scaleX(0.005333333333333333)' })
+    expect(fill).toHaveClass(
+      'origin-left',
+      'transition-transform',
+      'duration-200',
+      'motion-reduce:transition-none',
+    )
+    expect(fill).not.toHaveClass('transition-[width]', 'duration-300')
     expect(screen.getByText('源文件 901 bytes · 物化 640 bytes')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('target=verify&budgetBytes=120000'),
@@ -163,7 +171,7 @@ describe('ContextBundlePreview', () => {
     expect(progress).toHaveAttribute('aria-valuemax', '100')
     expect(progress).toHaveAttribute('aria-valuenow', '100')
     expect(progress).toHaveAttribute('aria-valuetext', '640 / 100 bytes，已使用 640%')
-    expect(screen.getByTestId('context-bundle-budget-fill')).toHaveStyle({ width: '100%' })
+    expect(screen.getByTestId('context-bundle-budget-fill')).toHaveStyle({ transform: 'scaleX(1)' })
     expect(screen.getByText('源文件 901 bytes · 物化 640 bytes')).toBeInTheDocument()
     await user.clear(budget)
     await user.type(budget, '120000')

@@ -71,9 +71,9 @@ export function BudgetSummary({
         })}
       >
         <div
-          className={`h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none ${tone === 'error' ? 'bg-amb-d' : 'bg-green'}`}
+          className={`h-full w-full origin-left rounded-full transition-transform duration-200 motion-reduce:transition-none ${tone === 'error' ? 'bg-amb-d' : 'bg-green'}`}
           data-testid="context-bundle-budget-fill"
-          style={{ width: `${visualPercent}%` }}
+          style={{ transform: `scaleX(${visualPercent / 100})` }}
         />
       </div>
       <p className={`mt-2 text-xs font-medium ${tone === 'error' ? 'text-amb-d' : 'text-text-2'}`}>

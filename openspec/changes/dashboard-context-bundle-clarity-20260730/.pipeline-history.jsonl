@@ -25,3 +25,19 @@
 {"ts":"2026-07-30T05:26:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb166-d610-7b72-b529-4abc24083e43"}
 {"ts":"2026-07-30T05:26:59Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T05:33:03Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T05:33:48Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T05:33:48Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T05:33:48Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T05:33:48Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T05:33:48Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"b2f22256-33d6-45ee-9eb5-c51db2f61f2a"}
+{"ts":"2026-07-30T05:45:41Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-dashboard-context-bundle-clarity-20260730-verify-fail-1.md"}
+{"ts":"2026-07-30T05:45:46Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T05:45:53Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-30T05:46:05Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-30T05:46:11Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-30T05:26:23Z authority_host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:46:17Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T05:46:17Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T05:46:49Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T05:46:49Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T05:46:49Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"16a11516-b5c3-4f49-acd4-aea1decc4cab"}
+{"ts":"2026-07-30T05:57:49Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
