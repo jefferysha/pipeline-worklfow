@@ -35244,13 +35244,14 @@ function scriptStates(value) {
     (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
   );
 }
-function customHostEnvelopeStrings(value) {
-  const values = Array.isArray(value) ? value : [value];
-  const item2 = values[0];
+function customHostHeaderState(item2) {
   const text2 = typeof item2 === "string" ? item2 : isRecord10(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
-  if (text2 === void 0 || !/^Script (?:completed|failed)(?:\n|$)/.test(text2)) return [];
-  const boundary = text2.indexOf("\nOutput:\n");
-  return boundary === -1 ? [] : [text2.slice(0, boundary)];
+  if (text2 === void 0) return void 0;
+  const marker = "\nOutput:\n";
+  const boundary = text2.indexOf(marker);
+  if (boundary === -1 || boundary !== text2.length - marker.length) return void 0;
+  const match = /^Script (completed|failed)(?:\n|$)/.exec(text2);
+  return match?.[1];
 }
 function successfulFunctionOutput(value) {
   if (scriptStates(value).includes("failed")) return false;
@@ -35282,30 +35283,30 @@ function parsedCompleteResultEnvelope(text2) {
     return void 0;
   }
 }
-function successfulCustomOutput(value) {
-  const states = customHostEnvelopeStrings(value).flatMap(
-    (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
+function parsedCustomCompletion(value) {
+  if (!Array.isArray(value) || value.length !== 2 && value.length < 3) return void 0;
+  if (customHostHeaderState(value[0]) !== "completed") return void 0;
+  const typedResultIndexes = value.flatMap(
+    (item2, index) => isRecord10(item2) && item2.type === "execution_result" ? [index] : []
   );
-  if (!states.includes("completed") || states.includes("failed")) return false;
-  const values = Array.isArray(value) ? value : [value];
-  const typedResults = values.filter((item2) => isRecord10(item2) && item2.type === "execution_result");
-  if (typedResults.length > 0) {
-    return typedResults.length === 1 && topLevelExitCode(typedResults[0]) === 0;
+  if (typedResultIndexes.length > 0) {
+    const resultIndex = typedResultIndexes[0];
+    if (typedResultIndexes.length !== 1 || resultIndex !== value.length - 1 || value.slice(1, resultIndex).some(
+      (item2) => !isRecord10(item2) || item2.type !== "input_text" || typeof item2.text !== "string"
+    )) return void 0;
+    const exitCode = topLevelExitCode(value[resultIndex]);
+    if (exitCode === void 0) return void 0;
+    return {
+      exitCode,
+      stdout: value.slice(1, resultIndex).map((item2) => item2.text).join("")
+    };
   }
-  const exitCodes = values.flatMap((item2) => {
-    if (typeof item2 === "string") {
-      const parsed = parsedCompleteResultEnvelope(item2.trim());
-      return parsed === void 0 ? [] : [parsed.exitCode];
-    }
-    if (!isRecord10(item2)) return [];
-    if (item2.type === "input_text") {
-      const text2 = asString(item2.text);
-      const parsed = text2 === void 0 ? void 0 : parsedCompleteResultEnvelope(text2.trim());
-      return parsed === void 0 ? [] : [parsed.exitCode];
-    }
-    return [];
-  });
-  return exitCodes.length === 1 && exitCodes[0] === 0;
+  if (value.length !== 2) return void 0;
+  const payload = value[1];
+  const text2 = typeof payload === "string" ? payload : isRecord10(payload) && payload.type === "input_text" ? asString(payload.text) : void 0;
+  if (text2 === void 0) return void 0;
+  const envelope = parsedCompleteResultEnvelope(text2);
+  return envelope === void 0 ? void 0 : { exitCode: envelope.exitCode, stdout: envelope.output };
 }
 function successfulFunctionStdout(value) {
   if (typeof value !== "string" || !successfulFunctionOutput(value)) return void 0;
@@ -35314,29 +35315,8 @@ function successfulFunctionStdout(value) {
   return boundary === -1 ? void 0 : value.slice(boundary + marker.length);
 }
 function successfulCustomStdout(value) {
-  if (!successfulCustomOutput(value)) return void 0;
-  const values = Array.isArray(value) ? value : [value];
-  const typedResults = values.filter((item2) => isRecord10(item2) && item2.type === "execution_result");
-  if (typedResults.length > 0) {
-    if (typedResults.length !== 1 || topLevelExitCode(typedResults[0]) !== 0) return void 0;
-    return values.slice(1).flatMap(
-      (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" ? [item2.text] : []
-    ).join("");
-  }
-  const envelopes = values.flatMap((item2) => {
-    if (typeof item2 === "string") {
-      const parsed2 = parsedCompleteResultEnvelope(item2.trim());
-      return parsed2 === void 0 ? [] : [parsed2];
-    }
-    if (!isRecord10(item2) || item2.type !== "input_text") return [];
-    const text2 = asString(item2.text);
-    const parsed = text2 === void 0 ? void 0 : parsedCompleteResultEnvelope(text2.trim());
-    return parsed === void 0 ? [] : [parsed];
-  });
-  if (envelopes.length > 0) {
-    return envelopes.length === 1 ? envelopes[0]?.output : void 0;
-  }
-  return void 0;
+  const completion = parsedCustomCompletion(value);
+  return completion?.exitCode === 0 ? completion.stdout : void 0;
 }
 
 // packages/cli/src/codexTrustedSkillRead.ts
