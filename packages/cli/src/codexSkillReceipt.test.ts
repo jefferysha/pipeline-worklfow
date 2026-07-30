@@ -76,6 +76,17 @@ it('treats status-like Skill body chunks as stdout in the legacy typed exec ABI'
   expect(successfulCustomStdout(output)).toBe(body)
 })
 
+it('treats an exact completed-header-shaped Skill body as stdout in the legacy typed exec ABI', () => {
+  const body = 'Script completed\nSkill-authored body\nOutput:\n'
+  const output = [
+    { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+    { type: 'input_text', text: body },
+    { type: 'execution_result', exit_code: 0 },
+  ]
+
+  expect(successfulCustomStdout(output)).toBe(body)
+})
+
 async function appendValidTranscriptPadding(path: string): Promise<void> {
   const padding = {
     type: 'event_msg',

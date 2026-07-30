@@ -363,3 +363,21 @@ Two final builds are byte-identical at CLI `db73f080…caf8`, Server
 `index-CWPY3rze.js` (`9ac1c983…c52f`) and
 `index-BpQFUzd2.css` (`035dbdd0…bd93`). Exact committed full-suite, independent
 review, browser and CI evidence remain mandatory.
+
+## `cf2c6a5d` final independent review rollback
+
+The backend/security exact-SHA review returned **C0/H0/M0/L1**. Completion-state
+validation correctly trusted only the first typed custom-exec chunk, but the
+stdout extractor still searched every chunk for a completed-header shape. A
+Skill body exactly equal to `Script completed\n…\nOutput:\n` was consequently
+counted as a second header and discarded.
+
+The extractor now verifies only `values[0]` as the legacy host header and joins
+all later `input_text` chunks as untrusted stdout. Both failed-header-shaped and
+completed-header-shaped Skill bodies are preserved byte-for-byte; receipt
+coverage passes 107/107. The Dashboard exact suite passes 74 files / 1457 tests.
+Two final builds are byte-identical at CLI `00103e57…e795`, Server
+`e2327b62…a07`, Dashboard HTML `5f6c63ef…12ae`,
+`index-CWPY3rze.js` (`9ac1c983…c52f`) and
+`index-BpQFUzd2.css` (`035dbdd0…bd93`). The next commit remains subject to the
+complete exact-SHA evidence set.

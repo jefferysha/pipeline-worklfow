@@ -160,21 +160,21 @@ export function successfulCustomStdout(value: unknown): string | undefined {
     return envelopes.length === 1 ? envelopes[0]?.output : undefined
   }
 
-  const headers = values.filter((item) =>
-    isRecord(item)
-    && item.type === 'input_text'
-    && typeof item.text === 'string'
-    && /^Script completed\n[\s\S]*\nOutput:\n$/.test(item.text),
-  )
+  const header = values[0]
+  if (
+    !isRecord(header)
+    || header.type !== 'input_text'
+    || typeof header.text !== 'string'
+    || !/^Script completed\n[\s\S]*\nOutput:\n$/.test(header.text)
+  ) return undefined
   const completions = values.filter((item) =>
     isRecord(item) && item.type === 'execution_result' && item.exit_code === 0,
   )
-  if (headers.length !== 1 || completions.length !== 1) return undefined
-  return values.flatMap((item) =>
+  if (completions.length !== 1) return undefined
+  return values.slice(1).flatMap((item) =>
     isRecord(item)
     && item.type === 'input_text'
     && typeof item.text === 'string'
-    && item !== headers[0]
       ? [item.text]
       : [],
   ).join('')

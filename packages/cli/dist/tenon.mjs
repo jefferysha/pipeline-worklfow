@@ -35329,15 +35329,14 @@ function successfulCustomStdout(value) {
   if (envelopes.length > 0) {
     return envelopes.length === 1 ? envelopes[0]?.output : void 0;
   }
-  const headers = values.filter(
-    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" && /^Script completed\n[\s\S]*\nOutput:\n$/.test(item2.text)
-  );
+  const header = values[0];
+  if (!isRecord10(header) || header.type !== "input_text" || typeof header.text !== "string" || !/^Script completed\n[\s\S]*\nOutput:\n$/.test(header.text)) return void 0;
   const completions = values.filter(
     (item2) => isRecord10(item2) && item2.type === "execution_result" && item2.exit_code === 0
   );
-  if (headers.length !== 1 || completions.length !== 1) return void 0;
-  return values.flatMap(
-    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" && item2 !== headers[0] ? [item2.text] : []
+  if (completions.length !== 1) return void 0;
+  return values.slice(1).flatMap(
+    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" ? [item2.text] : []
   ).join("");
 }
 
