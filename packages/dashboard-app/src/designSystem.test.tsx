@@ -53,8 +53,7 @@ describe('Dashboard 电脑端设计系统契约', () => {
   })
 
   it('App 清理 toast tween，并让 error/status 使用不同 live-region 语义', () => {
-    const source = readSource('App.tsx')
-    expect(source).toMatch(/return \(\) => \{\s*tween\.kill\(\)\s*\}/)
-    expect(source).toMatch(/role=\{flash\.kind === 'error' \? 'alert' : 'status'\}/)
+    expect(readSource('shared/useFlash.ts')).toMatch(/return \(\) => tween\.kill\(\)/)
+    expect(readSource('App.tsx')).toMatch(/role=\{flash\.kind === 'error' \? 'alert' : 'status'\}/)
   })
 })

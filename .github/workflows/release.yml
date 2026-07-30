@@ -131,7 +131,10 @@ jobs:
             "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAYLOAD_ARTIFACT_ID/zip" \
             > "$work_dir/payload.zip"
 
-          mapfile -t archive_entries < <(unzip -Z1 "$work_dir/payload.zip")
+          archive_entries=()
+          while IFS= read -r archive_entry; do
+            archive_entries+=("$archive_entry")
+          done < <(unzip -Z1 "$work_dir/payload.zip")
           [ "${#archive_entries[@]}" -ge 2 ] || {
             echo "release payload archive is unexpectedly empty" >&2
             exit 1
@@ -157,12 +160,14 @@ jobs:
             }
             asset_name="${BASH_REMATCH[2]}"
             [ "$asset_name" != "SHA256SUMS" ]
-            for existing_name in "${assets[@]}"; do
-              [ "$existing_name" != "$asset_name" ] || {
-                echo "duplicate SHA256SUMS asset: $asset_name" >&2
-                exit 1
-              }
-            done
+            if [ "${#assets[@]}" -gt 0 ]; then
+              for existing_name in "${assets[@]}"; do
+                [ "$existing_name" != "$asset_name" ] || {
+                  echo "duplicate SHA256SUMS asset: $asset_name" >&2
+                  exit 1
+                }
+              done
+            fi
             assets+=("$asset_name")
           done < "$manifest"
           [ "${#assets[@]}" -gt 0 ]

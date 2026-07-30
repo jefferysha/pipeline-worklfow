@@ -219,7 +219,7 @@ describe('stable host-hook ABI', () => {
                 chunk_id: 'stable-hook-receipt',
                 exit_code: 0,
                 original_token_count: 0,
-                output: '',
+                output: await readFile(skillPath, 'utf8'),
                 wall_time_seconds: 0.1,
               }),
             },

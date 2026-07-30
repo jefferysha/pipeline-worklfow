@@ -1997,6 +1997,41 @@ describe('WorkbenchView v11 P4：右栏重组（治理轨 + 机器配置折叠�
     fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
     await waitFor(() => expect(within(side).getByTestId('wb-rail-machine')).not.toHaveAttribute('open'))
   })
+
+  it('机器配置保存请求进行中时不得折叠或关闭治理面板', async () => {
+    const baseFetch = global.fetch
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    global.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === '/api/automation' && options?.method === 'POST') {
+        await gate
+        const { root: _root, ...settings } = JSON.parse(String(options.body)) as Record<string, unknown>
+        return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+      }
+      return baseFetch(url, options)
+    }) as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
+    const summary = within(side).getByTestId('wb-rail-machine-summary')
+    fireEvent.click(summary)
+    fireEvent.click(await within(side).findByTestId('afk-enabled'))
+    fireEvent.click(within(side).getByTestId('afk-save'))
+    await waitFor(() => expect(within(side).getByTestId('afk-save')).toBeDisabled())
+
+    expect(screen.getByTestId('wb-governance-close-action')).toBeDisabled()
+    fireEvent.click(summary)
+    expect(within(side).getByTestId('wb-rail-machine')).toHaveAttribute('open')
+    fireEvent.click(screen.getByTestId('wb-governance-close-icon'))
+    expect(screen.getByTestId('wb-advanced-orchestration')).toBeInTheDocument()
+
+    release()
+    await waitFor(() => expect(within(side).getByTestId('afk-save-ok')).toBeInTheDocument())
+    expect(screen.getByTestId('wb-governance-close-action')).toBeEnabled()
+  })
 })
 
 /**

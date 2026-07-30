@@ -98,6 +98,10 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     if (!busy) discardGuard.request(editorDirty, action)
   }
 
+  function requestEditorSwitch(action: () => void): void {
+    if (!busy) discardGuard.request(editorDirty, action)
+  }
+
   function openCreate(): void {
     const template = state.tracks.find((track) => track.id === 'frontend') ?? state.tracks[0]
     if (!template) return
@@ -178,14 +182,19 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
   }
 
   async function readMutationError(response: Response): Promise<string> {
-    let body: { error?: string; references?: string[]; blockers?: string[] } = {}
-    try { body = await response.json() as typeof body } catch { /* no JSON */ }
+    let body: unknown = null
+    try { body = await response.json() } catch { /* no JSON */ }
+    const value = (key: string): unknown =>
+      typeof body === 'object' && body !== null && !Array.isArray(body) ? Reflect.get(body, key) : undefined
+    const stringList = (input: unknown): string[] =>
+      Array.isArray(input) ? input.filter((item): item is string => typeof item === 'string') : []
+    const error = value('error')
     const current = localeIdentity.current
     const details = current.lang === 'zh'
-      ? [...(Array.isArray(body.references) ? body.references : []), ...(Array.isArray(body.blockers) ? body.blockers : [])]
+      ? [...stringList(value('references')), ...stringList(value('blockers'))]
       : []
-    const summary = current.lang === 'zh' && body.error
-      ? body.error
+    const summary = current.lang === 'zh' && typeof error === 'string'
+      ? error
       : current.t('common.request_http_error', { status: response.status })
     return [summary, ...details].join(' · ')
   }
@@ -315,7 +324,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
         >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-text-3">{t('workbench.track_settings_description')}</p>
-            <button type="button" className={ADD_CLS} data-testid="wb-track-create" onClick={openCreate}>{t('workbench.track_settings_create')}</button>
+            <button type="button" className={ADD_CLS} data-testid="wb-track-create" disabled={busy} onClick={() => requestEditorSwitch(openCreate)}>{t('workbench.track_settings_create')}</button>
           </div>
           {editor && (
             <form
@@ -358,7 +367,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
               </div>
             </form>
           )}
-          <TrackSettingsList state={state} onEdit={openEdit} />
+          <TrackSettingsList state={state} onEdit={(track) => requestEditorSwitch(() => openEdit(track))} />
         </Dialog>
       )}
       <UnsavedDraftDialog

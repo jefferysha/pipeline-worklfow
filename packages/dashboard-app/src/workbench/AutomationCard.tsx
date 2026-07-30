@@ -59,9 +59,10 @@ export interface AutomationCardProps {
   refreshToken?: number
   /** 宿主离开守卫只消费真实草稿差异；加载态与仅打开面板不算 dirty。 */
   onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
-export function AutomationCard({ root, refreshToken = 0, onDirtyChange }: AutomationCardProps): JSX.Element {
+export function AutomationCard({ root, refreshToken = 0, onDirtyChange, onBusyChange }: AutomationCardProps): JSX.Element {
   const { t, lang } = useT()
   // settings = server 已保存真值（GET/保存后回读）；draft = 编辑草稿。
   const [settings, setSettings] = useState<WbAutomationSettings | null>(null)
@@ -138,6 +139,12 @@ export function AutomationCard({ root, refreshToken = 0, onDirtyChange }: Automa
   useEffect(() => () => {
     onDirtyChange?.(false)
   }, [onDirtyChange])
+  useEffect(() => {
+    onBusyChange?.(saving)
+  }, [saving, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
 
   function edit(part: Partial<WbAutomationSettings>): void {
     setDraft((prev) => (prev ? { ...prev, ...part } : prev))

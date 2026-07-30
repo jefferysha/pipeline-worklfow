@@ -31,6 +31,7 @@ export function LoopAdvancedFields({
   draft,
   tokensK,
   levelBusy,
+  actionDisabled,
   levelError,
   onEdit,
   onLevel,
@@ -39,6 +40,7 @@ export function LoopAdvancedFields({
   draft: LoopDraft
   tokensK: number
   levelBusy: boolean
+  actionDisabled: boolean
   levelError: string | null
   onEdit: (patch: Partial<LoopDraft>) => void
   onLevel: (level: (typeof LEVELS)[number]) => void
@@ -81,7 +83,7 @@ export function LoopAdvancedFields({
         <div className="mt-0.5 mb-1 grid grid-cols-3 gap-2.5 mobile:grid-cols-1" role="radiogroup" aria-label={t('workbench.lp_level')}>
           {LEVELS.map((level) => {
             const selected = row.autonomy_level === level
-            return <button key={level} type="button" className={cn('flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2')} role="radio" aria-checked={selected} data-testid={`lp-lv-${level}`} disabled={levelBusy} onClick={() => onLevel(level)}>
+            return <button key={level} type="button" className={cn('flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2')} role="radio" aria-checked={selected} data-testid={`lp-lv-${level}`} disabled={levelBusy || actionDisabled} title={actionDisabled ? t('workbench.lp_action_dirty') : undefined} onClick={() => onLevel(level)}>
               <span className={cn('text-[13px] font-[750]', selected && 'text-accent-d')}>{t(`workbench.lp_lv${level.slice(1)}_k`)}</span>
               <span className="text-[11.5px] leading-[1.45] text-text-3">{t(`workbench.lp_lv${level.slice(1)}_d`)}</span>
             </button>

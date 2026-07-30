@@ -481,7 +481,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
             ['starter', t('afk.tool_schedule'), Plus, snapshot?.capabilities.operations !== true, t('afk.tool_schedule_hint')],
             ['run', t('afk.tool_validate'), Play, snapshot?.capabilities.operations !== true, t('afk.tool_validate_hint')],
           ] as const).map(([tool, label, Icon, disabled, title]) => (
-            <button key={tool} type="button" title={title} data-testid={`afk-tool-${tool}`} data-active={activeTool === tool} className="inline-flex min-h-10 min-w-[10.5rem] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-text-2 transition-[background-color,transform] hover:bg-fill active:scale-[.97] data-[active=true]:bg-accent-t data-[active=true]:text-accent-d disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none" disabled={disabled} onClick={() => setActiveTool(tool)}><Icon className="h-4 w-4" aria-hidden="true" />{label}</button>
+            <button key={tool} type="button" title={title} aria-pressed={activeTool === tool} data-testid={`afk-tool-${tool}`} data-active={activeTool === tool} className="inline-flex min-h-10 min-w-[10.5rem] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-text-2 transition-[background-color,transform] hover:bg-fill active:scale-[.97] data-[active=true]:bg-accent-t data-[active=true]:text-accent-d disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none" disabled={disabled} onClick={() => setActiveTool(tool)}><Icon className="h-4 w-4" aria-hidden="true" />{label}</button>
           ))}
         </nav>
       )}

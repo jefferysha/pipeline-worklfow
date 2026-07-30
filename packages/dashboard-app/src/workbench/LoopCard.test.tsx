@@ -523,6 +523,23 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     expect(lastPostBody('/api/loops/level')).toBeNull()
   })
 
+  it('同一 loop 的后台快照刷新不得覆盖未保存草稿', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '本地尚未保存的目标' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+
+    rows = rows.map((row) => ({ ...row, goal: '后台刷新后的目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+    expect(screen.getByTestId('lp-goal')).toHaveValue('本地尚未保存的目标')
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+  })
+
   it.each(decisionFactChanges)('%s 变化会撤销旧确认、恢复入口焦点且不能提交', async (_label, changeFacts) => {
     rows = [makeRow({ graduation })]
     renderReloadCard()
@@ -897,6 +914,19 @@ describe('LoopCard 草稿审阅（loop-init L5：徽章 + 批准/驳回动作行
     expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { goal: '调整后的目标文案' } })
     // 只改字段不含 status → 草稿标记不被清，徽章仍在（编辑不等于批准）
     expect(screen.getByTestId('lp-draft-badge')).toBeInTheDocument()
+  })
+
+  it('未保存字段草稿存在时，审阅与升档动作保持禁用，避免用旧 server 真值覆盖草稿', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '先保存再审阅' } })
+    expect(screen.getByTestId('lp-draft-approve')).toBeDisabled()
+    expect(screen.getByTestId('lp-draft-reject')).toBeDisabled()
+    expect(screen.getByTestId('lp-draft-approve')).toHaveAttribute('title', '请先保存或放弃当前 Loop 草稿')
+    openAdv()
+    expect(screen.getByTestId('lp-lv-L2')).toBeDisabled()
+    expect(lastPostBody('/api/loops/update')).toBeNull()
+    expect(lastPostBody('/api/loops/level')).toBeNull()
   })
 
   it('⑦busy 期间双钮 disabled（防双发，对齐既有 levelBusy 先例）', async () => {

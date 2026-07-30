@@ -31,9 +31,10 @@ export interface SecretsCardProps {
   onChanged?: () => void
   /** write-only 输入里只有真实非空用户草稿才算未保存。 */
   onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
-export function SecretsCard({ onChanged, onDirtyChange }: SecretsCardProps): JSX.Element {
+export function SecretsCard({ onChanged, onDirtyChange, onBusyChange }: SecretsCardProps): JSX.Element {
   const { t, lang } = useT()
   const [keys, setKeys] = useState<WbSecretsKeys | null>(null)
   const [loadError, setLoadError] = useState<unknown | null>(null)
@@ -48,6 +49,12 @@ export function SecretsCard({ onChanged, onDirtyChange }: SecretsCardProps): JSX
   useEffect(() => () => {
     onDirtyChange?.(false)
   }, [onDirtyChange])
+  useEffect(() => {
+    onBusyChange?.(busy)
+  }, [busy, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
 
   // Bug7：reload seq 守卫（参照 SkillChain/SkillHealthPanel）——挂载 + 每次保存/删除后都重拉，
   // 无守卫时慢响应会盖快响应（out-of-order），卸载后回来则 setState-after-unmount。每次 reload 递增

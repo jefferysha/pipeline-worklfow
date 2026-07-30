@@ -21,8 +21,9 @@ export interface LoopCardProps {
   root: string
   loops: LoopsState
   onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
-export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Element {
+export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardProps): JSX.Element {
   const { t, lang } = useT()
   const row = loops.selected
   const [draft, setDraft] = useState<LoopDraft | null>(null)
@@ -38,6 +39,9 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
   const saveGeneration = useRef(0)
   const levelGeneration = useRef(0)
   const reviewGeneration = useRef(0)
+  const draftIdentity = useRef('')
+  const draftBase = useRef<LoopDraft | null>(null)
+  const acceptNextRow = useRef(false)
   const identity = useRef({ root, rowId: row?.id ?? null })
   identity.current = { root, rowId: row?.id ?? null }
   const localeIdentity = useRef({ t, lang })
@@ -60,11 +64,21 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
   const [promptCopied, setPromptCopied] = useState(false)
   const [showMatches, setShowMatches] = useState(false)
   useEffect(() => {
-    setDraft(row ? draftOf(row) : null)
+    const nextIdentity = JSON.stringify([root, row?.id ?? null])
+    const nextBase = row ? draftOf(row) : null
+    setDraft((current) => {
+      const currentDirty = current !== null && draftBase.current !== null
+        && Object.keys(computePatch(current, draftBase.current)).length > 0
+      const preserve = draftIdentity.current === nextIdentity && currentDirty && !acceptNextRow.current
+      draftIdentity.current = nextIdentity
+      draftBase.current = nextBase
+      acceptNextRow.current = false
+      return preserve ? current : nextBase
+    })
     setSaveErrors(null)
     setLevelError(null)
     setReviewError(null)
-  }, [row])
+  }, [root, row])
   const base = row ? draftOf(row) : null
   const patch = draft && base ? computePatch(draft, base) : {}
   const dirty = Object.keys(patch).length > 0
@@ -74,6 +88,13 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
   useEffect(() => () => {
     onDirtyChange?.(false)
   }, [onDirtyChange])
+  const mutationBusy = saving || levelBusy || reviewBusy
+  useEffect(() => {
+    onBusyChange?.(mutationBusy)
+  }, [mutationBusy, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
   const promotionFacts = promotionDecisionKey(root, row)
   const activeConfirmLevel = confirmDecisionKey === promotionFacts ? confirmLevel : null
   useEffect(() => {
@@ -100,6 +121,7 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
       await postLoopUpdate({ root: targetRoot, id: targetId, patch: targetPatch })
       if (generation !== saveGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       setSaveOk(true)
+      acceptNextRow.current = true
       loops.reload() // 新行到达后草稿以 server 真值重置（见上方 effect）
     } catch (err) {
       if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
@@ -113,7 +135,7 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
     }
   }
   function requestLevel(target: (typeof LEVELS)[number]): void {
-    if (!row || levelBusy || target === row.autonomy_level) return
+    if (!row || dirty || levelBusy || target === row.autonomy_level) return
     if (LEVELS.indexOf(target) > LEVELS.indexOf(row.autonomy_level)) {
       setConfirmLevel(target)
       setConfirmDecisionKey(promotionFacts)
@@ -122,7 +144,10 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
     }
   }
   async function applyLevel(target: string): Promise<void> {
-    if (!row) return
+    if (!row || dirty) {
+      closePromotion()
+      return
+    }
     const targetRoot = root
     const targetId = row.id
     const generation = ++levelGeneration.current
@@ -146,7 +171,7 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
     }
   }
   async function reviewAction(status: 'active' | 'paused'): Promise<void> {
-    if (!row || reviewBusy) return
+    if (!row || dirty || reviewBusy) return
     const targetRoot = root
     const targetId = row.id
     const generation = ++reviewGeneration.current
@@ -281,6 +306,7 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
         draft={draft}
         tokensK={tokensK}
         levelBusy={levelBusy}
+        actionDisabled={dirty}
         levelError={levelError}
         onEdit={edit}
         onLevel={requestLevel}
@@ -289,6 +315,7 @@ export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Ele
         row={row}
         pendingReview={isPendingReview}
         reviewBusy={reviewBusy}
+        actionDisabled={dirty}
         reviewError={reviewError}
         confirmLevel={activeConfirmLevel}
         onReview={(status) => void reviewAction(status)}

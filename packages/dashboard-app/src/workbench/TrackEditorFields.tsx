@@ -58,12 +58,20 @@ export function TrackEditorFields(props: TrackEditorFieldsProps): JSX.Element {
           <summary className="cursor-pointer text-xs font-bold text-text-2">{t('workbench.track_policy_details')}</summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_review_seed')}
-              <select name="track-review-seed" className={props.fieldClass} value={props.draft.policyProfile.reviewSeed} onChange={(event) => updatePolicy({ ...props.draft.policyProfile, reviewSeed: event.target.value as 'pending' | 'skipped' })}>
+              <select name="track-review-seed" className={props.fieldClass} value={props.draft.policyProfile.reviewSeed} onChange={(event) => {
+                const reviewSeed = event.target.value
+                if (reviewSeed === 'pending' || reviewSeed === 'skipped') updatePolicy({ ...props.draft.policyProfile, reviewSeed })
+              }}>
                 <option value="pending">{t('workbench.track_review_pending')}</option><option value="skipped">{t('workbench.track_review_skipped')}</option>
               </select>
             </label>
             <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_coverage')}
-              <select name="track-coverage-profile" className={props.fieldClass} value={props.draft.policyProfile.coverageProfile} onChange={(event) => updatePolicy({ ...props.draft.policyProfile, coverageProfile: event.target.value as 'none' | 'pm' | 'frontend' | 'backend' })}>
+              <select name="track-coverage-profile" className={props.fieldClass} value={props.draft.policyProfile.coverageProfile} onChange={(event) => {
+                const coverageProfile = event.target.value
+                if (coverageProfile === 'none' || coverageProfile === 'pm' || coverageProfile === 'frontend' || coverageProfile === 'backend') {
+                  updatePolicy({ ...props.draft.policyProfile, coverageProfile })
+                }
+              }}>
                 <option value="none">{t('workbench.track_coverage_none')}</option><option value="pm">{t('workbench.track_coverage_pm')}</option><option value="frontend">{t('workbench.track_coverage_frontend')}</option><option value="backend">{t('workbench.track_coverage_backend')}</option>
               </select>
             </label>

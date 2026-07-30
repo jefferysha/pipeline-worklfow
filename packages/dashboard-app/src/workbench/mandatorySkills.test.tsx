@@ -164,7 +164,8 @@ beforeEach(() => {
   invalidateMandatoryConfig()
   configResponse = () => new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
   registryResponse = () => new Response(JSON.stringify(REGISTRY), { status: 200 })
-  postResponse = (body) => new Response(JSON.stringify({ ok: true, ...body }), { status: 200 })
+  postResponse = ({ phase, track, skills }) =>
+    new Response(JSON.stringify({ ok: true, phase, track, skills }), { status: 200 })
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === '/api/config' || url.startsWith('/api/config?')) return configResponse()
     if (url === '/api/skills/registry') return registryResponse()
@@ -446,7 +447,12 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
   })
 
   it('成功体带 skills 时以响应体为准（server 规范化后的集合才是真相，本地值只是回落）', async () => {
-    postResponse = () => new Response(JSON.stringify({ ok: true, skills: ['server-normalized-skill'] }), { status: 200 })
+    postResponse = () => new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'frontend',
+      skills: ['server-normalized-skill'],
+    }), { status: 200 })
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-frontend'))
     await waitAddReady('build')
@@ -455,6 +461,24 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
     await waitFor(() => expect(screen.getByTestId('wb-mand-chip-build-server-normalized-skill')).toBeInTheDocument())
     // 本地算出来的 ['superpowers:test-driven-development'] 被响应体整体取代
     expect(screen.queryByTestId('wb-mand-chip-build-superpowers:test-driven-development')).toBeNull()
+  })
+
+  it.each([
+    ['错误 phase', { ok: true, phase: 'spec', track: 'frontend', skills: ['server-normalized-skill'] }],
+    ['错误 track', { ok: true, phase: 'build', track: 'backend', skills: ['server-normalized-skill'] }],
+    ['额外字段', { ok: true, phase: 'build', track: 'frontend', skills: ['server-normalized-skill'], extra: true }],
+  ])('HTTP 200 成功体%s时拒绝写入请求 cell/cache', async (_label, responseBody) => {
+    postResponse = () => new Response(JSON.stringify(responseBody), { status: 200 })
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-frontend'))
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-web-design-guidelines'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
+    expect(screen.getByTestId('wb-mand-chip-build-superpowers:test-driven-development')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-mand-chip-build-web-design-guidelines')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-mand-chip-build-server-normalized-skill')).toBeNull()
   })
 
   it('POST 失败（500 + error 原文）→ 集合保持原值不变（不是回滚：它压根没被改过）+ 错误原文可见', async () => {
@@ -485,11 +509,16 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
   })
 
   it('HTTP 200 ok:true 但回读 skills 含逗号 → 拒绝响应，不推进集合/cache', async () => {
-    postResponse = () => new Response(JSON.stringify({ ok: true, skills: ['foo,bar'] }), { status: 200 })
+    postResponse = () => new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['foo,bar'],
+    }), { status: 200 })
     await renderMatrix(['build'])
     await waitAddReady('build')
     fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
-    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('server 返回的技能集合畸形'))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
     expect(screen.getByTestId('wb-mand-chip-build-frontend-design')).toBeInTheDocument()
   })
 
@@ -542,7 +571,12 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
       </I18nProvider>,
     )
     await screen.findByTestId('wb-mand-chip-build-b-only')
-    releaseA(new Response(JSON.stringify({ ok: true, skills: ['a-after-save'] }), { status: 200 }))
+    releaseA(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['a-after-save'],
+    }), { status: 200 }))
     await act(async () => { await Promise.resolve() })
     expect(screen.getByTestId('wb-mand-chip-build-b-only')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-mand-chip-build-a-after-save')).toBeNull()
@@ -598,7 +632,12 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     expect(screen.getByTestId('wb-mand-add-spec')).toBeEnabled()
     expect(screen.getByTestId('wb-mand-rm-spec-superpowers:brainstorming')).toBeEnabled()
 
-    release(new Response(JSON.stringify({ ok: true, skills: ['frontend-design'] }), { status: 200 }))
+    release(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['frontend-design'],
+    }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
     expect(screen.queryByTestId('wb-mand-chip-build-prototype|huashu-design')).toBeNull()
   })
@@ -617,7 +656,12 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
     expect(screen.getByTestId('wb-mand-add-spec')).toBeDisabled()
 
-    releases.get('spec')?.(new Response(JSON.stringify({ ok: true, skills: [] }), { status: 200 }))
+    releases.get('spec')?.(new Response(JSON.stringify({
+      ok: true,
+      phase: 'spec',
+      track: 'pm',
+      skills: [],
+    }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-spec')).toBeEnabled())
     expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
 
@@ -640,7 +684,12 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     act(() => probe.setSkills('build', []))
     expect(postCalls()).toHaveLength(1)
 
-    release(new Response(JSON.stringify({ ok: true, skills: ['frontend-design'] }), { status: 200 }))
+    release(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['frontend-design'],
+    }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
     // 在途结束后同 cell 可以再写
     act(() => probe.setSkills('build', ['frontend-design', 'improve-codebase-architecture']))
@@ -944,6 +993,24 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
     await waitFor(() => expect(screen.queryByTestId('wb-track-settings-panel')).toBeNull())
+  })
+
+  it('未保存 Track 草稿阻止直接新建或编辑另一轨道，确认丢弃后才切换', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'QA draft' } })
+
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByLabelText('显示名称')).toHaveValue('QA draft')
+
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
   })
 
   it('所有可编辑 input/select 都有稳定 name，非认证配置文本禁用浏览器自动填充', async () => {
@@ -1255,15 +1322,12 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved draft')
   })
 
-  it('同 root 的 Track A 保存晚到：不得关闭或污染 Track B 编辑器，也不得清除 B 的 busy', async () => {
+  it('Track 保存请求在途时禁止切换编辑器，响应只回写原 Track', async () => {
     const baseFetch = global.fetch
     let releaseA!: (response: Response) => void
-    let releaseB!: (response: Response) => void
     const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
-    const pendingB = new Promise<Response>((resolve) => { releaseB = resolve })
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return pendingA
-      if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') return pendingB
       return baseFetch(url, opts)
     }) as unknown as typeof fetch
 
@@ -1273,32 +1337,21 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-editor-save'))
 
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
-    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
-    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
     expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
 
     await act(async () => {
-      releaseA(new Response(JSON.stringify({ ok: false, error: 'A stale error' }), { status: 409 }))
+      releaseA(new Response(JSON.stringify({ ok: false, error: 'A save error' }), { status: 409 }))
       await pendingA
     })
     expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByTestId('wb-track-editor-error')).toHaveTextContent('A save error')
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
-    expect(screen.queryByText('A stale error')).toBeNull()
-    expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
-
-    await act(async () => {
-      releaseB(new Response(JSON.stringify({
-        ok: true,
-        revision: 'next',
-        source: 'project-file',
-        tracks: CONFIG_BODY.tracks,
-      }), { status: 200 }))
-      await pendingB
-    })
-    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
   })
 
-  it('同 root 的 Track A 删除晚到：不得把错误写入已切换的 Track B 编辑器', async () => {
+  it('Track 删除请求在途时禁止切换编辑器，错误保留在原 Track', async () => {
     const baseFetch = global.fetch
     let releaseDelete!: (response: Response) => void
     const pendingDelete = new Promise<Response>((resolve) => { releaseDelete = resolve })
@@ -1314,18 +1367,20 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-delete-confirm'))
 
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
-    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByTestId('wb-track-delete-confirm')).toBeDisabled()
 
     await act(async () => {
-      releaseDelete(new Response(JSON.stringify({ ok: false, error: 'stale delete error' }), { status: 409 }))
+      releaseDelete(new Response(JSON.stringify({ ok: false, error: 'delete error' }), { status: 409 }))
       await pendingDelete
     })
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByTestId('wb-track-editor-error')).toHaveTextContent('delete error')
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
-    expect(screen.queryByText('stale delete error')).toBeNull()
-    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
   })
 
-  it('Track A 晚到成功仍重拉 authority 并推进 revision，不关闭或污染已切到的 Track B', async () => {
+  it('Track A 保存成功后重拉 authority 并推进 revision，随后 Track B 使用新 revision', async () => {
     let configReads = 0
     let currentRevision = CONFIG_BODY.revision
     configResponse = () => {
@@ -1347,6 +1402,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
     fireEvent.click(screen.getByTestId('wb-track-editor-save'))
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
 
     currentRevision = 'revision-after-a'
     await act(async () => {
@@ -1359,6 +1415,8 @@ describe('TrackSettings v3 真实 CRUD', () => {
       await pendingA
     })
     await waitFor(() => expect(configReads).toBeGreaterThan(1))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
 
     fireEvent.click(screen.getByTestId('wb-track-editor-save'))

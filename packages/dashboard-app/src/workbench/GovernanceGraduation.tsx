@@ -29,7 +29,7 @@ export function GovernanceGraduation({
         <span className="font-mono text-text-2">{graduation.current} → {graduation.recommended}</span>
       </div>
       <p className="mt-1 font-mono text-[11px] text-text-2">
-        runs {graduation.runs} · drift {graduation.driftCount} · fail_streak {graduation.failStreak} · breaker {graduation.breaker}
+        {t('workbench.gov_metric_runs')} {graduation.runs} · {t('workbench.gov_metric_drift')} {graduation.driftCount} · {t('workbench.gov_metric_fail_streak')} {graduation.failStreak} · {t('workbench.gov_metric_breaker')} {graduation.breaker}
       </p>
       {lang === 'zh' && graduation.blockers.length > 0 && (
         <ul className="mt-2 space-y-1 pl-4 text-text-2">

@@ -7,7 +7,7 @@ on:
         description: Exact 40-character main commit SHA to release
         required: true
       tag:
-        description: New v-prefixed semver tag to create after every gate passes
+        description: V-prefixed semver tag to create, or recover when already bound to the same SHA
         required: true
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref }}
@@ -91,7 +91,7 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload the digest-bound release payload
         id: payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-candidate-payload-${{ steps.candidate.outputs.sha }}
           path: .release-candidate/payload
@@ -232,7 +232,7 @@ jobs:
           SOURCE_WORKFLOW_SHA: ${{ github.workflow_sha }}
           PAYLOAD_ARTIFACT_ID: ${{ steps.payload.outputs.artifact-id }}
           PAYLOAD_ARTIFACT_NAME: release-candidate-payload-${{ steps.candidate.outputs.sha }}
-          PAYLOAD_ARTIFACT_DIGEST: ${{ steps.payload.outputs.artifact-digest }}
+          PAYLOAD_ARTIFACT_DIGEST_HEX: ${{ steps.payload.outputs.artifact-digest }}
         run: |
           set -euo pipefail
           mkdir -p .release-candidate
@@ -241,7 +241,12 @@ jobs:
           )"
           payload_artifact_id="$PAYLOAD_ARTIFACT_ID"
           payload_artifact_name="$PAYLOAD_ARTIFACT_NAME"
-          payload_artifact_digest="$PAYLOAD_ARTIFACT_DIGEST"
+          [[ "$PAYLOAD_ARTIFACT_DIGEST_HEX" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "upload-artifact returned an invalid bare SHA-256 digest" >&2
+            exit 1
+          }
+          # upload-artifact emits bare hex; the REST artifact API uses the digest-algorithm prefix.
+          payload_artifact_digest="sha256:$PAYLOAD_ARTIFACT_DIGEST_HEX"
           jq -n \
             --arg sha "$CANDIDATE_SHA" \
             --arg tag "$RELEASE_TAG" \
@@ -267,7 +272,7 @@ jobs:
             }' > .release-candidate/approved.json
 
       - name: Publish approval evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-candidate-approval
           path: .release-candidate/approved.json

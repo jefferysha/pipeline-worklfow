@@ -3033,7 +3033,7 @@ var require_commander = __commonJS({
 import { execFile as execFile5, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash33 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync11 } from "node:fs";
-import { readFile as readFile39, rm as rm13, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
+import { readFile as readFile40, rm as rm13, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
 import { dirname as dirname25, join as join87 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
@@ -4578,9 +4578,9 @@ async function hydratePreVerifyReview(changeDir2, revision) {
   return attach(revision, parseRecord(await readFile4(target, "utf8"), target));
 }
 function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
-  const relative17 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
-  const raw = readText(relative17);
-  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join4(sourceRoot, relative17)));
+  const relative18 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
+  const raw = readText(relative18);
+  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join4(sourceRoot, relative18)));
 }
 
 // packages/kernel/dist/state/run-revision-continuity.js
@@ -22325,7 +22325,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep17) {
+function splitTopLevel(s, sep18) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -22337,7 +22337,7 @@ function splitTopLevel(s, sep17) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep17) {
+    } else if (ch === sep18) {
       out.push(cur);
       cur = "";
     } else {
@@ -23028,7 +23028,7 @@ function codexOnlyProcessEnv(...layers) {
   }
   return result;
 }
-var nodeCodexTriageExec = (file, args, options) => new Promise((resolve37) => {
+var nodeCodexTriageExec = (file, args, options) => new Promise((resolve38) => {
   const detached = process.platform !== "win32";
   const child = spawn(file, args, {
     cwd: options.cwd,
@@ -23048,7 +23048,7 @@ var nodeCodexTriageExec = (file, args, options) => new Promise((resolve37) => {
     options.signal.removeEventListener("abort", onAbort);
     if (forceKillTimer !== void 0)
       clearTimeout(forceKillTimer);
-    resolve37(result);
+    resolve38(result);
   };
   const killProcessTree = (signal) => {
     if (detached && child.pid !== void 0) {
@@ -23150,7 +23150,7 @@ function abortReason(signal) {
 function awaitExecWithAbort(execution, signal) {
   if (signal.aborted)
     return Promise.reject(abortReason(signal));
-  return new Promise((resolve37, reject3) => {
+  return new Promise((resolve38, reject3) => {
     let settled = false;
     const finish = (complete) => {
       if (settled)
@@ -23161,7 +23161,7 @@ function awaitExecWithAbort(execution, signal) {
     };
     const onAbort = () => finish(() => reject3(abortReason(signal)));
     signal.addEventListener("abort", onAbort, { once: true });
-    execution.then((result) => finish(() => resolve37(result)), (error) => finish(() => reject3(error)));
+    execution.then((result) => finish(() => resolve38(result)), (error) => finish(() => reject3(error)));
   });
 }
 function createCodexTriageProvider(options = {}) {
@@ -23286,7 +23286,7 @@ import { createHash as createHash18 } from "node:crypto";
 import { execFile, spawn as spawn2 } from "node:child_process";
 import { createInterface } from "node:readline";
 var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve37) => {
+var spawnStreaming = (file, args, opts) => new Promise((resolve38) => {
   const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
   const proc = spawn2(file, args, {
     cwd: opts.cwd,
@@ -23319,19 +23319,19 @@ var spawnStreaming = (file, args, opts) => new Promise((resolve37) => {
   }
   proc.on("error", (err) => {
     stderrTail.push(String(err.message ?? err));
-    resolve37({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+    resolve38({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
   });
   proc.on("close", (code) => {
-    resolve37({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+    resolve38({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
   });
 });
 var nodeExec = (file, args, opts) => {
   if (opts?.onLine || opts?.input !== void 0)
     return spawnStreaming(file, args, opts);
-  return new Promise((resolve37) => {
+  return new Promise((resolve38) => {
     execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
       const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-      resolve37({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+      resolve38({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
     });
   });
 };
@@ -25096,7 +25096,7 @@ var createSemaphore = (maxParallel) => {
       running++;
       return Promise.resolve();
     }
-    return new Promise((resolve37) => queue.push(resolve37));
+    return new Promise((resolve38) => queue.push(resolve38));
   };
   const release2 = () => {
     if (running <= 0)
@@ -27428,7 +27428,7 @@ async function withDigestPublishLock(casRoot, digest2, publish) {
       if (Date.now() >= deadline) {
         throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest2}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
       }
-      await new Promise((resolve37) => setTimeout(resolve37, PUBLISH_LOCK_RETRY_MS));
+      await new Promise((resolve38) => setTimeout(resolve38, PUBLISH_LOCK_RETRY_MS));
     }
   }
   try {
@@ -29437,12 +29437,12 @@ import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import { resolve as resolve14 } from "node:path";
 var resolveGitMounts = async (gitPath, deps) => {
   const stat13 = deps?.stat ?? ((p) => fsStat(p));
-  const readFile40 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
+  const readFile41 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
   const s = await stat13(gitPath);
   if (s.isDirectory()) {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
   }
-  const content = (await readFile40(gitPath)).trim();
+  const content = (await readFile41(gitPath)).trim();
   const match = content.match(/^gitdir:\s*(.+)$/);
   if (!match) {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
@@ -29465,7 +29465,7 @@ var AgentIdleTimeoutError = class extends Error {
 };
 var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
 var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve37, reject3) => {
+var invokeWithRace = (runExec, opts) => new Promise((resolve38, reject3) => {
   const { idleMs, graceMs, completionSignals, signal } = opts;
   let settled = false;
   let accumulated = "";
@@ -29487,7 +29487,7 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve37, reject3) => {
       return;
     settled = true;
     cleanup2();
-    resolve37(v);
+    resolve38(v);
   };
   const settleReject = (e) => {
     if (settled)
@@ -31396,13 +31396,13 @@ function serve(opts) {
       }
     }
   });
-  return new Promise((resolve37, reject3) => {
+  return new Promise((resolve38, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "reverse", port: boundPort, client, target: opts.target });
-      resolve37({
+      resolve38({
         port: boundPort,
         host,
         target: opts.target,
@@ -32468,13 +32468,13 @@ function serveForward(opts = {}) {
     upstream.on("close", cleanup2);
     clientSocket.on("close", cleanup2);
   });
-  return new Promise((resolve37, reject3) => {
+  return new Promise((resolve38, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "forward", port: boundPort, client, tls: !!ca });
-      resolve37({
+      resolve38({
         port: boundPort,
         host,
         client,
@@ -33333,11 +33333,11 @@ async function launchTap(opts) {
 import { execFile as execFile2 } from "node:child_process";
 import { accessSync, constants as fsConstants, statSync as statSync4 } from "node:fs";
 import { join as join46 } from "node:path";
-var nodeExecDocker = (args) => new Promise((resolve37) => {
+var nodeExecDocker = (args) => new Promise((resolve38) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve37({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve38({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -33345,8 +33345,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve37) => {
-      timer = setTimeout(() => resolve37(null), timeoutMs);
+    const timeout = new Promise((resolve38) => {
+      timer = setTimeout(() => resolve38(null), timeoutMs);
     });
     return await Promise.race([exec(args).catch(() => null), timeout]);
   } finally {
@@ -33982,12 +33982,12 @@ async function probeCodexAuth(exec = REAL_CODEX_AUTH_EXEC) {
   }
 }
 function createCodexAuthExec(options = {}) {
-  return () => new Promise((resolve37) => {
+  return () => new Promise((resolve38) => {
     const platform = options.platform ?? process.platform;
     const env = options.env ?? process.env;
     const plan = options.plan ?? codexStatusSpawnPlan(platform, env);
     if ("unavailableReason" in plan) {
-      resolve37({ kind: "unavailable", reason: plan.unavailableReason });
+      resolve38({ kind: "unavailable", reason: plan.unavailableReason });
       return;
     }
     const spawnProcess = options.spawnProcess ?? spawn3;
@@ -34020,7 +34020,7 @@ function createCodexAuthExec(options = {}) {
         terminationKiller = void 0;
         directKill(killer);
       }
-      resolve37(result);
+      resolve38(result);
     };
     const terminateCurrentProcessTree = () => {
       const target = child;
@@ -34848,16 +34848,16 @@ async function cmdArtifactRegister(deps, name2, field2, path9, producer) {
 
 // packages/cli/src/commands/document.ts
 import { lstat as lstat24 } from "node:fs/promises";
-import { relative as relative11, resolve as resolve22 } from "node:path";
+import { relative as relative12, resolve as resolve23 } from "node:path";
 
 // packages/cli/src/codexSkillReceipt.ts
-import { appendFile as appendFile2, lstat as lstat22, mkdir as mkdir19, readdir as readdir11, readFile as readFile25 } from "node:fs/promises";
+import { appendFile as appendFile2, lstat as lstat22, mkdir as mkdir19, readdir as readdir11, readFile as readFile26 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
-import { basename as basename5, isAbsolute as isAbsolute13, join as join55, relative as relative9, resolve as resolve19, sep as sep11 } from "node:path";
+import { basename as basename5, isAbsolute as isAbsolute13, join as join55, relative as relative10, resolve as resolve20, sep as sep12 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { homedir as homedir8 } from "node:os";
-import { isAbsolute as isAbsolute12, join as join54, relative as relative8, resolve as resolve18, sep as sep10 } from "node:path";
+import { isAbsolute as isAbsolute12, join as join54, relative as relative9, resolve as resolve19, sep as sep11 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
 import { finished } from "node:stream/promises";
 
@@ -35017,6 +35017,20 @@ function jsonStringAt(source, start) {
   }
   return void 0;
 }
+var COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS = /* @__PURE__ */ new Set([
+  "cmd",
+  "command",
+  "justification",
+  "login",
+  "prefix_rule",
+  "sandbox_permissions",
+  "tty",
+  "workdir",
+  "yield_time_ms"
+]);
+function isCompleteOutputSafeExecArguments(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).every((key) => COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key));
+}
 function safePrimitiveEnd(source, start) {
   const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/.exec(source.slice(start));
   return match ? start + match[0].length : void 0;
@@ -35038,6 +35052,7 @@ function invocationFromSafeObjectLiteral(source) {
       key = identifier[0];
       cursor += key.length;
     }
+    if (!COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key)) return void 0;
     while (/\s/.test(source[cursor] ?? "")) cursor += 1;
     if (source[cursor] !== ":") return void 0;
     cursor += 1;
@@ -35065,6 +35080,7 @@ function invocationFromObjectLiteral(source) {
     const parsed = JSON.parse(source);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
     const record2 = parsed;
+    if (!isCompleteOutputSafeExecArguments(record2)) return void 0;
     if (record2.cmd !== void 0 && record2.command !== void 0) return void 0;
     const command2 = record2.cmd ?? record2.command;
     if (typeof command2 !== "string") return void 0;
@@ -35078,6 +35094,15 @@ function invocationFromObjectLiteral(source) {
   }
 }
 function transcriptExecInvocations(input) {
+  const pragma = /^\s*\/\/ @exec:([^\r\n]*)/.exec(input);
+  if (pragma?.[1] !== void 0) {
+    try {
+      const parsed = JSON.parse(pragma[1].trim());
+      if (!isCompleteOutputSafeExecArguments(parsed)) return [];
+    } catch {
+      return [];
+    }
+  }
   const prefix = /^\s*(?:(?:\/\/ @exec:[^\r\n]*\r?\n)\s*)?(?:const|let|var)\s+([$A-Z_a-z][$\w]*)\s*=\s*await\s+tools\.exec_command\s*\(/.exec(input);
   if (!prefix) return [];
   const resultName = prefix[1];
@@ -35184,6 +35209,10 @@ async function explicitSiblingWorktreeTarget(sessionRoot, commandWorkdir, target
   return sessionGit !== void 0 && targetGit !== void 0 && sessionGit === targetGit;
 }
 
+// packages/cli/src/codexTrustedSkillRead.ts
+import { readFile as readFile25 } from "node:fs/promises";
+import { relative as relative7, resolve as resolve18, sep as sep9 } from "node:path";
+
 // packages/cli/src/codexTranscriptCompletion.ts
 function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -35228,10 +35257,12 @@ function completeResultEnvelopeExitCode(value) {
   if (!isRecord10(value) || typeof value.chunk_id !== "string" || value.chunk_id.length === 0 || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0 || typeof value.original_token_count !== "number" || !Number.isInteger(value.original_token_count) || value.original_token_count < 0) return void 0;
   return topLevelExitCode(value);
 }
-function parsedResultEnvelopeExitCode(text2) {
+function parsedCompleteResultEnvelope(text2) {
   try {
     const value = JSON.parse(text2);
-    return completeResultEnvelopeExitCode(value);
+    const exitCode = completeResultEnvelopeExitCode(value);
+    if (exitCode === void 0 || !isRecord10(value) || typeof value.output !== "string") return void 0;
+    return { exitCode, output: value.output };
   } catch {
     return void 0;
   }
@@ -35242,14 +35273,14 @@ function successfulCustomOutput(value) {
   const values = Array.isArray(value) ? value : [value];
   const exitCodes = values.flatMap((item2) => {
     if (typeof item2 === "string") {
-      const parsed = parsedResultEnvelopeExitCode(item2.trim());
-      return parsed === void 0 ? [] : [parsed];
+      const parsed = parsedCompleteResultEnvelope(item2.trim());
+      return parsed === void 0 ? [] : [parsed.exitCode];
     }
     if (!isRecord10(item2)) return [];
     if (item2.type === "input_text") {
       const text2 = asString(item2.text);
-      const parsed = text2 === void 0 ? void 0 : parsedResultEnvelopeExitCode(text2.trim());
-      return parsed === void 0 ? [] : [parsed];
+      const parsed = text2 === void 0 ? void 0 : parsedCompleteResultEnvelope(text2.trim());
+      return parsed === void 0 ? [] : [parsed.exitCode];
     }
     if (item2.type === "execution_result") {
       const code = topLevelExitCode(item2);
@@ -35259,11 +35290,111 @@ function successfulCustomOutput(value) {
   });
   return exitCodes.length > 0 && exitCodes.every((status) => status === 0);
 }
+function successfulFunctionStdout(value) {
+  if (typeof value !== "string" || !successfulFunctionOutput(value)) return void 0;
+  const marker = "\nOutput:\n";
+  const boundary = value.indexOf(marker);
+  return boundary === -1 ? void 0 : value.slice(boundary + marker.length);
+}
+function successfulCustomStdout(value) {
+  if (!successfulCustomOutput(value)) return void 0;
+  const values = Array.isArray(value) ? value : [value];
+  const envelopes = values.flatMap((item2) => {
+    if (typeof item2 === "string") {
+      const parsed2 = parsedCompleteResultEnvelope(item2.trim());
+      return parsed2 === void 0 ? [] : [parsed2];
+    }
+    if (!isRecord10(item2) || item2.type !== "input_text") return [];
+    const text2 = asString(item2.text);
+    const parsed = text2 === void 0 ? void 0 : parsedCompleteResultEnvelope(text2.trim());
+    return parsed === void 0 ? [] : [parsed];
+  });
+  if (envelopes.length > 0) {
+    return envelopes.length === 1 ? envelopes[0]?.output : void 0;
+  }
+  const headers = values.filter(
+    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" && /^Script completed\n[\s\S]*\nOutput:\n$/.test(item2.text)
+  );
+  const completions = values.filter(
+    (item2) => isRecord10(item2) && item2.type === "execution_result" && item2.exit_code === 0
+  );
+  if (headers.length !== 1 || completions.length !== 1) return void 0;
+  return values.flatMap(
+    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" && item2 !== headers[0] ? [item2.text] : []
+  ).join("");
+}
+
+// packages/cli/src/codexTrustedSkillRead.ts
+function isRecord11(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function asString2(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function functionExecInvocation(payload) {
+  if (payload.type !== "function_call" || asString2(payload.name) !== "exec_command") return void 0;
+  const argumentsText = asString2(payload.arguments);
+  if (!argumentsText) return void 0;
+  try {
+    const args = JSON.parse(argumentsText);
+    if (!isRecord11(args) || !isCompleteOutputSafeExecArguments(args)) return void 0;
+    if (args.cmd !== void 0 && args.command !== void 0) return void 0;
+    const command2 = asString2(args.cmd) ?? asString2(args.command);
+    if (args.workdir !== void 0 && typeof args.workdir !== "string") return void 0;
+    return command2 === void 0 ? void 0 : { command: command2, workdir: asString2(args.workdir) };
+  } catch {
+    return void 0;
+  }
+}
+async function outputMatchesTrustedSkillReads(output, outputAbi, readPaths) {
+  const stdout = outputAbi === "custom" ? successfulCustomStdout(output) : successfulFunctionStdout(output);
+  if (stdout === void 0) return false;
+  try {
+    const expected = Buffer.concat(await Promise.all(readPaths.map((path9) => readFile25(path9))));
+    return Buffer.from(stdout, "utf8").equals(expected);
+  } catch {
+    return false;
+  }
+}
+function decodeSingleShellWord(value) {
+  const singleQuoted = /^'([^'\r\n]*)'$/.exec(value);
+  if (singleQuoted) return singleQuoted[1];
+  const doubleQuoted = /^"([^"\\$`\r\n]*)"$/.exec(value);
+  if (doubleQuoted) return doubleQuoted[1];
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : void 0;
+}
+function safeCompleteCatPath(segment) {
+  const match = /^cat[ \t]+(?:(?:--)[ \t]+)?(.+)$/.exec(segment.trim());
+  return match?.[1] === void 0 ? void 0 : decodeSingleShellWord(match[1]);
+}
+function commandTrustedSkillPaths(command2, skillPath) {
+  if (command2.includes("||")) return void 0;
+  const segments = command2.split(/&&|\r?\n/);
+  if (segments.length === 0 || segments.some((segment) => segment.trim() === "")) return void 0;
+  const skillsRoot = resolve18(skillPath, "..", "..");
+  let observedRead = false;
+  const paths = [];
+  for (const segment of segments) {
+    const path9 = safeCompleteCatPath(segment);
+    if (path9 === void 0) return void 0;
+    const resolvedPath = resolve18(path9);
+    const sibling = relative7(skillsRoot, resolvedPath).split(sep9);
+    if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return void 0;
+    if (resolvedPath === skillPath) observedRead = true;
+    paths.push(resolvedPath);
+  }
+  return observedRead ? paths : void 0;
+}
+function transcriptInputTrustedSkillInvocation(input, skillPath) {
+  const invocations = transcriptExecInvocations(input);
+  const invocation = invocations.length === 1 ? invocations[0] : void 0;
+  return invocation && commandTrustedSkillPaths(invocation.command, skillPath) ? invocation : void 0;
+}
 
 // packages/cli/src/codexTranscriptDiscovery.ts
 import { constants as constants5 } from "node:fs";
 import { lstat as lstat21, open as open6, readdir as readdir10, realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute11, join as join53, relative as relative7, sep as sep9 } from "node:path";
+import { isAbsolute as isAbsolute11, join as join53, relative as relative8, sep as sep10 } from "node:path";
 var MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_TRANSCRIPTS = 32;
@@ -35293,8 +35424,8 @@ async function inspectHostTranscript(physicalRoot, candidate) {
   }
 }
 function isInside2(base, candidate) {
-  const fromBase = relative7(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute11(fromBase);
+  const fromBase = relative8(base, candidate);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute11(fromBase);
 }
 async function recentHostTranscripts(sessionsRoot) {
   let physicalRoot;
@@ -35379,26 +35510,26 @@ async function hostTranscriptUnchanged(handle, candidate) {
 
 // packages/cli/src/codexTranscriptEvidence.ts
 var MAX_RECEIPT_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
-function isRecord11(value) {
+function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function asString2(value) {
+function asString3(value) {
   return typeof value === "string" ? value : void 0;
 }
 function isInside3(base, candidate) {
-  const fromBase = relative8(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute12(fromBase);
+  const fromBase = relative9(base, candidate);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute12(fromBase);
 }
 function codexSessionsRoot2(homeDir, configured) {
   return join54(codexHomeRoot(homeDir, configured), "sessions");
 }
 function isTrustedTranscriptPath(transcriptPath, homeDir, configured) {
   if (!isAbsolute12(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
-  return isInside3(codexSessionsRoot2(homeDir, configured), resolve18(transcriptPath));
+  return isInside3(codexSessionsRoot2(homeDir, configured), resolve19(transcriptPath));
 }
 function responseItemAtOrAfter(event, notBefore) {
   if (notBefore === void 0) return true;
-  const timestamp = asString2(event.timestamp);
+  const timestamp = asString3(event.timestamp);
   if (!timestamp) return false;
   const eventTime = Date.parse(timestamp);
   const lowerBound = Date.parse(notBefore);
@@ -35406,26 +35537,13 @@ function responseItemAtOrAfter(event, notBefore) {
 }
 function receiptTurnId(payload) {
   const metadata = payload.internal_chat_message_metadata_passthrough;
-  if (!isRecord11(metadata)) return void 0;
-  return asString2(metadata.turn_id);
+  if (!isRecord12(metadata)) return void 0;
+  return asString3(metadata.turn_id);
 }
 async function settleBoundedStream(stream) {
   if (stream === void 0) return;
   if (!stream.readableEnded && !stream.destroyed) stream.destroy();
   await finished(stream).catch(() => void 0);
-}
-function functionExecInvocation(payload) {
-  if (payload.type !== "function_call" || asString2(payload.name) !== "exec_command") return void 0;
-  const argumentsText = asString2(payload.arguments);
-  if (!argumentsText) return void 0;
-  try {
-    const args = JSON.parse(argumentsText);
-    if (!isRecord11(args)) return void 0;
-    const command2 = asString2(args.cmd) ?? asString2(args.command);
-    return command2 === void 0 ? void 0 : { command: command2, workdir: asString2(args.workdir) };
-  } catch {
-    return void 0;
-  }
 }
 async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir = homedir8(), configured, notBefore) {
   const expectedSkillPath = await trustedCodexSkillPath(
@@ -35434,9 +35552,9 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
     homeDir,
     configured
   );
-  if (expectedSkillPath !== resolve18(receipt.skillPath)) return false;
+  if (expectedSkillPath !== resolve19(receipt.skillPath)) return false;
   const sessionsRoot = codexSessionsRoot2(homeDir, configured);
-  const candidate = resolve18(receipt.transcriptPath);
+  const candidate = resolve19(receipt.transcriptPath);
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false;
   const transcript = await exactHostTranscript(sessionsRoot, candidate);
   if (transcript === void 0 || transcript.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false;
@@ -35462,13 +35580,13 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       } catch {
         continue;
       }
-      if (!isRecord11(event)) continue;
+      if (!isRecord12(event)) continue;
       if (event.type === "session_meta") {
         const session = event.payload;
-        if (isRecord11(session)) {
-          const sessionId = asString2(session.session_id) ?? asString2(session.id);
+        if (isRecord12(session)) {
+          const sessionId = asString3(session.session_id) ?? asString3(session.id);
           matchesSession = sessionId === receipt.sessionId;
-          const cwd = asString2(session.cwd);
+          const cwd = asString3(session.cwd);
           sessionRoot = cwd;
           matchesProject = cwd !== void 0 && await isSameOrdinaryPhysicalDirectory(cwd, repoRoot);
         }
@@ -35476,24 +35594,30 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       }
       if (!matchesSession || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
       const payload = event.payload;
-      if (!isRecord11(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
+      if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
       const functionInvocation = functionExecInvocation(payload);
       if (functionInvocation !== void 0) {
-        const callId = asString2(payload.call_id);
-        if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)) {
-          confirmed = await matchingSuccessfulOutput(lines, receipt, "function");
+        const callId = asString3(payload.call_id);
+        const readPaths = commandTrustedSkillPaths(functionInvocation.command, receipt.skillPath);
+        if (callId === receipt.toolUseId && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) && readPaths !== void 0) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, "function", readPaths);
           break;
         }
         continue;
       }
       if (payload.type === "custom_tool_call") {
-        const callId = asString2(payload.call_id);
-        const name2 = asString2(payload.name);
-        const status = asString2(payload.status);
-        const command2 = asString2(payload.input);
+        const callId = asString3(payload.call_id);
+        const name2 = asString3(payload.name);
+        const status = asString3(payload.status);
+        const command2 = asString3(payload.input);
         const invocation = command2 === void 0 ? void 0 : transcriptInputTrustedSkillInvocation(command2, receipt.skillPath);
         if (callId === receipt.toolUseId && name2 === "exec" && status === "completed" && invocation !== void 0 && (matchesProject || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot))) {
-          confirmed = await matchingSuccessfulOutput(lines, receipt, "custom");
+          confirmed = await matchingSuccessfulOutput(
+            lines,
+            receipt,
+            "custom",
+            commandTrustedSkillPaths(invocation.command, receipt.skillPath) ?? []
+          );
           break;
         }
         continue;
@@ -35508,7 +35632,8 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
     await handle.close().catch(() => void 0);
   }
 }
-async function matchingSuccessfulOutput(lines, receipt, outputAbi) {
+async function matchingSuccessfulOutput(lines, receipt, outputAbi, readPaths) {
+  if (readPaths.length === 0) return false;
   const expectedOutputType = outputAbi === "custom" ? "custom_tool_call_output" : "function_call_output";
   for await (const line of lines) {
     let event;
@@ -35517,44 +35642,12 @@ async function matchingSuccessfulOutput(lines, receipt, outputAbi) {
     } catch {
       continue;
     }
-    if (!isRecord11(event) || event.type !== "response_item") continue;
+    if (!isRecord12(event) || event.type !== "response_item") continue;
     const payload = event.payload;
-    if (!isRecord11(payload) || receiptTurnId(payload) !== receipt.turnId || payload.type !== expectedOutputType || asString2(payload.call_id) !== receipt.toolUseId) continue;
-    return outputAbi === "custom" ? successfulCustomOutput(payload.output) : successfulFunctionOutput(payload.output);
+    if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId || payload.type !== expectedOutputType || asString3(payload.call_id) !== receipt.toolUseId) continue;
+    return outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths);
   }
   return false;
-}
-function decodeSingleShellWord(value) {
-  const singleQuoted = /^'([^'\r\n]*)'$/.exec(value);
-  if (singleQuoted) return singleQuoted[1];
-  const doubleQuoted = /^"([^"\\$`\r\n]*)"$/.exec(value);
-  if (doubleQuoted) return doubleQuoted[1];
-  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : void 0;
-}
-function safeCompleteCatPath(segment) {
-  const match = /^cat[ \t]+(?:(?:--)[ \t]+)?(.+)$/.exec(segment.trim());
-  return match?.[1] === void 0 ? void 0 : decodeSingleShellWord(match[1]);
-}
-function commandReadsTrustedSkill(command2, skillPath) {
-  if (command2.includes("||")) return false;
-  const segments = command2.split(/&&|\r?\n/);
-  if (segments.length === 0 || segments.some((segment) => segment.trim() === "")) return false;
-  const skillsRoot = resolve18(skillPath, "..", "..");
-  let observedRead = false;
-  for (const segment of segments) {
-    const path9 = safeCompleteCatPath(segment);
-    if (path9 === void 0) return false;
-    const resolvedPath = resolve18(path9);
-    const sibling = relative8(skillsRoot, resolvedPath).split(sep10);
-    if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return false;
-    if (resolvedPath === skillPath) observedRead = true;
-  }
-  return observedRead;
-}
-function transcriptInputTrustedSkillInvocation(input, skillPath) {
-  const invocations = transcriptExecInvocations(input);
-  const invocation = invocations.length === 1 ? invocations[0] : void 0;
-  return invocation && commandReadsTrustedSkill(invocation.command, skillPath) ? invocation : void 0;
 }
 function skillAliases(id) {
   const aliases = /* @__PURE__ */ new Set([id]);
@@ -35615,17 +35708,17 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           confirmedInLatestTurn.clear();
           break;
         }
-        if (!isRecord11(event)) continue;
+        if (!isRecord12(event)) continue;
         if (event.type === "session_meta") {
           const payload2 = event.payload;
-          if (isRecord11(payload2)) {
-            const cwd = asString2(payload2.cwd);
+          if (isRecord12(payload2)) {
+            const cwd = asString3(payload2.cwd);
             sessionRoot = cwd;
             if (cwd) {
               matchesRepo = await isSameOrdinaryPhysicalDirectory(cwd, repoRoot);
             }
             if (hostSessionId !== void 0) {
-              const sessionId = asString2(payload2.id);
+              const sessionId = asString3(payload2.id);
               matchesHostSession = sessionId === hostSessionId;
             }
           }
@@ -35633,7 +35726,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         }
         if (event.type === "turn_context") {
           const payload2 = event.payload;
-          const turnId = isRecord11(payload2) ? asString2(payload2.turn_id) : void 0;
+          const turnId = isRecord12(payload2) ? asString3(payload2.turn_id) : void 0;
           if (turnId === latestTurnId) continue;
           latestTurnId = turnId;
           readsByCall.clear();
@@ -35642,49 +35735,61 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         }
         if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
         const payload = event.payload;
-        if (!isRecord11(payload)) continue;
+        if (!isRecord12(payload)) continue;
         const eventTurnId = receiptTurnId(payload);
         if (eventTurnId !== void 0 && eventTurnId !== latestTurnId) continue;
         const functionInvocation = functionExecInvocation(payload);
         if (functionInvocation !== void 0) {
-          const callId2 = asString2(payload.call_id);
+          const callId2 = asString3(payload.call_id);
           if (!callId2) continue;
           if (!matchesRepo && !await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)) continue;
           const readIds = aliases.filter(
             (id) => {
               const path9 = selectedSkillPaths.get(id);
-              return path9 !== void 0 && commandReadsTrustedSkill(functionInvocation.command, path9);
+              return path9 !== void 0 && commandTrustedSkillPaths(functionInvocation.command, path9);
             }
           );
           if (readIds.length > 0) {
-            readsByCall.set(callId2, { skillIds: readIds, outputAbi: "function" });
+            const firstPath = selectedSkillPaths.get(readIds[0] ?? "");
+            const readPaths = firstPath === void 0 ? void 0 : commandTrustedSkillPaths(functionInvocation.command, firstPath);
+            if (readPaths !== void 0) {
+              readsByCall.set(callId2, { skillIds: readIds, outputAbi: "function", readPaths });
+            }
           }
           continue;
         }
         if (payload.type === "custom_tool_call") {
-          const callId2 = asString2(payload.call_id);
-          const name2 = asString2(payload.name);
-          const status = asString2(payload.status);
-          const toolInput = asString2(payload.input);
+          const callId2 = asString3(payload.call_id);
+          const name2 = asString3(payload.name);
+          const status = asString3(payload.status);
+          const toolInput = asString3(payload.input);
           if (!callId2 || name2 !== "exec" || status !== "completed" || !toolInput) continue;
           const invocations = transcriptExecInvocations(toolInput);
           const invocation = invocations.length === 1 ? invocations[0] : void 0;
           if (invocation === void 0 || !matchesRepo && !await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)) continue;
           const readIds = aliases.filter((id) => {
             const path9 = selectedSkillPaths.get(id);
-            return path9 !== void 0 && commandReadsTrustedSkill(invocation.command, path9);
+            return path9 !== void 0 && commandTrustedSkillPaths(invocation.command, path9);
           });
           if (readIds.length > 0) {
-            readsByCall.set(callId2, { skillIds: readIds, outputAbi: "custom" });
+            const firstPath = selectedSkillPaths.get(readIds[0] ?? "");
+            const readPaths = firstPath === void 0 ? void 0 : commandTrustedSkillPaths(invocation.command, firstPath);
+            if (readPaths !== void 0) {
+              readsByCall.set(callId2, { skillIds: readIds, outputAbi: "custom", readPaths });
+            }
           }
           continue;
         }
         if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
-        const callId = asString2(payload.call_id);
+        const callId = asString3(payload.call_id);
         const pendingRead = callId === void 0 ? void 0 : readsByCall.get(callId);
         const outputAbi = payload.type === "custom_tool_call_output" ? "custom" : "function";
         if (pendingRead === void 0 || pendingRead.outputAbi !== outputAbi) continue;
-        const successful = outputAbi === "custom" ? successfulCustomOutput(payload.output) : successfulFunctionOutput(payload.output);
+        const successful = await outputMatchesTrustedSkillReads(
+          payload.output,
+          outputAbi,
+          pendingRead.readPaths
+        );
         if (successful) {
           for (const id of pendingRead.skillIds) confirmedInLatestTurn.add(id);
         }
@@ -35718,10 +35823,10 @@ var REAL_CODEX_SKILL_RECEIPT_ENV = {
   selectedPluginRoot: () => process.env.TENON_CODEX_PLUGIN_ROOT,
   trustRoots: productionCodexSkillTrustRoots
 };
-function isRecord12(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function asString3(value) {
+function asString4(value) {
   return typeof value === "string" ? value : void 0;
 }
 function isSafeSkillId(value) {
@@ -35731,28 +35836,28 @@ function isSafeOpaqueId(value) {
   return /^[A-Za-z0-9._:-]{1,256}$/.test(value);
 }
 function isInside4(base, candidate) {
-  const fromBase = relative9(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute13(fromBase);
+  const fromBase = relative10(base, candidate);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep12}`) && !isAbsolute13(fromBase);
 }
 function codexSessionsRoot3(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
-  const codexHome = candidate ? resolve19(candidate) : resolve19(homeDir, ".codex");
+  const codexHome = candidate ? resolve20(candidate) : resolve20(homeDir, ".codex");
   return join55(codexHome, "sessions");
 }
 function isTrustedTranscriptPath2(transcriptPath, homeDir, configured) {
   if (!isAbsolute13(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
-  return isInside4(codexSessionsRoot3(homeDir, configured), resolve19(transcriptPath));
+  return isInside4(codexSessionsRoot3(homeDir, configured), resolve20(transcriptPath));
 }
 function parseReceipt2(value) {
-  if (!isRecord12(value) || value.version !== RECEIPT_VERSION) return void 0;
-  const receivedAt = asString3(value.receivedAt);
-  const changeName = asString3(value.changeName);
-  const skillId = asString3(value.skillId);
-  const skillPath = asString3(value.skillPath);
-  const transcriptPath = asString3(value.transcriptPath);
-  const sessionId = asString3(value.sessionId);
-  const turnId = asString3(value.turnId);
-  const toolUseId = asString3(value.toolUseId);
+  if (!isRecord13(value) || value.version !== RECEIPT_VERSION) return void 0;
+  const receivedAt = asString4(value.receivedAt);
+  const changeName = asString4(value.changeName);
+  const skillId = asString4(value.skillId);
+  const skillPath = asString4(value.skillPath);
+  const transcriptPath = asString4(value.transcriptPath);
+  const sessionId = asString4(value.sessionId);
+  const turnId = asString4(value.turnId);
+  const toolUseId = asString4(value.toolUseId);
   if (!receivedAt || !changeName || !skillId || !skillPath || !transcriptPath || !sessionId || !turnId || !toolUseId) return void 0;
   if (!isValidChangeName(changeName) || !isSafeSkillId(skillId) || !isSafeOpaqueId(sessionId) || !isSafeOpaqueId(turnId) || !isSafeOpaqueId(toolUseId)) {
     return void 0;
@@ -35778,7 +35883,7 @@ async function regularFile(path9) {
   }
 }
 async function trustedSelectedSkillPath(skillPath, skillId, trustRoots, homeDir, configured) {
-  return await trustedCodexSkillPath(trustRoots, skillId, homeDir, configured) === resolve19(skillPath);
+  return await trustedCodexSkillPath(trustRoots, skillId, homeDir, configured) === resolve20(skillPath);
 }
 async function validatedReceipt(value, trustRoots, homeDir, configured) {
   if (!await trustedSelectedSkillPath(value.skillPath, value.skillId, trustRoots, homeDir, configured)) return void 0;
@@ -35786,7 +35891,7 @@ async function validatedReceipt(value, trustRoots, homeDir, configured) {
   return value;
 }
 async function appendReceipt(repoRoot, receipt) {
-  const journalDir = join55(resolve19(repoRoot), ".pipeline");
+  const journalDir = join55(resolve20(repoRoot), ".pipeline");
   await mkdir19(journalDir, { recursive: true });
   const line = `${JSON.stringify(receipt)}
 `;
@@ -35795,11 +35900,11 @@ async function appendReceipt(repoRoot, receipt) {
   });
 }
 async function loadReceipts(repoRoot) {
-  const path9 = join55(resolve19(repoRoot), CODEX_SKILL_RECEIPTS_FILE);
+  const path9 = join55(resolve20(repoRoot), CODEX_SKILL_RECEIPTS_FILE);
   if (!await regularFile(path9)) return [];
   let text2;
   try {
-    text2 = await readFile25(path9, "utf8");
+    text2 = await readFile26(path9, "utf8");
   } catch {
     return [];
   }
@@ -35829,7 +35934,7 @@ function skillsEquivalent3(left, right) {
   return skillAliases2(right).some((candidate) => leftAliases.has(candidate));
 }
 function validTimestamp(value) {
-  const timestamp = asString3(value);
+  const timestamp = asString4(value);
   return timestamp !== void 0 && !Number.isNaN(Date.parse(timestamp)) ? timestamp : void 0;
 }
 function currentVisitEvidence(history, evidenceScope) {
@@ -35847,7 +35952,7 @@ function currentVisitEvidence(history, evidenceScope) {
   if (evidenceScope) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const entry = entries[index];
-      if (isRecord12(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
+      if (isRecord13(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
         start = index + 1;
         startedAt = validTimestamp(entry.ts);
         valid = startedAt !== void 0;
@@ -35855,12 +35960,12 @@ function currentVisitEvidence(history, evidenceScope) {
       }
     }
     const hasAnyTransition = entries.some(
-      (entry) => isRecord12(entry) && entry.kind === "transition"
+      (entry) => isRecord13(entry) && entry.kind === "transition"
     );
     if (!valid && !hasAnyTransition) {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
-        if (isRecord12(entry) && entry.kind === "init") {
+        if (isRecord13(entry) && entry.kind === "init") {
           start = index + 1;
           startedAt = validTimestamp(entry.ts);
           valid = startedAt !== void 0;
@@ -35871,8 +35976,8 @@ function currentVisitEvidence(history, evidenceScope) {
   }
   const ids = /* @__PURE__ */ new Set();
   for (const entry of entries.slice(start)) {
-    if (!isRecord12(entry) || entry.kind !== "tool") continue;
-    const raw = asString3(entry.raw);
+    if (!isRecord13(entry) || entry.kind !== "tool") continue;
+    const raw = asString4(entry.raw);
     const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null;
     if (match?.[1]) ids.add(match[1]);
   }
@@ -35880,13 +35985,13 @@ function currentVisitEvidence(history, evidenceScope) {
 }
 async function readHistory(changeDir2) {
   try {
-    return await readFile25(join55(changeDir2, HISTORY_FILE), "utf8");
+    return await readFile26(join55(changeDir2, HISTORY_FILE), "utf8");
   } catch {
     return "";
   }
 }
 async function latestBoundHostSessionId(repoRoot, changeName) {
-  const bindingsDir = join55(resolve19(repoRoot), TERMINAL_SESSION_BINDINGS_DIR);
+  const bindingsDir = join55(resolve20(repoRoot), TERMINAL_SESSION_BINDINGS_DIR);
   let entries;
   try {
     entries = await readdir11(bindingsDir);
@@ -35899,10 +36004,10 @@ async function latestBoundHostSessionId(repoRoot, changeName) {
     const path9 = join55(bindingsDir, entry);
     if (!await regularFile(path9)) continue;
     try {
-      const value = JSON.parse(await readFile25(path9, "utf8"));
-      if (!isRecord12(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString3(value.change) !== changeName) continue;
-      const sessionId = asString3(value.session_id);
-      const boundAt = asString3(value.bound_at);
+      const value = JSON.parse(await readFile26(path9, "utf8"));
+      if (!isRecord13(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString4(value.change) !== changeName) continue;
+      const sessionId = asString4(value.session_id);
+      const boundAt = asString4(value.bound_at);
       if (!sessionId || !boundAt || !isSafeOpaqueId(sessionId) || Number.isNaN(Date.parse(boundAt))) continue;
       if (latest === void 0 || boundAt > latest.boundAt) latest = { sessionId, boundAt };
     } catch {
@@ -35919,7 +36024,7 @@ async function reconcileCodexSkillEvidence(input) {
   const visitEvidence = currentVisitEvidence(await readHistory(input.changeDir), input.evidenceScope);
   if (!visitEvidence.valid) return { confirmedSkillIds: [] };
   const existing = visitEvidence.completedSkillIds;
-  const changeName = basename5(resolve19(input.changeDir));
+  const changeName = basename5(resolve20(input.changeDir));
   if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] };
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName);
   const receipts = await loadReceipts(input.repoRoot);
@@ -35998,15 +36103,15 @@ async function cmdInternalCodexSkillReceipt(deps, changeName, skillId, skillPath
 }
 
 // packages/cli/src/documentLocale.ts
-import { readFile as readFile26 } from "node:fs/promises";
-import { resolve as resolve20 } from "node:path";
+import { readFile as readFile27 } from "node:fs/promises";
+import { resolve as resolve21 } from "node:path";
 async function inferLegacyDocumentLocale(changeDirPath) {
   let chinese = 0;
   let english = 0;
   let observedDocument = false;
   for (const name2 of ["proposal.md", "design.md", "tasks.md"]) {
     try {
-      const content = await readFile26(resolve20(changeDirPath, name2), "utf8");
+      const content = await readFile27(resolve21(changeDirPath, name2), "utf8");
       observedDocument = true;
       const heading = content.match(/^#\s+(.+?)\s*$/mu)?.[1] ?? "";
       const hasChinese = new RegExp("\\p{Script=Han}", "u").test(heading);
@@ -36055,7 +36160,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
 import { lstat as lstat23, realpath as realpath10 } from "node:fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute14, relative as relative10, resolve as resolve21, sep as sep12 } from "node:path";
+import { dirname as dirname11, isAbsolute as isAbsolute14, relative as relative11, resolve as resolve22, sep as sep13 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
 }
@@ -36072,9 +36177,9 @@ function requiredDeltaCapability(requestedCapability) {
   throw new Error("delta-spec scaffold \u5FC5\u987B\u4F20 --capability <name>");
 }
 async function assertSafeChangeRoot(repoRoot, changeRoot) {
-  const root = resolve21(repoRoot);
-  const lexical = relative10(root, resolve21(changeRoot));
-  if (lexical === ".." || lexical.startsWith(`..${sep12}`) || isAbsolute14(lexical)) {
+  const root = resolve22(repoRoot);
+  const lexical = relative11(root, resolve22(changeRoot));
+  if (lexical === ".." || lexical.startsWith(`..${sep13}`) || isAbsolute14(lexical)) {
     throw new Error(`Change \u6839\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
   const rootInfo = await lstat23(root);
@@ -36082,16 +36187,16 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
     throw new Error(`\u9879\u76EE\u6839\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${root}`);
   }
   let cursor = root;
-  for (const segment of lexical.split(sep12).filter(Boolean)) {
-    cursor = resolve21(cursor, segment);
+  for (const segment of lexical.split(sep13).filter(Boolean)) {
+    cursor = resolve22(cursor, segment);
     const info = await lstat23(cursor);
     if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error(`Change \u6839\u8DEF\u5F84\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${cursor}`);
     }
   }
   const [rootReal, changeReal] = await Promise.all([realpath10(root), realpath10(changeRoot)]);
-  const escaped3 = relative10(rootReal, changeReal);
-  if (escaped3 === ".." || escaped3.startsWith(`..${sep12}`) || isAbsolute14(escaped3)) {
+  const escaped3 = relative11(rootReal, changeReal);
+  if (escaped3 === ".." || escaped3.startsWith(`..${sep13}`) || isAbsolute14(escaped3)) {
     throw new Error(`Change \u6839\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
 }
@@ -36128,8 +36233,8 @@ async function cmdDocumentScaffold(deps, name2, kind, requestedLocale, requested
     await assertSafeChangeRoot(deps.cwd, dir);
     const locale = await resolveChangeDocumentLocale(dir, requestedLocale, true);
     const targetRelative = documentPathForKind(kind, { change: name2, capability });
-    const target = resolve22(deps.cwd, targetRelative);
-    const escaped3 = relative11(resolve22(deps.cwd), target);
+    const target = resolve23(deps.cwd, targetRelative);
+    const escaped3 = relative12(resolve23(deps.cwd), target);
     if (escaped3 === ".." || escaped3.startsWith("../") || escaped3.startsWith("..\\")) {
       throw new Error(`document scaffold \u8DEF\u5F84\u8D8A\u754C: ${targetRelative}`);
     }
@@ -37473,7 +37578,7 @@ function createProductionSkillContentLocator(opts) {
 
 // packages/cli/src/commands/afk-executor-contract.ts
 import { createHash as createHash29 } from "node:crypto";
-import { readFile as readFile27, realpath as realpath11 } from "node:fs/promises";
+import { readFile as readFile28, realpath as realpath11 } from "node:fs/promises";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var SHA256_HEX = /^[0-9a-f]{64}$/;
 var BUNDLED_CLI_SUFFIX = "/packages/cli/dist/tenon.mjs";
@@ -37520,7 +37625,7 @@ async function resolveBundledCliDistSha256(moduleUrl = import.meta.url) {
     throw new BundledCliDigestUnavailableError(resolved);
   }
   try {
-    return createHash29("sha256").update(await readFile27(resolved)).digest("hex");
+    return createHash29("sha256").update(await readFile28(resolved)).digest("hex");
   } catch (error) {
     throw new BundledCliDigestUnavailableError(resolved, `\u8BFB\u53D6 bundle \u5931\u8D25\uFF1A${messageOf(error)}`);
   }
@@ -38211,7 +38316,7 @@ function nextSeq(lastSeq) {
 }
 
 // packages/channel/dist/paths.js
-import { isAbsolute as isAbsolute16, join as join60, resolve as resolve23 } from "node:path";
+import { isAbsolute as isAbsolute16, join as join60, resolve as resolve24 } from "node:path";
 var GLOBAL_BUCKET = "_global";
 function resolveRoot(defaultRoot, envRoot) {
   const env = (envRoot ?? "").trim();
@@ -38227,7 +38332,7 @@ function projectKey(env) {
   const override = (env.projectOverride ?? "").trim();
   if (override)
     return sanitizeBucket(override);
-  const base = isAbsolute16(env.cwd) ? env.cwd : resolve23(env.cwd);
+  const base = isAbsolute16(env.cwd) ? env.cwd : resolve24(env.cwd);
   return sanitizeBucket(base);
 }
 function bucketFor(env, scope) {
@@ -39258,8 +39363,8 @@ function readNewEvents(fs, path9, state) {
   return parseEventsText(lines.join("\n"));
 }
 function defaultSleep(ms) {
-  return new Promise((resolve37) => {
-    const t = setTimeout(resolve37, ms);
+  return new Promise((resolve38) => {
+    const t = setTimeout(resolve38, ms);
     if (typeof t.unref === "function")
       t.unref();
   });
@@ -39479,7 +39584,7 @@ var ShutdownController = class {
   awaitKilled() {
     if (this.killedDone || !this.killedStarted)
       return Promise.resolve();
-    return new Promise((resolve37) => this.killedWaiters.push(resolve37));
+    return new Promise((resolve38) => this.killedWaiters.push(resolve38));
   }
   startKillLadder() {
     const child = this.deps.child();
@@ -39715,12 +39820,12 @@ async function startSupervisor(channelName, workerName, config, deps) {
   log(`[supervisor] starting ${adapter.provider} ${args.join(" ")}
 `);
   const child = proc.spawn(adapter.provider, args, { cwd: config.cwd, env: childEnv });
-  const settled = new Promise((resolve37) => {
-    child.onSpawn(() => resolve37(true));
+  const settled = new Promise((resolve38) => {
+    child.onSpawn(() => resolve38(true));
     child.onError((err) => {
       log(`[supervisor] worker error: ${err.message}
 `);
-      resolve37(false);
+      resolve38(false);
     });
   });
   child.onStderr((chunk) => log(chunk));
@@ -42562,7 +42667,7 @@ async function cmdLoops(deps, sub, args, fs = REAL_LOOPS_FS, driftFs = REAL_DRIF
 }
 
 // packages/cli/src/commands/mem.ts
-import { resolve as resolve24 } from "node:path";
+import { resolve as resolve25 } from "node:path";
 
 // packages/cli/src/commands/mem-render.ts
 var memIsoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -42644,7 +42749,7 @@ function buildFilter(deps, flags) {
     cwd = null;
   } else {
     const cwdFlag = typeof flags.cwd === "string" ? flags.cwd : deps.cwd;
-    cwd = resolve24(cwdFlag);
+    cwd = resolve25(cwdFlag);
   }
   const limit = parseOptionalNumberFlag(flags.limit, "--limit", 50);
   return { platform: platformRaw, since, until, cwd, limit };
@@ -42905,23 +43010,23 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 }
 
 // packages/cli/src/commands/scaffold.ts
-import { lstat as lstat29, mkdir as mkdir22, readFile as readFile30, rm as rm8, stat as stat10, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
-import { dirname as dirname14, isAbsolute as isAbsolute20, join as join64, relative as relative15, resolve as resolve28, sep as sep15 } from "node:path";
+import { lstat as lstat29, mkdir as mkdir22, readFile as readFile31, rm as rm8, stat as stat10, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
+import { dirname as dirname14, isAbsolute as isAbsolute20, join as join64, relative as relative16, resolve as resolve29, sep as sep16 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 import { lstat as lstat28, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname13, isAbsolute as isAbsolute19, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
+import { dirname as dirname13, isAbsolute as isAbsolute19, relative as relative15, resolve as resolve28, sep as sep15 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash31 } from "node:crypto";
-import { copyFile, lstat as lstat26, mkdir as mkdir20, readFile as readFile28, readdir as readdir12 } from "node:fs/promises";
-import { relative as relative12, resolve as resolve25 } from "node:path";
+import { copyFile, lstat as lstat26, mkdir as mkdir20, readFile as readFile29, readdir as readdir12 } from "node:fs/promises";
+import { relative as relative13, resolve as resolve26 } from "node:path";
 async function copyOrdinaryTree(source, target) {
   await mkdir20(target);
   for (const entry of await readdir12(source, { withFileTypes: true })) {
-    const sourcePath = resolve25(source, entry.name);
-    const targetPath = resolve25(target, entry.name);
+    const sourcePath = resolve26(source, entry.name);
+    const targetPath = resolve26(target, entry.name);
     if (entry.isSymbolicLink()) {
       throw new Error(`spec scaffold \u4E8B\u52A1\u62D2\u7EDD\u590D\u5236 symlink: ${sourcePath}`);
     }
@@ -42937,8 +43042,8 @@ async function copyOrdinaryTree(source, target) {
 async function syncUnmanagedOrdinaryTree(source, target, managedPaths) {
   const walk = async (sourceDirectory, targetDirectory) => {
     for (const entry of await readdir12(sourceDirectory, { withFileTypes: true })) {
-      const sourcePath = resolve25(sourceDirectory, entry.name);
-      const targetPath = resolve25(targetDirectory, entry.name);
+      const sourcePath = resolve26(sourceDirectory, entry.name);
+      const targetPath = resolve26(targetDirectory, entry.name);
       if (entry.isSymbolicLink()) {
         throw new Error(`spec scaffold \u4E8B\u52A1\u62D2\u7EDD\u540C\u6B65 symlink: ${sourcePath}`);
       }
@@ -42946,7 +43051,7 @@ async function syncUnmanagedOrdinaryTree(source, target, managedPaths) {
         await mkdir20(targetPath, { recursive: true });
         await walk(sourcePath, targetPath);
       } else if (entry.isFile()) {
-        const relativePath = relative12(source, sourcePath);
+        const relativePath = relative13(source, sourcePath);
         if (!managedPaths.has(relativePath)) await copyFile(sourcePath, targetPath);
       } else {
         throw new Error(`spec scaffold \u4E8B\u52A1\u53EA\u5141\u8BB8\u666E\u901A\u6587\u4EF6\u548C\u76EE\u5F55: ${sourcePath}`);
@@ -42961,7 +43066,7 @@ async function ordinaryTreeDigest(root) {
     const entries = (await readdir12(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const pathname = resolve25(directory, entry.name);
+      const pathname = resolve26(directory, entry.name);
       if (entry.isSymbolicLink()) {
         throw new Error(`spec scaffold \u4E8B\u52A1\u62D2\u7EDD\u6458\u8981 symlink: ${pathname}`);
       }
@@ -42969,7 +43074,7 @@ async function ordinaryTreeDigest(root) {
         hash.update(`D\0${relativePath}\0`);
         await walk(pathname, relativePath);
       } else if (entry.isFile()) {
-        const content = await readFile28(pathname);
+        const content = await readFile29(pathname);
         hash.update(`F\0${relativePath}\0${content.byteLength}\0`);
         hash.update(content);
         hash.update("\0");
@@ -42993,16 +43098,16 @@ function ordinaryPathKey(target) {
 }
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
-import { lstat as lstat27, readFile as readFile29, rename as rename7, rm as rm6 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute18, relative as relative13, resolve as resolve26, sep as sep13 } from "node:path";
+import { lstat as lstat27, readFile as readFile30, rename as rename7, rm as rm6 } from "node:fs/promises";
+import { basename as basename6, dirname as dirname12, isAbsolute as isAbsolute18, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
   const code = Reflect.get(error, "code");
   return typeof code === "string" ? code : void 0;
 }
 function contained2(root, target) {
-  const rel = relative13(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep13}`) && !isAbsolute18(rel);
+  const rel = relative14(root, target);
+  return rel !== ".." && !rel.startsWith(`..${sep14}`) && !isAbsolute18(rel);
 }
 async function existingOrdinaryFile(target) {
   try {
@@ -43080,8 +43185,8 @@ function processIsAlive(pid) {
   }
 }
 function receiptPaths(specDirectory, receipt, anchor = dirname12(specDirectory)) {
-  const stage = resolve26(anchor, receipt.stageName);
-  const backup = resolve26(anchor, receipt.backupName);
+  const stage = resolve27(anchor, receipt.stageName);
+  const backup = resolve27(anchor, receipt.backupName);
   if (!contained2(anchor, stage) || !contained2(anchor, backup)) {
     throw new Error("spec scaffold \u4E8B\u52A1\u63CF\u8FF0\u8D8A\u8FC7\u4E8B\u52A1\u951A\u70B9");
   }
@@ -43089,7 +43194,7 @@ function receiptPaths(specDirectory, receipt, anchor = dirname12(specDirectory))
 }
 async function recoverClaimedTransaction(specDirectory, recoveryFile, anchor) {
   await existingOrdinaryFile(recoveryFile);
-  const receipt = parseTransactionReceipt(await readFile29(recoveryFile, "utf8"), specDirectory);
+  const receipt = parseTransactionReceipt(await readFile30(recoveryFile, "utf8"), specDirectory);
   const { stage, backup } = receiptPaths(specDirectory, receipt, anchor);
   const [targetExists, stageExists, backupExists] = await Promise.all([
     existingOrdinaryDirectory(specDirectory),
@@ -43127,7 +43232,7 @@ async function recoverStaleTransaction(specDirectory, lockFile, recoveryFile, an
     throw new Error(`spec scaffold \u4E8B\u52A1\u6B63\u5728\u6062\u590D\uFF0C\u62D2\u7EDD\u5E76\u53D1\u5199\u5165: ${specDirectory}`);
   }
   if (!await existingOrdinaryFile(lockFile)) return "retry";
-  const receipt = parseTransactionReceipt(await readFile29(lockFile, "utf8"), specDirectory);
+  const receipt = parseTransactionReceipt(await readFile30(lockFile, "utf8"), specDirectory);
   if (processIsAlive(receipt.pid)) {
     throw new Error(`spec scaffold \u4E8B\u52A1 owner pid=${receipt.pid} \u4ECD\u5728\u8FD0\u884C\uFF0C\u62D2\u7EDD\u5E76\u53D1\u5199\u5165`);
   }
@@ -43149,7 +43254,7 @@ async function recoverStaleTransaction(specDirectory, lockFile, recoveryFile, an
   return "recovered";
 }
 async function acquireTransaction(specDirectory, receipt, anchor) {
-  const lockFile = resolve26(
+  const lockFile = resolve27(
     anchor,
     `.tenon-spec-transaction-${ordinaryPathKey(specDirectory)}.json`
   );
@@ -43176,8 +43281,8 @@ async function acquireTransaction(specDirectory, receipt, anchor) {
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 function contained3(root, target) {
-  const rel = relative14(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep14}`) && !isAbsolute19(rel);
+  const rel = relative15(root, target);
+  return rel !== ".." && !rel.startsWith(`..${sep15}`) && !isAbsolute19(rel);
 }
 async function existingOrdinaryDirectory2(target) {
   try {
@@ -43192,13 +43297,13 @@ async function existingOrdinaryDirectory2(target) {
   }
 }
 async function publishSpecScaffoldTransaction(options) {
-  const repoRoot = resolve27(options.repoRoot);
-  const specDirectory = resolve27(options.specDirectory);
+  const repoRoot = resolve28(options.repoRoot);
+  const specDirectory = resolve28(options.specDirectory);
   if (!contained3(repoRoot, specDirectory)) {
     throw new Error(`spec scaffold \u4E8B\u52A1\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${options.specDirectory}`);
   }
-  const specRelative = relative14(repoRoot, specDirectory);
-  const topLevelName = specRelative.split(sep14).filter(Boolean)[0];
+  const specRelative = relative15(repoRoot, specDirectory);
+  const topLevelName = specRelative.split(sep15).filter(Boolean)[0];
   if (!topLevelName) {
     throw new Error("spec scaffold \u4E8B\u52A1\u76EE\u6807\u4E0D\u80FD\u662F\u9879\u76EE\u6839");
   }
@@ -43232,7 +43337,7 @@ async function publishSpecScaffoldTransaction(options) {
     await ensureTrustedProjectDirectory(stage, candidateSpecDirectory);
     const managedPaths = /* @__PURE__ */ new Set();
     for (const file of options.files) {
-      const target = resolve27(candidateSpecDirectory, file.relativePath);
+      const target = resolve28(candidateSpecDirectory, file.relativePath);
       if (!contained3(candidateSpecDirectory, target)) {
         throw new Error(`spec scaffold \u4E8B\u52A1\u6587\u4EF6\u8D8A\u8FC7\u6682\u5B58\u6839: ${file.relativePath}`);
       }
@@ -43245,7 +43350,7 @@ async function publishSpecScaffoldTransaction(options) {
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }
-      managedPaths.add(relative14(candidateSpecDirectory, target));
+      managedPaths.add(relative15(candidateSpecDirectory, target));
       await writeFile12(target, file.content, "utf8");
     }
     await options.beforeCommit?.();
@@ -43330,7 +43435,7 @@ var REAL_FS = {
   },
   readText: async (abs) => {
     try {
-      return await readFile30(abs, "utf8");
+      return await readFile31(abs, "utf8");
     } catch {
       return void 0;
     }
@@ -43348,19 +43453,19 @@ var REAL_FS = {
 var SPEC_STRATEGY_SIGNAL = "TENON_SPEC_STRATEGY";
 function safeSpecDir(cwd, specDir) {
   if (isAbsolute20(specDir)) return false;
-  const rel = relative15(resolve28(cwd), resolve28(cwd, specDir));
-  return rel !== ".." && !rel.startsWith(`..${sep15}`) && !isAbsolute20(rel);
+  const rel = relative16(resolve29(cwd), resolve29(cwd, specDir));
+  return rel !== ".." && !rel.startsWith(`..${sep16}`) && !isAbsolute20(rel);
 }
 async function assertExistingParentsSafe(cwd, target) {
-  const root = resolve28(cwd);
+  const root = resolve29(cwd);
   const parent = dirname14(target);
-  const rel = relative15(root, parent);
-  if (rel === ".." || rel.startsWith(`..${sep15}`) || isAbsolute20(rel)) {
+  const rel = relative16(root, parent);
+  if (rel === ".." || rel.startsWith(`..${sep16}`) || isAbsolute20(rel)) {
     throw new Error(`scaffold \u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${target}`);
   }
   let cursor = root;
-  for (const segment of rel.split(sep15).filter(Boolean)) {
-    cursor = resolve28(cursor, segment);
+  for (const segment of rel.split(sep16).filter(Boolean)) {
+    cursor = resolve29(cursor, segment);
     try {
       const info = await lstat29(cursor);
       if (!info.isDirectory() || info.isSymbolicLink()) {
@@ -43418,7 +43523,7 @@ async function cmdScaffoldSpec(deps, args, fs) {
   }
   const rawStrategy = typeof flags["strategy"] === "string" && flags["strategy"] !== "" ? flags["strategy"] : fs.env(SPEC_STRATEGY_SIGNAL) || "";
   const files = buildSpecScaffold(type, specDir, locale);
-  const abs = (rel) => resolve28(deps.cwd, rel);
+  const abs = (rel) => resolve29(deps.cwd, rel);
   const existing = /* @__PURE__ */ new Set();
   for (const f of files) {
     if (fs === REAL_FS) {
@@ -43459,12 +43564,12 @@ async function cmdScaffoldSpec(deps, args, fs) {
   const plan = planDocScaffold(files, existing, strategy);
   try {
     if (fs === REAL_FS && strategy === "overwrite") {
-      const specRoot = resolve28(deps.cwd, specDir);
+      const specRoot = resolve29(deps.cwd, specDir);
       await publishSpecScaffoldTransaction({
         repoRoot: deps.cwd,
         specDirectory: specRoot,
         files: plan.writes.map((file) => ({
-          relativePath: relative15(specRoot, abs(file.rel)),
+          relativePath: relative16(specRoot, abs(file.rel)),
           content: file.content
         }))
       });
@@ -43559,11 +43664,11 @@ async function cmdScaffold(deps, sub, args, fs = REAL_FS) {
 }
 
 // packages/cli/src/commands/session.ts
-import { appendFile as appendFile3, lstat as lstat31, mkdir as mkdir23, readFile as readFile32, rename as rename9, rm as rm9, writeFile as writeFile14 } from "node:fs/promises";
+import { appendFile as appendFile3, lstat as lstat31, mkdir as mkdir23, readFile as readFile33, rename as rename9, rm as rm9, writeFile as writeFile14 } from "node:fs/promises";
 import { join as join66 } from "node:path";
 
 // packages/cli/src/continuousAuthority.ts
-import { lstat as lstat30, readFile as readFile31 } from "node:fs/promises";
+import { lstat as lstat30, readFile as readFile32 } from "node:fs/promises";
 import { join as join65 } from "node:path";
 var ACTIVE_POINTER_FILE = ".pipeline-active";
 var INTERACTION_AUTHORITY_FILE = ".pipeline-interaction-authority";
@@ -43578,7 +43683,7 @@ async function readRegularFile(path9) {
   try {
     const entry = await lstat30(path9);
     if (!entry.isFile() || entry.isSymbolicLink()) return null;
-    return await readFile31(path9, "utf8");
+    return await readFile32(path9, "utf8");
   } catch {
     return null;
   }
@@ -43716,7 +43821,7 @@ var REAL_FS2 = {
   loadPackages: async (cwd) => {
     let text2;
     try {
-      text2 = await readFile32(join66(cwd, PROJECT_CONFIG_FILE), "utf8");
+      text2 = await readFile33(join66(cwd, PROJECT_CONFIG_FILE), "utf8");
     } catch {
       return null;
     }
@@ -44115,25 +44220,25 @@ async function cmdTap(deps, sub, args) {
         }
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
-        const code = await new Promise((resolve37) => {
+        const code = await new Promise((resolve38) => {
           const child = spawn5(executable, command2.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
-          child.on("exit", (exitCode, signal) => resolve37(exitCode ?? (signal ? 1 : 0)));
-          child.on("error", () => resolve37(1));
+          child.on("exit", (exitCode, signal) => resolve38(exitCode ?? (signal ? 1 : 0)));
+          child.on("error", () => resolve38(1));
         });
         await result.daemon.stop();
         return code;
       }
-      const termination = new Promise((resolve37, reject3) => {
+      const termination = new Promise((resolve38, reject3) => {
         const cleanup2 = () => {
           process.off("SIGINT", stop);
           process.off("SIGTERM", stop);
         };
         const stop = () => {
           cleanup2();
-          void result.daemon.stop().then(resolve37, reject3);
+          void result.daemon.stop().then(resolve38, reject3);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
@@ -45003,7 +45108,7 @@ var visitStrings = (value, emit4) => {
     for (const item2 of Object.values(value)) visitStrings(item2, emit4);
   }
 };
-var isRecord13 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord14 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var diagnosticMessage = (value) => value.replace(/\s+/g, " ").trim().slice(0, 400);
 async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
   if (mode !== "usage" && mode !== "transitions" && mode !== "last-message") {
@@ -45033,7 +45138,7 @@ async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
             if (embeddedLine.startsWith("[TRANSITION] ")) deps.io.out(embeddedLine);
           }
         });
-      } else if (isRecord13(event) && event.type === "item.completed" && isRecord13(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
+      } else if (isRecord14(event) && event.type === "item.completed" && isRecord14(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
         const message2 = diagnosticMessage(event.item.text);
         if (message2.length > 0) lastAgentMessage = message2;
       }
@@ -45076,8 +45181,8 @@ async function cmdMigrateWorkflow(deps, name2) {
 }
 
 // packages/cli/src/commands/state-projection.ts
-import { lstat as lstat32, readFile as readFile33 } from "node:fs/promises";
-import { isAbsolute as isAbsolute21, join as join67, resolve as resolve29 } from "node:path";
+import { lstat as lstat32, readFile as readFile34 } from "node:fs/promises";
+import { isAbsolute as isAbsolute21, join as join67, resolve as resolve30 } from "node:path";
 function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -45117,7 +45222,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
           deps.io.out(opts.json ? JSON.stringify({ status: "already-pinned" }) : `${name2}: workflow snapshot already pinned`);
           return 0;
         }
-        const sourcePath = isAbsolute21(opts.workflowFile) ? opts.workflowFile : resolve29(deps.cwd, opts.workflowFile);
+        const sourcePath = isAbsolute21(opts.workflowFile) ? opts.workflowFile : resolve30(deps.cwd, opts.workflowFile);
         const info = await lstat32(sourcePath);
         if (!info.isFile() || info.isSymbolicLink()) {
           throw new Error(`workflow file \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${sourcePath}`);
@@ -45125,7 +45230,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
         const workflowId = resolveWorkflowName(state);
         const plan = compileEffectiveWorkflowPlan(
           workflowId,
-          parseWorkflow(await readFile33(sourcePath, "utf8"))
+          parseWorkflow(await readFile34(sourcePath, "utf8"))
         );
         if (plan.workflowFingerprint !== metadata.workflowPlanFingerprint) {
           throw new Error(
@@ -45408,7 +45513,7 @@ var stripNl = (value) => value.replace(/\n$/, "");
 import { spawn as spawn7 } from "node:child_process";
 import { accessSync as accessSync3, constants as fsConstants3, realpathSync as realpathSync4 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
-import { basename as basename7, dirname as dirname15, join as join69, resolve as resolve30 } from "node:path";
+import { basename as basename7, dirname as dirname15, join as join69, resolve as resolve31 } from "node:path";
 
 // packages/cli/src/runtime/paths.ts
 function resolveRuntimePaths(input = {}) {
@@ -45606,30 +45711,30 @@ async function waitForHealthyServer(port, expectedReleaseId, expectedStateScopeI
   return null;
 }
 function listenerPids(port) {
-  return new Promise((resolve37) => {
+  return new Promise((resolve38) => {
     execFile3("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error, stdout) => {
       if (error === null) {
-        resolve37([...new Set(String(stdout ?? "").split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))]);
+        resolve38([...new Set(String(stdout ?? "").split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))]);
         return;
       }
-      resolve37(error.code === 1 ? [] : null);
+      resolve38(error.code === 1 ? [] : null);
     });
   });
 }
 function dashboardPortOpen(port) {
-  return new Promise((resolve37) => {
+  return new Promise((resolve38) => {
     const socket = createConnection({ host: "127.0.0.1", port });
     socket.setTimeout(250);
     socket.once("connect", () => {
       socket.destroy();
-      resolve37(true);
+      resolve38(true);
     });
     socket.once("timeout", () => {
       socket.destroy();
-      resolve37(true);
+      resolve38(true);
     });
     socket.once("error", (error) => {
-      resolve37(error.code !== "ECONNREFUSED");
+      resolve38(error.code !== "ECONNREFUSED");
     });
   });
 }
@@ -45708,11 +45813,11 @@ function openBrowser(url) {
 function resolveDashboardRoot() {
   const declared = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
   if (declared !== void 0 && declared.trim() !== "") return declared;
-  const candidate = resolve30(process.argv[1] ?? "");
+  const candidate = resolve31(process.argv[1] ?? "");
   try {
-    return resolve30(dirname15(realpathSync4(candidate)), "..", "..", "..");
+    return resolve31(dirname15(realpathSync4(candidate)), "..", "..", "..");
   } catch {
-    return resolve30(dirname15(candidate), "..", "..", "..");
+    return resolve31(dirname15(candidate), "..", "..", "..");
   }
 }
 var REAL_DASHBOARD_RUNTIME = {
@@ -45904,7 +46009,7 @@ import { mkdir as mkdir27 } from "node:fs/promises";
 import { join as join75 } from "node:path";
 
 // packages/cli/src/runtime/launchers.ts
-import { chmod as chmod2, lstat as lstat33, mkdir as mkdir24, readFile as readFile34, rm as rm10 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat33, mkdir as mkdir24, readFile as readFile35, rm as rm10 } from "node:fs/promises";
 import { homedir as homedir16 } from "node:os";
 import { dirname as dirname16, join as join70 } from "node:path";
 function shellQuote(value) {
@@ -45942,7 +46047,7 @@ async function captureLauncher(path9) {
       path: path9,
       state: {
         kind: "file",
-        content: await readFile34(path9, "utf8"),
+        content: await readFile35(path9, "utf8"),
         mode: item2.mode & 511
       }
     };
@@ -46027,13 +46132,13 @@ import {
   copyFile as copyFile2,
   lstat as lstat34,
   mkdir as mkdir25,
-  readFile as readFile36,
+  readFile as readFile37,
   readdir as readdir13,
   rename as rename10,
   rm as rm12,
   stat as stat11
 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname17, join as join73, relative as relative16, resolve as resolve31, sep as sep16 } from "node:path";
+import { basename as basename8, dirname as dirname17, join as join73, relative as relative17, resolve as resolve32, sep as sep17 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -46050,7 +46155,7 @@ import { rm as rm11 } from "node:fs/promises";
 import { join as join72 } from "node:path";
 
 // packages/cli/src/runtime/release-store-codecs.ts
-import { appendFile as appendFile4, readFile as readFile35 } from "node:fs/promises";
+import { appendFile as appendFile4, readFile as readFile36 } from "node:fs/promises";
 import { join as join71 } from "node:path";
 var EMPTY_SELECTION = {
   version: 1,
@@ -46075,7 +46180,7 @@ var PAYLOAD_ENTRIES = [
   "tools/verify-skills.sh"
 ];
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
-function isRecord14(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function nonEmptyString(value) {
@@ -46089,7 +46194,7 @@ function isExistingReleaseCollision(error) {
   return code === "EEXIST" || code === "ENOTEMPTY";
 }
 function sourceFromUnknown(value) {
-  if (!isRecord14(value)) return null;
+  if (!isRecord15(value)) return null;
   const host = value.host;
   const pluginVersion = nonEmptyString(value.pluginVersion);
   if (host !== "codex" && host !== "claude" && host !== "adapter" && host !== "manual" || pluginVersion === null) {
@@ -46104,7 +46209,7 @@ function parseManifest(raw) {
   } catch {
     return null;
   }
-  if (!isRecord14(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
+  if (!isRecord15(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
   const payloadDigest = nonEmptyString(value.payloadDigest);
   const createdAt = nonEmptyString(value.createdAt);
   const source = sourceFromUnknown(value.source);
@@ -46119,7 +46224,7 @@ function parseSelection(raw) {
   } catch {
     return null;
   }
-  if (!isRecord14(value)) return null;
+  if (!isRecord15(value)) return null;
   const revision = value.revision;
   if (value.version !== 1 || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) return null;
   const activeRelease = value.activeRelease;
@@ -46135,7 +46240,7 @@ function parseAudit(raw) {
   } catch {
     return null;
   }
-  if (!isRecord14(value) || value.version !== 1) return null;
+  if (!isRecord15(value) || value.version !== 1) return null;
   const at = nonEmptyString(value.at);
   const detail = nonEmptyString(value.detail);
   const kind = value.kind;
@@ -46157,14 +46262,14 @@ function stableJson(value) {
 }
 async function readReleaseManifest(releaseRoot) {
   try {
-    return parseManifest(await readFile35(join71(releaseRoot, "release.json"), "utf8"));
+    return parseManifest(await readFile36(join71(releaseRoot, "release.json"), "utf8"));
   } catch {
     return null;
   }
 }
 async function readSelection(paths) {
   try {
-    const parsed = parseSelection(await readFile35(paths.selectionPath, "utf8"));
+    const parsed = parseSelection(await readFile36(paths.selectionPath, "utf8"));
     if (parsed !== null) return parsed;
     throw new RuntimeFailure("runtime-corrupt", "managed runtime selection.json \u683C\u5F0F\u65E0\u6548");
   } catch (error) {
@@ -46174,7 +46279,7 @@ async function readSelection(paths) {
 }
 async function lastAudit(paths) {
   try {
-    const lines = (await readFile35(paths.auditPath, "utf8")).trim().split(/\r?\n/);
+    const lines = (await readFile36(paths.auditPath, "utf8")).trim().split(/\r?\n/);
     for (let index = lines.length - 1; index >= 0; index -= 1) {
       const line = lines[index];
       if (line === void 0 || line === "") continue;
@@ -46230,12 +46335,12 @@ async function compensateActivation(input) {
 
 // packages/cli/src/runtime/release-store.ts
 function isWithin(root, candidate) {
-  const rel = relative16(root, candidate);
-  return rel === "" || !rel.startsWith(`..${sep16}`) && rel !== ".." && !rel.includes(`${sep16}..${sep16}`);
+  const rel = relative17(root, candidate);
+  return rel === "" || !rel.startsWith(`..${sep17}`) && rel !== ".." && !rel.includes(`${sep17}..${sep17}`);
 }
 function candidatePath(root, entry) {
-  const path9 = resolve31(root, entry);
-  if (!isWithin(resolve31(root), path9)) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u8DEF\u5F84\u8D8A\u754C: ${entry}`);
+  const path9 = resolve32(root, entry);
+  if (!isWithin(resolve32(root), path9)) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u8DEF\u5F84\u8D8A\u754C: ${entry}`);
   return path9;
 }
 async function copyEntry(source, target) {
@@ -46279,7 +46384,7 @@ async function hashTree(root) {
         await visit(child, childRel);
       } else if (item2.isFile()) {
         hash.update(`F\0${childRel}\0${(item2.mode & 511).toString(8)}\0`);
-        hash.update(await readFile36(child));
+        hash.update(await readFile37(child));
       } else {
         throw new RuntimeFailure("runtime-corrupt", `\u53D1\u5E03 payload \u5305\u542B\u975E\u666E\u901A\u6587\u4EF6: ${childRel}`);
       }
@@ -46319,7 +46424,7 @@ function hookCommands(value, output) {
     for (const item2 of value) hookCommands(item2, output);
     return;
   }
-  if (!isRecord14(value)) return;
+  if (!isRecord15(value)) return;
   const command2 = value.command;
   if (typeof command2 === "string") output.push(command2);
   for (const item2 of Object.values(value)) hookCommands(item2, output);
@@ -46328,7 +46433,7 @@ async function verifyHookAbi(payloadRoot) {
   const manifestPath2 = join73(payloadRoot, "hooks", "hooks.json");
   let parsed;
   try {
-    parsed = JSON.parse(await readFile36(manifestPath2, "utf8"));
+    parsed = JSON.parse(await readFile37(manifestPath2, "utf8"));
   } catch (error) {
     throw new RuntimeFailure("candidate-invalid", `hooks/hooks.json \u65E0\u6CD5\u89E3\u6790: ${String(error)}`);
   }
@@ -46383,8 +46488,8 @@ async function verifyPayload(payloadRoot, runner) {
 async function candidateVersion(candidateRoot) {
   for (const manifest of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(await readFile36(join73(candidateRoot, manifest), "utf8"));
-      const version = isRecord14(parsed) ? nonEmptyString(parsed.version) : null;
+      const parsed = JSON.parse(await readFile37(join73(candidateRoot, manifest), "utf8"));
+      const version = isRecord15(parsed) ? nonEmptyString(parsed.version) : null;
       if (version !== null) return version;
     } catch {
     }
@@ -46405,7 +46510,7 @@ var RuntimeReleaseStore = class {
     this.auditWriter = options.auditWriter ?? writeAudit;
   }
   async stageAndActivate(candidateRoot, host) {
-    const absoluteCandidate = resolve31(candidateRoot);
+    const absoluteCandidate = resolve32(candidateRoot);
     await this.prepareRoots();
     try {
       return await withLock(this.paths.stateRoot, async () => this.stageAndActivateUnderLock(absoluteCandidate, host));
@@ -46600,12 +46705,12 @@ var RuntimeReleaseStore = class {
     const previous = join73(this.paths.bootstrapRoot, "previous.mjs");
     try {
       await stat11(active);
-      await atomicWriteFile(previous, await readFile36(active, "utf8"));
+      await atomicWriteFile(previous, await readFile37(active, "utf8"));
       await chmod3(previous, 493);
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    await atomicWriteFile(active, await readFile36(source, "utf8"));
+    await atomicWriteFile(active, await readFile37(source, "utf8"));
     await chmod3(active, 493);
   }
   async prune(selection) {
@@ -46636,11 +46741,11 @@ var RuntimeReleaseStore = class {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { lstat as lstat35, mkdir as mkdir26, readFile as readFile37, unlink as unlink6 } from "node:fs/promises";
+import { lstat as lstat35, mkdir as mkdir26, readFile as readFile38, unlink as unlink6 } from "node:fs/promises";
 import { dirname as dirname18, isAbsolute as isAbsolute22, join as join74, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
-function isRecord15(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys(value, allowed) {
@@ -46653,7 +46758,7 @@ function decodeManagedHostSteps(value) {
   const ids = /* @__PURE__ */ new Set();
   const steps = [];
   for (const item2 of value) {
-    if (!isRecord15(item2) || !exactKeys(item2, [
+    if (!isRecord16(item2) || !exactKeys(item2, [
       "id",
       "state",
       "before",
@@ -46680,7 +46785,7 @@ function decodeManagedHostSteps(value) {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 var JOURNAL_FILE = "release-transaction.json";
-function isRecord16(value) {
+function isRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys2(value, required2, optional = []) {
@@ -46691,7 +46796,7 @@ function isSource(value) {
   return value === "codex" || value === "claude" || value === "adapter" || value === "manual";
 }
 function decodeSelection(value) {
-  if (!isRecord16(value) || !exactKeys2(value, [
+  if (!isRecord17(value) || !exactKeys2(value, [
     "version",
     "revision",
     "activeRelease",
@@ -46708,14 +46813,14 @@ function decodeSelection(value) {
   };
 }
 function decodeRelease(value) {
-  if (!isRecord16(value) || !exactKeys2(value, [
+  if (!isRecord17(value) || !exactKeys2(value, [
     "version",
     "releaseId",
     "payloadDigest",
     "createdAt",
     "source"
   ])) return null;
-  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord16(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
+  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord17(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
   return {
     version: 1,
     releaseId: value.releaseId,
@@ -46728,9 +46833,9 @@ function decodeRelease(value) {
   };
 }
 function decodeLauncherFile(value) {
-  if (!isRecord16(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute22(value.path) || normalize(value.path) !== value.path) return null;
+  if (!isRecord17(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute22(value.path) || normalize(value.path) !== value.path) return null;
   const state = value.state;
-  if (!isRecord16(state) || typeof state.kind !== "string") return null;
+  if (!isRecord17(state) || typeof state.kind !== "string") return null;
   if (state.kind === "missing" && exactKeys2(state, ["kind"])) {
     return { path: value.path, state: { kind: "missing" } };
   }
@@ -46747,13 +46852,13 @@ function decodeLauncherFile(value) {
   return null;
 }
 function decodeLauncherSnapshot(value) {
-  if (!isRecord16(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
+  if (!isRecord17(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
   const tenon = decodeLauncherFile(value.tenon);
   const hook = decodeLauncherFile(value.hook);
   return tenon === null || hook === null ? null : { tenon, hook };
 }
 function decodeActivation(value) {
-  if (!isRecord16(value) || !exactKeys2(
+  if (!isRecord17(value) || !exactKeys2(
     value,
     ["selection", "release", "releaseRoot"],
     ["launcherSnapshot", "launcherCommitted"]
@@ -46773,7 +46878,7 @@ function decodeActivation(value) {
   };
 }
 function decodeActivationCheckpoint(value) {
-  if (!isRecord16(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
+  if (!isRecord17(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
   const selection = decodeSelection(value.selection);
   const launchers = decodeLauncherSnapshot(value.launchers);
   return selection === null || launchers === null ? null : { selection, launchers };
@@ -46783,7 +46888,7 @@ function isOperation(value) {
 }
 function decodeDashboardIdentity(value) {
   if (value === void 0) return void 0;
-  if (!isRecord16(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
+  if (!isRecord17(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
   return {
     version: 1,
     port: value.port,
@@ -46795,7 +46900,7 @@ function decodeDashboardIdentity(value) {
 }
 function decodeDashboard(value) {
   if (value === void 0) return void 0;
-  if (!isRecord16(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
+  if (!isRecord17(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
   const identity = decodeDashboardIdentity({
     version: value.version,
     port: value.port,
@@ -46818,7 +46923,7 @@ function decodeJournal(raw, paths) {
   } catch {
     return null;
   }
-  if (!isRecord16(value) || !exactKeys2(
+  if (!isRecord17(value) || !exactKeys2(
     value,
     ["version", "transactionId", "operation", "source", "phase", "startedAt", "updatedAt"],
     [
@@ -46874,7 +46979,7 @@ async function readJournal(path9, paths) {
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`managed release journal \u4E0D\u662F\u666E\u901A\u6587\u4EF6\uFF1A${path9}`);
     }
-    const decoded = decodeJournal(await readFile37(path9, "utf8"), paths);
+    const decoded = decodeJournal(await readFile38(path9, "utf8"), paths);
     if (decoded === null) throw new Error(`managed release journal \u683C\u5F0F\u975E\u6CD5\uFF1A${path9}`);
     return decoded;
   } catch (error) {
@@ -47471,7 +47576,7 @@ function createReleasedDashboardStarter(runtime) {
 var REAL_RELEASED_DASHBOARD_STARTER = createReleasedDashboardStarter(REAL_DASHBOARD_RUNTIME);
 
 // packages/cli/src/commands/setupEnvironment.ts
-import { dirname as dirname19, join as join76, resolve as resolve32 } from "node:path";
+import { dirname as dirname19, join as join76, resolve as resolve33 } from "node:path";
 import { randomUUID as randomUUID12 } from "node:crypto";
 
 // packages/cli/src/commands/native-host-command-binding.ts
@@ -47555,7 +47660,7 @@ var REAL_SETUP_ENV = {
     return r !== void 0 && r.trim() !== "" ? r : null;
   },
   selfPath: () => {
-    const candidate = resolve32(process.argv[1] ?? "");
+    const candidate = resolve33(process.argv[1] ?? "");
     try {
       return realpathSync5(candidate);
     } catch {
@@ -47668,7 +47773,7 @@ var REAL_SETUP_ENV = {
 function resolvePipelineRoot(env) {
   const root = env.pluginRoot();
   if (root !== null) return root;
-  return resolve32(dirname19(env.selfPath()), "..", "..", "..");
+  return resolve33(dirname19(env.selfPath()), "..", "..", "..");
 }
 function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
@@ -48871,8 +48976,8 @@ async function runManagedHostCommand(transaction, stepId, env, command2) {
 
 // packages/cli/src/migration/legacy-project-registry.ts
 import { statSync as statSync9 } from "node:fs";
-import { mkdir as mkdir28, readFile as readFile38 } from "node:fs/promises";
-import { isAbsolute as isAbsolute25, join as join80, posix as posix7, resolve as resolve33, win32 as win325 } from "node:path";
+import { mkdir as mkdir28, readFile as readFile39 } from "node:fs/promises";
+import { isAbsolute as isAbsolute25, join as join80, posix as posix7, resolve as resolve34, win32 as win325 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
 var MIGRATION_ID = "host-project-registry-v1";
 function resolveHostProjectRegistryCandidates(input) {
@@ -48889,7 +48994,7 @@ function nonNegativeInteger(value) {
 async function readMigrationReceipt(path9) {
   let text2;
   try {
-    text2 = await readFile38(path9, "utf8");
+    text2 = await readFile39(path9, "utf8");
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -48921,7 +49026,7 @@ async function readMigrationReceipt(path9) {
 async function readPendingMigration(path9) {
   let text2;
   try {
-    text2 = await readFile38(path9, "utf8");
+    text2 = await readFile39(path9, "utf8");
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -48942,7 +49047,7 @@ async function readPendingMigration(path9) {
   return {
     version: 1,
     migration: MIGRATION_ID,
-    roots: record2.roots.map((root) => resolve33(root)),
+    roots: record2.roots.map((root) => resolve34(root)),
     rejected: record2.rejected
   };
 }
@@ -49008,7 +49113,7 @@ async function migrateLegacyProjectRegistry(input) {
             rejected += 1;
             continue;
           }
-          discovered.add(resolve33(item2));
+          discovered.add(resolve34(item2));
         }
       }
       pending = {
@@ -50890,9 +50995,9 @@ function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve37) => {
+  return new Promise((resolve38) => {
     execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
-      resolve37((stdout ?? "").trim());
+      resolve38((stdout ?? "").trim());
     });
   });
 }
@@ -50902,7 +51007,7 @@ async function readGateMarkers(cwd) {
     try {
       const p = join87(cwd, `.pipeline-pending-${kind}`);
       const st = await stat12(p);
-      out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile39(p, "utf8") });
+      out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile40(p, "utf8") });
     } catch {
     }
   }
@@ -51016,8 +51121,8 @@ function makeDoctorProbes(runtimeScope2) {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () => new Promise((resolve37) => {
-      execFile5("git", ["--version"], (err) => resolve37(!err));
+    gitAvailable: () => new Promise((resolve38) => {
+      execFile5("git", ["--version"], (err) => resolve38(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -51068,7 +51173,7 @@ function makeDoctorProbes(runtimeScope2) {
       return host === "codex" || host === "claude" ? host : null;
     },
     codexAuthStatus: () => probeCodexAuth(),
-    runVerifySkills: () => new Promise((resolve37) => {
+    runVerifySkills: () => new Promise((resolve38) => {
       execFile5(
         "bash",
         [join87(root, "tools", "verify-skills.sh"), "--quiet"],
@@ -51076,7 +51181,7 @@ function makeDoctorProbes(runtimeScope2) {
         (err, stdout, stderr) => {
           const errCode = err?.code;
           const code = err ? typeof errCode === "number" ? errCode : 1 : 0;
-          resolve37({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
+          resolve38({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
         }
       );
     }),
@@ -51203,7 +51308,7 @@ async function main() {
     readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile39(join87(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile40(join87(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
@@ -51216,7 +51321,7 @@ async function main() {
     readInstalledPlugins: async () => {
       for (const p of [join87(pluginRoot(), "..", "installed_plugins.json"), join87(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
-          return await readFile39(p, "utf8");
+          return await readFile40(p, "utf8");
         } catch {
         }
       }

@@ -208,8 +208,8 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     const preflight = await screen.findByTestId('wb-gov-graduation')
     expect(preflight).toHaveTextContent('2 项活跃漂移未清')
     expect(preflight).toHaveTextContent('fail_streak=1')
-    expect(preflight).toHaveTextContent('runs 3')
-    expect(preflight).toHaveTextContent('drift 2')
+    expect(preflight).toHaveTextContent('运行 3')
+    expect(preflight).toHaveTextContent('漂移 2')
     expect(preflight).toHaveAttribute('data-can-graduate', 'false')
   })
 

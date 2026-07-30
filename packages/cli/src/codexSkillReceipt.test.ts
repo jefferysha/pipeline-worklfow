@@ -52,7 +52,7 @@ async function appendValidTranscriptPadding(path: string): Promise<void> {
   await appendFile(path, `${JSON.stringify(padding)}\n`, 'utf8')
 }
 
-function customResultOutput(exitCode = 0, output = ''): readonly unknown[] {
+function customResultOutput(exitCode = 0, output = '# OpenSpec Propose\n'): readonly unknown[] {
   return [
     { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
     {
@@ -84,6 +84,7 @@ function eventLines(
     readonly callId?: string
     readonly outputCallId?: string
     readonly command?: string
+    readonly execArgs?: Readonly<Record<string, unknown>>
   } = {},
 ): string {
   const callId = options.callId ?? toolUseId
@@ -112,7 +113,10 @@ function eventLines(
         status: 'completed',
         call_id: callId,
         name: 'exec',
-        input: `const r = await tools.exec_command(${JSON.stringify({ cmd: command })}); text(r);`,
+        input: `const r = await tools.exec_command(${JSON.stringify({
+          cmd: command,
+          ...options.execArgs,
+        })}); text(r);`,
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -179,7 +183,7 @@ function multilineSessionScopedEventLines(sessionCwd: string): string {
       payload: {
         type: 'custom_tool_call_output',
         call_id: 'call-multiline-skill-read',
-        output: customResultOutput(),
+        output: customResultOutput(0, '# OpenSpec Propose\n# Writing Plans\n'),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -219,7 +223,7 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
       payload: {
         type: 'custom_tool_call_output',
         call_id: 'call-unquoted-object-skill-read',
-        output: customResultOutput(),
+        output: customResultOutput(0, '# OpenSpec Propose\n# Writing Plans\n'),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -232,7 +236,8 @@ function functionCallSessionScopedEventLines(
   sessionCwd: string,
   workdir?: string,
   outputType: 'function_call_output' | 'custom_tool_call_output' = 'function_call_output',
-  output: unknown = 'Chunk ID: abc123\nWall time: 0.001 seconds\nProcess exited with code 0\n',
+  output: unknown = 'Chunk ID: abc123\nWall time: 0.001 seconds\nProcess exited with code 0\nOriginal token count: 3\nOutput:\n# OpenSpec Propose\n',
+  execArgs: Readonly<Record<string, unknown>> = {},
 ): string {
   const command = `cat ${skillPath}`
   const events: unknown[] = [
@@ -253,7 +258,11 @@ function functionCallSessionScopedEventLines(
         type: 'function_call',
         call_id: 'call-function-skill-read',
         name: 'exec_command',
-        arguments: JSON.stringify({ cmd: command, ...(workdir === undefined ? {} : { workdir }) }),
+        arguments: JSON.stringify({
+          cmd: command,
+          ...(workdir === undefined ? {} : { workdir }),
+          ...execArgs,
+        }),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -411,6 +420,12 @@ describe('Codex transcript skill receipt', () => {
         prefix_rule: ['sed', '-n'],
       })}); text(r);`,
     )).toEqual([{ command: "sed -n '1,20p' /trusted/SKILL.md", workdir: '/repo' }])
+    expect(transcriptExecInvocations(
+      `const r = await tools.exec_command({cmd:"cat /trusted/SKILL.md",max_output_tokens:1}); text(r);`,
+    )).toEqual([])
+    expect(transcriptExecInvocations(
+      `// @exec: {"max_output_tokens":1}\nconst r = await tools.exec_command({cmd:"cat /trusted/SKILL.md"}); text(r);`,
+    )).toEqual([])
   })
 
   it.each([
@@ -479,7 +494,11 @@ describe('Codex transcript skill receipt', () => {
             directDevelopmentRoot: pluginRoot,
             executingPluginRoot: pluginRoot,
           }
-      await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
+      await writeFile(
+        transcript,
+        eventLines(customResultOutput(0, '# trusted root skill\n')),
+        'utf8',
+      )
       const deps = { ...makeDeps({ cwd: root }), clock: (): string => '2026-07-24T00:02:00Z' }
       expect(await cmdInternalCodexSkillReceipt(
         deps,
@@ -554,8 +573,8 @@ describe('Codex transcript skill receipt', () => {
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
   })
 
-  it('accepts the current Codex content-array ABI when text(result) forwards a complete JSON envelope', async () => {
-    await writeFile(transcript, eventLines(customResultOutput(0, '# skill body\n')), 'utf8')
+  it('accepts the current Codex content-array ABI when text(result) forwards the complete Skill', async () => {
+    await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
     await recordPendingReceipt()
 
     const result = await reconcileCodexSkillEvidence({
@@ -568,6 +587,74 @@ describe('Codex transcript skill receipt', () => {
       codexHomeDir: join(home, '.codex'),
     })
     expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects a successful receipt when max_output_tokens can truncate the trusted Skill output', async () => {
+    await writeFile(
+      transcript,
+      eventLines(
+        customResultOutput(0, '# OpenSpec'),
+        turnId,
+        [skillPath],
+        '2026-07-24T00:02:00Z',
+        { execArgs: { max_output_tokens: 1 } },
+      ),
+      'utf8',
+    )
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects a successful receipt whose forwarded stdout is not the complete trusted Skill', async () => {
+    await writeFile(transcript, eventLines(customResultOutput(0, '# OpenSpec')), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects max_output_tokens on the function-call exec ABI', async () => {
+    await writeFile(
+      transcript,
+      functionCallSessionScopedEventLines(
+        root,
+        undefined,
+        'function_call_output',
+        'Chunk ID: abc123\nWall time: 0.001 seconds\nProcess exited with code 0\nOriginal token count: 1\nOutput:\n# OpenSpec',
+        { max_output_tokens: 1 },
+      ),
+      'utf8',
+    )
+    await recordPendingReceipt('call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('rejects stdout that prints exit_code=0 without a complete result envelope', async () => {
@@ -590,17 +677,17 @@ describe('Codex transcript skill receipt', () => {
   })
 
   it.each([
-    ['literal cat', () => `cat ${skillPath}`],
-    ['literal cat with option terminator', () => `cat -- ${skillPath}`],
-    ['single-quoted literal cat', () => `cat '${skillPath}'`],
-    ['double-quoted literal cat', () => `cat "${skillPath}"`],
-    ['safe batched cats', () => `cat ${writingPlansPath} && cat ${skillPath}`],
-    ['safe multiline cats', () => `cat ${writingPlansPath}\ncat ${skillPath}`],
-  ])('accepts %s as proof of a complete trusted Skill read', async (_case, command) => {
+    ['literal cat', () => `cat ${skillPath}`, '# OpenSpec Propose\n'],
+    ['literal cat with option terminator', () => `cat -- ${skillPath}`, '# OpenSpec Propose\n'],
+    ['single-quoted literal cat', () => `cat '${skillPath}'`, '# OpenSpec Propose\n'],
+    ['double-quoted literal cat', () => `cat "${skillPath}"`, '# OpenSpec Propose\n'],
+    ['safe batched cats', () => `cat ${writingPlansPath} && cat ${skillPath}`, '# Writing Plans\n# OpenSpec Propose\n'],
+    ['safe multiline cats', () => `cat ${writingPlansPath}\ncat ${skillPath}`, '# Writing Plans\n# OpenSpec Propose\n'],
+  ])('accepts %s as proof of a complete trusted Skill read', async (_case, command, expectedOutput) => {
     await writeFile(
       transcript,
       eventLines(
-        customResultOutput(),
+        customResultOutput(0, expectedOutput),
         turnId,
         [skillPath],
         '2026-07-24T00:02:00Z',
@@ -1020,7 +1107,15 @@ describe('Codex transcript skill receipt', () => {
   })
 
   it('discovers unresolved skills after another skill in the same batched exec has a strict receipt', async () => {
-    await writeFile(transcript, sessionScopedEventLines(root, undefined, [skillPath, writingPlansPath]), 'utf8')
+    await writeFile(
+      transcript,
+      sessionScopedEventLines(
+        root,
+        customResultOutput(0, '# OpenSpec Propose\n# Writing Plans\n'),
+        [skillPath, writingPlansPath],
+      ),
+      'utf8',
+    )
     await recordPendingReceipt()
     await bindHostSession()
 

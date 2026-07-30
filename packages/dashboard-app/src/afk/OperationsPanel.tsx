@@ -50,6 +50,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
   const [loops, setLoops] = useState<WbLoopRow[]>([])
   const [cadence, setCadence] = useState<WbCadenceStatus | null>(null)
   const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [loading, setLoading] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [loopId, setLoopId] = useState('')
   const [runner, setRunner] = useState('codex')
@@ -70,6 +71,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
   const [operationError, setOperationError] = useState<unknown | null>(null)
   const [loadedRoot, setLoadedRoot] = useState<string | null>(null)
   const loadGeneration = useRef(0)
+  const loadingRoot = useRef<string | null>(null)
   const currentRoot = useRef(root)
   currentRoot.current = root
   const localeIdentity = useRef({ t, lang })
@@ -102,7 +104,10 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
 
   const reload = (): void => {
     const targetRoot = root
+    if (loadingRoot.current === targetRoot) return
     const generation = ++loadGeneration.current
+    loadingRoot.current = targetRoot
+    setLoading(true)
     setLoadError(null)
     void Promise.all([fetchAutomationStarters(targetRoot), fetchLoopsSnapshot(), fetchCadenceStatus(targetRoot)])
       .then(([nextTemplates, loopSnapshot, cadenceStatus]) => {
@@ -120,10 +125,18 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
           setLoadError(error)
         }
       })
+      .finally(() => {
+        if (generation === loadGeneration.current && currentRoot.current === targetRoot) {
+          loadingRoot.current = null
+          setLoading(false)
+        }
+      })
   }
 
   useEffect(() => {
     operationMutation.invalidate()
+    loadingRoot.current = null
+    setLoading(false)
     clearRootScopedState()
     reload()
     return () => {
@@ -222,12 +235,16 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
           <div className="flex items-center gap-2 text-text"><Activity size={17} aria-hidden="true" /><h2 className="text-[15px] font-bold">{t('operations.title')}</h2></div>
           <p className="mt-1 text-xs text-text-3">{t('operations.subtitle')}</p>
         </div>
-        <button type="button" className={ghost} onClick={reload} disabled={busy !== null} data-testid="ops-refresh">
+        <button type="button" className={ghost} onClick={reload} disabled={loading || busy !== null} data-testid="ops-refresh">
           <RefreshCw className="mr-1.5 inline size-3.5" aria-hidden="true" />{t('operations.refresh')}
         </button>
       </header>}
 
       {loadError !== null && <p role="alert" className="mb-3 rounded-lg border border-red-b bg-red-t px-3 py-2 text-xs text-red-d">{formatApiError(loadError, t, { exposeServerDetail: lang === 'zh' })}</p>}
+      {loading && <p role="status" aria-live="polite" data-testid="ops-loading" className="mb-3 rounded-lg border border-border bg-fill px-3 py-2 text-xs text-text-3">{t('operations.loading')}</p>}
+      {!loading && loadError === null && rootReady && templates.length === 0 && loops.length === 0 && (
+        <p role="status" aria-live="polite" data-testid="ops-empty" className="mb-3 rounded-lg border border-border bg-fill px-3 py-2 text-xs text-text-3">{t('operations.empty')}</p>
+      )}
 
       <div className={`grid gap-3 ${compact ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>
         {shows('cadence') && <OperationsCadenceCard cadence={cadence} compact={compact} />}
@@ -238,19 +255,19 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             <label className="text-xs font-semibold text-text-2">{t('operations.loop_id')}<input className={`${input} mt-1`} data-testid="ops-loop-id" name="loop-id" autoComplete="off" value={loopId} onChange={(event) => {
               invalidateOperation()
               setLoopId(event.target.value)
-            }} placeholder={t('operations.loop_id_placeholder')} /><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.loop_id_help')}</span></label>
+            }} placeholder={t('operations.loop_id_placeholder')} /><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.loop_id_help')}</span></label>
             <label className="text-xs font-semibold text-text-2">{t('operations.skill_bundle')}<input className={`${input} mt-1`} data-testid="ops-skill-bundle" name="skill-bundle" autoComplete="off" value={skillBundle} onChange={(event) => {
               invalidateOperation()
               setSkillBundle(event.target.value)
-            }} placeholder={t('operations.skill_bundle_placeholder')} /><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.skill_bundle_help')}</span></label>
+            }} placeholder={t('operations.skill_bundle_placeholder')} /><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.skill_bundle_help')}</span></label>
             <label className="text-xs font-semibold text-text-2">{t('operations.workflow')}<input className={`${input} mt-1`} name="workflow" autoComplete="off" value={workflow} onChange={(event) => {
               invalidateOperation()
               setWorkflow(event.target.value)
-            }} /><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.workflow_help')}</span></label>
+            }} /><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.workflow_help')}</span></label>
             <label className="text-xs font-semibold text-text-2">{t('operations.runner')}<select className={`${input} mt-1`} data-testid="ops-runner" value={runner} onChange={(event) => {
               invalidateOperation()
               setRunner(event.target.value)
-            }}><option value="codex">Codex</option><option value="claude-code">Claude Code</option></select><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.runner_help')}</span></label>
+            }}><option value="codex">Codex</option><option value="claude-code">Claude Code</option></select><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.runner_help')}</span></label>
           </div>
           <button
             type="button"
@@ -278,13 +295,15 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
               setConfirmedRunKey(null)
               setConfirmedL3Key(null)
               setConfirmedSyncKey(null)
-            }}>{loops.map((loop) => <option key={loop.id} value={loop.id}>{loop.id} · {loop.status}</option>)}</select><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.run_loop_help')}</span></label>
+            }}>{loops.map((loop) => <option key={loop.id} value={loop.id}>{loop.id} · {loop.status}</option>)}</select><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.run_loop_help')}</span></label>
             <label className="text-xs font-semibold text-text-2">{t('operations.run_permission')}<select className={`${input} mt-1`} data-testid="ops-run-level" value={runLevel} onChange={(event) => {
               invalidateOperation()
-              setRunLevel(event.target.value as 'L1' | 'L2' | 'L3')
+              const level = event.target.value
+              if (level !== 'L1' && level !== 'L2' && level !== 'L3') return
+              setRunLevel(level)
               setConfirmedRunKey(null)
               setConfirmedL3Key(null)
-            }}><option value="L1">{t('operations.run_permission_l1')}</option><option value="L2">{t('operations.run_permission_l2')}</option><option value="L3">{t('operations.run_permission_l3')}</option></select><span className="mt-1 block text-[10px] font-normal text-text-3">{t('operations.run_permission_help')}</span></label>
+            }}><option value="L1">{t('operations.run_permission_l1')}</option><option value="L2">{t('operations.run_permission_l2')}</option><option value="L3">{t('operations.run_permission_l3')}</option></select><span className="mt-1 block text-[11px] font-normal text-text-3">{t('operations.run_permission_help')}</span></label>
           </div>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-text-2">
             <label><input type="checkbox" data-testid="ops-run-real" checked={runReal} onChange={(event) => {

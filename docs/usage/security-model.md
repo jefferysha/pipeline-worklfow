@@ -49,11 +49,14 @@ for host marketplace/source trust or OS account security.
 CI and the pre-tag release candidate run `npm run check:dependencies`. The canonical gate combines the High/Critical
 advisory audit with `npm ls --all`, so invalid, extraneous, or incompatible
 resolved trees fail too. A formal release starts by dispatching
-**Release candidate (pre-tag)** with the exact current `main` SHA and new tag.
+**Release candidate (pre-tag)** with the exact current `main` SHA and a new tag,
+or with an existing tag that already peels to that SHA when recovering an
+interrupted release.
 Its untrusted verification job is read-only, does not persist checkout
 credentials, and fails closed unless canonical push CI succeeded for that exact
 SHA. All build, test, and packaging commands run there without release secrets.
-It publishes a payload bound by GitHub's artifact digest and a per-asset
+It normalizes the upload action's bare SHA-256 into GitHub's REST artifact
+digest form and publishes a payload bound by that digest and a per-asset
 SHA-256 manifest, plus separate approval evidence. A default-branch-owned
 `workflow_run` writer revalidates the repository, canonical workflow, completed
 run, exact artifact, and approved SHA. The writer checks out and executes no

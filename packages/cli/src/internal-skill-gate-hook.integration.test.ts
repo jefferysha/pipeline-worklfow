@@ -278,7 +278,8 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
                 chunk_id: 'dag-receipt',
                 exit_code: 0,
                 original_token_count: 0,
-                output: '',
+                output: await readFile(join(hostCache, 'skills', 'tenon-open', 'SKILL.md'), 'utf8')
+                  + await readFile(join(hostCache, 'skills', 'tenon', 'SKILL.md'), 'utf8'),
                 wall_time_seconds: 0.1,
               }),
             },
@@ -369,7 +370,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
                 chunk_id: 'omitted-receipt',
                 exit_code: 0,
                 original_token_count: 0,
-                output: '',
+                output: await readFile(join(hostCache, 'skills', 'tenon-open', 'SKILL.md'), 'utf8'),
                 wall_time_seconds: 0.1,
               }),
             },

@@ -111,6 +111,7 @@ jobs:
           set -euo pipefail
           mkdir -p .release-candidate
           gh run download "$UPSTREAM_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
             --name release-candidate-approval \
             --dir .release-candidate
           [ -f .release-candidate/approved.json ]

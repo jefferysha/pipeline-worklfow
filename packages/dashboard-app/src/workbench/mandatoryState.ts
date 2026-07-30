@@ -4,33 +4,24 @@ import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
   clearMandatoryConfig,
-  isValidMandatorySkillList,
   loadMandatoryConfig,
   peekMandatoryConfig,
   primeMandatoryConfig,
   type MandatoryConfig,
   type MatrixTrack,
 } from './mandatoryConfig'
+import { decodeMandatorySkillWriteSuccess } from './mandatorySkillWriteResponse'
 
-interface MandatorySkillsPostResponse {
-  ok: boolean
-  error?: string
-  skills?: string[]
+interface MandatorySkillsPostError {
+  readonly error: string | null
 }
 
-function decodeMandatorySkillsPostResponse(value: unknown): MandatorySkillsPostResponse | null {
+function decodeMandatorySkillsPostError(value: unknown): MandatorySkillsPostError | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const body = value as Record<string, unknown>
-  if (typeof body.ok !== 'boolean') return null
-  if (body.error !== undefined && typeof body.error !== 'string') return null
-  if (body.skills !== undefined && (!Array.isArray(body.skills) || !body.skills.every((skill) => typeof skill === 'string'))) {
-    return null
-  }
-  return {
-    ok: body.ok,
-    ...(body.error === undefined ? {} : { error: body.error }),
-    ...(body.skills === undefined ? {} : { skills: body.skills as string[] }),
-  }
+  if (body.ok !== false) return null
+  if (body.error === undefined) return { error: null }
+  return typeof body.error === 'string' ? { error: body.error } : null
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -206,40 +197,54 @@ export function useMandatorySkills(root: string): MandatoryState {
       savingOpsRef.current.get(opKey)?.token === op.token && rootRef.current === requestRoot
     try {
       const res = await postMandatorySkills({ phase, track: selected.id, skills, root: requestRoot })
-      let body: MandatorySkillsPostResponse | null = null
+      let body: unknown = null
       let parsed = false
       try {
-        const value: unknown = await res.json()
+        body = await res.json()
         parsed = true
-        body = decodeMandatorySkillsPostResponse(value)
       } catch {
         /* 无 JSON 体：走下方通用错误文案 */
       }
       const locale = localeRef.current
-      if (parsed && body === null) {
-        if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
-        return
-      }
-      if (!res.ok || body?.ok !== true) {
+      const success = parsed
+        ? decodeMandatorySkillWriteSuccess(body, { phase, track: selected.id })
+        : null
+      const serverError = parsed ? decodeMandatorySkillsPostError(body) : null
+      if (!res.ok) {
+        if (parsed && success === null && serverError === null) {
+          if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
+          return
+        }
         if (isCurrent()) {
           setSaveErrors((current) => ({
             ...current,
             [cellKey]:
-            locale.lang === 'zh' && body?.error
-              ? body.error
+            locale.lang === 'zh' && serverError?.error
+              ? serverError.error
               : locale.t('workbench.mand_save_failed', { status: res.status }),
           }))
         }
         return
       }
-      if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('workbench.mand_save_invalid') }))
+      if (serverError !== null) {
+        if (isCurrent()) {
+          setSaveErrors((current) => ({
+            ...current,
+            [cellKey]:
+            locale.lang === 'zh' && serverError.error
+              ? serverError.error
+              : locale.t('workbench.mand_save_failed', { status: res.status }),
+          }))
+        }
         return
       }
-      const saved = body.skills ?? skills
+      if (success === null) {
+        if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
+        return
+      }
       const base = peekMandatoryConfig(requestRoot) ?? requestCfg
       if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: saved } }
+        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: success.skills } }
         primeMandatoryConfig(next, requestRoot)
         if (isCurrent()) setCfg(next)
       }

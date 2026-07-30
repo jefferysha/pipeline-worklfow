@@ -65,6 +65,50 @@ function renderPanel() {
 }
 
 describe('OperationsPanel：H11-H14 可操作面', () => {
+  it('初始加载有明确状态且同 root 刷新不会并发发出第二组三联请求', async () => {
+    global.fetch = vi.fn(() => new Promise<Response>(() => undefined)) as typeof fetch
+    const { unmount } = render(<I18nProvider><OperationsPanel root={ROOT} /></I18nProvider>)
+    expect(await screen.findByTestId('ops-loading')).toHaveTextContent('正在加载运行事实')
+    const refresh = screen.getByTestId('ops-refresh')
+    expect(refresh).toBeDisabled()
+    fireEvent.click(refresh)
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+    unmount()
+  })
+
+  it('空数据呈现明确空态，关键选择控件都有可访问名称与选中语义', async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/operations/starters')) {
+        return new Response(JSON.stringify({ ok: true, templates: [], defaults: { runner: 'codex', workflow: 'default' } }), { status: 200 })
+      }
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({ generated_at: '2026-07-19T00:00:00Z', rows: [] }), { status: 200 })
+      }
+      if (url.startsWith('/api/cadence/status')) {
+        return new Response(JSON.stringify({ enabled: true, poll_interval_ms: 30000, generated_at: '2026-07-20T12:00:00Z', running: false, errors: [], loops: [] }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as typeof fetch
+    renderPanel()
+    expect(await screen.findByTestId('ops-empty')).toHaveTextContent('当前项目还没有可运行的定时任务或模板')
+    expect(screen.getByLabelText('对账模式')).toBeInTheDocument()
+    expect(screen.getByLabelText('Triage 来源')).toBeInTheDocument()
+    expect(screen.getByLabelText('Triage 模型')).toBeInTheDocument()
+  })
+
+  it('starter 选择器暴露 radio 语义和真实选中态', async () => {
+    renderPanel()
+    const group = await screen.findByRole('radiogroup', { name: '选择定时任务类型' })
+    const selected = within(group).getByTestId('ops-starter-ci-sweeper')
+    const alternate = within(group).getByTestId('ops-starter-daily-triage')
+    expect(selected).toHaveAttribute('role', 'radio')
+    expect(selected).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(alternate)
+    expect(selected).toHaveAttribute('aria-checked', 'false')
+    expect(alternate).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('English locale covers starter catalog, form help, risks, and run permissions without Chinese product copy', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     renderPanel()

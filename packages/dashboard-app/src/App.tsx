@@ -6,12 +6,11 @@ import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
 import { ProgressView } from './progress/ProgressView'
 import { AfkView } from './afk/AfkView'
-import { Nav, PRIMARY_VIEWS, type ThemePreference, type View } from './shell/Nav'
+import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
 import { WorkbenchView } from './workbench/WorkbenchView'
-import { toastIn } from './shared/motion'
 import { MachineView } from './machine/MachineView'
 import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
@@ -19,28 +18,19 @@ import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
 import { formatApiError } from './api/transport'
-import { Dialog } from './shared/Dialog'
+import { UnsavedDraftDialog } from './shared/UnsavedDraftDialog'
 import type { DashboardNavigationTarget } from './state/useProjectSelection'
+import { useFlash } from './shared/useFlash'
+import { useDashboardTheme } from './shell/useDashboardTheme'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
-const THEME_KEY = 'tenon-dashboard-theme'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'tenon-dashboard-view'
 // 可路由的全部视图 = rail 六项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器/宿主计划）。「项目」是 rail
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
-
-function initialTheme(): ThemePreference {
-  try {
-    const stored = localStorage.getItem(THEME_KEY)
-    if (stored === 'system' || stored === 'light' || stored === 'dark') return stored
-  } catch {
-    /* ignore */
-  }
-  return 'system'
-}
 
 function initialView(): View {
   try {
@@ -58,11 +48,6 @@ function initialView(): View {
   return 'progress'
 }
 
-interface Flash {
-  kind: 'toast' | 'error'
-  msg: string
-}
-
 interface PendingNavigation {
   readonly kind: 'view' | 'pop'
   readonly target: DashboardNavigationTarget
@@ -74,21 +59,13 @@ function AppShell(): JSX.Element {
   const [selectedChange, setSelectedChange] = useState<string | null>(() => {
     try { return parseDashboardLocation(window.location.search).change ?? null } catch { return null }
   })
-  const [theme, setThemeState] = useState<ThemePreference>(initialTheme)
-  const [flash, setFlash] = useState<Flash | null>(null)
-  const flashRef = useRef<HTMLDivElement>(null)
-  const flashTimerRef = useRef<number | null>(null)
+  const { theme, setTheme } = useDashboardTheme()
+  const { flash, flashRef, showFlash } = useFlash(lang)
   const [workbenchDirty, setWorkbenchDirty] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null)
   const viewRef = useRef(view)
   const dirtyRef = useRef(workbenchDirty)
   const currentRootRef = useRef('')
-
-  useEffect(() => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
-    flashTimerRef.current = null
-    setFlash(null)
-  }, [lang])
 
   const commitView = useCallback((v: View) => {
     setViewState(v)
@@ -117,16 +94,6 @@ function AppShell(): JSX.Element {
     return true
   }, [])
 
-  useEffect(() => {
-    if (!flash || !flashRef.current) return
-    const tween = toastIn(flashRef.current)
-    return () => {
-      tween.kill()
-    }
-  }, [flash])
-  useEffect(() => () => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
-  }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
   const { currentRoot, selectProject, confirmPopNavigation } = useProjectSelection({
     snapshot,
@@ -181,33 +148,6 @@ function AppShell(): JSX.Element {
   // 聚合事实，无选择时不需要、也不允许发起任何 per-root workflow 请求。
   const rulesByKey = useMemo(() => workflowRulesFromSnapshot(snapshot), [snapshot])
 
-  useEffect(() => {
-    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-color-scheme: dark)')
-      : undefined
-    const applyTheme = (): void => {
-      try {
-        document.documentElement.dataset.themePreference = theme
-        document.documentElement.dataset.theme = theme === 'system' ? (media?.matches ? 'dark' : 'light') : theme
-      } catch {
-        /* ignore */
-      }
-    }
-    applyTheme()
-    if (theme !== 'system' || !media) return
-    media.addEventListener?.('change', applyTheme)
-    return () => media.removeEventListener?.('change', applyTheme)
-  }, [theme])
-
-  const setTheme = useCallback((next: ThemePreference) => {
-    setThemeState(next)
-    try {
-      localStorage.setItem(THEME_KEY, next)
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
   // 待拍板计数（Nav「进度」项红徽标）：口径沿 selectInbox 不变——收件箱视图退役后，
   // 选择器保留为「现在就能拍板」的唯一判定源（F1 的进度行高亮同源消费）。
   const decisionCount = useMemo(
@@ -235,15 +175,6 @@ function AppShell(): JSX.Element {
     if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot || snapshot.project_count === 0) return
     if (currentRoot === '') setView('projects')
   }, [view, snapshot, currentRoot, setView])
-
-  const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
-    setFlash({ kind, msg })
-    flashTimerRef.current = window.setTimeout(() => {
-      flashTimerRef.current = null
-      setFlash(null)
-    }, 4000)
-  }, [])
 
   // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
   // 动作接线（继续/打回/重试/终止）由 ProgressView 侧按需重建（postTransition 仍在 api/client）。
@@ -436,33 +367,12 @@ function AppShell(): JSX.Element {
       </main>
 
       </div>
-      {pendingNavigation && (
-        <Dialog
-          title={t('common.unsaved_navigation_title')}
-          onClose={closePendingNavigation}
+      <UnsavedDraftDialog
+          open={pendingNavigation !== null}
           testid="app-unsaved-navigation"
-          actions={(
-            <>
-              <button
-                type="button"
-                className="rounded-lg border border-border bg-card px-3.5 py-2 text-[13px] font-bold text-text hover:bg-fill"
-                onClick={closePendingNavigation}
-              >
-                {t('common.unsaved_navigation_stay')}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-red px-3.5 py-2 text-[13px] font-bold text-solid-fg hover:opacity-90"
-                onClick={discardAndNavigate}
-              >
-                {t('common.unsaved_navigation_leave')}
-              </button>
-            </>
-          )}
-        >
-          <p className="text-[13px] leading-6 text-text-2">{t('common.unsaved_navigation_body')}</p>
-        </Dialog>
-      )}
+          onStay={closePendingNavigation}
+          onDiscard={discardAndNavigate}
+        />
     </div>
   )
 }
