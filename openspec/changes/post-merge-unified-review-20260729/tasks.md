@@ -133,6 +133,15 @@
 
 ## 验证
 
+## 最终 main 范围扩展（PR #27 / #28）
+
+- [x] 将 `origin/main@a86dabb4` 合入统一分支，覆盖 canonical state version、冻结 Workflow 定义状态与编排图前后端闭环。 (build)
+- [x] 逐项合并 Dashboard 版本兼容、编排图、错误本地化、dirty navigation 与只读状态语义，不以单侧冲突取舍丢失能力。 (build)
+- [x] 从合并后源码重建 CLI、Server 与 Dashboard tracked distribution，并消除全部冲突 marker。 (build)
+- [x] 修复集成后 Progress route 超限，恢复前端 600 行架构硬门。 (build)
+- [x] 重跑 Dashboard 78 files / 1525 tests、root 330 files / 5875 tests（26 honest skips）、OpenSpec 38/38、release 24/24 与仓库门禁。 (build)
+- [ ] 在新精确提交上完成 production 浏览器矩阵与三轨 C0/H0/M0/L0 独立复审。 (build)
+
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [ ] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [ ] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

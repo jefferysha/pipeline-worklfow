@@ -463,3 +463,36 @@ under `/tmp/tenon-unified-final-a6ff29bf/`.
 This section authorizes the exact Build handoff only. GitHub CI for this SHA,
 Verify review acknowledgement, merge reachability, main-branch CI, Ship and
 Archive remain mandatory and are not claimed here.
+
+## Latest main integration: PR #27 and PR #28
+
+The prior `baa38f3d` freeze is intentionally invalidated. The unified branch now
+contains the final merged `main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`,
+including canonical-state compatibility, frozen Workflow-definition status and
+the orchestration graph across kernel, server, API decoder and Dashboard.
+
+Conflict resolution preserved both sides of every shared boundary: snapshot
+errors retain locale-safe initial and stale-data presentations; future canonical
+versions stay readable but non-mutating; compatibility-only projects are not
+misclassified as corrupted; Progress remains read-only when required; the
+orchestration graph keeps accessible list and visual representations; and dirty
+Workbench Back/Forward behavior remains exact.
+
+The integration first exposed four deterministic Dashboard regressions and one
+architecture failure. Invalid 2xx snapshot bodies are now classified as invalid
+responses without pretending HTTP 200 is an error; initial and stale snapshot
+states retain their distinct localized copy; the new technical Workflow label is
+explicitly allowlisted; and `ProgressView.tsx` is back within the 600-line route
+limit.
+
+Current post-integration evidence is Dashboard 78 files / 1525 passed, root 330
+files / 5875 passed with 26 honest environment skips, architecture 717 production
+files, strict OpenSpec 38/38, release contracts 24/24, dependency audit/tree,
+repository hygiene, comment honesty, typecheck, full build and whitespace checks.
+Two consecutive builds are byte-identical at CLI `75faafe2…c0c7`, Server
+`a809869f…d1e4`, Dashboard HTML `0020c20e…e6c4`,
+`index-BIUkQHZD.js` (`25fc4998…5f56`) and
+`index-CTzkdGem.css` (`3651c3a4…f515`).
+This is pre-freeze evidence only. The production browser matrix and three
+independent exact-SHA C0/H0/M0/L0 reviews must be rerun on the next committed
+candidate; no earlier review or browser result is carried forward.

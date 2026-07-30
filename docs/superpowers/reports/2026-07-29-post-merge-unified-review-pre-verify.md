@@ -307,3 +307,24 @@ bundle 31/31, migration CAS 13/13, npx contracts 39/39, bilingual docs,
 and all five oracle fixtures are green. The regenerated production browser
 matrix and fresh exact-SHA C0/H0/M0/L0 review remain required before this report
 may record PASS.
+
+## 2026-07-30 final main integration
+
+- PR #27 and PR #28 are merged into `main`; the unified branch now integrates
+  `main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`.
+- Canonical-state compatibility, frozen Workflow-definition status and the
+  orchestration graph are reviewed as one fullstack contract with the existing
+  Dashboard error, navigation, mutation-identity and accessibility protections.
+- Integration REDs covered malformed 2xx snapshot classification, initial versus
+  stale snapshot copy, the i18n technical-token allowlist and the 600-line
+  Progress route boundary. All are green.
+- Current local gates: Dashboard 78 files / 1525 tests; root 330 files / 5875
+  tests with 26 honest environment skips; architecture 717 files; OpenSpec 38/38;
+  release workflow contracts 24/24; dependency, hygiene, comments, typecheck,
+  build and diff checks pass.
+- Two consecutive builds are byte-identical at CLI `75faafe2…c0c7`, Server
+  `a809869f…d1e4`, Dashboard HTML `0020c20e…e6c4`,
+  `index-BIUkQHZD.js` (`25fc4998…5f56`) and
+  `index-CTzkdGem.css` (`3651c3a4…f515`).
+- The exact-candidate browser matrix and three independent zero-finding reviews
+  remain mandatory before Build is frozen.
