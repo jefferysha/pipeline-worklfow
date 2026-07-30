@@ -145,3 +145,17 @@ focus restoration and empty-Track Save remaining disabled.
 
 The complete exact-candidate independent review is the remaining Build freeze gate. Its result
 must be appended here before `pre_verify_review_result=pass` and the Build→Verify transition.
+
+The exact `07c712fd` review then correctly returned two additional Medium findings. A browser
+history target could remain on the Workbench view while changing project root and bypass the
+dirty-draft guard; the Workflow guard decoder could also accept illegal variant fields and
+silently normalize them away. The navigation guard now treats any root change as leaving the
+dirty Workbench, with a real two-root history regression. All nine Workflow guard variants now
+enforce their exact top-level data-key set, and nested `when` and `file-exists.path` objects are
+also exact. The concrete `{type:"nonempty-output",n:2}` corruption is rejected.
+
+After this rollback, focused tests pass 214/214 and the full Dashboard suite passes 73 files /
+1417 tests. The rebuilt assets are `index-BDpnC0x_.js` and `index-YeY6VsN7.css`; the repeated
+21-scene production browser matrix and AFK/Track/Governance interaction acceptance both report
+zero failures. A new exact-candidate independent review is still required; no earlier PASS is
+carried forward.

@@ -97,9 +97,19 @@ function decodeSkill(value: unknown): WbSkillRef | null {
   }
 }
 
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return keys.length === sortedExpected.length
+    && keys.every((key, index) => key === sortedExpected[index])
+}
+
 function decodePredicate(value: unknown): WbTrackPredicate | null {
   const item = record(value)
-  if (!item || (item.kind !== 'track-in' && item.kind !== 'track-not-in') || !strings(item.values)) return null
+  if (!item
+    || !exactKeys(item, ['kind', 'values'])
+    || (item.kind !== 'track-in' && item.kind !== 'track-not-in')
+    || !strings(item.values)) return null
   return { kind: item.kind, values: item.values }
 }
 
@@ -110,9 +120,31 @@ function withWhen(
   return when === undefined ? guard : { ...guard, when }
 }
 
+const GUARD_DATA_KEYS = {
+  'tasks-at-least': ['n'],
+  'nonempty-output': [],
+  'field-nonempty': ['field'],
+  'file-exists': ['path'],
+  'field-equals': ['field', 'value'],
+  'field-in': ['field', 'values'],
+  'full-direct-override': [],
+  'build-head-unchanged': ['field'],
+  'spec-migration-applied': [],
+} as const satisfies Record<WbGuardConfig['type'], readonly string[]>
+
+function isGuardType(value: string): value is WbGuardConfig['type'] {
+  return Object.prototype.hasOwnProperty.call(GUARD_DATA_KEYS, value)
+}
+
 function decodeGuard(value: unknown): WbGuardConfig | null {
   const item = record(value)
-  if (!item || typeof item.type !== 'string') return null
+  if (!item || typeof item.type !== 'string' || !isGuardType(item.type)) return null
+  const expectedKeys = [
+    'type',
+    ...GUARD_DATA_KEYS[item.type],
+    ...(item.when === undefined ? [] : ['when']),
+  ]
+  if (!exactKeys(item, expectedKeys)) return null
   const when = item.when === undefined ? undefined : decodePredicate(item.when)
   if (when === null) return null
   switch (item.type) {
@@ -128,7 +160,10 @@ function decodeGuard(value: unknown): WbGuardConfig | null {
       return typeof item.field === 'string' ? withWhen({ type: 'field-nonempty', field: item.field }, when) : null
     case 'file-exists': {
       const path = record(item.path)
-      return path?.kind === 'field' && typeof path.field === 'string'
+      return path !== null
+        && exactKeys(path, ['kind', 'field'])
+        && path.kind === 'field'
+        && typeof path.field === 'string'
         ? withWhen({ type: 'file-exists', path: { kind: 'field', field: path.field } }, when)
         : null
     }

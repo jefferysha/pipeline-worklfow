@@ -70,18 +70,24 @@ const EDITABLE_WORKFLOW = {
   ],
 }
 
-function stubEditableWorkbench(options: { preserveLocation?: boolean } = {}): void {
+function stubEditableWorkbench(options: {
+  preserveLocation?: boolean
+  roots?: readonly string[]
+} = {}): void {
+  const roots = options.roots ?? ['/repo']
   if (!options.preserveLocation) {
     window.history.replaceState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
   }
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/snapshot') {
-      return new Response(JSON.stringify(makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build')])])), { status: 200 })
+      return new Response(JSON.stringify(makeSnapshot(
+        roots.map((root) => makeProject(root, [makeChange(`seed-${root.split('/').filter(Boolean).at(-1) ?? 'root'}`, 'build')])),
+      )), { status: 200 })
     }
-    if (url === `/api/workflows?root=${encodeURIComponent('/repo')}`) {
+    if (roots.some((root) => url === `/api/workflows?root=${encodeURIComponent(root)}`)) {
       return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
     }
-    if (url === `/api/workflows/release-train?root=${encodeURIComponent('/repo')}`) {
+    if (roots.some((root) => url === `/api/workflows/release-train?root=${encodeURIComponent(root)}`)) {
       return new Response(JSON.stringify(EDITABLE_WORKFLOW), { status: 200 })
     }
     if (url.startsWith('/api/hooks?root=')) {
@@ -112,6 +118,7 @@ async function renderDirtyWorkbenchApp(options: { preserveLocation?: boolean } =
   stubEditableWorkbench(options)
   render(<App />)
   await screen.findByTestId('wb-step-draft')
+  await waitFor(() => expect(screen.getByTestId('wb-lane-name-draft').tagName).toBe('BUTTON'))
   fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
   const input = await screen.findByTestId('wb-lane-name-input-draft')
   fireEvent.change(input, { target: { value: '未保存草稿' } })
@@ -120,6 +127,39 @@ async function renderDirtyWorkbenchApp(options: { preserveLocation?: boolean } =
 }
 
 describe('App Workbench 未保存草稿离开守卫', () => {
+  it('Workbench 内 browser Back 切换项目时，取消保留 root A 草稿，确认才进入 root B', async () => {
+    const rootA = '/repo-a'
+    const rootB = '/repo-b'
+    window.history.replaceState({ page: 'workbench-b' }, '', `/?view=workbench&root=${encodeURIComponent(rootB)}`)
+    window.history.pushState({ page: 'workbench-a' }, '', `/?view=workbench&root=${encodeURIComponent(rootA)}`)
+    stubEditableWorkbench({ preserveLocation: true, roots: [rootA, rootB] })
+    render(<App />)
+    await screen.findByTestId('wb-step-draft')
+    await waitFor(() => expect(screen.getByTestId('wb-lane-name-draft').tagName).toBe('BUTTON'))
+    fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
+    const input = await screen.findByTestId('wb-lane-name-input-draft')
+    fireEvent.change(input, { target: { value: 'root A 未保存草稿' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await screen.findByTestId('wb-dirty')
+
+    act(() => window.history.back())
+    const firstDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('root')).toBe(rootA))
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('root A 未保存草稿')
+
+    fireEvent.click(within(firstDialog).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('root')).toBe(rootA)
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('root A 未保存草稿')
+
+    act(() => window.history.back())
+    const secondDialog = await screen.findByTestId('app-unsaved-navigation')
+    fireEvent.click(within(secondDialog).getByRole('button', { name: '丢弃并离开' }))
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('root')).toBe(rootB))
+    await waitFor(() => expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('起草'))
+  })
+
   it('取消浏览器 Back 用 forward 补偿，不 replace/corrupt 目标历史项；随后仍可确认同一次 Back', async () => {
     window.history.replaceState({ page: 'overview-target' }, '', '/?view=overview&historyMarker=target')
     window.history.pushState({ page: 'workbench-current' }, '', '/?view=workbench&root=%2Frepo')

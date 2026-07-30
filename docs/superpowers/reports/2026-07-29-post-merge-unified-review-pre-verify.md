@@ -194,3 +194,19 @@
   无 Loop 时提交禁用，空 Track identity 时 Save 禁用，runtime error 为 0。
 - 本节记录的是最终独立 exact-candidate review 前的 Build 证据；只有复审达到
   C0/H0/M0/L0 后才允许写入 pre-Verify pass 并冻结 SHA。
+
+### `07c712fd` 独立复审回退
+
+- 独立 reviewer 在精确提交上继续发现 2 个 Medium：dirty Workbench 的历史目标仍为
+  Workbench、但 project root 变化时会绕过确认；Workflow guard decoder 会接受非法附加字段
+  并静默归一化。
+- 导航守卫现在把任何 root 变化视为离开当前 dirty Workbench，并以 root A→root B 的真实
+  history Back、取消恢复 A 草稿、确认才进入 B 的 RED→GREEN 覆盖。
+- 9 类 Workflow guard 按各自 exact-key 闭集解码；嵌套 `when` 与
+  `file-exists.path` 也必须 exact。`{type:"nonempty-output",n:2}` 明确失败关闭。
+- 修复后定向 5 files / 214 tests、Dashboard 全量 73 files / 1417 tests、typecheck、
+  architecture 693 files 与 production build 均通过。新 JS 为 `index-BDpnC0x_.js`
+  （SHA-256 `c1f4c76e…6ac63`），CSS 保持 `index-YeY6VsN7.css`
+  （SHA-256 `1a4a0f55…8aff1`）。
+- 重建后再次执行 21 场景全 Dashboard 浏览器矩阵及 AFK/Track/Governance 交互，失败均为 0。
+  旧 reviewer 结果保持作废，必须在新提交上重新取得 C0/H0/M0/L0。

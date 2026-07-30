@@ -108,7 +108,9 @@ function AppShell(): JSX.Element {
   }, [view, workbenchDirty])
 
   const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
-    if (viewRef.current === 'workbench' && dirtyRef.current && target.view !== 'workbench') {
+    const leavesDirtyWorkbench = target.view !== 'workbench'
+      || target.root !== currentRootRef.current
+    if (viewRef.current === 'workbench' && dirtyRef.current && leavesDirtyWorkbench) {
       setPendingNavigation({ kind: 'pop', target })
       return false
     }

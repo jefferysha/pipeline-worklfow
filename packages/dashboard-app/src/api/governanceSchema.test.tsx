@@ -11,6 +11,25 @@ const step = {
   transitions: [],
 }
 
+const guards = [
+  ['tasks-at-least', { type: 'tasks-at-least', n: 1 }],
+  ['nonempty-output', { type: 'nonempty-output' }],
+  ['field-nonempty', { type: 'field-nonempty', field: 'plan' }],
+  ['file-exists', { type: 'file-exists', path: { kind: 'field', field: 'plan' } }],
+  ['field-equals', { type: 'field-equals', field: 'verify_result', value: 'pass' }],
+  ['field-in', { type: 'field-in', field: 'phase_status', values: ['ready'] }],
+  ['full-direct-override', { type: 'full-direct-override' }],
+  ['build-head-unchanged', { type: 'build-head-unchanged', field: 'build_sha' }],
+  ['spec-migration-applied', { type: 'spec-migration-applied' }],
+] as const
+
+function decodeWithGuard(guard: unknown) {
+  return decodeWorkflowDefinition({
+    name: 'guard-contract',
+    steps: [{ ...step, guards: [guard] }],
+  })
+}
+
 describe('decodeWorkflowDefinition', () => {
   it('accepts each supported document contract mode independently', () => {
     expect(decodeWorkflowDefinition({
@@ -64,5 +83,34 @@ describe('decodeWorkflowDefinition', () => {
         guards: [{ type: 'spec-migration-applied' }],
       },
     ])
+  })
+
+  it.each(guards)('%s rejects an illegal top-level data key instead of silently normalizing it', (_name, guard) => {
+    expect(decodeWithGuard({ ...guard, illegal: 'must-not-disappear' })).toBeNull()
+  })
+
+  it.each(guards)('%s requires an exact nested when predicate', (_name, guard) => {
+    expect(decodeWithGuard({
+      ...guard,
+      when: { kind: 'track-in', values: ['backend'], illegal: 'must-not-disappear' },
+    })).toBeNull()
+  })
+
+  it('rejects the concrete nonempty-output+n corruption and an over-broad file-exists path', () => {
+    expect(decodeWithGuard({ type: 'nonempty-output', n: 2 })).toBeNull()
+    expect(decodeWithGuard({
+      type: 'file-exists',
+      path: { kind: 'field', field: 'plan', illegal: 'must-not-disappear' },
+    })).toBeNull()
+  })
+
+  it.each(guards)('%s still accepts its exact canonical key set with an exact when predicate', (_name, guard) => {
+    expect(decodeWithGuard({
+      ...guard,
+      when: { kind: 'track-not-in', values: ['pm'] },
+    })?.steps[0]?.guards[0]).toEqual({
+      ...guard,
+      when: { kind: 'track-not-in', values: ['pm'] },
+    })
   })
 })
