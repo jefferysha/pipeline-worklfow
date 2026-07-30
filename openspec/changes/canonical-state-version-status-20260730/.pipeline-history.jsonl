@@ -22,3 +22,17 @@
 {"ts":"2026-07-30T07:21:04Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-07-30T07:41:56Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T07:53:36Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T07:54:15Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T07:54:15Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T07:54:15Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T07:54:15Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T07:54:29Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"ea6bfbdb-9d87-4507-9f6a-41608e3f0374"}
+{"ts":"2026-07-30T07:55:11Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb1d6-8c31-7ed2-a427-381ffadbf626"}
+{"ts":"2026-07-30T07:55:20Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T07:55:35Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T07:55:35Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-30T07:55:11Z authority_host_session=019fb1d6-8c31-7ed2-a427-381ffadbf626"}
+{"ts":"2026-07-30T07:55:54Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T07:55:54Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T07:55:54Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"f834b6c2-ee15-46d8-9d10-8cdda7ca7093"}
+{"ts":"2026-07-30T07:56:31Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T07:56:31Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

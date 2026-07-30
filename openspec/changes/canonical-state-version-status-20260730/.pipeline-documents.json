@@ -27,6 +27,18 @@
           "sha256": "8214182711bb8f37f2b257a61dd50d6de276defa1f7331f20b25b4a6697be25f",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "8214182711bb8f37f2b257a61dd50d6de276defa1f7331f20b25b4a6697be25f",
+          "readAt": "2026-07-30T07:55:34Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "8214182711bb8f37f2b257a61dd50d6de276defa1f7331f20b25b4a6697be25f",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -54,27 +66,18 @@
           "sha256": "aee7bb489a587b34d27a46912ac321b7f0ac2d845e171d328c92bf6230525a0f",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
-        }
-      ]
-    },
-    {
-      "kind": "adr",
-      "path": "docs/adr/2026-07-30-canonical-state-version-status-20260730-explore.md",
-      "sha256": "51b4198f2fdd86c60ee5d8c260e13e55124b218312e238f04188a253bf4a603a",
-      "producer": "brainstorming",
-      "recordedAt": "2026-07-30T07:18:25Z",
-      "reads": [
+        },
         {
           "phase": "spec",
-          "sha256": "51b4198f2fdd86c60ee5d8c260e13e55124b218312e238f04188a253bf4a603a",
-          "readAt": "2026-07-30T07:20:20Z",
-          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",2]"
+          "sha256": "aee7bb489a587b34d27a46912ac321b7f0ac2d845e171d328c92bf6230525a0f",
+          "readAt": "2026-07-30T07:55:34Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",4]"
         },
         {
           "phase": "build",
-          "sha256": "51b4198f2fdd86c60ee5d8c260e13e55124b218312e238f04188a253bf4a603a",
-          "readAt": "2026-07-30T07:21:04Z",
-          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+          "sha256": "aee7bb489a587b34d27a46912ac321b7f0ac2d845e171d328c92bf6230525a0f",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -90,6 +93,12 @@
           "sha256": "1ddb1ae52f751f001ce12c30b371501ad4dcca564f56e0e92ce5d240cdf01572",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1ddb1ae52f751f001ce12c30b371501ad4dcca564f56e0e92ce5d240cdf01572",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -105,6 +114,12 @@
           "sha256": "0e4b6a8b847245f7230a31bdb0297826b7b4f5f957ee7b26b11313e0afd7800e",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0e4b6a8b847245f7230a31bdb0297826b7b4f5f957ee7b26b11313e0afd7800e",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -120,6 +135,12 @@
           "sha256": "0e4b6a8b847245f7230a31bdb0297826b7b4f5f957ee7b26b11313e0afd7800e",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0e4b6a8b847245f7230a31bdb0297826b7b4f5f957ee7b26b11313e0afd7800e",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -141,6 +162,39 @@
           "sha256": "807e9c4827799782b7daa9967c6736c7b202fe8cefd18da8c6bfd962179510ea",
           "readAt": "2026-07-30T07:21:04Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "807e9c4827799782b7daa9967c6736c7b202fe8cefd18da8c6bfd962179510ea",
+          "readAt": "2026-07-30T07:55:34Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "807e9c4827799782b7daa9967c6736c7b202fe8cefd18da8c6bfd962179510ea",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-30-canonical-state-version-status-20260730-explore.md",
+      "sha256": "e00ef9ff50e69467ad96f9f092450758f02ff17bf33059903f727a76e3261687",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T07:55:20Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "e00ef9ff50e69467ad96f9f092450758f02ff17bf33059903f727a76e3261687",
+          "readAt": "2026-07-30T07:55:34Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e00ef9ff50e69467ad96f9f092450758f02ff17bf33059903f727a76e3261687",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     },
@@ -149,13 +203,25 @@
       "path": "openspec/changes/canonical-state-version-status-20260730/tasks.md",
       "sha256": "c3062c1f35654596e89457c5770603a35b1a769b20b65f72f515e428adc7c91e",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-30T07:41:56Z",
+      "recordedAt": "2026-07-30T07:56:31Z",
       "reads": [
         {
           "phase": "build",
           "sha256": "c3062c1f35654596e89457c5770603a35b1a769b20b65f72f515e428adc7c91e",
           "readAt": "2026-07-30T07:41:56Z",
           "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c3062c1f35654596e89457c5770603a35b1a769b20b65f72f515e428adc7c91e",
+          "readAt": "2026-07-30T07:55:34Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c3062c1f35654596e89457c5770603a35b1a769b20b65f72f515e428adc7c91e",
+          "readAt": "2026-07-30T07:56:31Z",
+          "visitId": "[\"3fe594c8-0582-4590-acad-5a2eb452b313\",5]"
         }
       ]
     }
