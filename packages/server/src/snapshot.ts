@@ -6,8 +6,8 @@
 import {
   closeSync, constants, fstatSync, lstatSync, openSync,
 } from 'node:fs'
-import { lstat, readFile, readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { lstat, readdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import {
   evaluateDocumentEvidence,
   isDocumentPolicyStep,
@@ -37,6 +37,11 @@ import {
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
 import { readBounded } from './contextBundleTrustedReader.js'
+import { dedupeRoots } from './projectRoots.js'
+import { readTasksMarkdown } from './snapshotTasks.js'
+
+export { dedupeRoots } from './projectRoots.js'
+export { readTasksMarkdown } from './snapshotTasks.js'
 
 const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
 
@@ -57,18 +62,6 @@ export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
 function str(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v.join(',')
   return v ?? ''
-}
-
-export async function readTasksMarkdown(changeDir: string): Promise<string | undefined> {
-  const target = join(changeDir, 'tasks.md')
-  try {
-    const info = await lstat(target)
-    // Do not make a dashboard read follow a task-file symlink outside the change directory.
-    if (!info.isFile() || info.isSymbolicLink()) return undefined
-    return await readFile(target, 'utf8')
-  } catch {
-    return undefined
-  }
 }
 
 /**
@@ -165,20 +158,6 @@ export function documentTodoItems(
       completed: status.get(requirement.kind) === 'recorded',
     })),
   ]))
-}
-
-/** 去重（按规范化路径，保序）。 */
-export function dedupeRoots(roots: string[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const r of roots) {
-    if (!r) continue
-    const rp = resolve(r)
-    if (seen.has(rp)) continue
-    seen.add(rp)
-    out.push(rp)
-  }
-  return out
 }
 
 async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Promise<ProjectSnapshot> {
