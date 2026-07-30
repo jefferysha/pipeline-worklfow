@@ -35250,8 +35250,11 @@ function customHostHeaderState(item2) {
   const marker = "\nOutput:\n";
   const boundary = text2.indexOf(marker);
   if (boundary === -1 || boundary !== text2.length - marker.length) return void 0;
-  const match = /^Script (completed|failed)(?:\n|$)/.exec(text2);
-  return match?.[1];
+  const states = [...text2.slice(0, boundary).matchAll(
+    /(?:^|\n)Script (completed|failed)(?=\n|$)/g
+  )].map((match) => match[1]);
+  if (states.length !== 1) return void 0;
+  return states[0];
 }
 function successfulFunctionOutput(value) {
   if (scriptStates(value).includes("failed")) return false;
@@ -35284,7 +35287,7 @@ function parsedCompleteResultEnvelope(text2) {
   }
 }
 function parsedCustomCompletion(value) {
-  if (!Array.isArray(value) || value.length !== 2 && value.length < 3) return void 0;
+  if (!Array.isArray(value) || value.length < 2) return void 0;
   if (customHostHeaderState(value[0]) !== "completed") return void 0;
   const typedResultIndexes = value.flatMap(
     (item2, index) => isRecord10(item2) && item2.type === "execution_result" ? [index] : []

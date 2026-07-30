@@ -122,6 +122,14 @@ it.each([
     ],
   ],
   [
+    'typed header with conflicting completion states',
+    [
+      { type: 'input_text', text: 'Script completed\nScript failed\nOutput:\n' },
+      { type: 'input_text', text: '# Trusted Skill\n' },
+      { type: 'execution_result', exit_code: 0 },
+    ],
+  ],
+  [
     'modern completion with trailing item',
     [
       { type: 'input_text', text: 'Script completed\nOutput:\n' },

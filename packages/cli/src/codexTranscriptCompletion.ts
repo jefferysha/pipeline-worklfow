@@ -47,8 +47,11 @@ function customHostHeaderState(item: unknown): 'completed' | 'failed' | undefine
   const marker = '\nOutput:\n'
   const boundary = text.indexOf(marker)
   if (boundary === -1 || boundary !== text.length - marker.length) return undefined
-  const match = /^Script (completed|failed)(?:\n|$)/.exec(text)
-  return match?.[1] as 'completed' | 'failed' | undefined
+  const states = [...text.slice(0, boundary).matchAll(
+    /(?:^|\n)Script (completed|failed)(?=\n|$)/g,
+  )].map((match) => match[1])
+  if (states.length !== 1) return undefined
+  return states[0] as 'completed' | 'failed'
 }
 
 export function successfulFunctionOutput(value: unknown): boolean {
@@ -109,7 +112,7 @@ interface CustomCompletion {
 }
 
 function parsedCustomCompletion(value: unknown): CustomCompletion | undefined {
-  if (!Array.isArray(value) || value.length !== 2 && value.length < 3) return undefined
+  if (!Array.isArray(value) || value.length < 2) return undefined
   if (customHostHeaderState(value[0]) !== 'completed') return undefined
 
   const typedResultIndexes = value.flatMap((item, index) =>
