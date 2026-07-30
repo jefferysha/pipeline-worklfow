@@ -641,6 +641,60 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     expect(screen.queryByTestId('onboard-no-change')).toBeNull()
     expect(screen.getByText('future-change')).toBeInTheDocument()
   })
+
+  it('混合项目同时展示升级要求与可读 Change，不把项目整体降级为不可达', async () => {
+    const project = makeProject('/repo', [makeChange('readable-change', 'build')], {
+      ok: false,
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-change',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([project]) }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    expect(await screen.findByTestId('canonical-state-version-notice')).toBeInTheDocument()
+    expect(await screen.findByTestId('prg-cv-chg-readable-change')).toBeInTheDocument()
+    expect(screen.queryByTestId('prg-empty')).toBeNull()
+    expect(screen.queryByTestId('progress-new-change')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('nav-afk'))
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('afk-view')).toBeNull()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/automation?root='))).toBe(false)
+  })
+
+  it('普通损坏与未来版本并存时回到不可达项目面，不用升级提示掩盖错误', async () => {
+    const project = makeProject('/repo', [makeChange('readable-change', 'build')], {
+      ok: false,
+      error: 'broken-current: 状态损坏或不可读',
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-change',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([project]) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+
+    render(<App />)
+    expect(await screen.findByTestId('section-unreachable')).toBeInTheDocument()
+    expect(screen.queryByTestId('canonical-state-version-notice')).toBeNull()
+  })
 })
 
 describe('App currentRoot 语义（只消费显式选择）', () => {

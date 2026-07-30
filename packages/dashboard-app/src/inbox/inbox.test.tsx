@@ -214,6 +214,28 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
     expect(selectInbox(snap, '/bad', RULES)).toEqual([])
   })
 
+  it('只含未来版本问题的项目保留可读 sibling 决策徽标，若同时损坏则继续拒绝', () => {
+    const compatibilityIssues = [{
+      kind: 'unsupported-canonical-version' as const,
+      change: 'future',
+      foundVersion: 2,
+      supportedVersion: 1,
+      action: 'upgrade-runtime' as const,
+    }]
+    const snap = makeSnapshot([
+      makeProject('/read-only', [
+        makeChange('readable-verify', 'verify', { fields: { ...VERIFY_OK } }),
+      ], { ok: false, compatibilityIssues }),
+      makeProject('/broken', [
+        makeChange('hidden-verify', 'verify', { fields: { ...VERIFY_OK } }),
+      ], { ok: false, compatibilityIssues, error: 'corrupt current' }),
+    ])
+
+    expect(selectInbox(snap, '/read-only', RULES).map((item) => item.change.name))
+      .toEqual(['readable-verify'])
+    expect(selectInbox(snap, '/broken', RULES)).toEqual([])
+  })
+
   it('按 updated_at 倒序、并列按 name 升序', () => {
     const snap = makeSnapshot([
       makeProject('/a', [

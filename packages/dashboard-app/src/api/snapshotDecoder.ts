@@ -365,6 +365,7 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     ? undefined
     : decodeCompatibilityIssues(value.compatibilityIssues)
   if (compatibilityIssues === null) return null
+  if (value.ok && (value.error !== undefined || (compatibilityIssues?.length ?? 0) > 0)) return null
   const changes: ChangeSnapshot[] = []
   const rulesByFingerprint = new Map<string, string>()
   for (const change of value.changes) {
@@ -388,7 +389,7 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
 function decodeCompatibilityIssues(
   value: unknown,
 ): ProjectSnapshot['compatibilityIssues'] | null {
-  if (!Array.isArray(value)) return null
+  if (!Array.isArray(value) || value.length > 100) return null
   const seenChanges = new Set<string>()
   const issues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []
   for (const issue of value) {

@@ -68,3 +68,119 @@ disclosure, mixed-project behavior, and the existing refresh/error boundaries.
 ## Final disposition
 
 Critical: 0. High: 0. Medium: 0. Low: 0. Both Build-review findings were fixed and rechecked.
+
+## Verify return loop: mixed-project visibility
+
+The first frozen Verify at `fb47fda23605aa50c340b712b09b681afb278b1f` failed after the independent
+reviewer found one High: the server preserved readable sibling Changes beside a compatibility issue,
+but Dashboard progress/rules selectors skipped every `ok=false` project and Projects classified the
+project as wholly unreachable.
+
+### Red
+
+- Added mixed-project regressions for project selection, Progress plus frozen workflow rules,
+  Projects navigation, and the App shell.
+- The initial focused run failed in `progressModel`, `ProjectsView`, and `App` for the intended
+  reason: the readable sibling was absent and the project remained in the unreachable section.
+- Renamed `projectSelectionModel.test.ts` to `.test.tsx` so it is actually discovered by the
+  Dashboard Vitest configuration.
+
+### Green and refactor
+
+- Added `isProjectNavigable(ProjectSnapshot)` as the single structured exception to ordinary
+  `ok=false`: a project with a non-empty `compatibilityIssues` array remains navigable because the
+  server deliberately retains readable siblings and Progress owns the upgrade notice.
+- `resolveProjectSelection`, `selectProgress`, `workflowRulesFromSnapshot`, and `buildProjectRows`
+  now consume that predicate. Generic unreachable projects without compatibility issues remain
+  excluded, and Workbench mutation routing remains restricted to `project.ok`.
+- Focused recheck: 4 files, 123/123 tests; `typecheck:web` and `git diff --check` passed.
+
+### UI quality re-review
+
+The fix changes only project classification and reuses the existing Project row, Progress canvas,
+and compatibility notice. It introduces no new visual primitive, copy, spacing, motion, or control.
+The existing semantic button, visible focus, bilingual notice, loading/error/empty states, and token
+usage remain intact. Critical: 0. High: 0. Medium: 0. Low: 0 after the behavioral fix.
+
+### Repository evidence hygiene
+
+The full hygiene gate exposed that the new fixed upstream-research path was not yet in the
+capability-scoped reference allowlist. A failing node-test was added first, then the checker was
+extended to allow only the two approved upstream identities in that one research file. Source,
+design, and unrelated documentation paths remain rejected, as does the third restricted identity.
+The focused test passes 9/9 and the live repository hygiene scan passes.
+
+## Second Build convergence: read-only compatibility boundary
+
+The independent Standards + Spec review rejected the first mixed-project fix with two High and
+three Medium findings:
+
+- the global readable-project selection also exposed Progress create/transition/cancel and AFK
+  mutations, violating the design's refresh-only recovery contract;
+- a project with both ordinary corruption and a future-version issue was treated as healthy,
+  hiding the ordinary error;
+- the decision badge still skipped readable siblings, `compatibilityIssues` had no explicit
+  response bound, and the permanent public contract was not updated.
+
+### Red
+
+- Added regressions for mixed corruption + future version, read-only Progress actions, AFK routing,
+  readable sibling decision badges, Projects classification, strict decoder bounds, and a real
+  server project with 101 future-version Changes.
+- The first Dashboard run failed 6 tests while 157 passed, and the server bound test failed with
+  101 returned issues instead of 100. Each failure matched the intended missing boundary.
+
+### Green and refactor
+
+- `isProjectNavigable` now accepts the compatibility exception only when `project.error` is absent.
+  Progress can still show readable siblings, but App passes an explicit read-only capability that
+  removes create and drawer actions; AFK and Workbench require `project.ok=true`.
+- `selectInbox` consumes the same readable projection, so the navigation badge matches visible
+  sibling Changes without reopening mutation paths.
+- Server projection sorts directory entries before collection, returns at most 100 compatibility
+  issues, and adds a path-free project error when more are omitted. The Dashboard decoder rejects
+  responses above the same bound.
+- `docs/CONTRACT.md` now records the typed kernel error, bounded snapshot DTO, mixed-error priority,
+  rolling optionality, and refresh-only Dashboard behavior.
+
+### Final Build evidence
+
+- Focused Dashboard: 186/186; server snapshot: 31/31.
+- Dashboard full: 71 files, 1232/1232.
+- Root full: 326 files, 5790 passed, 14 honest environment skips.
+- Hooks: 512/512; migration CAS: 13/13; oracle: 0 mismatches.
+- `npm run build`, `typecheck:web`, strict OpenSpec validation, architecture, comments, identity,
+  docs, document templates, repository hygiene, generated bundle syntax, default workflow
+  freshness, and `git diff --check` all pass.
+
+The UI continues to reuse the existing Project row, Progress canvas, native refresh button, and
+upgrade notice. The only visual change is removal of write controls while the compatibility warning
+is active; hierarchy, bilingual copy, focus treatment, loading/error/empty states, and desktop
+layout remain unchanged. Critical: 0. High: 0. Medium: 0. Low: 0 after the fixes.
+
+## Final Build convergence: trusted write eligibility
+
+The second full-diff re-review found two remaining High issues at the same trust boundary:
+
+- the Dashboard decoder accepted contradictory projects that claimed `ok=true` while also carrying
+  a compatibility issue or ordinary error, which could re-enable write surfaces for an untrusted
+  response;
+- AFK relied on an effect to redirect a compatibility-only project after render, allowing its
+  write-capable view to mount transiently.
+
+### Red
+
+- Added a project-selection regression for positive write eligibility. It failed because the shared
+  predicate did not yet exist.
+- Added strict boundary cases for `ok=true` plus a compatibility issue and `ok=true` plus an error.
+  The decoder accepted the first contradictory response.
+- Strengthened the mixed-project App regression to prove that AFK never appears and no
+  `/api/automation?root=` request is issued.
+
+### Green
+
+- `decodeProject` now rejects every `ok=true` response that also carries a non-empty compatibility
+  issue list or a defined error.
+- `isProjectWritable` centralizes the positive `project.ok === true` check for Workbench, Progress
+  capabilities, the redirect effect, and the synchronous AFK mount gate.
+- Focused recheck: project selection, boundary decoders, and App shell pass 79/79.

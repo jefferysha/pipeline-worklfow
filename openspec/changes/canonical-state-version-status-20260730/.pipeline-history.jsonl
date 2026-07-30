@@ -36,3 +36,25 @@
 {"ts":"2026-07-30T07:55:54Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"f834b6c2-ee15-46d8-9d10-8cdda7ca7093"}
 {"ts":"2026-07-30T07:56:31Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T07:56:31Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T07:56:40Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T07:56:40Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T07:56:40Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T07:56:40Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T07:56:40Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"e5bc474d-9ad5-40a8-900b-b5de0ccb266e"}
+{"ts":"2026-07-30T08:10:11Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-canonical-state-version-status-20260730-verify-fail.md"}
+{"ts":"2026-07-30T08:10:15Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T08:10:22Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-30T08:10:22Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-30T07:55:11Z authority_host_session=019fb1d6-8c31-7ed2-a427-381ffadbf626"}
+{"ts":"2026-07-30T08:10:23Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T08:10:23Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T08:10:23Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T08:10:23Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T08:10:23Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b651012c-1bb3-4d34-bdb6-13535b92f8af"}
+{"ts":"2026-07-30T08:23:42Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb1d6-8c31-7ed2-a427-381ffadbf626"}
+{"ts":"2026-07-30T08:26:42Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-30T08:26:57Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-30T08:27:05Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T08:27:05Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T08:27:57Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-30T08:28:03Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-30T08:57:56Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

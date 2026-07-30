@@ -20578,6 +20578,7 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
 }
 
 // packages/server/src/snapshot.ts
+var MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100;
 function str(v) {
   if (Array.isArray(v)) return v.join(",");
   return v ?? "";
@@ -20708,7 +20709,8 @@ async function scanProject(deps, root, nowMs) {
       }
     }
   };
-  for (const e of entries) {
+  let compatibilityIssueOverflow = 0;
+  for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === "archive") continue;
     const changeDir = join39(changesRoot, e.name);
     let source;
@@ -20775,13 +20777,17 @@ async function scanProject(deps, root, nowMs) {
       });
     } catch (error) {
       if (error instanceof UnsupportedRunStateVersionError) {
-        compatibilityIssues.push({
-          kind: "unsupported-canonical-version",
-          change: e.name,
-          foundVersion: error.foundVersion,
-          supportedVersion: error.supportedVersion,
-          action: "upgrade-runtime"
-        });
+        if (compatibilityIssues.length < MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES) {
+          compatibilityIssues.push({
+            kind: "unsupported-canonical-version",
+            change: e.name,
+            foundVersion: error.foundVersion,
+            supportedVersion: error.supportedVersion,
+            action: "upgrade-runtime"
+          });
+        } else {
+          compatibilityIssueOverflow += 1;
+        }
         continue;
       }
       errors.push(
@@ -20791,6 +20797,9 @@ async function scanProject(deps, root, nowMs) {
   }
   changes.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   compatibilityIssues.sort((a, b) => a.change < b.change ? -1 : a.change > b.change ? 1 : 0);
+  if (compatibilityIssueOverflow > 0) {
+    errors.push(`compatibility issue limit exceeded (${MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES}); ${compatibilityIssueOverflow} additional future-version Changes omitted`);
+  }
   return {
     root,
     ok: errors.length === 0 && compatibilityIssues.length === 0,

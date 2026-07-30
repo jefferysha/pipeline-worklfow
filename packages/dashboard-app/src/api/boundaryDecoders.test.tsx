@@ -373,6 +373,7 @@ describe('API bounded-context response decoders', () => {
   it('accepts a strict canonical compatibility issue while preserving older omitted responses', () => {
     expect(decodeSnapshot(validSnapshot())?.projects[0]?.compatibilityIssues).toBeUndefined()
     const snapshot = validSnapshot()
+    snapshot.projects[0].ok = false
     ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = [{
       kind: 'unsupported-canonical-version',
       change: 'future-change',
@@ -388,6 +389,22 @@ describe('API bounded-context response decoders', () => {
       supportedVersion: 1,
       action: 'upgrade-runtime',
     }])
+  })
+
+  it('rejects projects that claim write-safe ok=true while carrying an error or compatibility issue', () => {
+    const futureVersion = validSnapshot()
+    ;(futureVersion.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = [{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }]
+    expect(decodeSnapshot(futureVersion)).toBeNull()
+
+    const corrupt = validSnapshot()
+    ;(corrupt.projects[0] as unknown as Record<string, unknown>).error = 'state is unreadable'
+    expect(decodeSnapshot(corrupt)).toBeNull()
   })
 
   it('rejects malformed, over-broad, or duplicate canonical compatibility issues', () => {
@@ -407,6 +424,22 @@ describe('API bounded-context response decoders', () => {
       ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = compatibilityIssues
       expect(decodeSnapshot(snapshot)).toBeNull()
     }
+  })
+
+  it('rejects compatibility issue arrays above the 100-item server contract', () => {
+    const snapshot = validSnapshot()
+    ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = Array.from(
+      { length: 101 },
+      (_, index) => ({
+        kind: 'unsupported-canonical-version',
+        change: `future-${index}`,
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }),
+    )
+
+    expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
   it('decodes a strict exact-event Review Handshake while accepting an older missing field', () => {

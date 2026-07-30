@@ -3,16 +3,16 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-30-canonical-state-version-status-design.md
 plan: docs/superpowers/plans/2026-07-30-canonical-state-version-status.md
-verification_report: null
+verification_report: docs/superpowers/reports/2026-07-30-canonical-state-version-status-20260730-verify-fail.md
 build_mode: direct
 isolation: worktree
 build_sha: null
 agent_review_result: pending
 codex_review_result: pending
-verify_result: pending
+verify_result: fail
 branch_status: pending
 direct_override: true
 prd_path: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-30T07:10:36Z
-updated_at: 2026-07-30T07:55:54Z
+updated_at: 2026-07-30T08:10:23Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 3fe594c8-0582-4590-acad-5a2eb452b313
-pipeline_transition_sequence: 5
-pipeline_transition_head: f834b6c2-ee15-46d8-9d10-8cdda7ca7093
-pipeline_state_revision: 18
-pipeline_state_revision_id: aa05447b-7efe-4e79-a849-df3049e7d5d9
-pipeline_state_digest: ed3cb7176873f9c3c601cc74a62b2a1f2f30ee1d7069b519a1bdde47f14ffcb1
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTgsInJldmlzaW9uSWQiOiJhYTA1NDQ3Yi03ZWZlLTRlNzktYTg0OS1kZjMwNDllN2Q1ZDkiLCJwYXlsb2FkRGlnZXN0IjoiNTBkMzQxYzhhNzQyYTY5N2Q2NzUyNWEwZGQ4MTRkZTkzZmNkNzIxM2NlMWYzYzU3NDhkNWQ4MzI0YmVjZDI1YyJ9
+pipeline_transition_sequence: 7
+pipeline_transition_head: b651012c-1bb3-4d34-bdb6-13535b92f8af
+pipeline_state_revision: 24
+pipeline_state_revision_id: 4f5845b7-ee85-432f-b752-84f78e4d77ab
+pipeline_state_digest: 94990014332b2439447e4816712eff68a20a2af5804cf63234c78a769566f23d
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MjQsInJldmlzaW9uSWQiOiI0ZjU4NDViNy1lZTg1LTQzMmYtYjc1Mi04NGY3OGU0ZDc3YWIiLCJwYXlsb2FkRGlnZXN0IjoiYjBmYTY5ZDVhNWQ4YTVkYzAwYWI3ODZkYjc2NmYwZWIzMTNkZGM3ODhkMzY2MWE3NWViZjZlODk5YzUxMWY1MiJ9

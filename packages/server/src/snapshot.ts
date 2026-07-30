@@ -34,6 +34,8 @@ import {
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
 
+const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
+
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
   store: StateStore
@@ -210,7 +212,8 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
           },
         }),
   }
-  for (const e of entries) {
+  let compatibilityIssueOverflow = 0
+  for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const changeDir = join(changesRoot, e.name)
     let source: string | undefined
@@ -281,13 +284,17 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
       })
     } catch (error) {
       if (error instanceof UnsupportedRunStateVersionError) {
-        compatibilityIssues.push({
-          kind: 'unsupported-canonical-version',
-          change: e.name,
-          foundVersion: error.foundVersion,
-          supportedVersion: error.supportedVersion,
-          action: 'upgrade-runtime',
-        })
+        if (compatibilityIssues.length < MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES) {
+          compatibilityIssues.push({
+            kind: 'unsupported-canonical-version',
+            change: e.name,
+            foundVersion: error.foundVersion,
+            supportedVersion: error.supportedVersion,
+            action: 'upgrade-runtime',
+          })
+        } else {
+          compatibilityIssueOverflow += 1
+        }
         continue
       }
       errors.push(
@@ -299,6 +306,9 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   compatibilityIssues.sort((a, b) => (
     a.change < b.change ? -1 : a.change > b.change ? 1 : 0
   ))
+  if (compatibilityIssueOverflow > 0) {
+    errors.push(`compatibility issue limit exceeded (${MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES}); ${compatibilityIssueOverflow} additional future-version Changes omitted`)
+  }
   return {
     root,
     ok: errors.length === 0 && compatibilityIssues.length === 0,

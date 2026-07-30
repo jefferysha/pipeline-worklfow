@@ -86,9 +86,22 @@ export interface ProgressViewProps {
   selectedChange?: string | null
   /** 抽屉开合回传给宿主，用于同步可复制 URL。 */
   onSelectedChange?: (name: string | null) => void
+  /** Future canonical state 只允许读取 sibling Changes 与刷新，不暴露任何写操作。 */
+  readOnly?: boolean
 }
 
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
+export function ProgressView({
+  snapshot,
+  loading,
+  error,
+  currentRoot,
+  rulesByKey,
+  onToast,
+  onRefresh,
+  selectedChange,
+  onSelectedChange,
+  readOnly = false,
+}: ProgressViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
@@ -473,6 +486,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   function drawerActionsFor(row: FlatRow): JSX.Element {
+    if (readOnly) return <></>
     return (
       <ProgressActions
         row={row}
@@ -520,7 +534,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         workflow={effectiveWf}
         onDeckTab={setDeckTab}
         onWorkflow={setWfFilter}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={readOnly ? undefined : () => setCreateOpen(true)}
       />
 
       <CanonicalStateVersionNotice
@@ -542,7 +556,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         </div>
       )}
 
-      {createOpen && (
+      {!readOnly && createOpen && (
         <CreateChangeDialog
           root={currentRoot}
           onClose={() => setCreateOpen(false)}
