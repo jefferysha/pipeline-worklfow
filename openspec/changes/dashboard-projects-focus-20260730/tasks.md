@@ -27,9 +27,9 @@
 
 ## 验证
 
-- [ ] 冻结 build SHA，完成代码审查与 OpenSpec strict 校验。 (verify)
-- [ ] 在 1024×768、1200×870、1440×900、1920×1080 的真实 Dashboard 复核明暗/system 主题、键盘、成功/零结果/不可达/离线反馈和 reduced-motion。 (verify)
-- [ ] 记录测试、浏览器身份、兼容性、风险和回滚证据，并取得 verify-pass exact-event review。 (verify)
+- [x] 冻结 build SHA，完成代码审查与 OpenSpec strict 校验。 (verify)
+- [x] 在 1024×768、1200×870、1440×900、1920×1080 的真实 Dashboard 复核明暗/system 主题、键盘、成功/零结果/不可达/离线反馈和 reduced-motion。 (verify)
+- [x] 记录测试、浏览器身份、兼容性、风险和回滚证据，并取得 verify-pass exact-event review。 (verify)
 
 ## 交付
 

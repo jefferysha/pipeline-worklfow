@@ -232,3 +232,80 @@ Codex CLI 因完整 diff 超过 1 MiB 输入上限而降级审查源码、规格
 2. 为 radio group 增加 ArrowUp/ArrowDown，并补齐首尾循环测试。
 3. 增加普通 motion 下首次 `fromTo` 只执行一次、查询/聚焦不重播的测试。
 4. 重建 dist、重新冻结并执行完整四轨，禁止只复查本次 finding。
+
+## 第四次冻结验证：`d7cca5b6e4d40ee063dbe646374ab4a0cfd647cf`
+
+### 结论
+
+第四次冻结四轨全部 **PASS**。CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0；前三次 Verify 的所有
+finding 均已关闭，新冻结靶没有新增 finding，可以进入 `verify-pass`。
+
+### Reviewer Agent：PASS
+
+- 全量回读 `3175d767...d7cca5b6` 的 123 个累计提交文件：7 个 source/test/i18n、5 个 dist、
+  4 个 docs、107 个 OpenSpec/Tenon Change 文件；另覆盖当前 revision 41、pre-verify 41、
+  transition 14 与 4 个 canonical 投影。
+- source empty / filtered empty、全部 radio 键、normal/reduced motion、O(n)、确定性大小写、
+  live summary、重复 basename、不可达只读、桌面边界、生成资产与治理链均通过。
+- `git diff --check` PASS；CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0。
+
+### 隔离 E2E / 构建轨：PASS
+
+- 仓外隔离 clone `/tmp/dashboard-projects-frozen4.UBBO2j/repo` checkout 精确 SHA。
+- `npm ci`、定向 2 files / 32 tests、根 `npm run build`、dist `git diff --exit-code`、
+  `npm run typecheck:web`、`npm run test:web` 69 files / 1,218 tests 全部 exit 0。
+- source empty、filtered empty、ArrowLeft/Right/Up/Down、Home/End、normal/reduced motion 以及
+  累计 Projects 行为均通过。
+- 信息项：7 个既有依赖 advisory；Vite 主 chunk 898.78 kB warning。本批未修改依赖或拆包边界。
+
+### Codex CLI：PASS
+
+- 通过 stdin 审查确切累计的人类编写源码、测试、i18n、规格、设计、报告和 dist 入口；
+  生成 JS/CSS 与 Tenon receipts 由 Reviewer/E2E 轨覆盖。
+- correctness、accessibility、performance、security、error handling、tests、i18n、spec alignment
+  与 dist wiring 全部通过。
+- source/filtered empty、四向 radio 键、唯一 checked/tabbable、live summary、O(n)、
+  `toLowerCase()`、normal/reduced motion 与 GSAP cleanup 均通过。
+- CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0。
+
+### 视觉轨：PASS
+
+- 冻结前后 CSS blob 完全相同，6 张仓外真实截图继续覆盖：
+  1024 System all、1024 Light filtered、1200 Light unreachable、1024 Dark empty、
+  1440 Dark filtered、1920 Dark all。
+- 新 source empty 与 ArrowUp/Down 由冻结 dist 和 1280×720 实机语义证据核对；旧图未被冒充为
+  新状态截图。
+- source empty 不显示无效工具栏/清除动作；filtered empty 保留可恢复主动作。token、层级、对比度、
+  焦点、不可达、断连、无横溢和 reduced-motion 均通过。
+- CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0。
+
+### 逐文件 capability 回读
+
+| 文件组 | 文件数 | 对应规范 | 结果 |
+| --- | ---: | --- | --- |
+| `packages/dashboard-app/src/**` | 7 | `openspec/specs/dashboard-ui-ux-system/spec.md` + Change delta | PASS |
+| `packages/dashboard-app/dist/**` | 5 | `openspec/specs/dashboard-ui-ux-system/spec.md` + release asset wiring | PASS |
+| ADR、设计、计划、报告 | 4 | Change proposal/design/delta/plan | PASS |
+| OpenSpec/Tenon Change | 107 | Change delta、tasks、ledger 与 phase/review contract | PASS |
+
+123 个累计提交文件均已归组并逐文件回读；没有未映射文件。
+
+### OpenSpec 隔离应用与冻结屏障
+
+- `openspec show ... --json --deltas-only`、Change strict validate、隔离 archive 均 PASS。
+- 隔离目录 `/tmp/dashboard-focus-openspec4.w2pRHr`；应用后的
+  `dashboard-ui-ux-system --type spec --strict` PASS。
+- 真实主 spec 摘要前后均为
+  `217e7b60d7d6b4a04c5e3ecf972c143a4a5436535f63508e686a64dfa8a7b530`，Verify 未修改主规范。
+- 三条 agent 轨前后真实 worktree 指纹完全一致：
+  HEAD `d7cca5b6`、status `01152b63`、tracked `e19bf8b3`、staged empty、untracked `556a851c`。
+
+### 浏览器、兼容性与剩余风险
+
+- 真实 Dashboard 完整证据覆盖 1024×768、1200×870、1440×900、1920×1080，
+  System/Light/Dark、查询成功、筛选零结果、不可达、离线/重连和无横向溢出。
+- 第四次修复在 1280×720 真实 Dashboard 复核：ArrowUp 从“全部”循环到“读不到”，ArrowDown
+  循环回“全部”；每步唯一 checked、焦点同步、live summary 更新，`scrollWidth === innerWidth`。
+- reduced-motion 与 normal-motion 的执行次数由组件集成测试证明；未运行手机端验收。
+- 剩余非阻断项仅为既有 Vite chunk advisory 与依赖 advisory；本批无 API、持久化、数据库、
+  依赖或生产部署变化。回滚为撤销 Projects 域内组件、模型、i18n、测试和 dist 提交。
