@@ -71,3 +71,30 @@ TDD 回归先得到 4 个预期失败，再以最小实现令定向 2 files / 28
 
 第二次 Build 复评结论：第一轮冻结的 4 个 MEDIUM 和 1 个 LOW 均已修复；当前无剩余
 CRITICAL、HIGH 或 MEDIUM 发现。最终结论仍须以后续精确新 build SHA 的独立 Verify 四轨为准。
+
+## 第二次 Verify finding 收敛
+
+第二次冻结 `19da8013597444646279185a88ba1a9bf6674add` 的 Reviewer、隔离 E2E 与视觉轨
+PASS；Codex 降级轨发现高频查询后重复排序的 MEDIUM，以及确定性大小写、live summary、组合测试
+与 one-of-many 语义 LOW。按 `verify-fail → requirements-changed` 正式回 Spec 修订后完成：
+
+| 严重度 | 发现 | 修复与新证据 |
+| --- | --- | --- |
+| MEDIUM | query/focus 后再次对 need/rest 排序，违反 O(n) 承诺 | `rows` 改变时只预排序 reachable 一次，unreachable 保持原顺序；高频路径仅 filter；测试监视 `Array.sort` 证明查询/切换零调用 |
+| LOW | `toLocaleLowerCase()` 受浏览器 locale 影响 | 改为确定性 `toLowerCase()`，测试证明不调用 locale-sensitive API |
+| LOW | live summary 未朗读当前 focus | 中英文 summary 加入本地化 focus，真实语义快照为“全部 · 显示 1 / 40 个项目” |
+| LOW | 缺重复 basename 查询与 ArrowLeft/wrap 回归 | 增加完整 root 精确匹配、ArrowLeft 末项与 ArrowRight 首项循环 |
+| LOW | 互斥 toggle button group 对 one-of-many 关系表达不足 | Spec 与实现改为具名 `radiogroup`、四个 `radio`、单一 `aria-checked=true` 与单一 `tabIndex=0` |
+
+TDD 红态为 2 files / 30 tests 中 6 个预期失败；最小实现后 30/30 PASS。完整验证：
+
+- `typecheck:web` PASS；`test:web` 69 files / 1,216 tests PASS。
+- architecture 670 production files PASS（5 个既有 size-only exceptions）；comments PASS。
+- OpenSpec strict PASS；`git diff --check` PASS；根 `npm run build` PASS。
+- Vite 仍有既有 897.86 kB 主 chunk warning；未增加依赖。
+- 真实 1024×768 System/Dark Dashboard：snapshot 暴露 `radiogroup`、4 个 radio、
+  1 个 checked、1 个 tabbable；ArrowLeft/Right 首尾循环、当前 focus summary 和
+  `scrollWidth === innerWidth === 1024` 均通过。
+
+第三次 Build 收敛结论：第二次 Verify 的 1 个 MEDIUM 与 4 个 LOW 全部关闭；视觉几何与 token
+未变化。最终结论仍须新冻结 SHA 的完整四轨重新全量验证。

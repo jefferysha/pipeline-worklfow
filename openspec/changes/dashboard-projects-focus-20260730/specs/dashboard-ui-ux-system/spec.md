@@ -31,9 +31,10 @@ Projects MUST 在 1024–1920px 电脑端提供按项目 basename 或完整 root
 #### Scenario: 键盘选择状态
 
 - **WHEN** 焦点位于任一状态筛选按钮且用户按 ArrowLeft、ArrowRight、Home 或 End
-- **THEN** 焦点和按下状态按 roving 按钮组模型同步移动
-- **AND** 按钮组提供明确的可访问名称，每个按钮使用 `aria-pressed` 暴露状态
-- **AND** 每次只有按下按钮可通过常规 Tab 顺序到达
+- **THEN** 焦点和选择状态按 roving radio group 模型同步移动并支持首尾循环
+- **AND** 选择器使用有名称的 `radiogroup`，每个选项使用 `radio` 与 `aria-checked` 暴露
+  one-of-many 状态
+- **AND** 每次只有选中的 radio 可通过常规 Tab 顺序到达
 
 #### Scenario: 清除查询与零结果恢复
 
@@ -46,9 +47,16 @@ Projects MUST 在 1024–1920px 电脑端提供按项目 basename 或完整 root
 #### Scenario: 高频筛选与 reduced motion
 
 - **WHEN** 用户连续输入查询或切换状态筛选
-- **THEN** Projects 只执行当前项目集合的 O(n) 本地派生，不发起网络请求
+- **THEN** Projects 只在完整 rows 事实集合变化时预排序一次；查询或状态切换仅执行 O(n) 本地过滤，
+  不发起网络请求
 - **AND** 不按每次查询或状态变化重播 GSAP 列表入场
 - **AND** `prefers-reduced-motion: reduce` 下既有集合级动画继续直接呈现终态
+
+#### Scenario: 确定性查询与状态朗读
+
+- **WHEN** 项目路径包含 locale-sensitive casing，或用户改变状态聚焦
+- **THEN** basename/root 以不依赖浏览器 locale 的小写归一规则匹配
+- **AND** live summary 同时朗读当前状态名称、当前结果数量与完整项目总数
 
 #### Scenario: 四档电脑端兼容性
 

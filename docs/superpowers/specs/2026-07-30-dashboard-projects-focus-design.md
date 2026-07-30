@@ -44,7 +44,8 @@ Tenon Dashboard 是本地开发者的电脑端操作控制台。真实生产 Das
 ### 聚焦工具栏
 
 - 位于 PageHeader 之后、项目结果之前；1024px 起保持搜索框与状态筛选按钮组同行，空间不足时自然换行。
-- 搜索输入使用 Lucide `Search`，可访问 label 和中英文 placeholder；匹配经过 `trim().toLocaleLowerCase()`，
+- 搜索输入使用 Lucide `Search`，可访问 label 和中英文 placeholder；匹配经过
+  `trim().toLowerCase()`，
   同时覆盖 `basename` 与完整 `root`。
 - 状态筛选按钮为 `all | attention | running | unreachable`：
   - `all`：全部项目数，包括不可达项目。
@@ -52,14 +53,15 @@ Tenon Dashboard 是本地开发者的电脑端操作控制台。真实生产 Das
   - `running`：`ok && running > 0`。
   - `unreachable`：`!ok`。
 - badge 计数来自完整 rows，不随查询改变；查询与状态筛选共同决定结果摘要。
-- 按钮组使用 roving focus；ArrowLeft/ArrowRight/Home/End 同步焦点和 `aria-pressed` 状态。
+- 状态选择器使用 one-of-many `radiogroup/radio` 与 roving focus；ArrowLeft/ArrowRight/Home/End
+  同步焦点和 `aria-checked` 状态并支持首尾循环。
 
 ### 结果呈现
 
 - 默认 `all + 空查询` 完全保留现有三分区与“读不到 N 个”折叠语义。
 - `all + 有查询` 自动展开匹配的不可达行，避免用户搜索到项目却仍要猜测折叠区。
 - 非 `all` 状态直接展示对应结果；不可达结果继续是 `aria-disabled` 的只读 group，不伪装为可点击项目。
-- live summary 使用 `role=status`、`aria-live=polite`，表达“显示 X / 共 Y 个项目”与当前状态。
+- live summary 使用 `role=status`、`aria-live=polite`，表达“当前状态 · 显示 X / 共 Y 个项目”。
 - 零结果显示边框虚线空态，说明没有匹配项，并提供“清除条件”；执行后恢复 `all`、清空查询并把焦点返回搜索框。
 - 搜索输入按 Escape 只清空查询，不改变当前状态筛选，避免一次键盘动作丢失两个条件。
 
@@ -88,12 +90,14 @@ Snapshot
 - 不为每次键入新增 GSAP；搜索和状态切换立即更新，避免 38+ 项目下的重复 stagger 和输入延迟。
 - 保留既有项目集合入场动画，其依赖仍是完整 rows 指纹，不因 query/focus 改变而重播。
 - hover/press 和 focus ring 继续使用既有 token 与短 transition；reduced-motion 不增加新分支负担。
-- 查询与聚焦均为 O(n) 的本地派生，n 为当前已注册项目数；不产生网络请求。
+- 完整 rows 只在事实集合变化时按既有 comparator 排序一次；查询与聚焦均为 O(n) filter，
+  n 为当前已注册项目数；不产生网络请求。
 
 ## 可访问性与兼容性
 
 - 搜索使用原生 input 和显式 `htmlFor/id` 标签；清除按钮与 input 同级，避免复合 label 语义。
-- 状态筛选使用有名称的 `role=group`、原生 button、`aria-pressed` 与单一 `tabIndex=0`，不伪装成缺少关联 panel 的 tabs。
+- 状态筛选使用有名称的 `role=radiogroup`、`role=radio`、`aria-checked` 与单一 `tabIndex=0`，
+  明确暴露 one-of-many 选择，不伪装成缺少关联 panel 的 tabs 或独立 toggles。
 - 状态不只靠颜色：每个按钮有文字、计数和按下形态。
 - 结果摘要与零结果为可读文字；清除动作是普通按钮。
 - 项目 accessible name 继续包含完整 root；同 basename 的 React key/DOM id 不变。

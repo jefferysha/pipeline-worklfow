@@ -18,4 +18,8 @@
 
 - 定位瓶颈由真实 38 项目基线确认，不依赖假数据推断。
 - badge 使用全局计数、live summary 使用当前结果；既有优先排序只在匹配集合内生效。
-- 状态筛选使用具 `aria-pressed` 的按钮组，并保留 roving ArrowLeft/ArrowRight/Home/End；清除条件后焦点回搜索框。Verify 已证明筛选器不应伪装成缺少关联 panel 的 tabs。
+- 状态筛选使用 one-of-many `radiogroup/radio` 语义，并保留 roving
+  ArrowLeft/ArrowRight/Home/End；清除条件后焦点回搜索框。Verify 已证明筛选器既不应伪装成
+  缺少关联 panel 的 tabs，也不应把互斥状态暴露成四个独立 toggle。
+- basename/root 使用确定性 `toLowerCase()`；完整 rows 仅在集合变化时排序，查询与状态切换只做
+  O(n) filter；live summary 同时朗读当前状态与结果计数。

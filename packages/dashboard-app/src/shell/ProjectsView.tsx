@@ -244,11 +244,19 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
       ? `project-row-${row.basename}-${encodeURIComponent(row.root)}`
       : `project-row-${row.basename}`
   const focusCounts = useMemo(() => countProjectFocus(rows), [rows])
-  const focusedRows = useMemo(() => selectFocusedProjects(rows, query, focus), [focus, query, rows])
+  const orderedRows = useMemo(() => {
+    const reachable = rows.filter((row) => row.ok).sort(compareProjectRows)
+    const unreachable = rows.filter((row) => !row.ok)
+    return [...reachable, ...unreachable]
+  }, [rows])
+  const focusedRows = useMemo(
+    () => selectFocusedProjects(orderedRows, query, focus),
+    [focus, orderedRows, query],
+  )
   const { needRows, restRows, unreachable } = useMemo(() => {
     const reachable = focusedRows.filter((r) => r.ok)
-    const need = reachable.filter((r) => r.need > 0).sort(compareProjectRows)
-    const rest = reachable.filter((r) => r.need === 0).sort(compareProjectRows)
+    const need = reachable.filter((r) => r.need > 0)
+    const rest = reachable.filter((r) => r.need === 0)
     const unreach = focusedRows.filter((r) => !r.ok)
     return { needRows: need, restRows: rest, unreachable: unreach }
   }, [focusedRows])
@@ -260,7 +268,10 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   }
 
   // 入场动画依赖键 = 行/分区成员指纹（增删项目才重放 stagger；展开读不到区不整列重播）。
-  const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.root}`).sort().join('|')
+  const animKey = useMemo(
+    () => rows.map((r) => `${r.ok ? '1' : '0'}${r.root}`).sort().join('|'),
+    [rows],
+  )
   useGSAP(
     () => {
       const el = rootRef.current

@@ -8,7 +8,7 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 ## 目标与边界
 
 在 Projects 功能域内交付 basename/root 检索、四态状态聚焦、全局计数、当前结果摘要、
-键盘 roving 状态按钮组与可恢复零结果。只覆盖 1024–1920px 电脑端；不修改 Snapshot、API、项目发现、
+键盘 roving radio group 与可恢复零结果。只覆盖 1024–1920px 电脑端；不修改 Snapshot、API、项目发现、
 公共状态或手机端契约，不增加依赖。
 
 技术 prototype 不适用：真实生产 Dashboard 已确认现有 `ProjectRow` 事实、列表分区、动画触发条件、
@@ -21,7 +21,7 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 - 新增 `packages/dashboard-app/src/shell/projectsFocusModel.test.tsx`，覆盖 basename/root 大小写与空白、
   `all | attention | running | unreachable` 谓词、全局计数、查询与聚焦组合。
 - 新增 `packages/dashboard-app/src/shell/projectsFocusModel.ts`，导出 `ProjectFocus`、
-  `countProjectFocus` 与 `selectFocusedProjects`；只消费 `ProjectRow`，保持 O(n) 且无副作用。
+  `countProjectFocus` 与 `selectFocusedProjects`；只消费 `ProjectRow`，保持无副作用。
 - 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/projectsFocusModel.test.tsx`。
 
 ### Task 2：贯穿一个可见 happy path
@@ -38,9 +38,9 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 
 ### Task 3：补齐键盘和恢复路径
 
-- 在 `ProjectsFocusToolbar.tsx` 实现状态按钮组的 ArrowLeft/ArrowRight/Home/End roving focus、搜索 Escape、
+- 在 `ProjectsFocusToolbar.tsx` 实现状态 radio group 的 ArrowLeft/ArrowRight/Home/End roving focus、搜索 Escape、
   清除条件与搜索焦点恢复。
-- 在 `ProjectsView.test.tsx` 覆盖按钮焦点/按下状态同步、Escape 保留状态、零结果清除与焦点回归。
+- 在 `ProjectsView.test.tsx` 覆盖 radio 焦点/选择状态同步、首尾循环、Escape 保留状态、零结果清除与焦点回归。
 - 验证每次只有按下按钮的 `tabIndex=0`，结果摘要使用 `role=status`、`aria-live=polite`。
 - 运行：`npm run test:web -- --run packages/dashboard-app/src/shell/ProjectsView.test.tsx`。
 
@@ -78,6 +78,25 @@ design-doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 - 每档检查 `scrollWidth === clientWidth`；不得运行或声称手机端验收。
 
 此处建议 /clear：build 证据完整后冻结 SHA，进入 Verify，不再混入实现变更。
+
+## Phase 4：Verify finding 收敛
+
+### Task 7：先锁定复杂度、确定性与 one-of-many 语义
+
+- 先修改 `projectsFocusModel.test.tsx` 与 `ProjectsView.test.tsx`，令旧实现分别因
+  locale-sensitive casing、重复排序、缺少 `radiogroup/radio`、缺少当前 focus live summary、
+  重复 basename 查询和 ArrowLeft 首尾循环而失败。
+- 将 `toLocaleLowerCase()` 改为 `toLowerCase()`；在 `rows` 变化时预排序一次，查询/状态切换只过滤。
+- 把视觉不变的筛选按钮改为 `radiogroup/radio + aria-checked`，保留原生 button 的事件和 roving 行为。
+
+### Task 8：重建并复验冻结基线
+
+- 更新中英文 live summary，重建 Dashboard dist。
+- 重新运行定向 Vitest、`typecheck:web`、`test:web`、`build`、architecture/comments/OpenSpec strict。
+- 在真实桌面 Dashboard 复核 radiogroup accessible snapshot、四键循环、当前 focus 朗读和无横向溢出；
+  视觉像素不变时复用第二次冻结的六档截图作为对比锚点，并采集新的语义证据。
+
+此处建议 /clear：所有 Verify findings 关闭后重新冻结 SHA，再执行完整四轨而不是局部复查。
 
 ## 兼容性、回滚与交付
 

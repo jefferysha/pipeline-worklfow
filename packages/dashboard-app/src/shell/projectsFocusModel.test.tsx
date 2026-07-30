@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ProjectRow } from './projectsModel'
 import {
   countProjectFocus,
@@ -39,10 +39,13 @@ const rows: ProjectRow[] = [
 
 describe('projectsFocusModel', () => {
   it('matches trimmed, case-insensitive basename and root fragments', () => {
+    const localeLower = vi.spyOn(String.prototype, 'toLocaleLowerCase')
     expect(projectMatchesQuery(rows[0], '  PIPELINE  ')).toBe(true)
     expect(projectMatchesQuery(rows[1], 'code/release')).toBe(true)
     expect(projectMatchesQuery(rows[2], 'missing')).toBe(false)
     expect(projectMatchesQuery(rows[2], '   ')).toBe(true)
+    expect(localeLower).not.toHaveBeenCalled()
+    localeLower.mockRestore()
   })
 
   it('maps every focus to the existing ProjectRow facts', () => {

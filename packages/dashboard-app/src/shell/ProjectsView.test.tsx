@@ -231,11 +231,27 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(searchLabel).not.toContainElement(clearQuery)
     expect(screen.queryByTestId('project-row-repo-a')).toBeNull()
     expect(screen.getByTestId('project-row-repo-b')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('显示 1 / 2 个项目')
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('全部 · 显示 1 / 2 个项目')
 
     fireEvent.change(search, { target: { value: 'code/repo-a' } })
     expect(screen.getByTestId('project-row-repo-a')).toBeInTheDocument()
     expect(screen.queryByTestId('project-row-repo-b')).toBeNull()
+  })
+
+  it('查询完整 root 时只保留同 basename worktree 的精确匹配身份', () => {
+    const firstRoot = '/Users/me/.codex/worktrees/alpha/pipeline-worklfow'
+    const secondRoot = '/Users/me/.codex/worktrees/beta/pipeline-worklfow'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstRoot, [makeChange('alpha', 'open')]),
+        makeProject(secondRoot, [makeChange('beta', 'open')]),
+      ]),
+      rulesByKey: rulesFor(firstRoot, secondRoot),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '/beta/' } })
+    expect(screen.queryByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(firstRoot)}`)).toBeNull()
+    expect(screen.getByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(secondRoot)}`)).toBeInTheDocument()
   })
 
   it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
@@ -255,13 +271,14 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(screen.getByTestId('projects-focus-unreachable')).toHaveTextContent('1')
 
     fireEvent.click(screen.getByTestId('projects-focus-running'))
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('运行中 · 显示 1 / 3 个项目')
     expect(screen.getByTestId('project-row-repo-a')).toBeInTheDocument()
     expect(screen.queryByTestId('project-row-repo-b')).toBeNull()
     expect(screen.queryByTestId('project-row-broken')).toBeNull()
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'missing' } })
     expect(screen.getByTestId('projects-focus-all')).toHaveTextContent('3')
-    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('显示 0 / 3 个项目')
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('运行中 · 显示 0 / 3 个项目')
   })
 
   it('查询或不可达聚焦直接揭示匹配的不可达只读行，默认 all 仍保持折叠', () => {
@@ -283,29 +300,38 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(onOpenProject).not.toHaveBeenCalled()
   })
 
-  it('状态按钮组使用 aria-pressed 与 roving focus，支持方向键循环与 Home/End', () => {
+  it('状态 radiogroup 使用 aria-checked 与 roving focus，支持方向键循环与 Home/End', () => {
     renderView()
     const all = screen.getByTestId('projects-focus-all')
     const attention = screen.getByTestId('projects-focus-attention')
     const unreachable = screen.getByTestId('projects-focus-unreachable')
 
-    expect(screen.getByRole('group', { name: '项目状态聚焦' })).toBeInTheDocument()
-    expect(all).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radiogroup', { name: '项目状态聚焦' })).toBeInTheDocument()
+    expect(all).toHaveAttribute('role', 'radio')
+    expect(all).toHaveAttribute('aria-checked', 'true')
     expect(all).not.toHaveAttribute('role', 'tab')
 
     all.focus()
+    fireEvent.keyDown(all, { key: 'ArrowLeft' })
+    expect(unreachable).toHaveFocus()
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(unreachable, { key: 'ArrowRight' })
+    expect(all).toHaveFocus()
+    expect(all).toHaveAttribute('aria-checked', 'true')
+
     fireEvent.keyDown(all, { key: 'ArrowRight' })
     expect(attention).toHaveFocus()
-    expect(attention).toHaveAttribute('aria-pressed', 'true')
+    expect(attention).toHaveAttribute('aria-checked', 'true')
     expect(all).toHaveAttribute('tabindex', '-1')
 
     fireEvent.keyDown(attention, { key: 'End' })
     expect(unreachable).toHaveFocus()
-    expect(unreachable).toHaveAttribute('aria-pressed', 'true')
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
 
     fireEvent.keyDown(unreachable, { key: 'Home' })
     expect(all).toHaveFocus()
-    expect(all).toHaveAttribute('aria-pressed', 'true')
+    expect(all).toHaveAttribute('aria-checked', 'true')
   })
 
   it('Escape 只清空查询；零结果清除恢复 all 并把焦点交还搜索框', () => {
@@ -317,14 +343,27 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
 
     fireEvent.keyDown(search, { key: 'Escape' })
     expect(search).toHaveValue('')
-    expect(attention).toHaveAttribute('aria-pressed', 'true')
+    expect(attention).toHaveAttribute('aria-checked', 'true')
 
     fireEvent.change(search, { target: { value: 'missing' } })
     expect(screen.getByRole('heading', { name: '没有符合当前条件的项目' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '清除条件' }))
     expect(search).toHaveValue('')
-    expect(screen.getByTestId('projects-focus-all')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('projects-focus-all')).toHaveAttribute('aria-checked', 'true')
     expect(search).toHaveFocus()
+  })
+
+  it('rows 不变时查询与状态切换只过滤，不重复排序', () => {
+    renderView()
+    const search = screen.getByRole('searchbox', { name: '搜索项目' })
+    const attention = screen.getByTestId('projects-focus-attention')
+    const sort = vi.spyOn(Array.prototype, 'sort')
+
+    fireEvent.change(search, { target: { value: 'repo' } })
+    fireEvent.click(attention)
+
+    expect(sort).not.toHaveBeenCalled()
+    sort.mockRestore()
   })
 
   it('查询与状态切换不重播集合级 GSAP；reduced-motion 直接落终态', () => {

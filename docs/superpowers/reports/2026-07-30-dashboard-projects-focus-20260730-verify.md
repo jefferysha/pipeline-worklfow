@@ -101,3 +101,70 @@ CRITICAL 0、HIGH 0；聚合去重后仍有 4 个 MEDIUM 和 1 个 LOW。按 Ten
 4. 修正规划文档中的 `.test.tsx` 路径。
 5. 重建生产资产，重新运行全量验证，重新冻结 SHA。
 6. 从新冻结产物重新采集 1024、1200、1440、1920，以及不可达行和关键主题/状态截图。
+
+## 第二次冻结验证：`19da8013597444646279185a88ba1a9bf6674add`
+
+### 结论
+
+第二次冻结四轨已全部完成，结论仍为 **FAIL**。Reviewer、隔离 E2E 与视觉轨均 PASS；
+Codex CLI 因完整 diff 超过 1 MiB 输入上限而降级审查源码、规格、测试、i18n 与 dist entry，
+发现 1 个 MEDIUM 规格违约和 4 个 LOW。按持续自主规则返回 Build 修复，不接受偏差。
+
+### Reviewer Agent：PASS
+
+- 全量回读 `3175d767...19da8013` 的 83 个文件：7 个源码/i18n/测试、5 个生成资产、
+  9 个设计/OpenSpec/报告文档、62 个 Tenon canonical state/receipt/governance 文件。
+- 第一轮复合 label、错误 tab 语义、不可达对比度、计划扩展名与证据一致性问题均已关闭。
+- 生成入口引用闭合，治理 JSON、revision `0..23` 与 transition `1..7` 链闭合。
+- CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0；真实 worktree 前后指纹一致。
+
+### 隔离 E2E / 构建轨：PASS
+
+- 隔离副本 `/tmp/dashboard-projects-frozen2.BjG2ak/repo` checkout 精确 SHA。
+- `npm ci` PASS；定向 2 files / 28 tests PASS。
+- fresh clone 首次 `typecheck:web` 仅因内部类型尚未生成失败；根 `npm run build` PASS 后，
+  `typecheck:web` PASS，`test:web` 69 files / 1,214 tests PASS。
+- `git diff --exit-code -- packages/dashboard-app/dist` PASS，冻结 dist 可复现。
+- 仍有既有 7 个依赖 advisory 与 897.71 kB Vite chunk warning；本批未改依赖。
+
+### 视觉轨：PASS
+
+- 只读审查冻结源码/dist 与仓外 6 张真实 app 截图：
+  1024 System all、1024 Light filtered、1200 Light unreachable、1024 Dark empty、
+  1440 Dark filtered、1920 Dark all。
+- 层级、token、唯一清除动作、不可达可读性、空态、focus、宽屏密度与动效边界均通过。
+- CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0；未启动额外浏览器或写入仓库。
+
+### Codex CLI：FAIL（完整输入降级）
+
+- `codex login status` PASS；完整冻结 diff 为 2,247,729 字符，超过 `turn/start` 的
+  1,048,576 字符上限。随后只提交源码、规格、测试、i18n 与 dist entry diff；
+  生成 bundle 和 Tenon 状态由独立 Reviewer 全量覆盖。
+- MEDIUM：`focusedRows` 在每次 query/focus 改变后又分别排序 need/rest，令高频路径成为
+  O(n log n)，违背 delta spec 的 O(n) 承诺。
+- LOW：live summary 没有朗读当前 focus；重复 basename + 查询与 ArrowLeft/wrap 缺少组合回归；
+  `toLocaleLowerCase()` 会随浏览器 locale 漂移。
+- LOW 建议：互斥且方向键选择的按钮组可改用 radiogroup/radio 语义；当前 `group +
+  aria-pressed` 与冻结 Spec 一致，但下一轮将正式回 Spec 采用 one-of-many 语义，避免保留争议。
+- Codex 在受限 sandbox 内自行运行全量前端测试时，68 files / 1,211 tests 通过，
+  `serverIntegration` 因 `listen EPERM 127.0.0.1` 环境限制失败；该结果不替代隔离 E2E 的全绿证据。
+
+### 第二次 OpenSpec 演练与冻结屏障
+
+- OpenSpec 1.6.0；change strict validate PASS。
+- 隔离副本 `/tmp/dashboard-projects-focus-verify2.UUneYQ/repo` archive PASS，归档后主 capability
+  strict validate PASS。
+- 真实主 spec 摘要前后均为
+  `ac489b1f42b1ceaf65c8598ecd1fe5807b239ea71363bbf1dd2c96a713494581`；
+  隔离应用后摘要为 `ea22a9996857853f4c8fa2e3e4a0485851531754d51320328e857c0c880fc979`。
+- 四轨期间真实 HEAD 保持 `19da8013`，tracked diff、staged diff 与 untracked receipt 指纹
+  前后完全一致；只有本聚合报告在全部轨结束后被允许写入仓库。
+
+### 第二次回退 Build 修复清单
+
+1. 只在完整 `rows` 改变时排序一次，查询/聚焦高频路径只执行 O(n) filter。
+2. 改用确定性的 `toLowerCase()` 并增加 locale-sensitive casing 回归。
+3. live summary 加入当前 focus 的本地化名称。
+4. 补齐重复 basename + 查询、ArrowLeft 与首尾循环测试。
+5. 以 `requirements-changed` 回 Spec，把互斥筛选从 toggle button group 修订为
+   `radiogroup/radio` one-of-many 语义，再回 Build 实现。

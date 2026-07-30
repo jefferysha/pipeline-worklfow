@@ -7,9 +7,9 @@ export type ProjectFocus = (typeof PROJECT_FOCUS_OPTIONS)[number]
 export type ProjectFocusCounts = Record<ProjectFocus, number>
 
 export function projectMatchesQuery(row: ProjectRow, query: string): boolean {
-  const normalized = query.trim().toLocaleLowerCase()
+  const normalized = query.trim().toLowerCase()
   if (!normalized) return true
-  return row.basename.toLocaleLowerCase().includes(normalized) || row.root.toLocaleLowerCase().includes(normalized)
+  return row.basename.toLowerCase().includes(normalized) || row.root.toLowerCase().includes(normalized)
 }
 
 export function projectMatchesFocus(row: ProjectRow, focus: ProjectFocus): boolean {

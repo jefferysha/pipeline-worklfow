@@ -100,7 +100,7 @@ export function ProjectsFocusToolbar({
 
         <div className="max-w-full overflow-x-auto py-0.5 [scrollbar-width:thin]">
           <div
-            role="group"
+            role="radiogroup"
             aria-label={t('projects.filters_label')}
             className="inline-flex w-max items-center gap-1 rounded-xl bg-fill p-1"
           >
@@ -111,15 +111,16 @@ export function ProjectsFocusToolbar({
                   tabRefs.current[index] = node
                 }}
                 type="button"
+                role="radio"
                 tabIndex={focus === option ? 0 : -1}
-                aria-pressed={focus === option}
+                aria-checked={focus === option}
                 data-testid={`projects-focus-${option}`}
                 onClick={() => onFocus(option)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-1 focus-visible:ring-offset-fill aria-pressed:bg-card aria-pressed:text-text aria-pressed:shadow-sm"
+                className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-1 focus-visible:ring-offset-fill aria-checked:bg-card aria-checked:text-text aria-checked:shadow-sm"
               >
                 {t(`projects.focus_${option}`)}
-                <span className="inline-flex min-w-[19px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[19px] text-text-3 group-aria-pressed:bg-(--accent) group-aria-pressed:text-btn-fg">
+                <span className="inline-flex min-w-[19px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[19px] text-text-3 group-aria-checked:bg-(--accent) group-aria-checked:text-btn-fg">
                   {counts[option]}
                 </span>
               </button>
@@ -136,7 +137,7 @@ export function ProjectsFocusToolbar({
           aria-atomic="true"
           className="text-[12px] font-medium text-text-3"
         >
-          {t('projects.result_summary', { shown, total })}
+          {t('projects.result_summary', { focus: t(`projects.focus_${focus}`), shown, total })}
         </p>
         {hasConditions && shown > 0 && (
           <button

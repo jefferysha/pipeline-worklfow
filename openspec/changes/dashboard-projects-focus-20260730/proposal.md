@@ -6,7 +6,9 @@
 
 ## What Changes
 
-在 1024–1920px 的 Dashboard 项目总览中补充 basename/root 检索、All/Needs you/Running/Unreachable 状态聚焦、键盘 roving 按钮组、实时结果摘要和可恢复零结果，并保持项目身份、健康摘要和打开项目的既有语义。
+在 1024–1920px 的 Dashboard 项目总览中补充确定性的 basename/root 检索、All/Needs you/Running/Unreachable
+状态聚焦、键盘 roving `radiogroup`、包含当前状态的实时结果摘要和可恢复零结果；完整集合只预排序一次，
+并保持项目身份、健康摘要和打开项目的既有语义。
 
 非目标：不改项目发现/API/数据模型，不改手机端布局，不触碰 AFK、Trace 或生产部署。
 
