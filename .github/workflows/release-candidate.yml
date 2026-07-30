@@ -32,7 +32,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      - name: Prove exact current main candidate and unused tag
+      - name: Prove exact current main candidate and compatible tag
         id: candidate
         env:
           CANDIDATE_SHA: ${{ inputs.ref }}
@@ -69,8 +69,13 @@ jobs:
             exit 1
           }
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "release tag already exists: $RELEASE_TAG" >&2
-            exit 1
+            git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            existing_commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+            [ "$existing_commit" = "$CANDIDATE_SHA" ] || {
+              echo "release tag already exists at a different commit: tag=$RELEASE_TAG expected=$CANDIDATE_SHA actual=$existing_commit" >&2
+              exit 1
+            }
+            echo "release tag already exists at the approved candidate; recovery may continue"
           fi
           version="${RELEASE_TAG#v}"
           root_version="$(node -p "require('./package.json').version")"
@@ -171,6 +176,52 @@ jobs:
             exit 1
           }
 
+      - name: Package the verified release payload
+        env:
+          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.candidate.outputs.version }}
+          TENON_NPM_PACKAGE: ${{ vars.TENON_NPM_PACKAGE }}
+        run: |
+          set -euo pipefail
+          payload_dir=.release-candidate/payload
+          mkdir -p "$payload_dir"
+
+          npm run build:legacy-bridge
+          tar -C .release -czf "$payload_dir/tenon-legacy-bridge-$RELEASE_VERSION.tar.gz" legacy-bridge
+
+          if [ -n "$TENON_NPM_PACKAGE" ]; then
+            node tools/build-npx-package.mjs \
+              --package-name "$TENON_NPM_PACKAGE" \
+              --ref "$RELEASE_TAG" \
+              --output .release/npx-package
+            npm pack .release/npx-package --pack-destination "$payload_dir"
+          fi
+
+          (
+            cd "$payload_dir"
+            shopt -s nullglob
+            assets=(*)
+            [ "${#assets[@]}" -gt 0 ]
+            for asset in "${assets[@]}"; do
+              [[ "$asset" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+                echo "unsafe release asset name: $asset" >&2
+                exit 1
+              }
+            done
+            printf '%s\0' "${assets[@]}" |
+              LC_ALL=C sort -z |
+              xargs -0 sha256sum > SHA256SUMS
+          )
+
+      - name: Upload the digest-bound release payload
+        id: payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-payload-${{ steps.candidate.outputs.sha }}
+          path: .release-candidate/payload
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Write approval evidence for the default-branch writer
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
@@ -179,9 +230,18 @@ jobs:
           SOURCE_RUN_ID: ${{ github.run_id }}
           SOURCE_WORKFLOW_ID: ${{ github.workflow_ref }}
           SOURCE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          PAYLOAD_ARTIFACT_ID: ${{ steps.payload.outputs.artifact-id }}
+          PAYLOAD_ARTIFACT_NAME: release-candidate-payload-${{ steps.candidate.outputs.sha }}
+          PAYLOAD_ARTIFACT_DIGEST: ${{ steps.payload.outputs.artifact-digest }}
         run: |
           set -euo pipefail
           mkdir -p .release-candidate
+          payload_manifest_sha256="$(
+            sha256sum .release-candidate/payload/SHA256SUMS | cut -d ' ' -f 1
+          )"
+          payload_artifact_id="$PAYLOAD_ARTIFACT_ID"
+          payload_artifact_name="$PAYLOAD_ARTIFACT_NAME"
+          payload_artifact_digest="$PAYLOAD_ARTIFACT_DIGEST"
           jq -n \
             --arg sha "$CANDIDATE_SHA" \
             --arg tag "$RELEASE_TAG" \
@@ -189,13 +249,21 @@ jobs:
             --arg source_run_id "$SOURCE_RUN_ID" \
             --arg source_workflow_ref "$SOURCE_WORKFLOW_ID" \
             --arg source_workflow_sha "$SOURCE_WORKFLOW_SHA" \
+            --arg payload_artifact_id "$payload_artifact_id" \
+            --arg payload_artifact_name "$payload_artifact_name" \
+            --arg payload_artifact_digest "$payload_artifact_digest" \
+            --arg payload_manifest_sha256 "$payload_manifest_sha256" \
             '{
               sha: $sha,
               tag: $tag,
               version: $version,
               source_run_id: $source_run_id,
               source_workflow_ref: $source_workflow_ref,
-              source_workflow_sha: $source_workflow_sha
+              source_workflow_sha: $source_workflow_sha,
+              payload_artifact_id: $payload_artifact_id,
+              payload_artifact_name: $payload_artifact_name,
+              payload_artifact_digest: $payload_artifact_digest,
+              payload_manifest_sha256: $payload_manifest_sha256
             }' > .release-candidate/approved.json
 
       - name: Publish approval evidence
@@ -204,4 +272,4 @@ jobs:
           name: release-candidate-approval
           path: .release-candidate/approved.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 90

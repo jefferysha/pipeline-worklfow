@@ -11,6 +11,7 @@ import { useT } from '../i18n'
 import { formatApiError } from '../api/transport'
 import { decodeTrackMutationSuccess } from '../api/trackMutationResponse'
 import { Dialog } from '../shared/Dialog'
+import { UnsavedDraftDialog, useDiscardGuard } from '../shared/UnsavedDraftDialog'
 import type { MandatoryState } from './mandatoryState'
 import {
   allowedFromTrackDraft,
@@ -50,6 +51,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
   const [routePreview, setRoutePreview] = useState<WbRouterPreview | null>(null)
   const [routePreviewBusy, setRoutePreviewBusy] = useState(false)
   const [routePreviewError, setRoutePreviewError] = useState('')
+  const discardGuard = useDiscardGuard()
   const routePreviewGeneration = useRef(0)
   const rootIdentity = useRef(state.root)
   rootIdentity.current = state.root
@@ -80,6 +82,21 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     onDirtyChange?.(false)
   }, [onDirtyChange])
   const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
+
+  function clearEditor(): void {
+    setEditor(null)
+    setRoutePrompt('')
+    invalidateRoutePreview()
+  }
+
+  function closePanel(): void {
+    setOpen(false)
+    clearEditor()
+  }
+
+  function requestDraftClose(action: () => void): void {
+    if (!busy) discardGuard.request(editorDirty, action)
+  }
 
   function openCreate(): void {
     const template = state.tracks.find((track) => track.id === 'frontend') ?? state.tracks[0]
@@ -279,13 +296,10 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
         className="rounded-md border border-border bg-card px-3 py-[6px] text-[12.5px] font-bold text-text-2 transition-colors hover:bg-fill"
         data-testid="wb-track-settings-toggle"
         aria-expanded={open}
+        disabled={busy}
         onClick={() => {
-          if (open) {
-            setEditor(null)
-            setRoutePrompt('')
-            invalidateRoutePreview()
-          }
-          setOpen((value) => !value)
+          if (open) requestDraftClose(closePanel)
+          else setOpen(true)
         }}
       >
         {t('workbench.track_settings_toggle')}
@@ -293,7 +307,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
       {open && (
         <Dialog
           title={t('workbench.track_settings_dialog')}
-          onClose={() => { setOpen(false); setEditor(null); setRoutePrompt(''); invalidateRoutePreview() }}
+          onClose={() => requestDraftClose(closePanel)}
           testid="wb-track-settings-panel"
           closeLabel={t('workbench.track_settings_close')}
           panelClassName="w-[min(920px,calc(100vw-32px))]"
@@ -311,7 +325,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <b className="text-[13px] text-text">{editor.mode === 'create' ? t('workbench.track_create_title') : t('workbench.track_edit_title')}</b>
-                <button type="button" className="text-xs text-text-3" onClick={() => { setEditor(null); setRoutePrompt(''); invalidateRoutePreview() }}>{t('workbench.track_cancel')}</button>
+                <button type="button" className="text-xs text-text-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={busy} onClick={() => requestDraftClose(clearEditor)}>{t('workbench.track_cancel')}</button>
               </div>
               <TrackEditorFields
                 draft={editor.draft}
@@ -347,6 +361,12 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
           <TrackSettingsList state={state} onEdit={openEdit} />
         </Dialog>
       )}
+      <UnsavedDraftDialog
+        open={discardGuard.confirmOpen}
+        testid="wb-track-unsaved-draft"
+        onStay={discardGuard.stay}
+        onDiscard={discardGuard.discard}
+      />
     </div>
   )
 }

@@ -248,3 +248,33 @@
   build 与 `git diff --check` 通过。新资产为 `index-UJjh5PoS.js`（SHA-256
   `a927f340…6a9f`）与
   `index-YeY6VsN7.css`。旧复审作废，下一精确提交必须重新独立复审。
+
+### `571997db` 后独立复审回退
+
+- 两个独立 reviewer 对 `origin/main@445aa141..571997db` 的完整范围给出合并结论
+  C0/H2/M3/L0：特权 release job 执行候选代码；Skill receipt 可被零行读取或重定向欺骗；
+  tag 创建后的崩溃无法恢复；Workbench 子面板可绕过 dirty guard 卸载草稿；Create Change
+  在途 POST 可被 Esc/backdrop/Cancel 静默关闭。
+- release candidate 现在只读、无 secrets，所有构建/测试/打包均在该 job 内完成；payload
+  绑定 artifact id/name/digest/run/head 与逐资产 `SHA256SUMS`。特权 writer/release 不 checkout、
+  不 setup Node、不运行 npm lifecycle、不 `secrets: inherit`，自动化不再执行 `npm publish`。
+- writer 对 existing tag 递归 peel；仅在精确等于批准 SHA 时恢复。GitHub Release 已存在时
+  拒绝 draft/prerelease/未知资产/digest 漂移，只补齐缺失资产；不存在时先建 Release 后逐项上传，
+  可覆盖 tag 后或部分上传后的崩溃窗口。
+- Skill receipt 仅接受完整 literal `cat [--] <trusted SKILL.md>`，允许安全的 `&&`/换行批量，
+  拒绝 head/tail/sed、重定向、pipe、wrapper、替换、glob、选项和分号。定向 receipt + 两个
+  Hook 集成文件 113/113 通过。
+- Dashboard 新增统一丢弃确认：Loop、Automation、Secrets、Track、机器折叠与整个 Governance
+  workspace 都不能静默卸载 dirty draft。Create Change POST 在途时 Cancel disabled，Esc 与
+  backdrop 均无效，成功结果仍只触发一次刷新/提示/关闭。
+- Dashboard 全量 73 files / 1426 tests、web typecheck、694-file architecture、root build、
+  release contract 12/12、YAML 与 shell syntax、docs、repository hygiene、`git diff --check`
+  已通过。生成资产为 `index-DVjAM_GF.js`（SHA-256 `254e4323…ad8`）和
+  `index-YeY6VsN7.css`；CLI bundle SHA-256 为 `5c091ac1…acd5`。
+- 首次 root 全量运行共 327 files / 5803 passed / 14 honest-skip，仅 3 条仍使用 partial `sed`
+  模型的旧 fixture 失败；fixture 已改成完整 `cat`。修复后的 fresh root 全量为
+  327 files / 5806 passed / 14 honest-skip，且定向 113/113 通过。
+- 同一候选上的 hooks 512/512、adapters 272/272、bundle 31/31、migration CAS 13/13、
+  npx 安装契约 39/39、docs check/build/smoke、clean Codex install 与五套 golden oracle
+  （0 差异）均通过。仍必须在最终 commit 上完成生产浏览器矩阵、独立 C0/H0/M0/L0 与
+  canonical GitHub CI。

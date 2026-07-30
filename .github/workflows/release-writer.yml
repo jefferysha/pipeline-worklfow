@@ -29,6 +29,12 @@ jobs:
     outputs:
       sha: ${{ steps.tag.outputs.sha }}
       tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      source_run_id: ${{ steps.tag.outputs.source_run_id }}
+      payload_artifact_id: ${{ steps.tag.outputs.payload_artifact_id }}
+      payload_artifact_name: ${{ steps.tag.outputs.payload_artifact_name }}
+      payload_artifact_digest: ${{ steps.tag.outputs.payload_artifact_digest }}
+      payload_manifest_sha256: ${{ steps.tag.outputs.payload_manifest_sha256 }}
     steps:
       - name: Prove the upstream run used the protected default-branch workflow
         env:
@@ -109,7 +115,7 @@ jobs:
             --dir .release-candidate
           [ -f .release-candidate/approved.json ]
 
-      - name: Re-prove main and atomically create the approved annotated tag
+      - name: Validate approval, artifact, and create or recover the approved tag
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -117,6 +123,35 @@ jobs:
           UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+
+          resolve_tag_commit() {
+            local release_tag="$1"
+            local ref_json object_sha object_type tag_json depth
+            ref_json="$(
+              gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$release_tag" \
+                --jq ".[] | select(.ref == \"refs/tags/$release_tag\")"
+            )"
+            [ -n "$ref_json" ] || return 1
+            object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
+            object_type="$(jq -er '.object.type' <<<"$ref_json")"
+            depth=0
+            while [ "$object_type" = "tag" ]; do
+              depth=$((depth + 1))
+              [ "$depth" -le 8 ] || {
+                echo "tag indirection is too deep: $release_tag" >&2
+                return 2
+              }
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+              object_sha="$(jq -er '.object.sha' <<<"$tag_json")"
+              object_type="$(jq -er '.object.type' <<<"$tag_json")"
+            done
+            [ "$object_type" = "commit" ] || {
+              echo "tag does not peel to a commit: $release_tag ($object_type)" >&2
+              return 2
+            }
+            printf '%s\n' "$object_sha"
+          }
+
           approval=.release-candidate/approved.json
           CANDIDATE_SHA="$(jq -er '.sha | select(type == "string" and length == 40)' "$approval")"
           RELEASE_TAG="$(jq -er '.tag | select(type == "string" and length > 0)' "$approval")"
@@ -124,6 +159,10 @@ jobs:
           SOURCE_RUN_ID="$(jq -er '.source_run_id | select(type == "string" and length > 0)' "$approval")"
           SOURCE_WORKFLOW_REF="$(jq -er '.source_workflow_ref | select(type == "string" and length > 0)' "$approval")"
           SOURCE_WORKFLOW_SHA="$(jq -er '.source_workflow_sha | select(type == "string" and length == 40)' "$approval")"
+          PAYLOAD_ARTIFACT_ID="$(jq -er '.payload_artifact_id | select(type == "string" and test("^[0-9]+$"))' "$approval")"
+          PAYLOAD_ARTIFACT_NAME="$(jq -er '.payload_artifact_name | select(type == "string" and length > 0)' "$approval")"
+          PAYLOAD_ARTIFACT_DIGEST="$(jq -er '.payload_artifact_digest | select(type == "string" and test("^sha256:[0-9a-f]{64}$"))' "$approval")"
+          PAYLOAD_MANIFEST_SHA256="$(jq -er '.payload_manifest_sha256 | select(type == "string" and test("^[0-9a-f]{64}$"))' "$approval")"
 
           [ "$SOURCE_RUN_ID" = "$UPSTREAM_RUN_ID" ]
           [ "$SOURCE_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml@refs/heads/main" ]
@@ -137,38 +176,75 @@ jobs:
             exit 1
           }
           [ "$RELEASE_VERSION" = "${RELEASE_TAG#v}" ]
+          [ "$PAYLOAD_ARTIFACT_NAME" = "release-candidate-payload-$CANDIDATE_SHA" ]
 
-          main="$(
-            gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          artifact="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAYLOAD_ARTIFACT_ID"
           )"
-          [ "$main" = "$CANDIDATE_SHA" ] || {
-            echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
-            exit 1
-          }
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "release tag already exists: $RELEASE_TAG" >&2
-            exit 1
+          [ "$(jq -r '.id' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_ID" ]
+          [ "$(jq -r '.name' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_NAME" ]
+          [ "$(jq -r '.digest' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_DIGEST" ]
+          [ "$(jq -r '.expired' <<<"$artifact")" = "false" ]
+          [ "$(jq -r '.workflow_run.id' <<<"$artifact")" = "$UPSTREAM_RUN_ID" ]
+          [ "$(jq -r '.workflow_run.head_sha' <<<"$artifact")" = "$CANDIDATE_SHA" ]
+
+          existing_commit=""
+          if existing_commit="$(resolve_tag_commit "$RELEASE_TAG")"; then
+            [ "$existing_commit" = "$CANDIDATE_SHA" ] || {
+              echo "existing tag points to a different commit: tag=$RELEASE_TAG expected=$CANDIDATE_SHA actual=$existing_commit" >&2
+              exit 1
+            }
+            echo "tag already exists at approved commit; continuing release recovery"
+          else
+            resolve_status=$?
+            [ "$resolve_status" -eq 1 ] || exit "$resolve_status"
+            main="$(
+              gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+            )"
+            [ "$main" = "$CANDIDATE_SHA" ] || {
+              echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
+              exit 1
+            }
+            tag_object="$(
+              gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+                -f tag="$RELEASE_TAG" \
+                -f message="Tenon $RELEASE_VERSION" \
+                -f object="$CANDIDATE_SHA" \
+                -f type=commit \
+                --jq '.sha'
+            )"
+            if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" \
+              -f sha="$tag_object" >/dev/null; then
+              existing_commit="$(resolve_tag_commit "$RELEASE_TAG")"
+              [ "$existing_commit" = "$CANDIDATE_SHA" ] || {
+                echo "tag creation raced with a conflicting ref: tag=$RELEASE_TAG" >&2
+                exit 1
+              }
+            fi
           fi
-          tag_object="$(
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
-              -f tag="$RELEASE_TAG" \
-              -f message="Tenon $RELEASE_VERSION" \
-              -f object="$CANDIDATE_SHA" \
-              -f type=commit \
-              --jq '.sha'
-          )"
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/$RELEASE_TAG" \
-            -f sha="$tag_object" >/dev/null
+
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_id=$PAYLOAD_ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_name=$PAYLOAD_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_digest=$PAYLOAD_ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "payload_manifest_sha256=$PAYLOAD_MANIFEST_SHA256" >> "$GITHUB_OUTPUT"
 
   release:
     needs: create-tag
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.create-tag.outputs.tag }}
       expected_sha: ${{ needs.create-tag.outputs.sha }}
-    secrets: inherit
+      version: ${{ needs.create-tag.outputs.version }}
+      source_run_id: ${{ needs.create-tag.outputs.source_run_id }}
+      payload_artifact_id: ${{ needs.create-tag.outputs.payload_artifact_id }}
+      payload_artifact_name: ${{ needs.create-tag.outputs.payload_artifact_name }}
+      payload_artifact_digest: ${{ needs.create-tag.outputs.payload_artifact_digest }}
+      payload_manifest_sha256: ${{ needs.create-tag.outputs.payload_manifest_sha256 }}

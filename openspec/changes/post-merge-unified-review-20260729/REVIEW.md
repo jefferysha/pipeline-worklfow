@@ -209,3 +209,50 @@ number to the kernel's non-negative integer rule. Focused tests pass 90/90 and t
 suite passes 73 files / 1422 tests. The rebuilt production asset is
 `index-UJjh5PoS.js` with `index-YeY6VsN7.css`. The `276d2b3e` result is invalidated; a new
 exact-candidate review remains mandatory.
+
+## Post-`571997db` independent review rollback
+
+Two independent reviewers examined the complete `origin/main@445aa141..571997db` range and
+reported a combined **C0/H2/M3/L0**. The findings were not waived:
+
+- privileged release packaging still checked out and executed candidate-owned npm lifecycle
+  code before using write credentials;
+- transcript receipts treated successful path access as a full Skill read, so zero-line partial
+  readers and destructive redirection could satisfy evidence;
+- an annotated tag created just before a crash could not be resumed safely;
+- nested Loop, Automation, Secrets and Track surfaces could unmount dirty drafts without passing
+  through the top-level Workbench navigation guard;
+- Create Change could close during an in-flight POST, hiding a server-side creation and making a
+  retry conflict likely.
+
+The Build repair moves every source build, test and payload-packaging step into the read-only
+candidate job. The no-checkout writer/release jobs use fixed shell plus `gh`, `jq`, `unzip` and
+SHA-256 tools only, inherit no secrets, and validate artifact id/name/digest/run/head provenance
+plus a per-asset manifest. Release automation no longer runs `npm publish`; an optional npx
+package is a GitHub Release asset only. Existing tags are recursively peeled and accepted only
+at the approved commit; partial Releases resume by verifying existing assets and uploading only
+missing assets.
+
+Skill evidence now accepts only the deliberately tiny grammar
+`cat [--] <one literal trusted SKILL.md>` with safe `&&` or newline batching. Partial readers,
+options, redirection, pipes, shell wrappers, command substitution, globbing and ambiguous
+sequences fail closed. The focused receipt and Hook suites pass 113/113 after the full-runtime
+fixtures were updated from partial `sed` reads to genuine complete reads.
+
+Dashboard internal draft close paths now share one accessible confirmation primitive. Loop and
+machine panels, the entire Governance workspace, Track editor cancel/Escape/toggle, and all
+child unmounts preserve the draft until explicit discard; creating a Change blocks Cancel,
+Escape and backdrop while the POST is in flight. The full Dashboard suite passes 73 files /
+1426 tests, including the new child-panel, whole-workspace, machine-card and in-flight request
+regressions. Typecheck and the 694-file architecture gate pass; touched page/component files
+remain within their enforced size limits.
+
+The first subsequent root run exposed only three stale integration fixtures that still modeled
+partial Skill reads; after correction, the affected 113 tests pass. The fresh full root rerun now
+passes 327 files / 5806 tests with 14 honest environment skips. Hooks pass 512/512, adapters
+272/272, bundle 31/31, migration CAS 13/13, npx install contracts 39/39, docs check/build/smoke,
+clean Codex install and the five golden-oracle fixtures (zero differences) also pass. The
+production browser matrix, exact committed SHA review and canonical CI remain mandatory.
+The current generated Dashboard asset is `index-DVjAM_GF.js`
+(`sha256:254e4323…ad8`) with `index-YeY6VsN7.css`; the CLI bundle has been regenerated from the
+receipt parser source.

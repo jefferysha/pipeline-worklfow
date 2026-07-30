@@ -46,19 +46,22 @@ for host marketplace/source trust or OS account security.
 
 ## Dependency supply chain
 
-CI, the pre-tag release candidate, and the tag release workflow run
-`npm run check:dependencies`. The canonical gate combines the High/Critical
+CI and the pre-tag release candidate run `npm run check:dependencies`. The canonical gate combines the High/Critical
 advisory audit with `npm ls --all`, so invalid, extraneous, or incompatible
 resolved trees fail too. A formal release starts by dispatching
 **Release candidate (pre-tag)** with the exact current `main` SHA and new tag.
 Its untrusted verification job is read-only, does not persist checkout
 credentials, and fails closed unless canonical push CI succeeded for that exact
-SHA. It publishes only a bounded, short-lived approval artifact. A
-default-branch-owned `workflow_run` writer revalidates the repository, canonical
-workflow, completed run, artifact, exact SHA, and current `main` identity. Only
-then may a separate minimal writer job that checks out and executes no
-repository code create the tag. Packaging receives the approved SHA and rejects
-any tag whose peeled commit differs.
+SHA. All build, test, and packaging commands run there without release secrets.
+It publishes a payload bound by GitHub's artifact digest and a per-asset
+SHA-256 manifest, plus separate approval evidence. A default-branch-owned
+`workflow_run` writer revalidates the repository, canonical workflow, completed
+run, exact artifact, and approved SHA. The writer checks out and executes no
+repository code and runs no npm lifecycle. With minimal permissions, it creates
+the tag or idempotently accepts an existing tag only when its peeled commit is
+the approved SHA, then creates or repairs the GitHub Release after validating
+every existing asset digest. Release automation never runs `npm publish`; an
+optional npx package is only a GitHub Release asset.
 
 ## Hooks and review
 

@@ -240,48 +240,42 @@ async function matchingSuccessfulOutput(
   return false
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+function decodeSingleShellWord(value: string): string | undefined {
+  const singleQuoted = /^'([^'\r\n]*)'$/.exec(value)
+  if (singleQuoted) return singleQuoted[1]
+  const doubleQuoted = /^"([^"\\$`\r\n]*)"$/.exec(value)
+  if (doubleQuoted) return doubleQuoted[1]
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value)
+    ? value
+    : undefined
 }
 
-function unwrapReadCommand(segment: string): string | undefined {
-  const command = segment.trim()
-  if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(command)) return command
-  for (const prefix of ['/bin/zsh -lc "', '/bin/zsh -c "', 'zsh -lc "', 'zsh -c "']) {
-    if (!command.startsWith(prefix) || !command.endsWith('"')) continue
-    return command.slice(prefix.length, -1)
-  }
-  return undefined
+/**
+ * Decode one deliberately tiny shell grammar: `cat [--] <one literal path>`.
+ *
+ * A receipt proves that the model received the complete Skill, not merely that a process opened
+ * the path. Options, partial readers, redirects, pipelines, substitutions, expansions, and wrapper
+ * shells are therefore all outside the grammar and fail closed.
+ */
+function safeCompleteCatPath(segment: string): string | undefined {
+  const match = /^cat[ \t]+(?:(?:--)[ \t]+)?(.+)$/.exec(segment.trim())
+  return match?.[1] === undefined ? undefined : decodeSingleShellWord(match[1])
 }
 
-function finalReadPath(command: string): string | undefined {
-  const quoted = /(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/.exec(command)
-  return quoted?.[1] ?? quoted?.[2] ?? quoted?.[3]
-}
-
-/** The decoded command must structurally be a supported read of this exact host-cache asset. */
+/** The decoded command must be a complete, literal read of the exact host-cache asset. */
 function commandReadsTrustedSkill(command: string, skillPath: string): boolean {
   if (command.includes('||')) return false
-  const trustedPath = new RegExp(`^${escapeRegex(skillPath)}$`)
-  const unwrapped = unwrapReadCommand(command) ?? command
-  const hasAnd = unwrapped.includes('&&')
-  const hasSequence = /;|\r?\n/.test(unwrapped)
-  if (hasAnd && hasSequence) return false
-  const segments = unwrapped.split(hasAnd ? /&&/ : /;|\r?\n/).filter((segment) => segment.trim() !== '')
+  const segments = command.split(/&&|\r?\n/)
+  if (segments.length === 0 || segments.some((segment) => segment.trim() === '')) return false
   const skillsRoot = resolve(skillPath, '..', '..')
   let observedRead = false
   for (const segment of segments) {
-    const commandSegment = unwrapReadCommand(segment) ?? segment.trim()
-    const path = commandSegment ? finalReadPath(commandSegment) : undefined
+    const path = safeCompleteCatPath(segment)
     if (path === undefined) return false
-    const sibling = relative(skillsRoot, resolve(path)).split(sep)
+    const resolvedPath = resolve(path)
+    const sibling = relative(skillsRoot, resolvedPath).split(sep)
     if (sibling.length !== 2 || sibling[0] === '' || sibling[1] !== 'SKILL.md') return false
-    if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
-      if (trustedPath.test(path)) observedRead = true
-      continue
-    }
-    if (/^wc\s+-(?:l|c|w)(?:\s|$)/.test(commandSegment)) continue
-    return false
+    if (resolvedPath === skillPath) observedRead = true
   }
   return observedRead
 }

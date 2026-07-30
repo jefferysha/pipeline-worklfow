@@ -123,6 +123,12 @@
 - [x] 将 release candidate 限制为只读 approval producer，并由 default-branch `workflow_run` writer 重验身份后创建 tag。 (build)
 - [x] 为 Dashboard 历史项登记单调位置，dirty Workbench 对 Back/Forward 均按原方向补偿和确认重放。 (build)
 - [x] Workflow action decoder 按 exact-key 闭集拒绝附加字段，并同步 `tasks-at-least` 非负整数契约。 (build)
+- [x] 将 Codex Skill transcript 证据收紧为完整 literal `cat`，拒绝 partial reader、重定向、管道、wrapper、替换与 glob，并同步真实 Hook 集成 fixture。 (build)
+- [x] 将所有候选代码执行和 release payload 打包隔离到无 secrets 的只读 candidate；特权 writer/release 不 checkout、不运行 npm lifecycle、不继承 secrets。 (build)
+- [x] 以 artifact provenance、GitHub digest、逐资产 SHA-256 清单绑定 release payload，并移除自动化 npm publish。 (build)
+- [x] 让正确 existing tag、部分 GitHub Release 与已上传资产可验证地幂等恢复；冲突 tag、未知资产或 digest 漂移保持 fail-closed。 (build)
+- [x] 为 Track、Loop、Automation、Secrets 与整个 Governance 面板的内部卸载入口增加统一丢弃确认，保留草稿与焦点直到明确确认。 (build)
+- [x] 创建 Change 请求进行中禁用并拦截 Cancel、Escape 与 backdrop，避免服务器已创建但客户端静默取消。 (build)
 - [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证

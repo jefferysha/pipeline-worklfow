@@ -201,7 +201,7 @@ describe('stable host-hook ABI', () => {
           status: 'completed',
           call_id: 'call-skill-read',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,120p' ${skillPath}"}); text(r);`,
+          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: `cat ${skillPath}` })}); text(r);`,
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),
@@ -231,10 +231,10 @@ describe('stable host-hook ABI', () => {
     const skillEvent = JSON.stringify({
       cwd: project,
       // 当前正常 Codex 对话把 tools.exec_command 上报为 `exec`，部分宿主版本把命令字段命名为
-      // `cmd`。Receipt 必须在这条真实 ABI 上工作；随后 document record 仍要核对 transcript 中的
-      // completed custom_tool_call + output 才会得到 CodexSkillRead history。
+      // `cmd`。Receipt 必须在这条真实 ABI 上工作，并要求完整 literal cat；随后 document record
+      // 仍要核对 transcript 中的 completed custom_tool_call + output 才会得到 CodexSkillRead history。
       tool_name: 'exec',
-      tool_input: { cmd: `/bin/zsh -lc "sed -n '1,120p' ${skillPath}"` },
+      tool_input: { cmd: `cat ${skillPath}` },
       transcript_path: transcript,
       session_id: 'session-receipt-1',
       turn_id: turnId,

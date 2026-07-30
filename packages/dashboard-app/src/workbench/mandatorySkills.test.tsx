@@ -924,6 +924,28 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
 })
 
 describe('TrackSettings v3 真实 CRUD', () => {
+  it('有未保存 Track 草稿时，取消、Esc 与折叠入口都必须先确认丢弃', async () => {
+    await renderMatrix(['build'])
+    const toggle = screen.getByTestId('wb-track-settings-toggle')
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    const editor = screen.getByTestId('wb-track-editor')
+    fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'QA draft' } })
+
+    fireEvent.click(within(editor).getByRole('button', { name: '关闭' }))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('显示名称')).toHaveValue('QA draft')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-settings-panel')).toBeNull())
+  })
+
   it('所有可编辑 input/select 都有稳定 name，非认证配置文本禁用浏览器自动填充', async () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))

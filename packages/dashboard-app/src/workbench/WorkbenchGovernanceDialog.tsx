@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { ChangeHistoryEntry } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
+import { UnsavedDraftDialog, useDiscardGuard } from '../shared/UnsavedDraftDialog'
 import type { LoopsState } from './useLoops'
 import { WorkbenchSideRail } from './WorkbenchSideRail'
 import { BTN_GHOST, NOTE, SIDE_BODY, SIDE_CARD, SIDE_HEAD, SIDE_HEAD_B, SIDE_ROW, SIDE_ROW_LABEL, SIDE_ROW_VALUE } from './workbenchStyles'
@@ -17,10 +18,20 @@ export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recent
 }): JSX.Element {
   const { t } = useT()
   const [nonce, setNonce] = useState(0)
+  const [drafts, setDrafts] = useState({ loop: false, automation: false, secrets: false })
+  const discardGuard = useDiscardGuard()
+  const reportDirty = useCallback((source: 'loop' | 'automation' | 'secrets', dirty: boolean) => {
+    setDrafts((current) => current[source] === dirty ? current : { ...current, [source]: dirty })
+    onDirtyChange?.(source, dirty)
+  }, [onDirtyChange])
+  const requestClose = useCallback(() => {
+    discardGuard.request(Object.values(drafts).some(Boolean), onClose)
+  }, [discardGuard, drafts, onClose])
   return (
-    <Dialog title={t('workbench.governance_dialog_title')} onClose={onClose} closeLabel={t('workbench.track_cancel')} testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} onClick={onClose}>{t('workbench.track_cancel')}</button>}>
-      <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
-        <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)} onDirtyChange={onDirtyChange}>
+    <>
+      <Dialog title={t('workbench.governance_dialog_title')} onClose={requestClose} closeLabel={t('workbench.track_cancel')} closeTestid="wb-governance-close-icon" testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} data-testid="wb-governance-close-action" onClick={requestClose}>{t('workbench.track_cancel')}</button>}>
+        <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
+          <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)} onDirtyChange={reportDirty}>
           <div className={SIDE_CARD}>
             <div className={SIDE_HEAD}><b className={SIDE_HEAD_B}>{t('workbench.summary_title')}</b></div>
             <div className={`${SIDE_BODY} divide-y divide-border`}>
@@ -43,8 +54,15 @@ export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recent
               {recent !== null && recentSilent > 0 && <p className={NOTE} data-testid="wb-recent-legacy">{t('workbench.recent_legacy', { n: recentSilent })}</p>}
             </div>
           </div>
-        </WorkbenchSideRail>
-      </aside>
-    </Dialog>
+          </WorkbenchSideRail>
+        </aside>
+      </Dialog>
+      <UnsavedDraftDialog
+        open={discardGuard.confirmOpen}
+        testid="wb-governance-unsaved-draft"
+        onStay={discardGuard.stay}
+        onDiscard={discardGuard.discard}
+      />
+    </>
   )
 }

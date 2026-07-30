@@ -35524,44 +35524,30 @@ async function matchingSuccessfulOutput(lines, receipt, outputAbi) {
   }
   return false;
 }
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function decodeSingleShellWord(value) {
+  const singleQuoted = /^'([^'\r\n]*)'$/.exec(value);
+  if (singleQuoted) return singleQuoted[1];
+  const doubleQuoted = /^"([^"\\$`\r\n]*)"$/.exec(value);
+  if (doubleQuoted) return doubleQuoted[1];
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : void 0;
 }
-function unwrapReadCommand(segment) {
-  const command2 = segment.trim();
-  if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(command2)) return command2;
-  for (const prefix of ['/bin/zsh -lc "', '/bin/zsh -c "', 'zsh -lc "', 'zsh -c "']) {
-    if (!command2.startsWith(prefix) || !command2.endsWith('"')) continue;
-    return command2.slice(prefix.length, -1);
-  }
-  return void 0;
-}
-function finalReadPath(command2) {
-  const quoted = /(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/.exec(command2);
-  return quoted?.[1] ?? quoted?.[2] ?? quoted?.[3];
+function safeCompleteCatPath(segment) {
+  const match = /^cat[ \t]+(?:(?:--)[ \t]+)?(.+)$/.exec(segment.trim());
+  return match?.[1] === void 0 ? void 0 : decodeSingleShellWord(match[1]);
 }
 function commandReadsTrustedSkill(command2, skillPath) {
   if (command2.includes("||")) return false;
-  const trustedPath = new RegExp(`^${escapeRegex(skillPath)}$`);
-  const unwrapped = unwrapReadCommand(command2) ?? command2;
-  const hasAnd = unwrapped.includes("&&");
-  const hasSequence = /;|\r?\n/.test(unwrapped);
-  if (hasAnd && hasSequence) return false;
-  const segments = unwrapped.split(hasAnd ? /&&/ : /;|\r?\n/).filter((segment) => segment.trim() !== "");
+  const segments = command2.split(/&&|\r?\n/);
+  if (segments.length === 0 || segments.some((segment) => segment.trim() === "")) return false;
   const skillsRoot = resolve18(skillPath, "..", "..");
   let observedRead = false;
   for (const segment of segments) {
-    const commandSegment = unwrapReadCommand(segment) ?? segment.trim();
-    const path9 = commandSegment ? finalReadPath(commandSegment) : void 0;
+    const path9 = safeCompleteCatPath(segment);
     if (path9 === void 0) return false;
-    const sibling = relative8(skillsRoot, resolve18(path9)).split(sep10);
+    const resolvedPath = resolve18(path9);
+    const sibling = relative8(skillsRoot, resolvedPath).split(sep10);
     if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return false;
-    if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
-      if (trustedPath.test(path9)) observedRead = true;
-      continue;
-    }
-    if (/^wc\s+-(?:l|c|w)(?:\s|$)/.test(commandSegment)) continue;
-    return false;
+    if (resolvedPath === skillPath) observedRead = true;
   }
   return observedRead;
 }

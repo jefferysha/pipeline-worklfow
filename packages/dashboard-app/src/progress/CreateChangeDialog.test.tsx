@@ -337,4 +337,40 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
     expect(props.onToast).not.toHaveBeenCalled()
     expect(props.onClose).not.toHaveBeenCalled()
   })
+
+  it('创建请求进行中禁用取消，并忽略 Esc 与背景点击直至服务器结果完成', async () => {
+    let resolveCreate!: (response: Response) => void
+    const delayedCreate = new Promise<Response>((resolve) => { resolveCreate = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: [] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url === '/api/changes') return delayedCreate
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    const props = renderDialog()
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'durable-create' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Create exactly once' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('change-create'))
+
+    const cancel = screen.getByTestId('change-create-cancel')
+    await waitFor(() => expect(cancel).toBeDisabled())
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByTestId('create-change-dialog'))
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(screen.getByTestId('create-change-dialog')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveCreate(okJson({
+        ok: true,
+        name: 'durable-create',
+        path: '/repo/openspec/changes/durable-create',
+        task_prompt_saved: true,
+        session: { requested: true, active: true, status: 'active', exit_code: 0 },
+      }))
+      await delayedCreate
+    })
+    await waitFor(() => expect(props.onCreated).toHaveBeenCalledWith('durable-create'))
+    expect(props.onClose).toHaveBeenCalledTimes(1)
+  })
 })

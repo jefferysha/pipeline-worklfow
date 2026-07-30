@@ -232,15 +232,25 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     }
   }
 
+  function requestClose(): void {
+    if (!busy) onClose()
+  }
+
   return (
     <Dialog
       title={t('change_create.title')}
-      onClose={onClose}
+      onClose={requestClose}
       testid="create-change-dialog"
       panelClassName="w-[min(780px,94vw)]"
       actions={(
         <>
-          <button type="button" className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-2 hover:bg-fill" onClick={onClose}>
+          <button
+            type="button"
+            className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-2 hover:bg-fill disabled:cursor-not-allowed disabled:opacity-45"
+            data-testid="change-create-cancel"
+            disabled={busy}
+            onClick={requestClose}
+          >
             {t('change_create.cancel')}
           </button>
           <button

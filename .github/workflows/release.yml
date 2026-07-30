@@ -4,45 +4,97 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: Candidate-created v-prefixed tag to package
+        description: Candidate-created v-prefixed tag
         type: string
         required: true
       expected_sha:
         description: Approved candidate commit SHA
         type: string
         required: true
+      version:
+        description: Approved stable SemVer without the v prefix
+        type: string
+        required: true
+      source_run_id:
+        description: Trusted release-candidate workflow run ID
+        type: string
+        required: true
+      payload_artifact_id:
+        description: Exact Actions artifact ID containing the verified payload
+        type: string
+        required: true
+      payload_artifact_name:
+        description: SHA-bound Actions artifact name
+        type: string
+        required: true
+      payload_artifact_digest:
+        description: GitHub-computed SHA-256 digest for the payload artifact
+        type: string
+        required: true
+      payload_manifest_sha256:
+        description: Approved SHA-256 digest of payload SHA256SUMS
+        type: string
+        required: true
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
-
-      - name: Resolve and validate release tag
-        id: release
+      - name: Verify approved payload and create or repair GitHub Release
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          PAYLOAD_ARTIFACT_ID: ${{ inputs.payload_artifact_id }}
+          PAYLOAD_ARTIFACT_NAME: ${{ inputs.payload_artifact_name }}
+          PAYLOAD_ARTIFACT_DIGEST: ${{ inputs.payload_artifact_digest }}
+          PAYLOAD_MANIFEST_SHA256: ${{ inputs.payload_manifest_sha256 }}
         run: |
           set -euo pipefail
+
+          resolve_tag_commit() {
+            local release_tag="$1"
+            local ref_json object_sha object_type tag_json depth
+            ref_json="$(
+              gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$release_tag" \
+                --jq ".[] | select(.ref == \"refs/tags/$release_tag\")"
+            )"
+            [ -n "$ref_json" ] || return 1
+            object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
+            object_type="$(jq -er '.object.type' <<<"$ref_json")"
+            depth=0
+            while [ "$object_type" = "tag" ]; do
+              depth=$((depth + 1))
+              [ "$depth" -le 8 ] || {
+                echo "tag indirection is too deep: $release_tag" >&2
+                return 2
+              }
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+              object_sha="$(jq -er '.object.sha' <<<"$tag_json")"
+              object_type="$(jq -er '.object.type' <<<"$tag_json")"
+            done
+            [ "$object_type" = "commit" ] || {
+              echo "tag does not peel to a commit: $release_tag ($object_type)" >&2
+              return 2
+            }
+            printf '%s\n' "$object_sha"
+          }
+
           [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
             echo "release tag must be a complete stable v-prefixed SemVer" >&2
             exit 1
           }
-          tag="$RELEASE_TAG"
+          [ "$RELEASE_VERSION" = "${RELEASE_TAG#v}" ]
           case "$EXPECTED_SHA" in
             *[!0-9a-fA-F]*|'') echo "expected_sha must be a full hexadecimal commit SHA" >&2; exit 1 ;;
           esac
@@ -50,85 +102,126 @@ jobs:
             echo "expected_sha must contain exactly 40 hexadecimal characters" >&2
             exit 1
           }
-          version="${tag#v}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$PAYLOAD_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [ "$PAYLOAD_ARTIFACT_NAME" = "release-candidate-payload-$EXPECTED_SHA" ]
+          [[ "$PAYLOAD_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$PAYLOAD_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
 
-      - name: Checkout exact release tag
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: |
-          set -euo pipefail
-          git fetch --force --tags origin
-          git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" >/dev/null
-          git checkout --detach "refs/tags/$RELEASE_TAG"
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$EXPECTED_SHA"
-
-      - name: Validate package versions
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          plugin_version="$(node -p "require('./.codex-plugin/plugin.json').version")"
-          claude_version="$(node -p "require('./.claude-plugin/plugin.json').version")"
-          [ "$version" = "$plugin_version" ] && [ "$version" = "$claude_version" ] || {
-            echo "tag/plugin version mismatch: $version / $plugin_version / $claude_version" >&2
+          tag_commit="$(resolve_tag_commit "$RELEASE_TAG")"
+          [ "$tag_commit" = "$EXPECTED_SHA" ] || {
+            echo "release tag does not peel to approved commit: tag=$RELEASE_TAG expected=$EXPECTED_SHA actual=$tag_commit" >&2
             exit 1
           }
 
-      - run: npm ci
-      - run: npm run check:dependencies
-      - run: npm run check:release-workflows
-      - run: npm run check:identity
-      - run: npm run check:repository-hygiene
-      - run: npm run check:legacy-bridge
-      - run: npm run check:npx-package
-      - run: npm run build
-      - run: bash tools/verify-skills.sh
-      - run: bash tools/test-bundle.sh
-      - name: Install pinned Codex CLI for public bootstrap acceptance
-        run: npm install --global @openai/codex@0.144.1
-      - name: Real clean Codex install through public bootstrap
-        run: npm run test:clean-install:public -- --public-ref "$(git rev-parse HEAD)"
+          artifact="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAYLOAD_ARTIFACT_ID"
+          )"
+          artifact_digest="$(jq -er '.digest' <<<"$artifact")"
+          [ "$(jq -r '.id' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_ID" ]
+          [ "$(jq -r '.name' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_NAME" ]
+          [ "$artifact_digest" = "$PAYLOAD_ARTIFACT_DIGEST" ]
+          [ "$(jq -r '.expired' <<<"$artifact")" = "false" ]
+          [ "$(jq -r '.workflow_run.id' <<<"$artifact")" = "$SOURCE_RUN_ID" ]
+          [ "$(jq -r '.workflow_run.head_sha' <<<"$artifact")" = "$EXPECTED_SHA" ]
 
-      - name: Package migration-only legacy bridge
-        run: |
-          npm run build:legacy-bridge
-          tar -C .release -czf ".release/tenon-legacy-bridge-${{ steps.release.outputs.version }}.tar.gz" legacy-bridge
+          work_dir="$(mktemp -d "$RUNNER_TEMP/tenon-release.XXXXXX")"
+          trap 'rm -rf -- "$work_dir"' EXIT
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAYLOAD_ARTIFACT_ID/zip" \
+            > "$work_dir/payload.zip"
 
-      - name: Build optional npx package
-        if: vars.TENON_NPM_PACKAGE != ''
-        env:
-          TENON_NPM_PACKAGE: ${{ vars.TENON_NPM_PACKAGE }}
-        run: |
-          node tools/build-npx-package.mjs \
-            --package-name "$TENON_NPM_PACKAGE" \
-            --ref "${{ steps.release.outputs.tag }}" \
-            --output .release/npx-package
-          npm pack .release/npx-package --pack-destination .release
+          mapfile -t archive_entries < <(unzip -Z1 "$work_dir/payload.zip")
+          [ "${#archive_entries[@]}" -ge 2 ] || {
+            echo "release payload archive is unexpectedly empty" >&2
+            exit 1
+          }
+          for entry in "${archive_entries[@]}"; do
+            [[ "$entry" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+              echo "unsafe release payload archive entry: $entry" >&2
+              exit 1
+            }
+          done
 
-      - name: Publish optional npx package
-        if: vars.TENON_NPM_PACKAGE != ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
-            npm publish .release/npx-package --access public
+          mkdir "$work_dir/payload"
+          unzip -q "$work_dir/payload.zip" -d "$work_dir/payload"
+          manifest="$work_dir/payload/SHA256SUMS"
+          [ -f "$manifest" ] && [ ! -L "$manifest" ]
+          [ "$(sha256sum "$manifest" | cut -d ' ' -f 1)" = "$PAYLOAD_MANIFEST_SHA256" ]
+
+          assets=()
+          while IFS= read -r manifest_line; do
+            [[ "$manifest_line" =~ ^([0-9a-f]{64})\ \ ([A-Za-z0-9][A-Za-z0-9._-]*)$ ]] || {
+              echo "unsafe SHA256SUMS entry: $manifest_line" >&2
+              exit 1
+            }
+            asset_name="${BASH_REMATCH[2]}"
+            [ "$asset_name" != "SHA256SUMS" ]
+            for existing_name in "${assets[@]}"; do
+              [ "$existing_name" != "$asset_name" ] || {
+                echo "duplicate SHA256SUMS asset: $asset_name" >&2
+                exit 1
+              }
+            done
+            assets+=("$asset_name")
+          done < "$manifest"
+          [ "${#assets[@]}" -gt 0 ]
+          [ "${#archive_entries[@]}" -eq "$(( ${#assets[@]} + 1 ))" ]
+          (
+            cd "$work_dir/payload"
+            sha256sum --check --strict SHA256SUMS
+          )
+
+          expected_assets=("SHA256SUMS" "${assets[@]}")
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_json="$(
+              gh release view "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json tagName,isDraft,isPrerelease,assets
+            )"
+            [ "$(jq -r '.tagName' <<<"$release_json")" = "$RELEASE_TAG" ]
+            [ "$(jq -r '.isDraft' <<<"$release_json")" = "false" ]
+            [ "$(jq -r '.isPrerelease' <<<"$release_json")" = "false" ]
+            while IFS= read -r existing_asset; do
+              known=false
+              for expected_asset in "${expected_assets[@]}"; do
+                if [ "$existing_asset" = "$expected_asset" ]; then
+                  known=true
+                  break
+                fi
+              done
+              [ "$known" = true ] || {
+                echo "existing release contains an unapproved asset: $existing_asset" >&2
+                exit 1
+              }
+            done < <(jq -r '.assets[].name' <<<"$release_json")
           else
-            echo "[HONEST SKIP] NPM_TOKEN 未配置；GitHub release 和 Marketplace 仍照常发布。"
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --generate-notes \
+              --title "Tenon $RELEASE_VERSION"
+            release_json='{"assets":[]}'
           fi
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          assets=(".release/tenon-legacy-bridge-${{ steps.release.outputs.version }}.tar.gz")
-          for archive in .release/*.tgz; do
-            [ -e "$archive" ] && assets+=("$archive")
+          mkdir "$work_dir/existing"
+          for asset_name in "${expected_assets[@]}"; do
+            source_asset="$work_dir/payload/$asset_name"
+            [ -f "$source_asset" ] && [ ! -L "$source_asset" ]
+            if jq -e --arg name "$asset_name" '.assets[] | select(.name == $name)' \
+              <<<"$release_json" >/dev/null; then
+              gh release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern "$asset_name" \
+                --dir "$work_dir/existing"
+              expected_digest="$(sha256sum "$source_asset" | cut -d ' ' -f 1)"
+              actual_digest="$(sha256sum "$work_dir/existing/$asset_name" | cut -d ' ' -f 1)"
+              [ "$actual_digest" = "$expected_digest" ] || {
+                echo "existing release asset digest mismatch: $asset_name" >&2
+                exit 1
+              }
+            else
+              gh release upload "$RELEASE_TAG" "$source_asset" \
+                --repo "$GITHUB_REPOSITORY"
+            fi
           done
-          gh release create "${{ steps.release.outputs.tag }}" "${assets[@]}" \
-            --generate-notes \
-            --title "Tenon ${{ steps.release.outputs.version }}"

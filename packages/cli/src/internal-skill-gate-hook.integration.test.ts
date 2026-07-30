@@ -198,13 +198,13 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     await cp(join(REPO_ROOT, 'packages', 'cli', 'dist', 'tenon.mjs'), cacheBundle, { preserveTimestamps: false })
 
     const commonEnv = { HOME: home, TENON_CODEX_PLUGIN_ROOT: hostCache, PLUGIN_ROOT: REPO_ROOT }
-    const orchestrationRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon/SKILL.md"`
-    // 当前 Codex host 将 shell tool 统一上报成 /bin/zsh -lc 包装；不能只用理想化的
-    // 直接 `sed …` 形态覆盖，否则真实会话的 SKILL.md read 不会被识别和记账。
-    const pipelineOpenRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"`
-    const browserQaRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
-    const batchedLockedRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
-    const batchedReceiptRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/tenon/SKILL.md"`
+    // Receipt evidence deliberately accepts only a complete literal cat. Partial readers and
+    // wrapper shells cannot prove that the model received the whole trusted Skill document.
+    const orchestrationRead = `cat ${hostCache}/skills/tenon/SKILL.md`
+    const pipelineOpenRead = `cat ${hostCache}/skills/tenon-open/SKILL.md`
+    const browserQaRead = `cat ${hostCache}/skills/browser-qa/SKILL.md`
+    const batchedLockedRead = `cat ${hostCache}/skills/tenon-open/SKILL.md && cat ${hostCache}/skills/browser-qa/SKILL.md`
+    const batchedReceiptRead = `cat ${hostCache}/skills/tenon-open/SKILL.md && cat ${hostCache}/skills/tenon/SKILL.md`
 
     // `tenon` 是正常对话进入 custom workflow 前必经的编排入口，不是该 step 的工作
     // 节点；DAG 只能约束阶段实际 skill，不能因此把入口本身锁死。
@@ -329,7 +329,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       TENON_CODEX_PLUGIN_ROOT: hostCache,
       PLUGIN_ROOT: REPO_ROOT,
     }
-    const browserQaRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
+    const browserQaRead = `cat ${hostCache}/skills/browser-qa/SKILL.md`
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'abi-omitted.jsonl')
     await mkdir(dirname(transcript), { recursive: true })
     const transcriptTimestamp = new Date().toISOString()
@@ -352,7 +352,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           status: 'completed',
           call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"}); text(r);`,
+          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: `cat ${hostCache}/skills/tenon-open/SKILL.md` })}); text(r);`,
         },
       }),
       JSON.stringify({
@@ -405,7 +405,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     await mkdir(dirname(foreignSkill), { recursive: true })
     await writeFile(foreignSkill, '# foreign tenon-open\n', 'utf8')
 
-    const shadowedRead = `/bin/zsh -lc "sed -n '1,40p' ${foreignSkill}"`
+    const shadowedRead = `cat ${foreignSkill}`
     const gate = runHook(
       'gate.sh',
       { cwd: h.cwd, tool_name: 'exec', tool_input: { cmd: shadowedRead } },

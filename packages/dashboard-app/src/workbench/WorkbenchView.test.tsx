@@ -417,7 +417,16 @@ beforeEach(() => {
     //    SecretsCard 则会直接深访问 keys[key].set。
     if (url.startsWith('/api/automation')) {
       return new Response(
-        JSON.stringify({ ok: true, engine: 'claude-code', max_parallel: 1, dry_run: false, image: 'pipeline-afk:latest' }),
+        JSON.stringify({
+          ok: true,
+          settings: {
+            enabled: false,
+            max_parallel: 1,
+            max_retries: 1,
+            default_opt_in: false,
+            image: 'pipeline-afk:latest',
+          },
+        }),
         { status: 200 },
       )
     }
@@ -1581,6 +1590,26 @@ describe('WorkbenchView T16 Loop 卡（右栏「完整治理设置」Dialog）�
     expect(within(card).queryByTestId('lp-loop-select')).toBeNull()
   })
 
+  it('Loop 草稿阻止关闭子 Dialog 与整个治理面板，确认丢弃后才卸载', async () => {
+    loopRows = [LOOP_ROW]
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    await openGovernance()
+    const dialog = await openLoopDialog()
+    const goal = await within(dialog).findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保留这份未保存治理草稿' } })
+
+    fireEvent.click(within(dialog).getByTestId('wb-rail-loop-close'))
+    expect(screen.getByTestId('wb-rail-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(screen.getByTestId('lp-goal')).toHaveValue('保留这份未保存治理草稿')
+
+    fireEvent.click(screen.getByTestId('wb-governance-close-action'))
+    expect(screen.getByTestId('wb-governance-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-advanced-orchestration')).toBeNull())
+  })
+
   it('暂停中的 loop：摘要行「停 · 今日 …」', async () => {
     loopRows = [{ ...LOOP_ROW, status: 'paused' }]
     renderView()
@@ -1950,6 +1979,23 @@ describe('WorkbenchView v11 P4：右栏重组（治理轨 + 机器配置折叠�
     expect(within(side).getByTestId('wb-secrets-card')).toBeInTheDocument() // SecretsCard
     // 区头说明：讲清「这些是 per-root 机器级配置，与当前 workflow 无关」
     expect(within(side).getByTestId('wb-rail-machine-note')).toBeInTheDocument()
+  })
+
+  it('机器配置内有未保存草稿时，折叠动作必须先确认丢弃', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
+    const summary = within(side).getByTestId('wb-rail-machine-summary')
+    fireEvent.click(summary)
+    const enabled = await within(side).findByTestId('afk-enabled')
+    fireEvent.click(enabled)
+    expect(within(side).getByTestId('afk-dirty')).toBeInTheDocument()
+
+    fireEvent.click(summary)
+    expect(screen.getByTestId('wb-rail-unsaved-draft')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-rail-machine')).toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(within(side).getByTestId('wb-rail-machine')).not.toHaveAttribute('open'))
   })
 })
 
