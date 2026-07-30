@@ -59,18 +59,25 @@ interface ProjectRisk {
 }
 
 function rootName(root: string): string {
-  const name = root.slice(-256).split(/[\\/]+/).filter(Boolean).pop() ?? 'unknown'
+  const name = boundedRootTail(root).split(/[\\/]+/).filter(Boolean).pop() ?? 'unknown'
   return shortenRootSegment(name, 48)
 }
 
 function shortenRootSegment(segment: string, limit = 20): string {
-  if (segment.length <= limit) return segment
+  const points = Array.from(segment)
+  if (points.length <= limit) return segment
   const headLength = Math.floor((limit - 1) / 2)
-  return `${segment.slice(0, headLength)}…${segment.slice(-(limit - headLength - 1))}`
+  return `${points.slice(0, headLength).join('')}…${points.slice(-(limit - headLength - 1)).join('')}`
+}
+
+function boundedRootTail(root: string): string {
+  const tail = root.slice(-256)
+  const first = tail.charCodeAt(0)
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail
 }
 
 function boundedRootHint(root: string): string {
-  const segments = root.slice(-256).split(/[\\/]+/).filter(Boolean)
+  const segments = boundedRootTail(root).split(/[\\/]+/).filter(Boolean)
   const suffix = segments.slice(-2).map((segment) => shortenRootSegment(segment)).join('/')
   return `…/${suffix || 'unknown'}`
 }

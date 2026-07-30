@@ -638,3 +638,28 @@ expected non-Linux trusted-reader precheck alert.
 This new source, generated distribution, documentation and ledger must be
 committed together and reviewed at one exact SHA; `bfa229a7` remains rejected
 even though its CI passed.
+
+## `e80502b7` Unicode-boundary rollback
+
+Backend/security and Dashboard design returned zero findings, and exact GitHub
+CI passed, but release/E2E correctly found one remaining Low: the bounded path
+window and segment truncation still used UTF-16 code-unit slices. A non-BMP
+character exactly at a cut boundary could therefore leave a lone surrogate in
+the visible hint and accessible name. The candidate was rejected.
+
+The replacement keeps the fixed 256-code-unit work bound, removes a leading low
+surrogate if the tail window starts inside a pair, and converts only that
+already-bounded segment to Unicode code points before display truncation. An
+emoji-boundary regression proves the complete character is preserved and that
+no isolated surrogate reaches the rendered text. Machine remains 13/13;
+typecheck, architecture and the full production build pass.
+
+The final generated entry asset is `index-Ci4cbgx1.js`. The fresh 21-scene
+matrix at `/tmp/tenon-unified-final-dashboard-Ci4cbgx1-v6` again has exact
+desktop widths and presentation settings, zero document overflow, busy/loading
+residue, mobile navigation, console errors or CDP exceptions, and 21/21 unique
+Machine action names at every matrix size. Its `audit.json` records the expected
+source-backed Progress precheck alert rather than suppressing it.
+
+This section is still pre-freeze evidence until a new exact committed SHA
+receives three zero-finding reviews and its own GitHub CI.

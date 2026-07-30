@@ -326,14 +326,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/post-merge-unified-review-20260729/tasks.md",
-      "sha256": "c6b1718731a3c77f836fba7e4cca7958b5544d40789530544747d2bc8c21a5b0",
+      "sha256": "4d42ef22262a2e24a4925d4089a8a71d2b13f3f9f1b143b3aa175503e14dff21",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-30T14:16:58Z",
+      "recordedAt": "2026-07-30T14:38:31Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "c6b1718731a3c77f836fba7e4cca7958b5544d40789530544747d2bc8c21a5b0",
-          "readAt": "2026-07-30T14:16:58Z",
+          "sha256": "4d42ef22262a2e24a4925d4089a8a71d2b13f3f9f1b143b3aa175503e14dff21",
+          "readAt": "2026-07-30T14:38:31Z",
           "visitId": "[\"d5c0234f-22a6-4a86-bed0-4c26c59b79ff\",31]"
         }
       ]

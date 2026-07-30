@@ -148,6 +148,8 @@
 - [x] 在 `index-CrqBAgSc.js` 上重跑 21 场景固定桌面视口矩阵并保存可审计 JSON。 (build)
 - [x] 将风险路径提示收紧为跨平台、有界且碰撞可区分的身份，并为每个打开动作提供唯一可访问名称。 (build)
 - [x] 在 `index-JA5PIwBX.js` 上重跑完整 21 场景矩阵，验证 21/21 Machine 动作可访问名称唯一。 (build)
+- [x] 修复非 BMP 字符位于路径窗口或显示截断边界时产生孤立 surrogate 的 Unicode Low。 (build)
+- [x] 在 `index-Ci4cbgx1.js` 上重跑 21 场景矩阵并保存最终 bounded audit。 (build)
 - [ ] 在新精确提交上完成三轨 C0/H0/M0/L0 独立复审。 (build)
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

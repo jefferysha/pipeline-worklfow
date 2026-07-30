@@ -421,3 +421,19 @@ may record PASS.
   overflow, busy/loading residue, mobile navigation, console or CDP exception;
   every live Machine action has a unique accessible name. The three Progress
   scenes retain the honest non-Linux trusted-reader precheck alert.
+
+### `e80502b7` Unicode-boundary remediation
+
+- Release/E2E found one Low after the other tracks passed: code-unit slicing
+  could split an emoji/non-BMP character at the path-window or display boundary.
+  The exact candidate was rejected despite green CI.
+- The fixed-size tail window now removes a leading orphan low surrogate, then
+  only the already-bounded segment is converted to Unicode code points for
+  display truncation. An emoji-boundary regression proves no isolated surrogate
+  reaches visible or accessible text.
+- Machine remains 13/13; typecheck, architecture 717 and full build pass. The
+  production entry is `index-Ci4cbgx1.js`.
+- A new 21-scene matrix and `audit.json` are stored in
+  `/tmp/tenon-unified-final-dashboard-Ci4cbgx1-v6`; overflow, busy/loading,
+  mobile navigation, console and CDP exception counts remain zero, and every
+  Matrix size reports 21/21 unique Machine action names.

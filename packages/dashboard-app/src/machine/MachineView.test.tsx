@@ -186,10 +186,12 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     const rootA = '/Users/alice/src/pipeline-worklfow'
     const rootB = '/Volumes/backup/src/pipeline-worklfow'
     const rootC = `C:\\Users\\alice\\${'very-long-parent-segment-'.repeat(8)}\\pipeline-worklfow`
+    const rootD = '/worktrees/12345678😀ABCDEFGHIJKLM/pipeline-worklfow'
     const snapshot = makeSnapshot([
       makeProject(rootA, [], { ok: false, error: 'unreadable' }),
       makeProject(rootB, [], { ok: false, error: 'unreadable' }),
       makeProject(rootC, [], { ok: false, error: 'unreadable' }),
+      makeProject(rootD, [], { ok: false, error: 'unreadable' }),
     ])
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
 
@@ -199,6 +201,11 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(hints[1]).toMatch(/^…\/src\/pipeline-worklfow · #[0-9a-f]{12}$/)
     expect(hints[0]).not.toBe(hints[1])
     expect(hints[2]).toMatch(/^…\/very-long…t-segment-\/pipeline-worklfow$/)
+    expect(hints[3]).toContain('…/12345678😀…DEFGHIJKLM/pipeline-worklfow')
+    expect(Array.from(hints[3]!).every((character) => {
+      const codePoint = character.codePointAt(0) ?? 0
+      return codePoint < 0xd800 || codePoint > 0xdfff
+    })).toBe(true)
     expect(hints.every((hint) => hint.length <= 64)).toBe(true)
     expect(queue).not.toHaveTextContent('C:\\Users\\alice')
     expect(queue).not.toHaveTextContent('/Users/alice/src')
