@@ -663,3 +663,28 @@ source-backed Progress precheck alert rather than suppressing it.
 
 This section is still pre-freeze evidence until a new exact committed SHA
 receives three zero-finding reviews and its own GitHub CI.
+
+## `f6e16437` final Build freeze
+
+The exact candidate
+`f6e164379e42fe6fca77a1245bf244e453329738` is accepted by all three independent
+tracks:
+
+- backend/security/architecture: **C0/H0/M0/L0**;
+- complete Dashboard design/accessibility: **C0/H0/M0/L0**;
+- release/E2E/API: **C0/H0/M0/L0**.
+
+The final track independently reproduced the bounded Unicode behavior, verified
+Machine 13/13, Dashboard 1533/1533, root 5879 passed with 26 honest skips,
+snapshot security 45/45, OpenSpec 38/38, release 24/24, typecheck and the
+717-file architecture gate. Isolated full and Dashboard builds match the tracked
+distribution byte for byte. The production entry is `index-Ci4cbgx1.js`; v6
+browser evidence covers all 21 fixed desktop scenes with zero overflow,
+busy/loading residue, mobile navigation, console or CDP exception, and 21/21
+unique Machine action names at every size.
+
+GitHub PR #20 is non-draft and mergeable at the exact SHA. CI run
+`30552730210` and Documentation Pages build `30552730398` both succeeded.
+No prior failed candidate is reused. This section freezes Build evidence;
+Verify review receipt, Verify fields, merge/main CI, Ship and Archive remain
+mandatory.
