@@ -146,6 +146,8 @@
 - [x] 在修复源码与最新 production assets 上完成 21 场景全 Dashboard 浏览器矩阵。 (build)
 - [x] 修复 Machine Docker badge/detail 事实冲突，并为同 basename 风险行显示有界稳定的父目录提示。 (build)
 - [x] 在 `index-CrqBAgSc.js` 上重跑 21 场景固定桌面视口矩阵并保存可审计 JSON。 (build)
+- [x] 将风险路径提示收紧为跨平台、有界且碰撞可区分的身份，并为每个打开动作提供唯一可访问名称。 (build)
+- [x] 在 `index-JA5PIwBX.js` 上重跑完整 21 场景矩阵，验证 21/21 Machine 动作可访问名称唯一。 (build)
 - [ ] 在新精确提交上完成三轨 C0/H0/M0/L0 独立复审。 (build)
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

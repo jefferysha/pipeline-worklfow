@@ -399,3 +399,25 @@ may record PASS.
 - Screenshots and `audit.json` are stored in
   `/tmp/tenon-unified-final-dashboard-CrqBAgSc-v3`. A new exact commit and three
   zero-finding reviews remain mandatory.
+
+### `bfa229a7` bounded identity and accessible action remediation
+
+- Exact reviewers returned C0/H0/M1/L1: two-segment hints still leaked Windows
+  roots, were unbounded and could collide, while every action exposed the same
+  accessible name. The candidate was rejected despite green CI.
+- Root presentation now handles `/` and `\`, reads only a bounded prefix/tail
+  sample, caps visible segments and titles, and adds a stable short identifier
+  only to colliding bounded suffixes. A deterministic occurrence suffix keeps
+  the rendered set unique even if short identifiers collide.
+- Each action keeps the short visible label but receives a localized accessible
+  name with its bounded title and target hint. POSIX collision, long Windows
+  root, non-disclosure, length, stable uniqueness, exact routing and accessible
+  name regressions pass.
+- Machine passes 13/13, Dashboard 78 files / 1533 tests, root 330 files / 5879
+  tests with 26 honest skips, typecheck and architecture 717. The new production
+  build uses `index-JA5PIwBX.js`.
+- The fixed-viewport 21-scene matrix and bounded `audit.json` are in
+  `/tmp/tenon-unified-final-dashboard-JA5PIwBX-v5`. Every scene has zero page
+  overflow, busy/loading residue, mobile navigation, console or CDP exception;
+  every live Machine action has a unique accessible name. The three Progress
+  scenes retain the honest non-Linux trusted-reader precheck alert.

@@ -59,12 +59,58 @@ interface ProjectRisk {
 }
 
 function rootName(root: string): string {
-  return root.split('/').filter(Boolean).pop() ?? root
+  const name = root.slice(-256).split(/[\\/]+/).filter(Boolean).pop() ?? 'unknown'
+  return shortenRootSegment(name, 48)
 }
 
-function rootHint(root: string): string {
-  const segments = root.split('/').filter(Boolean)
-  return segments.length > 2 ? `…/${segments.slice(-2).join('/')}` : root
+function shortenRootSegment(segment: string, limit = 20): string {
+  if (segment.length <= limit) return segment
+  const headLength = Math.floor((limit - 1) / 2)
+  return `${segment.slice(0, headLength)}…${segment.slice(-(limit - headLength - 1))}`
+}
+
+function boundedRootHint(root: string): string {
+  const segments = root.slice(-256).split(/[\\/]+/).filter(Boolean)
+  const suffix = segments.slice(-2).map((segment) => shortenRootSegment(segment)).join('/')
+  return `…/${suffix || 'unknown'}`
+}
+
+function stableRootId(root: string): string {
+  const sample = `${root.length}:${root.slice(0, 96)}:${root.slice(-96)}`
+  let first = 0x811c9dc5
+  let second = 0x9e3779b9
+  for (let index = 0; index < sample.length; index += 1) {
+    const code = sample.charCodeAt(index)
+    first = Math.imul(first ^ code, 0x01000193)
+    second = Math.imul(second ^ code, 0x85ebca6b)
+  }
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`.slice(0, 12)
+}
+
+function disambiguateRootHints(rows: readonly ProjectRisk[]): ProjectRisk[] {
+  const rootsByHint = new Map<string, Set<string>>()
+  for (const row of rows) {
+    const roots = rootsByHint.get(row.rootHint) ?? new Set<string>()
+    roots.add(row.root)
+    rootsByHint.set(row.rootHint, roots)
+  }
+  const idsByRoot = new Map<string, string>()
+  for (const roots of rootsByHint.values()) {
+    if (roots.size < 2) continue
+    const usedIds = new Map<string, number>()
+    for (const root of roots) {
+      const baseId = stableRootId(root)
+      const occurrence = (usedIds.get(baseId) ?? 0) + 1
+      usedIds.set(baseId, occurrence)
+      idsByRoot.set(root, occurrence === 1 ? baseId : `${baseId}-${occurrence}`)
+    }
+  }
+  return rows.map((row) => {
+    const stableId = idsByRoot.get(row.root)
+    return stableId !== undefined
+      ? { ...row, rootHint: `${row.rootHint} · #${stableId}` }
+      : row
+  })
 }
 
 /** Unknown legacy tier stays conservative; explicit conditional/optional entries are informational. */
@@ -93,7 +139,7 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
         key: `project:${project.root}`,
         root: project.root,
         title: rootName(project.root),
-        rootHint: rootHint(project.root),
+        rootHint: boundedRootHint(project.root),
         details: [t('machine.risk_project_unreadable', {
           error: formatServerProse(project.error, t, {
             exposeServerDetail,
@@ -107,7 +153,7 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
     for (const change of project.changes) {
       const automation = typeof change.fields.automation === 'string' ? change.fields.automation : ''
       if (change.archived !== 'true' && (automation === 'failed' || automation === 'conflict')) {
-        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, rootHint: rootHint(project.root), details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
+        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, rootHint: boundedRootHint(project.root), details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
       }
     }
   }
@@ -120,9 +166,9 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
     if (loop.readiness.band === 'not-ready') details.push(t('machine.risk_readiness_not_ready'))
     if (loop.readiness.band === 'mostly-ready') details.push(t('machine.risk_readiness_mostly_ready'))
     if (loop.status === 'active' && loop.skill_bundle_id === null) details.push(t('machine.risk_skill_bundle_missing'))
-    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, rootHint: rootHint(loop.root), details, testId: `machine-risk-open-${loop.id}` })
+    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, rootHint: boundedRootHint(loop.root), details, testId: `machine-risk-open-${loop.id}` })
   }
-  return rows
+  return disambiguateRootHints(rows)
 }
 
 /**
@@ -266,10 +312,18 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
                   <span className="h-8 w-1 flex-none rounded-full bg-red" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <div className="break-words font-bold text-text [overflow-wrap:anywhere]">{risk.title}</div>
-                    <div className="break-words font-mono text-[10.5px] text-text-3 [overflow-wrap:anywhere]">{risk.rootHint}</div>
+                    <div className="break-words font-mono text-[10.5px] text-text-3 [overflow-wrap:anywhere]" data-testid="machine-risk-root-hint">{risk.rootHint}</div>
                     <div className="mt-0.5 break-words text-xs text-text-3 [overflow-wrap:anywhere]">{risk.details.join(' · ')}</div>
                   </div>
-                  <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
+                  <button
+                    type="button"
+                    data-testid={risk.testId}
+                    className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full"
+                    aria-label={t('machine.open_project_target', { title: risk.title, root: risk.rootHint })}
+                    onClick={() => onOpenProject(risk.root)}
+                  >
+                    {t('machine.open_project')}
+                  </button>
                 </li>
               ))}
             </ul>

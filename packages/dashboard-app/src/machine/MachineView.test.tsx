@@ -173,11 +173,36 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     const queue = await screen.findByTestId('machine-risk-queue')
     expect(queue).toHaveTextContent('…/alpha/pipeline-worklfow')
     expect(queue).toHaveTextContent('…/beta/pipeline-worklfow')
-    const buttons = within(queue).getAllByRole('button', { name: '打开项目' })
+    const buttons = within(queue).getAllByRole('button', { name: /^打开项目/ })
+    expect(buttons[0]).toHaveAccessibleName('打开项目：pipeline-worklfow（…/alpha/pipeline-worklfow）')
+    expect(buttons[1]).toHaveAccessibleName('打开项目：pipeline-worklfow（…/beta/pipeline-worklfow）')
     fireEvent.click(buttons[0]!)
     fireEvent.click(buttons[1]!)
     expect(onOpenProject).toHaveBeenNthCalledWith(1, rootA)
     expect(onOpenProject).toHaveBeenNthCalledWith(2, rootB)
+  })
+
+  it('风险路径提示兼容反斜杠、限制长度，并在末两段相同时稳定消歧', async () => {
+    const rootA = '/Users/alice/src/pipeline-worklfow'
+    const rootB = '/Volumes/backup/src/pipeline-worklfow'
+    const rootC = `C:\\Users\\alice\\${'very-long-parent-segment-'.repeat(8)}\\pipeline-worklfow`
+    const snapshot = makeSnapshot([
+      makeProject(rootA, [], { ok: false, error: 'unreadable' }),
+      makeProject(rootB, [], { ok: false, error: 'unreadable' }),
+      makeProject(rootC, [], { ok: false, error: 'unreadable' }),
+    ])
+    render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    const queue = await screen.findByTestId('machine-risk-queue')
+    const hints = within(queue).getAllByTestId('machine-risk-root-hint').map((node) => node.textContent ?? '')
+    expect(hints[0]).toMatch(/^…\/src\/pipeline-worklfow · #[0-9a-f]{12}$/)
+    expect(hints[1]).toMatch(/^…\/src\/pipeline-worklfow · #[0-9a-f]{12}$/)
+    expect(hints[0]).not.toBe(hints[1])
+    expect(hints[2]).toMatch(/^…\/very-long…t-segment-\/pipeline-worklfow$/)
+    expect(hints.every((hint) => hint.length <= 64)).toBe(true)
+    expect(queue).not.toHaveTextContent('C:\\Users\\alice')
+    expect(queue).not.toHaveTextContent('/Users/alice/src')
+    expect(queue).not.toHaveTextContent('/Volumes/backup/src')
   })
 
   it('optional 或上游已下架的 skill 仍计入明细，但不把机器误判为 blocked、也不生成 blocker', async () => {

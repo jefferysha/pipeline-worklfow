@@ -601,3 +601,40 @@ bounded machine-readable audit are stored under
 This remains pre-freeze evidence. The remediation must be committed and all
 three independent reviewers must return C0/H0/M0/L0 on that exact SHA before
 Build can transition.
+
+## `bfa229a7` bounded-identity and accessibility rollback
+
+The next exact review correctly rejected the two-segment hint with
+**C0/H0/M1/L1**. A Windows root could bypass `/` splitting and expose the full
+path, an unbounded segment could produce unbounded output, two roots with the
+same final two segments could still collide, and every risk action retained the
+same accessible name.
+
+The replacement processes only a bounded prefix/tail sample, accepts both path
+separators, truncates every visible segment, and groups distinct roots by their
+bounded suffix. Only a colliding group receives a stable 12-hex identifier; an
+identifier collision gets a deterministic local occurrence suffix, so distinct
+targets in the same rendered queue remain distinct without revealing the full
+root. Visible project titles are independently capped at 48 characters. Each
+button now has a localized accessible name containing that bounded title and
+root hint.
+
+RED→GREEN coverage includes POSIX roots with the same final two segments, a
+long Windows root, output length, non-disclosure of full roots, stable distinct
+identifiers, exact navigation targets and distinct accessible button names.
+Machine passes 13/13; the complete Dashboard passes 78 files / 1533 tests and
+root passes 330 files / 5879 tests with 26 honest skips. Typecheck, the
+717-file architecture gate and production build pass.
+
+The regenerated Dashboard loads `index-JA5PIwBX.js`. A new 21-scene matrix
+under `/tmp/tenon-unified-final-dashboard-JA5PIwBX-v5` records the exact
+viewport, locale, theme and motion preference, new asset, alert text, bounded
+root hints and accessible button labels in `audit.json`. All scenes have zero
+document overflow, busy/loading residue, mobile navigation, console errors and
+CDP exceptions. All 21 live Machine actions have 21 distinct accessible names
+in each matrix configuration. The three Progress scenes truthfully retain the
+expected non-Linux trusted-reader precheck alert.
+
+This new source, generated distribution, documentation and ledger must be
+committed together and reviewed at one exact SHA; `bfa229a7` remains rejected
+even though its CI passed.
