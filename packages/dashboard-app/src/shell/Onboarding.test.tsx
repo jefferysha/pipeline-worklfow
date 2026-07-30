@@ -55,6 +55,25 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     expect(screen.getByTestId('onboard-no-project')).not.toHaveTextContent('tenon setup')
   })
 
+  it('只在 1024px 起启用宽卡与步骤卡视觉，保留既有小屏契约', () => {
+    renderOb()
+    const card = screen.getByTestId('onboard-no-project')
+    const steps = card.querySelectorAll('ol > li')
+
+    expect(card).toHaveClass('max-w-[620px]', 'min-[1024px]:max-w-[920px]')
+    expect(steps).toHaveLength(2)
+    for (const step of steps) {
+      expect(step).toHaveClass(
+        'flex',
+        'gap-3',
+        'min-[1024px]:rounded-xl',
+        'min-[1024px]:border',
+        'min-[1024px]:bg-fill/55',
+        'min-[1024px]:p-3.5',
+      )
+    }
+  })
+
   it('每条命令逐个可复制：clipboard 写入对应命令 + 文案切「已复制」', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })

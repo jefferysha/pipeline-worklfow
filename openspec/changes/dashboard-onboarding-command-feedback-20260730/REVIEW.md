@@ -15,9 +15,12 @@
 | 严重度 | 发现 | 用户影响 | 修复与复核 |
 | --- | --- | --- | --- |
 | HIGH | pending 最初使用原生 `disabled`；Chromium 会把焦点移回页面根，与键盘操作保持焦点的契约冲突 | 键盘用户复制后失去当前位置，无法自然确认结果或重试 | 改为 `aria-disabled=true` 加状态机防重入；真实浏览器确认 pending、success、拒绝和 API 缺失后焦点均留在原按钮 |
+| MEDIUM | 第一轮冻结实现把 920px 宽卡和步骤卡视觉样式应用到所有视口，改变 `<1024px` 既有契约 | 620–1023px 的既有单列宽度和视觉结构发生非目标回归 | Verify 正式回退 Build；用 `min-[1024px]` 门控宽卡、grid、边框、背景和 padding，并新增 class 契约测试 |
 
-第一轮没有其他 Critical/High/Medium。低风险观察：成功和错误状态保留 2s/4s 后回落，属于
-规格定义的短暂反馈，不持久化、不调用服务端。
+返工后的 Build 自审已重新核对完整交付面，未发现其他 Critical/High/Medium。低风险观察：
+成功和错误状态保留 2s/4s 后回落，属于规格定义的短暂反馈，不持久化、不调用服务端；
+design 文档三处仍使用宽泛的 `disabled` 术语，但 delta spec、实现、测试与本 REVIEW 已明确
+真实契约是 `aria-disabled=true` 加状态机防重入，未在 Build 越权重登记已批准 design 文档。
 
 ## 第二轮：frontend-design + design-taste-frontend 复评
 
@@ -33,15 +36,20 @@
 ## 机器验证
 
 - TDD 红灯：新增测试在旧实现上 6 项失败，原因覆盖 pending、API 缺失、同步/异步错误和 timer。
-- 相邻 Vitest：13/13。
-- Dashboard 全量 Vitest：69 files / 1224 tests。
+- Verify 回退后的 TDD 红灯：新增 `<1024px` class 契约测试在第一轮冻结实现上 1 项失败；
+  门控修复后相邻 Vitest 14/14。
+- Dashboard 全量 Vitest：69 files / 1225 tests。
 - `npm run typecheck:web`：通过。
-- `npm run build`：通过；最终 asset `index-3wsebZmY.js` / `index-DzC8jn5F.css`。
+- `npm run build`：通过；返工 asset `index-CMqFZGvH.js` / `index-bvENxFTR.css`。
+- `npm run check:architecture`：670 个 production files 通过。
+- `npm run check:comments`：通过。
+- `openspec validate dashboard-onboarding-command-feedback-20260730 --type change --strict --no-interactive`：通过。
 - `git diff --check`：通过。
 
 ## 真实浏览器复评
 
-- 目标：`http://127.0.0.1:18855/`，标题 `Tenon Dashboard`，隔离 worktree server。
+- 第一轮目标：`http://127.0.0.1:18855/`，标题 `Tenon Dashboard`，隔离 worktree server；
+  新冻结 SHA 仍须在 Verify 重新完成全矩阵，不沿用第一轮 PASS。
 - 1024×768：单列，两个步骤宽 822px；1200×870、1440×900、1920×1080：双列，
   两个步骤各宽 420px；四个视口根级 overflow 均为 0。
 - Light、Dark、System 均读取现有 success/error token。

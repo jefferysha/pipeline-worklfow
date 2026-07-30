@@ -39,6 +39,18 @@
           "sha256": "999ae774b2abde96a175fdea858bb582e8ee86d0efe4a5a48ed7c625b5446fd1",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "999ae774b2abde96a175fdea858bb582e8ee86d0efe4a5a48ed7c625b5446fd1",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "999ae774b2abde96a175fdea858bb582e8ee86d0efe4a5a48ed7c625b5446fd1",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -78,6 +90,18 @@
           "sha256": "4a840859e278d4e998137de6e6e0cb2d2732353a1d1133e125cfd6053bb16b30",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4a840859e278d4e998137de6e6e0cb2d2732353a1d1133e125cfd6053bb16b30",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4a840859e278d4e998137de6e6e0cb2d2732353a1d1133e125cfd6053bb16b30",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -111,6 +135,18 @@
           "sha256": "b426149924297ed3101b65fb3530386b5f6faa098216dc99dd024c1325f5a86e",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b426149924297ed3101b65fb3530386b5f6faa098216dc99dd024c1325f5a86e",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b426149924297ed3101b65fb3530386b5f6faa098216dc99dd024c1325f5a86e",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -126,6 +162,18 @@
           "sha256": "37d18b4a8d10c7963dd8bc61e036a73e16e1171e05d9b33fbc152168c2751e59",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "37d18b4a8d10c7963dd8bc61e036a73e16e1171e05d9b33fbc152168c2751e59",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "37d18b4a8d10c7963dd8bc61e036a73e16e1171e05d9b33fbc152168c2751e59",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -141,6 +189,18 @@
           "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -156,6 +216,18 @@
           "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -177,6 +249,18 @@
           "sha256": "c49b0019deafd1f6011a9b320a6f35ca16b3d6ef48f5738e61c1c2e65112984b",
           "readAt": "2026-07-30T03:34:06Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c49b0019deafd1f6011a9b320a6f35ca16b3d6ef48f5738e61c1c2e65112984b",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c49b0019deafd1f6011a9b320a6f35ca16b3d6ef48f5738e61c1c2e65112984b",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
     },
@@ -192,8 +276,28 @@
           "sha256": "a636c4ab3f59e5839dd2cfbbf956b5ff798b69c4e0bbbd55ead3651e6c3f5be0",
           "readAt": "2026-07-30T03:37:04Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a636c4ab3f59e5839dd2cfbbf956b5ff798b69c4e0bbbd55ead3651e6c3f5be0",
+          "readAt": "2026-07-30T03:39:02Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a636c4ab3f59e5839dd2cfbbf956b5ff798b69c4e0bbbd55ead3651e6c3f5be0",
+          "readAt": "2026-07-30T03:47:27Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",7]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-30-dashboard-onboarding-command-feedback-20260730-verify-fail-1.md",
+      "sha256": "86c5e0cc582b199f069395c0eb7fcb24142837a1578781e6e7bb2fa15bae0930",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-30T03:43:54Z",
+      "reads": []
     }
   ]
 }

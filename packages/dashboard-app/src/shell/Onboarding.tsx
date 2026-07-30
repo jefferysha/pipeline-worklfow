@@ -18,14 +18,15 @@ export interface OnboardingProps {
 const INIT_CMD = 'tenon init my-change --track chat'
 
 // ── tailwind 类串（v10b 迁移：.empty/.ob-* 全局类退役，样式全由原子类承载）──
-/** 教学空态卡片基底（max-width 按形态各自补：no-change 460px / no-project 520px）。 */
+/** 教学空态卡片基底（max-width 按形态各自补：no-change 460px / no-project 小屏 620px）。 */
 const EMPTY_CLS = 'mx-auto my-[8vh] rounded-lg border border-border bg-card px-8 py-[30px] text-center'
 const EMPTY_MARK_CLS = 'mx-auto mb-3.5 grid h-[42px] w-[42px] place-items-center rounded-lg bg-ink text-ink-fg'
 const EMPTY_TITLE_CLS = 'mb-2 text-[17px] font-bold text-text'
 const EMPTY_DESC_CLS = 'mb-[18px] text-[12.5px] leading-[1.7] text-text-3'
 const STEP_LABEL_CLS = 'text-[12.5px] leading-[1.6] text-text-2'
 const STEP_N_CLS = 'h-[22px] w-[22px] flex-none rounded-full bg-ink text-center text-xs font-bold leading-[22px] text-ink-fg'
-const STEP_CARD_CLS = 'flex h-full min-w-0 gap-3 rounded-xl border border-border bg-fill/55 p-3.5'
+const STEP_CARD_CLS =
+  'flex gap-3 min-[1024px]:h-full min-[1024px]:min-w-0 min-[1024px]:rounded-xl min-[1024px]:border min-[1024px]:border-border min-[1024px]:bg-fill/55 min-[1024px]:p-3.5'
 
 type CopyState = 'idle' | 'pending' | 'success' | 'error'
 
@@ -205,11 +206,11 @@ export function Onboarding({ kind, root, onCreated, onToast, copyText = writeCli
   // no-project：tenon init 会自动登记项目；界面只保留可复制的真实终端步骤，不再要求用户
   // 暴露本机绝对路径或理解项目注册表。
   return (
-    <div className={`${EMPTY_CLS} max-w-[920px]`} data-testid="onboard-no-project">
+    <div className={`${EMPTY_CLS} max-w-[620px] min-[1024px]:max-w-[920px]`} data-testid="onboard-no-project">
       <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="folder" size={20} /></div>
       <h1 className={EMPTY_TITLE_CLS}>{t('onboard.no_project_title')}</h1>
       <p className={EMPTY_DESC_CLS}>{t('onboard.no_project_desc')}</p>
-      <ol className="mt-1 grid list-none grid-cols-1 gap-3.5 p-0 text-left min-[1100px]:grid-cols-2">
+      <ol className="mt-1 flex list-none flex-col gap-3.5 p-0 text-left min-[1024px]:grid min-[1024px]:grid-cols-1 min-[1100px]:grid-cols-2">
         <li className={STEP_CARD_CLS}>
           <span className={STEP_N_CLS} aria-hidden="true">1</span>
           <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
