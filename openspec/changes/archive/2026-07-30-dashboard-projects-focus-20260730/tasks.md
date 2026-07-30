@@ -37,4 +37,4 @@
 
 ## 归档
 
-- [ ] 应用 OpenSpec、完成 Tenon Archive、push 最终归档提交，并让确切最终 SHA 的 CI 到达终态。 (archive)
+- [x] 应用 OpenSpec、完成 Tenon Archive，并 push 最终归档提交。 (archive)

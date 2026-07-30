@@ -2,8 +2,8 @@ track: frontend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md
 plan: docs/superpowers/plans/2026-07-30-dashboard-projects-focus.md
 verification_report: docs/superpowers/reports/2026-07-30-dashboard-projects-focus-20260730-verify.md
@@ -31,18 +31,18 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-30T01:05:17Z
-updated_at: 2026-07-30T02:56:22Z
+updated_at: 2026-07-30T03:01:42Z
 verified_at: 2026-07-30T02:56:22Z
-archived_at: null
-archived: false
+archived_at: 2026-07-30T03:01:42Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 7d978ba5-6f13-4397-81de-679e49e22692
-pipeline_transition_sequence: 15
-pipeline_transition_head: c2621486-5c3e-4185-a4b7-bfd87554eb85
-pipeline_state_revision: 49
-pipeline_state_revision_id: e85645b1-c360-4346-99bd-663dec22082a
-pipeline_state_digest: 61b00fb7def57be2db8cee2727c600776a9f52023a39aa454f382db414032a62
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDksInJldmlzaW9uSWQiOiJlODU2NDViMS1jMzYwLTQzNDYtOTliZC02NjNkZWMyMjA4MmEiLCJwYXlsb2FkRGlnZXN0IjoiOTlhZDY3ODk3Mjc0OTUyNTQzZjExNzFlN2VmMTYwNjYxNzViMzMzZGFhY2FiZDQwYmM4MDg0ZTAzYTk0MjFjNCJ9
+pipeline_transition_sequence: 17
+pipeline_transition_head: 4204bf34-a0b6-4c76-8ce7-5fe65c304715
+pipeline_state_revision: 51
+pipeline_state_revision_id: 3017b84f-4918-4767-add7-912fbfc1c3c4
+pipeline_state_digest: e48f06cc90951a700c601b6a56118b381f82c0e5828a4b066ecacaf0ec8c21e8
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NTEsInJldmlzaW9uSWQiOiIzMDE3Yjg0Zi00OTE4LTQ3NjctYWRkNy05MTJmYmZjMWMzYzQiLCJwYXlsb2FkRGlnZXN0IjoiODhhNWQ0NGU1ZDk2NTI0NDY0NWE4ZmI1MzRiN2NjMTRjODQ0MmY2MDNlY2Y5MjhjNTQyZGJmYzIxYTBhZWQ5NCJ9
 # tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6IjdkOTc4YmE1LTZmMTMtNDM5Ny04MWRlLTY3OWU0OWUyMjY5MiIsInNlcXVlbmNlIjoxMSwicmVjb3JkSWQiOiJjZjliMTJlNC00YjMyLTQ5MzAtOWE0ZC03NDQ4YjI3ZDdjODYiLCJyZWNvcmREaWdlc3QiOiIzN2M5YjMzMjA1ZWNmZGM4ODEwNzQ4MjQzYWI3YzQ5Nzc4OWQzMTYxNzg5ODYxYWVkNDQ2OWM0NTVkYTQ3ODY0In0
