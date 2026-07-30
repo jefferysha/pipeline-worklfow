@@ -166,7 +166,10 @@ export async function evaluateDocumentEvidence(
       items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
       continue
     }
-    const digests = await Promise.all(records.map((record) => currentRecordDigest(repoRoot, record)))
+    const digests: Array<string | undefined> = []
+    for (const record of records) {
+      digests.push(await currentRecordDigest(repoRoot, record))
+    }
     if (records.some((record, index) => digests[index] !== record.sha256)) {
       blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 tenon document record 后再继续`)
       items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))

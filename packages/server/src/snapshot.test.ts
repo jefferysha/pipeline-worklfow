@@ -1,7 +1,9 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
-import { mkdir, readFile, readdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import {
   builtinTrack,
   compileEffectiveWorkflowPlan,
@@ -13,8 +15,17 @@ import {
   workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
+import {
+  MAX_TASKS_MARKDOWN_BYTES,
+  readAnchoredTasksMarkdown,
+  readChangeSnapshot,
+} from './changeSnapshot.js'
+import { captureChangePathAnchor } from './contextBundlePreviewSupport.js'
 import { readRegistry } from './registry.js'
 import { initChange, makeProject, makeTempHome, newStore, sleep } from './test-support.js'
+import { captureWorkflowRootAnchor, closeWorkflowRootAnchor } from './workflows.js'
+
+const execFileAsync = promisify(execFile)
 
 describe('readRegistry', () => {
   it('JSON 字符串数组 → 路径数组', async () => {
@@ -142,6 +153,219 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     const snap = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
     expect(snap.projects[0].changes[0].name).toBe('repair-on-scan')
     expect(await store.inspectProjection(dir)).toMatchObject({ status: 'current' })
+  })
+
+  it('单 Change 直读不修复缺失 projection，也不扫描其他 Change', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const otherDir = await initChange(store, root, 'other')
+    await unlink(join(targetDir, '.pipeline.yaml'))
+    await unlink(join(otherDir, '.pipeline.yaml'))
+
+    const change = await readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )
+
+    expect(change?.name).toBe('target')
+    expect(await store.inspectProjection(targetDir)).toMatchObject({ status: 'missing' })
+    expect(await store.inspectProjection(otherDir)).toMatchObject({ status: 'missing' })
+  })
+
+  it('单 Change 直读拒绝指向 registered root 外的 Change 目录 symlink', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const outsideRoot = await makeProject()
+    const outsideDir = await initChange(store, outsideRoot, 'target')
+    await rename(targetDir, `${targetDir}.original`)
+    await symlink(outsideDir, targetDir, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+
+    try {
+      await expect(readChangeSnapshot(
+        { registry: () => [root], store, version: '1', clock: () => 't' },
+        anchor,
+        'target',
+        0,
+      )).rejects.toThrow(/路径|symlink|真实目录|registered root/i)
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('单 Change 直读拒绝指向外部状态的 legacy projection symlink', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const outsideRoot = await makeProject()
+    const outsideDir = await initChange(store, outsideRoot, 'outside')
+    await rename(join(targetDir, '.pipeline-run'), join(targetDir, '.pipeline-run.original'))
+    await unlink(join(targetDir, '.pipeline.yaml'))
+    await symlink(join(outsideDir, '.pipeline.yaml'), join(targetDir, '.pipeline.yaml'), 'file')
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )).rejects.toThrow(/symlink|普通文件/i)
+  })
+
+  it('单 Change legacy custom workflow fallback 拒绝读取 root 外的 workflow symlink', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const workflowDir = join(root, '.pipeline', 'workflows')
+    const outsideRoot = await makeProject()
+    const outsideWorkflow = join(outsideRoot, 'legacy.yaml')
+    await mkdir(workflowDir, { recursive: true })
+    await writeFile(outsideWorkflow, [
+      'name: legacy',
+      'steps:',
+      '  - id: external',
+      '    label: External secret label',
+      '    gate: null',
+      '    skills: []',
+      '    inputs: []',
+      '    outputs: []',
+      '    guards: []',
+      '    transitions: []',
+      '',
+    ].join('\n'), 'utf8')
+    await symlink(outsideWorkflow, join(workflowDir, 'legacy.yaml'), 'file')
+    await initChange(store, root, 'legacy-change', {
+      legacyWithoutRunIdentity: true,
+      initialWorkflow: { workflow: 'legacy', phase: 'external' },
+    })
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'legacy-change',
+      0,
+    )).rejects.toThrow(/workflow|可信|symlink|普通文件/i)
+  })
+
+  it('单 Change 直读不跟随 root 外的 tasks.md leaf symlink', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const outsideRoot = await makeProject()
+    const outsideTasks = join(outsideRoot, 'tasks.md')
+    await writeFile(outsideTasks, '- [ ] External secret task\n', 'utf8')
+    await unlink(join(targetDir, 'tasks.md'))
+    await symlink(outsideTasks, join(targetDir, 'tasks.md'), 'file')
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )).rejects.toThrow(/tasks|路径|可信/i)
+  })
+
+  it('单 Change 目录被换到 root 外时，在读取 tasks 字节前拒绝', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const parkedTargetDir = `${targetDir}.parked`
+    const outsideRoot = await makeProject()
+    const outsideChange = join(outsideRoot, 'outside-change')
+    await mkdir(outsideChange)
+    await writeFile(join(outsideChange, 'tasks.md'), 'external secret task\n', 'utf8')
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'target')
+      await rename(targetDir, parkedTargetDir)
+      await symlink(outsideChange, targetDir, 'dir')
+      let readAttempted = false
+
+      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+        readAttempted = true
+        return 'should not be read'
+      })).toThrow(/Change|tasks|路径|可信|读取期间变化/i)
+      expect(readAttempted).toBe(false)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change 的 FIFO tasks 非阻塞地拒绝为非普通文件', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    await unlink(join(targetDir, 'tasks.md'))
+    await execFileAsync('mkfifo', [join(targetDir, 'tasks.md')])
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )).rejects.toThrow(/tasks|普通文件|路径|可信/i)
+  })
+
+  it('单 Change 的 tasks 在读取回调前执行硬字节上限', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    await writeFile(join(targetDir, 'tasks.md'), Buffer.alloc(MAX_TASKS_MARKDOWN_BYTES + 1, 0x61))
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'target')
+      let readAttempted = false
+      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+        readAttempted = true
+        return 'should not be read'
+      })).toThrow(/tasks.*上限/i)
+      expect(readAttempted).toBe(false)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change 受信 reader 不把状态 pathname 委托给注入的 StateStore', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const racingStore = {
+      read: async () => { throw new Error('untrusted pathname read must not run') },
+    } as typeof store
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store: racingStore, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )).resolves.toMatchObject({ name: 'target' })
+  })
+
+  it('单 Change legacy 读取不受注入 StateStore 的状态源切换影响', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'target')
+    const runDir = join(targetDir, '.pipeline-run')
+    const parkedRunDir = join(targetDir, '.pipeline-run.parked')
+    await rename(runDir, parkedRunDir)
+    let delegated = false
+    const racingStore = {
+      read: async () => {
+        delegated = true
+        await rename(parkedRunDir, runDir)
+        return store.read(targetDir)
+      },
+    } as typeof store
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store: racingStore, version: '1', clock: () => 't' },
+      root,
+      'target',
+      0,
+    )).resolves.toMatchObject({ name: 'target', phase: 'open' })
+    expect(delegated).toBe(false)
   })
 
   it('聚合两个注册项目、计数与相位真实', async () => {
