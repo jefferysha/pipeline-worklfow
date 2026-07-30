@@ -411,3 +411,55 @@ pass. Two builds are byte-identical at CLI `fc904aad…fa1f`, Server
 `index-B-F0BGU4.js` (`b2a73c1a…d090`) and
 `index-BpQFUzd2.css` (`035dbdd0…bd93`). The next commit remains subject to the
 complete exact-SHA evidence set.
+
+## `baa38f3d` final Build freeze
+
+The final candidate is
+`baa38f3d1a1707f8571d6ac9c067cb57619c38e2` on top of
+`origin/main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`. No finding from any
+earlier rollback was waived.
+
+The final remediation closes the remaining typed/current custom-exec ambiguity:
+the host header must begin with exactly one recognized completion state and end
+exactly at `Output:\n`; typed output requires one terminal `execution_result`
+after only raw `input_text` chunks; modern output requires exactly one complete
+result envelope; and duplicate required top-level JSON keys fail closed. The
+Dashboard Loop save path also protects pending fields from a stale mid-flight
+snapshot while allowing unrelated fields to converge. Canonical CI now limits
+`OPENAI_API_KEY` detection and injection to a `push` of `refs/heads/main`;
+pull-request code always takes an explicit no-secret honest-skip path.
+
+Three independent exact-SHA reviews report **C0/H0/M0/L0** across
+backend/security/CLI/OpenSpec, the complete Dashboard/design surface, and
+release/E2E/CI. Root verification reached 327 files / 5823 passed / 14 honest
+environment skips in the fullest run; a concurrent local rerun reached 5811
+passed / 26 honest environment skips when Docker was unavailable. Dashboard
+passes 74 files / 1460 tests. Focused CLI/Hook/real-loop coverage passes
+139 tests with one honest skip; OpenSpec passes 35/35; release workflow
+contracts pass 24/24; architecture covers 699 files; typecheck, dependency
+audit/tree, documentation, repository hygiene, comments, bundle, npx package
+and legacy bridge gates pass.
+
+Two consecutive builds are byte-identical at CLI
+`2a1f8844ed9b95b92bcb9ca771153cc26662ea8171810cd30fb5d479ad858323`,
+Server
+`e2327b620bb60f087004c12fb55d811609ccaf9bac716676d64949c24cd97a07`,
+Dashboard HTML
+`4dc720cadd2f1c8240181bd536483285cddd91dceeb71adb31d5c6344d4397f5`,
+`index-B51kaJ-7.js`
+(`84a634d64fe5a2434aded18b47ea02b6c03b1537480b7b9156b488c2b7e6b953`)
+and `index-BpQFUzd2.css`
+(`035dbdd066f119a620945eeaea1db37df04f6ca31762dfab18763ca5fb27bd93`).
+
+Production browser acceptance used the persistent project browser and the exact
+`index-B51kaJ-7.js` asset. Overview, Progress, Automation, Workbench, Machine,
+Host Plan and Projects were captured at 1024, 1440 and 1920 CSS pixels across
+Chinese/English, light/dark and reduced-motion settings. All 21 scenes report
+zero document overflow, page alerts, console errors or CDP exceptions. Manual
+visual inspection of all three Workbench sizes plus Overview, Machine and Host
+Plan found no remaining design or accessibility defect. Evidence is stored
+under `/tmp/tenon-unified-final-a6ff29bf/`.
+
+This section authorizes the exact Build handoff only. GitHub CI for this SHA,
+Verify review acknowledgement, merge reachability, main-branch CI, Ship and
+Archive remain mandatory and are not claimed here.

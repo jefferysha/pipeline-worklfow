@@ -99,7 +99,7 @@
 - [x] 为 Workbench 全部真实草稿建立统一站内导航与 browser unload 守卫，取消离开时保留状态和焦点。 (build)
 - [x] 修复 Machine 双列卡片等高空洞、AFK 重复 CTA、泛化 transition 与输入 autocomplete/name 等全部设计 Low。 (build)
 - [x] 抽离临界大组件中的身份/解码/状态 helper，恢复架构行数余量并完成全量 RED→GREEN。 (build)
-- [ ] 更新 REVIEW、pre-Verify 报告、生成资产与真实浏览器证据，经独立 C0/H0/M0/L0 复审后冻结新 SHA。 (build)
+- [x] 更新 REVIEW、pre-Verify 报告、生成资产与真实浏览器证据，经独立 C0/H0/M0/L0 复审后冻结新 SHA。 (build)
 
 ## 最新 main 范围扩展（PR #21 / #23）
 
@@ -108,7 +108,7 @@
 - [x] 复核 #23 的 canonical review handshake、snapshot/SSE、严格 decoder 与 Progress 状态卡。 (build)
 - [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
 - [ ] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
-- [ ] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
+- [x] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
 
 ## 最终独立复审回退修复
 
@@ -129,7 +129,7 @@
 - [x] 让正确 existing tag、部分 GitHub Release 与已上传资产可验证地幂等恢复；冲突 tag、未知资产或 digest 漂移保持 fail-closed。 (build)
 - [x] 为 Track、Loop、Automation、Secrets 与整个 Governance 面板的内部卸载入口增加统一丢弃确认，保留草稿与焦点直到明确确认。 (build)
 - [x] 创建 Change 请求进行中禁用并拦截 Cancel、Escape 与 backdrop，避免服务器已创建但客户端静默取消。 (build)
-- [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
+- [x] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证
 
