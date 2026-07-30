@@ -46,6 +46,18 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 已激活 Change 时 hook 会拒绝这类 shadowed read。若该打包 skill 不可用，运行
 `tenon setup --codex` 或 `tenon update --codex` 修复，不能用同名外部 skill 代替。
 
+Codex 通过 custom tool-program 读取上述必需 Skill 时，必须把内部执行的完整结果转发给宿主，
+使 `exit_code` 可审计：
+
+```javascript
+const result = await tools.exec_command({ cmd: "<读取 SKILL.md 的命令>", workdir: "<绝对项目目录>" });
+text(result);
+```
+
+不得使用 `text(result.output)`：它会丢失内部退出码，即使外层 custom tool 显示完成，也不能
+证明 Skill 读取成功，Tenon 会按失败关闭拒绝 receipt。原生 `function_call(exec_command)` ABI
+继续由其结构化 output 提供退出码。
+
 ## 触发场景
 
 用户输入以下任一情况触发本 skill：

@@ -11,7 +11,7 @@
  * 见该文件 §3 红线自证段的说明）。
  */
 import { spawnSync } from 'node:child_process'
-import { chmod, cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -96,6 +96,10 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
 
   beforeEach(async () => {
     h = await freshHarness()
+    // The trust boundary deliberately rejects paths reached through symlinked ancestors. macOS
+    // exposes tmpdir through /var -> /private/var, so normalize this test-only project fixture
+    // before placing its path in host-owned transcript metadata.
+    h.cwd = await realpath(h.cwd)
   })
 
   afterEach(async () => {
@@ -244,6 +248,11 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: { cwd: h.cwd, session_id: 'session-dag-1', id: 'session-dag-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: transcriptTimestamp,
+        payload: { turn_id: 'turn-dag-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: transcriptTimestamp,
         payload: {
@@ -251,7 +260,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           status: 'completed',
           call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })});`,
+          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })}); text(r);`,
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
@@ -261,7 +270,19 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-tenon-open',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'dag-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
+          ],
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
@@ -319,6 +340,11 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: { cwd: h.cwd, session_id: 'session-omitted-1', id: 'session-omitted-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: transcriptTimestamp,
+        payload: { turn_id: 'turn-omitted-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: transcriptTimestamp,
         payload: {
@@ -326,7 +352,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
           status: 'completed',
           call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"});`,
+          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"}); text(r);`,
         },
       }),
       JSON.stringify({
@@ -335,7 +361,19 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-tenon-open',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'omitted-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
+          ],
         },
       }),
     ].join('\n') + '\n', 'utf8')

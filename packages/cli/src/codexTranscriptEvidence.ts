@@ -6,27 +6,34 @@
  * long active transcript, but only inside the host sessions root and under both per-file and total
  * byte budgets.  This is a cold path executed while the change lock is held.
  */
-import { createReadStream, type Dirent } from 'node:fs'
-import { lstat, readdir, realpath, stat } from 'node:fs/promises'
+import type { ReadStream } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
+import { finished } from 'node:stream/promises'
 import type { CodexSkillReceipt } from './codexSkillReceipt.js'
 import {
   codexHomeRoot,
   trustedCodexSkillPath,
   type CodexSkillTrustRoots,
 } from './codexSkillTrust.js'
-import { transcriptExecCommands } from './codexToolProgram.js'
-import { explicitSiblingWorktreeTarget } from './codexProjectIdentity.js'
+import { transcriptExecInvocations, type TranscriptExecInvocation } from './codexToolProgram.js'
+import {
+  explicitSiblingWorktreeTarget,
+  isSameOrdinaryPhysicalDirectory,
+} from './codexProjectIdentity.js'
+import { successfulCustomOutput, successfulFunctionOutput } from './codexTranscriptCompletion.js'
+import {
+  exactHostTranscript,
+  hostTranscriptUnchanged,
+  openVerifiedHostTranscript,
+  recentHostTranscripts,
+} from './codexTranscriptDiscovery.js'
 
 // Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
 // session/project/turn/tool/path bound and streamed rather than buffered, so use the same bounded
 // ceiling as fallback discovery instead of making valid long conversations deadlock themselves.
 const MAX_RECEIPT_TRANSCRIPT_BYTES = 512 * 1024 * 1024
-const MAX_DISCOVERY_TRANSCRIPT_BYTES = 512 * 1024 * 1024
-const MAX_DISCOVERY_TOTAL_BYTES = 512 * 1024 * 1024
-const MAX_DISCOVERED_TRANSCRIPTS = 32
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -63,46 +70,18 @@ function receiptTurnId(payload: Record<string, unknown>): string | undefined {
   if (!isRecord(metadata)) return undefined
   return asString(metadata.turn_id)
 }
-function explicitExitCodes(value: unknown): number[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => explicitExitCodes(item))
-  }
-  if (!isRecord(value)) return []
-  const nested = Object.entries(value)
-    .filter(([key]) => key !== 'exit_code')
-    .flatMap(([, item]) => explicitExitCodes(item))
-  return typeof value.exit_code === 'number' ? [value.exit_code, ...nested] : nested
+
+async function settleBoundedStream(stream: ReadStream | undefined): Promise<void> {
+  if (stream === undefined) return
+  if (!stream.readableEnded && !stream.destroyed) stream.destroy()
+  await finished(stream).catch(() => undefined)
 }
 
-function outputStrings(value: unknown): string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.flatMap((item) => outputStrings(item))
-  if (!isRecord(value)) return []
-  return Object.values(value).flatMap((item) => outputStrings(item))
-}
-
-function successfulOutput(value: unknown): boolean {
-  const strings = outputStrings(value)
-  const scriptStates = strings.flatMap((text) =>
-    [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
-      .map((match) => match[1]),
-  )
-  if (scriptStates.includes('failed')) return false
-  const textExitCodes = strings.flatMap((text) =>
-    [...text.matchAll(
-      /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
-    )].map((match) => Number(match[1])),
-  )
-  const exitCodes = [...explicitExitCodes(value), ...textExitCodes]
-  if (exitCodes.some((status) => status !== 0)) return false
-  if (new Set(exitCodes).size > 1) return false
-  if (scriptStates.includes('completed')) return true
-  return exitCodes.length > 0
-}
 interface FunctionExecInvocation {
   readonly command: string
   readonly workdir?: string
 }
+type OutputAbi = 'custom' | 'function'
 
 function functionExecInvocation(payload: Record<string, unknown>): FunctionExecInvocation | undefined {
   if (payload.type !== 'function_call' || asString(payload.name) !== 'exec_command') return undefined
@@ -137,25 +116,23 @@ export async function transcriptConfirmsReceipt(
   const candidate = resolve(receipt.transcriptPath)
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false
 
-  let physicalRoot: string
-  let physicalTranscript: string
-  try {
-    const info = await lstat(candidate)
-    if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
-    physicalRoot = await realpath(sessionsRoot)
-    physicalTranscript = await realpath(candidate)
-    if (!isInside(physicalRoot, physicalTranscript)) return false
-    const physicalInfo = await stat(physicalTranscript)
-    if (!physicalInfo.isFile() || physicalInfo.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
-  } catch {
-    return false
-  }
+  const transcript = await exactHostTranscript(sessionsRoot, candidate)
+  if (transcript === undefined || transcript.size > MAX_RECEIPT_TRANSCRIPT_BYTES) return false
+  const handle = await openVerifiedHostTranscript(transcript)
+  if (handle === undefined) return false
 
   let matchesSession = false
   let matchesProject = false
   let sessionRoot: string | undefined
+  let confirmed = false
+  let input: ReadStream | undefined
   try {
-    const input = createReadStream(physicalTranscript, { encoding: 'utf8' })
+    input = handle.createReadStream({
+      encoding: 'utf8',
+      autoClose: false,
+      start: 0,
+      end: transcript.size - 1,
+    })
     const lines = createInterface({ input, crlfDelay: Infinity })
     for await (const line of lines) {
       let event: unknown
@@ -172,7 +149,8 @@ export async function transcriptConfirmsReceipt(
           matchesSession = sessionId === receipt.sessionId
           const cwd = asString(session.cwd)
           sessionRoot = cwd
-          matchesProject = cwd !== undefined && await isSamePhysicalDirectory(cwd, repoRoot)
+          matchesProject = cwd !== undefined
+            && await isSameOrdinaryPhysicalDirectory(cwd, repoRoot)
         }
         continue
       }
@@ -193,35 +171,53 @@ export async function transcriptConfirmsReceipt(
             || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)
           )
           && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)
-        ) return await matchingSuccessfulOutput(lines, receipt)
+        ) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, 'function')
+          break
+        }
         continue
       }
-      if (!matchesProject) continue
       if (payload.type === 'custom_tool_call') {
         const callId = asString(payload.call_id)
         const name = asString(payload.name)
         const status = asString(payload.status)
         const command = asString(payload.input)
+        const invocation = command === undefined ? undefined
+          : transcriptInputTrustedSkillInvocation(command, receipt.skillPath)
         if (
           callId === receipt.toolUseId
           && name === 'exec'
           && status === 'completed'
-          && command !== undefined
-          && transcriptInputReadsTrustedSkill(command, receipt.skillPath)
-        ) return await matchingSuccessfulOutput(lines, receipt)
+          && invocation !== undefined
+          && (
+            matchesProject
+            || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
+          )
+        ) {
+          confirmed = await matchingSuccessfulOutput(lines, receipt, 'custom')
+          break
+        }
         continue
       }
     }
+    await settleBoundedStream(input)
+    return confirmed && await hostTranscriptUnchanged(handle, transcript)
   } catch {
     return false
+  } finally {
+    await settleBoundedStream(input)
+    await handle.close().catch(() => undefined)
   }
-  return false
 }
 
 async function matchingSuccessfulOutput(
   lines: AsyncIterable<string>,
   receipt: CodexSkillReceipt,
+  outputAbi: OutputAbi,
 ): Promise<boolean> {
+  const expectedOutputType = outputAbi === 'custom'
+    ? 'custom_tool_call_output'
+    : 'function_call_output'
   for await (const line of lines) {
     let event: unknown
     try {
@@ -234,10 +230,12 @@ async function matchingSuccessfulOutput(
     if (
       !isRecord(payload)
       || receiptTurnId(payload) !== receipt.turnId
-      || (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output')
+      || payload.type !== expectedOutputType
       || asString(payload.call_id) !== receipt.toolUseId
     ) continue
-    return successfulOutput(payload.output)
+    return outputAbi === 'custom'
+      ? successfulCustomOutput(payload.output)
+      : successfulFunctionOutput(payload.output)
   }
   return false
 }
@@ -289,9 +287,10 @@ function commandReadsTrustedSkill(command: string, skillPath: string): boolean {
 }
 
 /** The transcript stores tool-program source, so inspect only its decoded, executed command values. */
-function transcriptInputReadsTrustedSkill(input: string, skillPath: string): boolean {
-  const commands = transcriptExecCommands(input)
-  return commands.length === 1 && commandReadsTrustedSkill(commands[0] ?? '', skillPath)
+function transcriptInputTrustedSkillInvocation(input: string, skillPath: string): TranscriptExecInvocation | undefined {
+  const invocations = transcriptExecInvocations(input)
+  const invocation = invocations.length === 1 ? invocations[0] : undefined
+  return invocation && commandReadsTrustedSkill(invocation.command, skillPath) ? invocation : undefined
 }
 
 function skillAliases(id: string): readonly string[] {
@@ -308,67 +307,6 @@ function skillAliases(id: string): readonly string[] {
 function skillsEquivalent(left: string, right: string): boolean {
   const leftAliases = new Set(skillAliases(left))
   return skillAliases(right).some((candidate) => leftAliases.has(candidate))
-}
-
-async function isSamePhysicalDirectory(left: string, right: string): Promise<boolean> {
-  try {
-    return await realpath(left) === await realpath(right)
-  } catch {
-    return false
-  }
-}
-
-interface TranscriptFile {
-  readonly path: string
-  readonly modifiedAt: number
-  readonly size: number
-}
-
-/** Enumerate current host transcripts without allowing one old archive to consume unbounded I/O. */
-async function recentHostTranscripts(sessionsRoot: string): Promise<readonly string[]> {
-  let physicalRoot: string
-  try {
-    physicalRoot = await realpath(sessionsRoot)
-  } catch {
-    return []
-  }
-
-  const discovered: TranscriptFile[] = []
-  async function visit(directory: string, depth: number): Promise<void> {
-    let entries: readonly Dirent<string>[]
-    try {
-      entries = await readdir(directory, { withFileTypes: true })
-    } catch {
-      return
-    }
-    for (const entry of entries) {
-      const candidate = join(directory, entry.name)
-      if (entry.isDirectory() && depth < 3) {
-        await visit(candidate, depth + 1)
-        continue
-      }
-      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
-      try {
-        const info = await lstat(candidate)
-        if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_DISCOVERY_TRANSCRIPT_BYTES) continue
-        const physical = await realpath(candidate)
-        if (!isInside(physicalRoot, physical)) continue
-        discovered.push({ path: physical, modifiedAt: info.mtimeMs, size: info.size })
-      } catch {
-        // A concurrent host rotation cannot turn into proof.
-      }
-    }
-  }
-  await visit(physicalRoot, 0)
-
-  let remaining = MAX_DISCOVERY_TOTAL_BYTES
-  const selected: string[] = []
-  for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
-    if (selected.length >= MAX_DISCOVERED_TRANSCRIPTS || transcript.size > remaining) continue
-    selected.push(transcript.path)
-    remaining -= transcript.size
-  }
-  return selected
 }
 
 function confirmsEveryCandidate(confirmed: ReadonlySet<string>, candidates: readonly string[]): boolean {
@@ -399,23 +337,41 @@ export async function discoverCompletedCodexSkillReads(
   }
   if (selectedSkillPaths.size === 0) return []
   const transcripts = await recentHostTranscripts(codexSessionsRoot(homeDir, configured))
+  if (transcripts === undefined) return []
   const confirmed = new Set<string>()
 
   for (const transcript of transcripts) {
     if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break
-    const readsByCall = new Map<string, readonly string[]>()
+    const readsByCall = new Map<string, {
+      readonly skillIds: readonly string[]
+      readonly outputAbi: OutputAbi
+    }>()
+    const confirmedInLatestTurn = new Set<string>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
     let sessionRoot: string | undefined
+    let latestTurnId: string | undefined
+    let malformedTranscript = false
+    const handle = await openVerifiedHostTranscript(transcript)
+    if (handle === undefined) return []
+    let stream: ReadStream | undefined
     try {
-      const stream = createReadStream(transcript, { encoding: 'utf8' })
+      stream = handle.createReadStream({
+        encoding: 'utf8',
+        autoClose: false,
+        start: 0,
+        end: transcript.size - 1,
+      })
       const lines = createInterface({ input: stream, crlfDelay: Infinity })
       for await (const line of lines) {
         let event: unknown
         try {
           event = JSON.parse(line) as unknown
         } catch {
-          continue
+          malformedTranscript = true
+          readsByCall.clear()
+          confirmedInLatestTurn.clear()
+          break
         }
         if (!isRecord(event)) continue
         if (event.type === 'session_meta') {
@@ -423,21 +379,35 @@ export async function discoverCompletedCodexSkillReads(
           if (isRecord(payload)) {
             const cwd = asString(payload.cwd)
             sessionRoot = cwd
-            if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot)
+            if (cwd) {
+              matchesRepo = await isSameOrdinaryPhysicalDirectory(cwd, repoRoot)
+            }
             if (hostSessionId !== undefined) {
-              const sessionId = asString(payload.session_id) ?? asString(payload.id)
+              const sessionId = asString(payload.id)
               matchesHostSession = sessionId === hostSessionId
             }
           }
           continue
         }
+        if (event.type === 'turn_context') {
+          const payload = event.payload
+          const turnId = isRecord(payload) ? asString(payload.turn_id) : undefined
+          if (turnId === latestTurnId) continue
+          latestTurnId = turnId
+          readsByCall.clear()
+          confirmedInLatestTurn.clear()
+          continue
+        }
         if (
           !matchesHostSession
+          || latestTurnId === undefined
           || event.type !== 'response_item'
           || !responseItemAtOrAfter(event, notBefore)
         ) continue
         const payload = event.payload
         if (!isRecord(payload)) continue
+        const eventTurnId = receiptTurnId(payload)
+        if (eventTurnId !== undefined && eventTurnId !== latestTurnId) continue
         const functionInvocation = functionExecInvocation(payload)
         if (functionInvocation !== undefined) {
           const callId = asString(payload.call_id)
@@ -452,33 +422,67 @@ export async function discoverCompletedCodexSkillReads(
               return path !== undefined && commandReadsTrustedSkill(functionInvocation.command, path)
             },
           )
-          if (readIds.length > 0) readsByCall.set(callId, readIds)
+          if (readIds.length > 0) {
+            readsByCall.set(callId, { skillIds: readIds, outputAbi: 'function' })
+          }
           continue
         }
         if (payload.type === 'custom_tool_call') {
-          if (!matchesRepo) continue
           const callId = asString(payload.call_id)
           const name = asString(payload.name)
           const status = asString(payload.status)
           const toolInput = asString(payload.input)
           if (!callId || name !== 'exec' || status !== 'completed' || !toolInput) continue
+          const invocations = transcriptExecInvocations(toolInput)
+          const invocation = invocations.length === 1 ? invocations[0] : undefined
+          if (
+            invocation === undefined
+            || (
+              !matchesRepo
+              && !await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
+            )
+          ) continue
           const readIds = aliases.filter((id) => {
             const path = selectedSkillPaths.get(id)
-            return path !== undefined && transcriptInputReadsTrustedSkill(toolInput, path)
+            return path !== undefined && commandReadsTrustedSkill(invocation.command, path)
           })
-          if (readIds.length > 0) readsByCall.set(callId, readIds)
+          if (readIds.length > 0) {
+            readsByCall.set(callId, { skillIds: readIds, outputAbi: 'custom' })
+          }
           continue
         }
         if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
         const callId = asString(payload.call_id)
-        if (callId && successfulOutput(payload.output)) {
-          for (const id of readsByCall.get(callId) ?? []) confirmed.add(id)
-          if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break
+        const pendingRead = callId === undefined ? undefined : readsByCall.get(callId)
+        const outputAbi: OutputAbi = payload.type === 'custom_tool_call_output'
+          ? 'custom'
+          : 'function'
+        if (pendingRead === undefined || pendingRead.outputAbi !== outputAbi) continue
+        const successful = outputAbi === 'custom'
+          ? successfulCustomOutput(payload.output)
+          : successfulFunctionOutput(payload.output)
+        if (successful) {
+          for (const id of pendingRead.skillIds) confirmedInLatestTurn.add(id)
         }
       }
+      await settleBoundedStream(stream)
+      if (malformedTranscript) return []
+      if (!await hostTranscriptUnchanged(handle, transcript)) return []
+      if (matchesHostSession) {
+        if (latestTurnId !== undefined) {
+          for (const id of confirmedInLatestTurn) confirmed.add(id)
+        }
+        break
+      }
     } catch {
-      // An unreadable/rotated transcript cannot provide evidence; continue with another host file.
+      // A transcript I/O failure makes recency and completeness unknowable. Fail closed instead
+      // of accepting evidence from an older file that may belong to a superseded host turn.
+      return []
+    } finally {
+      await settleBoundedStream(stream)
+      await handle.close().catch(() => undefined)
     }
+    if (matchesHostSession) break
   }
   return [...confirmed]
 }

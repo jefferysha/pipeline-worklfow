@@ -17,10 +17,22 @@ async function physicalDirectory(path: string): Promise<string | undefined> {
   try {
     const info = await lstat(path)
     if (!info.isDirectory() || info.isSymbolicLink()) return undefined
-    return await realpath(path)
+    const physical = await realpath(path)
+    return resolve(path) === physical ? physical : undefined
   } catch {
     return undefined
   }
+}
+
+export async function isSameOrdinaryPhysicalDirectory(
+  left: string,
+  right: string,
+): Promise<boolean> {
+  const [physicalLeft, physicalRight] = await Promise.all([
+    physicalDirectory(left),
+    physicalDirectory(right),
+  ])
+  return physicalLeft !== undefined && physicalLeft === physicalRight
 }
 
 function singleLine(value: string): string | undefined {
@@ -48,14 +60,6 @@ async function gitCommonDirectory(projectRoot: string): Promise<string | undefin
   )
 }
 
-async function samePhysicalDirectory(left: string, right: string): Promise<boolean> {
-  try {
-    return await realpath(left) === await realpath(right)
-  } catch {
-    return false
-  }
-}
-
 /**
  * A Codex session may start in one Git worktree while an exec call explicitly targets a sibling.
  * Trust that call only when its declared workdir is the exact target and both roots share one
@@ -67,8 +71,17 @@ export async function explicitSiblingWorktreeTarget(
   commandWorkdir: string | undefined,
   targetRoot: string,
 ): Promise<boolean> {
-  if (!sessionRoot || !commandWorkdir) return false
-  if (!await samePhysicalDirectory(commandWorkdir, targetRoot)) return false
+  if (!sessionRoot || !commandWorkdir || !isAbsolute(commandWorkdir)) return false
+  if (resolve(commandWorkdir) !== resolve(targetRoot)) return false
+  const [physicalCommandWorkdir, physicalTargetRoot] = await Promise.all([
+    physicalDirectory(commandWorkdir),
+    physicalDirectory(targetRoot),
+  ])
+  if (
+    physicalCommandWorkdir === undefined
+    || physicalTargetRoot === undefined
+    || physicalCommandWorkdir !== physicalTargetRoot
+  ) return false
   const [sessionGit, targetGit] = await Promise.all([
     gitCommonDirectory(sessionRoot),
     gitCommonDirectory(targetRoot),

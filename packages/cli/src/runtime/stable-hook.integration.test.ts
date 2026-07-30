@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +14,7 @@ const roots: string[] = []
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 async function freshRoot(label: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `pipeline-stable-hook-${label}-`))
+  const root = await realpath(await mkdtemp(join(tmpdir(), `pipeline-stable-hook-${label}-`)))
   roots.push(root)
   return root
 }
@@ -189,6 +189,11 @@ describe('stable host-hook ABI', () => {
         payload: { cwd: project, session_id: 'session-receipt-1', id: 'session-receipt-1' },
       }),
       JSON.stringify({
+        type: 'turn_context',
+        timestamp: eventTimestamp,
+        payload: { turn_id: turnId },
+      }),
+      JSON.stringify({
         type: 'response_item',
         timestamp: eventTimestamp,
         payload: {
@@ -196,7 +201,7 @@ describe('stable host-hook ABI', () => {
           status: 'completed',
           call_id: 'call-skill-read',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,120p' ${skillPath}"});`,
+          input: `const r = await tools.exec_command({"cmd":"sed -n '1,120p' ${skillPath}"}); text(r);`,
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),
@@ -206,7 +211,19 @@ describe('stable host-hook ABI', () => {
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-skill-read',
-          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: [
+            { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: 'stable-hook-receipt',
+                exit_code: 0,
+                original_token_count: 0,
+                output: '',
+                wall_time_seconds: 0.1,
+              }),
+            },
+          ],
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),

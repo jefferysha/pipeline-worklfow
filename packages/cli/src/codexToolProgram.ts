@@ -27,10 +27,23 @@ function jsonStringAt(source: string, start: number): ParsedString | undefined {
   return undefined
 }
 
-function commandFromSafeObjectLiteral(source: string): string | undefined {
+export interface TranscriptExecInvocation {
+  readonly command: string
+  readonly workdir?: string
+}
+
+function safePrimitiveEnd(source: string, start: number): number | undefined {
+  const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/
+    .exec(source.slice(start))
+  return match ? start + match[0].length : undefined
+}
+
+function invocationFromSafeObjectLiteral(source: string): TranscriptExecInvocation | undefined {
   let cursor = 1
+  let command: string | undefined
+  let workdir: string | undefined
   while (cursor < source.length - 1) {
-    while (/[\s,]/.test(source[cursor] ?? '')) cursor += 1
+    while (/\s/.test(source[cursor] ?? '')) cursor += 1
     const quotedKey = jsonStringAt(source, cursor)
     let key: string
     if (quotedKey) {
@@ -47,76 +60,95 @@ function commandFromSafeObjectLiteral(source: string): string | undefined {
     cursor += 1
     while (/\s/.test(source[cursor] ?? '')) cursor += 1
     const stringValue = jsonStringAt(source, cursor)
-    if (key === 'cmd' || key === 'command') return stringValue?.value
-    if (!stringValue) return undefined
-    cursor = stringValue.end
+    if (key === 'cmd' || key === 'command') {
+      if (command !== undefined || !stringValue) return undefined
+      command = stringValue.value
+    } else if (key === 'workdir') {
+      if (workdir !== undefined || !stringValue) return undefined
+      workdir = stringValue.value
+    }
+    const valueEnd = stringValue?.end ?? safePrimitiveEnd(source, cursor)
+    if (valueEnd === undefined) return undefined
+    cursor = valueEnd
+    while (/\s/.test(source[cursor] ?? '')) cursor += 1
+    if (cursor >= source.length - 1) break
+    if (source[cursor] !== ',') return undefined
+    cursor += 1
   }
-  return undefined
+  return command === undefined
+    ? undefined
+    : { command, ...(workdir === undefined ? {} : { workdir }) }
 }
 
-function commandFromObjectLiteral(source: string): string | undefined {
+function invocationFromObjectLiteral(source: string): TranscriptExecInvocation | undefined {
   try {
     const parsed = JSON.parse(source) as unknown
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
     const record = parsed as Record<string, unknown>
+    if (record.cmd !== undefined && record.command !== undefined) return undefined
     const command = record.cmd ?? record.command
-    return typeof command === 'string' ? command : undefined
+    if (typeof command !== 'string') return undefined
+    if (record.workdir !== undefined && typeof record.workdir !== 'string') return undefined
+    return {
+      command,
+      ...(typeof record.workdir === 'string' ? { workdir: record.workdir } : {}),
+    }
   } catch {
-    return commandFromSafeObjectLiteral(source)
+    return invocationFromSafeObjectLiteral(source)
   }
 }
 
 /**
- * Decode only the bounded `tools.exec_command({ ... })` object literal emitted by Codex.
- * Both JSON objects and the current ABI's unquoted safe keys are accepted; expressions,
- * computed keys, template literals, and non-string command values fail closed.
+ * Decode only Codex's canonical completed exec wrapper:
+ * `const result = await tools.exec_command({ ... }); text(result);`.
+ * Anchoring the entire program proves the call is awaited and its complete result is forwarded;
+ * comments, strings, dead code, extra statements, and self-authored success text fail closed.
  */
-export function transcriptExecCommands(input: string): readonly string[] {
-  const marker = 'tools.exec_command('
-  const commands: string[] = []
-  let cursor = 0
+export function transcriptExecInvocations(input: string): readonly TranscriptExecInvocation[] {
+  const prefix = /^\s*(?:(?:\/\/ @exec:[^\r\n]*\r?\n)\s*)?(?:const|let|var)\s+([$A-Z_a-z][$\w]*)\s*=\s*await\s+tools\.exec_command\s*\(/
+    .exec(input)
+  if (!prefix) return []
+  const resultName = prefix[1]
+  if (!resultName) return []
+  let objectStart = prefix[0].length
+  while (/\s/.test(input[objectStart] ?? '')) objectStart += 1
+  if (input[objectStart] !== '{') return []
 
-  while (cursor < input.length) {
-    const markerAt = input.indexOf(marker, cursor)
-    if (markerAt < 0) break
-    let objectStart = markerAt + marker.length
-    while (/\s/.test(input[objectStart] ?? '')) objectStart += 1
-    if (input[objectStart] !== '{') {
-      cursor = markerAt + marker.length
+  let depth = 0
+  let inString = false
+  let escaped = false
+  let objectEnd: number | undefined
+  for (let index = objectStart; index < input.length; index += 1) {
+    const char = input[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
       continue
     }
-
-    let depth = 0
-    let inString = false
-    let escaped = false
-    let objectEnd: number | undefined
-    for (let index = objectStart; index < input.length; index += 1) {
-      const char = input[index]
-      if (inString) {
-        if (escaped) escaped = false
-        else if (char === '\\') escaped = true
-        else if (char === '"') inString = false
-        continue
+    if (char === '"') inString = true
+    else if (char === '{') depth += 1
+    else if (char === '}') {
+      depth -= 1
+      if (depth === 0) {
+        objectEnd = index + 1
+        break
       }
-      if (char === '"') inString = true
-      else if (char === '{') depth += 1
-      else if (char === '}') {
-        depth -= 1
-        if (depth === 0) {
-          objectEnd = index + 1
-          break
-        }
-        if (depth < 0) break
-      }
+      if (depth < 0) break
     }
-
-    if (objectEnd === undefined) {
-      cursor = markerAt + marker.length
-      continue
-    }
-    const command = commandFromObjectLiteral(input.slice(objectStart, objectEnd))
-    if (command) commands.push(command)
-    cursor = objectEnd
   }
-  return commands
+  if (objectEnd === undefined) return []
+
+  const invocation = invocationFromObjectLiteral(input.slice(objectStart, objectEnd))
+  if (!invocation) return []
+  const escapedResultName = resultName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const suffix = new RegExp(
+    `^\\s*\\)\\s*;\\s*text\\s*\\(\\s*${escapedResultName}\\s*\\)\\s*;?\\s*$`,
+  )
+  return suffix.test(input.slice(objectEnd)) ? [invocation] : []
+}
+
+/** Compatibility view for consumers that only need executed command values. */
+export function transcriptExecCommands(input: string): readonly string[] {
+  return transcriptExecInvocations(input).map((invocation) => invocation.command)
 }
