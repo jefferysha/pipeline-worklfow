@@ -73,8 +73,14 @@
         {
           "phase": "ship",
           "sha256": "999ae774b2abde96a175fdea858bb582e8ee86d0efe4a5a48ed7c625b5446fd1",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "999ae774b2abde96a175fdea858bb582e8ee86d0efe4a5a48ed7c625b5446fd1",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -148,8 +154,14 @@
         {
           "phase": "ship",
           "sha256": "4a840859e278d4e998137de6e6e0cb2d2732353a1d1133e125cfd6053bb16b30",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "4a840859e278d4e998137de6e6e0cb2d2732353a1d1133e125cfd6053bb16b30",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -217,8 +229,14 @@
         {
           "phase": "ship",
           "sha256": "b426149924297ed3101b65fb3530386b5f6faa098216dc99dd024c1325f5a86e",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b426149924297ed3101b65fb3530386b5f6faa098216dc99dd024c1325f5a86e",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -268,8 +286,14 @@
         {
           "phase": "ship",
           "sha256": "37d18b4a8d10c7963dd8bc61e036a73e16e1171e05d9b33fbc152168c2751e59",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "37d18b4a8d10c7963dd8bc61e036a73e16e1171e05d9b33fbc152168c2751e59",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -319,8 +343,14 @@
         {
           "phase": "ship",
           "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -370,8 +400,14 @@
         {
           "phase": "ship",
           "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "2dbe46e8d1c534b2ae4091702d85b09b4a565284cc9134fda5cbad2ed991892d",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -427,8 +463,14 @@
         {
           "phase": "ship",
           "sha256": "c49b0019deafd1f6011a9b320a6f35ca16b3d6ef48f5738e61c1c2e65112984b",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c49b0019deafd1f6011a9b320a6f35ca16b3d6ef48f5738e61c1c2e65112984b",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -442,29 +484,14 @@
         {
           "phase": "ship",
           "sha256": "18b91ef6ec67b899f3f7305334d833684688b40e4a66a02d8cd7c50f58b3b99f",
-          "readAt": "2026-07-30T04:09:54Z",
+          "readAt": "2026-07-30T04:11:09Z",
           "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-onboarding-command-feedback-20260730/tasks.md",
-      "sha256": "32f4946944611f19da1c917562700d13c04b30febd5ed286396f1d22c2d9f02d",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-07-30T04:08:13Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "32f4946944611f19da1c917562700d13c04b30febd5ed286396f1d22c2d9f02d",
-          "readAt": "2026-07-30T04:08:13Z",
-          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",10]"
         },
         {
-          "phase": "ship",
-          "sha256": "32f4946944611f19da1c917562700d13c04b30febd5ed286396f1d22c2d9f02d",
-          "readAt": "2026-07-30T04:09:54Z",
-          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",11]"
+          "phase": "archive",
+          "sha256": "18b91ef6ec67b899f3f7305334d833684688b40e4a66a02d8cd7c50f58b3b99f",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
         }
       ]
     },
@@ -474,7 +501,29 @@
       "sha256": "f63b601ac1be459e895202efd177120daf363455e71119de981a03031dd0f5da",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-30T04:09:54Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "f63b601ac1be459e895202efd177120daf363455e71119de981a03031dd0f5da",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-onboarding-command-feedback-20260730/tasks.md",
+      "sha256": "f557db6cc91e0e18a00b77f0687c4011fb5cc7330ecd58ae7b8691725b980ffa",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-30T04:11:38Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "f557db6cc91e0e18a00b77f0687c4011fb5cc7330ecd58ae7b8691725b980ffa",
+          "readAt": "2026-07-30T04:11:38Z",
+          "visitId": "[\"665be552-df3d-43a4-89da-b68e4656b56d\",12]"
+        }
+      ]
     }
   ]
 }

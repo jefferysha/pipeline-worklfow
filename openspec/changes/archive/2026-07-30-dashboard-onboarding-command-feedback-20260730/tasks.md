@@ -24,8 +24,8 @@
 
 ## 交付
 
-- [ ] 提交、push、创建非草稿 stacked PR，并记录设计、测试、浏览器、风险与回滚。 (ship)
+- [x] 提交、push、创建非草稿 stacked PR，并记录设计、测试、浏览器、风险与回滚。 (ship)
 
 ## 归档
 
-- [ ] 应用 OpenSpec、完成 Tenon Archive、push 最终归档提交并等待 exact-head CI 终态。 (archive)
+- [x] 应用 OpenSpec、完成 Tenon Archive、push 最终归档提交并等待 exact-head CI 终态。 (archive)
