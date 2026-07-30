@@ -72,8 +72,13 @@ describe('TimelineStageStrip 横向阶段导航', () => {
 
   it('阶段重排提供键盘可聚焦的前移和后移入口', () => {
     const { onStageReorder } = renderEditableStrip()
-    fireEvent.click(screen.getByRole('button', { name: '将阶段 spec 向前移动' }))
-    fireEvent.click(screen.getByRole('button', { name: '将阶段 spec 向后移动' }))
+    const before = screen.getByRole('button', { name: '将阶段 spec 向前移动' })
+    const after = screen.getByRole('button', { name: '将阶段 spec 向后移动' })
+    expect(before).toHaveClass('size-8', 'focus-visible:ring-3')
+    expect(after).toHaveClass('size-8', 'focus-visible:ring-3')
+    expect(before.parentElement).toHaveClass('gap-2')
+    fireEvent.click(before)
+    fireEvent.click(after)
     expect(onStageReorder).toHaveBeenNthCalledWith(1, 'spec', 'explore', false)
     expect(onStageReorder).toHaveBeenNthCalledWith(2, 'spec', 'build', true)
   })

@@ -105,6 +105,12 @@ export interface LoopDraft {
   denylist: string[]
 }
 
+export function loopDraftValueEqual(left: unknown, right: unknown): boolean {
+  return Array.isArray(left) && Array.isArray(right)
+    ? JSON.stringify(left) === JSON.stringify(right)
+    : left === right
+}
+
 export function draftOf(row: WbLoopRow): LoopDraft {
   return {
     status: row.status,

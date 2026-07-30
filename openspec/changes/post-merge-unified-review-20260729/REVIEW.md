@@ -381,3 +381,33 @@ Two final builds are byte-identical at CLI `00103e57…e795`, Server
 `index-CWPY3rze.js` (`9ac1c983…c52f`) and
 `index-BpQFUzd2.css` (`035dbdd0…bd93`). The next commit remains subject to the
 complete exact-SHA evidence set.
+
+## `2d842008` final independent review rollback
+
+The exact backend/security, Dashboard/design and release/E2E reviews returned
+**C0/H0/M0/L1**, **C0/H0/M1/L2** and **C0/H0/M2/L0**. The candidate was rejected
+without waivers.
+
+Custom-exec parsing now chooses the ABI before inspecting stdout: the presence of
+exactly one valid `execution_result` selects the typed path, whose later
+`input_text` chunks are always returned byte-for-byte. Only the current
+non-typed ABI parses one complete result-envelope JSON. Exit-zero and exit-nine
+envelope-shaped Skill bodies are covered as raw typed stdout.
+
+Loop pending-save state is now the exact set of fields in the submitted patch.
+Unrelated fields edited and returned to baseline do not become protected from a
+concurrent server refresh. On either success or failure, revisions whose latest
+draft equals the accepted baseline are pruned; deferred failure followed by a
+new server snapshot cannot revive a stale local value.
+
+The Machine readiness regression waits for the actual asynchronous terminal
+states rather than an always-present container. Stage reorder controls now have
+the recorded eight-CSS-pixel gap, and tests assert their 32×32 size, spacing and
+focus-ring classes. The shared Loop equality primitive keeps the component under
+the enforced 400-line architecture limit. Focused Dashboard tests pass 75/75,
+receipt tests pass 109/109, and typecheck plus the 699-file architecture gate
+pass. Two builds are byte-identical at CLI `fc904aad…fa1f`, Server
+`e2327b62…a07`, Dashboard HTML `79e82ee1…ba57`,
+`index-B-F0BGU4.js` (`b2a73c1a…d090`) and
+`index-BpQFUzd2.css` (`035dbdd0…bd93`). The next commit remains subject to the
+complete exact-SHA evidence set.

@@ -35288,6 +35288,10 @@ function successfulCustomOutput(value) {
   );
   if (!states.includes("completed") || states.includes("failed")) return false;
   const values = Array.isArray(value) ? value : [value];
+  const typedResults = values.filter((item2) => isRecord10(item2) && item2.type === "execution_result");
+  if (typedResults.length > 0) {
+    return typedResults.length === 1 && topLevelExitCode(typedResults[0]) === 0;
+  }
   const exitCodes = values.flatMap((item2) => {
     if (typeof item2 === "string") {
       const parsed = parsedCompleteResultEnvelope(item2.trim());
@@ -35299,13 +35303,9 @@ function successfulCustomOutput(value) {
       const parsed = text2 === void 0 ? void 0 : parsedCompleteResultEnvelope(text2.trim());
       return parsed === void 0 ? [] : [parsed.exitCode];
     }
-    if (item2.type === "execution_result") {
-      const code = topLevelExitCode(item2);
-      return code === void 0 ? [] : [code];
-    }
     return [];
   });
-  return exitCodes.length > 0 && exitCodes.every((status) => status === 0);
+  return exitCodes.length === 1 && exitCodes[0] === 0;
 }
 function successfulFunctionStdout(value) {
   if (typeof value !== "string" || !successfulFunctionOutput(value)) return void 0;
@@ -35316,6 +35316,13 @@ function successfulFunctionStdout(value) {
 function successfulCustomStdout(value) {
   if (!successfulCustomOutput(value)) return void 0;
   const values = Array.isArray(value) ? value : [value];
+  const typedResults = values.filter((item2) => isRecord10(item2) && item2.type === "execution_result");
+  if (typedResults.length > 0) {
+    if (typedResults.length !== 1 || topLevelExitCode(typedResults[0]) !== 0) return void 0;
+    return values.slice(1).flatMap(
+      (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" ? [item2.text] : []
+    ).join("");
+  }
   const envelopes = values.flatMap((item2) => {
     if (typeof item2 === "string") {
       const parsed2 = parsedCompleteResultEnvelope(item2.trim());
@@ -35329,15 +35336,7 @@ function successfulCustomStdout(value) {
   if (envelopes.length > 0) {
     return envelopes.length === 1 ? envelopes[0]?.output : void 0;
   }
-  const header = values[0];
-  if (!isRecord10(header) || header.type !== "input_text" || typeof header.text !== "string" || !/^Script completed\n[\s\S]*\nOutput:\n$/.test(header.text)) return void 0;
-  const completions = values.filter(
-    (item2) => isRecord10(item2) && item2.type === "execution_result" && item2.exit_code === 0
-  );
-  if (completions.length !== 1) return void 0;
-  return values.slice(1).flatMap(
-    (item2) => isRecord10(item2) && item2.type === "input_text" && typeof item2.text === "string" ? [item2.text] : []
-  ).join("");
+  return void 0;
 }
 
 // packages/cli/src/codexTrustedSkillRead.ts

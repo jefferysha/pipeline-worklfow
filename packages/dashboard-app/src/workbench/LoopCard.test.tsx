@@ -717,6 +717,59 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     }))
   })
 
+  it('保存期间未参与请求的字段改后还原不会阻挡并发服务端刷新', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '保存目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(screen.getByTestId('lp-risk'), { target: { value: 'high' } })
+    fireEvent.change(screen.getByTestId('lp-risk'), { target: { value: 'low' } })
+    rows = rows.map((row) => ({ ...row, risk: 'high' }))
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-risk')).toHaveValue('high'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+  })
+
+  it('保存失败后清除已回到基线的 revision，后续刷新接受服务端新值', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '会失败的目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: '把旧版工单卡样式逐个迁移到 SaaS 卡片风' } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: false, error: '写入失败' }), { status: 400 }))
+    await waitFor(() => expect(screen.getByTestId('lp-save-errors')).toBeInTheDocument())
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+
+    rows = rows.map((row) => ({ ...row, goal: '失败后的服务端新目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('失败后的服务端新目标'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+  })
+
   it.each(decisionFactChanges)('%s 变化会撤销旧确认、恢复入口焦点且不能提交', async (_label, changeFacts) => {
     rows = [makeRow({ graduation })]
     renderReloadCard()

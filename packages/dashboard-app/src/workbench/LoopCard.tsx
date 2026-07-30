@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 export { LOOP_RUNNERS, WB_TW, WbAdvanced } from './loopCardModel'
 export { LpSlider } from './LoopControls'
 export { useLoops, type LoopsState } from './useLoops'
-import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, rebaseLoopDraft, type LoopDraft } from './loopCardModel'
+import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, loopDraftValueEqual, rebaseLoopDraft, type LoopDraft } from './loopCardModel'
 import { RECO_TOKENS_K, clamp } from './LoopControls'
 import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
@@ -27,6 +27,8 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   const { t, lang } = useT()
   const row = loops.selected
   const [draft, setDraft] = useState<LoopDraft | null>(null)
+  const draftRef = useRef<LoopDraft | null>(null)
+  draftRef.current = draft
   const [saving, setSaving] = useState(false)
   const [saveErrors, setSaveErrors] = useState<string[] | null>(null)
   const [saveOk, setSaveOk] = useState(false)
@@ -39,7 +41,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   const saveGeneration = useRef(0)
   const levelGeneration = useRef(0)
   const reviewGeneration = useRef(0)
-  const saveInFlight = useRef(false)
+  const pendingSaveFields = useRef(new Set<keyof LoopDraft>())
   const draftIdentity = useRef('')
   const draftBase = useRef<LoopDraft | null>(null)
   const editRevision = useRef(0)
@@ -54,7 +56,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     ++levelGeneration.current
     ++reviewGeneration.current
     setSaving(false)
-    saveInFlight.current = false
+    pendingSaveFields.current.clear()
     setLevelBusy(false)
     setReviewBusy(false)
     setConfirmLevel(null)
@@ -74,12 +76,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       const sameIdentity = draftIdentity.current === nextIdentity
       if (sameIdentity && current !== null && nextBase !== null) {
         for (const key of fieldRevisions.current.keys()) {
-          const currentValue = current[key]
-          const serverValue = nextBase[key]
-          const converged = Array.isArray(currentValue) && Array.isArray(serverValue)
-            ? JSON.stringify(currentValue) === JSON.stringify(serverValue)
-            : currentValue === serverValue
-          if (converged) fieldRevisions.current.delete(key)
+          if (loopDraftValueEqual(current[key], nextBase[key])) fieldRevisions.current.delete(key)
         }
       }
       const rebased = sameIdentity && current !== null && nextBase !== null
@@ -88,6 +85,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       if (!sameIdentity) fieldRevisions.current.clear()
       draftIdentity.current = nextIdentity
       draftBase.current = nextBase
+      draftRef.current = rebased
       return rebased
     })
     setBaseRevision((value) => value + 1)
@@ -125,14 +123,11 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       if (!prev) return prev
       const next = { ...prev, ...part }
       for (const key of Object.keys(part) as Array<keyof LoopDraft>) {
-        const nextValue = next[key]
-        const baseValue = draftBase.current?.[key]
-        const equalsBase = Array.isArray(nextValue) && Array.isArray(baseValue)
-          ? JSON.stringify(nextValue) === JSON.stringify(baseValue)
-          : nextValue === baseValue
-        if (equalsBase && !saveInFlight.current) fieldRevisions.current.delete(key)
+        const equalsBase = loopDraftValueEqual(next[key], draftBase.current?.[key])
+        if (equalsBase && !pendingSaveFields.current.has(key)) fieldRevisions.current.delete(key)
         else fieldRevisions.current.set(key, ++editRevision.current)
       }
+      draftRef.current = next
       return next
     })
     setSaveOk(false)
@@ -144,11 +139,12 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     const generation = ++saveGeneration.current
     const targetPatch = patch
     const targetDraft = draft
+    const targetKeys = Object.keys(targetPatch) as Array<keyof LoopDraft>
     const targetRevisions = new Map(
-      (Object.keys(targetPatch) as Array<keyof LoopDraft>)
+      targetKeys
         .map((key) => [key, fieldRevisions.current.get(key)] as const),
     )
-    saveInFlight.current = true
+    pendingSaveFields.current = new Set(targetKeys)
     setSaving(true)
     setSaveErrors(null)
     setSaveOk(false)
@@ -175,7 +171,14 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       }
     } finally {
       if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
-        saveInFlight.current = false
+        pendingSaveFields.current.clear()
+        const currentDraft = draftRef.current
+        const currentBase = draftBase.current
+        if (currentDraft !== null && currentBase !== null) {
+          for (const key of fieldRevisions.current.keys()) {
+            if (loopDraftValueEqual(currentDraft[key], currentBase[key])) fieldRevisions.current.delete(key)
+          }
+        }
         setSaving(false)
       }
     }

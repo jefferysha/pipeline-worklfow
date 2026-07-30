@@ -86,7 +86,7 @@ export function TimelineStageStrip({
                   {lane.running && <span className="size-1.5 flex-none animate-pulse rounded-full bg-green motion-reduce:animate-none" data-testid={`wb-flow-gloss-${lane.id}`} aria-hidden="true" />}
                 </button>
                 {!readonly && onStageReorder && (
-                  <span className="ml-1 inline-flex flex-col gap-1">
+                  <span className="ml-1 inline-flex flex-col gap-2">
                     <button
                       type="button"
                       className="grid size-8 place-items-center rounded-lg text-sm text-text-3 outline-none hover:bg-fill hover:text-accent-d focus-visible:ring-3 focus-visible:ring-accent-t disabled:opacity-30"

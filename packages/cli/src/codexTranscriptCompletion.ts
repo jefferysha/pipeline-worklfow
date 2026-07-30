@@ -114,6 +114,10 @@ export function successfulCustomOutput(value: unknown): boolean {
   )
   if (!states.includes('completed') || states.includes('failed')) return false
   const values = Array.isArray(value) ? value : [value]
+  const typedResults = values.filter((item) => isRecord(item) && item.type === 'execution_result')
+  if (typedResults.length > 0) {
+    return typedResults.length === 1 && topLevelExitCode(typedResults[0]) === 0
+  }
   const exitCodes = values.flatMap((item) => {
     if (typeof item === 'string') {
       const parsed = parsedCompleteResultEnvelope(item.trim())
@@ -125,13 +129,9 @@ export function successfulCustomOutput(value: unknown): boolean {
       const parsed = text === undefined ? undefined : parsedCompleteResultEnvelope(text.trim())
       return parsed === undefined ? [] : [parsed.exitCode]
     }
-    if (item.type === 'execution_result') {
-      const code = topLevelExitCode(item)
-      return code === undefined ? [] : [code]
-    }
     return []
   })
-  return exitCodes.length > 0 && exitCodes.every((status) => status === 0)
+  return exitCodes.length === 1 && exitCodes[0] === 0
 }
 
 /** Return only the stdout bytes forwarded by a successful function-call exec envelope. */
@@ -146,6 +146,17 @@ export function successfulFunctionStdout(value: unknown): string | undefined {
 export function successfulCustomStdout(value: unknown): string | undefined {
   if (!successfulCustomOutput(value)) return undefined
   const values = Array.isArray(value) ? value : [value]
+  const typedResults = values.filter((item) => isRecord(item) && item.type === 'execution_result')
+  if (typedResults.length > 0) {
+    if (typedResults.length !== 1 || topLevelExitCode(typedResults[0]) !== 0) return undefined
+    return values.slice(1).flatMap((item) =>
+      isRecord(item)
+      && item.type === 'input_text'
+      && typeof item.text === 'string'
+        ? [item.text]
+        : [],
+    ).join('')
+  }
   const envelopes = values.flatMap((item) => {
     if (typeof item === 'string') {
       const parsed = parsedCompleteResultEnvelope(item.trim())
@@ -160,22 +171,5 @@ export function successfulCustomStdout(value: unknown): string | undefined {
     return envelopes.length === 1 ? envelopes[0]?.output : undefined
   }
 
-  const header = values[0]
-  if (
-    !isRecord(header)
-    || header.type !== 'input_text'
-    || typeof header.text !== 'string'
-    || !/^Script completed\n[\s\S]*\nOutput:\n$/.test(header.text)
-  ) return undefined
-  const completions = values.filter((item) =>
-    isRecord(item) && item.type === 'execution_result' && item.exit_code === 0,
-  )
-  if (completions.length !== 1) return undefined
-  return values.slice(1).flatMap((item) =>
-    isRecord(item)
-    && item.type === 'input_text'
-    && typeof item.text === 'string'
-      ? [item.text]
-      : [],
-  ).join('')
+  return undefined
 }

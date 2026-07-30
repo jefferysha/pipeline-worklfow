@@ -87,6 +87,23 @@ it('treats an exact completed-header-shaped Skill body as stdout in the legacy t
   expect(successfulCustomStdout(output)).toBe(body)
 })
 
+it.each([0, 9])('treats complete-result-envelope-shaped Skill stdout with exit %i as raw text in the legacy typed exec ABI', (exitCode) => {
+  const body = JSON.stringify({
+    chunk_id: 'skill-authored-json',
+    wall_time_seconds: 0,
+    exit_code: exitCode,
+    original_token_count: 0,
+    output: 'nested-not-raw-stdout',
+  })
+  const output = [
+    { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+    { type: 'input_text', text: body },
+    { type: 'execution_result', exit_code: 0 },
+  ]
+
+  expect(successfulCustomStdout(output)).toBe(body)
+})
+
 async function appendValidTranscriptPadding(path: string): Promise<void> {
   const padding = {
     type: 'event_msg',
