@@ -370,6 +370,67 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
+  it('decodes a strict exact-event Review Handshake while accepting an older missing field', () => {
+    const legacy = decodeSnapshot(validSnapshot())
+    expect(legacy).not.toBeNull()
+    expect((legacy?.projects[0]?.changes[0] as unknown as {
+      reviewHandshake?: unknown
+    }).reviewHandshake).toBeUndefined()
+
+    const snapshot = validSnapshot()
+    ;(snapshot.projects[0].changes[0].workflowRules.gateByStep as Record<
+      string,
+      'review' | 'confirm' | null
+    >).open = 'review'
+    const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+    change.reviewHandshake = {
+      status: 'pending',
+      event: 'finish',
+      requestedAt: '2026-07-30T02:00:00Z',
+    }
+    const decoded = decodeSnapshot(snapshot)
+    expect((decoded?.projects[0]?.changes[0] as unknown as {
+      reviewHandshake?: unknown
+    }).reviewHandshake).toEqual({
+      status: 'pending',
+      event: 'finish',
+      requestedAt: '2026-07-30T02:00:00Z',
+    })
+  })
+
+  it('accepts an explicit not-requested handshake on a non-review step', () => {
+    const snapshot = validSnapshot()
+    const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+    change.reviewHandshake = { status: 'not-requested' }
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.changes[0]?.reviewHandshake).toEqual({
+      status: 'not-requested',
+    })
+  })
+
+  it('rejects malformed, unreachable, or over-broad Review Handshake objects', () => {
+    for (const reviewHandshake of [
+      { status: 'pending', event: 'ghost', requestedAt: '2026-07-30T02:00:00Z' },
+      { status: 'pending', event: 'finish' },
+      {
+        status: 'approved',
+        event: 'finish',
+        requestedAt: '2026-07-30T02:00:00Z',
+      },
+      { status: 'not-requested', event: 'finish' },
+      { status: 'delegated', event: 'finish', hostSession: 'secret' },
+    ]) {
+      const snapshot = validSnapshot()
+      ;(snapshot.projects[0].changes[0].workflowRules.gateByStep as Record<
+        string,
+        'review' | 'confirm' | null
+      >).open = 'review'
+      const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+      change.reviewHandshake = reviewHandshake
+      expect(decodeSnapshot(snapshot)).toBeNull()
+    }
+  })
+
   it('rejects a Change whose phase is outside its frozen workflow steps', () => {
     const snapshot = validSnapshot()
     snapshot.projects[0].changes[0].phase = 'ghost'

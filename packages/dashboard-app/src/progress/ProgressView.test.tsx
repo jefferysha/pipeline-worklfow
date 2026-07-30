@@ -650,6 +650,11 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
           fields: { workflow: 'multi-edge' },
           workflowRules: MULTI_EDGE_SNAPSHOT_RULES,
           workflowExecution: readyWorkflowExecution(MULTI_EDGE_SNAPSHOT_RULES),
+          reviewHandshake: {
+            status: 'pending',
+            event: 'fast-track',
+            requestedAt: '2026-07-30T02:00:00Z',
+          },
         })]),
       ]),
       rulesByKey: new Map([[rulesKey(ROOT_A, 'multi-edge'), MULTI_EDGE_RULES]]),
@@ -659,6 +664,9 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
   it('2+ 条同向出边一条不落（评审 P1-1）：首选前进边带目标相位，第 2 条以事件名可点、POST 事件正确', async () => {
     renderMultiEdge()
     await openDrawer('multi-demo')
+    expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('等待明确确认')
+    expect(within(screen.getByTestId('review-handshake-status')).getByText('fast-track'))
+      .toBeInTheDocument()
     expect(screen.getByTestId('prg9-dw-pass-multi-demo').textContent).toContain('放行进入 发布')
     const second = screen.getByTestId('prg9-dw-fw-fast-track-multi-demo')
     expect(second.textContent).toContain('fast-track')

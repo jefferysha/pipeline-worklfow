@@ -23,6 +23,7 @@ import type {
   Snapshot,
   TerminalActivitySnapshot,
 } from './types.js'
+import { projectReviewHandshake } from './reviewHandshake.js'
 import {
   legacySnapshotWorkflowRules,
   resolveSnapshotEffectivePlan,
@@ -271,6 +272,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
           e.name,
           capabilityDeps,
         ),
+        reviewHandshake: projectReviewHandshake(state, plan, phase),
         todo,
         documents,
         ...(terminalActivity === undefined ? {} : { terminalActivity }),

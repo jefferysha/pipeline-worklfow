@@ -4,6 +4,7 @@ import type {
   PipelineTodoProjection,
   PipelineTodoStage,
   ProjectSnapshot,
+  ReviewHandshakeSnapshot,
   Snapshot,
   TerminalActivitySnapshot,
   TransitionReadinessBlockerSnapshot,
@@ -97,6 +98,42 @@ function decodeFields(value: unknown): Record<string, string | string[]> | null 
   return fields
 }
 
+function decodeReviewHandshake(
+  value: unknown,
+  rules: ChangeSnapshot['workflowRules'],
+  currentStep: string,
+): ReviewHandshakeSnapshot | null {
+  if (!isRecord(value)) return null
+  if (value.status === 'not-requested') {
+    return exactKeys(value, ['status']) ? { status: 'not-requested' } : null
+  }
+  if (
+    rules.gateByStep[currentStep] !== 'review'
+    || (value.status !== 'pending' && value.status !== 'approved')
+    || typeof value.event !== 'string'
+    || value.event === ''
+    || !(rules.transitions[currentStep] ?? []).some((edge) => edge.event === value.event)
+    || typeof value.requestedAt !== 'string'
+    || value.requestedAt === ''
+  ) return null
+  if (value.status === 'pending') {
+    return exactKeys(value, ['status', 'event', 'requestedAt'])
+      ? { status: 'pending', event: value.event, requestedAt: value.requestedAt }
+      : null
+  }
+  if (
+    typeof value.acknowledgedAt !== 'string'
+    || value.acknowledgedAt === ''
+    || !exactKeys(value, ['status', 'event', 'requestedAt', 'acknowledgedAt'])
+  ) return null
+  return {
+    status: 'approved',
+    event: value.event,
+    requestedAt: value.requestedAt,
+    acknowledgedAt: value.acknowledgedAt,
+  }
+}
+
 function decodeChange(value: unknown): ChangeSnapshot | null {
   if (!isRecord(value)) return null
   const fields = decodeFields(value.fields)
@@ -116,10 +153,14 @@ function decodeChange(value: unknown): ChangeSnapshot | null {
     || workflowExecution === null
     || !workflowRules.steps.includes(value.phase)
     || !fields) return null
+  const reviewHandshake = value.reviewHandshake === undefined
+    ? undefined
+    : decodeReviewHandshake(value.reviewHandshake, workflowRules, value.phase)
   const todo = value.todo === undefined ? undefined : decodeTodo(value.todo)
   const documents = value.documents === undefined ? undefined : decodeDocuments(value.documents)
   const terminalActivity = value.terminalActivity === undefined ? undefined : decodeTerminalActivity(value.terminalActivity)
-  if ((value.todo !== undefined && !todo)
+  if ((value.reviewHandshake !== undefined && !reviewHandshake)
+    || (value.todo !== undefined && !todo)
     || (value.documents !== undefined && !documents)
     || (value.terminalActivity !== undefined && !terminalActivity)) return null
   return {
@@ -135,6 +176,7 @@ function decodeChange(value: unknown): ChangeSnapshot | null {
     workflowPlanFingerprint: value.workflowPlanFingerprint,
     workflowRules,
     workflowExecution,
+    ...(reviewHandshake ? { reviewHandshake } : {}),
     ...(todo ? { todo } : {}),
     ...(documents ? { documents } : {}),
     ...(terminalActivity ? { terminalActivity } : {}),
