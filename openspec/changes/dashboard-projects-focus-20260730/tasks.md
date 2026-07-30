@@ -33,8 +33,8 @@
 
 ## 交付
 
-- [ ] 提交、push、创建非草稿 PR，记录设计、测试、浏览器、风险和回滚，并等待 CI 终态。 (ship)
+- [x] 提交、push、创建非草稿 PR，记录设计、测试、浏览器、风险和回滚。 (ship)
 
 ## 归档
 
-- [ ] 应用 OpenSpec、完成 Tenon Archive、push 归档提交并复核 PR/CI。 (archive)
+- [ ] 应用 OpenSpec、完成 Tenon Archive、push 最终归档提交，并让确切最终 SHA 的 CI 到达终态。 (archive)
