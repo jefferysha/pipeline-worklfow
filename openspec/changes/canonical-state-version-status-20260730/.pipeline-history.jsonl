@@ -117,3 +117,4 @@
 {"ts":"2026-07-30T10:50:38Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"639a5416-1ffd-4a89-a8dc-94f7a0095e56"}
 {"ts":"2026-07-30T10:52:45Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-30T10:53:13Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-30T10:54:53Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/27"}
