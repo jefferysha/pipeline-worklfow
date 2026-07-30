@@ -192,3 +192,20 @@ clears only on a matching revert or successful save, and protects both in-app na
 `beforeunload`. Release workflow contracts pass 8/8; related Dashboard tests pass 183/183;
 receipt tests pass 82/82; CLI and Dashboard typechecks pass. These fixes invalidate the
 `0591006f` review result. A fresh full review of the new committed candidate remains required.
+
+## `276d2b3e` independent review rollback
+
+The exact `276d2b3e` review found two further Medium state-integrity defects. The dirty
+Workbench history guard assumed every `popstate` was Back, so a Forward target could be left in
+the URL while the old Workbench remained rendered and confirmation replayed the wrong direction.
+Dashboard-created history entries now carry a monotonic position; blocked Back and Forward
+traversals are undone by the exact inverse delta and confirmation replays the same original
+delta. A real three-entry Forward regression proves cancel and confirm behavior.
+
+The same review found that Workflow action objects accepted illegal extra keys and silently
+normalized them, diverging from the kernel compiler. Every action variant now requires the exact
+`{type}` key set. The adjacent `tasks-at-least` numeric contract was tightened from any finite
+number to the kernel's non-negative integer rule. Focused tests pass 90/90 and the full Dashboard
+suite passes 73 files / 1422 tests. The rebuilt production asset is
+`index-UJjh5PoS.js` with `index-YeY6VsN7.css`. The `276d2b3e` result is invalidated; a new
+exact-candidate review remains mandatory.

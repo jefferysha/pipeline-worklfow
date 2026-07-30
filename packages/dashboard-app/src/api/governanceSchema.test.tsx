@@ -89,6 +89,29 @@ describe('decodeWorkflowDefinition', () => {
     expect(decodeWithGuard({ ...guard, illegal: 'must-not-disappear' })).toBeNull()
   })
 
+  it('rejects action variants with extra keys instead of silently normalizing them', () => {
+    expect(decodeWorkflowDefinition({
+      name: 'action-contract',
+      steps: [{
+        ...step,
+        transitions: [{
+          event: 'done',
+          to: 'open',
+          actions: [{ type: 'archive-run', illegal: 'must-not-disappear' }],
+        }],
+      }],
+    })).toBeNull()
+  })
+
+  it('requires tasks-at-least n to match the kernel non-negative integer contract', () => {
+    expect(decodeWithGuard({ type: 'tasks-at-least', n: -1 })).toBeNull()
+    expect(decodeWithGuard({ type: 'tasks-at-least', n: 1.5 })).toBeNull()
+    expect(decodeWithGuard({ type: 'tasks-at-least', n: 0 })?.steps[0]?.guards[0]).toEqual({
+      type: 'tasks-at-least',
+      n: 0,
+    })
+  })
+
   it.each(guards)('%s requires an exact nested when predicate', (_name, guard) => {
     expect(decodeWithGuard({
       ...guard,

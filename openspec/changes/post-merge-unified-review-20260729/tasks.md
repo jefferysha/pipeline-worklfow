@@ -121,6 +121,8 @@
 - [x] 从修复源码重新生成 tracked CLI bundle，保证 release freshness 与运行时实现一致。 (build)
 - [x] 将 Prompt Routing Bypass 草稿汇入 Workbench 统一 dirty/navigation/beforeunload 守卫。 (build)
 - [x] 将 release candidate 限制为只读 approval producer，并由 default-branch `workflow_run` writer 重验身份后创建 tag。 (build)
+- [x] 为 Dashboard 历史项登记单调位置，dirty Workbench 对 Back/Forward 均按原方向补偿和确认重放。 (build)
+- [x] Workflow action decoder 按 exact-key 闭集拒绝附加字段，并同步 `tasks-at-least` 非负整数契约。 (build)
 - [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证

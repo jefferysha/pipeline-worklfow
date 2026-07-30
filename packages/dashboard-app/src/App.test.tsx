@@ -220,6 +220,40 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('target'))
   })
 
+  it('取消浏览器 Forward 用 back 补偿；确认时重放 Forward 而不是错误地 Back', async () => {
+    window.history.replaceState(
+      { page: 'workbench-current', __tenonDashboardPosition: 0 },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
+    window.history.pushState(
+      { page: 'overview-forward', __tenonDashboardPosition: 1 },
+      '',
+      '/?view=overview&historyMarker=forward-target',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+
+    const back = vi.spyOn(window.history, 'back')
+    const forward = vi.spyOn(window.history, 'forward')
+    act(() => window.history.forward())
+
+    const firstDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    expect(back).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(firstDialog).getByRole('button', { name: '继续编辑' }))
+
+    act(() => window.history.forward())
+    const secondDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    fireEvent.click(within(secondDialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(forward).toHaveBeenCalledTimes(3)
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('forward-target'))
+  })
+
   it('一级导航与 Overview 共用可访问 Dialog；取消保留页面、草稿、URL 与触发焦点，确认才离开', async () => {
     await renderDirtyWorkbenchApp()
     const overview = screen.getByTestId('nav-overview')

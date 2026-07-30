@@ -149,7 +149,7 @@ function decodeGuard(value: unknown): WbGuardConfig | null {
   if (when === null) return null
   switch (item.type) {
     case 'tasks-at-least':
-      return typeof item.n === 'number' && Number.isFinite(item.n)
+      return typeof item.n === 'number' && Number.isInteger(item.n) && item.n >= 0
         ? withWhen({ type: 'tasks-at-least', n: item.n }, when)
         : null
     case 'nonempty-output':
@@ -191,7 +191,7 @@ function decodeGuard(value: unknown): WbGuardConfig | null {
 
 function decodeAction(value: unknown): WbActionConfig | null {
   const item = record(value)
-  if (!item) return null
+  if (!item || !exactKeys(item, ['type'])) return null
   switch (item.type) {
     case 'freeze-build-sha': return { type: 'freeze-build-sha' }
     case 'mark-verification-passed': return { type: 'mark-verification-passed' }

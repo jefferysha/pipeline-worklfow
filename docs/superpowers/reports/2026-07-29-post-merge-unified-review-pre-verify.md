@@ -236,3 +236,15 @@
   同时保护站内导航和 `beforeunload`；改回基线或成功保存才清除。
 - release contract 8/8、相关 Dashboard 183/183、receipt 82/82、CLI/Dashboard typecheck 和
   workflow YAML/shell 静态校验均通过。该复审结果保持作废，需在新提交上重新完整复审。
+
+### `276d2b3e` 独立复审回退
+
+- 精确提交复审发现 2 个 Medium：dirty Workbench 把所有 `popstate` 都当作 Back，Forward
+  场景会补偿和确认重放错误方向；Workflow action decoder 会接受附加字段并静默归一化。
+- Dashboard 自建 history entry 现在登记单调位置。Back/Forward 的目标 delta、逆向补偿和确认
+  重放保持同一方向；真实三项 history 回归覆盖 Forward 取消与确认。
+- 5 类 action 都只接受 exact `{type}`；`tasks-at-least.n` 同步 kernel 的非负整数口径。
+- focused 2 files / 90 tests、Dashboard 全量 73 files / 1422 tests、typecheck、production
+  build 与 `git diff --check` 通过。新资产为 `index-UJjh5PoS.js`（SHA-256
+  `a927f340…6a9f`）与
+  `index-YeY6VsN7.css`。旧复审作废，下一精确提交必须重新独立复审。

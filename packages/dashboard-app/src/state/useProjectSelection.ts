@@ -8,7 +8,7 @@ export interface ProjectSelectionController {
   readonly currentRoot: string
   readonly selectProject: (root: string, view: View) => void
   readonly applyLocation: (target: DashboardNavigationTarget) => void
-  /** Replays the blocked browser Back only after the compensating Forward has restored the current entry. */
+  /** Replays the blocked Back/Forward traversal after its inverse has restored the current entry. */
   readonly confirmPopNavigation: () => void
 }
 
@@ -16,6 +16,29 @@ export interface DashboardNavigationTarget {
   readonly view: View
   readonly root: string | null
   readonly change: string | null
+}
+
+const HISTORY_POSITION_KEY = '__tenonDashboardPosition'
+
+function historyPosition(state: unknown): number | null {
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) return null
+  const value = (state as Record<string, unknown>)[HISTORY_POSITION_KEY]
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : null
+}
+
+function historyStateAt(position: number): Record<string, unknown> {
+  const current = typeof window.history.state === 'object'
+    && window.history.state !== null
+    && !Array.isArray(window.history.state)
+    ? window.history.state as Record<string, unknown>
+    : {}
+  return { ...current, [HISTORY_POSITION_KEY]: position }
+}
+
+function traverseHistory(delta: number): void {
+  if (delta === -1) window.history.back()
+  else if (delta === 1) window.history.forward()
+  else window.history.go(delta)
 }
 
 export function useProjectSelection(input: {
@@ -30,6 +53,13 @@ export function useProjectSelection(input: {
   const restoringBlockedPopRef = useRef(false)
   const confirmAfterRestoreRef = useRef(false)
   const allowNextPopRef = useRef(false)
+  const historyPositionRef = useRef(historyPosition(window.history.state) ?? 0)
+  const blockedTraversalRef = useRef(-1)
+  useEffect(() => {
+    if (historyPosition(window.history.state) === null) {
+      window.history.replaceState(historyStateAt(historyPositionRef.current), '')
+    }
+  }, [])
   const [preferredRoot, setPreferredRoot] = useState<string | null>(() => {
     try {
       return parseDashboardLocation(window.location.search).root ?? null
@@ -46,7 +76,11 @@ export function useProjectSelection(input: {
       const search = dashboardSearch(window.location.search, { view, root, change: null })
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
-      if (next !== now) window.history.pushState(window.history.state, '', next)
+      if (next !== now) {
+        const nextPosition = historyPositionRef.current + 1
+        window.history.pushState(historyStateAt(nextPosition), '', next)
+        historyPositionRef.current = nextPosition
+      }
     } catch {
       // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
     }
@@ -90,20 +124,28 @@ export function useProjectSelection(input: {
       return
     }
     allowNextPopRef.current = true
-    window.history.back()
+    traverseHistory(blockedTraversalRef.current)
   }, [])
 
   useEffect(() => {
-    const onPopState = (): void => {
+    const onPopState = (event: PopStateEvent): void => {
+      const previousPosition = historyPositionRef.current
+      const eventPosition = historyPosition(event.state)
       if (restoringBlockedPopRef.current) {
+        historyPositionRef.current = eventPosition ?? previousPosition - blockedTraversalRef.current
         restoringBlockedPopRef.current = false
         if (confirmAfterRestoreRef.current) {
           confirmAfterRestoreRef.current = false
           allowNextPopRef.current = true
-          window.history.back()
+          traverseHistory(blockedTraversalRef.current)
         }
         return
       }
+      // Entries created before the Dashboard mounted do not carry our monotonic marker. They can
+      // only be reached by leaving the current marked entry, so preserve the legacy Back fallback.
+      const targetPosition = eventPosition ?? previousPosition - 1
+      const traversal = targetPosition - previousPosition
+      historyPositionRef.current = targetPosition
       const linked = parseDashboardLocation(window.location.search)
       const target: DashboardNavigationTarget = {
         view: linked.view ?? input.view,
@@ -116,11 +158,11 @@ export function useProjectSelection(input: {
         return
       }
       if (input.onPopAttempt?.(target) === false) {
-        // popstate fires after Back has selected the prior entry. Traverse Forward to the
-        // still-existing current entry instead of rewriting the prior entry with replaceState.
-        // The compensating pop is suppressed above, so UI and URL remain on the dirty Workbench.
+        // popstate fires after the browser has selected the target. Undo the exact traversal
+        // direction (Back or Forward), then replay that same delta only if the user confirms.
+        blockedTraversalRef.current = traversal === 0 ? -1 : traversal
         restoringBlockedPopRef.current = true
-        window.history.forward()
+        traverseHistory(-blockedTraversalRef.current)
         return
       }
       applyLocation(target)
