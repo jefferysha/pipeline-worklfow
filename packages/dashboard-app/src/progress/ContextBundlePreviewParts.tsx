@@ -138,7 +138,7 @@ export function ContextBundleLoading(): JSX.Element {
     <div role="status" className="space-y-3">
       <span className="text-xs text-text-3">{t('progress.bundle_loading')}</span>
       <div
-        className="animate-pulse space-y-2 rounded-lg border border-border bg-fill p-3 motion-reduce:animate-none"
+        className="space-y-2 rounded-lg border border-border bg-fill p-3"
         data-testid="context-bundle-loading-skeleton"
         aria-hidden="true"
       >

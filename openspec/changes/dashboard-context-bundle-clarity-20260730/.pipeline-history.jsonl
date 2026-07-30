@@ -41,3 +41,33 @@
 {"ts":"2026-07-30T05:46:49Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-30T05:46:49Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"16a11516-b5c3-4f49-acd4-aea1decc4cab"}
 {"ts":"2026-07-30T05:57:49Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T05:58:17Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T05:58:42Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T05:58:42Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T05:58:42Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T05:58:42Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T05:58:43Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"4fb77fdc-cb87-488c-add0-5d5e33a636fc"}
+{"ts":"2026-07-30T06:08:06Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-dashboard-context-bundle-clarity-20260730-verify-fail-2.md"}
+{"ts":"2026-07-30T06:08:15Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T06:08:24Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-30T06:08:32Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-30T06:08:40Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-30T05:26:23Z authority_host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T06:08:40Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T06:08:40Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T06:08:40Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T06:08:40Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T06:08:40Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b55b3ba7-1ca6-42f8-88a1-d4e7ef6e917e"}
+{"ts":"2026-07-30T06:09:07Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T06:09:07Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T06:09:07Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T06:09:07Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T06:09:07Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"9cb563ac-f7b4-48a8-9853-e8c28e1ae302"}
+{"ts":"2026-07-30T06:11:46Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T06:11:47Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T06:11:47Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-30-dashboard-context-bundle-clarity.md"}
+{"ts":"2026-07-30T06:11:47Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T06:11:59Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T06:11:59Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-30T05:26:23Z authority_host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T06:12:00Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"e8a6e9dd-d595-41cf-8d8b-2b97010e9ccf"}
+{"ts":"2026-07-30T06:20:12Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T06:20:48Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

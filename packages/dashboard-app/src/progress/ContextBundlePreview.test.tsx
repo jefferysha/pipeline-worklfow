@@ -78,6 +78,8 @@ describe('ContextBundlePreview', () => {
     expect(screen.getByText('正在预检 Context Bundle…')).toBeInTheDocument()
     expect(screen.getByLabelText('目标阶段')).toHaveValue('verify')
     expect(screen.getByLabelText('预算（bytes）')).toHaveValue(120000)
+    expect(screen.getByLabelText('预算（bytes）')).toHaveAttribute('name', 'budgetBytes')
+    expect(screen.getByLabelText('预算（bytes）')).toHaveAttribute('autocomplete', 'off')
     pending.resolve(new Response(JSON.stringify(responseBody()), { status: 200 }))
 
     expect(await screen.findByText('640 / 120,000 bytes')).toBeInTheDocument()
@@ -135,7 +137,7 @@ describe('ContextBundlePreview', () => {
     await screen.findByText('640 / 120,000 bytes')
     await user.selectOptions(screen.getByLabelText('目标阶段'), 'open')
 
-    expect(await screen.findByText('该目标阶段不要求读取文档。')).toBeInTheDocument()
+    expect(await screen.findByText('该目标阶段不要求读取文档。')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -188,7 +190,7 @@ describe('ContextBundlePreview', () => {
     const result = screen.getByTestId('context-bundle-result')
     expect(result).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('status')).toHaveTextContent('正在预检 Context Bundle…')
-    expect(screen.getByTestId('context-bundle-loading-skeleton')).toHaveClass(
+    expect(screen.getByTestId('context-bundle-loading-skeleton')).not.toHaveClass(
       'animate-pulse',
       'motion-reduce:animate-none',
     )

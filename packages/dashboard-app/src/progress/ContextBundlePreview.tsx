@@ -97,6 +97,8 @@ export function ContextBundlePreview({
           <input
             className="h-9 rounded-lg border border-border bg-fill px-2 font-mono text-sm text-text outline-none transition-colors hover:border-border-2 focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             type="number"
+            name="budgetBytes"
+            autoComplete="off"
             min="1"
             step="1"
             inputMode="numeric"
@@ -127,7 +129,10 @@ export function ContextBundlePreview({
         )}
 
         {state.kind === 'success' && state.preview.inputs.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border-2 px-3 py-4 text-xs text-text-3">
+          <div
+            className="rounded-lg border border-dashed border-border-2 px-3 py-4 text-xs text-text-3"
+            role="status"
+          >
             {t('progress.bundle_empty')}
           </div>
         )}

@@ -12,7 +12,7 @@
 复查采用 `frontend-design`、`web-design-guidelines` 与 `design-taste-frontend` 的设计 token、
 层级、排版、状态、可访问性和反模板维度；React 与 Tailwind 边界另按当前打包 pattern Skill
 复核。此次没有引入 GSAP；唯一新增运动是进度条 `scaleX()` 的 200ms CSS 过渡，并在
-`prefers-reduced-motion` 下归零。
+`prefers-reduced-motion` 下归零；loading skeleton 为静态占位。
 
 ## 第一轮：评估与修复
 
@@ -50,3 +50,22 @@ C0/H0/M3/L1 回到 Build：修复 300ms/width 动画，并补齐 Dark、System�
   `prefers-color-scheme: dark` 环境正确解析为 dark token，结束前已恢复 System 偏好。
 
 最终结论：CRITICAL 0、HIGH 0、MEDIUM 0；一个 LOW 为已知且有边界的协议上限滚动成本。
+
+## 第四轮：第二次 Verify 回退与修复
+
+冻结 SHA `9ade47602aa0e0d3ca99ccdf9622fb71bcbfb2cc` 的四轨审查发现设计证据仍描述
+width/color transition，并发现 loading skeleton 的无限 pulse、policy-empty 缺少 status 语义及
+budget 输入缺少稳定表单属性。失败证据登记在
+`docs/superpowers/reports/2026-07-30-dashboard-context-bundle-clarity-20260730-verify-fail-2.md`。
+
+本轮先以 `requirements-changed` 回到 Spec，将正式设计和 delta 修订为仅 200ms `scaleX()`、
+静态 loading；再以三个精确红灯证明实现缺口，最小修复如下：
+
+- 移除 loading 的 `animate-pulse` 与循环动画类，保留有界 skeleton、`role=status` 和
+  `aria-busy`。
+- 为 policy-empty 增加 `role=status`，不改变文案或成功空态分支。
+- 为 budget 输入增加 `name="budgetBytes"` 与 `autocomplete="off"`，不改变 label、Tab 顺序或
+  请求语义。
+
+修复后定向测试 18/18、类型检查通过。视觉层级、布局、颜色、文案和数据边界均未改变；当前复评
+CRITICAL 0、HIGH 0、MEDIUM 0。64 项长列表仍是已记录 LOW，本批次不改变服务端上限或引入虚拟化。

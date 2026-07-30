@@ -21,9 +21,9 @@ overage。线性容量条 SHALL 使用 progressbar 语义，视觉宽度 SHALL �
 本地化 reason、source bytes 和 materialized bytes。客户端 SHALL NOT 按体积重排、推导新的
 物化规则或以颜色作为唯一状态线索。
 
-loading SHALL 使用有界的状态占位并保留 `role="status"`/`aria-busy`；policy-empty、budget-error
-和其他 error SHALL 保持可读文字、对应语义 role 与原地恢复路径。容量与 loading 动效 SHALL 在
-`prefers-reduced-motion: reduce` 下直接呈现终态。
+loading SHALL 使用静态、有界的状态占位并保留 `role="status"`/`aria-busy`，不得使用 pulse、
+循环或其他持续动画；policy-empty、budget-error 和其他 error SHALL 保持可读文字、对应语义 role
+与原地恢复路径。容量过渡 SHALL 在 `prefers-reduced-motion: reduce` 下直接呈现终态。
 
 当前 workflow step 可以是 custom step；这不影响用户选择 canonical target。custom step 下组件
 SHALL 可见，默认 target 为 `open`，请求的 `from` 保留当前安全 step id。只有 target 必须是
@@ -62,7 +62,8 @@ canonical phase。
 #### Scenario: 加载与 reduced motion
 
 - **WHEN** 预览请求仍在进行
-- **THEN** 页面显示有界 loading 状态且提交按钮禁用
+- **THEN** 页面显示静态、有界且具备 status/busy 语义的 loading 状态，提交按钮禁用
+- **AND** loading 状态不执行 pulse、循环或其他持续动画
 - **WHEN** `prefers-reduced-motion: reduce` 生效
 - **THEN** loading 与容量反馈直接呈现可操作终态而不执行过渡动画。
 
