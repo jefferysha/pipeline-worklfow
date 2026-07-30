@@ -79,6 +79,13 @@ describe('fetchSnapshot', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }))
     await expect(fetchSnapshot()).rejects.toThrow('500')
   })
+
+  it('2xx 响应解码失败不伪装成 HTTP 200 错误', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) }))
+    const error = await fetchSnapshot().catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBeUndefined()
+  })
 })
 
 describe('fetchTraceTimeline', () => {

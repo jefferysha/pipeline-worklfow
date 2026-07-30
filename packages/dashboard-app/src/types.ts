@@ -128,6 +128,7 @@ export interface ProjectSnapshot {
   ok: boolean
   changes: ChangeSnapshot[]
   compatibilityIssues?: CanonicalStateCompatibilityIssue[]
+  compatibilityIssuesTruncated?: true
   error?: string
 }
 

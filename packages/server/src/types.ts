@@ -122,6 +122,8 @@ export interface ProjectSnapshot {
   changes: ChangeSnapshot[]
   /** Canonical Changes that this runtime intentionally refuses to decode. */
   compatibilityIssues?: CanonicalStateCompatibilityIssueSnapshot[]
+  /** Literal marker: more compatibility issues exist beyond the bounded 100-item response. */
+  compatibilityIssuesTruncated?: true
   /** Remove only after the declared rolling compatibility window ends. */
   workflowRules: Record<string, LegacyWorkflowRulesSnapshot>
   error?: string

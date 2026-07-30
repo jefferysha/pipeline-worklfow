@@ -20797,14 +20797,12 @@ async function scanProject(deps, root, nowMs) {
   }
   changes.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   compatibilityIssues.sort((a, b) => a.change < b.change ? -1 : a.change > b.change ? 1 : 0);
-  if (compatibilityIssueOverflow > 0) {
-    errors.push(`compatibility issue limit exceeded (${MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES}); ${compatibilityIssueOverflow} additional future-version Changes omitted`);
-  }
   return {
     root,
     ok: errors.length === 0 && compatibilityIssues.length === 0,
     changes,
     ...compatibilityIssues.length === 0 ? {} : { compatibilityIssues },
+    ...compatibilityIssueOverflow === 0 ? {} : { compatibilityIssuesTruncated: true },
     workflowRules: legacyWorkflowRules,
     ...errors.length === 0 ? {} : { error: errors.join("; ") }
   };

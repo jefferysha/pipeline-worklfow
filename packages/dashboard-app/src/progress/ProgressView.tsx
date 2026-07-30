@@ -21,6 +21,7 @@ import { ProgressToolbar } from './ProgressToolbar'
 import { ProgressDrawer } from './ProgressDrawer'
 import { ProgressActions } from './ProgressActions'
 import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
+import { SnapshotInlineError } from './SnapshotInlineError'
 import {
   BADGE_TONE_CLS,
   deckMatch,
@@ -519,8 +520,8 @@ export function ProgressView({
       phaseLabelOf(row),
     ).text,
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
-  const compatibilityIssues = snapshot?.projects.find((project) => project.root === currentRoot)
-    ?.compatibilityIssues ?? []
+  const compatibilityProject = snapshot?.projects.find((project) => project.root === currentRoot)
+  const compatibilityIssues = compatibilityProject?.compatibilityIssues ?? []
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
@@ -539,11 +540,12 @@ export function ProgressView({
 
       <CanonicalStateVersionNotice
         issues={compatibilityIssues}
+        truncated={compatibilityProject?.compatibilityIssuesTruncated}
         loading={loading}
         onRefresh={onRefresh}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      {error && <SnapshotInlineError error={error} loading={loading} onRefresh={onRefresh} />}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (

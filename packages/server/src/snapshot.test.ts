@@ -109,9 +109,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(project.error).toMatch(/broken-current/)
   })
 
-  it('兼容问题数组最多返回 100 项，超限时 fail-loud 且不泄露额外路径', async () => {
+  it('兼容问题数组最多返回 100 项，超限时用 typed 截断信号且保留可读 sibling', async () => {
     const store = newStore()
     const root = await makeProject()
+    await initChange(store, root, 'readable-state')
     for (let index = 0; index < 101; index += 1) {
       const dir = await initChange(store, root, `future-${String(index).padStart(3, '0')}`)
       const currentPath = join(dir, '.pipeline-run', 'current.json')
@@ -124,8 +125,12 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     })
     const project = snapshot.projects[0]
     expect(project.compatibilityIssues).toHaveLength(100)
-    expect(project.error).toMatch(/compatibility issue limit.*100/i)
-    expect(project.error).not.toContain(root)
+    expect(project.compatibilityIssues?.at(0)?.change).toBe('future-000')
+    expect(project.compatibilityIssues?.at(-1)?.change).toBe('future-099')
+    expect(project.compatibilityIssuesTruncated).toBe(true)
+    expect(project.error).toBeUndefined()
+    expect(project.changes.map((change) => change.name)).toEqual(['readable-state'])
+    expect(snapshot.change_count).toBe(1)
   }, 15_000)
 
   it('server 扫描自动重建缺失的 YAML projection，但 canonical 仍是读取真相', async () => {

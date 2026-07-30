@@ -67,4 +67,21 @@ describe('CanonicalStateVersionNotice', () => {
     )
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('以当前语言说明还有受影响 Change 未列出，不猜测总数', () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    render(
+      <I18nProvider>
+        <CanonicalStateVersionNotice
+          issues={issues}
+          truncated
+          loading={false}
+          onRefresh={() => undefined}
+        />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('More affected Changes were omitted')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('101')
+  })
 })

@@ -184,3 +184,134 @@ The second full-diff re-review found two remaining High issues at the same trust
 - `isProjectWritable` centralizes the positive `project.ok === true` check for Workbench, Progress
   capabilities, the redirect effect, and the synchronous AFK mount gate.
 - Focused recheck: project selection, boundary decoders, and App shell pass 79/79.
+
+## Third Build return loop: bounded compatibility truth
+
+The second frozen Verify at `185f0a0d602b5a5f5a16cdcb41876e592e2ccdd7` failed with three Medium
+findings:
+
+- Machine described a compatibility-only project as unreadable and skipped the automation risk on
+  its readable sibling;
+- the 101st future-version issue became a free-text project error, making every readable sibling
+  unreachable instead of preserving a bounded typed result;
+- the English HTTP 503 path displayed server-originated Chinese text and offered no generic retry.
+
+### Red
+
+- Added a real server fixture with 101 future-version Changes and required 100 stable structured
+  issues plus an explicit truncation signal, without an ordinary project error.
+- Added strict decoder cases for the literal truncation marker and its exact 100-item invariant.
+- Added bilingual notice regressions, a readable-sibling Machine regression, and an App regression
+  proving an English 503 never leaks Chinese text and can recover through the existing refresh
+  channel.
+- The focused tests failed for each missing contract before implementation: no server truncation
+  signal, dropped decoder signal, missing omitted-copy, skipped sibling automation risk, and leaked
+  server text.
+
+### Green and refactor
+
+- The snapshot DTO now exposes optional literal `compatibilityIssuesTruncated: true`. The server
+  sorts entries, returns at most 100 structured issues, and sets that marker only when more issues
+  were omitted; it no longer converts valid overflow into an ordinary project error.
+- The Dashboard decoder accepts the marker only when it is exactly `true` and accompanies exactly
+  100 issues. Progress renders bilingual omitted-copy while keeping refresh and readable siblings.
+- Machine reserves project-unreadable for an actual `project.error` and still evaluates readable
+  sibling automation risks for compatibility-only projects.
+- `useSnapshot` retains the HTTP status while App owns presentation-localized generic error copy.
+  `SnapshotInlineError` exposes a semantic Retry button wired to the same refresh channel and
+  disabled during loading.
+- The architecture gate exposed `ProgressView.tsx` above the 600-line limit, so the inline error
+  was extracted into `SnapshotInlineError.tsx`; the recheck passed across 672 source files.
+
+### Final Build evidence
+
+- Server snapshot: 31/31; focused Dashboard: 86/86; App plus Progress refactor: 116/116.
+- Dashboard full: 71 files, 1238/1238.
+- Root full: 326 files, 5790 passed, 14 honest environment skips.
+- Hooks: 512/512; adapters: 272/272; migration CAS: 13/13; bundle: 31/31;
+  npx package: 39/39; legacy bridge: 1/1; oracle: 0 mismatches.
+- `npm run build`, `typecheck:web`, architecture, comments, identity, docs, document templates,
+  repository hygiene, default workflow freshness, generated bundle syntax, Skill verification, and
+  `git diff --check` pass.
+- Exact production assets: Dashboard `index-Cm7t-_BA.js`,
+  `dist/index.html` SHA-256 `cbc1dbe4edcdae8a24728f9a9a4918c8d4caf9597971c5ec2017599729c59b2c`,
+  server bundle SHA-256 `ceeff0820dc89e06562716e9d1f185990e250eb31e250cd545cd03f4c5e782ec`,
+  and CLI bundle SHA-256 `63b273ae7a1fe33308df7ba871332e8505cc265a3a7bb2b735b48dad805fc2c8`.
+
+### Browser and UI quality re-review
+
+The v3 production-browser matrix passed at 1440×900 and 1024×768 in Chinese and English.
+It covered baseline identity, zero global horizontal overflow, compatibility-only read-only
+permissions, loading and disabled retry, strict empty state, keyboard Tab/Shift+Tab/Enter with
+visible focus, localized English HTTP 503 plus successful generic Retry recovery, exactly 100
+issues with bilingual omitted-copy and a readable sibling, and Machine automation-failed risk.
+Network writes, AFK writes, console errors, and page errors were empty. The repository fingerprint
+matched before and after, and evidence is retained outside the worktree at
+`/tmp/tenon-version-status-visual-v3/`.
+
+The new presentation remains within the existing notice, Machine risk row, and inline-error
+patterns. Bilingual hierarchy, semantic controls, focus visibility, state distinctions, desktop
+layout, and token usage all pass the frontend-design, web-design-guidelines, and
+design-taste-frontend re-review. Critical: 0. High: 0. Medium: 0. Low: 0.
+
+## Fourth Build convergence: retained snapshot recovery
+
+The next full Standards + Spec review passed the canonical version boundary but found one Medium
+and one Low in the global snapshot recovery contract:
+
+- after a snapshot had loaded, a refresh failure was visible only inside Progress; Projects,
+  Machine, AFK, and Workbench silently retained stale content without a localized failure state or
+  generic retry;
+- a successful HTTP 200 response with an invalid decoded body was labeled as an HTTP 200 failure.
+
+### Red and green
+
+- Added an App regression that loads a real snapshot, navigates to Projects, drives the product's
+  EventSource reconnect and refresh path into a 503, and requires the retained Projects content,
+  localized alert, generic Retry, and recovery to coexist. It failed because no alert rendered.
+- Added a client regression requiring a 2xx decode failure to omit HTTP status. It failed because
+  `ApiError.status` was 200.
+- App now renders `SnapshotInlineError` for retained-snapshot failures in every snapshot-dependent
+  non-Progress view; Progress retains its existing local placement and Host Plan remains
+  independent.
+- `fetchSnapshot` assigns status only to non-2xx transport failures. Decoder-invalid 2xx responses
+  now select the localized unknown/generic presentation instead of claiming HTTP 200 failed.
+- Focused App plus client recheck passed 85/85; `typecheck:web`, architecture, and
+  `git diff --check` passed.
+
+### Browser return and pending-state fix
+
+The v4 production-browser return verified the 503, retained Projects, generic Retry recovery,
+invalid-200 copy, keyboard Enter, empty console, and zero write requests, then found one Medium:
+starting Retry cleared the error immediately, so a paused request had neither a visible alert nor
+a disabled/loading control.
+
+A failing App regression then held the retry promise open and required the existing alert and
+button to remain mounted with the button disabled. `useSnapshot` now preserves the previous error
+through the pending request and clears it only on a successful snapshot or replaces it with the
+new failure. Focused App, `useSnapshot`, and client tests passed 89/89.
+
+The final build passed:
+
+- Dashboard full: 71 files, 1240/1240. One unchanged Progress drawer timing test failed once under
+  full-suite load, then passed 64/64 in isolation and the immediate full rerun passed 1240/1240.
+- Root full: 326 files, 5790 passed, 14 honest environment skips.
+- `npm run build`, `typecheck:web`, architecture, and `git diff --check` pass.
+- Exact final assets: Dashboard `index-DFk9L5Z3.js`,
+  `dist/index.html` SHA-256 `69087e2563e8957fd1ba48b855560a7d6d06448483dc49547d5331844e8fc117`,
+  server bundle SHA-256 `ceeff0820dc89e06562716e9d1f185990e250eb31e250cd545cd03f4c5e782ec`,
+  and CLI bundle SHA-256 `63b273ae7a1fe33308df7ba871332e8505cc265a3a7bb2b735b48dad805fc2c8`.
+
+The v5 production-browser matrix passed the final stable asset: English Projects retained its
+real project content beside a localized 503; Enter-triggered Retry kept the alert and button
+visible with the button disabled while the request was paused; success removed the alert; invalid
+HTTP 200 content used generic unknown copy without `HTTP 200`. Console and page errors and write
+requests were empty. Browser interception was cleared, and the repository fingerprint matched
+before and after at
+`workspace:sha256:eab016f14c3b1def8f7f3ecfb4089c235f45efdd366b6aa0e6f5f59b66b8ffe1`.
+Evidence is retained outside the worktree at `/tmp/tenon-version-status-visual-v5/`.
+
+The retained-data alert reuses the same semantic error/retry component in the existing page frame;
+it adds no new visual language or motion. Localization, stale-data visibility, pending feedback,
+keyboard behavior, focus styling, desktop layout, and token use pass the frontend-design,
+web-design-guidelines, and design-taste-frontend re-review. Critical: 0. High: 0. Medium: 0. Low: 0.

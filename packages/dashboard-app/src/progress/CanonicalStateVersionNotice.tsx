@@ -4,12 +4,14 @@ import type { CanonicalStateCompatibilityIssue } from '../types'
 
 export interface CanonicalStateVersionNoticeProps {
   issues: readonly CanonicalStateCompatibilityIssue[]
+  truncated?: boolean
   loading: boolean
   onRefresh?: () => void | Promise<void>
 }
 
 export function CanonicalStateVersionNotice({
   issues,
+  truncated = false,
   loading,
   onRefresh,
 }: CanonicalStateVersionNoticeProps): JSX.Element | null {
@@ -46,6 +48,11 @@ export function CanonicalStateVersionNotice({
               </li>
             ))}
           </ol>
+          {truncated && (
+            <p className="mt-3 text-[12.5px] leading-5" data-testid="canonical-state-version-truncated">
+              {t('progress.canonical_version_truncated')}
+            </p>
+          )}
           <p className="mt-3 text-[12.5px] leading-5">
             {t('progress.canonical_version_command')}{' '}
             <code className="rounded bg-fill px-1.5 py-1 font-mono text-[12px] text-text">

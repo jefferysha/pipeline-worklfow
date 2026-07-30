@@ -11,7 +11,7 @@ export async function fetchSnapshot(): Promise<Snapshot> {
   }
   if (!response.ok) throw new ApiError(`快照获取失败（${response.status}）`, response.status)
   const snapshot = decodeSnapshot(await readJson(response))
-  if (!snapshot) throw new ApiError('快照响应形状无效', response.status)
+  if (!snapshot) throw new ApiError('快照响应形状无效')
   return snapshot
 }
 

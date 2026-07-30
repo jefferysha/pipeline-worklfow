@@ -19,6 +19,7 @@ import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { isProjectWritable } from './state/projectSelectionModel'
 import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
+import { SnapshotInlineError } from './progress/SnapshotInlineError'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -94,7 +95,12 @@ function AppShell(): JSX.Element {
   useEffect(() => () => {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
   }, [])
-  const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
+  const { snapshot, loading, error, errorStatus, connected, refresh, reconnect } = useSnapshot()
+  const snapshotError = error === null
+    ? null
+    : errorStatus === null
+      ? t('common.snapshot_request_failed_unknown')
+      : t('common.snapshot_request_failed', { status: errorStatus })
   const { currentRoot, selectProject } = useProjectSelection({
     snapshot,
     view,
@@ -243,10 +249,13 @@ function AppShell(): JSX.Element {
         className="w-full flex-1 px-6 pb-6 pt-3 mobile:px-4 mobile:pb-[calc(88px+env(safe-area-inset-bottom))] mobile:pt-2"
         data-testid="app-main"
       >
+        {snapshot !== null && snapshotError && view !== 'progress' && view !== 'hostPlan' && (
+          <SnapshotInlineError error={snapshotError} loading={loading} onRefresh={refresh} />
+        )}
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {snapshot === null && !loading && error && view !== 'hostPlan' ? (
+        {snapshot === null && !loading && snapshotError && view !== 'hostPlan' ? (
           <section
             className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d mobile:mt-4 mobile:p-5"
             role="alert"
@@ -254,7 +263,7 @@ function AppShell(): JSX.Element {
             data-testid="snapshot-error"
           >
             <h1 className="text-lg font-bold text-text">{t('common.snapshot_error_title')}</h1>
-            <p className="mt-2 break-words text-[13px] leading-6">{error}</p>
+            <p className="mt-2 break-words text-[13px] leading-6">{snapshotError}</p>
             <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
             <button
               type="button"
@@ -300,7 +309,7 @@ function AppShell(): JSX.Element {
             <ProgressView
               snapshot={snapshot}
               loading={loading}
-              error={error}
+              error={snapshotError}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
               onToast={(m) => showFlash('toast', m)}

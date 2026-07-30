@@ -58,11 +58,43 @@ design-doc: docs/superpowers/specs/2026-07-30-canonical-state-version-status-des
 回滚边界：删除 optional DTO、typed error 分支与 notice 即可恢复原行为；无数据迁移、无状态写入、
 无依赖变更。
 
+此处建议 /clear
+
+## Build 子阶段 4：第二次 Verify 返工——有界截断与本地化恢复
+
+1. 先在 `packages/server/src/snapshot.test.ts` 写 101 项失败回归：期望前 100 项、
+   `compatibilityIssuesTruncated: true`、无普通 `error` 且可读 sibling 保留；在 Dashboard boundary
+   测试中先证明合法截断被接受，`false`、错误类型和少于 100 项的截断声明被拒绝。
+2. 在 selection/Progress/App/Machine 测试中先写失败回归：截断项目保持只读可导航并显示双语省略提示；
+   Machine 不把 compatibility-only 项目误报为损坏，仍扫描 readable sibling。
+3. 在 `useSnapshot`、`App` 与 Progress 错误态测试中先写英文 503 失败回归：不展示中文服务端 message，
+   展示本地化 status 与 `Retry loading`，键盘点击后复用既有 refresh 恢复。
+4. 加入最小 shared DTO、server aggregation、strict decoder、i18n 与 presentation 实现；运行定向
+   server/Dashboard 测试和 `npm run typecheck:web`，保持红→绿→重构证据。
+
+验证：
+`npx vitest run packages/server/src/snapshot.test.ts`，
+`npm run test:web -- --run packages/dashboard-app/src/api/boundaryDecoders.test.tsx packages/dashboard-app/src/machine/MachineView.test.tsx packages/dashboard-app/src/App.test.tsx`，
+`npm run typecheck:web`。
+
+此处建议 /clear
+
+## Build 子阶段 5：第三次冻结前全量收敛
+
+1. 更新 `docs/CONTRACT.md` 与生成资产，完整审查相对 `origin/main` 的全部实现、配置、文档与 capability。
+2. 运行 web 及 repo 全量测试、build、typecheck、hooks/adapters/bundle/oracle、OpenSpec strict 和
+   `git diff --check`；修复全部 Critical/High/Medium。
+3. 将本次返工 tasks 勾选，重新登记 Build 文档，完成独立 convergence review 后冻结新的唯一 SHA。
+
+回滚边界：移除 optional truncation metadata 与 presentation-localized retry 即恢复上一冻结行为；
+不涉及迁移、状态写入、新 endpoint 或依赖。
+
 ## Verify
 
 1. Reviewer/Codex/E2E/视觉轨基于同一冻结 SHA 独立审查；所有轨前后 workspace fingerprint 一致。
 2. 在真实生产 Dashboard 核对 title、目标 worktree root、目标 Change；以 1440×900 和 1024×768
-   覆盖中英文升级状态、加载/刷新、空/错误、Tab/Shift+Tab/Enter，并记录无横向溢出。
+   覆盖中英文升级状态、101 项截断、英文 503 通用重试、Machine readable sibling、加载/刷新、
+   空/错误、Tab/Shift+Tab/Enter，并记录无横向溢出。
 3. 在全部轨结束后一次性写入并登记 `verification_report`；有 finding 则走 `verify-fail` 回 Build 修复。
 
 ## Ship 与 Archive

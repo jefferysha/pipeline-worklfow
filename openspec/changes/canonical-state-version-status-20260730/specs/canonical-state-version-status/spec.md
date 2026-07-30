@@ -28,7 +28,8 @@ server SHALL 只捕获 kernel 的版本不兼容 typed error，并在 `ProjectSn
 `compatibilityIssues` 中投影稳定 `unsupported-canonical-version` issue。每项 SHALL 只包含非空
 Change 名、安全整数的发现/支持版本和 `upgrade-runtime` action；MUST NOT 包含 canonical source
 path、异常 message、原始 JSON 或未来 state 字段。issues SHALL 按 Change 名稳定排序，且每个 Change
-至多一项。
+至多一项。server SHALL 最多返回 100 项；存在更多项时 SHALL 设置 optional 字面量
+`compatibilityIssuesTruncated: true`，MUST NOT 把 overflow 写入普通 `error`。
 
 #### Scenario: 项目同时包含可读与未来版本 Change
 
@@ -51,12 +52,22 @@ path、异常 message、原始 JSON 或未来 state 字段。issues SHALL 按 Ch
 - **THEN** 新 Dashboard 将其视为空数组
 - **AND** `tenon-snapshot/v2` 协议保持不变
 
+#### Scenario: 兼容问题超过响应上限
+
+- **WHEN** 项目扫描出 101 个明确未来版本 Change 和至少一个可读 Change
+- **THEN** `compatibilityIssues` 只包含按 Change 名排序的前 100 项
+- **AND** `compatibilityIssuesTruncated` 为 `true`
+- **AND** 项目不因 overflow 产生普通 `error`
+- **AND** 可读 Change 与前 100 条恢复信息保持可导航
+
 ### Requirement: Dashboard SHALL 在 Progress 提供双语升级后恢复路径
 
 Dashboard 边界 decoder SHALL 严格验证 optional `compatibilityIssues` 的字段闭集、枚举、非空 Change
-名和安全整数。当前项目存在 issue 时，Progress SHALL 以可访问 alert 展示受影响 Change、发现版本、
+名和安全整数，并 SHALL 仅接受字面量 `compatibilityIssuesTruncated: true` 且只在恰有 100 条 issue
+时接受该字段。当前项目存在 issue 时，Progress SHALL 以可访问 alert 展示受影响 Change、发现版本、
 支持版本和中英文升级说明，并 SHALL 提供调用现有 snapshot refresh 的“升级后刷新”动作。Dashboard
-MUST NOT 自动执行更新或创建第二套请求通道。
+MUST NOT 自动执行更新或创建第二套请求通道。snapshot/decoder/network 请求失败时，Dashboard SHALL
+按当前 locale 和可用 HTTP status 生成用户文案，并 SHALL 通过同一 refresh 通道提供通用重试。
 
 #### Scenario: 兼容问题优先于 no-change 教学空态
 
@@ -76,9 +87,23 @@ MUST NOT 自动执行更新或创建第二套请求通道。
 - **WHEN** issue 字段缺失或为空
 - **THEN** 兼容 notice 不渲染且现有空态保持不变
 - **WHEN** snapshot/网络失败
-- **THEN** 现有错误和重试路径保持可用
-- **WHEN** issue 含未知 kind/action、额外字段、空 Change 名或非法版本
+- **THEN** 当前语言显示失败状态与通用重试，不直接展示另一语言的服务端 message
+- **WHEN** issue 含未知 kind/action、额外字段、空 Change 名或非法版本，或截断字段不是 `true`、issue 少于 100 条却声明截断
 - **THEN** Dashboard 拒绝整个不可信 snapshot，且不展示半可信升级建议
+
+#### Scenario: 截断的升级要求保持可恢复
+
+- **WHEN** 当前项目包含 100 条 compatibility issue、`compatibilityIssuesTruncated: true` 和可读 sibling
+- **THEN** Progress 展示当前语言的“还有受影响 Change 未列出”说明
+- **AND** Machine 继续扫描并展示可读 sibling 的真实风险
+- **AND** 项目保持只读可导航且升级后刷新仍可触发
+
+#### Scenario: 英文 snapshot 503 可直接恢复
+
+- **WHEN** 英文 locale 下 snapshot 请求返回 HTTP 503 和中文服务端 message
+- **THEN** Dashboard 不展示该中文 message
+- **AND** 展示带 503 的英文失败文案与 `Retry loading` 动作
+- **AND** 键盘触发后通过既有 refresh 请求恢复
 
 ### Requirement: Compatibility status SHALL 通过真实边界与浏览器验证
 

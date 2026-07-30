@@ -365,7 +365,18 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     ? undefined
     : decodeCompatibilityIssues(value.compatibilityIssues)
   if (compatibilityIssues === null) return null
-  if (value.ok && (value.error !== undefined || (compatibilityIssues?.length ?? 0) > 0)) return null
+  const compatibilityIssuesTruncated = value.compatibilityIssuesTruncated === undefined
+    ? undefined
+    : value.compatibilityIssuesTruncated === true
+      ? true
+      : null
+  if (compatibilityIssuesTruncated === null
+    || (compatibilityIssuesTruncated && compatibilityIssues?.length !== 100)) return null
+  if (value.ok && (
+    value.error !== undefined
+    || (compatibilityIssues?.length ?? 0) > 0
+    || compatibilityIssuesTruncated
+  )) return null
   const changes: ChangeSnapshot[] = []
   const rulesByFingerprint = new Map<string, string>()
   for (const change of value.changes) {
@@ -382,6 +393,7 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     ok: value.ok,
     changes,
     ...(compatibilityIssues === undefined ? {} : { compatibilityIssues }),
+    ...(compatibilityIssuesTruncated === undefined ? {} : { compatibilityIssuesTruncated }),
     ...(value.error === undefined ? {} : { error: value.error }),
   }
 }

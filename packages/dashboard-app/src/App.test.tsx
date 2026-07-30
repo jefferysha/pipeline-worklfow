@@ -192,7 +192,7 @@ describe('App 初始 snapshot 错误恢复', () => {
 
     const errorState = await screen.findByTestId('snapshot-error')
     expect(errorState).toHaveAttribute('role', 'alert')
-    expect(errorState).toHaveTextContent('快照获取失败（500）')
+    expect(errorState).toHaveTextContent('快照获取失败（HTTP 500）')
     const retry = screen.getByRole('button', { name: '重试加载' })
 
     fireEvent.click(retry)
@@ -669,6 +669,105 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
     expect(screen.queryByTestId('afk-view')).toBeNull()
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/automation?root='))).toBe(false)
+  })
+
+  it('英文刷新遇到 503 时不泄漏中文 client 文案，并用通用 Retry 恢复既有 snapshot', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const project = makeProject('/repo', [makeChange('readable-change', 'build')], {
+      ok: false,
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-change',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+    let attempts = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url !== '/api/snapshot') throw new Error(`unexpected fetch ${url}`)
+      attempts += 1
+      if (attempts === 2) {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: '服务端中文错误' }),
+        }
+      }
+      return { ok: true, json: async () => makeSnapshot([project]) }
+    }))
+
+    render(<App />)
+    const upgradeRefresh = await screen.findByRole('button', { name: 'Refresh after updating' })
+    fireEvent.click(upgradeRefresh)
+
+    const errorState = await screen.findByTestId('prg-error')
+    expect(errorState).toHaveTextContent('Snapshot request failed (HTTP 503)')
+    expect(errorState).not.toHaveTextContent('快照获取失败')
+    expect(errorState).not.toHaveTextContent('服务端中文错误')
+
+    fireEvent.click(within(errorState).getByRole('button', { name: 'Retry loading' }))
+    await waitFor(() => expect(screen.queryByTestId('prg-error')).toBeNull())
+    expect(attempts).toBe(3)
+  })
+
+  it('非 Progress 视图保留旧 snapshot 时也显示本地化失败状态并可通用 Retry', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    let attempts = 0
+    let resolveRetry: ((response: {
+      ok: true
+      status: 200
+      json: () => Promise<ReturnType<typeof makeSnapshot>>
+    }) => void) | undefined
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url !== '/api/snapshot') throw new Error(`unexpected fetch ${url}`)
+      attempts += 1
+      if (attempts === 2) {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: '服务端中文错误' }),
+        }
+      }
+      if (attempts === 3) {
+        return await new Promise<{
+          ok: true
+          status: 200
+          json: () => Promise<ReturnType<typeof makeSnapshot>>
+        }>((resolve) => { resolveRetry = resolve })
+      }
+      return {
+        ok: true as const,
+        status: 200 as const,
+        json: async () => makeSnapshot([makeProject('/repo', [makeChange('retained', 'build')])]),
+      }
+    }))
+
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    fireEvent.click(screen.getByTestId('nav-projects'))
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+
+    const eventSource = lastEventSource()
+    expect(eventSource).toBeDefined()
+    act(() => eventSource?.emit('error', ''))
+    fireEvent.click(await screen.findByTestId('offline-reconnect'))
+
+    const errorState = await screen.findByTestId('prg-error')
+    expect(screen.getByTestId('projects-view')).toBeInTheDocument()
+    expect(errorState).toHaveTextContent('Snapshot request failed (HTTP 503)')
+    expect(errorState).not.toHaveTextContent('服务端中文错误')
+
+    fireEvent.click(within(errorState).getByRole('button', { name: 'Retry loading' }))
+    expect(await within(screen.getByTestId('prg-error')).findByRole('button', { name: 'Retry loading' })).toBeDisabled()
+    act(() => resolveRetry?.({
+      ok: true,
+      status: 200,
+      json: async () => makeSnapshot([makeProject('/repo', [makeChange('retained', 'build')])]),
+    }))
+    await waitFor(() => expect(screen.queryByTestId('prg-error')).toBeNull())
+    expect(screen.getByTestId('projects-view')).toBeInTheDocument()
+    expect(attempts).toBe(3)
   })
 
   it('普通损坏与未来版本并存时回到不可达项目面，不用升级提示掩盖错误', async () => {

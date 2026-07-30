@@ -268,6 +268,8 @@ export const zh: Dict = {
     loading: '加载中…',
     snapshot_error_title: '无法加载 Tenon 数据',
     snapshot_error_hint: '服务暂时没有返回可用快照。可检查连接后重试，不需要刷新整个页面。',
+    snapshot_request_failed: '快照获取失败（HTTP {status}）',
+    snapshot_request_failed_unknown: '快照请求失败，请检查本机 Tenon 服务后重试。',
     snapshot_retry: '重试加载',
     connected: '实时已连接',
     // 意图迁移（评审 P2-13，Task 5）：旧「离线（轮询）」暗示仍在悄悄轮询兜底，与实况不符
@@ -1394,6 +1396,7 @@ export const zh: Dict = {
     canonical_version_command: '请先在终端升级并新开会话：',
     canonical_version_refresh: '升级后刷新',
     canonical_version_refreshing: '正在刷新状态…',
+    canonical_version_truncated: '还有受影响的 Change 未列出；升级后刷新以重新检查全部状态。',
     // T18 孤儿键清理登记：progress.hk_* 28 键系并行 worktree 合并误落本命名空间的副本
     // （HookTimeline 唯一消费 workbench.hk_*，T16 已归位），随本次修剪删除。
     // ── T11：行展开详情 + 动作接线（终止=cancel / 放行·打回=transition）+ running 行日志区。
@@ -1839,6 +1842,8 @@ export const en: Dict = {
     loading: 'Loading…',
     snapshot_error_title: 'Unable to load Tenon data',
     snapshot_error_hint: 'The service did not return a usable snapshot. Check the connection and retry without reloading the page.',
+    snapshot_request_failed: 'Snapshot request failed (HTTP {status})',
+    snapshot_request_failed_unknown: 'The snapshot request failed. Check the local Tenon service and retry.',
     snapshot_retry: 'Retry loading',
     connected: 'Live connected',
     offline: 'Disconnected — data may be stale',
@@ -2921,6 +2926,7 @@ export const en: Dict = {
     canonical_version_command: 'Update in your terminal, then start a new session:',
     canonical_version_refresh: 'Refresh after updating',
     canonical_version_refreshing: 'Refreshing status…',
+    canonical_version_truncated: 'More affected Changes were omitted. Refresh after updating to check every state again.',
     // ── T11: row detail + action wiring + running-row log tail. Acceptance-G retirement:
     //    act_retry/act_dismiss removed with "retry/dismiss go back to the terminal" (zero refs). ──
     act_pass: 'Approve',

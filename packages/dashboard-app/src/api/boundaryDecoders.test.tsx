@@ -442,6 +442,37 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
+  it('accepts only a literal typed truncation signal paired with exactly 100 compatibility issues', () => {
+    const issues = Array.from({ length: 100 }, (_, index) => ({
+      kind: 'unsupported-canonical-version',
+      change: `future-${String(index).padStart(3, '0')}`,
+      foundVersion: 2,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }))
+    const valid = validSnapshot()
+    valid.projects[0].ok = false
+    Object.assign(valid.projects[0], {
+      compatibilityIssues: issues,
+      compatibilityIssuesTruncated: true,
+    })
+    expect(decodeSnapshot(valid)?.projects[0]).toMatchObject({
+      compatibilityIssuesTruncated: true,
+    })
+
+    for (const compatibilityIssuesTruncated of [false, 'true', 1]) {
+      const malformed = structuredClone(valid)
+      ;(malformed.projects[0] as unknown as Record<string, unknown>).compatibilityIssuesTruncated
+        = compatibilityIssuesTruncated
+      expect(decodeSnapshot(malformed)).toBeNull()
+    }
+
+    const tooShort = structuredClone(valid)
+    ;((tooShort.projects[0] as unknown as Record<string, unknown>)
+      .compatibilityIssues as unknown[]).pop()
+    expect(decodeSnapshot(tooShort)).toBeNull()
+  })
+
   it('decodes a strict exact-event Review Handshake while accepting an older missing field', () => {
     const legacy = decodeSnapshot(validSnapshot())
     expect(legacy).not.toBeNull()

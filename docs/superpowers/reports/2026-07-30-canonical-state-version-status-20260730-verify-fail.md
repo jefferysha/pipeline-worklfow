@@ -92,3 +92,89 @@ generated bundles 与 codec 500 行门禁均未发现额外 Critical/High/Medium
 - 本报告是失败报告，不满足 `verify-pass`。
 - 独立 visual 与 Codex 轨均未形成 PASS。
 - 当前冻结基线不能进入 Ship；必须经精确 `verify-fail` 返回 Build 后修复并重新冻结。
+
+## 第二次冻结 Verify
+
+### 结论
+
+- 冻结构建基线：`185f0a0d602b5a5f5a16cdcb41876e592e2ccdd7`
+- 基线 tree：`9e1a5b86dbe661b854d9ba6be5d0e0dc3249b786`
+- 上游基线：`ef728bf63f6902251e87fb9495a3dfafe10e42b7`
+- Track：`frontend`（full preset，前后端共享契约）
+- 结论：**FAIL**
+- 聚合结果：0 Critical、0 High、3 Medium；必须一次性返回 Build 修复。
+
+### Reviewer 轨
+
+独立 reviewer 逐项审查 117 个冻结变更路径及所有受影响 capability，结论 **FAIL**：
+
+1. **Medium — Machine 将兼容只读误报为损坏。**
+   `packages/dashboard-app/src/machine/MachineView.tsx` 对所有 `ok=false` 项目生成
+   `Project cannot be read: unknown error` 后提前跳过。兼容只读项目没有普通 `error`，且仍有
+   可读 sibling；该逻辑既错误描述状态，也隐藏 sibling 的 automation 风险。
+2. **Medium — 第 101 个兼容问题关闭整个恢复入口。**
+   `packages/server/src/snapshot.ts` 把 issue overflow 写入自由文本 `error`；Dashboard 随后按
+   普通 corruption 将项目判为不可导航，使已经返回的 100 个结构化 issue、刷新路径与可读 sibling
+   全部不可访问。应使用有界结构化截断元数据，同时保持 compatibility-only 项目可导航。
+
+除上述两项外，kernel typed error、decoder 顺序、DTO 脱敏、strict boundary、Progress/AFK/
+Workbench 写能力、公共契约、生成资产和治理证据均未发现额外 Critical/High/Medium。
+
+### E2E 轨
+
+独立 E2E 轨严格使用冻结提交与仓库外隔离副本，结果 **PASS**：
+
+- 真实 `http://127.0.0.1:18932` 健康检查通过；snapshot 精确返回一个
+  `future-state` 兼容 issue 和可读 `readable-state`，issue 字段闭集且不泄露路径；
+- kernel/server 64/64，Dashboard 242/242，共 306/306 定向测试通过，0 跳过；
+- 干净 clone 初次因缺少 workspace 构建产物而失败；在隔离副本构建 kernel/server 后原命令通过；
+- `typecheck:web` 在隔离副本通过；
+- 前后真实 HEAD、working diff、cached diff、status 与 `openspec/specs` digest 精确一致；
+- 日志：`/tmp/tenon-verify-e2e-hard.MrUATJ/`。
+
+### Codex CLI 轨
+
+只读 `codex exec` 在开始审查前被账户用量上限拒绝：
+
+`You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 5th, 2026 12:09 PM.`
+
+该轨按 Verify Skill 的外部异常降级处理；没有生成 PASS/FAIL，也没有修改仓库。独立 reviewer 与
+E2E 轨仍完整执行，Codex 外部额度问题不得误记为代码失败或绿色。
+
+### Visual / browser 轨
+
+独立 visual agent 作为唯一浏览器所有者，使用受控浏览器对真实生产 Dashboard 完成矩阵，结论
+**FAIL**：
+
+3. **Medium — 英文 503 恢复路径泄漏中文服务端错误。**
+   locale 为英文时，snapshot 503 显示原始 `快照获取失败（503）`，且唯一恢复按钮仍是升级语义
+   `Refresh after updating`，没有网络错误对应的重试标签。
+
+其余浏览器证据通过：
+
+- `1440×900`、`1024×768` 均确认标题 `Tenon Dashboard`、目标 root、
+  `future-state` 的 2 > 1 升级要求与可读 `readable-state`；
+- compatibility 状态没有 create/transition/cancel/stop 控件，AFK DOM 为 0，且没有
+  `/api/automation` 或 `/api/afk` 请求；
+- 中英文 notice、Tab → Shift+Tab → Tab → Enter、2px 可见 focus ring、禁用的
+  `Refreshing status…` 加载态、空态、503 与恢复均已覆盖；
+- 两个桌面尺寸横向 overflow 为 0；对比度最低 5.84:1；console/page error 为 0；
+- 六张截图与结构化证据：`/tmp/tenon-version-status-visual/`。
+
+### OpenSpec 与冻结完整性
+
+- OpenSpec 1.6.0；
+- `show --deltas-only` 返回 4 条 ADDED requirement，Change strict validate 1/1 通过；
+- 隔离副本 archive rehearsal 成功，`specsUpdated=true`、added=4；应用后主 capability strict
+  validate 1/1 通过；
+- 真实 `openspec/specs` 聚合 digest 前后保持
+  `ee9ec373b59cc4648f05e744fe1a53c9a48612cbdbce099f0979c7f254c9b2f8`；
+- 冻结 HEAD、tree、working/cached diff 和 status 在全部轨前后保持一致。
+
+### 第二次返工清单
+
+1. Machine 只在普通 `project.error` 存在时输出 unreadable 风险；兼容只读项目继续检查可读 sibling。
+2. overflow 使用有界结构化元数据，不借自由文本 `error` 破坏 compatibility-only 导航；补 101 项
+   server → decoder → selection/UI 回归。
+3. 英文网络错误不得展示中文 server 文案，提供与网络失败匹配的双语 retry 入口。
+4. 修复后重新冻结新 SHA，并重新运行完整 Reviewer、E2E、Codex 降级判定与真实浏览器矩阵。

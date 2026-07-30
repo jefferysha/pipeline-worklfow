@@ -32,9 +32,16 @@ interface CanonicalStateCompatibilityIssueSnapshot {
   supportedVersion: number
   action: 'upgrade-runtime'
 }
+
+interface ProjectSnapshot {
+  compatibilityIssues?: CanonicalStateCompatibilityIssueSnapshot[]
+  compatibilityIssuesTruncated?: true
+}
 ```
 
 该 issue 只来自 kernel typed error。server 不解析 canonical JSON，不把异常 message、source path 或原始 payload 投影给 Dashboard。数组按 Change 名稳定排序；每个 Change 至多一项。
+数组最多返回 100 项；若仍有兼容问题，只增加字面量 `compatibilityIssuesTruncated: true`。该信号不是
+普通 corruption，不得写入自由文本 `error`，也不得使已有结构化 issue 或可读 sibling 失去导航入口。
 
 ## 关键业务规则
 
@@ -43,8 +50,13 @@ interface CanonicalStateCompatibilityIssueSnapshot {
 3. `foundVersion <= supportedVersion` 但不等于当前版本属于损坏/已淘汰输入，不宣称升级一定能修复。
 4. 项目含兼容问题时 `ok=false`，对应 Change 不进入 `changes` 与 `change_count`；其他可读 Change 继续展示。
 5. 兼容问题不进入自由文本 `error`，避免 Machine/Projects 把升级要求重复描述为损坏；真正 corruption 仍沿用现有 error。
-6. Dashboard 只在当前项目 Progress 入口展示 issue；旧响应省略字段等价于空数组。
-7. “升级”只作为可复制说明 `tenon update --codex`，本功能不自动执行外部更新；唯一动作是复用现有 snapshot refresh。
+6. compatibility issue 最多投影 100 条；第 101 条及以后只设置
+   `compatibilityIssuesTruncated: true`，不得借普通 `error` 表达溢出。
+7. Machine 只在 `project.error` 存在时生成不可读风险；compatibility-only 项目继续检查可读 sibling。
+8. Dashboard 只在当前项目 Progress 入口展示 issue；旧响应省略字段等价于空数组。
+9. “升级”只作为可复制说明 `tenon update --codex`，本功能不自动执行外部更新；唯一动作是复用现有 snapshot refresh。
+10. snapshot/decoder/network 错误不直接渲染服务端任意语言 message；App 按当前 locale 与 HTTP status
+    生成用户文案，并通过同一 `refresh` 通道提供通用重试。
 
 ## 状态机
 
@@ -68,16 +80,19 @@ stateDiagram-v2
 
 - 位置：当前项目 Progress 内容首部，使用 `role="alert"`、可见标题、原因与下一步。
 - 信息：受影响 Change、发现版本、当前支持版本；多项以有序列表呈现。
+- 截断：存在 `compatibilityIssuesTruncated: true` 时，说明还有受影响 Change 未列出，不猜测总数。
 - 动作：一个键盘可达的“升级后刷新”按钮，调用 App 已有 `refresh`，加载时禁用并展示中英文状态。
 - 空态：`compatibilityIssues` 缺失或为空时组件不渲染；若 Changes 也为零则保留现有 Onboarding。
-- 错误：全局 snapshot/decoder/network 错误继续走现有错误与重试路径，不以兼容 notice 掩盖。
+- 错误：全局 snapshot/decoder/network 错误按当前语言显示 HTTP status，并提供键盘可达的通用重试；
+  不泄露另一语言的服务端 message，也不以兼容 notice 掩盖。
 
 ## 错误、兼容与安全
 
 - 版本识别只读取一个安全整数，不信任未来对象的其余结构。
 - unknown state 绝不进入现有 `PipelineState`、projection repair 或任何写路径。
 - DTO 使用稳定枚举，无绝对路径、原始错误、用户数据或任意 HTML。
-- decoder 对字段闭集、枚举、非空 Change 名和安全整数做边界验证；畸形 issue 使整个 snapshot 解码失败，避免半可信展示。
+- decoder 对字段闭集、枚举、非空 Change 名和安全整数做边界验证；truncation 只接受字面量 `true`
+  且必须恰有 100 条 issue；畸形 issue 或截断元数据使整个 snapshot 解码失败，避免半可信展示。
 - snapshot 字段为 optional，保持 server/Dashboard 滚动升级；snapshot protocol 不升级。
 
 ## 领域与包边界
@@ -90,8 +105,8 @@ stateDiagram-v2
 ## 验证策略
 
 - kernel：未来版本（含额外顶层字段）得到 typed error；字符串、分数、低版本和坏 JSON 仍为 corruption。
-- server：混合可读/未来版本项目保留可读 Change 并投影稳定 issue；响应不含 canonical 路径或原始错误；普通 corruption 行为不变。
-- Dashboard decoder：字段缺失、合法 issue、畸形 issue；组件：中英文、空、加载、刷新、多个 issue；App：issue 不被 no-change Onboarding 遮蔽。
+- server：混合可读/未来版本项目保留可读 Change 并投影稳定 issue；101 项时返回前 100 项及 typed truncation signal，不生成普通 error；响应不含 canonical 路径或原始错误；普通 corruption 行为不变。
+- Dashboard decoder：字段缺失、合法 issue、合法/畸形 truncation、畸形 issue；组件：中英文、空、加载、刷新、多个 issue 与省略提示；App：issue 不被 no-change Onboarding 遮蔽，英文 503 有本地化通用重试。
 - 门禁：定向测试、`typecheck:web`、`test:web`、`build:web`、repo build、`npm test`。
 - 浏览器：在真实 Tenon Dashboard 核验 title、目标 root/Change，覆盖 1440×900 与 1024×768 的升级要求、加载/重试、空/错误和纯键盘路径。
 
@@ -100,6 +115,8 @@ stateDiagram-v2
 - 采用 typed error + snapshot issue；拒绝前端解析错误字符串和 server 重复解析 canonical。
 - 采用项目级 issue，而不是伪造一个 `ChangeSnapshot`，因为未来状态不可被当前 runtime 声称为可操作 Change。
 - 采用现有 refresh，不新增 endpoint 或自动更新。
+- 采用字面量 truncation metadata 而不是自由文本 overflow error，保持 bounded payload 与只读导航同时成立。
+- snapshot 请求错误在 App presentation 层本地化；hook 只保留 status，不让任意服务端文案成为跨语言 UI 契约。
 - 持续授权下未暂停询问低风险细节；以上选择均最小、可逆且不扩大外部权限。
 
 ## Grill 红队自检
