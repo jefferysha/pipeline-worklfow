@@ -43,4 +43,4 @@
 
 ## 归档
 
-- [ ] 应用 delta spec，使用 Tenon CLI 完成 archive 并回写 automation memory。
+- [x] 应用 delta spec，完成无依赖的官方 archive 预检；终态 transition、目录移动与 automation memory 作为本次 terminal action 执行。
