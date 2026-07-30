@@ -85,6 +85,32 @@ export function TimelineStageStrip({
                   <span className="whitespace-nowrap text-sm font-semibold text-text group-aria-[current=step]:text-accent-d">{lane.name}</span>
                   {lane.running && <span className="size-1.5 flex-none animate-pulse rounded-full bg-green motion-reduce:animate-none" data-testid={`wb-flow-gloss-${lane.id}`} aria-hidden="true" />}
                 </button>
+                {!readonly && onStageReorder && (
+                  <span className="ml-1 inline-flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      className="grid h-5 w-6 place-items-center rounded text-xs text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30"
+                      aria-label={t('workbench.move_stage_before', { name: lane.name })}
+                      disabled={index === 0}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        const previous = lanes[index - 1]
+                        if (previous) onStageReorder(lane.id, previous.id, false)
+                      }}
+                    >←</button>
+                    <button
+                      type="button"
+                      className="grid h-5 w-6 place-items-center rounded text-xs text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30"
+                      aria-label={t('workbench.move_stage_after', { name: lane.name })}
+                      disabled={index === lanes.length - 1}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        const next = lanes[index + 1]
+                        if (next) onStageReorder(lane.id, next.id, true)
+                      }}
+                    >→</button>
+                  </span>
+                )}
                 {index < lanes.length - 1 && (
                   <div className="relative flex h-12 w-9 flex-none items-center justify-center" aria-hidden="true">
                     <span className={`absolute inset-x-0 top-1/2 h-px -translate-y-1/2 ${isSelected || lanes[index + 1]?.id === selectedId ? 'bg-(--accent)' : 'bg-border-2'}`} />

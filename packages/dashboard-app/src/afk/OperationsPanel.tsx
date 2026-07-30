@@ -227,6 +227,13 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
   const rootReady = loadedRoot === root
   const realRunReady = !runReal || (confirmRun && (runLevel !== 'L3' || confirmL3))
   const shows = (tool: OperationTool): boolean => activeTool === undefined || activeTool === tool
+  const compactToolEmpty = compact && rootReady && (
+    (activeTool === 'starter' && templates.length === 0)
+    || ((activeTool === 'run' || activeTool === 'sync') && loops.length === 0)
+  )
+  const compactToolEmptyMessage = activeTool === 'starter'
+    ? t('operations.empty_starters')
+    : t('operations.empty_loops')
 
   return (
     <section className={compact ? 'bg-card' : 'mb-5 rounded-xl border border-border bg-card p-4'} data-testid="operations-panel" data-tool={activeTool}>
@@ -240,16 +247,22 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
         </button>
       </header>}
 
-      {loadError !== null && <p role="alert" className="mb-3 rounded-lg border border-red-b bg-red-t px-3 py-2 text-xs text-red-d">{formatApiError(loadError, t, { exposeServerDetail: lang === 'zh' })}</p>}
+      {loadError !== null && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-b bg-red-t px-3 py-2 text-xs text-red-d">
+        <span>{formatApiError(loadError, t, { exposeServerDetail: lang === 'zh' })}</span>
+        {compact && <button type="button" className={ghost} onClick={reload} disabled={loading || busy !== null} data-testid="ops-compact-retry"><RefreshCw className="mr-1.5 inline size-3.5" aria-hidden="true" />{t('operations.refresh')}</button>}
+      </div>}
       {loading && <p role="status" aria-live="polite" data-testid="ops-loading" className="mb-3 rounded-lg border border-border bg-fill px-3 py-2 text-xs text-text-3">{t('operations.loading')}</p>}
-      {!loading && loadError === null && rootReady && templates.length === 0 && loops.length === 0 && (
+      {!compact && !loading && loadError === null && rootReady && templates.length === 0 && loops.length === 0 && (
         <p role="status" aria-live="polite" data-testid="ops-empty" className="mb-3 rounded-lg border border-border bg-fill px-3 py-2 text-xs text-text-3">{t('operations.empty')}</p>
+      )}
+      {!loading && loadError === null && compactToolEmpty && (
+        <p role="status" aria-live="polite" data-testid="ops-tool-empty" className="mb-3 rounded-lg border border-border bg-fill px-3 py-2 text-xs text-text-3">{compactToolEmptyMessage}</p>
       )}
 
       <div className={`grid gap-3 ${compact ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>
         {shows('cadence') && <OperationsCadenceCard cadence={cadence} compact={compact} />}
 
-        {shows('starter') && <article className={card}>
+        {shows('starter') && !(compact && compactToolEmpty) && <article className={card}>
           <OperationStarterGallery templates={templates} selected={selectedTemplate} onSelect={(id) => { invalidateOperation(); setSelectedTemplate(id) }} />
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <label className="text-xs font-semibold text-text-2">{t('operations.loop_id')}<input className={`${input} mt-1`} data-testid="ops-loop-id" name="loop-id" autoComplete="off" value={loopId} onChange={(event) => {
@@ -285,7 +298,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
           >{busy === 'init' ? t('operations.running') : t('operations.create_draft')}</button>
         </article>}
 
-        {shows('run') && <article className={card}>
+        {shows('run') && !(compact && compactToolEmpty) && <article className={card}>
           <div className="flex items-center gap-2"><Play size={15} aria-hidden="true" /><h3 className="font-bold text-text">{t('operations.run_title')}</h3></div>
           <p className="mt-1 text-xs leading-5 text-text-3">{t('operations.run_note')}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -335,7 +348,7 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
           }}>{busy === 'run' ? t('operations.running') : runReal ? t('operations.run_now') : t('operations.preview')}</button>
         </article>}
 
-        {shows('sync') && <OperationSyncCard
+        {shows('sync') && !(compact && compactToolEmpty) && <OperationSyncCard
           rootReady={rootReady} busy={busy} selectorReady={selector !== '' && loops.some((loop) => loop.id === selector)}
           mode={syncMode} confirmed={confirmSync}
           onModeChange={(mode) => { invalidateOperation(); setSyncMode(mode); setConfirmedSyncKey(null) }}

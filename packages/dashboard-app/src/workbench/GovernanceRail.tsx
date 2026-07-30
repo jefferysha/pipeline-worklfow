@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
+import { handleRadioKey } from '../shared/radioKeyboard'
 import { LpSlider, type LoopsState } from './LoopCard'
 import { cn } from '@/lib/utils'
 import { ChartNoAxesColumn, CircleAlert, Pencil } from 'lucide-react'
@@ -184,7 +185,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
           <span className={cn(MINIBADGE_TW, TAG_RW_TW, 'inline-flex items-center gap-1')}><Pencil className="size-3" aria-hidden="true" />{t('workbench.gov_tag_rw')}</span>
         </div>
         <div className="flex gap-[7px]" role="radiogroup" aria-label={t('workbench.lp_level')}>
-          {LEVELS.map((lv) => {
+          {LEVELS.map((lv, index) => {
             const on = row.autonomy_level === lv
             return (
               <button
@@ -196,10 +197,15 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
                 )}
                 role="radio"
                 aria-checked={on}
+                tabIndex={on ? 0 : -1}
                 data-testid={`wb-gov-lv-${lv}`}
                 // 恒不因「预判会被拒」而 disable——那是 server 的判决权（诚实门③）。只在写回在途时禁双发。
                 disabled={levelBusy}
                 onClick={() => requestLevel(lv)}
+                onKeyDown={(event) => handleRadioKey(event, index, LEVELS.length, (next) => {
+                  const candidate = LEVELS[next]
+                  if (candidate) requestLevel(candidate)
+                })}
               >
                 <b className={cn('block font-mono text-base font-extrabold', on ? 'text-accent-d' : 'text-text-2')}>{lv}</b>
                 <small className="mt-0.5 block text-[11.5px] whitespace-nowrap text-text-3">{t(LEVEL_SHORT_KEY[lv])}</small>

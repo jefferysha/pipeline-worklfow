@@ -196,6 +196,19 @@ describe('ExecutionTimelineComposer', () => {
     })
   })
 
+  it('同阶段 Skill 重排提供键盘可聚焦的前移和后移入口', () => {
+    const onSkillMove = vi.fn()
+    renderComposer({ onSkillMove })
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill evidence-reviewer 向前移动' }))
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill test-runner 向后移动' }))
+    expect(onSkillMove).toHaveBeenNthCalledWith(1, {
+      skillId: 'evidence-reviewer', fromStage: 'verify', toStage: 'verify', refSkillId: 'test-runner', after: false,
+    })
+    expect(onSkillMove).toHaveBeenNthCalledWith(2, {
+      skillId: 'test-runner', fromStage: 'verify', toStage: 'verify', refSkillId: 'evidence-reviewer', after: true,
+    })
+  })
+
   it('执行指令页签编辑真实阶段 prompt', () => {
     const onPromptChange = vi.fn()
     renderComposer({ prompt: '先读取变更上下文', onPromptChange })

@@ -2,6 +2,7 @@ import { CircleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WbLoopRow } from '../api/client'
 import { useT } from '../i18n'
+import { handleRadioKey } from '../shared/radioKeyboard'
 import {
   CADS,
   KILL_DESC_KEYS,
@@ -68,8 +69,11 @@ export function LoopAdvancedFields({
         <div className={WB_TW.policyRow}>
           <span className={WB_TW.flabel}>{t('workbench.lp_policy')}</span><ProvBadge field="on_exceed" />
           <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('workbench.lp_policy')}>
-            {(['skip', 'pause'] as const).map((policy) => (
-              <button key={policy} type="button" className={cn('h-7 cursor-pointer rounded-full border px-3 text-[12.5px] font-semibold transition-[border-color,background-color,color,box-shadow] duration-[120ms]', draft.on_exceed === policy ? 'border-(--accent) bg-accent-t text-accent-d shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill text-text-2 hover:border-border-2')} role="radio" aria-checked={draft.on_exceed === policy} data-testid={`lp-exceed-${policy}`} onClick={() => onEdit({ on_exceed: policy })}>
+            {(['skip', 'pause'] as const).map((policy, index, policies) => (
+              <button key={policy} type="button" className={cn('h-7 cursor-pointer rounded-full border px-3 text-[12.5px] font-semibold transition-[border-color,background-color,color,box-shadow] duration-[120ms]', draft.on_exceed === policy ? 'border-(--accent) bg-accent-t text-accent-d shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill text-text-2 hover:border-border-2')} role="radio" aria-checked={draft.on_exceed === policy} tabIndex={draft.on_exceed === policy ? 0 : -1} data-testid={`lp-exceed-${policy}`} onClick={() => onEdit({ on_exceed: policy })} onKeyDown={(event) => handleRadioKey(event, index, policies.length, (next) => {
+                const candidate = policies[next]
+                if (candidate) onEdit({ on_exceed: candidate })
+              })}>
                 {t(policy === 'skip' ? 'workbench.lp_policy_skip' : 'workbench.lp_policy_pause')}
               </button>
             ))}
@@ -81,9 +85,12 @@ export function LoopAdvancedFields({
         <div className={WB_TW.secH}>{t('workbench.lp_sec_auto')}<span className={WB_TW.hint}>{t('workbench.lp_sec_auto_hint')}</span></div>
         <span className={cn(WB_TW.flabel, 'mb-[5px]')}>{t('workbench.lp_level')}</span>
         <div className="mt-0.5 mb-1 grid grid-cols-3 gap-2.5 mobile:grid-cols-1" role="radiogroup" aria-label={t('workbench.lp_level')}>
-          {LEVELS.map((level) => {
+          {LEVELS.map((level, index) => {
             const selected = row.autonomy_level === level
-            return <button key={level} type="button" className={cn('flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2')} role="radio" aria-checked={selected} data-testid={`lp-lv-${level}`} disabled={levelBusy || actionDisabled} title={actionDisabled ? t('workbench.lp_action_dirty') : undefined} onClick={() => onLevel(level)}>
+            return <button key={level} type="button" className={cn('flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60', selected ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2')} role="radio" aria-checked={selected} tabIndex={selected ? 0 : -1} data-testid={`lp-lv-${level}`} disabled={levelBusy || actionDisabled} title={actionDisabled ? t('workbench.lp_action_dirty') : undefined} onClick={() => onLevel(level)} onKeyDown={(event) => handleRadioKey(event, index, LEVELS.length, (next) => {
+              const candidate = LEVELS[next]
+              if (candidate) onLevel(candidate)
+            })}>
               <span className={cn('text-[13px] font-[750]', selected && 'text-accent-d')}>{t(`workbench.lp_lv${level.slice(1)}_k`)}</span>
               <span className="text-[11.5px] leading-[1.45] text-text-3">{t(`workbench.lp_lv${level.slice(1)}_d`)}</span>
             </button>

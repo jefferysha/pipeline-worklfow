@@ -1,6 +1,7 @@
 import { Sparkles } from 'lucide-react'
 import type { AutomationStarterTemplate } from '../api/client'
 import { useT } from '../i18n'
+import { handleRadioKey } from '../shared/radioKeyboard'
 import { riskLabel, starterCopy } from './operationsPresentation'
 
 interface OperationStarterGalleryProps {
@@ -21,10 +22,13 @@ export function OperationStarterGallery({ templates, selected, onSelect }: Opera
         <span><b className="block text-text">{t('operations.starter_axis_skills')}</b>{t('operations.starter_axis_skills_note')}</span>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t('operations.starter_title')}>
-        {templates.map((item) => {
+        {templates.map((item, index) => {
           const copy = starterCopy(item, t)
           return (
-            <button key={item.id} type="button" role="radio" aria-checked={selected === item.id} data-testid={`ops-starter-${item.id}`} data-selected={selected === item.id} className="rounded-xl border border-border bg-bg p-3.5 text-left data-[selected=true]:border-(--accent) data-[selected=true]:bg-accent-t" onClick={() => onSelect(item.id)}>
+            <button key={item.id} type="button" role="radio" aria-checked={selected === item.id} tabIndex={selected === item.id ? 0 : -1} data-testid={`ops-starter-${item.id}`} data-selected={selected === item.id} className="rounded-xl border border-border bg-bg p-3.5 text-left data-[selected=true]:border-(--accent) data-[selected=true]:bg-accent-t" onClick={() => onSelect(item.id)} onKeyDown={(event) => handleRadioKey(event, index, templates.length, (next) => {
+              const candidate = templates[next]
+              if (candidate) onSelect(candidate.id)
+            })}>
               <span className="flex items-center justify-between gap-3"><b className="text-sm text-text">{copy.title}</b><span className="rounded-full bg-fill px-2 py-1 text-[10px] font-semibold text-text-3">{riskLabel(item.risk, t)}</span></span>
               <span className="mt-1.5 block text-xs leading-5 text-text-3">{copy.description}</span>
             </button>

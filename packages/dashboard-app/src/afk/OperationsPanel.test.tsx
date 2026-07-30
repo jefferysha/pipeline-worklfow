@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { OperationsPanel } from './OperationsPanel'
 
@@ -104,9 +104,37 @@ describe('OperationsPanel：H11-H14 可操作面', () => {
     const alternate = within(group).getByTestId('ops-starter-daily-triage')
     expect(selected).toHaveAttribute('role', 'radio')
     expect(selected).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(alternate)
+    expect(selected).toHaveAttribute('tabindex', '0')
+    expect(alternate).toHaveAttribute('tabindex', '-1')
+    selected.focus()
+    fireEvent.keyDown(selected, { key: 'ArrowRight' })
     expect(selected).toHaveAttribute('aria-checked', 'false')
     expect(alternate).toHaveAttribute('aria-checked', 'true')
+    expect(alternate).toHaveAttribute('tabindex', '0')
+    expect(alternate).toHaveFocus()
+  })
+
+  it('compact 工具失败后提供就地重试，且按工具分别呈现空态', async () => {
+    global.fetch = vi.fn(async () => { throw new TypeError('offline') }) as typeof fetch
+    render(<I18nProvider><OperationsPanel root={ROOT} activeTool="starter" compact /></I18nProvider>)
+    const retry = await screen.findByTestId('ops-compact-retry')
+    expect(retry).toHaveTextContent('刷新事实')
+    const before = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.length
+    fireEvent.click(retry)
+    await waitFor(() => expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before))
+
+    cleanup()
+    vi.restoreAllMocks()
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/operations/starters')) return new Response(JSON.stringify({ ok: true, templates: [], defaults: { runner: 'codex', workflow: 'default' } }))
+      if (url === '/api/loops/snapshot') return new Response(JSON.stringify({ generated_at: 'now', rows: [{ root: ROOT, id: 'existing', name: 'Existing', status: 'active', autonomy_level: 'L1' }] }))
+      if (url.startsWith('/api/cadence/status')) return new Response(JSON.stringify({ enabled: true, poll_interval_ms: 30000, generated_at: 'now', running: false, errors: [], loops: [] }))
+      throw new Error(`unexpected fetch ${url}`)
+    }) as typeof fetch
+    render(<I18nProvider><OperationsPanel root={ROOT} activeTool="starter" compact /></I18nProvider>)
+    expect(await screen.findByTestId('ops-tool-empty')).toHaveTextContent('没有可用的定时任务模板')
+    expect(screen.queryByTestId('ops-loop-id')).toBeNull()
   })
 
   it('English locale covers starter catalog, form help, risks, and run permissions without Chinese product copy', async () => {

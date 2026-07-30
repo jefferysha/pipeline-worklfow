@@ -225,6 +225,14 @@ test('release candidate actions are immutable full-SHA pins', async () => {
   assert.doesNotMatch(candidate, /uses:\s+actions\/[^@\s]+@v\d+\b/)
 })
 
+test('canonical CI actions are immutable full-SHA pins', async () => {
+  const ci = await text('.github/workflows/ci.yml')
+
+  assert.match(ci, /actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/)
+  assert.match(ci, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/)
+  assert.doesNotMatch(ci, /actions\/(?:checkout|setup-node)@v\d+\b/)
+})
+
 test('candidate converts the upload action bare digest into the REST digest ABI', async (t) => {
   const candidate = await text('.github/workflows/release-candidate.yml')
   const script = workflowRunScript(candidate, 'Write approval evidence for the default-branch writer')
@@ -514,6 +522,29 @@ test('CI and the read-only candidate share advisory and full dependency-tree gat
   for (const workflow of [ci, candidate]) {
     assert.match(workflow, /npm run check:dependencies/)
     assert.match(workflow, /npm run check:release-workflows/)
+    assert.match(workflow, /npm run check:openspec/)
+  }
+})
+
+test('OpenSpec validation is lockfile-pinned and strict in canonical CI and release candidate', async () => {
+  const [packageJson, packageLock, ci, candidate] = await Promise.all([
+    text('package.json'),
+    text('package-lock.json'),
+    text('.github/workflows/ci.yml'),
+    text('.github/workflows/release-candidate.yml'),
+  ])
+  const manifest = JSON.parse(packageJson)
+  const lock = JSON.parse(packageLock)
+
+  assert.equal(manifest.devDependencies['@fission-ai/openspec'], '1.6.0')
+  assert.equal(lock.packages['node_modules/@fission-ai/openspec'].version, '1.6.0')
+  assert.equal(
+    manifest.scripts['check:openspec'],
+    'openspec validate --all --strict --no-interactive',
+  )
+  for (const workflow of [ci, candidate]) {
+    assert.match(workflow, /name: OpenSpec strict governance validation/)
+    assert.match(workflow, /run: npm run check:openspec/)
   }
 })
 

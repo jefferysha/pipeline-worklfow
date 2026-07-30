@@ -13,12 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The compatibility gate extracts the exact CLI bytes from the pinned N-1 release commit.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -31,6 +31,9 @@ jobs:
 
       - name: Release workflow anti-bypass contract
         run: npm run check:release-workflows
+
+      - name: OpenSpec strict governance validation
+        run: npm run check:openspec
 
       # 纯静态扫描（bash + grep，零构建依赖、~1s）——放在 build/test 之前 fail-fast：
       # 一条假待做注释不值得等 60 分钟的构建+docker/real-Codex 集成测试跑完才报。

@@ -219,6 +219,18 @@ export function SkillOrchestrationDialog({
                       <GripVertical className="h-5 w-5 flex-none cursor-grab text-text-3 active:cursor-grabbing" aria-hidden="true" />
                       <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-(--accent) font-mono text-xs font-bold text-btn-fg shadow-sm">{index + 1}</span>
                       <div className="min-w-0 flex-1"><h3 className="font-semibold text-text">{presentation.name}</h3><p className="mt-0.5 text-xs text-text-3">{presentation.description}</p></div>
+                      {!readonly && onMove && (
+                        <span className="inline-flex gap-1">
+                          <button type="button" className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30" aria-label={t('workbench.move_skill_before', { name: presentation.name })} disabled={index === 0} onClick={() => {
+                            const previousSkill = skills[index - 1]
+                            if (previousSkill) onMove({ skillId, fromStage: lane.id, toStage: lane.id, refSkillId: previousSkill, after: false })
+                          }}>↑</button>
+                          <button type="button" className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30" aria-label={t('workbench.move_skill_after', { name: presentation.name })} disabled={index === skills.length - 1} onClick={() => {
+                            const nextSkill = skills[index + 1]
+                            if (nextSkill) onMove({ skillId, fromStage: lane.id, toStage: lane.id, refSkillId: nextSkill, after: true })
+                          }}>↓</button>
+                        </span>
+                      )}
                       <div className="inline-flex rounded-xl bg-fill p-1" role="group" aria-label={t('workbench.skill_dialog_mode', { id: skillId })}>
                         <button type="button" aria-label={t('workbench.skill_dialog_parallel_label', { id: skillId })} aria-pressed={mode === 'parallel'} disabled={readonly || !onDependencyChange} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-text-3 transition aria-pressed:bg-card aria-pressed:text-accent-d aria-pressed:shadow-sm" onClick={() => setExecutionMode(skillId, index, 'parallel')}>{t('workbench.skill_dialog_parallel')}</button>
                         <button type="button" aria-label={t('workbench.skill_dialog_serial_label', { id: skillId })} aria-pressed={mode === 'serial'} disabled={readonly || !onDependencyChange || index === 0} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-text-3 transition aria-pressed:bg-card aria-pressed:text-accent-d aria-pressed:shadow-sm disabled:opacity-35" onClick={() => setExecutionMode(skillId, index, 'serial')}>{t('workbench.skill_dialog_serial')}</button>

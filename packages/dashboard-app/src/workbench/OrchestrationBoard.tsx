@@ -258,6 +258,7 @@ export function OrchestrationBoard({
                         skPop={skPop}
                         dupWarn={dupWarn}
                         skillRegistry={skillRegistry}
+                        moveTargets={lanes}
                         onBeginDrag={beginDrag}
                         onEndDrag={endDrag}
                         onDropHint={setDrop}

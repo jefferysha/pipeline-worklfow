@@ -278,3 +278,32 @@
   npx 安装契约 39/39、docs check/build/smoke、clean Codex install 与五套 golden oracle
   （0 差异）均通过。仍必须在最终 commit 上完成生产浏览器矩阵、独立 C0/H0/M0/L0 与
   canonical GitHub CI。
+
+## 2026-07-30 exact-candidate rollback and remediation
+
+The exact `8224c75d` candidate was rejected by three independent tracks with a
+combined C0/H2/M7/L4. No severity was deferred:
+
+- release reproducibility now pins OpenSpec 1.6.0 and validates all specs and
+  Changes strictly in both canonical CI and the read-only release candidate;
+- canonical checkout/setup actions are immutable full commit pins;
+- transcript completion reads host status only, never Skill-authored stdout;
+- the complete Dashboard now has honest Machine pending state, compact Operations
+  retry and per-tool empty states, keyboard reorder/cross-stage controls,
+  complete radio semantics, and focusable named help/count affordances;
+- Loop refresh/save rebases untouched fields and preserves post-submit edits by
+  field revision; Workbench updates its dirty ref synchronously and keeps a
+  permanent `beforeunload` listener.
+
+Current regression results are root 327 files / 5810 passed / 14 honest skips,
+Dashboard 73 files / 1445 tests, Dashboard typecheck, architecture 698 files,
+release contracts 23/23, OpenSpec 35/35, and receipt tests 105/105. An initial
+concurrent run hit one existing 5-second Hook timeout; that Hook file passed 9/9,
+then the complete root suite passed under a 15-second integration limit.
+Two clean builds are byte-identical at CLI `74bf6154…c366`, Server
+`e2327b62…a07`, Dashboard `index-CRNCuoIq.js` (`64fbca9d…299`) and
+`index-CLLRnTB_.css` (`1200acad…226`). Hooks 512/512, adapters 272/272,
+bundle 31/31, migration CAS 13/13, npx contracts 39/39, bilingual docs,
+and all five oracle fixtures are green. The regenerated production browser
+matrix and fresh exact-SHA C0/H0/M0/L0 review remain required before this report
+may record PASS.

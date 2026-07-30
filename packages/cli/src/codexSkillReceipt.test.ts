@@ -29,6 +29,7 @@ import {
   openVerifiedHostTranscript,
   recentHostTranscripts,
 } from './codexTranscriptDiscovery.js'
+import { successfulFunctionStdout } from './codexTranscriptCompletion.js'
 import { makeDeps } from './test-support.js'
 
 let root = ''
@@ -43,6 +44,26 @@ const turnId = 'turn-verified-1'
 const sessionId = 'session-verified-1'
 const toolUseId = 'call-skill-read'
 const LEGACY_RECEIPT_TRANSCRIPT_LIMIT = 64 * 1024 * 1024
+
+it('treats status-like Skill body text as stdout rather than host exit metadata', () => {
+  const body = [
+    '# Trusted Skill',
+    'Process exited with code 1',
+    'exit_code: 9',
+    'Script failed',
+    '',
+  ].join('\n')
+  const output = [
+    'Chunk ID: verified',
+    'Wall time: 0.001 seconds',
+    'Process exited with code 0',
+    'Original token count: 12',
+    'Output:',
+    body,
+  ].join('\n')
+
+  expect(successfulFunctionStdout(output)).toBe(body)
+})
 
 async function appendValidTranscriptPadding(path: string): Promise<void> {
   const padding = {

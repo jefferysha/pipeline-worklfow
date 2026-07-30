@@ -1260,6 +1260,19 @@ describe('OrchestrationBoard P2 §4.2 技能卡列内排序（onSkillMove：toSt
 })
 
 describe('OrchestrationBoard P2 §4.3 技能卡跨列搬（onSkillMove：toStage = 目标列）', () => {
+  it('键盘用户可用阶段选择器完成跨列移动', () => {
+    const { onSkillMove } = renderDnd()
+    const source = screen.getByTestId(`wb-lane-sk-plan-${SK_TDD}`)
+    fireEvent.change(within(source).getByLabelText(`将 Skill ${SK_TDD} 移动到阶段`), { target: { value: 'review' } })
+    expect(onSkillMove).toHaveBeenCalledWith({
+      skillId: SK_TDD,
+      fromStage: 'plan',
+      toStage: 'review',
+      refSkillId: null,
+      after: true,
+    })
+  })
+
   it('拖到别列的技能卡上 → toStage 是目标列，fromStage 仍是原列', () => {
     const { onSkillMove } = renderDnd()
     const transfer = startSkillDrag('plan', SK_BRAIN)

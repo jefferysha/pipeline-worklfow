@@ -233,8 +233,12 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     const group = screen.getByRole('radiogroup', { name: '自主级别' })
     expect(within(group).getAllByRole('radio')).toHaveLength(3)
     expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('tabindex', '0')
     expect(screen.getByTestId('wb-gov-lv-L2')).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByTestId('wb-gov-lv-L2')).toHaveAttribute('tabindex', '-1')
     expect(screen.getByTestId('wb-gov-lv-L3')).toHaveAttribute('aria-checked', 'false')
+    fireEvent.keyDown(screen.getByTestId('wb-gov-lv-L1'), { key: 'ArrowRight' })
+    expect(await screen.findByTestId('wb-gov-promote-confirm')).toHaveTextContent('L2')
   })
 
   /**

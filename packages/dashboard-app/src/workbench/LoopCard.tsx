@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 export { LOOP_RUNNERS, WB_TW, WbAdvanced } from './loopCardModel'
 export { LpSlider } from './LoopControls'
 export { useLoops, type LoopsState } from './useLoops'
-import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
+import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, rebaseLoopDraft, type LoopDraft } from './loopCardModel'
 import { RECO_TOKENS_K, clamp } from './LoopControls'
 import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
@@ -41,7 +41,9 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   const reviewGeneration = useRef(0)
   const draftIdentity = useRef('')
   const draftBase = useRef<LoopDraft | null>(null)
-  const acceptNextRow = useRef(false)
+  const editRevision = useRef(0)
+  const fieldRevisions = useRef(new Map<keyof LoopDraft, number>())
+  const [, setBaseRevision] = useState(0)
   const identity = useRef({ root, rowId: row?.id ?? null })
   identity.current = { root, rowId: row?.id ?? null }
   const localeIdentity = useRef({ t, lang })
@@ -67,19 +69,21 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     const nextIdentity = JSON.stringify([root, row?.id ?? null])
     const nextBase = row ? draftOf(row) : null
     setDraft((current) => {
-      const currentDirty = current !== null && draftBase.current !== null
-        && Object.keys(computePatch(current, draftBase.current)).length > 0
-      const preserve = draftIdentity.current === nextIdentity && currentDirty && !acceptNextRow.current
+      const sameIdentity = draftIdentity.current === nextIdentity
+      const rebased = sameIdentity && current !== null && nextBase !== null
+        ? rebaseLoopDraft(current, nextBase, fieldRevisions.current)
+        : nextBase
+      if (!sameIdentity) fieldRevisions.current.clear()
       draftIdentity.current = nextIdentity
       draftBase.current = nextBase
-      acceptNextRow.current = false
-      return preserve ? current : nextBase
+      return rebased
     })
+    setBaseRevision((value) => value + 1)
     setSaveErrors(null)
     setLevelError(null)
     setReviewError(null)
   }, [root, row])
-  const base = row ? draftOf(row) : null
+  const base = draftBase.current
   const patch = draft && base ? computePatch(draft, base) : {}
   const dirty = Object.keys(patch).length > 0
   useEffect(() => {
@@ -105,24 +109,42 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   }, [confirmDecisionKey, promotionFacts])
   const closePromotion = (): void => { setConfirmLevel(null); setConfirmDecisionKey(null) }
   function edit(part: Partial<LoopDraft>): void {
+    for (const key of Object.keys(part) as Array<keyof LoopDraft>) {
+      fieldRevisions.current.set(key, ++editRevision.current)
+    }
     setDraft((prev) => (prev ? { ...prev, ...part } : prev))
     setSaveOk(false)
   }
   async function save(): Promise<void> {
-    if (!row || !dirty || saving) return
+    if (!row || !draft || !dirty || saving) return
     const targetRoot = root
     const targetId = row.id
     const generation = ++saveGeneration.current
     const targetPatch = patch
+    const targetDraft = draft
+    const targetRevisions = new Map(
+      (Object.keys(targetPatch) as Array<keyof LoopDraft>)
+        .map((key) => [key, fieldRevisions.current.get(key)] as const),
+    )
     setSaving(true)
     setSaveErrors(null)
     setSaveOk(false)
     try {
       await postLoopUpdate({ root: targetRoot, id: targetId, patch: targetPatch })
       if (generation !== saveGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
+      if (draftBase.current !== null) {
+        const acceptedBase = { ...draftBase.current }
+        for (const key of Object.keys(targetPatch) as Array<keyof LoopDraft>) {
+          Object.assign(acceptedBase, { [key]: targetDraft[key] })
+        }
+        draftBase.current = acceptedBase
+        setBaseRevision((value) => value + 1)
+      }
+      for (const [key, revision] of targetRevisions) {
+        if (fieldRevisions.current.get(key) === revision) fieldRevisions.current.delete(key)
+      }
       setSaveOk(true)
-      acceptNextRow.current = true
-      loops.reload() // 新行到达后草稿以 server 真值重置（见上方 effect）
+      loops.reload()
     } catch (err) {
       if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
         const current = localeIdentity.current

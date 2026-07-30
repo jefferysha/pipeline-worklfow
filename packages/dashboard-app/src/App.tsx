@@ -66,6 +66,7 @@ function AppShell(): JSX.Element {
   const viewRef = useRef(view)
   const dirtyRef = useRef(workbenchDirty)
   const currentRootRef = useRef('')
+  viewRef.current = view
 
   const commitView = useCallback((v: View) => {
     setViewState(v)
@@ -78,11 +79,6 @@ function AppShell(): JSX.Element {
       /* ignore */
     }
   }, [])
-
-  useEffect(() => {
-    viewRef.current = view
-    dirtyRef.current = workbenchDirty
-  }, [view, workbenchDirty])
 
   const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
     const leavesDirtyWorkbench = target.view !== 'workbench'
@@ -128,20 +124,26 @@ function AppShell(): JSX.Element {
     if (!pendingNavigation) return
     const pending = pendingNavigation
     setPendingNavigation(null)
+    dirtyRef.current = false
     setWorkbenchDirty(false)
     if (pending.kind === 'pop') confirmPopNavigation()
     else commitView(pending.target.view)
   }, [commitView, confirmPopNavigation, pendingNavigation])
 
+  const onWorkbenchDirtyChange = useCallback((dirty: boolean): void => {
+    dirtyRef.current = dirty
+    setWorkbenchDirty(dirty)
+  }, [])
+
   useEffect(() => {
-    if (!workbenchDirty) return
     const protectDraft = (event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current) return
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', protectDraft)
     return () => window.removeEventListener('beforeunload', protectDraft)
-  }, [workbenchDirty])
+  }, [])
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
 
   // 跨项目 snapshot 已携带每个 change 冻结绑定的 workflow 摘要。项目总览与单项目视图消费同一
@@ -341,7 +343,7 @@ function AppShell(): JSX.Element {
               root={workbenchRoot}
               onToggleError={(m) => showFlash('error', m)}
               snapshot={snapshot}
-              onDirtyChange={setWorkbenchDirty}
+              onDirtyChange={onWorkbenchDirtyChange}
             />
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView

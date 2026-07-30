@@ -134,6 +134,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 <span
                   className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="progress-badge"
+                  aria-label={t('nav.progress_badge', { count: decisionCount })}
                 >
                   {decisionCount}
                 </span>
@@ -142,6 +143,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 <span
                   className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="afk-badge"
+                  aria-label={t('nav.afk_badge', { count: afkCount })}
                 >
                   {afkCount}
                 </span>

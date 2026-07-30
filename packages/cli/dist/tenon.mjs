@@ -35232,14 +35232,21 @@ function outputStrings(value) {
   if (!isRecord10(value)) return [];
   return Object.values(value).flatMap((item2) => outputStrings(item2));
 }
+function hostEnvelopeStrings(value) {
+  const marker = "\nOutput:\n";
+  return outputStrings(value).map((text2) => {
+    const boundary = text2.indexOf(marker);
+    return boundary === -1 ? text2 : text2.slice(0, boundary);
+  });
+}
 function scriptStates(value) {
-  return outputStrings(value).flatMap(
+  return hostEnvelopeStrings(value).flatMap(
     (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
   );
 }
 function successfulFunctionOutput(value) {
   if (scriptStates(value).includes("failed")) return false;
-  const textExitCodes = outputStrings(value).flatMap(
+  const textExitCodes = hostEnvelopeStrings(value).flatMap(
     (text2) => [...text2.matchAll(
       /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g
     )].map((match) => Number(match[1]))

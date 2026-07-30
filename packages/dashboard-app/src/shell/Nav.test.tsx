@@ -209,6 +209,7 @@ describe('Nav 交互 + 徽标', () => {
     renderNav({ decisionCount: 4 })
     const badge = screen.getByTestId('progress-badge')
     expect(badge.textContent).toBe('4')
+    expect(badge).toHaveAttribute('aria-label', '4 个待决策项')
     expect(within(screen.getByTestId('nav-progress')).getByTestId('progress-badge')).toBe(badge)
     // 旧收件箱徽标 testid 随视图退役，不再渲染
     expect(screen.queryByTestId('inbox-badge')).toBeNull()
@@ -223,6 +224,7 @@ describe('Nav 交互 + 徽标', () => {
     renderNav({ afkCount: 3 })
     const badge = screen.getByTestId('afk-badge')
     expect(badge.textContent).toBe('3')
+    expect(badge).toHaveAttribute('aria-label', '3 个待处理自动运行')
     expect(within(screen.getByTestId('nav-afk')).getByTestId('afk-badge')).toBe(badge)
   })
 

@@ -23,6 +23,7 @@
     "check:architecture": "node tools/check-architecture.mjs",
     "check:dependency-tree": "npm ls --all",
     "check:dependencies": "npm audit --audit-level=high && npm run check:dependency-tree",
+    "check:openspec": "openspec validate --all --strict --no-interactive",
     "check:release-workflows": "node --test tools/check-release-workflows.node-test.mjs",
     "check:repository-hygiene": "node --test tools/check-repository-hygiene.node-test.mjs && node tools/check-repository-hygiene.mjs",
     "build:npx-package": "node tools/build-npx-package.mjs",
@@ -49,6 +50,7 @@
     "check:default-workflow-freshness": "npm run generate:default-workflow && git diff --exit-code -- packages/kernel/src/workflow/default-workflow.generated.ts"
   },
   "devDependencies": {
+    "@fission-ai/openspec": "1.6.0",
     "@types/node": "^22.10.0",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.1",

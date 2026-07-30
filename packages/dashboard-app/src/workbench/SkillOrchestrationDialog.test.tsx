@@ -121,6 +121,15 @@ describe('SkillOrchestrationDialog', () => {
     expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ skillId: 'verify', refSkillId: 'research', after: false }))
   })
 
+  it('计划卡提供键盘可聚焦的前后移动入口', () => {
+    const onMove = vi.fn()
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={onMove} onDependencyChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill implement 向前移动' }))
+    expect(onMove).toHaveBeenCalledWith({
+      skillId: 'implement', fromStage: 'build', toStage: 'build', refSkillId: 'research', after: false,
+    })
+  })
+
   it('用批次拓扑直观区分并行与串行，而不是只显示开关', () => {
     renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
 

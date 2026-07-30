@@ -105,6 +105,9 @@ jobs:
       - name: Prove release workflow anti-bypass contract
         run: npm run check:release-workflows
 
+      - name: OpenSpec strict governance validation
+        run: npm run check:openspec
+
       - name: Repository, identity, compatibility, and package gates
         run: |
           npm run check:comments

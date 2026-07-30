@@ -26,6 +26,14 @@ afterEach(() => {
 })
 
 describe('MachineView 统一就绪与跨项目风险', () => {
+  it('全部必要事实返回前保持未知加载态，不提前宣告没有阻断', async () => {
+    global.fetch = vi.fn(() => new Promise<Response>(() => undefined)) as typeof fetch
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    expect(await screen.findByTestId('machine-blockers-loading')).toHaveTextContent('正在读取真实信号')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未发现机器级阻断')
+  })
+
   it('把已接线 Trace timeline 暴露在真实机器页诊断入口', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {

@@ -296,6 +296,28 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     expect(screen.getByTestId('lp-sld-runs-val')).toHaveTextContent('30 次')
   })
 
+  it('自定义 radio 组支持方向键、Home/End 与单一 tab stop', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const skip = screen.getByTestId('lp-exceed-skip')
+    const pause = screen.getByTestId('lp-exceed-pause')
+    expect(skip).toHaveAttribute('tabindex', '0')
+    expect(pause).toHaveAttribute('tabindex', '-1')
+    skip.focus()
+    fireEvent.keyDown(skip, { key: 'ArrowRight' })
+    expect(pause).toHaveAttribute('aria-checked', 'true')
+    expect(pause).toHaveAttribute('tabindex', '0')
+    expect(pause).toHaveFocus()
+    fireEvent.keyDown(pause, { key: 'Home' })
+    expect(skip).toHaveAttribute('aria-checked', 'true')
+
+    const level = screen.getByTestId('lp-lv-L1')
+    level.focus()
+    fireEvent.keyDown(level, { key: 'End' })
+    expect(await screen.findByTestId('lp-promote-confirm')).toHaveTextContent('L3')
+  })
+
   it('token 预算滑杆 step=10 对齐受控粒度：连续单步（键盘方向键语义）不再原地踏步（真机 E2E bug 回归）', async () => {
     // 根因：受控 value 的语义网格是「10 的倍数」（tokensK = round(max_tokens_per_day/10000)*10），
     // 若原生 input 的 step 不等于 10，方向键单步会落到网格外的中间值，onValue 的有损取整把它
@@ -538,6 +560,59 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     ).toHaveLength(2))
     expect(screen.getByTestId('lp-goal')).toHaveValue('本地尚未保存的目标')
     expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+  })
+
+  it('后台只更新未触碰字段时三方重基准，后续保存不得把旧值写回', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '本地目标草稿' } })
+
+    rows = rows.map((row) => ({ ...row, cadence: '6h' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+
+    openAdv()
+    expect(screen.getByTestId('lp-sld-cadence-val')).toHaveTextContent('6h')
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: '本地目标草稿' },
+    })
+  })
+
+  it('保存完成到 reload 返回之间的新输入保持为下一版草稿并可再次精确保存', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '第一版目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: '保存期间继续编辑的第二版' } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('保存期间继续编辑的第二版'))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: '保存期间继续编辑的第二版' },
+    }))
   })
 
   it.each(decisionFactChanges)('%s 变化会撤销旧确认、恢复入口焦点且不能提交', async (_label, changeFacts) => {

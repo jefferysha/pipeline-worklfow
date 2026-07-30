@@ -145,9 +145,9 @@ export function ExecutionTimelineComposer({
                   {t('workbench.timeline_stage_title', { name: selected.name })}
                 </button>
               )}
-              <span className="grid h-9 w-9 place-items-center rounded-full text-text-3" title={t('workbench.timeline_help')} aria-label={t('workbench.timeline_help_label')}>
+              <button type="button" className="grid h-9 w-9 place-items-center rounded-full text-text-3 outline-none hover:bg-fill focus-visible:ring-3 focus-visible:ring-accent-t" title={t('workbench.timeline_help')} aria-label={t('workbench.timeline_help_label')}>
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />
-              </span>
+              </button>
             </div>
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] leading-6 text-text-2">
               <span>{t('workbench.timeline_enter', { name: selected.name })}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -250,7 +250,7 @@ export function ExecutionTimelineComposer({
                   )}
                   <div className="rounded-xl bg-card px-3 shadow-sm ring-1 ring-border">
                   {skills.length === 0 && <p className="py-5 text-center text-sm text-text-3" role="status" aria-live="polite">{t('workbench.timeline_skills_empty')}</p>}
-                  {skills.map((skillId) => {
+                  {skills.map((skillId, index) => {
                     const entry = registryByName.get(skillId)
                     const presentation = skillPresentation(skillId, skillRegistry, lang)
                     const deps = selected.skillDeps?.[skillId] ?? []
@@ -290,6 +290,30 @@ export function ExecutionTimelineComposer({
                             {' · '}{deps.length > 0 ? t('workbench.timeline_waiting', { ids: deps.join(', ') }) : t(skills.length > 1 ? 'workbench.timeline_parallel_start' : 'workbench.timeline_independent')}
                           </p>
                         </div>
+                        {!readonly && onSkillMove && (
+                          <span className="inline-flex gap-1">
+                            <button
+                              type="button"
+                              className="grid h-8 w-8 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30"
+                              aria-label={t('workbench.move_skill_before', { name: presentation.name })}
+                              disabled={index === 0}
+                              onClick={() => {
+                                const previous = skills[index - 1]
+                                if (previous) onSkillMove({ skillId, fromStage: selected.id, toStage: selected.id, refSkillId: previous, after: false })
+                              }}
+                            >↑</button>
+                            <button
+                              type="button"
+                              className="grid h-8 w-8 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-accent-d disabled:opacity-30"
+                              aria-label={t('workbench.move_skill_after', { name: presentation.name })}
+                              disabled={index === skills.length - 1}
+                              onClick={() => {
+                                const next = skills[index + 1]
+                                if (next) onSkillMove({ skillId, fromStage: selected.id, toStage: selected.id, refSkillId: next, after: true })
+                              }}
+                            >↓</button>
+                          </span>
+                        )}
                         {!readonly && onSkillRemove && (
                           <button type="button" className="grid h-9 w-9 place-items-center rounded-lg text-text-3 hover:bg-fill hover:text-red" aria-label={t('workbench.timeline_remove_skill', { id: skillId })} onClick={() => onSkillRemove(selected.id, skillId)}>
                             <X className="h-4 w-4" aria-hidden="true" />

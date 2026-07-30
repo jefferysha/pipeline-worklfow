@@ -22,8 +22,16 @@ function outputStrings(value: unknown): string[] {
   return Object.values(value).flatMap((item) => outputStrings(item))
 }
 
+function hostEnvelopeStrings(value: unknown): string[] {
+  const marker = '\nOutput:\n'
+  return outputStrings(value).map((text) => {
+    const boundary = text.indexOf(marker)
+    return boundary === -1 ? text : text.slice(0, boundary)
+  })
+}
+
 function scriptStates(value: unknown): string[] {
-  return outputStrings(value).flatMap((text) =>
+  return hostEnvelopeStrings(value).flatMap((text) =>
     [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
       .map((match) => match[1] ?? ''),
   )
@@ -31,7 +39,7 @@ function scriptStates(value: unknown): string[] {
 
 export function successfulFunctionOutput(value: unknown): boolean {
   if (scriptStates(value).includes('failed')) return false
-  const textExitCodes = outputStrings(value).flatMap((text) =>
+  const textExitCodes = hostEnvelopeStrings(value).flatMap((text) =>
     [...text.matchAll(
       /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
     )].map((match) => Number(match[1])),

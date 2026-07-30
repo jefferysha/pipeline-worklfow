@@ -256,3 +256,35 @@ production browser matrix, exact committed SHA review and canonical CI remain ma
 The current generated Dashboard asset is `index-DVjAM_GF.js`
 (`sha256:254e4323…ad8`) with `index-YeY6VsN7.css`; the CLI bundle has been regenerated from the
 receipt parser source.
+
+## `8224c75d` final independent review rollback
+
+Three independent reviewers examined the exact candidate across backend/security,
+the complete Dashboard, and release/E2E. Their combined result was
+**C0/H2/M7/L4**, so the candidate was rejected and no finding was waived.
+
+The backend/release repair pins `@fission-ai/openspec@1.6.0`, runs the complete
+strict OpenSpec set in canonical CI and the release candidate, pins checkout and
+setup-node actions to immutable commits, and limits transcript process-status
+parsing to the host envelope rather than Skill-authored stdout.
+
+The Dashboard repair waits for all Machine facts before declaring no blockers;
+adds compact Operations retry and tool-specific empty states; provides keyboard
+stage/Skill reorder and cross-stage movement; completes Arrow/Home/End radio
+semantics; and makes help/count affordances focusable and named. Loop refresh and
+save now rebase per-field revisions, preserving both pre-save unrelated edits and
+new edits made while a save is in flight. The Workbench dirty ref is updated in
+the input callback and its `beforeunload` listener remains registered, closing the
+effect-timing window.
+
+Regression evidence includes root 327 files / 5810 passed / 14 honest skips,
+Dashboard 73 files / 1445 tests, Dashboard typecheck, the 698-file architecture
+gate, release contracts 23/23, OpenSpec 35/35, and receipt tests 105/105. The
+root suite's only failure under concurrent load was the existing 5-second Hook
+integration timeout; the Hook file passed 9/9 and the complete root suite then
+passed under a 15-second integration limit. This section does not record a Build
+PASS yet. Two clean builds are byte-identical at CLI `74bf6154…c366`,
+Server `e2327b62…a07`, Dashboard `index-CRNCuoIq.js`
+(`64fbca9d…299`) and `index-CLLRnTB_.css` (`1200acad…226`).
+The 21-scene browser matrix and a fresh exact-SHA
+**C0/H0/M0/L0** review remain mandatory.

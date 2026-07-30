@@ -38,6 +38,16 @@ function renderStrip() {
   return { onSelect }
 }
 
+function renderEditableStrip() {
+  const onStageReorder = vi.fn()
+  render(
+    <I18nProvider>
+      <TimelineStageStrip workflowName="custom" lanes={LANES} selectedId="spec" readonly={false} onSelect={vi.fn()} onStageReorder={onStageReorder} />
+    </I18nProvider>,
+  )
+  return { onStageReorder }
+}
+
 describe('TimelineStageStrip 横向阶段导航', () => {
   it('为较窄桌面提供可发现的横向滚动提示，并建立无障碍说明关系', () => {
     renderStrip()
@@ -58,5 +68,13 @@ describe('TimelineStageStrip 横向阶段导航', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '选择阶段 归档' }))
     expect(onSelect).toHaveBeenCalledWith('archive')
+  })
+
+  it('阶段重排提供键盘可聚焦的前移和后移入口', () => {
+    const { onStageReorder } = renderEditableStrip()
+    fireEvent.click(screen.getByRole('button', { name: '将阶段 spec 向前移动' }))
+    fireEvent.click(screen.getByRole('button', { name: '将阶段 spec 向后移动' }))
+    expect(onStageReorder).toHaveBeenNthCalledWith(1, 'spec', 'explore', false)
+    expect(onStageReorder).toHaveBeenNthCalledWith(2, 'spec', 'build', true)
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 export type WorkbenchDirtySource = 'track' | 'loop' | 'automation' | 'secrets'
 
@@ -20,7 +20,7 @@ export function useWorkbenchDirtyState(input: {
     setSources((current) => current[source] === value ? current : { ...current, [source]: value })
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     input.onDirtyChange?.(dirty)
   }, [dirty, input.onDirtyChange])
   useEffect(() => () => {

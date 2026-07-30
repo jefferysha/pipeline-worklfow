@@ -184,6 +184,14 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     if (snapshot && snapshot.capabilities.operations !== true) values.push(t('machine.blocker_operations'))
     return values
   }, [currentRoot, errors, images, lang, readiness, skills, snapshot, t])
+  const blockersPending = blockers.length === 0 && (
+    readiness === null
+    || images === null
+    || secrets === null
+    || skills === null
+    || loops === null
+    || snapshot === null
+  )
 
   const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
   const configuredImage = readiness?.image.configured ?? t('machine.loading_signal')
@@ -219,7 +227,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]" data-testid="machine-risk-layout">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
-          {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
+          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
             <ul className="mt-3 space-y-2 p-0">
               {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
             </ul>
