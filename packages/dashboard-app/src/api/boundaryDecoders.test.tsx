@@ -370,6 +370,45 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
+  it('accepts a strict canonical compatibility issue while preserving older omitted responses', () => {
+    expect(decodeSnapshot(validSnapshot())?.projects[0]?.compatibilityIssues).toBeUndefined()
+    const snapshot = validSnapshot()
+    ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = [{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }]
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.compatibilityIssues).toEqual([{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }])
+  })
+
+  it('rejects malformed, over-broad, or duplicate canonical compatibility issues', () => {
+    for (const compatibilityIssues of [
+      [{ kind: 'unknown', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: '', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 1, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2.5, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'repair-state' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime', path: '/private/current.json' }],
+      [
+        { kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' },
+        { kind: 'unsupported-canonical-version', change: 'future', foundVersion: 3, supportedVersion: 1, action: 'upgrade-runtime' },
+      ],
+    ]) {
+      const snapshot = validSnapshot()
+      ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = compatibilityIssues
+      expect(decodeSnapshot(snapshot)).toBeNull()
+    }
+  })
+
   it('decodes a strict exact-event Review Handshake while accepting an older missing field', () => {
     const legacy = decodeSnapshot(validSnapshot())
     expect(legacy).not.toBeNull()

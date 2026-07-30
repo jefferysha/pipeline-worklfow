@@ -1387,6 +1387,13 @@ export const zh: Dict = {
     state_queued: '排队',
     act_kill: '终止',
     empty: '没有在制的任务——使用右上角“创建并锁定”开始，或在终端 tenon init',
+    canonical_version_title: '需要升级 Tenon',
+    canonical_version_desc: '这个项目包含由较新 Tenon 写入的 Change。当前版本已安全停止读取，状态并未被降级或改写。',
+    canonical_version_list: '需要升级后读取的 Change',
+    canonical_version_values: '发现版本 {found} · 当前支持 {supported}',
+    canonical_version_command: '请先在终端升级并新开会话：',
+    canonical_version_refresh: '升级后刷新',
+    canonical_version_refreshing: '正在刷新状态…',
     // T18 孤儿键清理登记：progress.hk_* 28 键系并行 worktree 合并误落本命名空间的副本
     // （HookTimeline 唯一消费 workbench.hk_*，T16 已归位），随本次修剪删除。
     // ── T11：行展开详情 + 动作接线（终止=cancel / 放行·打回=transition）+ running 行日志区。
@@ -2907,6 +2914,13 @@ export const en: Dict = {
     state_queued: 'Queued',
     act_kill: 'Stop',
     empty: 'Nothing in flight — use “Create and lock” above, or run tenon init in your terminal',
+    canonical_version_title: 'Tenon update required',
+    canonical_version_desc: 'This project contains Changes written by a newer Tenon. This version stopped safely without downgrading or rewriting their state.',
+    canonical_version_list: 'Changes that require an update',
+    canonical_version_values: 'Found version {found} · supported here {supported}',
+    canonical_version_command: 'Update in your terminal, then start a new session:',
+    canonical_version_refresh: 'Refresh after updating',
+    canonical_version_refreshing: 'Refreshing status…',
     // ── T11: row detail + action wiring + running-row log tail. Acceptance-G retirement:
     //    act_retry/act_dismiss removed with "retry/dismiss go back to the terminal" (zero refs). ──
     act_pass: 'Approve',

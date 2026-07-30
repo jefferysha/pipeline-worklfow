@@ -20,6 +20,7 @@ import { buildCanvasGroups } from './progressCanvasModel'
 import { ProgressToolbar } from './ProgressToolbar'
 import { ProgressDrawer } from './ProgressDrawer'
 import { ProgressActions } from './ProgressActions'
+import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
 import {
   BADGE_TONE_CLS,
   deckMatch,
@@ -504,6 +505,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       phaseLabelOf(row),
     ).text,
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
+  const compatibilityIssues = snapshot?.projects.find((project) => project.root === currentRoot)
+    ?.compatibilityIssues ?? []
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
@@ -520,6 +523,12 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         onCreate={() => setCreateOpen(true)}
       />
 
+      <CanonicalStateVersionNotice
+        issues={compatibilityIssues}
+        loading={loading}
+        onRefresh={onRefresh}
+      />
+
       {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
@@ -527,7 +536,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
-      {snapshot && flatRows.length === 0 && (
+      {snapshot && flatRows.length === 0 && compatibilityIssues.length === 0 && (
         <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>

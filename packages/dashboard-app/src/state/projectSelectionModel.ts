@@ -9,7 +9,9 @@ export function resolveProjectSelection(
   projects: readonly ProjectSnapshot[],
   preferred: string | null,
 ): ProjectSelection {
-  const reachableRoots = projects.filter((project) => project.ok).map((project) => project.root)
+  const reachableRoots = projects
+    .filter((project) => project.ok || (project.compatibilityIssues?.length ?? 0) > 0)
+    .map((project) => project.root)
   const root = resolveDashboardRoot(reachableRoots, preferred)
   return root === '' ? { kind: 'none' } : { kind: 'selected', root }
 }

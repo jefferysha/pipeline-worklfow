@@ -265,7 +265,11 @@ function AppShell(): JSX.Element {
           <SolutionView />
         ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
           <Onboarding kind="no-project" />
-        ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
+        ) : snapshot
+          && currentProject
+          && currentProject.changes.length === 0
+          && (currentProject.compatibilityIssues?.length ?? 0) === 0
+          && view === 'progress' ? (
           <Onboarding
             kind="no-change"
             root={currentRoot}

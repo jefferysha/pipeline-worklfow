@@ -1,0 +1,67 @@
+import { AlertTriangle } from 'lucide-react'
+import { useT } from '../i18n'
+import type { CanonicalStateCompatibilityIssue } from '../types'
+
+export interface CanonicalStateVersionNoticeProps {
+  issues: readonly CanonicalStateCompatibilityIssue[]
+  loading: boolean
+  onRefresh?: () => void | Promise<void>
+}
+
+export function CanonicalStateVersionNotice({
+  issues,
+  loading,
+  onRefresh,
+}: CanonicalStateVersionNoticeProps): JSX.Element | null {
+  const { t } = useT()
+  if (issues.length === 0) return null
+
+  return (
+    <section
+      className="mt-5 rounded-xl border border-amb-b bg-amb-t px-5 py-4 text-amb-d"
+      role="alert"
+      aria-live="assertive"
+      data-testid="canonical-state-version-notice"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 flex-none" strokeWidth={1.75} aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-bold text-text">{t('progress.canonical_version_title')}</h2>
+          <p className="mt-1 text-[13px] leading-6">
+            {t('progress.canonical_version_desc')}
+          </p>
+          <ol className="mt-3 space-y-2" aria-label={t('progress.canonical_version_list')}>
+            {issues.map((issue) => (
+              <li
+                key={issue.change}
+                className="grid gap-1 rounded-lg border border-amb-b bg-card/75 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <code className="min-w-0 break-all text-[12px] font-semibold text-text">{issue.change}</code>
+                <span className="text-[12px] font-medium">
+                  {t('progress.canonical_version_values', {
+                    found: issue.foundVersion,
+                    supported: issue.supportedVersion,
+                  })}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-3 text-[12.5px] leading-5">
+            {t('progress.canonical_version_command')}{' '}
+            <code className="rounded bg-fill px-1.5 py-1 font-mono text-[12px] text-text">
+              tenon update --codex
+            </code>
+          </p>
+          <button
+            type="button"
+            className="mt-4 cursor-pointer rounded-lg border border-amb-b bg-card px-3.5 py-2 text-[13px] font-bold text-amb-d transition-colors hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) disabled:cursor-wait disabled:opacity-60"
+            disabled={loading || onRefresh === undefined}
+            onClick={() => { void onRefresh?.() }}
+          >
+            {loading ? t('progress.canonical_version_refreshing') : t('progress.canonical_version_refresh')}
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}

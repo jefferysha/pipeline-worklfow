@@ -35,6 +35,47 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('明确未来 canonical 版本投影为有界 issue，并与可读 Change 共存且不泄露路径', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const futureDir = await initChange(store, root, 'future-state')
+    await initChange(store, root, 'readable-state')
+    const currentPath = join(futureDir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    await writeFile(currentPath, JSON.stringify({
+      ...current,
+      schemaVersion: 2,
+      futureOnly: { sourcePath: currentPath },
+    }), 'utf8')
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    const project = snapshot.projects[0] as typeof snapshot.projects[number] & {
+      compatibilityIssues?: Array<{
+        kind: string
+        change: string
+        foundVersion: number
+        supportedVersion: number
+        action: string
+      }>
+    }
+
+    expect(project.ok).toBe(false)
+    expect(project.changes.map((change) => change.name)).toEqual(['readable-state'])
+    expect(snapshot.change_count).toBe(1)
+    expect(project.compatibilityIssues).toEqual([{
+      kind: 'unsupported-canonical-version',
+      change: 'future-state',
+      foundVersion: 2,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }])
+    expect(project.error).toBeUndefined()
+    expect(JSON.stringify(project.compatibilityIssues)).not.toContain(root)
+    expect(JSON.stringify(project.compatibilityIssues)).not.toContain('futureOnly')
+  })
+
   it('canonical current 损坏必须在项目快照 fail-loud，不得静默把 change 隐藏成空项目', async () => {
     const store = newStore()
     const root = await makeProject()

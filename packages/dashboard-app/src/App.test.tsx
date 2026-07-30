@@ -616,6 +616,31 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     fireEvent.click(screen.getByTestId('onboard-new-change'))
     expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
   })
+
+  it('未来 canonical 版本优先于 no-change 教学态，进入只读升级恢复路径', async () => {
+    const project = makeProject('/repo', [], {
+      ok: false,
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-change',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([project]) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+
+    render(<App />)
+    expect(await screen.findByTestId('canonical-state-version-notice')).toBeInTheDocument()
+    expect(screen.queryByTestId('onboard-no-change')).toBeNull()
+    expect(screen.getByText('future-change')).toBeInTheDocument()
+  })
 })
 
 describe('App currentRoot 语义（只消费显式选择）', () => {

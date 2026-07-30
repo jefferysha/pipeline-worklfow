@@ -12,6 +12,7 @@ import {
   parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
+  UnsupportedRunStateVersionError,
   TERMINAL_ACTIVITY_FILE,
   type EffectiveWorkflowPlan,
   type StateStore,
@@ -179,6 +180,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   }
 
   const changes: ChangeSnapshot[] = []
+  const compatibilityIssues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []
   const legacyWorkflowRules: ProjectSnapshot['workflowRules'] = {}
   const errors: string[] = []
   let gitHeadPromise: Promise<string> | undefined
@@ -278,16 +280,30 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
         ...(terminalActivity === undefined ? {} : { terminalActivity }),
       })
     } catch (error) {
+      if (error instanceof UnsupportedRunStateVersionError) {
+        compatibilityIssues.push({
+          kind: 'unsupported-canonical-version',
+          change: e.name,
+          foundVersion: error.foundVersion,
+          supportedVersion: error.supportedVersion,
+          action: 'upgrade-runtime',
+        })
+        continue
+      }
       errors.push(
         `${e.name}: 状态损坏或不可读 [${source}]（${error instanceof Error ? error.message : String(error)}）`,
       )
     }
   }
   changes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  compatibilityIssues.sort((a, b) => (
+    a.change < b.change ? -1 : a.change > b.change ? 1 : 0
+  ))
   return {
     root,
-    ok: errors.length === 0,
+    ok: errors.length === 0 && compatibilityIssues.length === 0,
     changes,
+    ...(compatibilityIssues.length === 0 ? {} : { compatibilityIssues }),
     workflowRules: legacyWorkflowRules,
     ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
   }
