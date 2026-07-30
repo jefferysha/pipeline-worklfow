@@ -55,6 +55,8 @@ export interface HooksConfigState {
   promptSkipKeyword: string | null
   promptSkipBusy: boolean
   promptSkipError: string | null
+  /** Prompt routing editor reports its unsaved effective keyword into Workbench's aggregate guard. */
+  onPromptSkipDirtyChange?: (dirty: boolean) => void
   /** 在途写回的 `<hook>.<阶段>` 键：对应开关禁用，防同键乱序竞态。 */
   busyKeys: ReadonlySet<string>
   toggle: (hook: string, phase: string, enabled: boolean) => void
@@ -70,7 +72,11 @@ export interface HooksConfigState {
  * T17：可选 onError——宿主（App 经 WorkbenchView）传入时，写回失败的提示改走它（接全局
  * showFlash），不再落 toggleError 行内 alert（两处同时报同一件事是重复）；缺省行为与 T15 一致。
  */
-export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
+export function useHooksConfig(
+  root: string,
+  onError?: (msg: string) => void,
+  onPromptSkipDirtyChange?: (dirty: boolean) => void,
+): HooksConfigState {
   const { t, lang } = useT()
   const tRef = useRef(t)
   tRef.current = t
@@ -202,6 +208,7 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
     promptSkipKeyword,
     promptSkipBusy,
     promptSkipError: promptSkipFailed ? t('workbench.hk_bypass_save_error') : null,
+    onPromptSkipDirtyChange,
     busyKeys,
     toggle,
     savePromptSkipKeyword,

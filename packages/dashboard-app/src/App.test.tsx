@@ -73,6 +73,7 @@ const EDITABLE_WORKFLOW = {
 function stubEditableWorkbench(options: {
   preserveLocation?: boolean
   roots?: readonly string[]
+  promptRoutingBypass?: boolean
 } = {}): void {
   const roots = options.roots ?? ['/repo']
   if (!options.preserveLocation) {
@@ -91,7 +92,14 @@ function stubEditableWorkbench(options: {
       return new Response(JSON.stringify(EDITABLE_WORKFLOW), { status: 200 })
     }
     if (url.startsWith('/api/hooks?root=')) {
-      return new Response(JSON.stringify({ ok: true, hooks: [], matrix: {} }), { status: 200 })
+      return new Response(JSON.stringify({
+        ok: true,
+        hooks: options.promptRoutingBypass
+          ? [{ id: 'router', event: 'UserPromptSubmit', matcher: '*', script: 'hooks/router.sh', configurable: true }]
+          : [],
+        matrix: {},
+        prompt_skip_keyword: 'no-tenon',
+      }), { status: 200 })
     }
     if (url === '/api/loops/snapshot') {
       return new Response(JSON.stringify({ generated_at: '2026-07-30T00:00:00Z', rows: [] }), { status: 200 })
@@ -127,6 +135,34 @@ async function renderDirtyWorkbenchApp(options: { preserveLocation?: boolean } =
 }
 
 describe('App Workbench 未保存草稿离开守卫', () => {
+  it('旁路词未保存草稿同时触发导航 Dialog 与 beforeunload；改回基线后解除', async () => {
+    stubEditableWorkbench({ promptRoutingBypass: true })
+    render(<App />)
+    const editor = await screen.findByTestId('wb-prompt-routing-bypass')
+    const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
+    fireEvent.change(input, { target: { value: 'draft-tenon' } })
+
+    const dirtyEvent = new Event('beforeunload', { cancelable: true })
+    expect(window.dispatchEvent(dirtyEvent)).toBe(false)
+    expect(dirtyEvent.defaultPrevented).toBe(true)
+
+    fireEvent.click(screen.getByTestId('nav-overview'))
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(input).toHaveValue('draft-tenon')
+    fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
+
+    fireEvent.change(input, { target: { value: 'no-tenon' } })
+    await waitFor(() => {
+      const cleanEvent = new Event('beforeunload', { cancelable: true })
+      expect(window.dispatchEvent(cleanEvent)).toBe(true)
+      expect(cleanEvent.defaultPrevented).toBe(false)
+    })
+    fireEvent.click(screen.getByTestId('nav-overview'))
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+  })
+
   it('Workbench 内 browser Back 切换项目时，取消保留 root A 草稿，确认才进入 root B', async () => {
     const rootA = '/repo-a'
     const rootB = '/repo-b'

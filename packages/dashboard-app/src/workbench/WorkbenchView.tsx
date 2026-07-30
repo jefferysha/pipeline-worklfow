@@ -104,13 +104,14 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   workflowIdentity.current = wfName
   localeIdentity.current = { t, lang }
   const [advancedOpen, setAdvancedOpen] = useState(false); const [skillEditorOpen, setSkillEditorOpen] = useState(false)
+  const [promptSkipDirty, setPromptSkipDirty] = useState(false)
   const defSnapshotRef = useRef<string | null>(null)
   const {
     addStageOpen, setAddStageOpen, stageDraftName, setStageDraftName, stageDraftId, setStageDraftId,
     stageIdTouched, setStageIdTouched, addStageNameRef, stageIdError, canSubmitStage,
     closeAddStage, confirmAddStage, draftDirty: addStageDraftDirty,
   } = useStageDraftEditor({ def, stageId, setDef, setStageId })
-  const hooksConfig = useHooksConfig(root, onToggleError)
+  const hooksConfig = useHooksConfig(root, onToggleError, setPromptSkipDirty)
   const mandatory = useMandatorySkills(root)
   const { recent, recentSilent } = useRecentWorkflowHistory(snapshot, root, wfName)
   const loops = useLoops(root)
@@ -144,6 +145,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     setWorkflowDeleteError(null)
     setAdvancedOpen(false)
     setSkillEditorOpen(false)
+    setPromptSkipDirty(false)
     defSnapshotRef.current = null
     let cancelled = false
     fetchWorkflowNames(targetRoot)
@@ -208,7 +210,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
   const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
   const { setSourceDirty } = useWorkbenchDirtyState({
-    localDirty: dirty || workflowCreateDirty || addStageDraftDirty,
+    localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
     onDirtyChange,
   })
   function editLane(laneId: string, patch: Parameters<typeof editLaneInDef>[2]): void {

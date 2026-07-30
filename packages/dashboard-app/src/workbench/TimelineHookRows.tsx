@@ -115,6 +115,15 @@ function PromptRoutingBypassEditor({ config }: { config: HooksConfigState }): JS
   const lastEnabledKeyword = useRef('no-tenon')
   useEffect(() => setValidationError(null), [lang])
 
+  const effectiveKeyword = enabled ? draft : ''
+  const dirty = config.promptSkipKeyword !== null && effectiveKeyword !== config.promptSkipKeyword
+  useEffect(() => {
+    config.onPromptSkipDirtyChange?.(dirty)
+  }, [config.onPromptSkipDirtyChange, dirty])
+  useEffect(() => () => {
+    config.onPromptSkipDirtyChange?.(false)
+  }, [config.onPromptSkipDirtyChange])
+
   useEffect(() => {
     if (config.promptSkipKeyword === null) return
     setDraft(config.promptSkipKeyword)
