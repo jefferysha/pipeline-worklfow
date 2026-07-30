@@ -115,10 +115,20 @@ export type TransitionReadinessBlockerSnapshot =
     }
 
 /** 单个已注册 Project 的聚合。 */
+export interface CanonicalStateCompatibilityIssue {
+  kind: 'unsupported-canonical-version'
+  change: string
+  foundVersion: number
+  supportedVersion: number
+  action: 'upgrade-runtime'
+}
+
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  compatibilityIssues?: CanonicalStateCompatibilityIssue[]
+  compatibilityIssuesTruncated?: true
   error?: string
 }
 

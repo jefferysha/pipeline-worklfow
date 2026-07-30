@@ -3897,6 +3897,28 @@ import { join as join6 } from "node:path";
 // packages/kernel/dist/state/run-revision-codec.js
 import { createHash as createHash2, randomUUID as randomUUID2 } from "node:crypto";
 
+// packages/kernel/dist/state/run-revision-validation.js
+var RUN_STATE_SCHEMA_VERSION = 1;
+var RunStateCorruptError = class extends Error {
+  _tag = "RunStateCorruptError";
+};
+var UnsupportedRunStateVersionError = class extends Error {
+  foundVersion;
+  supportedVersion;
+  _tag = "UnsupportedRunStateVersionError";
+  constructor(foundVersion, supportedVersion = RUN_STATE_SCHEMA_VERSION) {
+    super(`canonical schemaVersion ${foundVersion} \u9AD8\u4E8E\u5F53\u524D\u652F\u6301\u7248\u672C ${supportedVersion}`);
+    this.foundVersion = foundVersion;
+    this.supportedVersion = supportedVersion;
+    this.name = "UnsupportedRunStateVersionError";
+  }
+};
+function ownRecord(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return void 0;
+  return Object.fromEntries(Object.entries(value));
+}
+
 // packages/kernel/dist/state/workflow-governance-binding.js
 import { lstat, readFile as readFile2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
@@ -4090,14 +4112,6 @@ ${logical.opaqueTail}`
 function rollbackCompatibleState(revision) {
   return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId);
 }
-var RunStateCorruptError = class extends Error {
-  _tag = "RunStateCorruptError";
-};
-function ownRecord(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return void 0;
-  return Object.fromEntries(Object.entries(value));
-}
 function stringField(fields, field2) {
   const value = fields[field2];
   return Array.isArray(value) ? value.join(",") : value;
@@ -4274,7 +4288,12 @@ function parseRunRevision(raw, source) {
     throw new RunStateCorruptError(`${source}: JSON \u635F\u574F\uFF08${String(error)}\uFF09`);
   }
   const record2 = ownRecord(value);
-  if (!record2 || Object.keys(record2).some((key) => ![
+  if (!record2)
+    throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
+  if (typeof record2.schemaVersion === "number" && Number.isSafeInteger(record2.schemaVersion) && record2.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
+    throw new UnsupportedRunStateVersionError(record2.schemaVersion);
+  }
+  if (Object.keys(record2).some((key) => ![
     "schemaVersion",
     "hookState",
     "revision",
@@ -4287,7 +4306,7 @@ function parseRunRevision(raw, source) {
     throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
   const hook = ownRecord(record2.hookState);
   const mutation = ownRecord(record2.mutation);
-  if (record2.schemaVersion !== 1 || typeof record2.revision !== "number" || !Number.isSafeInteger(record2.revision) || record2.revision < 0 || typeof record2.revisionId !== "string" || !SAFE_ID_RE.test(record2.revisionId) || record2.revision === 0 !== (record2.previousRevisionId === void 0) || record2.previousRevisionId !== void 0 && (typeof record2.previousRevisionId !== "string" || !SAFE_ID_RE.test(record2.previousRevisionId)) || typeof record2.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record2.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
+  if (record2.schemaVersion !== RUN_STATE_SCHEMA_VERSION || typeof record2.revision !== "number" || !Number.isSafeInteger(record2.revision) || record2.revision < 0 || typeof record2.revisionId !== "string" || !SAFE_ID_RE.test(record2.revisionId) || record2.revision === 0 !== (record2.previousRevisionId === void 0) || record2.previousRevisionId !== void 0 && (typeof record2.previousRevisionId !== "string" || !SAFE_ID_RE.test(record2.previousRevisionId)) || typeof record2.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record2.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
     "kind",
     "observedAt",
     "effects",

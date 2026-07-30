@@ -46,6 +46,47 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('明确未来 canonical 版本投影为有界 issue，并与可读 Change 共存且不泄露路径', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const futureDir = await initChange(store, root, 'future-state')
+    await initChange(store, root, 'readable-state')
+    const currentPath = join(futureDir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    await writeFile(currentPath, JSON.stringify({
+      ...current,
+      schemaVersion: 2,
+      futureOnly: { sourcePath: currentPath },
+    }), 'utf8')
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    const project = snapshot.projects[0] as typeof snapshot.projects[number] & {
+      compatibilityIssues?: Array<{
+        kind: string
+        change: string
+        foundVersion: number
+        supportedVersion: number
+        action: string
+      }>
+    }
+
+    expect(project.ok).toBe(false)
+    expect(project.changes.map((change) => change.name)).toEqual(['readable-state'])
+    expect(snapshot.change_count).toBe(1)
+    expect(project.compatibilityIssues).toEqual([{
+      kind: 'unsupported-canonical-version',
+      change: 'future-state',
+      foundVersion: 2,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }])
+    expect(project.error).toBeUndefined()
+    expect(JSON.stringify(project.compatibilityIssues)).not.toContain(root)
+    expect(JSON.stringify(project.compatibilityIssues)).not.toContain('futureOnly')
+  })
+
   it('canonical current 损坏必须在项目快照 fail-loud，不得静默把 change 隐藏成空项目', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -57,6 +98,51 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(snap.projects[0].error).toMatch(/broken-current.*current|current.*broken-current/i)
     expect(snap.change_count).toBe(0)
   })
+
+  it('未来版本与普通损坏并存时同时保留有界兼容信息和 corruption error', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const futureDir = await initChange(store, root, 'future-state')
+    const brokenDir = await initChange(store, root, 'broken-current')
+    await initChange(store, root, 'readable-state')
+    const futureCurrentPath = join(futureDir, '.pipeline-run', 'current.json')
+    const futureCurrent = JSON.parse(await readFile(futureCurrentPath, 'utf8')) as Record<string, unknown>
+    await writeFile(futureCurrentPath, JSON.stringify({ ...futureCurrent, schemaVersion: 2 }), 'utf8')
+    await writeFile(join(brokenDir, '.pipeline-run', 'current.json'), '{broken', 'utf8')
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    const project = snapshot.projects[0]
+    expect(project.ok).toBe(false)
+    expect(project.changes.map((change) => change.name)).toEqual(['readable-state'])
+    expect(project.compatibilityIssues?.map((issue) => issue.change)).toEqual(['future-state'])
+    expect(project.error).toMatch(/broken-current/)
+  })
+
+  it('兼容问题数组最多返回 100 项，超限时用 typed 截断信号且保留可读 sibling', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await initChange(store, root, 'readable-state')
+    for (let index = 0; index < 101; index += 1) {
+      const dir = await initChange(store, root, `future-${String(index).padStart(3, '0')}`)
+      const currentPath = join(dir, '.pipeline-run', 'current.json')
+      const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+      await writeFile(currentPath, JSON.stringify({ ...current, schemaVersion: 2 }), 'utf8')
+    }
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    const project = snapshot.projects[0]
+    expect(project.compatibilityIssues).toHaveLength(100)
+    expect(project.compatibilityIssues?.at(0)?.change).toBe('future-000')
+    expect(project.compatibilityIssues?.at(-1)?.change).toBe('future-099')
+    expect(project.compatibilityIssuesTruncated).toBe(true)
+    expect(project.error).toBeUndefined()
+    expect(project.changes.map((change) => change.name)).toEqual(['readable-state'])
+    expect(snapshot.change_count).toBe(1)
+  }, 15_000)
 
   it('server 扫描自动重建缺失的 YAML projection，但 canonical 仍是读取真相', async () => {
     const store = newStore()

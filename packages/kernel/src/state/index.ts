@@ -62,7 +62,8 @@ export type { WorkflowRunRepositoryDeps } from './workflow-run-repository.js'
 export {
   projectionMetadataFor, readCurrentRunRevision, readCurrentRunRevisionFromSync,
   readCurrentRunRevisionSync, readImmutableRunRevision,
-  RunStateCorruptError, RUN_CURRENT_FILE, RUN_REVISIONS_DIR, RUN_STATE_DIR,
+  RUN_STATE_SCHEMA_VERSION, RunStateCorruptError, UnsupportedRunStateVersionError,
+  RUN_CURRENT_FILE, RUN_REVISIONS_DIR, RUN_STATE_DIR,
   stateStorageExistsSync, stateStorageSourcePathSync, validateCanonicalRevisionHistory,
 } from './run-revision-store.js'
 export {

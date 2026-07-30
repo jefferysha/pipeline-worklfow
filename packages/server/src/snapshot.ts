@@ -15,6 +15,7 @@ import {
   parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
+  UnsupportedRunStateVersionError,
   TERMINAL_ACTIVITY_FILE,
   type EffectiveWorkflowPlan,
   type StateStore,
@@ -36,6 +37,8 @@ import {
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
 import { readBounded } from './contextBundleTrustedReader.js'
+
+const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
 
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
@@ -198,6 +201,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   }
 
   const changes: ChangeSnapshot[] = []
+  const compatibilityIssues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []
   const legacyWorkflowRules: ProjectSnapshot['workflowRules'] = {}
   const errors: string[] = []
   let gitHeadPromise: Promise<string> | undefined
@@ -227,7 +231,8 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
           },
         }),
   }
-  for (const e of entries) {
+  let compatibilityIssueOverflow = 0
+  for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const changeDir = join(changesRoot, e.name)
     let source: string | undefined
@@ -297,16 +302,35 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
         ...(terminalActivity === undefined ? {} : { terminalActivity }),
       })
     } catch (error) {
+      if (error instanceof UnsupportedRunStateVersionError) {
+        if (compatibilityIssues.length < MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES) {
+          compatibilityIssues.push({
+            kind: 'unsupported-canonical-version',
+            change: e.name,
+            foundVersion: error.foundVersion,
+            supportedVersion: error.supportedVersion,
+            action: 'upgrade-runtime',
+          })
+        } else {
+          compatibilityIssueOverflow += 1
+        }
+        continue
+      }
       errors.push(
         `${e.name}: 状态损坏或不可读 [${source}]（${error instanceof Error ? error.message : String(error)}）`,
       )
     }
   }
   changes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  compatibilityIssues.sort((a, b) => (
+    a.change < b.change ? -1 : a.change > b.change ? 1 : 0
+  ))
   return {
     root,
-    ok: errors.length === 0,
+    ok: errors.length === 0 && compatibilityIssues.length === 0,
     changes,
+    ...(compatibilityIssues.length === 0 ? {} : { compatibilityIssues }),
+    ...(compatibilityIssueOverflow === 0 ? {} : { compatibilityIssuesTruncated: true as const }),
     workflowRules: legacyWorkflowRules,
     ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
   }

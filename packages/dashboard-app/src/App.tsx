@@ -17,7 +17,9 @@ import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
 import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
+import { isProjectWritable } from './state/projectSelectionModel'
 import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
+import { SnapshotInlineError } from './progress/SnapshotInlineError'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -93,7 +95,12 @@ function AppShell(): JSX.Element {
   useEffect(() => () => {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
   }, [])
-  const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
+  const { snapshot, loading, error, errorStatus, connected, refresh, reconnect } = useSnapshot()
+  const snapshotError = error === null
+    ? null
+    : errorStatus === null
+      ? t('common.snapshot_request_failed_unknown')
+      : t('common.snapshot_request_failed', { status: errorStatus })
   const { currentRoot, selectProject } = useProjectSelection({
     snapshot,
     view,
@@ -102,6 +109,7 @@ function AppShell(): JSX.Element {
     onSelectedChange: setSelectedChange,
   })
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
+  const currentProjectWritable = isProjectWritable(currentProject)
 
   // 跨项目 snapshot 已携带每个 change 冻结绑定的 workflow 摘要。项目总览与单项目视图消费同一
   // 聚合事实，无选择时不需要、也不允许发起任何 per-root workflow 请求。
@@ -151,16 +159,17 @@ function AppShell(): JSX.Element {
 
   // 工作台是 per-root 配置面，只能消费显式选择且仍可达的项目，绝不回落首个可达项目。
   const workbenchRoot = useMemo(() => {
-    const okRoots = snapshot?.projects.filter((p) => p.ok).map((p) => p.root) ?? []
+    const okRoots = snapshot?.projects.filter(isProjectWritable).map((p) => p.root) ?? []
     if (currentRoot !== '' && okRoots.includes(currentRoot)) return currentRoot
     return ''
   }, [snapshot, currentRoot])
 
-  // 进度、AFK 和工作台都是单项目视图；没有显式有效选择时统一进入项目总览。
+  // Progress 可在仅含 future-version issue 时只读打开；AFK/Workbench 含写入口，仍要求
+  // project.ok=true。普通 corruption 与兼容 issue 并存时 selection model 会让 root 失效。
   useEffect(() => {
     if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot || snapshot.project_count === 0) return
-    if (currentRoot === '') setView('projects')
-  }, [view, snapshot, currentRoot, setView])
+    if (currentRoot === '' || (view !== 'progress' && !currentProjectWritable)) setView('projects')
+  }, [view, snapshot, currentRoot, currentProjectWritable, setView])
 
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
@@ -240,10 +249,13 @@ function AppShell(): JSX.Element {
         className="w-full flex-1 px-6 pb-6 pt-3 mobile:px-4 mobile:pb-[calc(88px+env(safe-area-inset-bottom))] mobile:pt-2"
         data-testid="app-main"
       >
+        {snapshot !== null && snapshotError && view !== 'progress' && view !== 'hostPlan' && (
+          <SnapshotInlineError error={snapshotError} loading={loading} onRefresh={refresh} />
+        )}
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {snapshot === null && !loading && error && view !== 'hostPlan' ? (
+        {snapshot === null && !loading && snapshotError && view !== 'hostPlan' ? (
           <section
             className="mx-auto mt-8 w-full max-w-[680px] rounded-2xl border border-red-b bg-red-t p-6 text-red-d mobile:mt-4 mobile:p-5"
             role="alert"
@@ -251,7 +263,7 @@ function AppShell(): JSX.Element {
             data-testid="snapshot-error"
           >
             <h1 className="text-lg font-bold text-text">{t('common.snapshot_error_title')}</h1>
-            <p className="mt-2 break-words text-[13px] leading-6">{error}</p>
+            <p className="mt-2 break-words text-[13px] leading-6">{snapshotError}</p>
             <p className="mt-1 text-[13px] leading-6 text-text-2">{t('common.snapshot_error_hint')}</p>
             <button
               type="button"
@@ -265,7 +277,11 @@ function AppShell(): JSX.Element {
           <SolutionView />
         ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
           <Onboarding kind="no-project" />
-        ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
+        ) : snapshot
+          && currentProject
+          && currentProject.changes.length === 0
+          && (currentProject.compatibilityIssues?.length ?? 0) === 0
+          && view === 'progress' ? (
           <Onboarding
             kind="no-change"
             root={currentRoot}
@@ -293,21 +309,23 @@ function AppShell(): JSX.Element {
             <ProgressView
               snapshot={snapshot}
               loading={loading}
-              error={error}
+              error={snapshotError}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
               onToast={(m) => showFlash('toast', m)}
               onRefresh={refresh}
               selectedChange={selectedChange}
               onSelectedChange={setSelectedChange}
+              readOnly={!currentProjectWritable}
             />
           ) : (
             <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
           )
         )}
         {view === 'afk' && (
-          // 契约同进度页：AfkView 恒吃真实单项目 root（currentRoot 非空）；'' 仅首帧未到，诚实加载态。
-          currentRoot !== '' ? (
+          // AfkView 含写入口，必须在同一渲染帧确认 project.ok=true 后才能挂载；effect 仅负责
+          // 将失效 URL/导航清理回项目页，不能作为安全边界。
+          currentRoot !== '' && currentProjectWritable ? (
             <AfkView
               snapshot={snapshot}
               currentRoot={currentRoot}

@@ -17,10 +17,10 @@ import {
 import { atomicLinkPublish } from './atomic-publish.js'
 import {
   preVerifyReviewPayloadDigest,
-  RunStateCorruptError,
   splitPreVerifyReviewAnchor,
   type RunRevision,
 } from './run-revision-codec.js'
+import { RunStateCorruptError } from './run-revision-validation.js'
 
 export const PRE_VERIFY_REVIEW_DIR = 'pre-verify-review'
 const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/

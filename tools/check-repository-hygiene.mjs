@@ -69,6 +69,10 @@ const ORCHESTRATION_GRAPH_CHANGE_REFERENCE_FILES = new Set([
 ])
 const ORCHESTRATION_GRAPH_CHANGE_PATH =
   /^openspec\/changes\/(?:frozen-workflow-definition-status-20260730|archive\/\d{4}-\d{2}-\d{2}-frozen-workflow-definition-status-20260730)\/(.+)$/
+const CANONICAL_VERSION_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const CANONICAL_VERSION_REFERENCE_DOCS = new Set([
+  'docs/superpowers/specs/2026-07-30-canonical-state-version-status-upstream-research.md',
+])
 const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
   String.fromCharCode(
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
@@ -167,6 +171,13 @@ function allowedOrchestrationGraphReference(rel, identity) {
   )
 }
 
+function allowedCanonicalVersionReference(rel, identity) {
+  return (
+    CANONICAL_VERSION_REFERENCE_IDENTITIES.has(identity)
+    && CANONICAL_VERSION_REFERENCE_DOCS.has(rel)
+  )
+}
+
 function disallowedReferenceIdentity(rel, value) {
   const normalized = value.toLowerCase()
   return FORBIDDEN_REFERENCE_IDENTITIES.find(
@@ -176,6 +187,7 @@ function disallowedReferenceIdentity(rel, value) {
       && !allowedTraceTimelineReference(rel, identity)
       && !allowedReviewHandshakeReference(rel, identity)
       && !allowedOrchestrationGraphReference(rel, identity)
+      && !allowedCanonicalVersionReference(rel, identity)
     ),
   )
 }
