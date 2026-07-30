@@ -44,6 +44,7 @@ describe('i18n completeness（zh / en 键结构逐一对齐）', () => {
       'detail.related_sessions.platform_codex',
       'detail.related_sessions.platform_opencode',
       'detail.related_sessions.platform_pi',
+      'detail.workflow_definition.workflow',
       'advanced.traffic_duration_ms',
       'operations.result_loop_doc_cas',
       'onboard.register_placeholder',
@@ -57,6 +58,17 @@ describe('i18n completeness（zh / en 键结构逐一对齐）', () => {
       .filter((key) => zhLeaves[key] !== '' && zhLeaves[key] === enLeaves[key])
       .sort()
     expect(identical).toEqual([...allowed].sort())
+  })
+
+  it('编排图标题、核心节点类型和治理元数据提供真正的中文文案', () => {
+    const graph = ((zh.detail as Dict).orchestration_graph as Dict)
+    expect(graph).toMatchObject({
+      heading: '编排图',
+      kind_workflow: '工作流',
+      kind_change: '变更',
+      meta_track: '轨道',
+      meta_preset: '预设',
+    })
   })
 })
 

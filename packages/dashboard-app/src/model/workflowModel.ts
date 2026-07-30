@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkflow } from '../api/client'
 import type { WbGuardConfig } from '../api/governanceTypes'
 import type { Snapshot } from '../types'
+import { isProjectNavigable } from '../state/projectSelectionModel'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
 
 // ── kernel WorkflowDef/StepDef 的 JSON 形状（跨 HTTP 边界手抄，不 import kernel 类型只为了
@@ -84,7 +85,7 @@ export function workflowRulesFromSnapshot(
 ): ReadonlyMap<string, WorkflowRules> {
   const rules = new Map<string, WorkflowRules>()
   for (const project of snapshot?.projects ?? []) {
-    if (!project.ok) continue
+    if (!isProjectNavigable(project)) continue
     for (const change of project.changes) {
       rules.set(snapshotRulesKey(project.root, change.workflowPlanFingerprint), change.workflowRules)
     }

@@ -3,10 +3,10 @@ import { join } from 'node:path'
 import type { TransitionRecord } from '../workflow/run-types.js'
 import { hydratePreVerifyReviewFromSync } from './pre-verify-review-store.js'
 import {
-  RunStateCorruptError,
   parseRunRevision,
   type RunRevision,
 } from './run-revision-codec.js'
+import { RunStateCorruptError } from './run-revision-validation.js'
 import {
   assertDirectPredecessor,
   assertMutationEffects,

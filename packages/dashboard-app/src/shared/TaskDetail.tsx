@@ -21,6 +21,7 @@ import { TaskConnectionCard } from './TaskConnectionCard'
 import { TaskDetailIntro } from './TaskDetailIntro'
 import { TaskDocumentsSection } from './TaskDocumentsSection'
 import { RelatedSessionsSection } from './RelatedSessionsSection'
+import { OrchestrationGraphCard } from './OrchestrationGraphCard'
 gsap.registerPlugin(useGSAP)
 export interface TaskDetailProps {
   root: string
@@ -355,6 +356,7 @@ export function TaskDetail({
           </div>
         )}
       </div>
+      <OrchestrationGraphCard root={root} change={change.name} />
       {change.documents?.governed ? (
         <TaskDocumentsSection
           documents={change.documents}

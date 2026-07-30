@@ -11,7 +11,7 @@ import { atomicLinkPublish } from './atomic-publish.js'
 
 export const WORKFLOW_PLAN_SNAPSHOT_FILE = '.pipeline-workflow-plan.json'
 
-interface WorkflowPlanSnapshotEnvelope {
+export interface WorkflowPlanSnapshotEnvelope {
   readonly version: 1
   readonly run_id: string
   readonly plan: WorkflowPlanSnapshot
@@ -35,7 +35,7 @@ function isWorkflowIr(value: unknown): value is WorkflowIR {
     && Array.isArray(record.steps)
 }
 
-function parseEnvelope(raw: string): WorkflowPlanSnapshotEnvelope {
+export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnvelope {
   let value: unknown
   try {
     value = JSON.parse(raw)
@@ -103,7 +103,7 @@ export async function readWorkflowPlanSnapshot(
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow plan snapshot 必须是非 symlink 普通文件: ${target}`)
     }
-    return parseEnvelope(await readFile(target, 'utf8'))
+    return parseWorkflowPlanSnapshot(await readFile(target, 'utf8'))
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return undefined
     throw error

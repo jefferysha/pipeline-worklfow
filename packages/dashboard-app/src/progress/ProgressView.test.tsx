@@ -1350,6 +1350,17 @@ describe('ProgressView Bug4：乐观 patch 按 change 落地清除，不被无�
 })
 
 describe('ProgressView 空态', () => {
+  it('只读兼容模式仅保留查看与刷新，不渲染创建、transition 或 cancel 写入口', async () => {
+    renderView({ readOnly: true })
+
+    expect(screen.queryByTestId('progress-new-change')).toBeNull()
+    await openDrawer('gate-demo')
+    expect(screen.queryByTestId('prg9-dw-pass-gate-demo')).toBeNull()
+    expect(screen.queryByTestId('prg9-dw-reject-gate-demo')).toBeNull()
+    await openDrawer('afk-demo')
+    expect(screen.queryByTestId('prg9-dw-kill-afk-demo')).toBeNull()
+  })
+
   it('无在制任务 → 主入口可打开 Route Lock，同时保留 tenon init 退路', async () => {
     renderView({ snapshot: makeSnapshot([makeProject(ROOT_A, [])]) })
     expect(screen.getByTestId('prg-empty').textContent).toContain('tenon init')

@@ -39,6 +39,9 @@ export function formatApiError(
   options: { exposeServerDetail?: boolean } = {},
 ): string {
   if (error instanceof ApiError) {
+    if (error.status === undefined && error.message === 'snapshot response is invalid') {
+      return t('common.invalid_response')
+    }
     if (error.status === undefined) return t('common.network_error')
     if (error.status >= 400) {
       return options.exposeServerDetail && error.hasServerDetail

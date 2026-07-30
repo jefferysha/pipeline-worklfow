@@ -20,6 +20,8 @@ import { ProgressToolbar } from './ProgressToolbar'
 import { ProgressDrawer } from './ProgressDrawer'
 import { ProgressActions } from './ProgressActions'
 import type { ProgressViewProps } from './progressViewTypes'
+import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
+import { SnapshotInlineError } from './SnapshotInlineError'
 import {
   BADGE_TONE_CLS,
   deckMatch,
@@ -39,14 +41,8 @@ import {
 gsap.registerPlugin(useGSAP)
 
 /**
- * ProgressView（v10c 单项目 · 画布即操作面）—— 2026-07-14 拆单项目重做（spec：
- * design-demos/v10c-per-project-spec.md）。进度页永远单项目（App 保证 currentRoot 非空；
- * 聚合与「全部项目」总览钻取归 ProjectsView）；画布卡片即操作面，下方按项目分组的重复在制
- * 列表整段退役——change 只挂在画布相位卡里，点开 = 右滑抽屉（TaskDetail + 全部动作）。
- * 数据层/动作逻辑沿现状：selectProgress、FlatRow 投影、rowSemantics、乐观 patch、
- * killAction/transitionAction、v9-J 会话链接批量预取、抽屉焦点陷阱/Esc/scrim/滚动锁、
- * RunLogPane 轮询。
- *
+ * 单项目画布操作面：App 保证 currentRoot 非空，跨项目钻取归 ProjectsView；change 只挂在
+ * 相位卡并通过右侧抽屉操作。数据、乐观更新、会话链接和抽屉行为沿用既有模型。
  *   · 吸顶工具条即页头：状态页签（全部/等你动手/运行中/等待中 + 计数，墨线 GSAP）——页签筛选
  *     作用于画布（未命中的 change 小卡淡出，不移除）。旧「调度」芯片已下线（#6：升级为独立 AFK
  *     视图，schedulerHealth/并发上限的展示归那处；本视图不再消费）。
@@ -67,7 +63,18 @@ gsap.registerPlugin(useGSAP)
  * 呼吸环/脉冲/流动虚线走纯 CSS（progress.css，reduced 停帧），组件内零 JS 循环。
  */
 
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
+export function ProgressView({
+  snapshot,
+  loading,
+  error,
+  currentRoot,
+  rulesByKey,
+  onToast,
+  onRefresh,
+  selectedChange,
+  onSelectedChange,
+  readOnly = false,
+}: ProgressViewProps): JSX.Element {
   const { t, lang } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const localeIdentity = useRef({ t, lang })
@@ -481,6 +488,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   function drawerActionsFor(row: FlatRow): JSX.Element {
+    if (readOnly) return <></>
     return (
       <ProgressActions
         row={row}
@@ -513,6 +521,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       phaseLabelOf(row),
     ).text,
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
+  const compatibilityProject = snapshot?.projects.find((project) => project.root === currentRoot)
+  const compatibilityIssues = compatibilityProject?.compatibilityIssues ?? []
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
@@ -526,23 +536,30 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         workflow={effectiveWf}
         onDeckTab={setDeckTab}
         onWorkflow={setWfFilter}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={readOnly ? undefined : () => setCreateOpen(true)}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      <CanonicalStateVersionNotice
+        issues={compatibilityIssues}
+        truncated={compatibilityProject?.compatibilityIssuesTruncated}
+        loading={loading}
+        onRefresh={onRefresh}
+      />
+
+      {error && <SnapshotInlineError error={error} loading={loading} onRefresh={onRefresh} />}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
-      {snapshot && flatRows.length === 0 && (
+      {snapshot && flatRows.length === 0 && compatibilityIssues.length === 0 && (
         <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>
       )}
 
-      {createOpen && (
+      {!readOnly && createOpen && (
         <CreateChangeDialog
           root={currentRoot}
           onClose={() => setCreateOpen(false)}

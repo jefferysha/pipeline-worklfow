@@ -3,8 +3,11 @@
  * server 是 kernel 消费方：用 StateStore.read（→ parsePipeline）读盘，绝不自造解析器。
  * 对位老仓 dashboard-generator.build_data 的「聚合所有 Project 的活跃 change」核心面。
  */
-import { lstat, readFile, readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import {
+  closeSync, constants, fstatSync, lstatSync, openSync,
+} from 'node:fs'
+import { lstat, readdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import {
   evaluateDocumentEvidence,
   isDocumentPolicyStep,
@@ -12,6 +15,7 @@ import {
   parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
+  UnsupportedRunStateVersionError,
   TERMINAL_ACTIVITY_FILE,
   type EffectiveWorkflowPlan,
   type StateStore,
@@ -32,6 +36,14 @@ import {
   snapshotWorkflowRules,
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
+import { readBounded } from './contextBundleTrustedReader.js'
+import { dedupeRoots } from './projectRoots.js'
+import { readTasksMarkdown } from './snapshotTasks.js'
+
+export { dedupeRoots } from './projectRoots.js'
+export { readTasksMarkdown } from './snapshotTasks.js'
+
+const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
 
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
@@ -52,33 +64,34 @@ function str(v: string | string[] | undefined): string {
   return v ?? ''
 }
 
-async function readTasksMarkdown(changeDir: string): Promise<string | undefined> {
-  const target = join(changeDir, 'tasks.md')
-  try {
-    const info = await lstat(target)
-    // Do not make a dashboard read follow a task-file symlink outside the change directory.
-    if (!info.isFile() || info.isSymbolicLink()) return undefined
-    return await readFile(target, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Read a strictly local, hook-written liveness sidecar.  This is intentionally fail-closed for
  * display: a symlink, oversized file, malformed payload, stale heartbeat, or mismatched Change
  * simply means no terminal is currently claimed to be running.
  */
-async function readTerminalActivity(
+export async function readTerminalActivity(
   changeDir: string,
   changeName: string,
   nowMs: number,
 ): Promise<TerminalActivitySnapshot | undefined> {
   const target = join(changeDir, TERMINAL_ACTIVITY_FILE)
+  let fd: number | undefined
   try {
-    const entry = await lstat(target)
-    if (!entry.isFile() || entry.isSymbolicLink() || entry.size > 4096) return undefined
-    const parsed = parseTerminalActivityRecord(JSON.parse(await readFile(target, 'utf8')))
+    fd = openSync(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    const opened = fstatSync(fd)
+    if (!opened.isFile() || opened.size > 4096) return undefined
+    const assertStable = (): boolean => {
+      const current = lstatSync(target)
+      return current.isFile()
+        && !current.isSymbolicLink()
+        && current.dev === opened.dev
+        && current.ino === opened.ino
+        && current.size === opened.size
+    }
+    if (!assertStable()) return undefined
+    const bytes = readBounded(fd, 4096)
+    if (bytes.byteLength > 4096 || !assertStable()) return undefined
+    const parsed = parseTerminalActivityRecord(JSON.parse(bytes.toString('utf8')))
     if (parsed === null || parsed.change !== changeName) return undefined
     const live = liveTerminalActivity(parsed, nowMs)
     if (live === null) return undefined
@@ -90,10 +103,12 @@ async function readTerminalActivity(
     }
   } catch {
     return undefined
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
 }
 
-async function documentEvidence(
+export async function documentEvidence(
   root: string,
   changeDir: string,
   plan: EffectiveWorkflowPlan | undefined,
@@ -129,7 +144,7 @@ async function documentEvidence(
   }
 }
 
-function documentTodoItems(
+export function documentTodoItems(
   plan: EffectiveWorkflowPlan | undefined,
   evidence: DocumentEvidenceSnapshot,
 ): Readonly<Record<string, readonly { text: string; completed: boolean }[]>> {
@@ -143,20 +158,6 @@ function documentTodoItems(
       completed: status.get(requirement.kind) === 'recorded',
     })),
   ]))
-}
-
-/** 去重（按规范化路径，保序）。 */
-export function dedupeRoots(roots: string[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const r of roots) {
-    if (!r) continue
-    const rp = resolve(r)
-    if (seen.has(rp)) continue
-    seen.add(rp)
-    out.push(rp)
-  }
-  return out
 }
 
 async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Promise<ProjectSnapshot> {
@@ -179,6 +180,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   }
 
   const changes: ChangeSnapshot[] = []
+  const compatibilityIssues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []
   const legacyWorkflowRules: ProjectSnapshot['workflowRules'] = {}
   const errors: string[] = []
   let gitHeadPromise: Promise<string> | undefined
@@ -208,7 +210,8 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
           },
         }),
   }
-  for (const e of entries) {
+  let compatibilityIssueOverflow = 0
+  for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const changeDir = join(changesRoot, e.name)
     let source: string | undefined
@@ -278,16 +281,35 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
         ...(terminalActivity === undefined ? {} : { terminalActivity }),
       })
     } catch (error) {
+      if (error instanceof UnsupportedRunStateVersionError) {
+        if (compatibilityIssues.length < MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES) {
+          compatibilityIssues.push({
+            kind: 'unsupported-canonical-version',
+            change: e.name,
+            foundVersion: error.foundVersion,
+            supportedVersion: error.supportedVersion,
+            action: 'upgrade-runtime',
+          })
+        } else {
+          compatibilityIssueOverflow += 1
+        }
+        continue
+      }
       errors.push(
         `${e.name}: 状态损坏或不可读 [${source}]（${error instanceof Error ? error.message : String(error)}）`,
       )
     }
   }
   changes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  compatibilityIssues.sort((a, b) => (
+    a.change < b.change ? -1 : a.change > b.change ? 1 : 0
+  ))
   return {
     root,
-    ok: errors.length === 0,
+    ok: errors.length === 0 && compatibilityIssues.length === 0,
     changes,
+    ...(compatibilityIssues.length === 0 ? {} : { compatibilityIssues }),
+    ...(compatibilityIssueOverflow === 0 ? {} : { compatibilityIssuesTruncated: true as const }),
     workflowRules: legacyWorkflowRules,
     ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
   }

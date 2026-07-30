@@ -14,10 +14,10 @@ export async function fetchSnapshot(): Promise<Snapshot> {
   try {
     body = await readJson(response)
   } catch {
-    throw new ApiError('snapshot response is invalid', response.status)
+    throw new ApiError('snapshot response is invalid')
   }
   const snapshot = decodeSnapshot(body)
-  if (!snapshot) throw new ApiError('snapshot response is invalid', response.status)
+  if (!snapshot) throw new ApiError('snapshot response is invalid')
   return snapshot
 }
 

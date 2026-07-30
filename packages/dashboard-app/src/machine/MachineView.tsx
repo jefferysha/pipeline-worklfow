@@ -82,7 +82,7 @@ function credentialSourceLabel(source: string, t: Translate): string {
 function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate, exposeServerDetail: boolean): ProjectRisk[] {
   const rows: ProjectRisk[] = []
   for (const project of snapshot?.projects ?? []) {
-    if (!project.ok) {
+    if (project.error !== undefined) {
       rows.push({
         key: `project:${project.root}`,
         root: project.root,

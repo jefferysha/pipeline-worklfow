@@ -34,6 +34,37 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未发现机器级阻断')
   })
 
+  it('compatibility-only 项目不误报损坏，并继续显示 readable sibling 的真实 automation 风险', async () => {
+    const project = makeProject(ROOT, [
+      makeChange('readable-failed', 'build', { fields: { automation: 'failed' } }),
+    ], {
+      ok: false,
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-state',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+
+    render(
+      <I18nProvider>
+        <MachineView
+          snapshot={makeSnapshot([project], { capabilities: { operations: true } })}
+          currentRoot={ROOT}
+          onOpenProject={vi.fn()}
+        />
+      </I18nProvider>,
+    )
+
+    const queue = await screen.findByTestId('machine-risk-queue')
+    expect(queue).toHaveTextContent('readable-failed')
+    expect(queue).toHaveTextContent('自动运行失败')
+    expect(queue).not.toHaveTextContent('项目无法读取')
+    expect(queue).not.toHaveTextContent('unknown error')
+  })
+
   it('把已接线 Trace timeline 暴露在真实机器页诊断入口', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {

@@ -18,4 +18,6 @@ export interface ProgressViewProps {
   selectedChange?: string | null
   /** 抽屉开合回传给宿主，用于同步可复制 URL。 */
   onSelectedChange?: (name: string | null) => void
+  /** Future canonical state only permits read-only sibling inspection and refresh. */
+  readOnly?: boolean
 }

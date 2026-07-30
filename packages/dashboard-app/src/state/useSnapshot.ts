@@ -44,7 +44,6 @@ export function useSnapshot(): SnapshotState {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    setError(null)
     fetchSnapshot()
       .then((s) => {
         if (cancelled) return
