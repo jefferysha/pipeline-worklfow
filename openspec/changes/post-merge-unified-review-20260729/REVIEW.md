@@ -159,3 +159,13 @@ After this rollback, focused tests pass 214/214 and the full Dashboard suite pas
 21-scene production browser matrix and AFK/Track/Governance interaction acceptance both report
 zero failures. A new exact-candidate independent review is still required; no earlier PASS is
 carried forward.
+
+The exact `daae7045` review then found one further Medium availability defect in the Codex
+Skill receipt fallback: any unrelated stale zero-byte transcript caused the complete discovery
+tree to fail closed forever. Discovery now records empty-file mtimes and skips an empty
+transcript only when a strictly newer readable transcript makes recency unambiguous. A newer or
+equal-time empty transcript, and a tree containing only empty transcripts, still fail closed;
+the exact-transcript path continues to reject empty files. The focused regression set passes
+4/4, the complete receipt suite passes 82/82, and the CLI TypeScript build passes. The
+`daae7045` review result is invalidated; the next committed candidate must receive a fresh
+C0/H0/M0/L0 review.

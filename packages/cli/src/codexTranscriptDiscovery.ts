@@ -16,28 +16,37 @@ export interface HostTranscriptCandidate {
   readonly changedAtNs: bigint
 }
 
+type HostTranscriptInspection =
+  | { readonly kind: 'candidate'; readonly candidate: HostTranscriptCandidate }
+  | { readonly kind: 'empty'; readonly modifiedAt: number }
+
 async function inspectHostTranscript(
   physicalRoot: string,
   candidate: string,
-): Promise<HostTranscriptCandidate | undefined> {
+): Promise<HostTranscriptInspection | undefined> {
   try {
     const info = await lstat(candidate, { bigint: true })
     if (
       !info.isFile()
       || info.isSymbolicLink()
-      || info.size === 0n
       || info.size > BigInt(MAX_TRANSCRIPT_BYTES)
     ) return undefined
     const physical = await realpath(candidate)
     if (!isInside(physicalRoot, physical)) return undefined
+    if (info.size === 0n) {
+      return { kind: 'empty', modifiedAt: Number(info.mtimeMs) }
+    }
     return {
-      path: physical,
-      modifiedAt: Number(info.mtimeMs),
-      size: Number(info.size),
-      device: info.dev,
-      inode: info.ino,
-      modifiedAtNs: info.mtimeNs,
-      changedAtNs: info.ctimeNs,
+      kind: 'candidate',
+      candidate: {
+        path: physical,
+        modifiedAt: Number(info.mtimeMs),
+        size: Number(info.size),
+        device: info.dev,
+        inode: info.ino,
+        modifiedAtNs: info.mtimeNs,
+        changedAtNs: info.ctimeNs,
+      },
     }
   } catch {
     return undefined
@@ -55,6 +64,8 @@ function isInside(base: string, candidate: string): boolean {
 /**
  * Enumerate newest host transcripts within fixed I/O budgets. An unreadable or oversized JSONL
  * candidate makes recency unknowable, so discovery fails closed instead of accepting an older file.
+ * A zero-byte transcript is ignored only when its mtime is strictly older than a readable candidate;
+ * an empty latest/equal-time file may be the current host session and therefore remains ambiguous.
  */
 export async function recentHostTranscripts(
   sessionsRoot: string,
@@ -67,6 +78,7 @@ export async function recentHostTranscripts(
   }
 
   const discovered: HostTranscriptCandidate[] = []
+  const emptyModifiedAt: number[] = []
   async function visit(directory: string, depth: number): Promise<boolean> {
     let entries: readonly Dirent<string>[]
     try {
@@ -82,13 +94,20 @@ export async function recentHostTranscripts(
       }
       if (!entry.name.endsWith('.jsonl')) continue
       if (!entry.isFile()) return false
-      const transcript = await inspectHostTranscript(physicalRoot, candidate)
-      if (transcript === undefined) return false
-      discovered.push(transcript)
+      const inspected = await inspectHostTranscript(physicalRoot, candidate)
+      if (inspected === undefined) return false
+      if (inspected.kind === 'empty') emptyModifiedAt.push(inspected.modifiedAt)
+      else discovered.push(inspected.candidate)
     }
     return true
   }
   if (!await visit(physicalRoot, 0)) return undefined
+
+  const newestReadable = discovered.reduce(
+    (newest, transcript) => Math.max(newest, transcript.modifiedAt),
+    Number.NEGATIVE_INFINITY,
+  )
+  if (emptyModifiedAt.some((modifiedAt) => modifiedAt >= newestReadable)) return undefined
 
   let remaining = MAX_TOTAL_BYTES
   const selected: HostTranscriptCandidate[] = []
@@ -105,7 +124,8 @@ export async function exactHostTranscript(
   transcriptPath: string,
 ): Promise<HostTranscriptCandidate | undefined> {
   try {
-    return await inspectHostTranscript(await realpath(sessionsRoot), transcriptPath)
+    const inspected = await inspectHostTranscript(await realpath(sessionsRoot), transcriptPath)
+    return inspected?.kind === 'candidate' ? inspected.candidate : undefined
   } catch {
     return undefined
   }

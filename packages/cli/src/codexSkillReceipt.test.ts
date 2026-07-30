@@ -1781,6 +1781,36 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
+  it('skips a stale empty transcript when a strictly newer non-empty transcript makes recency unambiguous', async () => {
+    const staleEmpty = join(home, '.codex', 'sessions', '2026', '07', '24', 'stale-empty.jsonl')
+    await writeFile(staleEmpty, '', 'utf8')
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await utimes(staleEmpty, new Date('2026-07-24T00:01:00Z'), new Date('2026-07-24T00:01:00Z'))
+    await utimes(transcript, new Date('2026-07-24T00:02:00Z'), new Date('2026-07-24T00:02:00Z'))
+
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+
+    expect(candidates?.map((candidate) => candidate.path)).toEqual([transcript])
+  })
+
+  it.each([
+    ['newer', '2026-07-24T00:03:00Z'],
+    ['same-mtime', '2026-07-24T00:02:00Z'],
+  ])('fails closed when an empty transcript is %s than the newest readable candidate', async (_case, emptyMtime) => {
+    const ambiguousEmpty = join(home, '.codex', 'sessions', '2026', '07', '24', 'ambiguous-empty.jsonl')
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await writeFile(ambiguousEmpty, '', 'utf8')
+    await utimes(transcript, new Date('2026-07-24T00:02:00Z'), new Date('2026-07-24T00:02:00Z'))
+    await utimes(ambiguousEmpty, new Date(emptyMtime), new Date(emptyMtime))
+
+    await expect(recentHostTranscripts(join(home, '.codex', 'sessions'))).resolves.toBeUndefined()
+  })
+
+  it('fails closed when the discovery tree contains only an empty transcript', async () => {
+    await writeFile(transcript, '', 'utf8')
+    await expect(recentHostTranscripts(join(home, '.codex', 'sessions'))).resolves.toBeUndefined()
+  })
+
   it('rejects a fallback candidate replaced after discovery', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))

@@ -210,3 +210,14 @@
   （SHA-256 `1a4a0f55…8aff1`）。
 - 重建后再次执行 21 场景全 Dashboard 浏览器矩阵及 AFK/Track/Governance 交互，失败均为 0。
   旧 reviewer 结果保持作废，必须在新提交上重新取得 C0/H0/M0/L0。
+
+### `daae7045` 独立复审回退
+
+- 独立 reviewer 继续发现 1 个 Medium：任意陈旧零字节 Codex transcript 都会让 fallback
+  discovery 整树永久 fail closed，即使存在更新且有效的当前证据。
+- discovery 现在记录空文件 mtime；只有空文件严格早于最新可读 transcript 时才跳过。空文件
+  更新、与最新可读文件同时间，或树中只有空文件时仍保持 fail-closed，exact transcript 路径也
+  继续拒绝空文件。
+- 新增 4 个精确回归，覆盖 stale/newer/equal/only-empty；focused 4/4、完整 receipt suite
+  82/82、CLI TypeScript build 与 `git diff --check` 均通过。
+- `daae7045` 的审查结果保持作废；修复提交后重新执行完整独立审查。

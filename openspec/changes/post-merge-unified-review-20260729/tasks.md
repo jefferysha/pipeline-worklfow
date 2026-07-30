@@ -117,6 +117,7 @@
 - [x] 新建 Track 必填身份为空或非法时禁用保存，并以浏览器交互与 RED→GREEN 覆盖。 (build)
 - [x] dirty Workbench 的历史目标即使仍为 Workbench，只要 project root 变化也必须先确认。 (build)
 - [x] Workflow guard decoder 按变体 exact-key 闭集拒绝附加字段和畸形嵌套对象。 (build)
+- [x] fallback transcript discovery 仅跳过严格更旧的零字节残留；最新、同时间或仅空文件时保持 fail-closed。 (build)
 - [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证
