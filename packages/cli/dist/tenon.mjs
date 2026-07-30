@@ -35250,10 +35250,12 @@ function customHostHeaderState(item2) {
   const marker = "\nOutput:\n";
   const boundary = text2.indexOf(marker);
   if (boundary === -1 || boundary !== text2.length - marker.length) return void 0;
-  const states = [...text2.slice(0, boundary).matchAll(
+  const header = text2.slice(0, boundary);
+  const firstState = /^Script (completed|failed)(?:\n|$)/.exec(header)?.[1];
+  const states = [...header.matchAll(
     /(?:^|\n)Script (completed|failed)(?=\n|$)/g
   )].map((match) => match[1]);
-  if (states.length !== 1) return void 0;
+  if (firstState === void 0 || states.length !== 1 || states[0] !== firstState) return void 0;
   return states[0];
 }
 function successfulFunctionOutput(value) {
@@ -35276,9 +35278,52 @@ function completeResultEnvelopeExitCode(value) {
   if (!isRecord10(value) || typeof value.chunk_id !== "string" || value.chunk_id.length === 0 || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0 || typeof value.original_token_count !== "number" || !Number.isInteger(value.original_token_count) || value.original_token_count < 0) return void 0;
   return topLevelExitCode(value);
 }
+function topLevelObjectKeys(text2) {
+  const keys = [];
+  let depth = 0;
+  let expectKey = false;
+  for (let index = 0; index < text2.length; index += 1) {
+    const character = text2[index];
+    if (character === '"') {
+      const start = index;
+      for (index += 1; index < text2.length; index += 1) {
+        if (text2[index] === "\\") {
+          index += 1;
+          continue;
+        }
+        if (text2[index] === '"') break;
+      }
+      if (depth === 1 && expectKey) {
+        keys.push(JSON.parse(text2.slice(start, index + 1)));
+        expectKey = false;
+      }
+      continue;
+    }
+    if (character === "{") {
+      depth += 1;
+      if (depth === 1) expectKey = true;
+    } else if (character === "}") {
+      depth -= 1;
+    } else if (character === "," && depth === 1) {
+      expectKey = true;
+    }
+  }
+  return keys;
+}
 function parsedCompleteResultEnvelope(text2) {
   try {
     const value = JSON.parse(text2);
+    const keys = topLevelObjectKeys(text2);
+    const requiredKeys = [
+      "chunk_id",
+      "wall_time_seconds",
+      "exit_code",
+      "original_token_count",
+      "output"
+    ];
+    if (requiredKeys.some((key) => keys.filter((candidate) => candidate === key).length !== 1)) {
+      return void 0;
+    }
     const exitCode = completeResultEnvelopeExitCode(value);
     if (exitCode === void 0 || !isRecord10(value) || typeof value.output !== "string") return void 0;
     return { exitCode, output: value.output };

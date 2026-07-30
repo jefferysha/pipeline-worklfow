@@ -47,10 +47,12 @@ function customHostHeaderState(item: unknown): 'completed' | 'failed' | undefine
   const marker = '\nOutput:\n'
   const boundary = text.indexOf(marker)
   if (boundary === -1 || boundary !== text.length - marker.length) return undefined
-  const states = [...text.slice(0, boundary).matchAll(
+  const header = text.slice(0, boundary)
+  const firstState = /^Script (completed|failed)(?:\n|$)/.exec(header)?.[1]
+  const states = [...header.matchAll(
     /(?:^|\n)Script (completed|failed)(?=\n|$)/g,
   )].map((match) => match[1])
-  if (states.length !== 1) return undefined
+  if (firstState === undefined || states.length !== 1 || states[0] !== firstState) return undefined
   return states[0] as 'completed' | 'failed'
 }
 
@@ -95,9 +97,53 @@ interface CompleteResultEnvelope {
   readonly output: string
 }
 
+function topLevelObjectKeys(text: string): string[] {
+  const keys: string[] = []
+  let depth = 0
+  let expectKey = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (character === '"') {
+      const start = index
+      for (index += 1; index < text.length; index += 1) {
+        if (text[index] === '\\') {
+          index += 1
+          continue
+        }
+        if (text[index] === '"') break
+      }
+      if (depth === 1 && expectKey) {
+        keys.push(JSON.parse(text.slice(start, index + 1)) as string)
+        expectKey = false
+      }
+      continue
+    }
+    if (character === '{') {
+      depth += 1
+      if (depth === 1) expectKey = true
+    } else if (character === '}') {
+      depth -= 1
+    } else if (character === ',' && depth === 1) {
+      expectKey = true
+    }
+  }
+  return keys
+}
+
 function parsedCompleteResultEnvelope(text: string): CompleteResultEnvelope | undefined {
   try {
     const value = JSON.parse(text) as unknown
+    const keys = topLevelObjectKeys(text)
+    const requiredKeys = [
+      'chunk_id',
+      'wall_time_seconds',
+      'exit_code',
+      'original_token_count',
+      'output',
+    ]
+    if (requiredKeys.some((key) => keys.filter((candidate) => candidate === key).length !== 1)) {
+      return undefined
+    }
     const exitCode = completeResultEnvelopeExitCode(value)
     if (exitCode === undefined || !isRecord(value) || typeof value.output !== 'string') return undefined
     return { exitCode, output: value.output }
