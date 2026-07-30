@@ -20,7 +20,7 @@
 
 ## 验证
 
-- [ ] 冻结 build SHA，完成代码审查、OpenSpec strict 校验与真实桌面浏览器验收。 (verify)
+- [x] 冻结 build SHA，完成代码审查、OpenSpec strict 校验与真实桌面浏览器验收。 (verify)
 
 ## 交付
 
