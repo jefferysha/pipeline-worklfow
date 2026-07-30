@@ -81,8 +81,8 @@ function credentialSourceLabel(source: string, t: Translate): string {
 function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate): ProjectRisk[] {
   const rows: ProjectRisk[] = []
   for (const project of snapshot?.projects ?? []) {
-    if (!project.ok) {
-      rows.push({ key: `project:${project.root}`, root: project.root, title: rootName(project.root), details: [t('machine.risk_project_unreadable', { error: project.error ?? t('machine.risk_unknown_error') })], testId: `machine-risk-open-project-${rootName(project.root)}` })
+    if (project.error !== undefined) {
+      rows.push({ key: `project:${project.root}`, root: project.root, title: rootName(project.root), details: [t('machine.risk_project_unreadable', { error: project.error })], testId: `machine-risk-open-project-${rootName(project.root)}` })
       continue
     }
     for (const change of project.changes) {

@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto'
 import { diffWireFieldsToEffects } from './run-metadata.js'
-import {
-  RunStateCorruptError,
-  type RunRevision,
-} from './run-revision-codec.js'
+import type { RunRevision } from './run-revision-codec.js'
+import { RunStateCorruptError } from './run-revision-validation.js'
 import { parseTransitionRecord } from './transition-record-store.js'
 import {
   assertTransitionHeadAnchorMatchesMetadata,

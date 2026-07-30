@@ -447,6 +447,41 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     expect(sel.total).toBe(1)
   })
 
+  it('兼容问题项目保留可读 Change 与其冻结 workflow rules，普通错误项目仍跳过', () => {
+    const readable = makeChange('readable', 'review', {
+      fields: { workflow: 'release-train' },
+      workflowExecution: REL_EXECUTION_READY,
+      workflowRules: {
+        executionModel: 'step-graph',
+        steps: [...REL_RULES.steps],
+        transitions: REL_RULES.transitions as Record<string, Array<{ event: string; to: string }>>,
+        gateByStep: REL_RULES.gateByStep,
+        labelByStep: REL_RULES.labelByStep ?? {},
+        outputsByStep: { draft: [], review: [], ship: [] },
+      },
+    })
+    const snap = makeSnapshot([
+      makeProject('/mixed', [readable], {
+        ok: false,
+        compatibilityIssues: [{
+          kind: 'unsupported-canonical-version',
+          change: 'future',
+          foundVersion: 2,
+          supportedVersion: 1,
+          action: 'upgrade-runtime',
+        }],
+      }),
+      makeProject('/broken', [makeChange('hidden', 'open')], { ok: false, error: 'boom' }),
+    ])
+    const rules = workflowRulesFromSnapshot(snap)
+    const sel = selectProgress(snap, '', rules)
+
+    expect(rules.get(snapshotRulesKey('/mixed', readable.workflowPlanFingerprint))).toBeDefined()
+    expect(sel.groups.map((group) => group.root)).toEqual(['/mixed'])
+    expect(sel.groups[0]?.rows.map((row) => row.change.name)).toEqual(['readable'])
+    expect(sel.total).toBe(1)
+  })
+
   it('archived 一律排除出行，但计入组头 archivedCount', () => {
     const snap = makeSnapshot([
       makeProject('/a', [

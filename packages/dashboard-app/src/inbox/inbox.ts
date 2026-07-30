@@ -15,6 +15,7 @@ import type { ChangeSnapshot, ProjectSnapshot, Snapshot } from '../types'
 import { rulesKey, snapshotRulesKey, type WorkflowRules } from '../model/workflowModel'
 import { changeProgressState, type ProgressRules } from '../model/progressModel'
 import { changeWorkflow } from '../model/changeModel'
+import { isProjectNavigable } from '../state/projectSelectionModel'
 export { changeWorkflow, decisionKind } from '../model/changeModel'
 
 /** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设。 */
@@ -57,7 +58,7 @@ export function selectInbox(
   if (!snapshot) return []
   const items: InboxItem[] = []
   for (const p of snapshot.projects) {
-    if (!p.ok) continue
+    if (!isProjectNavigable(p)) continue
     if (currentRoot !== '' && p.root !== currentRoot) continue
     for (const c of p.changes) {
       const rules = rulesByKey.get(snapshotRulesKey(p.root, c.workflowPlanFingerprint))

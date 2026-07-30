@@ -22,6 +22,7 @@
  *     判不了门就归 agent（不误报「等你确认」）；automation 活跃态不依赖 rules，照常判定。
  */
 import type { ChangeSnapshot, Snapshot } from '../types'
+import { isProjectNavigable } from '../state/projectSelectionModel'
 import {
   rulesKey,
   snapshotRulesKey,
@@ -214,7 +215,7 @@ export function selectProgress(
 
   const byKey = new Map<string, ProgressGroup>()
   for (const p of snapshot.projects) {
-    if (!p.ok) continue
+    if (!isProjectNavigable(p)) continue
     if (currentRoot !== '' && p.root !== currentRoot) continue
     for (const c of p.changes) {
       const workflow = changeWorkflowName(c)

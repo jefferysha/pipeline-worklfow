@@ -107,11 +107,23 @@ export interface WorkflowExecutionSnapshot {
   readinessByTransition: ReadinessByTransition
 }
 
+export interface CanonicalStateCompatibilityIssueSnapshot {
+  kind: 'unsupported-canonical-version'
+  change: string
+  foundVersion: number
+  supportedVersion: number
+  action: 'upgrade-runtime'
+}
+
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  /** Canonical Changes that this runtime intentionally refuses to decode. */
+  compatibilityIssues?: CanonicalStateCompatibilityIssueSnapshot[]
+  /** Literal marker: more compatibility issues exist beyond the bounded 100-item response. */
+  compatibilityIssuesTruncated?: true
   /** Remove only after the declared rolling compatibility window ends. */
   workflowRules: Record<string, LegacyWorkflowRulesSnapshot>
   error?: string

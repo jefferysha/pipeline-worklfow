@@ -20,6 +20,8 @@ import { buildCanvasGroups } from './progressCanvasModel'
 import { ProgressToolbar } from './ProgressToolbar'
 import { ProgressDrawer } from './ProgressDrawer'
 import { ProgressActions } from './ProgressActions'
+import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
+import { SnapshotInlineError } from './SnapshotInlineError'
 import {
   BADGE_TONE_CLS,
   deckMatch,
@@ -85,9 +87,22 @@ export interface ProgressViewProps {
   selectedChange?: string | null
   /** 抽屉开合回传给宿主，用于同步可复制 URL。 */
   onSelectedChange?: (name: string | null) => void
+  /** Future canonical state 只允许读取 sibling Changes 与刷新，不暴露任何写操作。 */
+  readOnly?: boolean
 }
 
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
+export function ProgressView({
+  snapshot,
+  loading,
+  error,
+  currentRoot,
+  rulesByKey,
+  onToast,
+  onRefresh,
+  selectedChange,
+  onSelectedChange,
+  readOnly = false,
+}: ProgressViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
@@ -472,6 +487,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   function drawerActionsFor(row: FlatRow): JSX.Element {
+    if (readOnly) return <></>
     return (
       <ProgressActions
         row={row}
@@ -504,6 +520,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       phaseLabelOf(row),
     ).text,
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
+  const compatibilityProject = snapshot?.projects.find((project) => project.root === currentRoot)
+  const compatibilityIssues = compatibilityProject?.compatibilityIssues ?? []
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
@@ -517,23 +535,30 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         workflow={effectiveWf}
         onDeckTab={setDeckTab}
         onWorkflow={setWfFilter}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={readOnly ? undefined : () => setCreateOpen(true)}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      <CanonicalStateVersionNotice
+        issues={compatibilityIssues}
+        truncated={compatibilityProject?.compatibilityIssuesTruncated}
+        loading={loading}
+        onRefresh={onRefresh}
+      />
+
+      {error && <SnapshotInlineError error={error} loading={loading} onRefresh={onRefresh} />}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
-      {snapshot && flatRows.length === 0 && (
+      {snapshot && flatRows.length === 0 && compatibilityIssues.length === 0 && (
         <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>
       )}
 
-      {createOpen && (
+      {!readOnly && createOpen && (
         <CreateChangeDialog
           root={currentRoot}
           onClose={() => setCreateOpen(false)}

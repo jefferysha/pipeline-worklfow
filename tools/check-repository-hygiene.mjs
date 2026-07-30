@@ -58,6 +58,10 @@ const REVIEW_HANDSHAKE_REFERENCE_DOCS = new Set([
   'docs/superpowers/specs/2026-07-30-review-handshake-upstream-research.md',
   'docs/superpowers/specs/2026-07-30-review-handshake-status-design.md',
 ])
+const CANONICAL_VERSION_REFERENCE_IDENTITIES = new Set(FORBIDDEN_REFERENCE_IDENTITIES.slice(0, 2))
+const CANONICAL_VERSION_REFERENCE_DOCS = new Set([
+  'docs/superpowers/specs/2026-07-30-canonical-state-version-status-upstream-research.md',
+])
 const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
   String.fromCharCode(
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
@@ -142,6 +146,13 @@ function allowedReviewHandshakeReference(rel, identity) {
   )
 }
 
+function allowedCanonicalVersionReference(rel, identity) {
+  return (
+    CANONICAL_VERSION_REFERENCE_IDENTITIES.has(identity)
+    && CANONICAL_VERSION_REFERENCE_DOCS.has(rel)
+  )
+}
+
 function disallowedReferenceIdentity(rel, value) {
   const normalized = value.toLowerCase()
   return FORBIDDEN_REFERENCE_IDENTITIES.find(
@@ -150,6 +161,7 @@ function disallowedReferenceIdentity(rel, value) {
       && !allowedHostTargetPlanReference(rel, identity)
       && !allowedTraceTimelineReference(rel, identity)
       && !allowedReviewHandshakeReference(rel, identity)
+      && !allowedCanonicalVersionReference(rel, identity)
     ),
   )
 }

@@ -361,6 +361,22 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     || typeof value.ok !== 'boolean'
     || !optionalString(value.error)
     || !Array.isArray(value.changes)) return null
+  const compatibilityIssues = value.compatibilityIssues === undefined
+    ? undefined
+    : decodeCompatibilityIssues(value.compatibilityIssues)
+  if (compatibilityIssues === null) return null
+  const compatibilityIssuesTruncated = value.compatibilityIssuesTruncated === undefined
+    ? undefined
+    : value.compatibilityIssuesTruncated === true
+      ? true
+      : null
+  if (compatibilityIssuesTruncated === null
+    || (compatibilityIssuesTruncated && compatibilityIssues?.length !== 100)) return null
+  if (value.ok && (
+    value.error !== undefined
+    || (compatibilityIssues?.length ?? 0) > 0
+    || compatibilityIssuesTruncated
+  )) return null
   const changes: ChangeSnapshot[] = []
   const rulesByFingerprint = new Map<string, string>()
   for (const change of value.changes) {
@@ -376,8 +392,42 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     root: value.root,
     ok: value.ok,
     changes,
+    ...(compatibilityIssues === undefined ? {} : { compatibilityIssues }),
+    ...(compatibilityIssuesTruncated === undefined ? {} : { compatibilityIssuesTruncated }),
     ...(value.error === undefined ? {} : { error: value.error }),
   }
+}
+
+function decodeCompatibilityIssues(
+  value: unknown,
+): ProjectSnapshot['compatibilityIssues'] | null {
+  if (!Array.isArray(value) || value.length > 100) return null
+  const seenChanges = new Set<string>()
+  const issues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []
+  for (const issue of value) {
+    if (!isRecord(issue)
+      || !exactKeys(issue, ['kind', 'change', 'foundVersion', 'supportedVersion', 'action'])
+      || issue.kind !== 'unsupported-canonical-version'
+      || typeof issue.change !== 'string'
+      || issue.change === ''
+      || typeof issue.foundVersion !== 'number'
+      || !Number.isSafeInteger(issue.foundVersion)
+      || typeof issue.supportedVersion !== 'number'
+      || !Number.isSafeInteger(issue.supportedVersion)
+      || issue.supportedVersion < 1
+      || issue.foundVersion <= issue.supportedVersion
+      || issue.action !== 'upgrade-runtime'
+      || seenChanges.has(issue.change)) return null
+    seenChanges.add(issue.change)
+    issues.push({
+      kind: issue.kind,
+      change: issue.change,
+      foundVersion: issue.foundVersion,
+      supportedVersion: issue.supportedVersion,
+      action: issue.action,
+    })
+  }
+  return issues
 }
 
 export function decodeSnapshot(value: unknown): Snapshot | null {
