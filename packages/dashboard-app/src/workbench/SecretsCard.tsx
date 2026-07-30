@@ -29,9 +29,11 @@ type EditableKey = (typeof EDITABLE_KEYS)[number]
 export interface SecretsCardProps {
   /** 保存/删除成功后的宿主通知(就绪三灯重拉)。 */
   onChanged?: () => void
+  /** write-only 输入里只有真实非空用户草稿才算未保存。 */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
+export function SecretsCard({ onChanged, onDirtyChange }: SecretsCardProps): JSX.Element {
   const { t, lang } = useT()
   const [keys, setKeys] = useState<WbSecretsKeys | null>(null)
   const [loadError, setLoadError] = useState<unknown | null>(null)
@@ -39,6 +41,13 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [opError, setOpError] = useState<unknown | null>(null)
+  const dirty = editing !== null && draft !== ''
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
 
   // Bug7：reload seq 守卫（参照 SkillChain/SkillHealthPanel）——挂载 + 每次保存/删除后都重拉，
   // 无守卫时慢响应会盖快响应（out-of-order），卸载后回来则 setState-after-unmount。每次 reload 递增

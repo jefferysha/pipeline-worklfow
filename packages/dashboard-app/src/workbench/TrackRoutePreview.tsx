@@ -31,6 +31,8 @@ export function TrackRoutePreview({
         <label className="min-w-0 flex-1">
           <span className="sr-only">{t('workbench.track_route_prompt')}</span>
           <input
+            name="track-route-prompt"
+            autoComplete="off"
             className={`${fieldClass} w-full`}
             data-testid="wb-track-route-prompt"
             value={prompt}

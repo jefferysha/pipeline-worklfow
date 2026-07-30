@@ -703,6 +703,31 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(body.steps).toEqual(RELEASE_TRAIN.steps)
   })
 
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('新建收到畸形 2xx %s：保留对话框和原 workflow，并显示当前语言无效响应', async (_label, response) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/malformed-flow' && opts?.method === 'POST') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    fireEvent.change(within(dialog).getByLabelText('Workflow 名称'), { target: { value: 'malformed-flow' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
+    expect(workflowDefs).not.toHaveProperty('malformed-flow')
+    expect(within(dialog).getByLabelText('Workflow 名称')).toHaveValue('malformed-flow')
+  })
+
   it('删除：确认后走带 token 的 DELETE，成功后从列表移除并切回 default', async () => {
     window.__TENON_DASHBOARD_TOKEN__ = 'studio-token'
     renderView()
@@ -1007,6 +1032,29 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-save')).toBeDisabled()
   })
 
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('保存收到畸形 2xx %s：保持 dirty 和草稿，并显示当前语言无效响应', async (_label, response) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'Uncommitted draft')
+    fireEvent.click(screen.getByTestId('wb-save'))
+
+    expect(await screen.findByTestId('wb-save-errors')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Uncommitted draft')
+    expect(screen.queryByTestId('wb-save-ok')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeEnabled()
+  })
+
   it('运行时产出只读：不提供人工增删，保存其他字段仍保留原始类型', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
@@ -1215,6 +1263,20 @@ describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
 })
 
 describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③）', () => {
+  it('把 workflow 草稿 dirty 精确上报给 App，保存成功后清除', async () => {
+    const onDirtyChange = vi.fn()
+    renderView({ onDirtyChange })
+    await screen.findByTestId('wb-step-draft')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    editLaneName('draft', '待保存草稿')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await screen.findByTestId('wb-save-ok')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('body portal 中的切换确认框仍能被 GSAP 定位且不产生空目标警告', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     renderView()

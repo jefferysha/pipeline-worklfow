@@ -308,9 +308,9 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
           <label className="relative w-full max-w-[350px]">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
             <span className="sr-only">{t('afk.search_label')}</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('afk.search_placeholder')} className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-10 text-sm text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t" />
+            <input name="afk-search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('afk.search_placeholder')} className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-10 text-sm text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t" />
           </label>
-          <button
+          {rows.length > 0 && <button
             type="button"
             data-testid="afk-new-run"
             className="inline-flex min-h-11 flex-none items-center gap-2 rounded-xl bg-btn-bg px-4 text-sm font-semibold text-btn-fg shadow-sm transition-[background-color,transform] duration-150 hover:bg-btn-hover active:scale-[.98] disabled:cursor-not-allowed disabled:bg-text-3 disabled:opacity-60 disabled:active:scale-100 motion-reduce:transform-none"
@@ -319,7 +319,7 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
             onClick={() => setActiveTool(enqueueCandidates.length > 0 ? 'enqueue' : 'starter')}
           >
             <Plus className="h-4 w-4" aria-hidden="true" />{enqueueCandidates.length > 0 ? t('afk.new_run') : t('afk.new_schedule')}
-          </button>
+          </button>}
           </div>}
         />
       </div>

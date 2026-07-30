@@ -75,6 +75,7 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     const riskRow = within(queue).getByTestId('machine-risk-row-broken-loop')
     expect(riskRow).toHaveClass('max-[480px]:flex-col')
     expect(within(riskRow).getByRole('button')).toHaveClass('max-[480px]:w-full')
+    expect(screen.getByTestId('machine-risk-layout')).toHaveClass('items-start')
     fireEvent.click(within(queue).getByTestId('machine-risk-open-broken-loop'))
     expect(onOpenProject).toHaveBeenCalledWith(ROOT)
   })

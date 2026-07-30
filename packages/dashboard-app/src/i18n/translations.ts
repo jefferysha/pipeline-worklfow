@@ -291,6 +291,10 @@ export const zh: Dict = {
     app_error: '界面出了点问题——已隔离到这块，刷新即可恢复；其余数据不受影响。',
     app_error_reload: '刷新',
     dialog_close: '关闭对话框',
+    unsaved_navigation_title: '未保存的修改',
+    unsaved_navigation_body: '工作台中仍有未保存的草稿。离开会丢弃这些修改。',
+    unsaved_navigation_stay: '继续编辑',
+    unsaved_navigation_leave: '丢弃并离开',
   },
   phases: {
     open: '立项', explore: '调研', spec: '规格', build: '实现',
@@ -2227,6 +2231,10 @@ export const en: Dict = {
     app_error: 'Something went wrong in the UI — it has been contained here; reload to recover. Other data is unaffected.',
     app_error_reload: 'Reload',
     dialog_close: 'Close dialog',
+    unsaved_navigation_title: 'Unsaved changes',
+    unsaved_navigation_body: 'The Workbench still has unsaved drafts. Leaving will discard these changes.',
+    unsaved_navigation_stay: 'Keep editing',
+    unsaved_navigation_leave: 'Discard and leave',
   },
   phases: {
     open: 'Open', explore: 'Explore', spec: 'Spec', build: 'Build',

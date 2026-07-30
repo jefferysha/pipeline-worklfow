@@ -54,6 +54,135 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const EDITABLE_WORKFLOW = {
+  name: 'release-train',
+  steps: [
+    {
+      id: 'draft',
+      label: '起草',
+      gate: null,
+      skills: [],
+      inputs: [],
+      outputs: [],
+      guards: [],
+      transitions: [],
+    },
+  ],
+}
+
+function stubEditableWorkbench(): void {
+  window.history.replaceState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/snapshot') {
+      return new Response(JSON.stringify(makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build')])])), { status: 200 })
+    }
+    if (url === `/api/workflows?root=${encodeURIComponent('/repo')}`) {
+      return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+    }
+    if (url === `/api/workflows/release-train?root=${encodeURIComponent('/repo')}`) {
+      return new Response(JSON.stringify(EDITABLE_WORKFLOW), { status: 200 })
+    }
+    if (url.startsWith('/api/hooks?root=')) {
+      return new Response(JSON.stringify({ ok: true, hooks: [], matrix: {} }), { status: 200 })
+    }
+    if (url === '/api/loops/snapshot') {
+      return new Response(JSON.stringify({ generated_at: '2026-07-30T00:00:00Z', rows: [] }), { status: 200 })
+    }
+    if (url.startsWith('/api/config?root=')) {
+      return new Response(JSON.stringify({
+        ok: true,
+        generated_at: '2026-07-30T00:00:00Z',
+        revision: 'app-dirty-r1',
+        source: 'builtin-only',
+        mandatory_skills_writable_profiles: [],
+        mandatory_skills: {},
+        tracks: [],
+      }), { status: 200 })
+    }
+    if (url === '/api/skills/registry') {
+      return new Response(JSON.stringify({ skills: [] }), { status: 200 })
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }))
+}
+
+async function renderDirtyWorkbenchApp(): Promise<void> {
+  stubEditableWorkbench()
+  render(<App />)
+  await screen.findByTestId('wb-step-draft')
+  fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
+  const input = screen.getByTestId('wb-lane-name-input-draft')
+  fireEvent.change(input, { target: { value: '未保存草稿' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  await screen.findByTestId('wb-dirty')
+}
+
+describe('App Workbench 未保存草稿离开守卫', () => {
+  it('一级导航与 Overview 共用可访问 Dialog；取消保留页面、草稿、URL 与触发焦点，确认才离开', async () => {
+    await renderDirtyWorkbenchApp()
+    const overview = screen.getByTestId('nav-overview')
+    overview.focus()
+    fireEvent.click(overview)
+
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    expect(within(dialog).getByRole('dialog')).toHaveAccessibleName('未保存的修改')
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+    expect(overview).toHaveFocus()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+
+    fireEvent.click(overview)
+    fireEvent.click(within(await screen.findByTestId('app-unsaved-navigation')).getByRole('button', { name: '丢弃并离开' }))
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+
+  it('dirty 时 beforeunload 触发原生浏览器保护；未 dirty 时不拦截', async () => {
+    stubEditableWorkbench()
+    render(<App />)
+    await screen.findByTestId('wb-step-draft')
+
+    const cleanEvent = new Event('beforeunload', { cancelable: true })
+    expect(window.dispatchEvent(cleanEvent)).toBe(true)
+    expect(cleanEvent.defaultPrevented).toBe(false)
+
+    fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
+    const input = screen.getByTestId('wb-lane-name-input-draft')
+    fireEvent.change(input, { target: { value: '未保存草稿' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await screen.findByTestId('wb-dirty')
+
+    const dirtyEvent = new Event('beforeunload', { cancelable: true })
+    expect(window.dispatchEvent(dirtyEvent)).toBe(false)
+    expect(dirtyEvent.defaultPrevented).toBe(true)
+  })
+
+  it('浏览器返回先恢复已提交 URL/UI 并弹确认；取消保持一致，确认才应用目标地址', async () => {
+    await renderDirtyWorkbenchApp()
+    window.history.replaceState({ page: 'overview' }, '', '/?view=overview')
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+
+    window.history.replaceState({ page: 'overview-again' }, '', '/?view=overview')
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    fireEvent.click(within(await screen.findByTestId('app-unsaved-navigation')).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+})
+
 describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯一在制面）', () => {
   it('首屏渲染进度视图，而非工作台；收件箱视图不复存在', async () => {
     render(<App />)

@@ -57,9 +57,11 @@ export interface AutomationCardProps {
   root: string
   /** v6 T9/T8：就绪三灯重拉信号——SecretsCard 保存/删除成功后由宿主 +1(显式动作触发,不轮询,G22 纪律)。 */
   refreshToken?: number
+  /** 宿主离开守卫只消费真实草稿差异；加载态与仅打开面板不算 dirty。 */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps): JSX.Element {
+export function AutomationCard({ root, refreshToken = 0, onDirtyChange }: AutomationCardProps): JSX.Element {
   const { t, lang } = useT()
   // settings = server 已保存真值（GET/保存后回读）；draft = 编辑草稿。
   const [settings, setSettings] = useState<WbAutomationSettings | null>(null)
@@ -130,6 +132,12 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
   }, [settings])
 
   const dirty = draft !== null && settings !== null && !same(draft, settings)
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
 
   function edit(part: Partial<WbAutomationSettings>): void {
     setDraft((prev) => (prev ? { ...prev, ...part } : prev))

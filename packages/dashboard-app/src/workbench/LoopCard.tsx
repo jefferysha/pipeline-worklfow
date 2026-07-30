@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { TriangleAlert } from 'lucide-react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
@@ -9,15 +8,21 @@ import { cn } from '@/lib/utils'
 export { LOOP_RUNNERS, WB_TW, WbAdvanced } from './loopCardModel'
 export { LpSlider } from './LoopControls'
 export { useLoops, type LoopsState } from './useLoops'
-import { BADGE_TW, LOOP_RUNNERS, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
+import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
 import { RECO_TOKENS_K, clamp } from './LoopControls'
 import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
 import { LoopCardActions } from './LoopCardActions'
+import { LoopGoalFields } from './LoopGoalFields'
 import { LoopRelationship } from './LoopRelationship'
+import { promotionDecisionKey } from './governanceModel'
 const LEVELS = ['L1', 'L2', 'L3'] as const
-export interface LoopCardProps { root: string; loops: LoopsState }
-export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
+export interface LoopCardProps {
+  root: string
+  loops: LoopsState
+  onDirtyChange?: (dirty: boolean) => void
+}
+export function LoopCard({ root, loops, onDirtyChange }: LoopCardProps): JSX.Element {
   const { t, lang } = useT()
   const row = loops.selected
   const [draft, setDraft] = useState<LoopDraft | null>(null)
@@ -27,6 +32,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const [levelError, setLevelError] = useState<string | null>(null)
   const [levelBusy, setLevelBusy] = useState(false)
   const [confirmLevel, setConfirmLevel] = useState<(typeof LEVELS)[number] | null>(null)
+  const [confirmDecisionKey, setConfirmDecisionKey] = useState<string | null>(null)
   const [reviewBusy, setReviewBusy] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
   const saveGeneration = useRef(0)
@@ -44,6 +50,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     setLevelBusy(false)
     setReviewBusy(false)
     setConfirmLevel(null)
+    setConfirmDecisionKey(null)
   }, [root, row?.id])
   useEffect(() => {
     setSaveErrors(null)
@@ -61,6 +68,21 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const base = row ? draftOf(row) : null
   const patch = draft && base ? computePatch(draft, base) : {}
   const dirty = Object.keys(patch).length > 0
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
+  const promotionFacts = promotionDecisionKey(root, row)
+  const activeConfirmLevel = confirmDecisionKey === promotionFacts ? confirmLevel : null
+  useEffect(() => {
+    if (confirmDecisionKey !== null && confirmDecisionKey !== promotionFacts) {
+      setConfirmLevel(null)
+      setConfirmDecisionKey(null)
+    }
+  }, [confirmDecisionKey, promotionFacts])
+  const closePromotion = (): void => { setConfirmLevel(null); setConfirmDecisionKey(null) }
   function edit(part: Partial<LoopDraft>): void {
     setDraft((prev) => (prev ? { ...prev, ...part } : prev))
     setSaveOk(false)
@@ -94,6 +116,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     if (!row || levelBusy || target === row.autonomy_level) return
     if (LEVELS.indexOf(target) > LEVELS.indexOf(row.autonomy_level)) {
       setConfirmLevel(target)
+      setConfirmDecisionKey(promotionFacts)
     } else {
       void applyLevel(target)
     }
@@ -252,109 +275,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         </ul>
       )}
       <LoopRelationship row={row} open={showMatches} onOpen={setShowMatches} t={t} />
-      {/* ── 目标 ── */}
-      <div className={WB_TW.sec} data-sec="">
-        <div className={WB_TW.secH}>
-          {t('workbench.lp_sec_goal')}
-          <span className={WB_TW.hint}>{t('workbench.lp_sec_goal_hint')}</span>
-        </div>
-        <div className="mb-[5px] flex items-center gap-2">
-          <label className={WB_TW.flabel} htmlFor="lp-goal">{t('workbench.lp_goal')}</label>
-          <ProvBadge field="goal" />
-        </div>
-        <input
-          className={WB_TW.input}
-          id="lp-goal"
-          data-testid="lp-goal"
-          value={draft.goal}
-          onChange={(e) => edit({ goal: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮
-          }}
-        />
-        <div className="mt-3 grid grid-cols-3 gap-3.5 mobile:grid-cols-1">
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-doc">{t('workbench.lp_doc')}</label>
-              <ProvBadge field="design_doc" />
-            </div>
-            <input
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-doc"
-              data-testid="lp-doc"
-              value={draft.design_doc}
-              onChange={(e) => edit({ design_doc: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.preventDefault()
-              }}
-            />
-          </div>
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-prefix">{t('workbench.lp_prefix')}</label>
-              <ProvBadge field="change_prefix" />
-            </div>
-            <input
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-prefix"
-              data-testid="lp-prefix"
-              value={draft.change_prefix}
-              onChange={(e) => edit({ change_prefix: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.preventDefault()
-              }}
-            />
-            <p className="mt-[5px] text-[11.5px] text-text-3">
-              {t('workbench.lp_prefix_eg')}
-              <b className="font-mono font-semibold text-text-2" data-testid="lp-prefix-eg">{`${draft.change_prefix}0142-migrate-card`}</b>
-            </p>
-          </div>
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-risk">{t('workbench.lp_risk')}</label>
-              <ProvBadge field="risk" />
-            </div>
-            <select className={WB_TW.input} id="lp-risk" data-testid="lp-risk" value={draft.risk} onChange={(e) => edit({ risk: e.target.value })}>
-              <option value="low">{t('workbench.lp_risk_low')}</option>
-              <option value="medium">{t('workbench.lp_risk_medium')}</option>
-              <option value="high">{t('workbench.lp_risk_high')}</option>
-            </select>
-          </div>
-          {/* T17 决议#14：runner 下拉（LOOP_RUNNERS 双选项）——数据面 T20 已交付
-              （PATCHABLE_SCALAR_FIELDS 含 runner），写回走同一 dirty→保存钮 patch 链路。
-              runner id 是代码标识符（mono 呈现，不翻译）；历史自由字符串真值补渲染为第三选项。 */}
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-runner">{t('workbench.lp_runner')}</label>
-              <ProvBadge field="runner" />
-            </div>
-            <select
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-runner"
-              data-testid="lp-runner"
-              value={draft.runner}
-              onChange={(e) => edit({ runner: e.target.value })}
-            >
-              {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-                <option value={draft.runner}>{draft.runner}</option>
-              )}
-              {LOOP_RUNNERS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-            {/* 观察项②（决议#14① backlog）：非标准 runner 值软校验警告——纯提示，不拦截保存/
-                不改值/不清第三选项。文案按 runnerFor.ts 真实归属语义（仅 'codex' 起 codex exec，
-                其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。警示色
-                color-mix 从既有 --red/--text-2 派生（决议#9，禁新原色）。 */}
-            {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-              <p className="mt-[5px] flex items-start gap-1.5 text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
-                <TriangleAlert className="mt-0.5 size-3.5 flex-none" aria-hidden="true" />
-                {t('workbench.lp_runner_warn', { runner: draft.runner })}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      <LoopGoalFields draft={draft} onEdit={edit} />
       <LoopAdvancedFields
         row={row}
         draft={draft}
@@ -369,10 +290,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         pendingReview={isPendingReview}
         reviewBusy={reviewBusy}
         reviewError={reviewError}
-        confirmLevel={confirmLevel}
+        confirmLevel={activeConfirmLevel}
         onReview={(status) => void reviewAction(status)}
-        onClosePromotion={() => setConfirmLevel(null)}
-        onConfirmPromotion={(target) => { setConfirmLevel(null); void applyLevel(target) }}
+        onClosePromotion={closePromotion}
+        onConfirmPromotion={(target) => {
+          if (confirmDecisionKey !== promotionFacts || confirmLevel !== target) {
+            closePromotion()
+            return
+          }
+          closePromotion()
+          void applyLevel(target)
+        }}
       />
     </section>
   )

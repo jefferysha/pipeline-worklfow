@@ -9,48 +9,40 @@ import {
 } from '../api/client'
 import { useT } from '../i18n'
 import { formatApiError } from '../api/transport'
+import { decodeTrackMutationSuccess } from '../api/trackMutationResponse'
 import { Dialog } from '../shared/Dialog'
 import type { MandatoryState } from './mandatoryState'
+import {
+  allowedFromTrackDraft,
+  cloneTrackPolicy,
+  effectiveTrackDraft,
+  trackDraftFromDefinition,
+  type TrackEditorDraft,
+} from './trackEditorDraft'
 import { TrackSettingsList } from './TrackSettingsList'
+import { TrackEditorFields } from './TrackEditorFields'
 import { TrackRoutePreview } from './TrackRoutePreview'
+import { useTrackMutationIdentity } from './useTrackMutationIdentity'
 
 const ADD_CLS =
   'cursor-pointer rounded-lg border-[1.5px] border-dashed border-border-2 bg-transparent px-[11px] py-[5px] text-[12.5px] font-bold whitespace-nowrap text-text-3 transition-colors enabled:hover:border-purple-b enabled:hover:text-purple-d disabled:cursor-not-allowed disabled:opacity-50'
 
-type TrackPolicyDraft = WbTrackDefinition['policyProfile']
-interface TrackEditorDraft {
-  id: string
-  label: string
-  workflowDefault: string
-  workflowAny: boolean
-  workflowAllowed: string
-  policyProfile: TrackPolicyDraft
+interface TrackSettingsProps {
+  state: MandatoryState
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-function clonePolicy(policy: TrackPolicyDraft): TrackPolicyDraft {
-  return {
-    ...policy,
-    routing: policy.routing.enabled ? { ...policy.routing } : { enabled: false },
-    skills: { ...policy.skills },
-  }
+type TrackEditorState = {
+  mode: 'create' | 'edit'
+  original: WbTrackDefinition | null
+  baseline: TrackEditorDraft
+  draft: TrackEditorDraft
 }
 
-function draftFromTrack(track: WbTrackDefinition): TrackEditorDraft {
-  return {
-    id: track.id,
-    label: track.label,
-    workflowDefault: track.workflow.default,
-    workflowAny: track.workflow.allowed === '*',
-    workflowAllowed: track.workflow.allowed === '*' ? '' : track.workflow.allowed.join(', '),
-    policyProfile: clonePolicy(track.policyProfile),
-  }
-}
-
-export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element {
+export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX.Element {
   const { t, lang } = useT()
   const [open, setOpen] = useState(false)
-  const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; original: WbTrackDefinition | null; draft: TrackEditorDraft } | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [editor, setEditor] = useState<TrackEditorState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [routePrompt, setRoutePrompt] = useState('')
@@ -60,6 +52,11 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   const routePreviewGeneration = useRef(0)
   const rootIdentity = useRef(state.root)
   rootIdentity.current = state.root
+  const trackMutation = useTrackMutationIdentity(
+    state.root,
+    editor === null ? null : editor.original?.id ?? editor.draft.id,
+  )
+  const busy = trackMutation.busy
   const localeIdentity = useRef({ t, lang })
   localeIdentity.current = { t, lang }
   useEffect(() => {
@@ -70,45 +67,54 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     ++routePreviewGeneration.current
     setOpen(false)
     setEditor(null)
-    setBusy(false)
     setRoutePreview(null)
     setRoutePreviewBusy(false)
     setRoutePreviewError('')
   }, [state.root])
+  const editorDirty = editor !== null && JSON.stringify(editor.draft) !== JSON.stringify(editor.baseline)
+  useEffect(() => {
+    onDirtyChange?.(editorDirty)
+  }, [editorDirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
   const fieldClass = 'rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text focus-visible:border-(--accent) focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-(--ring-blue) disabled:opacity-60'
 
   function openCreate(): void {
     const template = state.tracks.find((track) => track.id === 'frontend') ?? state.tracks[0]
     if (!template) return
+    const draft: TrackEditorDraft = {
+      id: '', label: '', workflowDefault: 'default', workflowAny: true, workflowAllowed: '',
+      policyProfile: cloneTrackPolicy(template.policyProfile),
+    }
     setEditor({
       mode: 'create', original: null,
-      draft: { id: '', label: '', workflowDefault: 'default', workflowAny: true, workflowAllowed: '', policyProfile: clonePolicy(template.policyProfile) },
+      baseline: { ...draft, policyProfile: cloneTrackPolicy(draft.policyProfile) },
+      draft,
     })
     setError(null)
     setDeleteConfirm(false)
+    setRoutePrompt('')
     invalidateRoutePreview()
   }
 
   function openEdit(track: WbTrackDefinition): void {
-    setEditor({ mode: 'edit', original: track, draft: draftFromTrack(track) })
+    const draft = trackDraftFromDefinition(track)
+    setEditor({
+      mode: 'edit',
+      original: track,
+      baseline: { ...draft, policyProfile: cloneTrackPolicy(draft.policyProfile) },
+      draft,
+    })
     setError(null)
     setDeleteConfirm(false)
+    setRoutePrompt('')
     invalidateRoutePreview()
   }
 
   function updateDraft(patch: Partial<TrackEditorDraft>): void {
     setEditor((current) => current ? { ...current, draft: { ...current.draft, ...patch } } : current)
     invalidateRoutePreview()
-  }
-
-  function effectiveDraft(draft: TrackEditorDraft): WbTrackDefinition {
-    return {
-      id: draft.id,
-      label: draft.label.trim(),
-      builtin: false,
-      workflow: { default: draft.workflowDefault.trim(), allowed: allowedFromDraft(draft) },
-      policyProfile: clonePolicy(draft.policyProfile),
-    }
   }
 
   function invalidateRoutePreview(): void {
@@ -123,7 +129,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     : JSON.stringify({
         root: state.root,
         prompt: routePrompt.trim(),
-        draft: effectiveDraft(editor.draft),
+        draft: effectiveTrackDraft(editor.draft),
       })
   const routeIdentityRef = useRef(routeIdentity)
   routeIdentityRef.current = routeIdentity
@@ -132,7 +138,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     if (!editor || editor.original?.builtin || routePreviewBusy || routePrompt.trim() === '') return
     const targetRoot = state.root
     const prompt = routePrompt.trim()
-    const draft = effectiveDraft(editor.draft)
+    const draft = effectiveTrackDraft(editor.draft)
     const identity = JSON.stringify({ root: targetRoot, prompt, draft })
     const generation = ++routePreviewGeneration.current
     setRoutePreviewBusy(true)
@@ -153,11 +159,6 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
     }
   }
 
-  function allowedFromDraft(draft: TrackEditorDraft): '*' | string[] {
-    if (draft.workflowAny) return '*'
-    return [...new Set(draft.workflowAllowed.split(',').map((value) => value.trim()).filter(Boolean))]
-  }
-
   async function readMutationError(response: Response): Promise<string> {
     let body: { error?: string; references?: string[]; blockers?: string[] } = {}
     try { body = await response.json() as typeof body } catch { /* no JSON */ }
@@ -174,7 +175,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
   async function saveTrack(): Promise<void> {
     if (!editor || busy) return
     const draft = editor.draft
-    const allowed = allowedFromDraft(draft)
+    const allowed = allowedFromTrackDraft(draft)
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(draft.id) || draft.label.trim() === '' || draft.workflowDefault.trim() === '') {
       setError(t('workbench.track_fields_invalid'))
       return
@@ -187,58 +188,86 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       setError(t('workbench.track_allowed_invalid'))
       return
     }
-    setBusy(true)
+    const targetRoot = state.root
+    const targetRevision = state.revision
+    const targetTrack = draft.id
+    const operation = trackMutation.begin('save', targetRevision, targetTrack)
     setError(null)
     try {
       const response = editor.mode === 'create'
         ? await postTrackDefinition({
-            root: state.root,
-            revision: state.revision,
+            root: targetRoot,
+            revision: targetRevision,
             track: {
-              id: draft.id,
+              id: targetTrack,
               label: draft.label.trim(),
               builtin: false,
               workflow: { default: draft.workflowDefault.trim(), allowed },
-              policyProfile: clonePolicy(draft.policyProfile),
+              policyProfile: cloneTrackPolicy(draft.policyProfile),
             },
           })
-        : await patchTrackDefinition(state.root, state.revision, draft.id, {
+        : await patchTrackDefinition(targetRoot, targetRevision, targetTrack, {
             label: draft.label.trim(),
             workflowDefault: draft.workflowDefault.trim(),
             workflowAllowed: allowed,
-            ...(editor.original?.builtin ? {} : { policyProfile: clonePolicy(draft.policyProfile) }),
+            ...(editor.original?.builtin ? {} : { policyProfile: cloneTrackPolicy(draft.policyProfile) }),
           })
       if (!response.ok) {
-        setError(await readMutationError(response))
+        const message = await readMutationError(response)
+        if (trackMutation.isCurrentEntity(operation)) setError(message)
         return
       }
+      let body: unknown
+      try { body = await response.json() } catch { body = null }
+      const success = decodeTrackMutationSuccess(body)
+      if (success === null) {
+        if (trackMutation.isCurrentEntity(operation)) setError(localeIdentity.current.t('common.invalid_response'))
+        return
+      }
+      if (!trackMutation.isActive(operation)) return
       await state.reloadConfig()
-      setEditor(null)
+      if (trackMutation.isCurrentEntity(operation)) setEditor(null)
     } catch (mutationError) {
-      const current = localeIdentity.current
-      setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      if (trackMutation.isCurrentEntity(operation)) {
+        const current = localeIdentity.current
+        setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      }
     } finally {
-      setBusy(false)
+      trackMutation.finish(operation)
     }
   }
 
   async function removeTrack(): Promise<void> {
     if (!editor?.original || editor.original.builtin || busy) return
-    setBusy(true)
+    const targetRoot = state.root
+    const targetRevision = state.revision
+    const targetTrack = editor.original.id
+    const operation = trackMutation.begin('delete', targetRevision, targetTrack)
     setError(null)
     try {
-      const response = await deleteTrackDefinition(state.root, state.revision, editor.original.id)
+      const response = await deleteTrackDefinition(targetRoot, targetRevision, targetTrack)
       if (!response.ok) {
-        setError(await readMutationError(response))
+        const message = await readMutationError(response)
+        if (trackMutation.isCurrentEntity(operation)) setError(message)
         return
       }
+      let body: unknown
+      try { body = await response.json() } catch { body = null }
+      const success = decodeTrackMutationSuccess(body)
+      if (success === null) {
+        if (trackMutation.isCurrentEntity(operation)) setError(localeIdentity.current.t('common.invalid_response'))
+        return
+      }
+      if (!trackMutation.isActive(operation)) return
       await state.reloadConfig()
-      setEditor(null)
+      if (trackMutation.isCurrentEntity(operation)) setEditor(null)
     } catch (mutationError) {
-      const current = localeIdentity.current
-      setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      if (trackMutation.isCurrentEntity(operation)) {
+        const current = localeIdentity.current
+        setError(formatApiError(mutationError, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      }
     } finally {
-      setBusy(false)
+      trackMutation.finish(operation)
     }
   }
 
@@ -252,6 +281,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
         onClick={() => {
           if (open) {
             setEditor(null)
+            setRoutePrompt('')
             invalidateRoutePreview()
           }
           setOpen((value) => !value)
@@ -262,7 +292,7 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
       {open && (
         <Dialog
           title={t('workbench.track_settings_dialog')}
-          onClose={() => { setOpen(false); setEditor(null); invalidateRoutePreview() }}
+          onClose={() => { setOpen(false); setEditor(null); setRoutePrompt(''); invalidateRoutePreview() }}
           testid="wb-track-settings-panel"
           closeLabel={t('workbench.track_settings_close')}
           panelClassName="w-[min(920px,calc(100vw-32px))]"
@@ -280,87 +310,16 @@ export function TrackSettings({ state }: { state: MandatoryState }): JSX.Element
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <b className="text-[13px] text-text">{editor.mode === 'create' ? t('workbench.track_create_title') : t('workbench.track_edit_title')}</b>
-                <button type="button" className="text-xs text-text-3" onClick={() => { setEditor(null); invalidateRoutePreview() }}>{t('workbench.track_cancel')}</button>
+                <button type="button" className="text-xs text-text-3" onClick={() => { setEditor(null); setRoutePrompt(''); invalidateRoutePreview() }}>{t('workbench.track_cancel')}</button>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  {t('workbench.track_id')}
-                  <input className={fieldClass} value={editor.draft.id} disabled={editor.mode === 'edit'} onChange={(event) => updateDraft({ id: event.target.value })} />
-                </label>
-                <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  {t('workbench.track_label')}
-                  <input aria-label={t('workbench.track_label')} className={fieldClass} value={editor.draft.label} onChange={(event) => updateDraft({ label: event.target.value })} />
-                </label>
-                <label className="grid gap-1 text-[11.5px] font-bold text-text-2">
-                  {t('workbench.track_workflow_default')}
-                  <input aria-label={t('workbench.track_workflow_default')} className={fieldClass} value={editor.draft.workflowDefault} onChange={(event) => updateDraft({ workflowDefault: event.target.value })} />
-                </label>
-                <label className="flex items-center gap-2 self-end rounded-md border border-border px-2 py-1.5 text-[11.5px] font-bold text-text-2">
-                  <input type="checkbox" checked={editor.draft.workflowAny} onChange={(event) => updateDraft({ workflowAny: event.target.checked })} />
-                  {t('workbench.track_workflow_any')}
-                </label>
-                {!editor.draft.workflowAny && (
-                  <label className="grid gap-1 text-[11.5px] font-bold text-text-2 sm:col-span-2">
-                    {t('workbench.track_workflow_allowed')}
-                    <input className={fieldClass} value={editor.draft.workflowAllowed} onChange={(event) => updateDraft({ workflowAllowed: event.target.value })} />
-                  </label>
-                )}
-                {!editor.original?.builtin && (
-                  <label className="grid gap-1 text-[11.5px] font-bold text-text-2 sm:col-span-2">
-                    {t('workbench.track_policy_template')}
-                    <select
-                      aria-label={t('workbench.track_policy_template')}
-                      className={fieldClass}
-                      defaultValue=""
-                      onChange={(event) => {
-                        const template = state.tracks.find((track) => track.id === event.target.value && track.builtin)
-                        if (template) updateDraft({ policyProfile: clonePolicy(template.policyProfile) })
-                      }}
-                    >
-                      <option value="">{t('workbench.track_policy_keep')}</option>
-                      {state.tracks.filter((track) => track.builtin).map((track) => <option key={track.id} value={track.id}>{track.id}</option>)}
-                    </select>
-                  </label>
-                )}
-              </div>
-              {!editor.original?.builtin && (
-                <details className="mt-3 rounded-md border border-border bg-card/60 p-2">
-                  <summary className="cursor-pointer text-xs font-bold text-text-2">{t('workbench.track_policy_details')}</summary>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_review_seed')}
-                      <select className={fieldClass} value={editor.draft.policyProfile.reviewSeed} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, reviewSeed: event.target.value as 'pending' | 'skipped' } })}>
-                        <option value="pending">{t('workbench.track_review_pending')}</option><option value="skipped">{t('workbench.track_review_skipped')}</option>
-                      </select>
-                    </label>
-                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_coverage')}
-                      <select className={fieldClass} value={editor.draft.policyProfile.coverageProfile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, coverageProfile: event.target.value as 'none' | 'pm' | 'frontend' | 'backend' } })}>
-                        <option value="none">{t('workbench.track_coverage_none')}</option><option value="pm">{t('workbench.track_coverage_pm')}</option><option value="frontend">{t('workbench.track_coverage_frontend')}</option><option value="backend">{t('workbench.track_coverage_backend')}</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />{t('workbench.track_afk_manual')}</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />{t('workbench.track_afk_auto')}</label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />{t('workbench.track_skills_matrix')}</label>
-                    <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_skills_profile')}<input className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />{t('workbench.track_routing_enabled')}</label>
-                    {editor.draft.policyProfile.routing.enabled && <>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_pattern')}<input className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_exclude')}<input className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
-                        const routing = editor.draft.policyProfile.routing as { enabled: true; pattern: string; excludePattern?: string; priority: number }
-                        const excludePattern = event.target.value
-                        updateDraft({
-                          policyProfile: {
-                            ...editor.draft.policyProfile,
-                            routing: excludePattern === ''
-                              ? { enabled: true, pattern: routing.pattern, priority: routing.priority }
-                              : { ...routing, excludePattern },
-                          },
-                        })
-                      }} /></label>
-                      <label className="grid gap-1 text-[11px] text-text-2">{t('workbench.track_routing_priority')}<input type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
-                    </>}
-                  </div>
-                </details>
-              )}
+              <TrackEditorFields
+                draft={editor.draft}
+                editMode={editor.mode === 'edit'}
+                builtin={editor.original?.builtin === true}
+                tracks={state.tracks}
+                fieldClass={fieldClass}
+                onUpdate={updateDraft}
+              />
               {!editor.original?.builtin && (
                 <TrackRoutePreview
                   prompt={routePrompt}

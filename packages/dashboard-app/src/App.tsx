@@ -19,6 +19,8 @@ import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
 import { formatApiError } from './api/transport'
+import { Dialog } from './shared/Dialog'
+import type { DashboardNavigationTarget } from './state/useProjectSelection'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -61,6 +63,11 @@ interface Flash {
   msg: string
 }
 
+interface PendingNavigation {
+  readonly kind: 'view' | 'pop'
+  readonly target: DashboardNavigationTarget
+}
+
 function AppShell(): JSX.Element {
   const { t, lang, setLang } = useT()
   const [view, setViewState] = useState<View>(initialView)
@@ -71,6 +78,11 @@ function AppShell(): JSX.Element {
   const [flash, setFlash] = useState<Flash | null>(null)
   const flashRef = useRef<HTMLDivElement>(null)
   const flashTimerRef = useRef<number | null>(null)
+  const [workbenchDirty, setWorkbenchDirty] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null)
+  const viewRef = useRef(view)
+  const dirtyRef = useRef(workbenchDirty)
+  const currentRootRef = useRef('')
 
   useEffect(() => {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
@@ -78,7 +90,7 @@ function AppShell(): JSX.Element {
     setFlash(null)
   }, [lang])
 
-  const setView = useCallback((v: View) => {
+  const commitView = useCallback((v: View) => {
     setViewState(v)
     if (v !== 'progress') setSelectedChange(null)
     try {
@@ -88,6 +100,19 @@ function AppShell(): JSX.Element {
     } catch {
       /* ignore */
     }
+  }, [])
+
+  useEffect(() => {
+    viewRef.current = view
+    dirtyRef.current = workbenchDirty
+  }, [view, workbenchDirty])
+
+  const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
+    if (viewRef.current === 'workbench' && dirtyRef.current && target.view !== 'workbench') {
+      setPendingNavigation({ kind: 'pop', target })
+      return false
+    }
+    return true
   }, [])
 
   useEffect(() => {
@@ -101,13 +126,53 @@ function AppShell(): JSX.Element {
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
   }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
-  const { currentRoot, selectProject } = useProjectSelection({
+  const { currentRoot, selectProject, applyLocation } = useProjectSelection({
     snapshot,
     view,
     selectedChange,
-    onPopView: setViewState,
+    onPopView: commitView,
     onSelectedChange: setSelectedChange,
+    onPopAttempt,
   })
+  currentRootRef.current = currentRoot
+
+  const setView = useCallback((nextView: View): void => {
+    if (viewRef.current === 'workbench' && dirtyRef.current && nextView !== 'workbench') {
+      setPendingNavigation({
+        kind: 'view',
+        target: {
+          view: nextView,
+          root: currentRootRef.current || null,
+          change: nextView === 'progress' ? selectedChange : null,
+        },
+      })
+      return
+    }
+    commitView(nextView)
+  }, [commitView, selectedChange])
+
+  const closePendingNavigation = useCallback(() => {
+    setPendingNavigation(null)
+  }, [])
+
+  const discardAndNavigate = useCallback(() => {
+    if (!pendingNavigation) return
+    const pending = pendingNavigation
+    setPendingNavigation(null)
+    setWorkbenchDirty(false)
+    if (pending.kind === 'pop') applyLocation(pending.target)
+    else commitView(pending.target.view)
+  }, [applyLocation, commitView, pendingNavigation])
+
+  useEffect(() => {
+    if (!workbenchDirty) return
+    const protectDraft = (event: BeforeUnloadEvent): void => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', protectDraft)
+    return () => window.removeEventListener('beforeunload', protectDraft)
+  }, [workbenchDirty])
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
 
   // 跨项目 snapshot 已携带每个 change 冻结绑定的 workflow 摘要。项目总览与单项目视图消费同一
@@ -338,7 +403,13 @@ function AppShell(): JSX.Element {
             // v6 计划 T11：流程带真实计数/running 脉冲吃同一份已加载的 snapshot（App 是唯一
             // useSnapshot() 调用点，不在 WorkbenchView 内独立开第二条 SSE 订阅——见
             // WorkbenchViewProps.snapshot 头注释）。
-            <WorkbenchView key={workbenchRoot} root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} snapshot={snapshot} />
+            <WorkbenchView
+              key={workbenchRoot}
+              root={workbenchRoot}
+              onToggleError={(m) => showFlash('error', m)}
+              snapshot={snapshot}
+              onDirtyChange={setWorkbenchDirty}
+            />
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。
@@ -363,6 +434,33 @@ function AppShell(): JSX.Element {
       </main>
 
       </div>
+      {pendingNavigation && (
+        <Dialog
+          title={t('common.unsaved_navigation_title')}
+          onClose={closePendingNavigation}
+          testid="app-unsaved-navigation"
+          actions={(
+            <>
+              <button
+                type="button"
+                className="rounded-lg border border-border bg-card px-3.5 py-2 text-[13px] font-bold text-text hover:bg-fill"
+                onClick={closePendingNavigation}
+              >
+                {t('common.unsaved_navigation_stay')}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-red px-3.5 py-2 text-[13px] font-bold text-solid-fg hover:opacity-90"
+                onClick={discardAndNavigate}
+              >
+                {t('common.unsaved_navigation_leave')}
+              </button>
+            </>
+          )}
+        >
+          <p className="text-[13px] leading-6 text-text-2">{t('common.unsaved_navigation_body')}</p>
+        </Dialog>
+      )}
     </div>
   )
 }

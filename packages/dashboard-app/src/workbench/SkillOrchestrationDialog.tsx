@@ -23,7 +23,7 @@ type DropTarget = { refSkillId: string | null; after: boolean }
 
 function DropPreview({ label }: { label: string }): JSX.Element {
   return (
-    <div data-testid="wb-skill-drop-preview" className="flex min-h-14 items-center justify-center rounded-2xl border-2 border-dashed border-(--accent) bg-accent-t/55 px-4 text-sm font-semibold text-accent-d shadow-[0_8px_28px_-22px_var(--accent)] transition-all duration-150 motion-reduce:transition-none">
+    <div data-testid="wb-skill-drop-preview" className="flex min-h-14 items-center justify-center rounded-2xl border-2 border-dashed border-(--accent) bg-accent-t/55 px-4 text-sm font-semibold text-accent-d shadow-[0_8px_28px_-22px_var(--accent)] transition-[background-color,border-color,color,box-shadow] duration-150 motion-reduce:transition-none">
       {label}
     </div>
   )
@@ -111,7 +111,7 @@ export function SkillOrchestrationDialog({
           <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-border bg-bg px-3 focus-within:border-(--accent) focus-within:ring-3 focus-within:ring-accent-t">
             <Search className="h-4 w-4 text-text-3" aria-hidden="true" />
             <span className="sr-only">{t('workbench.skill_dialog_search')}</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none" placeholder={t('workbench.skill_dialog_search_placeholder')} />
+            <input name="skill-search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none" placeholder={t('workbench.skill_dialog_search_placeholder')} />
           </label>
           <div className="mt-3 max-h-[505px] space-y-2 overflow-y-auto pr-1">
             {registry === null || registry === undefined ? (
@@ -232,7 +232,7 @@ export function SkillOrchestrationDialog({
                         <div className="mt-2 flex flex-wrap gap-2">
                           {skills.filter((candidate) => candidate !== skillId).map((candidate) => {
                             const checked = deps.includes(candidate)
-                            return <label key={candidate} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-bg px-3 text-xs text-text-2"><input type="checkbox" checked={checked} onChange={() => onDependencyChange?.(lane.id, skillId, checked ? null : candidate, checked ? candidate : null)} />{skillPresentation(candidate, registry, lang).name}</label>
+                            return <label key={candidate} className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-bg px-3 text-xs text-text-2"><input name={`skill-dependency-${lane.id}-${skillId}-${candidate}`} type="checkbox" checked={checked} onChange={() => onDependencyChange?.(lane.id, skillId, checked ? null : candidate, checked ? candidate : null)} />{skillPresentation(candidate, registry, lang).name}</label>
                           })}
                         </div>
                       </fieldset>

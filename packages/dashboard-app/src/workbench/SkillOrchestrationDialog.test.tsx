@@ -77,6 +77,16 @@ describe('SkillOrchestrationDialog', () => {
     expect(onAdd).toHaveBeenCalledWith('build', 'browser-qa')
   })
 
+  it('技能搜索与依赖配置声明稳定表单身份并关闭搜索自动填充', () => {
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
+
+    const search = screen.getByRole('textbox', { name: '搜索技能' })
+    expect(search).toHaveAttribute('name', 'skill-search')
+    expect(search).toHaveAttribute('autocomplete', 'off')
+    fireEvent.click(screen.getByRole('button', { name: 'implement 自定义依赖' }))
+    expect(screen.getByRole('checkbox', { name: /research/ })).toHaveAttribute('name', 'skill-dependency-build-implement-research')
+  })
+
   it('可把技能切为并行或接续上一项，变更映射到 depends_on', () => {
     const onDependencyChange = vi.fn()
     renderDialog(

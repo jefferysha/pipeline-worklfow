@@ -216,7 +216,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]">
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]" data-testid="machine-risk-layout">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
           {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (

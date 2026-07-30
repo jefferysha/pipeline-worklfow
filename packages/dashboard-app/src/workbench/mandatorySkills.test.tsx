@@ -924,6 +924,19 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
 })
 
 describe('TrackSettings v3 真实 CRUD', () => {
+  it('所有可编辑 input/select 都有稳定 name，非认证配置文本禁用浏览器自动填充', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const controls = Array.from(editor.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'))
+    expect(controls.length).toBeGreaterThan(0)
+    for (const control of controls) expect(control.name).not.toBe('')
+    for (const input of Array.from(editor.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])'))) {
+      expect(input).toHaveAttribute('autocomplete', 'off')
+    }
+  })
+
   it('English 自定义轨编辑器的 Policy template accessible name 不含中文', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     await renderMatrix(['build'])
@@ -968,7 +981,12 @@ describe('TrackSettings v3 真实 CRUD', () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/tracks' && opts?.method === 'POST') {
-        return new Response(JSON.stringify({ ok: true, revision: 'next-revision', tracks: CONFIG_BODY.tracks }), { status: 200 })
+        return new Response(JSON.stringify({
+          ok: true,
+          revision: 'next-revision',
+          source: 'project-file',
+          tracks: CONFIG_BODY.tracks,
+        }), { status: 200 })
       }
       return baseFetch(url, opts)
     }) as unknown as typeof fetch
@@ -1165,11 +1183,163 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
+  it.each([
+    ['non-JSON', () => new Response('not json', { status: 200 })],
+    ['empty body', () => new Response(null, { status: 200 })],
+    ['ok false', () => new Response(JSON.stringify({ ok: false, error: 'not success' }), { status: 200 })],
+    ['wrong revision field', () => new Response(JSON.stringify({
+      ok: true,
+      revision: 42,
+      source: 'project-file',
+      tracks: CONFIG_BODY.tracks,
+    }), { status: 200 })],
+    ['missing source', () => new Response(JSON.stringify({
+      ok: true,
+      revision: 'next',
+      tracks: CONFIG_BODY.tracks,
+    }), { status: 200 })],
+  ])('Track save 2xx %s fails closed, keeps the draft, and uses current-language invalid-response copy', async (_case, response) => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Unsaved draft' } })
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('Invalid server response.')
+    expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
+    expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved draft')
+  })
+
+  it('同 root 的 Track A 保存晚到：不得关闭或污染 Track B 编辑器，也不得清除 B 的 busy', async () => {
+    const baseFetch = global.fetch
+    let releaseA!: (response: Response) => void
+    let releaseB!: (response: Response) => void
+    const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
+    const pendingB = new Promise<Response>((resolve) => { releaseB = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return pendingA
+      if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') return pendingB
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
+
+    await act(async () => {
+      releaseA(new Response(JSON.stringify({ ok: false, error: 'A stale error' }), { status: 409 }))
+      await pendingA
+    })
+    expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+    expect(screen.queryByText('A stale error')).toBeNull()
+    expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
+
+    await act(async () => {
+      releaseB(new Response(JSON.stringify({
+        ok: true,
+        revision: 'next',
+        source: 'project-file',
+        tracks: CONFIG_BODY.tracks,
+      }), { status: 200 }))
+      await pendingB
+    })
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+  })
+
+  it('同 root 的 Track A 删除晚到：不得把错误写入已切换的 Track B 编辑器', async () => {
+    const baseFetch = global.fetch
+    let releaseDelete!: (response: Response) => void
+    const pendingDelete = new Promise<Response>((resolve) => { releaseDelete = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url.startsWith('/api/tracks/qa?') && opts?.method === 'DELETE') return pendingDelete
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-delete'))
+    fireEvent.click(screen.getByTestId('wb-track-delete-confirm'))
+
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
+
+    await act(async () => {
+      releaseDelete(new Response(JSON.stringify({ ok: false, error: 'stale delete error' }), { status: 409 }))
+      await pendingDelete
+    })
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+    expect(screen.queryByText('stale delete error')).toBeNull()
+    expect(screen.getByTestId('wb-track-editor-save')).toBeEnabled()
+  })
+
+  it('Track A 晚到成功仍重拉 authority 并推进 revision，不关闭或污染已切到的 Track B', async () => {
+    let configReads = 0
+    let currentRevision = CONFIG_BODY.revision
+    configResponse = () => {
+      configReads += 1
+      return new Response(JSON.stringify({ ...CONFIG_BODY, revision: currentRevision }), { status: 200 })
+    }
+    const baseFetch = global.fetch
+    let releaseA!: (response: Response) => void
+    const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
+    const pendingB = new Promise<Response>(() => {})
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return pendingA
+      if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') return pendingB
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+
+    currentRevision = 'revision-after-a'
+    await act(async () => {
+      releaseA(new Response(JSON.stringify({
+        ok: true,
+        revision: currentRevision,
+        source: 'project-file',
+        tracks: CONFIG_BODY.tracks,
+      }), { status: 200 }))
+      await pendingA
+    })
+    await waitFor(() => expect(configReads).toBeGreaterThan(1))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    await waitFor(() => expect(fetchMock().mock.calls.some(([url, opts]) =>
+      url === '/api/tracks/frontend'
+      && (opts as RequestInit | undefined)?.method === 'PATCH'
+      && JSON.parse(String((opts as RequestInit).body)).revision === currentRevision)).toBe(true))
+  })
+
   it('内建轨编辑器锁住 ID/policy/delete，只 PATCH label 与 workflow', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') {
-        return new Response(JSON.stringify({ ok: true, revision: 'next', tracks: CONFIG_BODY.tracks }), { status: 200 })
+        return new Response(JSON.stringify({
+          ok: true,
+          revision: 'next',
+          source: 'project-file',
+          tracks: CONFIG_BODY.tracks,
+        }), { status: 200 })
       }
       return baseFetch(url, opts)
     }) as unknown as typeof fetch

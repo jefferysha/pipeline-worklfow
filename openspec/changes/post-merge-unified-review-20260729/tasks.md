@@ -82,6 +82,25 @@
 - [x] 抽离 Workbench 定义编辑纯函数，保持 page/route 600 行架构硬门并重跑回归。 (build)
 - [x] 对完整返工 diff 重做 Standards+Spec pre-Verify 审查并冻结新 SHA。 (build)
 
+## 第五次 Verify 回退修复
+
+- [ ] 将 Operations 危险确认绑定 exact root+operation+全部决策输入，任一输入变化立即失效旧确认。 (build)
+- [ ] 将 Loop 升档确认绑定完整权威决策事实，逻辑等价刷新保持、事实变化关闭且旧确认不可提交。 (build)
+- [ ] 严格解码 Workbench save/create 的 2xx success schema，畸形成功体保留编辑状态并显示当前语言错误。 (build)
+- [ ] 为 Track Settings 与 Default Skill Chain 的同 root 跨实体 mutation 增加完整 operation identity 守卫。 (build)
+- [ ] 严格解码 AFK settings/enqueue/retry/dismiss success envelope，畸形 2xx 不得提交状态或成功反馈。 (build)
+- [ ] 同步权威前端规则到 Vite 6，重建 tracked assets 并完成全量 Standards+Spec pre-Verify 收敛。 (build)
+
+## 第六次 pre-Verify 回退修复
+
+- [ ] 将 Default Skill 保存升级为 per-cell revision/token 身份并严格校验服务端回显实体，保证跨 cell 并发成功均可对账。 (build)
+- [ ] 将 Track save/delete 严格解码权威 registry DTO，并在编辑器切换后安全 reconcile 已提交的迟到成功。 (build)
+- [ ] 将 Operations 在途结果绑定完整决策事实与唯一 token，提交后消费危险确认；收紧 AFK normalized settings 值域。 (build)
+- [ ] 为 Workbench 全部真实草稿建立统一站内导航与 browser unload 守卫，取消离开时保留状态和焦点。 (build)
+- [ ] 修复 Machine 双列卡片等高空洞、AFK 重复 CTA、泛化 transition 与输入 autocomplete/name 等全部设计 Low。 (build)
+- [ ] 抽离临界大组件中的身份/解码/状态 helper，恢复架构行数余量并完成全量 RED→GREEN。 (build)
+- [ ] 更新 REVIEW、pre-Verify 报告、生成资产与真实浏览器证据，经独立 C0/H0/M0/L0 复审后冻结新 SHA。 (build)
+
 ## 验证
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

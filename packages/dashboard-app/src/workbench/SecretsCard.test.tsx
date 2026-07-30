@@ -13,7 +13,7 @@ let postCalls: Array<Record<string, unknown>>
 let deleteUrls: string[]
 let getCalls: number
 
-function renderCard(onChanged?: () => void) {
+function renderCard(onChanged?: () => void, onDirtyChange?: (dirty: boolean) => void) {
   function LanguageToggle(): JSX.Element {
     const { setLang } = useT()
     return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
@@ -21,7 +21,7 @@ function renderCard(onChanged?: () => void) {
   render(
     <I18nProvider>
       <LanguageToggle />
-      <SecretsCard onChanged={onChanged} />
+      <SecretsCard onChanged={onChanged} onDirtyChange={onDirtyChange} />
     </I18nProvider>,
   )
 }
@@ -57,6 +57,24 @@ afterEach(() => {
 })
 
 describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
+  it('打开空 write-only 输入不算 dirty，真实输入才上报，清空或取消后清除', async () => {
+    const onDirtyChange = vi.fn()
+    renderCard(undefined, onDirtyChange)
+    fireEvent.click(await screen.findByTestId('sc-edit-OPENAI_API_KEY'))
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    const input = screen.getByTestId('sc-input-OPENAI_API_KEY')
+    fireEvent.change(input, { target: { value: 'not-saved' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.change(input, { target: { value: '' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(input, { target: { value: 'not-saved-again' } })
+    fireEvent.click(screen.getByTestId('sc-cancel-OPENAI_API_KEY'))
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('①已配键显掩码不显明文;未配键显「未配置」;点「更新」输入框为空(绝不回填)', async () => {
     renderCard()
     expect((await screen.findByTestId('sc-masked-CLAUDE_CODE_OAUTH_TOKEN')).textContent).toBe('tok…7f3a')

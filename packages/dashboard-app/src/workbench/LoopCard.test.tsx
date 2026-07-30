@@ -106,12 +106,27 @@ function Harness(): JSX.Element {
   return <LoopCard root={ROOT} loops={loops} />
 }
 
+function HarnessWithDirty({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }): JSX.Element {
+  const loops = useLoops(ROOT)
+  return <LoopCard root={ROOT} loops={loops} onDirtyChange={onDirtyChange} />
+}
+
 function LanguageHarness(): JSX.Element {
   const { setLang } = useT()
   const loops = useLoops(ROOT)
   return (
     <>
       <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+      <LoopCard root={ROOT} loops={loops} />
+    </>
+  )
+}
+
+function ReloadHarness(): JSX.Element {
+  const loops = useLoops(ROOT)
+  return (
+    <>
+      <button type="button" data-testid="test-reload-loops" onClick={loops.reload}>reload</button>
       <LoopCard root={ROOT} loops={loops} />
     </>
   )
@@ -204,6 +219,24 @@ describe('LoopCard 读回显（验收①）', () => {
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
+  it('只在真实未保存修改存在时上报 dirty，保存回读后清除', async () => {
+    const onDirtyChange = vi.fn()
+    render(
+      <I18nProvider>
+        <HarnessWithDirty onDirtyChange={onDirtyChange} />
+      </I18nProvider>,
+    )
+    const goal = await screen.findByTestId('lp-goal')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(goal, { target: { value: '待保存目标' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await screen.findByTestId('lp-save-ok')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('运行时切换语言不 refetch，也不覆盖未保存的 Loop 草稿', async () => {
     render(<I18nProvider><LanguageHarness /></I18nProvider>)
     const goal = await screen.findByTestId('lp-goal')
@@ -421,6 +454,93 @@ describe('LoopCard runner 软校验警告（观察项②）', () => {
 })
 
 describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒绝原文）', () => {
+  const graduation = {
+    id: 'restyle-loop',
+    current: 'L1',
+    recommended: 'L2',
+    enforcement: 'hard',
+    canGraduate: true,
+    blockers: [],
+    demotionReason: null,
+    demotionSignals: [],
+    readinessScore: 62,
+    readinessBand: 'L2-ready',
+    driftCount: 0,
+    breaker: 'ok',
+    failStreak: 0,
+    runs: 5,
+  }
+  const decisionFactChanges: Array<[
+    string,
+    (row: Record<string, unknown>) => Record<string, unknown>,
+  ]> = [
+    ['current autonomy', (row) => ({ ...row, autonomy_level: 'L2' })],
+    ['readiness band', (row) => ({ ...row, readiness: { score: 48, band: 'not-ready' } })],
+    ['budget eligibility', (row) => ({
+      ...row,
+      budget: { ...(row.budget as Record<string, unknown>), hasBudget: false, remaining: 0 },
+    })],
+    ['graduation blocker and eligibility', (row) => ({
+      ...row,
+      graduation: {
+        ...(row.graduation as Record<string, unknown>),
+        canGraduate: false,
+        blockers: ['readiness below threshold'],
+      },
+    })],
+  ]
+
+  function renderReloadCard(): void {
+    render(<I18nProvider><ReloadHarness /></I18nProvider>)
+  }
+
+  it('逻辑等价快照刷新保持升档确认与原目标', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    fireEvent.click(screen.getByTestId('lp-lv-L2'))
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+
+    rows = rows.map((row) => ({
+      ...row,
+      goal: 'equivalent refreshed goal',
+      readiness: { ...(row.readiness as Record<string, unknown>) },
+      budget: { ...(row.budget as Record<string, unknown>) },
+      graduation: {
+        ...(row.graduation as Record<string, unknown>),
+        blockers: [...((row.graduation as { blockers: string[] }).blockers)],
+      },
+    }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('equivalent refreshed goal'))
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+    expect(screen.getByTestId('lp-promote-confirm')).toHaveTextContent('L2')
+    expect(lastPostBody('/api/loops/level')).toBeNull()
+  })
+
+  it.each(decisionFactChanges)('%s 变化会撤销旧确认、恢复入口焦点且不能提交', async (_label, changeFacts) => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const trigger = screen.getByTestId('lp-lv-L2')
+    trigger.focus()
+    fireEvent.click(trigger)
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+
+    rows = rows.map(changeFacts)
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.queryByTestId('lp-promote-confirm')).toBeNull())
+    expect(trigger).toHaveFocus()
+    expect(lastPostBody('/api/loops/level')).toBeNull()
+  })
+
   it('升档 L1→L2：先确认 Dialog（取消不发请求），确认后 POST /api/loops/level 并回显新档', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')

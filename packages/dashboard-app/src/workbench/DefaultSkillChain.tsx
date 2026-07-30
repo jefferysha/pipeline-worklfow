@@ -5,7 +5,6 @@ import { postMandatorySkills, type WbSkillEntry } from '../api/client'
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
-  isValidMandatorySkillList,
   loadMandatoryConfig,
   peekMandatoryConfig,
   primeMandatoryConfig,
@@ -23,25 +22,9 @@ import {
   SEC_H_CLS,
 } from './skillChainModel'
 import { SkillTransferModal } from './SkillTransferModal'
+import { decodeMandatorySkillWriteSuccess } from './mandatorySkillWriteResponse'
 import type { WbStepDef } from './WorkbenchView'
-
-interface SaveEnvelope {
-  ok?: boolean
-  error?: string
-  skills?: unknown
-}
-
-function decodeSaveEnvelope(value: unknown): SaveEnvelope {
-  if (typeof value !== 'object' || value === null) return {}
-  const ok = Reflect.get(value, 'ok')
-  const error = Reflect.get(value, 'error')
-  const skills = Reflect.get(value, 'skills')
-  return {
-    ...(typeof ok === 'boolean' ? { ok } : {}),
-    ...(typeof error === 'string' ? { error } : {}),
-    ...(skills === undefined ? {} : { skills }),
-  }
-}
+import { useMandatoryCellMutations } from './useMandatoryCellMutations'
 
 export function DefaultSkillChain({
   step,
@@ -64,7 +47,7 @@ export function DefaultSkillChain({
   >(null)
   const rootRef = useRef(root)
   rootRef.current = root
-  const savingRef = useRef<{ token: symbol; root: string; cellKey: string } | null>(null)
+  const mutations = useMandatoryCellMutations()
 
   useEffect(() => {
     let cancelled = false
@@ -86,6 +69,8 @@ export function DefaultSkillChain({
   const matrixTracks = cfg?.tracks.filter((track) => track.policyProfile.skills.matrix) ?? []
   const selectedTrack = matrixTracks.find((track) => track.id === requestedTrack) ?? matrixTracks[0] ?? null
   const track = selectedTrack?.id ?? ''
+  const cellIdentityRef = useRef('')
+  cellIdentityRef.current = `${phase}.${track}`
   const installed = new Map((registry ?? []).map((entry) => [entry.name, entry]))
   const effectiveSkills = (trackId: string): string[] => {
     if (cfg === null) return []
@@ -97,47 +82,55 @@ export function DefaultSkillChain({
     if (selectedTrack === null) return
     const cellKey = `${phase}.${track}`
     const requestCfg = cfg
-    const op = { token: Symbol(cellKey), root, cellKey }
-    savingRef.current = op
+    const op = mutations.begin(root, cellKey, requestCfg?.revision ?? '')
+    if (op === null) return
     setSaveError(null)
+    const isCurrentOperation = (): boolean => (
+      mutations.isLatest(op)
+      && rootRef.current === op.root
+      && cellIdentityRef.current === op.cellKey
+    )
     try {
       const response = await postMandatorySkills({ phase, track, skills, root })
-      let body: SaveEnvelope = {}
+      let body: unknown
+      let parsed = false
       try {
-        body = decodeSaveEnvelope(await response.json())
+        body = await response.json()
+        parsed = true
       } catch {
-        body = {}
+        body = null
       }
-      if (!response.ok || body.ok !== true) {
-        if (rootRef.current === root) {
+      if (!response.ok || (typeof body === 'object' && body !== null && Reflect.get(body, 'ok') === false)) {
+        if (isCurrentOperation()) {
           setSaveError({
             kind: 'server',
-            detail: body.error ?? '',
+            detail: typeof body === 'object' && body !== null && typeof Reflect.get(body, 'error') === 'string'
+              ? String(Reflect.get(body, 'error'))
+              : '',
             status: response.status,
           })
         }
         return
       }
-      if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        if (rootRef.current === root) setSaveError({ kind: 'invalid' })
+      const success = parsed ? decodeMandatorySkillWriteSuccess(body, { phase, track }) : null
+      if (success === null) {
+        if (isCurrentOperation()) setSaveError({ kind: 'invalid' })
         return
       }
-      const saved = body.skills ?? skills
+      if (!mutations.isLatest(op)) return
       const base = peekMandatoryConfig(root) ?? requestCfg
       if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: saved } }
+        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: success.skills } }
         primeMandatoryConfig(next, root)
-        if (rootRef.current === root) {
-          setCfg(next)
-          setEditing(false)
-        }
+        if (rootRef.current === op.root) setCfg(next)
+        if (isCurrentOperation()) setEditing(false)
       }
     } catch (error) {
-      if (rootRef.current === root) {
+      if (isCurrentOperation()) {
         setSaveError({ kind: 'request', cause: error })
       }
     } finally {
-      if (savingRef.current?.token === op.token) savingRef.current = null
+      mutations.finish(op)
     }
   }
 
@@ -146,8 +139,7 @@ export function DefaultSkillChain({
     ? resolveMandatoryCell(cfg.table, selectedTrack, phase, cfg.writableProfiles)
     : null
   const canEdit = cfg?.capable === true && cell?.editable === true && cell.source === 'explicit' && phase !== 'archive'
-  const active = savingRef.current
-  const busy = active?.root === root && active.cellKey === `${phase}.${track}`
+  const busy = mutations.busy(root, `${phase}.${track}`)
   const missing = cfg?.capable === true && registry !== null
     ? (cell?.skills ?? []).filter((token) => token.split('|').every((alternative) => installed.get(alternative)?.installed !== true))
     : []
@@ -168,7 +160,11 @@ export function DefaultSkillChain({
                 className="h-[26px] cursor-pointer rounded-md px-[11px] font-mono text-[12.5px] font-semibold text-text-3 transition-colors not-aria-pressed:hover:bg-fill not-aria-pressed:hover:text-text-2 aria-pressed:bg-fill-2 aria-pressed:text-text"
                 aria-pressed={definition.id === track}
                 data-testid={`wb-sk-track-${definition.id}`}
-                onClick={() => setTrack(definition.id)}
+                onClick={() => {
+                  setTrack(definition.id)
+                  setEditing(false)
+                  setSaveError(null)
+                }}
               >
                 {definition.builtin && <LockKeyhole className="mr-1 inline size-3" aria-hidden="true" />}{definition.label}
                 {definition.policyProfile.skills.profile !== definition.id && ` · ${t('workbench.sk_inherits', { profile: definition.policyProfile.skills.profile })}`}
@@ -198,7 +194,7 @@ export function DefaultSkillChain({
         </div>
         {saveError && <p className="mt-2 text-[13px] text-red" data-testid="wb-sk-save-error" role="alert">
           {saveError.kind === 'invalid'
-            ? t('workbench.mand_save_invalid')
+            ? t('common.invalid_response')
             : saveError.kind === 'server'
               ? lang === 'zh' && saveError.detail !== ''
                 ? saveError.detail

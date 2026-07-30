@@ -173,3 +173,19 @@
 {"ts":"2026-07-29T17:23:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-29T17:23:11Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-29T17:23:11Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-29T17:24:52Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-29T17:24:52Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"ffa9041b-4dbc-4dd7-a729-4e0c0ece0516"}
+{"ts":"2026-07-29T17:25:33Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T17:56:19Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-29T17:56:25Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-29-post-merge-unified-review-verify-attempt-5.md"}
+{"ts":"2026-07-29T17:56:31Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-29T17:56:31Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-29T17:56:31Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-29T17:57:19Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-29T17:57:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-29T17:25:33Z authority_host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T17:57:28Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-29T17:57:29Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"21104c9b-65b8-4abc-a64f-874b31d62c7b"}
+{"ts":"2026-07-29T17:58:20Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fa7a0-64de-7a73-9c00-fc3215b612de"}
+{"ts":"2026-07-29T17:58:49Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
+{"ts":"2026-07-29T17:58:49Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-29T18:00:13Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

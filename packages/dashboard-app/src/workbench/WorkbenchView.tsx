@@ -14,13 +14,16 @@ import { useLoops } from './LoopCard'
 import { LaneMandatorySkills, TrackSelector, useMandatorySkills } from './mandatorySkills'
 import { ExecutionTimelineComposer } from './ExecutionTimelineComposer'
 import { SkillOrchestrationDialog } from './SkillOrchestrationDialog'
-import { readSaveErrors, readWorkflowDeleteResponse, STAGE_ID_RE } from './workbenchApiDecoders'
+import { readSaveErrors, readWorkflowDeleteResponse } from './workbenchApiDecoders'
 import { useRecentWorkflowHistory } from './useRecentWorkflowHistory'
 import { WorkbenchDialogs } from './WorkbenchDialogs'
 import { WorkbenchHeader } from './WorkbenchHeader'
 import { WorkbenchGovernanceDialog } from './WorkbenchGovernanceDialog'
+import { readWorkflowWriteSuccess } from './workbenchWriteResponse'
 import type { WorkbenchViewProps } from './workbenchViewTypes'
 import { useWorkbenchBoard } from './useWorkbenchBoard'
+import { useStageDraftEditor } from './useStageDraftEditor'
+import { useWorkbenchDirtyState } from './useWorkbenchDirtyState'
 import {
   addSkillToDef,
   buildDefaultDef,
@@ -61,7 +64,7 @@ export type {
   WbWorkflowDef,
 } from './workbenchDefinition'
 gsap.registerPlugin(useGSAP)
-export function WorkbenchView({ root, onToggleError, snapshot = null }: WorkbenchViewProps): JSX.Element {
+export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyChange }: WorkbenchViewProps): JSX.Element {
   const { t, lang } = useT()
   const defaultLabels = useMemo(
     () => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])),
@@ -77,13 +80,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' } | { kind: 'error'; errors: string[] }>({ kind: 'idle' })
   const [saving, setSaving] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
-  const [addStageOpen, setAddStageOpen] = useState(false)
-  const [stageDraftName, setStageDraftName] = useState('')
-  const [stageDraftId, setStageDraftId] = useState('')
-  const [stageIdTouched, setStageIdTouched] = useState(false)
-  const addStageNameRef = useRef<HTMLInputElement>(null)
   const [workflowCreateMode, setWorkflowCreateMode] = useState<'new' | 'copy' | null>(null)
   const [workflowDraftName, setWorkflowDraftName] = useState('')
+  const workflowDraftBaseline = useRef('')
   const [workflowOpBusy, setWorkflowOpBusy] = useState(false)
   const [workflowOpErrors, setWorkflowOpErrors] = useState<string[]>([])
   const [workflowDeleteTarget, setWorkflowDeleteTarget] = useState<{ root: string; name: string } | null>(null)
@@ -106,6 +105,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   localeIdentity.current = { t, lang }
   const [advancedOpen, setAdvancedOpen] = useState(false); const [skillEditorOpen, setSkillEditorOpen] = useState(false)
   const defSnapshotRef = useRef<string | null>(null)
+  const {
+    addStageOpen, setAddStageOpen, stageDraftName, setStageDraftName, stageDraftId, setStageDraftId,
+    stageIdTouched, setStageIdTouched, addStageNameRef, stageIdError, canSubmitStage,
+    closeAddStage, confirmAddStage, draftDirty: addStageDraftDirty,
+  } = useStageDraftEditor({ def, stageId, setDef, setStageId })
   const hooksConfig = useHooksConfig(root, onToggleError)
   const mandatory = useMandatorySkills(root)
   const { recent, recentSilent } = useRecentWorkflowHistory(snapshot, root, wfName)
@@ -132,6 +136,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     setAddStageOpen(false)
     setWorkflowCreateMode(null)
     setWorkflowDraftName('')
+    workflowDraftBaseline.current = ''
     setWorkflowOpBusy(false)
     setWorkflowOpErrors([])
     setWorkflowDeleteTarget(null)
@@ -201,6 +206,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
   const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
+  const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
+  const { setSourceDirty } = useWorkbenchDirtyState({
+    localDirty: dirty || workflowCreateDirty || addStageDraftDirty,
+    onDirtyChange,
+  })
   function editLane(laneId: string, patch: Parameters<typeof editLaneInDef>[2]): void {
     setDef((prev) => (prev ? editLaneInDef(prev, laneId, patch) : prev))
   }
@@ -216,61 +226,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       const rest = def?.steps.filter((s) => s.id !== laneId) ?? []
       return rest[0]?.id ?? null
     })
-  }
-  const stageIdTrimmed = stageDraftId.trim()
-  const stageIdInvalid = stageIdTrimmed.length > 0 && !STAGE_ID_RE.test(stageIdTrimmed)
-  const stageIdDup = stageIdTrimmed.length > 0 && !stageIdInvalid && (def?.steps.some((s) => s.id === stageIdTrimmed) ?? false)
-  const stageIdError = stageIdInvalid
-    ? t('workbench.add_stage_id_invalid')
-    : stageIdDup
-      ? t('workbench.add_stage_id_dup')
-      : null
-  const canSubmitStage = stageIdTrimmed.length > 0 && !stageIdInvalid && !stageIdDup
-  function closeAddStage(): void {
-    setAddStageOpen(false)
-    setStageDraftName('')
-    setStageDraftId('')
-    setStageIdTouched(false)
-  }
-  function confirmAddStage(): void {
-    if (!canSubmitStage || !def) return
-    const id = stageIdTrimmed
-    const label = stageDraftName.trim()
-    setDef((prev) => {
-      if (!prev) return prev
-      const steps = prev.steps
-      const selIdx = stageId ? steps.findIndex((s) => s.id === stageId) : -1
-      const insertIndex = selIdx >= 0 ? selIdx + 1 : steps.length
-      const prevStep = insertIndex > 0 ? steps[insertIndex - 1] : undefined
-      const nextStep = steps[insertIndex] // 插入前的「原下一个 step」，末尾插入时为 undefined
-      let newTransitions: WbStepDef['transitions'] = []
-      let steppedSteps = steps
-      if (prevStep && nextStep) {
-        const fwdIdx = prevStep.transitions.findIndex((tr) => tr.to === nextStep.id)
-        if (fwdIdx >= 0) {
-          newTransitions = [{ event: `${id}-complete`, to: nextStep.id }]
-          steppedSteps = steps.map((s, i) =>
-            i === insertIndex - 1
-              ? { ...s, transitions: s.transitions.map((tr, ti) => (ti === fwdIdx ? { ...tr, to: id } : tr)) }
-              : s,
-          )
-        }
-      } else if (prevStep && !nextStep) {
-        steppedSteps = steps.map((s, i) =>
-          i === insertIndex - 1
-            ? { ...s, transitions: [...s.transitions, { event: `${s.id}-complete`, to: id }] }
-            : s,
-        )
-      }
-      const newStep: WbStepDef = {
-        id, label, gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: newTransitions,
-      }
-      const finalSteps = [...steppedSteps]
-      finalSteps.splice(insertIndex, 0, newStep)
-      return { ...prev, steps: finalSteps }
-    })
-    setStageId(id)
-    closeAddStage()
   }
   async function save(): Promise<void> {
     if (!def || !wfName || readonlyWf || !dirty || saving) return
@@ -296,7 +251,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         })
         return
       }
+      const validSuccess = await readWorkflowWriteSuccess(res)
       if (generation !== saveGeneration.current || rootIdentity.current !== targetRoot || workflowIdentity.current !== targetWorkflow) return
+      if (!validSuccess) { setSaveStatus({ kind: 'error', errors: [localeIdentity.current.t('common.invalid_response')] }); return }
       invalidateWorkflowRules(targetRoot, targetWorkflow)
       defSnapshotRef.current = JSON.stringify(def)
       setSaveStatus({ kind: 'ok' })
@@ -339,14 +296,17 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   function openWorkflowCreate(mode: 'new' | 'copy'): void {
     if (saving) return
     setMenuOpen(false)
+    const initialName = mode === 'copy' ? `${wfName ?? 'workflow'}-copy` : ''
+    workflowDraftBaseline.current = initialName
     setWorkflowCreateMode(mode)
-    setWorkflowDraftName(mode === 'copy' ? `${wfName ?? 'workflow'}-copy` : '')
+    setWorkflowDraftName(initialName)
     setWorkflowOpErrors([])
   }
   function closeWorkflowCreate(): void {
     if (workflowOpBusy) return
     setWorkflowCreateMode(null)
     setWorkflowDraftName('')
+    workflowDraftBaseline.current = ''
     setWorkflowOpErrors([])
   }
   async function confirmWorkflowCreate(): Promise<void> {
@@ -372,11 +332,14 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         setWorkflowOpErrors(errors)
         return
       }
+      const validSuccess = await readWorkflowWriteSuccess(res)
       if (generation !== createGeneration.current || rootIdentity.current !== targetRoot) return
+      if (!validSuccess) { setWorkflowOpErrors([localeIdentity.current.t('common.invalid_response')]); return }
       invalidateWorkflowRules(targetRoot, workflowName)
       setNames((prev) => [...new Set([...(prev ?? []), workflowName])].sort())
       setWorkflowCreateMode(null)
       setWorkflowDraftName('')
+      workflowDraftBaseline.current = ''
       switchTo(workflowName)
     } catch (err) {
       if (generation === createGeneration.current && rootIdentity.current === targetRoot) {
@@ -508,7 +471,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       {def && (
         <>
           <div className="mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm" data-testid="wb-track-context">
-            <TrackSelector state={mandatory} />
+            <TrackSelector state={mandatory} onDirtyChange={(value) => setSourceDirty('track', value)} />
           </div>
           <ExecutionTimelineComposer
             workflowName={def.name}
@@ -540,7 +503,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         </>
       )}
       {!def && !defError && <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
-      {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} />}
+      {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} onDirtyChange={setSourceDirty} />}
       {skillEditorOpen && selectedLane && (
         <SkillOrchestrationDialog
           lane={selectedLane}

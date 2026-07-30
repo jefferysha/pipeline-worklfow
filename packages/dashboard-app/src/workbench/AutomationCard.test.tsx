@@ -28,7 +28,7 @@ const READY_BODY = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-function renderCard() {
+function renderCard(onDirtyChange?: (dirty: boolean) => void) {
   function LanguageToggle(): JSX.Element {
     const { setLang } = useT()
     return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
@@ -36,7 +36,7 @@ function renderCard() {
   render(
     <I18nProvider>
       <LanguageToggle />
-      <AutomationCard root={ROOT} />
+      <AutomationCard root={ROOT} onDirtyChange={onDirtyChange} />
     </I18nProvider>,
   )
 }
@@ -143,6 +143,19 @@ describe('AutomationCard —— 真值渲染', () => {
 })
 
 describe('AutomationCard —— dirty → 保存真写 → GET 回读', () => {
+  it('只在自动化草稿偏离 server 真值时上报 dirty', async () => {
+    const onDirtyChange = vi.fn()
+    renderCard(onDirtyChange)
+    const parallel = await screen.findByTestId('afk-sld-parallel')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(parallel, { target: { value: '8' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.change(parallel, { target: { value: '4' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('初始无 dirty、保存钮禁用；拖滑杆出现 未保存 chip、保存钮可点', async () => {
     renderCard()
     await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toBeInTheDocument())
@@ -162,7 +175,7 @@ describe('AutomationCard —— dirty → 保存真写 → GET 回读', () => {
     fireEvent.change(screen.getByTestId('afk-image'), { target: { value: 'sandcastle:v2' } })
     // 保存成功后组件会重新 GET——让 GET 返回「已写入」的新真值
     postResponse = () => {
-      settings = { max_parallel: 2, max_retries: 0, default_opt_in: true, image: 'sandcastle:v2' }
+      settings = { enabled: false, max_parallel: 2, max_retries: 0, default_opt_in: true, image: 'sandcastle:v2' }
       return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
     }
     fireEvent.click(screen.getByTestId('afk-save'))

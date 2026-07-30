@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { dashboardSearch, parseDashboardLocation } from '../shell/dashboardLocation'
 import type { View } from '../shell/Nav'
 import type { Snapshot } from '../types'
@@ -7,6 +7,13 @@ import { resolveProjectSelection, selectedProjectRoot } from './projectSelection
 export interface ProjectSelectionController {
   readonly currentRoot: string
   readonly selectProject: (root: string, view: View) => void
+  readonly applyLocation: (target: DashboardNavigationTarget) => void
+}
+
+export interface DashboardNavigationTarget {
+  readonly view: View
+  readonly root: string | null
+  readonly change: string | null
 }
 
 export function useProjectSelection(input: {
@@ -15,7 +22,12 @@ export function useProjectSelection(input: {
   readonly selectedChange: string | null
   readonly onPopView: (view: View) => void
   readonly onSelectedChange: (change: string | null) => void
+  /** Return false after capturing the target to keep the last committed URL/UI in place. */
+  readonly onPopAttempt?: (target: DashboardNavigationTarget) => boolean
 }): ProjectSelectionController {
+  const committedUrlRef = useRef(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  )
   const [preferredRoot, setPreferredRoot] = useState<string | null>(() => {
     try {
       return parseDashboardLocation(window.location.search).root ?? null
@@ -33,6 +45,7 @@ export function useProjectSelection(input: {
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.pushState(window.history.state, '', next)
+      committedUrlRef.current = next
     } catch {
       // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
     }
@@ -51,6 +64,7 @@ export function useProjectSelection(input: {
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.replaceState(window.history.state, '', next)
+      committedUrlRef.current = next
     } catch {
       // 禁用 history 的宿主只失去可复制 URL，不影响内存中的显式选择。
     }
@@ -64,16 +78,33 @@ export function useProjectSelection(input: {
     }
   }, [currentRoot, input.onSelectedChange, input.selectedChange, input.snapshot, input.view, preferredRoot])
 
+  const applyLocation = useCallback((target: DashboardNavigationTarget): void => {
+    input.onPopView(target.view)
+    setPreferredRoot(target.root)
+    input.onSelectedChange(target.change)
+  }, [input.onPopView, input.onSelectedChange])
+
   useEffect(() => {
     const onPopState = (): void => {
       const linked = parseDashboardLocation(window.location.search)
-      if (linked.view !== undefined) input.onPopView(linked.view)
-      setPreferredRoot(linked.root ?? null)
-      input.onSelectedChange(linked.change ?? null)
+      const target: DashboardNavigationTarget = {
+        view: linked.view ?? input.view,
+        root: linked.root ?? null,
+        change: linked.change ?? null,
+      }
+      if (input.onPopAttempt?.(target) === false) {
+        try {
+          window.history.replaceState(window.history.state, '', committedUrlRef.current)
+        } catch {
+          // URL restore is best-effort in restricted hosts; in-memory state remains authoritative.
+        }
+        return
+      }
+      applyLocation(target)
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [input.onPopView, input.onSelectedChange])
+  }, [applyLocation, input.onPopAttempt, input.view])
 
-  return { currentRoot, selectProject }
+  return { currentRoot, selectProject, applyLocation }
 }

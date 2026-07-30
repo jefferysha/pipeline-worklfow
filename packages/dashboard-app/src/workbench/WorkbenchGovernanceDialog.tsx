@@ -6,20 +6,21 @@ import type { LoopsState } from './useLoops'
 import { WorkbenchSideRail } from './WorkbenchSideRail'
 import { BTN_GHOST, NOTE, SIDE_BODY, SIDE_CARD, SIDE_HEAD, SIDE_HEAD_B, SIDE_ROW, SIDE_ROW_LABEL, SIDE_ROW_VALUE } from './workbenchStyles'
 
-export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recentSilent, onClose }: {
+export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recentSilent, onClose, onDirtyChange }: {
   root: string
   loops: LoopsState
   summary: { stages: number; gates: number; skills: number; hooks: number | null } | null
   recent: Array<ChangeHistoryEntry & { change: string }> | null
   recentSilent: number
   onClose: () => void
+  onDirtyChange?: (source: 'loop' | 'automation' | 'secrets', dirty: boolean) => void
 }): JSX.Element {
   const { t } = useT()
   const [nonce, setNonce] = useState(0)
   return (
     <Dialog title={t('workbench.governance_dialog_title')} onClose={onClose} closeLabel={t('workbench.track_cancel')} testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} onClick={onClose}>{t('workbench.track_cancel')}</button>}>
       <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
-        <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)}>
+        <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)} onDirtyChange={onDirtyChange}>
           <div className={SIDE_CARD}>
             <div className={SIDE_HEAD}><b className={SIDE_HEAD_B}>{t('workbench.summary_title')}</b></div>
             <div className={`${SIDE_BODY} divide-y divide-border`}>

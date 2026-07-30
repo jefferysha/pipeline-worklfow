@@ -62,8 +62,10 @@ beforeEach(() => {
       return new Response(JSON.stringify({ ok: true, settings: automationSettings }), { status: 200 })
     }
     if (url === '/api/automation' && init?.method === 'POST') {
-      settingsPosts.push(JSON.parse(String(init.body)) as Record<string, unknown>)
-      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>
+      settingsPosts.push(body)
+      const { root: _root, ...saved } = body
+      return new Response(JSON.stringify({ ok: true, settings: { enabled: false, ...saved } }), { status: 200 })
     }
     if (/\/api\/afk\/[^/]+\/(enqueue|retry)$/.test(url) && init?.method === 'POST') {
       afkPosts.push({ url, init })
@@ -204,6 +206,44 @@ describe('AfkView 两栏自动运行工作区', () => {
     await waitFor(() => expect(screen.getByTestId('afk-limit-input')).toHaveValue('4'))
     fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
     await waitFor(() => expect(settingsPosts).toEqual([{ root: ROOT, max_parallel: 6, max_retries: 1, default_opt_in: false, image: '' }]))
+  })
+
+  it('HTTP 200 的畸形 AFK 写回不保留 settings 乐观值或显示成功 toast', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/automation' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false }), { status: 200 })
+      }
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+    await waitFor(() => expect(screen.getByTestId('afk-limit-input')).toHaveValue('4'))
+
+    fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
+
+    await waitFor(() => expect(screen.getByTestId('afk-settings-error')).toHaveTextContent('Invalid server response.'))
+    expect(screen.getByTestId('afk-limit-input')).toHaveValue('4')
+    expect(props.onToast).not.toHaveBeenCalled()
+  })
+
+  it('HTTP 200 的畸形 enqueue body 保持对话框打开，显示本地化 invalid-response 且不 toast', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/afk/gate-d/enqueue' && init?.method === 'POST') {
+        return new Response('not-json', { status: 200 })
+      }
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+
+    fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
+    fireEvent.click(screen.getByTestId('afk-enqueue-gate-d'))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Invalid server response.'))
+    expect(screen.getByTestId('afk-tool-sheet')).toBeInTheDocument()
+    expect(props.onToast).not.toHaveBeenCalled()
   })
 
   it('AFK 入队与设置保存各自拥有独立 generation，不会互相清 busy 或吞掉结果', async () => {
@@ -425,12 +465,20 @@ describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的�
 })
 
 describe('AfkView 空态', () => {
-  it('无沙箱任务 → afk-empty，三栏都不渲染', async () => {
+  it('无沙箱任务 → afk-empty，三栏不渲染且只保留工具栏一处创建入口', async () => {
     const snap = makeSnapshot([makeProject(ROOT, [makeChange('gate-only', 'build', {})])])
     await renderAfk({ snapshot: snap })
     expect(screen.getByTestId('afk-empty').textContent).toContain('当前没有自动运行任务')
     expect(screen.queryByTestId('afk-sec-running')).toBeNull()
     expect(screen.queryByTestId('afk-sec-queued')).toBeNull()
     expect(screen.queryByTestId('afk-sec-failed')).toBeNull()
+    expect(screen.queryByTestId('afk-new-run')).toBeNull()
+    expect(screen.getByTestId('afk-tool-nav')).toBeInTheDocument()
+  })
+
+  it('搜索输入声明稳定 name 并关闭浏览器自动填充', async () => {
+    await renderAfk()
+    expect(screen.getByRole('textbox', { name: '搜索自动运行' })).toHaveAttribute('name', 'afk-search')
+    expect(screen.getByRole('textbox', { name: '搜索自动运行' })).toHaveAttribute('autocomplete', 'off')
   })
 })

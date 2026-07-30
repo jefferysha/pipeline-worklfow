@@ -10,6 +10,7 @@ import type {
 import {
   decodeAfkReadiness,
   decodeAutomationSettingsEnvelope,
+  decodeNormalizedAutomationSettings,
   decodeCadenceStatus,
   decodeDockerImages,
   decodeOperationResponse,
@@ -27,6 +28,26 @@ async function decodeResponse<T>(
   const body = decode(await readJson(response))
   if (!body) throw new ApiError(invalidMessage, response.status)
   return body
+}
+
+function decodeOkSuccess(value: unknown): { ok: true } | null {
+  return isRecord(value) && value.ok === true && Object.keys(value).length === 1
+    ? { ok: true }
+    : null
+}
+
+function decodeAutomationSettingsSuccess(value: unknown): WbAutomationSettings | null {
+  return isRecord(value)
+    && value.ok === true
+    && Object.keys(value).length === 2
+    && Object.prototype.hasOwnProperty.call(value, 'settings')
+    ? decodeNormalizedAutomationSettings(value.settings)
+    : null
+}
+
+async function requireOkSuccess(response: Response, fallback: string): Promise<void> {
+  if (!response.ok) await throwApiError(response, fallback)
+  await decodeResponse(response, decodeOkSuccess, `${fallback}响应形状无效`)
 }
 
 export async function fetchAutomationSettings(root: string): Promise<WbAutomationSettings> {
@@ -56,6 +77,7 @@ export async function postAutomationSettings(input: {
     wrapNetwork(error)
   }
   if (!response.ok) await throwApiError(response, 'AFK 执行配置写回失败')
+  await decodeResponse(response, decodeAutomationSettingsSuccess, 'AFK 执行配置写回响应形状无效')
 }
 
 export async function fetchAutomationStarters(root: string): Promise<AutomationStarterTemplate[]> {
@@ -166,7 +188,7 @@ async function postAfkAction(
   } catch (error) {
     wrapNetwork(error)
   }
-  if (!response.ok) await throwApiError(response, fallback)
+  await requireOkSuccess(response, fallback)
 }
 
 export const postAfkEnqueue = (name: string, root: string): Promise<void> =>

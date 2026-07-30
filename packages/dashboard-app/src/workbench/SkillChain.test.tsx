@@ -243,7 +243,12 @@ function mockDefaultFetch(overrides: Record<string, () => Response | Promise<Res
     }
     if (url === '/api/config/mandatory-skills' && opts?.method === 'POST') {
       const body = JSON.parse(String(opts.body)) as { phase: string; track: string; skills: string[] }
-      return new Response(JSON.stringify({ ok: true, ...body }), { status: 200 })
+      return new Response(JSON.stringify({
+        ok: true,
+        phase: body.phase,
+        track: body.track,
+        skills: body.skills,
+      }), { status: 200 })
     }
     throw new Error(`unexpected fetch ${url}`)
   })
@@ -378,7 +383,12 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     )
     const rootBMandatory = await screen.findByTestId('wb-sk-mand')
     await within(rootBMandatory).findByText('b-only')
-    releaseA(new Response(JSON.stringify({ ok: true, skills: ['a-after-save'] }), { status: 200 }))
+    releaseA(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'frontend',
+      skills: ['a-after-save'],
+    }), { status: 200 }))
     await waitFor(() => expect(within(screen.getByTestId('wb-sk-mand')).getByText('b-only')).toBeInTheDocument())
     expect(screen.queryByText('a-after-save')).toBeNull()
 

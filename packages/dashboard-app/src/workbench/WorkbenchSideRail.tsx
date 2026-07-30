@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
@@ -82,14 +82,19 @@ export interface WorkbenchSideRailProps {
   rdNonce?: number
   /** 摘要卡等既有右栏内容（宿主传入，避免本组件反向依赖 WorkbenchView）。 */
   children?: ReactNode
+  /** Reports only unsaved form drafts; immediate server mutations never enter this channel. */
+  onDirtyChange?: (source: 'loop' | 'automation' | 'secrets', dirty: boolean) => void
 }
 
-export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, children }: WorkbenchSideRailProps): JSX.Element {
+export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, children, onDirtyChange }: WorkbenchSideRailProps): JSX.Element {
   const { t } = useT()
   /** 「完整治理设置」Dialog 开合。 */
   const [loopOpen, setLoopOpen] = useState(false)
   /** 「机器配置」折叠区开合——**同时**是内容的挂载开关（见文件头②）。 */
   const [machineOpen, setMachineOpen] = useState(false)
+  const reportLoopDirty = useCallback((dirty: boolean) => onDirtyChange?.('loop', dirty), [onDirtyChange])
+  const reportAutomationDirty = useCallback((dirty: boolean) => onDirtyChange?.('automation', dirty), [onDirtyChange])
+  const reportSecretsDirty = useCallback((dirty: boolean) => onDirtyChange?.('secrets', dirty), [onDirtyChange])
 
   return (
     <div className={RAIL_TW} data-testid="wb-side-rail">
@@ -139,10 +144,10 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
             </p>
             {/* 三件原件（各自渲染自己的卡头）；卡本身「无皮」，由这里补卡壳与内边距。 */}
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
-              <AutomationCard root={root} refreshToken={rdNonce} />
+              <AutomationCard root={root} refreshToken={rdNonce} onDirtyChange={reportAutomationDirty} />
             </div>
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
-              <SecretsCard onChanged={onSecretsChanged} />
+              <SecretsCard onChanged={onSecretsChanged} onDirtyChange={reportSecretsDirty} />
             </div>
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
               <SkillHealthPanel />
@@ -177,7 +182,7 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
         >
           {/* 滚动壳（见文件头①）：长表单不撑出视口，保存钮恒可达。 */}
           <div className="-mr-1.5 max-h-[62vh] overflow-y-auto pr-1.5">
-            <LoopCard root={root} loops={loops} />
+            <LoopCard root={root} loops={loops} onDirtyChange={reportLoopDirty} />
           </div>
         </Dialog>
       )}
