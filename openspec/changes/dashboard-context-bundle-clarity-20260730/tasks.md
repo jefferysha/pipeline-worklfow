@@ -34,7 +34,7 @@
 
 ## 交付
 
-- [ ] 应用已验证 spec，提交、普通 push 并创建非草稿 PR。
+- [x] 应用已验证 spec，提交、普通 push 并创建非草稿 PR。
 - [ ] 完成 PR 说明、标签审计、review/comment 审计与 exact-head CI 终态。
 
 ## 归档
