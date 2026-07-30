@@ -31,7 +31,7 @@ Dashboard 三态观察面的组合。
 | --- | --- | --- | --- |
 | [mindfold-ai/Trellis](https://github.com/mindfold-ai/Trellis) | `main` · [`c94d6fc289b7a6fdd9480bdfae4d4639c9ac2d4c`](https://github.com/mindfold-ai/Trellis/commit/c94d6fc289b7a6fdd9480bdfae4d4639c9ac2d4c) | [`v0.6.10`](https://github.com/mindfold-ai/Trellis/tree/v0.6.10)，tag SHA 同为 `c94d6fc…` | [`releases/latest`](https://api.github.com/repos/mindfold-ai/Trellis/releases/latest) 返回 404；按约定回退 GitHub tags 中最新的稳定语义版本 tag。 |
 | [rpamis/comet](https://github.com/rpamis/comet) | `master` · [`92d418eb93ce07c95b0855b2d36da4f6fdaea92d`](https://github.com/rpamis/comet/commit/92d418eb93ce07c95b0855b2d36da4f6fdaea92d) | GitHub latest release [`0.4.0-beta.11`](https://github.com/rpamis/comet/releases/tag/0.4.0-beta.11)，API 标记 `draft=false`、`prerelease=false` | 名称含 `beta`，但 GitHub 发布元数据把它当正式 latest release；若按严格 SemVer 排除预发布标识，则最新稳定 tag 是 [`0.3.9`](https://github.com/rpamis/comet/tree/0.3.9)，tag SHA `053f76d8…`。报告保留两种口径，避免伪称。 |
-| [Chorus-AIDLC/Chorus](https://github.com/Chorus-AIDLC/Chorus) | `main` · [`be647877b4b56a61e480e939d6a6d31b3f84f7f9`](https://github.com/Chorus-AIDLC/Chorus/commit/be647877b4b56a61e480e939d6a6d31b3f84f7f9) | [`v0.14.5`](https://github.com/Chorus-AIDLC/Chorus/releases/tag/v0.14.5)，tag SHA 同为 `be647877…` | Release 固定了 daemon 向 Claude/Codex/Kiro 子进程传递 `CHORUS_URL` / `CHORUS_API_KEY` 的会话归属修复，并对 Codex 缺 MCP 配置给出显式诊断。 |
+| [Chorus-AIDLC/Chorus](https://github.com/Chorus-AIDLC/Chorus) | `main` · [`d590b568f40fae51f71c9800841c587a3fe94b0b`](https://github.com/Chorus-AIDLC/Chorus/commit/d590b568f40fae51f71c9800841c587a3fe94b0b) | [`v0.14.5`](https://github.com/Chorus-AIDLC/Chorus/releases/tag/v0.14.5)，tag SHA `be647877…` | 最终 freshness 复查发现默认分支已在本轮内前进；下方具体源码证据固定在稳定 release SHA `be647877…`。Release 修复了 daemon 向 Claude/Codex/Kiro 子进程传递 `CHORUS_URL` / `CHORUS_API_KEY` 的会话归属，并对 Codex 缺 MCP 配置给出显式诊断。 |
 | [catlog22/maestro-flow](https://github.com/catlog22/maestro-flow) | `master` · [`5375fb589f182c1c7e9cade69b4acd3ccd03bac1`](https://github.com/catlog22/maestro-flow/commit/5375fb589f182c1c7e9cade69b4acd3ccd03bac1) | [`v0.5.58`](https://github.com/catlog22/maestro-flow/releases/tag/v0.5.58)，tag SHA `be4cf1f8…` | 默认分支已在 release tag 之后；release 固定 Run 证据、知识曝光/消费、候选晋升、只读审计与可回滚剪枝闭环。 |
 | [liaohch3/claude-tap](https://github.com/liaohch3/claude-tap) | `main` · [`6cfe45afd7b6d009e839b178dd59b9e338b10309`](https://github.com/liaohch3/claude-tap/commit/6cfe45afd7b6d009e839b178dd59b9e338b10309) | [`v0.1.141`](https://github.com/liaohch3/claude-tap/releases/tag/v0.1.141)，tag SHA `547925c9…` | 默认分支已在 release tag 之后；当前 README 仍以本地 trace、结构化 diff、搜索、键盘导航和可移植导出为核心。 |
 
@@ -66,6 +66,8 @@ verification 与 next-step，`comet dashboard` 展示 active changes、phase、t
 ### Chorus：后端/共享契约、Dashboard、交互路径与具体功能
 
 Chorus 是本轮的重点交互参考，但只能提炼模式，不能复制业务模型。
+以下具体文件固定在稳定 release `v0.14.5`（`be647877…`）；默认分支的最终读取点另按上表记录为
+`d590b568…`，避免把 release 源码与最新 `main` 身份混写。
 
 #### 后端与共享契约
 
