@@ -233,6 +233,26 @@ test('canonical CI actions are immutable full-SHA pins', async () => {
   assert.doesNotMatch(ci, /actions\/(?:checkout|setup-node)@v\d+\b/)
 })
 
+test('canonical CI never exposes the real-Codex secret to pull-request code', async () => {
+  const ci = await text('.github/workflows/ci.yml')
+  const mainPush = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+  const secretLines = ci.split('\n')
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.includes('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}'))
+
+  assert.equal(secretLines.length, 2)
+  for (const { index } of secretLines) {
+    const stepStart = ci.split('\n').slice(0, index + 1)
+      .findLastIndex((line) => line.trim().startsWith('- name:'))
+    const stepPrefix = ci.split('\n').slice(stepStart, index).join('\n')
+    assert.match(stepPrefix, new RegExp(`if: ${mainPush.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+  }
+  assert.match(
+    ci,
+    /if: github\.event_name != 'push' \|\| github\.ref != 'refs\/heads\/main'\n\s+run: echo "\[HONEST SKIP\] 非 main push；真实 Codex H14 未接收仓库 secret，未执行且未声明通过。"/,
+  )
+})
+
 test('candidate converts the upload action bare digest into the REST digest ABI', async (t) => {
   const candidate = await text('.github/workflows/release-candidate.yml')
   const script = workflowRunScript(candidate, 'Write approval evidence for the default-branch writer')

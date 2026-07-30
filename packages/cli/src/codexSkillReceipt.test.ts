@@ -104,6 +104,55 @@ it.each([0, 9])('treats complete-result-envelope-shaped Skill stdout with exit %
   expect(successfulCustomStdout(output)).toBe(body)
 })
 
+it.each([
+  [
+    'typed completion before stdout',
+    [
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'execution_result', exit_code: 0 },
+      { type: 'input_text', text: '# Trusted Skill\n' },
+    ],
+  ],
+  [
+    'typed header with trailing bytes',
+    [
+      { type: 'input_text', text: 'Script completed\nOutput:\nignored' },
+      { type: 'input_text', text: '# Trusted Skill\n' },
+      { type: 'execution_result', exit_code: 0 },
+    ],
+  ],
+  [
+    'modern completion with trailing item',
+    [
+      { type: 'input_text', text: 'Script completed\nOutput:\n' },
+      { type: 'input_text', text: JSON.stringify({
+        chunk_id: 'verified',
+        wall_time_seconds: 0.1,
+        exit_code: 0,
+        original_token_count: 0,
+        output: '# Trusted Skill\n',
+      }) },
+      { type: 'input_text', text: 'ignored' },
+    ],
+  ],
+  [
+    'modern completion with leading item',
+    [
+      { type: 'input_text', text: 'Script completed\nOutput:\n' },
+      { type: 'input_text', text: 'ignored' },
+      { type: 'input_text', text: JSON.stringify({
+        chunk_id: 'verified',
+        wall_time_seconds: 0.1,
+        exit_code: 0,
+        original_token_count: 0,
+        output: '# Trusted Skill\n',
+      }) },
+    ],
+  ],
+] as const)('rejects malformed custom exec ABI: %s', (_label, output) => {
+  expect(successfulCustomStdout(output)).toBeUndefined()
+})
+
 async function appendValidTranscriptPadding(path: string): Promise<void> {
   const padding = {
     type: 'event_msg',

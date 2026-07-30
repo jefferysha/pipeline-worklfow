@@ -76,7 +76,10 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       const sameIdentity = draftIdentity.current === nextIdentity
       if (sameIdentity && current !== null && nextBase !== null) {
         for (const key of fieldRevisions.current.keys()) {
-          if (loopDraftValueEqual(current[key], nextBase[key])) fieldRevisions.current.delete(key)
+          if (
+            !pendingSaveFields.current.has(key)
+            && loopDraftValueEqual(current[key], nextBase[key])
+          ) fieldRevisions.current.delete(key)
         }
       }
       const rebased = sameIdentity && current !== null && nextBase !== null

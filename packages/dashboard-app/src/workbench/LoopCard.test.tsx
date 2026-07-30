@@ -717,6 +717,43 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     }))
   })
 
+  it('保存期间改回旧基线后，中途旧快照不得清除下一版草稿', async () => {
+    const originalGoal = '把旧版工单卡样式逐个迁移到 SaaS 卡片风'
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保存中的第一版' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: originalGoal } })
+
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+
+    rows = rows.map((row) => row.id === 'restyle-loop' ? { ...row, goal: '保存中的第一版' } : row)
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue(originalGoal))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: originalGoal },
+    }))
+  })
+
   it('保存期间未参与请求的字段改后还原不会阻挡并发服务端刷新', async () => {
     const baseFetch = global.fetch
     let firstUpdate = true
