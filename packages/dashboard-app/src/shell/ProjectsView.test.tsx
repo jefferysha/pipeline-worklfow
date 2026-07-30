@@ -332,6 +332,14 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     fireEvent.keyDown(unreachable, { key: 'Home' })
     expect(all).toHaveFocus()
     expect(all).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(all, { key: 'ArrowUp' })
+    expect(unreachable).toHaveFocus()
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(unreachable, { key: 'ArrowDown' })
+    expect(all).toHaveFocus()
+    expect(all).toHaveAttribute('aria-checked', 'true')
   })
 
   it('Escape 只清空查询；零结果清除恢复 all 并把焦点交还搜索框', () => {
@@ -351,6 +359,14 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(search).toHaveValue('')
     expect(screen.getByTestId('projects-focus-all')).toHaveAttribute('aria-checked', 'true')
     expect(search).toHaveFocus()
+  })
+
+  it('真实项目源为空时显示来源空态，不误报为可清除的筛选结果', () => {
+    renderView({ snapshot: makeSnapshot([]), rulesByKey: rulesFor() })
+
+    expect(screen.getByRole('heading', { name: '当前没有项目' })).toBeInTheDocument()
+    expect(screen.queryByTestId('projects-filter-empty')).toBeNull()
+    expect(screen.queryByRole('button', { name: '清除条件' })).toBeNull()
   })
 
   it('rows 不变时查询与状态切换只过滤，不重复排序', () => {
@@ -391,6 +407,27 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     fireEvent.click(screen.getByTestId('projects-focus-attention'))
     expect(set).toHaveBeenCalledTimes(setCalls)
     expect(fromTo).not.toHaveBeenCalled()
+  })
+
+  it('普通动效只在 rows 集合变化时播放，查询与状态切换不重播', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query.includes('prefers-reduced-motion: no-preference'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+    const fromTo = vi.spyOn(gsap, 'fromTo')
+
+    renderView()
+    expect(fromTo).toHaveBeenCalledTimes(1)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'repo-b' } })
+    fireEvent.click(screen.getByTestId('projects-focus-attention'))
+    expect(fromTo).toHaveBeenCalledTimes(1)
   })
 })
 

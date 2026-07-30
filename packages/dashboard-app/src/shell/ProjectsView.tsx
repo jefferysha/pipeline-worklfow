@@ -307,6 +307,17 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
 
       {snapshot === null ? (
         <p className="text-[14px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
+      ) : rows.length === 0 ? (
+        <div
+          className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-fill/50 px-6 py-10 text-center"
+          data-testid="projects-source-empty"
+        >
+          <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-text-3">
+            <SearchX aria-hidden="true" className="h-5 w-5" />
+          </span>
+          <h2 className="text-[16px] font-bold text-text">{t('projects.empty_source_title')}</h2>
+          <p className="mt-1.5 max-w-md text-[13px] leading-5 text-text-3">{t('projects.empty_source_desc')}</p>
+        </div>
       ) : (
         <>
           <ProjectsFocusToolbar

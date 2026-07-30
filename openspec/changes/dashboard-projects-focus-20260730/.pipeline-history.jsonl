@@ -77,3 +77,20 @@
 {"ts":"2026-07-30T02:23:00Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"cf9b12e4-4b32-4930-9a4d-7448b27d7c86"}
 {"ts":"2026-07-30T02:27:17Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-30T02:33:37Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-07-30T02:33:48Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-30T02:33:48Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-30T02:33:48Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T02:33:48Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T02:33:48Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"9cd3ba29-b941-4e0d-aec8-4a7abb4025b6"}
+{"ts":"2026-07-30T02:41:31Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-dashboard-projects-focus-20260730-verify.md"}
+{"ts":"2026-07-30T02:41:50Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-dashboard-projects-focus-20260730-verify.md"}
+{"ts":"2026-07-30T02:41:50Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-30T02:41:50Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-30T02:41:56Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-30T01:09:01Z authority_host_session=019fb08a-af35-7580-acfd-39660fca9eed"}
+{"ts":"2026-07-30T02:41:56Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-30T02:41:56Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-30T02:41:56Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-30T02:42:30Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-30T02:42:30Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4d00d3c0-b731-409a-b100-52c8c1660ad8"}
+{"ts":"2026-07-30T02:48:27Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T02:51:08Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

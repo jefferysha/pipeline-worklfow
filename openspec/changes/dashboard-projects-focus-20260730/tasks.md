@@ -21,6 +21,9 @@
 - [x] 以测试先行收敛 rows 预排序、确定性大小写、当前状态 live summary 与缺失组合回归。 (build)
 - [x] 把互斥状态选择器实现为 `radiogroup/radio`，保留 roving 键盘与既有视觉层级。 (build)
 - [x] 重建 dist，重跑全量验证并采集新冻结语义证据。 (build)
+- [x] 区分真实项目源为空与筛选零结果，补齐中英文诚实空态。 (build)
+- [x] 补齐 radio ArrowUp/ArrowDown 循环，并验证普通 motion 下筛选不重播。 (build)
+- [x] 重建 dist，重跑全量门禁并在真实桌面 Dashboard 复核第四次 finding。 (build)
 
 ## 验证
 

@@ -36,9 +36,11 @@ export function ProjectsFocusToolbar({
     let nextIndex: number
     switch (event.key) {
       case 'ArrowRight':
+      case 'ArrowDown':
         nextIndex = (index + 1) % PROJECT_FOCUS_OPTIONS.length
         break
       case 'ArrowLeft':
+      case 'ArrowUp':
         nextIndex = (index - 1 + PROJECT_FOCUS_OPTIONS.length) % PROJECT_FOCUS_OPTIONS.length
         break
       case 'Home':

@@ -98,3 +98,30 @@ TDD 红态为 2 files / 30 tests 中 6 个预期失败；最小实现后 30/30 P
 
 第三次 Build 收敛结论：第二次 Verify 的 1 个 MEDIUM 与 4 个 LOW 全部关闭；视觉几何与 token
 未变化。最终结论仍须新冻结 SHA 的完整四轨重新全量验证。
+
+## 第三次 Verify finding 收敛
+
+第三次冻结 `f26d383451068cc530c7a4a318f59e55438e2090` 的 Reviewer、隔离 E2E 与视觉轨
+PASS；Codex 有效轨发现 1 个 MEDIUM 与 2 个 LOW。持续自主模式未接受偏差，按
+`verify-fail → build` 收敛：
+
+| 严重度 | 发现 | 修复与新证据 |
+| --- | --- | --- |
+| MEDIUM | 真实项目源为 0 时被误报成“筛选无结果”，清除按钮无法恢复 | 在工具栏之前分流真实 source empty，显示中英文来源空态且不提供无效动作；新增非空 snapshot / 0 rows 组件回归 |
+| LOW | radio group 缺少常见 ArrowUp/ArrowDown 导航 | ArrowUp 与 ArrowLeft 同向、ArrowDown 与 ArrowRight 同向，均首尾循环并同步 focus、selection、`aria-checked` |
+| LOW | GSAP 不重播测试只覆盖 reduced-motion | 新增 no-preference 分支：首次 `fromTo` 恰好执行一次，查询与状态切换后调用数仍为 1 |
+
+TDD 红态为 29 tests 中 2 个预期失败，普通 motion 新断言在旧实现已通过并证明当前依赖边界；
+最小实现后定向 2 files / 32 tests PASS。完整验证：
+
+- `typecheck:web` PASS；`test:web` 69 files / 1,218 tests PASS；根 `npm run build` PASS。
+- architecture 670 production files PASS（5 个既有 size-only exceptions）；comments PASS。
+- OpenSpec strict PASS；`git diff --check` PASS；Vite 仅保留既有 898.78 kB chunk warning。
+- 真实 1280×720 Dashboard（在批准的 1024–1920 桌面范围内）：ArrowUp 从“全部”循环到“读不到”，
+  ArrowDown 循环回“全部”；每步均仅 1 个 checked、焦点同步、live summary 更新，
+  `scrollWidth === innerWidth === 1280`。
+- 此次没有改变既有正常数据下的像素布局、主题 token 或 GSAP 参数；前三轮的四档桌面、主题、
+  成功/零结果/不可达/离线与 reduced-motion 证据继续作为布局锚点。
+
+第四次 Build 收敛结论：第三次 Verify 的 1 个 MEDIUM 与 2 个 LOW 全部关闭；当前无剩余
+CRITICAL、HIGH 或 MEDIUM 发现。最终结论仍须新冻结 SHA 的完整四轨重新全量验证。

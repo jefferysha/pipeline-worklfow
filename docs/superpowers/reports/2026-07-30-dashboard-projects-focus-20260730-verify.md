@@ -168,3 +168,67 @@ Codex CLI 因完整 diff 超过 1 MiB 输入上限而降级审查源码、规格
 4. 补齐重复 basename + 查询、ArrowLeft 与首尾循环测试。
 5. 以 `requirements-changed` 回 Spec，把互斥筛选从 toggle button group 修订为
    `radiogroup/radio` one-of-many 语义，再回 Build 实现。
+
+## 第三次冻结验证：`f26d383451068cc530c7a4a318f59e55438e2090`
+
+### 结论
+
+第三次冻结的 Reviewer、隔离 E2E 与视觉轨均 PASS；Codex CLI 对源码、测试、i18n、规格与 dist
+入口完成有效审查后发现 1 个 MEDIUM 和 2 个 LOW，聚合结论为 **FAIL**。其中空数据源被误报成
+筛选无结果会给出无法恢复的清除动作，必须回 Build 修复；两个 LOW 同属键盘与动效验证闭环，一并修复。
+
+### Reviewer Agent：PASS
+
+- 全量回读 `3175d767...f26d3834` 的 107 个提交文件，并覆盖当前 revision 34、pre-verify 34、
+  transition 12 与 4 个 canonical 投影。
+- O(n) 查询/聚焦、确定性大小写、`radiogroup/radio`、live summary、GSAP 依赖、重复 basename、
+  不可达只读、生成资产和治理链均通过。
+- CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0；冻结前后四项真实 worktree 指纹完全一致。
+
+### 隔离 E2E / 构建轨：PASS
+
+- 仓外隔离副本 `/tmp/dashboard-projects-frozen3.0e8q8r/repo` checkout 精确 SHA。
+- `npm ci`、定向 2 files / 30 tests、`npm run build`、`npm run typecheck:web`、
+  `npm run test:web` 69 files / 1,216 tests 全部 exit 0。
+- 重建后 `git diff --exit-code` 为 0；冻结 dist 可复现。
+- 既有信息项：7 个依赖 advisory；Vite 主 chunk 897.86 kB。
+
+### 视觉轨：PASS
+
+- 复核确切冻结源码/dist 与 6 张仓外真实 Dashboard 证据：
+  1024 System all、1024 Light filtered、1200 Light unreachable、1024 Dark empty、
+  1440 Dark filtered、1920 Dark all。
+- 新 `radiogroup/radio`、`aria-checked` 样式与包含 focus 的 live summary 已在冻结 dist 确认；
+  旧截图只作为未改变的布局、主题与状态锚点。
+- 层级、token、对比度、焦点、不可达、断连、无横溢与动效边界均通过；
+  CRITICAL 0、HIGH 0、MEDIUM 0、LOW 0。
+
+### Codex CLI：FAIL
+
+- 第一次调用因明确禁止读取工具而产生 0% coverage，判为无效；第二次把确切源码、测试、i18n、
+  规格和 dist 入口 diff 直接送入 stdin，产生有效结论。
+- MEDIUM：当非 loading snapshot 本身含 0 个项目、且没有查询或状态条件时，
+  `focusedRows.length === 0` 仍显示“没有符合当前条件的项目”和无法改变结果的“清除条件”。
+- LOW：radio group 未实现常见的 ArrowUp/ArrowDown 前后移动。
+- LOW：GSAP 不重播测试只覆盖 reduced-motion，没有证明普通动效首次执行后筛选不会再次播放。
+- 其他重点面均通过：O(n) filter、确定性 `toLowerCase()`、radio 语义、live summary、i18n、
+  安全边界与 dist entry。
+
+### 第三次 OpenSpec 演练与冻结屏障
+
+- Change strict validate PASS；隔离副本
+  `/tmp/dashboard-focus-openspec-target.FMcIkV` archive PASS，应用后的
+  `dashboard-ui-ux-system` strict validate PASS。
+- 真实主 spec 摘要前后均为
+  `217e7b60d7d6b4a04c5e3ecf972c143a4a5436535f63508e686a64dfa8a7b530`。
+- `validate --all --strict` 仍有 13 个与本批无关的既有 change/spec 失败；目标 Change 与目标
+  capability 不受影响。
+- 三条只读 agent 轨与隔离 E2E 前后真实指纹均保持：HEAD `f26d3834`、status `5e498caf`、
+  tracked `fd32dca5`、staged empty、untracked `61536f59`。
+
+### 第三次回退 Build 修复清单
+
+1. 区分“真实项目源为空”和“激活条件导致零结果”，为前者复用真实无项目空态。
+2. 为 radio group 增加 ArrowUp/ArrowDown，并补齐首尾循环测试。
+3. 增加普通 motion 下首次 `fromTo` 只执行一次、查询/聚焦不重播的测试。
+4. 重建 dist、重新冻结并执行完整四轨，禁止只复查本次 finding。
