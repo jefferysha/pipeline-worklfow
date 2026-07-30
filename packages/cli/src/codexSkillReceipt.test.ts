@@ -29,7 +29,7 @@ import {
   openVerifiedHostTranscript,
   recentHostTranscripts,
 } from './codexTranscriptDiscovery.js'
-import { successfulFunctionStdout } from './codexTranscriptCompletion.js'
+import { successfulCustomStdout, successfulFunctionStdout } from './codexTranscriptCompletion.js'
 import { makeDeps } from './test-support.js'
 
 let root = ''
@@ -63,6 +63,17 @@ it('treats status-like Skill body text as stdout rather than host exit metadata'
   ].join('\n')
 
   expect(successfulFunctionStdout(output)).toBe(body)
+})
+
+it('treats status-like Skill body chunks as stdout in the legacy typed exec ABI', () => {
+  const body = '# Trusted Skill\nScript failed\n'
+  const output = [
+    { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+    { type: 'input_text', text: body },
+    { type: 'execution_result', exit_code: 0 },
+  ]
+
+  expect(successfulCustomStdout(output)).toBe(body)
 })
 
 async function appendValidTranscriptPadding(path: string): Promise<void> {

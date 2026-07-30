@@ -37,6 +37,20 @@ function scriptStates(value: unknown): string[] {
   )
 }
 
+function customHostEnvelopeStrings(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value]
+  return values.flatMap((item) => {
+    const text = typeof item === 'string'
+      ? item
+      : isRecord(item) && item.type === 'input_text'
+        ? asString(item.text)
+        : undefined
+    if (text === undefined || !/^Script (?:completed|failed)(?:\n|$)/.test(text)) return []
+    const boundary = text.indexOf('\nOutput:\n')
+    return boundary === -1 ? [] : [text.slice(0, boundary)]
+  })
+}
+
 export function successfulFunctionOutput(value: unknown): boolean {
   if (scriptStates(value).includes('failed')) return false
   const textExitCodes = hostEnvelopeStrings(value).flatMap((text) =>
@@ -95,7 +109,10 @@ function parsedCompleteResultEnvelope(text: string): CompleteResultEnvelope | un
  * execution_result sibling) is authoritative; stdout is untrusted and cannot manufacture it.
  */
 export function successfulCustomOutput(value: unknown): boolean {
-  const states = scriptStates(value)
+  const states = customHostEnvelopeStrings(value).flatMap((text) =>
+    [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
+      .map((match) => match[1] ?? ''),
+  )
   if (!states.includes('completed') || states.includes('failed')) return false
   const values = Array.isArray(value) ? value : [value]
   const exitCodes = values.flatMap((item) => {

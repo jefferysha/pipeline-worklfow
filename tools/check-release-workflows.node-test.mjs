@@ -540,7 +540,7 @@ test('OpenSpec validation is lockfile-pinned and strict in canonical CI and rele
   assert.equal(lock.packages['node_modules/@fission-ai/openspec'].version, '1.6.0')
   assert.equal(
     manifest.scripts['check:openspec'],
-    'openspec validate --all --strict --no-interactive',
+    'node --test tools/check-openspec.node-test.mjs && node tools/check-openspec.mjs',
   )
   for (const workflow of [ci, candidate]) {
     assert.match(workflow, /name: OpenSpec strict governance validation/)

@@ -23,7 +23,7 @@
     "check:architecture": "node tools/check-architecture.mjs",
     "check:dependency-tree": "npm ls --all",
     "check:dependencies": "npm audit --audit-level=high && npm run check:dependency-tree",
-    "check:openspec": "openspec validate --all --strict --no-interactive",
+    "check:openspec": "node --test tools/check-openspec.node-test.mjs && node tools/check-openspec.mjs",
     "check:release-workflows": "node --test tools/check-release-workflows.node-test.mjs",
     "check:repository-hygiene": "node --test tools/check-repository-hygiene.node-test.mjs && node tools/check-repository-hygiene.mjs",
     "build:npx-package": "node tools/build-npx-package.mjs",

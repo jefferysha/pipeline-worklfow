@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from 'react'
-import { CircleHelp } from 'lucide-react'
 import { useT } from '../i18n'
 import type { MandatoryState } from './mandatoryState'
+import { HelpPopover } from './HelpPopover'
 import { TrackSettings } from './TrackSettings'
 import { trackDisplayName } from './trackPresentation'
 
@@ -30,9 +30,9 @@ export function TrackSelector({ state, onDirtyChange }: { state: MandatoryState;
     <div className="flex flex-wrap items-center gap-3">
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-bold text-text-3">
         {t('workbench.track_selector_label')}
-        <button type="button" className="grid h-6 w-6 place-items-center rounded-full text-text-3 outline-none hover:bg-fill focus-visible:ring-3 focus-visible:ring-accent-t" title={t('workbench.track_selector_help')} aria-label={t('workbench.track_selector_help_label')}>
-          <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
+        <HelpPopover compact label={t('workbench.track_selector_help_label')}>
+          {t('workbench.track_selector_help')}
+        </HelpPopover>
       </span>
       {state.table === null ? (
         <span className={NOTE_CLS} role="status" data-testid="wb-track-loading">{t('workbench.track_loading')}</span>

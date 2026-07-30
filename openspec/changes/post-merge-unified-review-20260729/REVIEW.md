@@ -288,3 +288,43 @@ Server `e2327b62…a07`, Dashboard `index-CRNCuoIq.js`
 (`64fbca9d…299`) and `index-CLLRnTB_.css` (`1200acad…226`).
 The 21-scene browser matrix and a fresh exact-SHA
 **C0/H0/M0/L0** review remain mandatory.
+
+## `081f871a` final independent review rollback
+
+The backend/security, complete Dashboard, and release/E2E reviewers independently
+examined the exact `origin/main@ef728bf6..081f871a` range. Their results were
+respectively **C0/H0/M0/L2**, **C0/H0/M3/L2**, and **C0/H0/M2/L0**. The candidate
+was rejected; duplicate findings across tracks were consolidated, but none were
+waived.
+
+The CLI completion detector now derives legacy custom-exec status only from a
+recognized host header ending at the `Output:` boundary. Skill-authored stdout
+containing `Script failed` cannot manufacture a host failure. The OpenSpec command
+is now a checked wrapper around the lockfile-pinned executable and forces
+`DO_NOT_TRACK=1` plus `OPENSPEC_TELEMETRY=0`; its contract test and all 35 strict
+spec/change validations pass.
+
+Loop revisions now represent a real difference from the accepted baseline rather
+than historical interaction. Editing back to baseline and convergence with a new
+server snapshot both clear the revision, so a later refresh cannot revive a stale
+local value. `retired` renders as an explicit terminal state whose ordinary switch
+is disabled. The full legal exceed policies (`skip`, `pause`, `halt`, `skip-run`,
+`pause-loop`) and future non-empty values all keep an exact selected radio and
+single tab stop.
+
+Track and execution-stage help affordances now open a real accessible popover
+instead of relying on `title`; stage reorder controls are 32×32 CSS-pixel targets
+with focus rings and eight CSS pixels between targets. Focused Dashboard regression
+coverage passes 172/172, the full Dashboard suite passes 74 files / 1455 tests,
+and the full root suite passes 327 files / 5811 tests with 14 honest environment
+skips. Typecheck and the 699-file architecture gate pass, release contracts pass
+23/23, receipt tests pass 106/106, and dependency, comment, documentation and
+diff gates pass.
+
+Two consecutive production builds are byte-identical at CLI
+`fdd1a775…11404`, Server `e2327b62…a07`, Dashboard HTML
+`87c92575…e765`, `index-H0tOOdIs.js` (`068c88c6…956d`) and
+`index-BpQFUzd2.css` (`035dbdd0…bd93`). This remains pre-freeze evidence: the
+new exact commit must still pass three independent zero-finding reviews, the
+21-scene production browser matrix and canonical CI before Build can be marked
+complete.

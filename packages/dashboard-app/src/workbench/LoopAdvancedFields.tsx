@@ -26,6 +26,16 @@ import {
 import { LoopScopePreview } from './LoopScopePreview'
 
 const LEVELS = ['L1', 'L2', 'L3'] as const
+const EXCEED_POLICIES = ['skip', 'pause', 'halt', 'skip-run', 'pause-loop'] as const
+
+function policyLabel(policy: string, t: ReturnType<typeof useT>['t']): string {
+  if (policy === 'skip') return t('workbench.lp_policy_skip')
+  if (policy === 'pause') return t('workbench.lp_policy_pause')
+  if (policy === 'halt') return t('workbench.lp_policy_halt')
+  if (policy === 'skip-run') return t('workbench.lp_policy_skip_run')
+  if (policy === 'pause-loop') return t('workbench.lp_policy_pause_loop')
+  return t('workbench.lp_policy_custom', { value: policy })
+}
 
 export function LoopAdvancedFields({
   row,
@@ -50,6 +60,9 @@ export function LoopAdvancedFields({
   const policyDirty =
     JSON.stringify(draft.allowlist) !== JSON.stringify(row.allowlist) ||
     JSON.stringify(draft.denylist) !== JSON.stringify(row.denylist)
+  const exceedPolicies: readonly string[] = EXCEED_POLICIES.includes(draft.on_exceed as (typeof EXCEED_POLICIES)[number])
+    ? EXCEED_POLICIES
+    : [draft.on_exceed, ...EXCEED_POLICIES]
   return (
     <WbAdvanced testid="lp-adv">
       <div className={WB_TW.sec} data-sec="">
@@ -69,12 +82,12 @@ export function LoopAdvancedFields({
         <div className={WB_TW.policyRow}>
           <span className={WB_TW.flabel}>{t('workbench.lp_policy')}</span><ProvBadge field="on_exceed" />
           <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('workbench.lp_policy')}>
-            {(['skip', 'pause'] as const).map((policy, index, policies) => (
+            {exceedPolicies.map((policy, index, policies) => (
               <button key={policy} type="button" className={cn('h-7 cursor-pointer rounded-full border px-3 text-[12.5px] font-semibold transition-[border-color,background-color,color,box-shadow] duration-[120ms]', draft.on_exceed === policy ? 'border-(--accent) bg-accent-t text-accent-d shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill text-text-2 hover:border-border-2')} role="radio" aria-checked={draft.on_exceed === policy} tabIndex={draft.on_exceed === policy ? 0 : -1} data-testid={`lp-exceed-${policy}`} onClick={() => onEdit({ on_exceed: policy })} onKeyDown={(event) => handleRadioKey(event, index, policies.length, (next) => {
                 const candidate = policies[next]
                 if (candidate) onEdit({ on_exceed: candidate })
               })}>
-                {t(policy === 'skip' ? 'workbench.lp_policy_skip' : 'workbench.lp_policy_pause')}
+                {policyLabel(policy, t)}
               </button>
             ))}
           </div>

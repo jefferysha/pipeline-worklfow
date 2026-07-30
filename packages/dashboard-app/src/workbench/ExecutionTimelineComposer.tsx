@@ -5,7 +5,6 @@ import {
   Braces,
   Check,
   ChevronDown,
-  CircleHelp,
   Eye,
   GripVertical,
   LockKeyhole,
@@ -18,6 +17,7 @@ import {
 import { outputPresentation } from '../shared/outputPresentation'
 import { useT } from '../i18n'
 import { SkillExecutionTopology } from './SkillExecutionTopology'
+import { HelpPopover } from './HelpPopover'
 import { skillPresentation } from './skillPresentation'
 import type { ExecutionTimelineComposerProps } from './executionTimelineTypes'
 export type { TimelineSkillMove } from './executionTimelineTypes'
@@ -145,9 +145,9 @@ export function ExecutionTimelineComposer({
                   {t('workbench.timeline_stage_title', { name: selected.name })}
                 </button>
               )}
-              <button type="button" className="grid h-9 w-9 place-items-center rounded-full text-text-3 outline-none hover:bg-fill focus-visible:ring-3 focus-visible:ring-accent-t" title={t('workbench.timeline_help')} aria-label={t('workbench.timeline_help_label')}>
-                <CircleHelp className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <HelpPopover label={t('workbench.timeline_help_label')}>
+                {t('workbench.timeline_help')}
+              </HelpPopover>
             </div>
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] leading-6 text-text-2">
               <span>{t('workbench.timeline_enter', { name: selected.name })}</span><ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

@@ -769,6 +769,15 @@ describe('LaneMandatorySkills §4.11 调用链展示', () => {
 })
 
 describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集合跟着换）', () => {
+  it('轨道帮助按钮会展开项目级配置说明', async () => {
+    await renderMatrix(['build'])
+    const help = screen.getByRole('button', { name: '运行轨道说明' })
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(help)
+    expect(help).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('tooltip')).toHaveTextContent('轨道是项目级运行配置')
+  })
+
   it('运行时 registry 未返回前显示加载态，不先闪出任何手抄轨道', async () => {
     let release!: (value: Response) => void
     configResponse = () => new Promise<Response>((resolve) => (release = resolve))

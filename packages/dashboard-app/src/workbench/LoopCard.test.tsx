@@ -216,6 +216,19 @@ describe('LoopCard 读回显（验收①）', () => {
     openAdv()
     expect(screen.getByText('本 loop 同时走自动化通道的任务数，超出只提醒不硬拦')).toBeInTheDocument()
   })
+
+  it('retired 是不可由普通开关复活的独立终态', async () => {
+    rows = [makeRow({ status: 'retired' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const toggle = screen.getByTestId('lp-enable')
+    expect(toggle).toBeDisabled()
+    expect(screen.getByTestId('lp-pill')).toHaveAttribute('data-state', 'retired')
+    expect(screen.getByTestId('lp-pill')).toHaveTextContent('已退役')
+    fireEvent.click(toggle)
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+    expect(lastPostBody('/api/loops/update')).toBeNull()
+  })
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
@@ -316,6 +329,33 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     level.focus()
     fireEvent.keyDown(level, { key: 'End' })
     expect(await screen.findByTestId('lp-promote-confirm')).toHaveTextContent('L3')
+  })
+
+  it.each([
+    ['halt', '停止后续运行'],
+    ['skip-run', '跳过本次运行'],
+    ['pause-loop', '暂停定时任务'],
+  ])('合法超限策略 %s 保留精确值并提供唯一 tab stop', async (policy, label) => {
+    rows = [makeRow({ budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: policy, max_tokens_per_day: 100000 } })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const selected = screen.getByTestId(`lp-exceed-${policy}`)
+    expect(selected).toHaveAttribute('aria-checked', 'true')
+    expect(selected).toHaveAttribute('tabindex', '0')
+    expect(selected).toHaveTextContent(label)
+    expect(screen.getAllByRole('radio', { checked: true }).filter((radio) => radio.closest('[aria-label="超限策略"]'))).toHaveLength(1)
+  })
+
+  it('未知但合法的非空超限策略以自定义真值显示，不伪装成未选中', async () => {
+    rows = [makeRow({ budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'future-policy', max_tokens_per_day: 100000 } })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const selected = screen.getByTestId('lp-exceed-future-policy')
+    expect(selected).toHaveAttribute('aria-checked', 'true')
+    expect(selected).toHaveAttribute('tabindex', '0')
+    expect(selected).toHaveTextContent('自定义：future-policy')
   })
 
   it('token 预算滑杆 step=10 对齐受控粒度：连续单步（键盘方向键语义）不再原地踏步（真机 E2E bug 回归）', async () => {
@@ -582,6 +622,35 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
       id: 'restyle-loop',
       patch: { goal: '本地目标草稿' },
     })
+  })
+
+  it('字段改回基线后清除 touched，后续刷新接受服务端新值且不会伪 dirty', async () => {
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '临时本地值' } })
+    fireEvent.change(goal, { target: { value: '把旧版工单卡样式逐个迁移到 SaaS 卡片风' } })
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+
+    rows = rows.map((row) => ({ ...row, goal: '服务端的新目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('服务端的新目标'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+    expect(screen.getByTestId('lp-save')).toBeDisabled()
+  })
+
+  it('本地值与服务端收敛后清除 touched，下一次刷新不会复活旧草稿', async () => {
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '共同值' } })
+
+    rows = rows.map((row) => ({ ...row, goal: '共同值' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.queryByTestId('lp-dirty')).toBeNull())
+
+    rows = rows.map((row) => ({ ...row, goal: '服务端第三版' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('服务端第三版'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
   })
 
   it('保存完成到 reload 返回之间的新输入保持为下一版草稿并可再次精确保存', async () => {

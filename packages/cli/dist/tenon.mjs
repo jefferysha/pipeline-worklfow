@@ -35244,6 +35244,15 @@ function scriptStates(value) {
     (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
   );
 }
+function customHostEnvelopeStrings(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return values.flatMap((item2) => {
+    const text2 = typeof item2 === "string" ? item2 : isRecord10(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
+    if (text2 === void 0 || !/^Script (?:completed|failed)(?:\n|$)/.test(text2)) return [];
+    const boundary = text2.indexOf("\nOutput:\n");
+    return boundary === -1 ? [] : [text2.slice(0, boundary)];
+  });
+}
 function successfulFunctionOutput(value) {
   if (scriptStates(value).includes("failed")) return false;
   const textExitCodes = hostEnvelopeStrings(value).flatMap(
@@ -35275,7 +35284,9 @@ function parsedCompleteResultEnvelope(text2) {
   }
 }
 function successfulCustomOutput(value) {
-  const states = scriptStates(value);
+  const states = customHostEnvelopeStrings(value).flatMap(
+    (text2) => [...text2.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)].map((match) => match[1] ?? "")
+  );
   if (!states.includes("completed") || states.includes("failed")) return false;
   const values = Array.isArray(value) ? value : [value];
   const exitCodes = values.flatMap((item2) => {

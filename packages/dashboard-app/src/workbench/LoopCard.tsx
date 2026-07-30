@@ -70,6 +70,16 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     const nextBase = row ? draftOf(row) : null
     setDraft((current) => {
       const sameIdentity = draftIdentity.current === nextIdentity
+      if (sameIdentity && current !== null && nextBase !== null) {
+        for (const key of fieldRevisions.current.keys()) {
+          const currentValue = current[key]
+          const serverValue = nextBase[key]
+          const converged = Array.isArray(currentValue) && Array.isArray(serverValue)
+            ? JSON.stringify(currentValue) === JSON.stringify(serverValue)
+            : currentValue === serverValue
+          if (converged) fieldRevisions.current.delete(key)
+        }
+      }
       const rebased = sameIdentity && current !== null && nextBase !== null
         ? rebaseLoopDraft(current, nextBase, fieldRevisions.current)
         : nextBase
@@ -109,10 +119,20 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   }, [confirmDecisionKey, promotionFacts])
   const closePromotion = (): void => { setConfirmLevel(null); setConfirmDecisionKey(null) }
   function edit(part: Partial<LoopDraft>): void {
-    for (const key of Object.keys(part) as Array<keyof LoopDraft>) {
-      fieldRevisions.current.set(key, ++editRevision.current)
-    }
-    setDraft((prev) => (prev ? { ...prev, ...part } : prev))
+    setDraft((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...part }
+      for (const key of Object.keys(part) as Array<keyof LoopDraft>) {
+        const nextValue = next[key]
+        const baseValue = draftBase.current?.[key]
+        const equalsBase = Array.isArray(nextValue) && Array.isArray(baseValue)
+          ? JSON.stringify(nextValue) === JSON.stringify(baseValue)
+          : nextValue === baseValue
+        if (equalsBase) fieldRevisions.current.delete(key)
+        else fieldRevisions.current.set(key, ++editRevision.current)
+      }
+      return next
+    })
     setSaveOk(false)
   }
   async function save(): Promise<void> {
@@ -260,6 +280,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     )
   }
   const active = draft.status === 'active'
+  const retired = draft.status === 'retired'
   const isPendingReview = row.draft === true
   const tokensK = draft.max_tokens_per_day === null ? RECO_TOKENS_K : clamp(Math.round(draft.max_tokens_per_day / 10000) * 10, 10, 500)
   return (
@@ -269,16 +290,19 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
         <Switch
           className={WB_TW.switch}
           checked={active}
+          disabled={retired}
           aria-label={t('workbench.lp_enable')}
           data-testid="lp-enable"
-          onCheckedChange={() => edit({ status: active ? 'paused' : 'active' })}
+          onCheckedChange={() => {
+            if (!retired) edit({ status: active ? 'paused' : 'active' })
+          }}
         />
         <span
-          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green-d' : 'bg-fill text-text-3')}
-          data-state={active ? 'run' : 'paused'}
+          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green-d' : retired ? 'bg-red-t text-red-d' : 'bg-fill text-text-3')}
+          data-state={active ? 'run' : retired ? 'retired' : 'paused'}
           data-testid="lp-pill"
         >
-          {t(active ? 'workbench.lp_running' : 'workbench.lp_paused')}
+          {t(active ? 'workbench.lp_running' : retired ? 'workbench.lp_retired' : 'workbench.lp_paused')}
         </span>
         <ProvBadge field="status" />
         {/* loop-init L5：草稿待审阅徽章——蓝底 color-mix 从 --accent 派生（决议 #9）；testid 走

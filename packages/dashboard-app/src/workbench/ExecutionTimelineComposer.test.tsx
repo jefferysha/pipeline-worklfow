@@ -101,6 +101,15 @@ afterEach(() => {
 })
 
 describe('ExecutionTimelineComposer', () => {
+  it('阶段帮助按钮会展开真实说明内容', () => {
+    renderComposer()
+    const help = screen.getByRole('button', { name: '阶段执行说明' })
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(help)
+    expect(help).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('tooltip')).toHaveTextContent('这里按真实执行顺序展示')
+  })
+
   it('English locale translates the complete execution surface while preserving user stage names', () => {
     window.localStorage.setItem('tenon-dashboard-lang', 'en')
     renderComposer()
