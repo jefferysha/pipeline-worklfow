@@ -34,7 +34,8 @@ export function BudgetSummary({
   tone,
 }: BudgetSummaryProps): JSX.Element {
   const { t } = useT()
-  const percent = maxBytes > 0 ? Math.round((usedBytes / maxBytes) * 100) : 0
+  const rawPercent = maxBytes > 0 ? (usedBytes / maxBytes) * 100 : 0
+  const percent = usedBytes > maxBytes ? Math.ceil(rawPercent) : Math.round(rawPercent)
   const visualPercent = Math.min(100, Math.max(0, (usedBytes / maxBytes) * 100))
   const clampedBytes = Math.min(maxBytes, Math.max(0, usedBytes))
   const percentText = t('progress.bundle_percent_used', { percent })

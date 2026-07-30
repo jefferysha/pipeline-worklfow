@@ -69,3 +69,23 @@ budget 输入缺少稳定表单属性。失败证据登记在
 
 修复后定向测试 18/18、类型检查通过。视觉层级、布局、颜色、文案和数据边界均未改变；当前复评
 CRITICAL 0、HIGH 0、MEDIUM 0。64 项长列表仍是已记录 LOW，本批次不改变服务端上限或引入虚拟化。
+
+## 第五轮：小幅超限比例修复
+
+冻结 SHA `976ae90bb4769ae36d5a51d7a6ac7516566ce1b6` 的 clean-clone Codex 审查发现
+`1001 / 1000` 会被 `Math.round` 显示成 100%，与 overage 结论矛盾。第三轮失败证据登记在
+`docs/superpowers/reports/2026-07-30-dashboard-context-bundle-clarity-20260730-verify-fail-3.md`。
+
+本轮先增加真实 422 小幅超限红灯，证明文字和 progressbar 可访问值错误地停在 100%；最小修复为：
+
+- success 范围继续使用整数四舍五入，不改变既有 1% 等展示。
+- `usedBytes > maxBytes` 时改用 `Math.ceil`，确保任何真实超限都显示为大于 100%。
+- 精确字节、overage、视觉 100% 钳制和 ARIA 边界保持不变。
+
+修复后定向测试 19/19、Dashboard 全量 1229/1229、仓库 build、架构/注释/卫生门禁和
+OpenSpec strict 校验均通过。生产构建 `index-Dgcil20F.js` 在 1440×900 真实 Dashboard 中以
+受控 422 响应验证 `1,001 / 1,000 bytes` 显示「已使用 101%」与「超出 1 bytes」；
+progressbar 的 `aria-valuetext` 同步为 101%，视觉条保持 `scaleX(1)`，根级横向溢出为 0，
+浏览器控制台无错误。结束前已清除网络拦截并恢复共享浏览器视口。
+
+当前复评 CRITICAL 0、HIGH 0、MEDIUM 0，64 项长列表继续作为已记录 LOW。

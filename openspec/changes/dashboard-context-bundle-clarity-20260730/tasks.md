@@ -24,6 +24,7 @@
 - [x] 完成 budget-error、loading、policy-empty、stable error、双语、键盘与 reduced-motion 闭环。
 - [x] 运行定向测试、完整 Dashboard 测试、类型检查、构建与静态门禁并冻结 build SHA。
 - [x] 按第二轮 Verify 修复静态 loading、policy-empty status 与 budget 输入属性并重新冻结。
+- [x] 按第三轮 Verify 修复小幅预算超限仍显示 100% 的舍入缺陷并重新冻结。
 
 ## 验证
 

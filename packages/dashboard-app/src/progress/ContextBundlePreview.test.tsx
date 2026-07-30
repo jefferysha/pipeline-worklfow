@@ -182,6 +182,41 @@ describe('ContextBundlePreview', () => {
     expect(await screen.findByText('640 / 120,000 bytes')).toBeInTheDocument()
   })
 
+  it('小幅预算超限仍显示大于 100% 的真实超限结论', async () => {
+    const slightOverrunInput = {
+      ...input,
+      sourceBytes: 1200,
+      materializedBytes: 1001,
+    }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseBody()), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: false,
+        code: 'CONTEXT_BUNDLE_BUDGET_EXCEEDED',
+        error: 'too small',
+        preview: {
+          ...responseBody('verify', [slightOverrunInput]).preview,
+          budget: { maxBytes: 1000, usedBytes: 1001, fits: false },
+          aggregateDigest: undefined,
+        },
+      }), { status: 422 })))
+    const user = userEvent.setup()
+
+    renderPreview()
+    await screen.findByText('640 / 120,000 bytes')
+    const budget = screen.getByLabelText('预算（bytes）')
+    await user.clear(budget)
+    await user.type(budget, '1000{Enter}')
+
+    expect(await screen.findByText('已使用 101%')).toBeInTheDocument()
+    expect(screen.queryByText('已使用 100%')).not.toBeInTheDocument()
+    expect(screen.getByText('超出 1 bytes')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '1,001 / 1,000 bytes，已使用 101%',
+    )
+  })
+
   it('loading 提供有界骨架、busy 状态并禁用提交', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(deferred<Response>().promise))
 
