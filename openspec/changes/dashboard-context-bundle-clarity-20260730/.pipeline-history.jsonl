@@ -1,0 +1,27 @@
+{"ts":"2026-07-30T05:07:14Z","kind":"init"}
+{"ts":"2026-07-30T05:07:14Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:09:23Z","kind":"set","field":"depends_on","to":"dashboard-onboarding-command-feedback-20260730"}
+{"ts":"2026-07-30T05:09:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:09:36Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T05:09:57Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"2d29f13e-87b4-4607-b0e3-c66fefc72849"}
+{"ts":"2026-07-30T05:14:53Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-30-dashboard-context-bundle-clarity-design.md"}
+{"ts":"2026-07-30T05:14:58Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-30T05:15:12Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-30T05:15:39Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-30T05:15:43Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-30T05:09:23Z authority_host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:15:48Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-30T05:15:48Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-30T05:15:48Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"d6b536e1-54f5-4ae6-bb9a-d367113f03fc"}
+{"ts":"2026-07-30T05:17:54Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-30-dashboard-context-bundle-clarity.md"}
+{"ts":"2026-07-30T05:18:16Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-30T05:18:35Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-30T05:18:45Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-30T05:19:08Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-30T05:19:14Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-30T05:09:23Z authority_host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:19:19Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"a8181198-e491-40b6-b0a1-90e737d1ca67"}
+{"ts":"2026-07-30T05:19:58Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-30T05:19:58Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-07-30T05:19:58Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-30T05:26:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fb166-d610-7b72-b529-4abc24083e43"}
+{"ts":"2026-07-30T05:26:59Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-30T05:33:03Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
