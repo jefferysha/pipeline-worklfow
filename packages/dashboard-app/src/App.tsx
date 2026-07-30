@@ -1,23 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { selectInbox } from './inbox/inbox'
 import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
-import { ProgressView } from './progress/ProgressView'
-import { AfkView } from './afk/AfkView'
 import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
-import { WorkbenchView } from './workbench/WorkbenchView'
-import { MachineView } from './machine/MachineView'
 import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
-import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { isProjectWritable } from './state/projectSelectionModel'
-import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
 import { formatApiError } from './api/transport'
 import { UnsavedDraftDialog } from './shared/UnsavedDraftDialog'
 import type { DashboardNavigationTarget } from './state/useProjectSelection'
@@ -26,6 +20,23 @@ import { useDashboardTheme } from './shell/useDashboardTheme'
 import { SnapshotInlineError } from './progress/SnapshotInlineError'
 
 export { ErrorBoundary } from './AppErrorBoundary'
+
+const ProgressView = lazy(async () => ({
+  default: (await import('./progress/ProgressView')).ProgressView,
+}))
+const AfkView = lazy(async () => ({ default: (await import('./afk/AfkView')).AfkView }))
+const WorkbenchView = lazy(async () => ({
+  default: (await import('./workbench/WorkbenchView')).WorkbenchView,
+}))
+const MachineView = lazy(async () => ({
+  default: (await import('./machine/MachineView')).MachineView,
+}))
+const SolutionView = lazy(async () => ({
+  default: (await import('./solution/SolutionView')).SolutionView,
+}))
+const HostTargetPlanView = lazy(async () => ({
+  default: (await import('./hostPlan/HostTargetPlanView')).HostTargetPlanView,
+}))
 
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
@@ -257,6 +268,13 @@ function AppShell(): JSX.Element {
         className="w-full flex-1 px-6 pb-6 pt-3 mobile:px-4 mobile:pb-[calc(88px+env(safe-area-inset-bottom))] mobile:pt-2"
         data-testid="app-main"
       >
+        <Suspense
+          fallback={(
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="route-loading">
+              {t('common.loading')}
+            </p>
+          )}
+        >
         {snapshot !== null && staleSnapshotError && view !== 'progress' && view !== 'hostPlan' && (
           <SnapshotInlineError error={staleSnapshotError} loading={loading} onRefresh={refresh} />
         )}
@@ -385,6 +403,7 @@ function AppShell(): JSX.Element {
         {view === 'hostPlan' && <HostTargetPlanView />}
           </>
         )}
+        </Suspense>
       </main>
 
       </div>

@@ -140,6 +140,9 @@
 - [x] 从合并后源码重建 CLI、Server 与 Dashboard tracked distribution，并消除全部冲突 marker。 (build)
 - [x] 修复集成后 Progress route 超限，恢复前端 600 行架构硬门。 (build)
 - [x] 重跑 Dashboard 78 files / 1525 tests、root 330 files / 5875 tests（26 honest skips）、OpenSpec 38/38、release 24/24 与仓库门禁。 (build)
+- [x] 修复聚合 snapshot 的 `tasks.md` lstat→open 竞态和无界读取，以 O_NOFOLLOW、目录/leaf inode 复核与 256 KiB 硬上限 fail closed。 (build)
+- [x] 补齐 future-version sibling 与可读 Change 编排图的交叉集成回归。 (build)
+- [x] 将 Dashboard 重型 route 改为真实 lazy chunks，并拆分 vendor，消除 1.06 MB 单一 JS 与 Vite 500 KiB 告警。 (build)
 - [ ] 在新精确提交上完成 production 浏览器矩阵与三轨 C0/H0/M0/L0 独立复审。 (build)
 
 - [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)

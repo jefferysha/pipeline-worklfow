@@ -49,6 +49,9 @@ import {
   ContextBundleTrustedFileError,
   readTrustedFile,
 } from './contextBundleTrustedReader.js'
+import { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
+
+export { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
 
 export interface AnchoredChangeState {
   readonly changeDir: string
@@ -66,8 +69,6 @@ function isInside(base: string, candidate: string): boolean {
     || (fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase))
 }
 
-
-export const MAX_TASKS_MARKDOWN_BYTES = 256 * 1024
 
 type TasksFdReader = (fd: number, maxBytes: number) => string
 

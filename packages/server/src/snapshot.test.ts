@@ -1,6 +1,7 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
+import { appendFileSync, symlinkSync, unlinkSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -15,6 +16,7 @@ import {
   workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
+import { readTasksMarkdown } from './snapshotTasks.js'
 import {
   MAX_TASKS_MARKDOWN_BYTES,
   readAnchoredTasksMarkdown,
@@ -46,6 +48,73 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('聚合快照在 tasks leaf 的 lstat→open 竞态中不跟随替换后的 symlink', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'raced-tasks')
+    const outsideRoot = await makeProject()
+    const outsideTasks = join(outsideRoot, 'outside-secret.md')
+    await writeFile(outsideTasks, 'outside secret\n', 'utf8')
+    let readAttempted = false
+
+    const source = await readTasksMarkdown(changeDir, {
+      beforeOpen: () => {
+        unlinkSync(join(changeDir, 'tasks.md'))
+        symlinkSync(outsideTasks, join(changeDir, 'tasks.md'), 'file')
+      },
+      readSource: () => {
+        readAttempted = true
+        return 'must not be read'
+      },
+    })
+
+    expect(source).toBeUndefined()
+    expect(readAttempted).toBe(false)
+  })
+
+  it('聚合快照在读取回调前拒绝超出硬上限的 tasks.md', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'oversized-tasks')
+    await writeFile(join(changeDir, 'tasks.md'), Buffer.alloc(MAX_TASKS_MARKDOWN_BYTES + 1, 0x61))
+    let readAttempted = false
+
+    const source = await readTasksMarkdown(changeDir, {
+      readSource: () => {
+        readAttempted = true
+        return 'must not be read'
+      },
+    })
+
+    expect(source).toBeUndefined()
+    expect(readAttempted).toBe(false)
+  })
+
+  it('聚合快照非阻塞地拒绝 FIFO tasks.md', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'fifo-tasks')
+    await unlink(join(changeDir, 'tasks.md'))
+    await execFileAsync('mkfifo', [join(changeDir, 'tasks.md')])
+
+    await expect(readTasksMarkdown(changeDir)).resolves.toBeUndefined()
+  })
+
+  it('聚合快照在 fd 读取期间增长时不发布已过期内容', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'growing-tasks')
+
+    const source = await readTasksMarkdown(changeDir, {
+      readSource: () => {
+        appendFileSync(join(changeDir, 'tasks.md'), '\n- [ ] raced growth\n')
+        return '- [ ] stale bytes\n'
+      },
+    })
+
+    expect(source).toBeUndefined()
+  })
+
   it('明确未来 canonical 版本投影为有界 issue，并与可读 Change 共存且不泄露路径', async () => {
     const store = newStore()
     const root = await makeProject()

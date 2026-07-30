@@ -496,3 +496,25 @@ Two consecutive builds are byte-identical at CLI `75faafe2…c0c7`, Server
 This is pre-freeze evidence only. The production browser matrix and three
 independent exact-SHA C0/H0/M0/L0 reviews must be rerun on the next committed
 candidate; no earlier review or browser result is carried forward.
+
+The first exact `5a17a2af` backend/security review then found one Medium
+aggregate-snapshot race: `tasks.md` was checked with `lstat` but later reopened
+by pathname without a byte limit. The candidate and its browser evidence were
+invalidated. The reader now opens with `O_NOFOLLOW | O_NONBLOCK`, verifies the
+Change-directory and leaf inode/size/realpath both before and after a bounded
+256 KiB fd read, and omits missing, raced, special or oversized inputs. New
+regressions replace the leaf with an external symlink exactly before open and
+prove oversized input is rejected before the read callback. The focused
+snapshot suite passes 43/43; architecture and full build pass. A fresh exact
+commit must rerun every review and browser gate.
+
+The release/E2E review also recorded two Low findings, both remediated rather
+than deferred. App integration now proves that a future-version sibling does
+not block opening a readable Change, requesting its orchestration graph or
+rendering the accessible graph card. Heavy Dashboard routes now use
+`React.lazy` with a localized Suspense state; vendor boundaries remain
+deterministic. The former 1.06 MB single JS artifact is replaced by an initial
+290.17 kB chunk plus on-demand route chunks (largest 212.29 kB), with no Vite
+500 KiB warning. Dashboard passes 78 files / 1526 tests and snapshot security
+passes 45/45. The old candidate remains invalid; exact evidence must follow a
+new commit.

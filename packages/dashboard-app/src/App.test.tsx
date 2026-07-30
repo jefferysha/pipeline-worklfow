@@ -972,6 +972,85 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/automation?root='))).toBe(false)
   })
 
+  it('未来版本 sibling 不阻断可读 Change 的编排图请求与呈现', async () => {
+    const project = makeProject('/repo', [makeChange('readable-change', 'build')], {
+      ok: false,
+      compatibilityIssues: [{
+        kind: 'unsupported-canonical-version',
+        change: 'future-change',
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }],
+    })
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([project]) }
+      }
+      if (url.startsWith('/api/orchestration-graph?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            schema: 'tenon-orchestration-graph/v1',
+            scope: { root: '/repo', change: 'readable-change' },
+            coverage: {
+              implemented: ['workflow', 'change', 'phase'],
+              deferred: [],
+            },
+            nodes: [
+              {
+                id: 'workflow:default',
+                kind: 'workflow',
+                label: 'default',
+                status: 'changed',
+                metadata: [{ key: 'execution_model', value: 'phase-manifest' }],
+              },
+              {
+                id: 'change:readable-change',
+                kind: 'change',
+                label: 'readable-change',
+                status: 'in_progress',
+                metadata: [
+                  { key: 'phase', value: 'build' },
+                  { key: 'track', value: 'backend' },
+                  { key: 'preset', value: 'full' },
+                ],
+              },
+              {
+                id: 'phase:build',
+                kind: 'phase',
+                label: '实现',
+                status: 'current',
+                metadata: [{ key: 'phase_id', value: 'build' }],
+              },
+            ],
+            edges: [
+              {
+                id: 'governs',
+                kind: 'governs',
+                source: 'workflow:default',
+                target: 'change:readable-change',
+                label: 'governs',
+              },
+            ],
+          }),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    expect(await screen.findByTestId('canonical-state-version-notice')).toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('prg-cv-chg-readable-change'))
+    expect(await screen.findByRole('heading', { name: '编排图' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /readable-change · 变更/ })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) =>
+      String(url).startsWith('/api/orchestration-graph?root=%2Frepo&change=readable-change'))).toBe(true)
+    expect(screen.getByTestId('canonical-state-version-notice')).toBeInTheDocument()
+  })
+
   it('英文刷新遇到 503 时不泄漏中文 client 文案，并用通用 Retry 恢复既有 snapshot', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     const project = makeProject('/repo', [makeChange('readable-change', 'build')], {

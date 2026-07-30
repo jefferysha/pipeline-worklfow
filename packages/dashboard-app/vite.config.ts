@@ -25,6 +25,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalized = id.replaceAll('\\', '/')
+          if (normalized.includes('/node_modules/gsap/')
+            || normalized.includes('/node_modules/@gsap/')) return 'motion-vendor'
+          if (normalized.includes('/node_modules/@radix-ui/')
+            || normalized.includes('/node_modules/radix-ui/')) return 'radix-vendor'
+          if (normalized.includes('/node_modules/react/')
+            || normalized.includes('/node_modules/react-dom/')
+            || normalized.includes('/node_modules/scheduler/')) return 'react-vendor'
+          if (normalized.includes('/node_modules/lucide-react/')) return 'icons-vendor'
+          return undefined
+        },
+      },
+    },
   },
   server: {
     // 本地 dev 独立在 5173（可用 TENON_DASHBOARD_DEV_PORT 覆盖）；/api 代理到生产 API

@@ -328,3 +328,23 @@ may record PASS.
   `index-CTzkdGem.css` (`3651c3a4…f515`).
 - The exact-candidate browser matrix and three independent zero-finding reviews
   remain mandatory before Build is frozen.
+
+### `5a17a2af` security review rollback
+
+- The backend/security reviewer found a Medium lstat→open race and unbounded
+  read in the aggregate snapshot `tasks.md` path. The exact candidate and its
+  21-scene browser evidence are invalidated.
+- The replacement reader uses `O_NOFOLLOW | O_NONBLOCK`, a 256 KiB hard limit,
+  and before/after Change-directory plus leaf inode/size/realpath validation.
+  Suspicious, missing, special, raced and oversized inputs fail closed.
+- Deterministic leaf-swap and oversized-input tests prove rejected paths are not
+  passed to the fd reader. Focused snapshot tests pass 43/43; architecture and
+  full build pass. All exact-SHA reviews and browser gates must be rerun.
+- FIFO and in-read growth regressions extend the aggregate reader proof to
+  45/45 snapshot tests.
+- The PR #27/#28 cross path now proves a future-version sibling can coexist with
+  a readable Change whose orchestration graph is requested and rendered.
+- Heavy Dashboard routes use real lazy imports with localized Suspense fallback.
+  The former 1.06 MB single JS becomes a 290.17 kB initial chunk and route
+  chunks no larger than 212.29 kB; the 500 KiB warning is gone. Dashboard passes
+  78 files / 1526 tests.
