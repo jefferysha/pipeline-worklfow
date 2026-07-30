@@ -23,11 +23,12 @@
 - [x] Tracer bullet：以 success 红灯贯通容量摘要、输入行、DOM/ARIA 与真实抽屉渲染。
 - [x] 完成 budget-error、loading、policy-empty、stable error、双语、键盘与 reduced-motion 闭环。
 - [x] 运行定向测试、完整 Dashboard 测试、类型检查、构建与静态门禁并冻结 build SHA。
+- [x] 按第二轮 Verify 修复静态 loading、policy-empty status 与 budget 输入属性并重新冻结。
 
 ## 验证
 
 - [x] 对冻结 SHA 完成 Reviewer、E2E、Codex 与视觉、可访问性四轨复核。
-- [ ] 在 1024×768、1200×870、1440×900、1920×1080 验收全部目标状态和主题。
+- [x] 在 1024×768、1200×870、1440×900、1920×1080 验收全部目标状态和主题。
 - [ ] 修复全部范围内发现后重新冻结与完整验证，登记 verification report 并完成 exact-event review。
 
 ## 交付

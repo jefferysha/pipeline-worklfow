@@ -47,7 +47,7 @@ fail closed，显示 `CONTEXT_BUNDLE_TRUSTED_READER_UNAVAILABLE`，未暴露绝�
    - 容量条视觉宽度钳制在 0–100%，但文本保留真实百分比与精确 bytes。
    - 使用 `role="progressbar"`、`aria-valuemin/max/now` 和可读 `aria-label`。
 2. `PreviewInputs`
-   - 标题先显示输入数量，再显示稳定顺序的文档行。
+   - 输入数量位于容量摘要 badge，清单标题保持简洁，再显示稳定顺序的文档行。
    - 每行按 path → kind/mode → reason → source/materialized bytes 排列。
    - Lucide 文件图标只作装饰，token 与文字承担语义，不靠颜色单独区分。
 3. 状态容器
@@ -79,15 +79,17 @@ stateDiagram-v2
 - Tab 顺序保持 target → budget → submit；Enter 与点击使用同一 form submit。
 - 容量条提供完整语义，错误/空/loading 保持现有 live region 与 alert/status 角色。
 - Light/Dark/System 只使用现有 semantic tokens。
-- 容量变化使用短 CSS width/color transition 表达“预算结论变化”，并以
-  `motion-reduce:transition-none` 取消；loading pulse 使用 `motion-reduce:animate-none`。
+- 容量变化只使用 200ms CSS transform transition，以 `origin-left scaleX()` 表达“预算结论变化”；
+  不对宽度或颜色做动画，并以 `motion-reduce:transition-none` 取消。
+- loading skeleton 是静态、有界的占位，不使用 pulse、循环或其他持续动画。
 - 不使用 GSAP：本批次没有需要时间轴、空间因果或复杂清理的动画。
 
 ## 性能边界
 
 - server 最多返回 64 个输入，客户端保持单次 O(n) 渲染，不做排序、测量循环或持续动画。
 - 百分比、remaining 和 overage 只做常数时间纯计算，不提升到 state 或 effect。
-- 容量条只改变一个有界宽度样式；reduced-motion 下取消 transition。
+- 容量条只改变一个有界 `transform: scaleX()`；不触发布局宽度变化，reduced-motion 下取消
+  transition。
 
 ## Assumptions / Decision Log
 

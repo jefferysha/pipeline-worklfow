@@ -40,9 +40,11 @@ decoder、`useContextBundlePreview`、server/kernel、安全 reader、依赖和�
    - 真实超限比例、overage、error progressbar 与安全输入摘要。
    - 视觉宽度不超过 100%，精确文本不被钳制。
 2. 补 loading、policy-empty、stable error 与 reduced-motion 断言：
-   - loading 为 `role=status`/`aria-busy` 且 submit disabled。
-   - empty 不渲染容量摘要。
+   - loading 为静态有界 skeleton，保留 `role=status`/`aria-busy` 且 submit disabled，不运行
+     pulse 或循环动画。
+   - empty 使用 `role=status` 且不渲染容量摘要。
    - error 保留 code、说明、恢复动作和原 retry 路径。
+   - budget 输入保留可访问 label，并声明稳定 `name` 与 `autocomplete="off"`。
 3. 在 `packages/dashboard-app/src/i18n/translations.ts` 成对增加 zh/en 容量、remaining、
    overage、document list 与 loading 文案。
 4. 保持 target → budget → submit 的 DOM/Tab 顺序和 Enter submit；不得修改 hook。
