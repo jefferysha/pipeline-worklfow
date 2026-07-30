@@ -518,3 +518,43 @@ deterministic. The former 1.06 MB single JS artifact is replaced by an initial
 500 KiB warning. Dashboard passes 78 files / 1526 tests and snapshot security
 passes 45/45. The old candidate remains invalid; exact evidence must follow a
 new commit.
+
+## Post-`11902da4` Dashboard design rollback
+
+The complete Dashboard reviewer rejected the next candidate with
+**C0/H0/M4/L1**. No finding was deferred:
+
+- Machine readiness now uses three desktop columns, wraps headings safely, and
+  replaces five card live regions with one aggregate polite status;
+- WorkflowCanvas measures each real scroll container rather than guessing from
+  a viewport breakpoint, exposes the hint whenever `scrollWidth > clientWidth`,
+  and makes the labelled scroll region keyboard-focusable;
+- an unfiltered large orchestration graph keeps the complete matching set in
+  its accessible list but progressively renders at most 21 canvas nodes,
+  preventing the 142-node graph from becoming a 3,000-pixel edge hairball;
+- canonical-version compatibility renders one compact assertive summary,
+  keeps refresh visible, shows five issues initially, and places the remaining
+  bounded issues in an accessible disclosure.
+
+RED regressions cover the aggregate Machine announcement, true overflow at a
+wide viewport, the 100-issue compatibility bound, and a 120-resource
+orchestration graph. Focused tests pass 47/47; the complete Dashboard run
+passes 78 files / 1530 tests. The fresh root run before the final helper
+extraction passes 330 files / 5879 tests with 26 honest environment skips.
+Architecture initially rejected the 413-line WorkflowCanvas; overflow
+measurement was then extracted into the existing positioning hook module, and
+the 717-file architecture gate plus the 85 affected Progress tests pass.
+
+Production acceptance uses `index-CRRTQLIW.js`. The 21-scene matrix covers all
+seven Dashboard views at 1024/1440/1920 CSS pixels, Chinese/English,
+light/dark, and reduced-motion. Every scene has zero page-level horizontal
+overflow, visible alert, loading residue, console error, or CDP exception.
+The live seven-stage track is 1624px wide inside a 1046px viewport and exposes
+its labelled hint and `tabIndex=0`. Machine English cards are 354px wide with
+zero heading/badge overlap and exactly one live region. The real All graph has
+142 nodes / 149 edges but renders 21 buttons in a 532px canvas while retaining
+the full accessible list. Evidence is under
+`/tmp/tenon-unified-final-dashboard-CRRTQLIW`.
+
+This section is pre-freeze evidence. A new exact committed SHA must still pass
+all three independent review tracks; no prior PASS is carried forward.

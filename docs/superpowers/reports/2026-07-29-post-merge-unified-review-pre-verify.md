@@ -348,3 +348,29 @@ may record PASS.
   The former 1.06 MB single JS becomes a 290.17 kB initial chunk and route
   chunks no larger than 212.29 kB; the 500 KiB warning is gone. Dashboard passes
   78 files / 1526 tests.
+
+### Post-`11902da4` Dashboard design remediation
+
+- The complete Dashboard review returned C0/H0/M4/L1. Machine card overlap and
+  repeated live regions, breakpoint-only Progress scroll guidance, the
+  unbounded visual graph expansion, and the 100-row assertive compatibility
+  wall were all repaired; no Low was waived.
+- New RED→GREEN coverage proves one Machine aggregate announcement and a
+  three-column desktop grid, true DOM-overflow detection with a focusable
+  labelled scroller, five-item compatibility disclosure, and a 21-node visual
+  cap while all 123 test nodes remain in the accessible list.
+- Dashboard passes 78 files / 1530 tests. Root tests pass 330 files / 5879
+  tests with 26 honest environment skips before the final helper-only
+  extraction. The architecture gate then caught WorkflowCanvas at 413 lines;
+  moving the overflow observer into the existing positioning hook restored the
+  717-file gate, and the affected Progress tests pass 85/85.
+- Production `index-CRRTQLIW.js` passed the complete 21-scene matrix at
+  1024/1440/1920 CSS pixels across zh/en, light/dark and reduced-motion:
+  zero document overflow, alerts, loading residue, console errors and CDP
+  exceptions. Machine has zero heading/badge overlap and one live region; the
+  seven-stage track reports its real 1624/1046 overflow; the live 142-node /
+  149-edge graph renders only 21 canvas nodes at 532px high while preserving
+  the full accessible list.
+- Evidence is stored under
+  `/tmp/tenon-unified-final-dashboard-CRRTQLIW`. A fresh exact-SHA three-track
+  review is still mandatory before Build freeze.

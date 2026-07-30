@@ -447,4 +447,40 @@ describe('OrchestrationGraphCard', () => {
     expect(list).toHaveTextContent('归档')
     expect(list).toHaveTextContent('任务')
   })
+
+  it('大图只在画布渐进展示有限资源节点，完整匹配集仍保留在可访问列表', async () => {
+    const tasks = Array.from({ length: 120 }, (_, index) => ({
+      id: `task:${index + 1}`,
+      kind: 'task' as const,
+      label: `Task ${String(index + 1).padStart(3, '0')}`,
+      status: 'pending',
+      metadata: [{ key: 'phase_id', value: 'build' }],
+    }))
+    fetchMock.mockResolvedValue({
+      ...graph,
+      nodes: [...graph.nodes, ...tasks],
+      edges: [
+        ...graph.edges,
+        ...tasks.map((task) => ({
+          id: `contains:phase:build:${task.id}`,
+          kind: 'contains' as const,
+          source: 'phase:build',
+          target: task.id,
+          label: 'task',
+        })),
+      ],
+    })
+    const view = render(
+      <I18nProvider>
+        <OrchestrationGraphCard root="/repo" change="demo" />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '全部' }))
+    expect(await screen.findByTestId('orchestration-canvas-limited')).toHaveTextContent('123')
+    expect(screen.getByTestId('orchestration-canvas').querySelectorAll('button')).toHaveLength(21)
+    fireEvent.click(screen.getByText('可访问节点与边列表'))
+    expect(screen.getByTestId('orchestration-accessible-list')).toHaveTextContent('Task 120')
+    expect(view.container.querySelector('[style*="3196px"]')).not.toBeInTheDocument()
+  })
 })

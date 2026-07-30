@@ -286,8 +286,11 @@ describe('ProgressView 单项目 · 下方在制列表退役（负向钉死不�
 
   it('七阶段 workflow 使用独立横向阅读区，任务卡同时给出名称与人话状态', async () => {
     renderView()
-    expect(screen.getByTestId('prg-cv-scroll-proj-a-default')).toBeInTheDocument()
-    expect(screen.getByTestId('prg-cv-scroll-hint-proj-a-default')).toHaveTextContent('横向滚动查看后续阶段')
+    const viewport = screen.getByTestId('prg-cv-scroll-proj-a-default')
+    expect(viewport).toBeInTheDocument()
+    expect(viewport).toHaveAttribute('tabindex', '0')
+    expect(viewport).toHaveAccessibleName('横向滚动查看后续阶段')
+    expect(screen.queryByTestId('prg-cv-scroll-hint-proj-a-default')).toBeNull()
     expect(screen.getByTestId('prg-cv-chg-hotfix-login')).toHaveTextContent('失败')
     expect(screen.getByTestId('prg-cv-chg-afk-demo')).toHaveTextContent('运行中')
     await act(async () => {})

@@ -105,6 +105,20 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers').textContent).toContain('browser-e2e')
   })
 
+  it('就绪卡保持非 live 语义并只用一个聚合状态播报，宽屏不会挤成五个重叠窄列', async () => {
+    const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
+    render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-readiness-summary')).toHaveTextContent('就绪 3，受阻 2，未知 0'))
+    expect(screen.getByTestId('machine-readiness-summary')).toHaveAttribute('role', 'status')
+    expect(screen.getByTestId('machine-readiness-grid')).toHaveClass('xl:grid-cols-3')
+    for (const testId of ['machine-docker', 'machine-image', 'machine-codex', 'machine-skills', 'machine-operations']) {
+      expect(screen.getByTestId(testId)).not.toHaveAttribute('role')
+      expect(screen.getByTestId(testId)).not.toHaveAttribute('aria-live')
+      expect(within(screen.getByTestId(testId)).getByRole('heading', { level: 3 })).toHaveClass('break-words')
+    }
+  })
+
   it('风险队列把后端异常翻译为可理解的中文处置项，并为窄屏声明单列与全宽动作', async () => {
     const onOpenProject = vi.fn()
     const snapshot = makeSnapshot([makeProject(ROOT, [makeChange('failed-change', 'build', { fields: { automation: 'failed' } })])])

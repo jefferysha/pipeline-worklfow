@@ -38,10 +38,10 @@ function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCa
   const { t } = useT()
   const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amb-d bg-amb-t border-amb-b'
   return (
-    <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId} role="status" aria-live="polite">
+    <article className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
       <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
       <div className="min-w-0 flex-1">
-        <h3 className="font-bold text-text">{label}</h3>
+        <h3 className="break-words font-bold leading-tight text-text [overflow-wrap:anywhere]">{label}</h3>
         <p className="truncate text-[11px] text-text-3" title={detail}>{detail}</p>
       </div>
       <span className={`flex-none rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>{t(`machine.${state}`)}</span>
@@ -167,6 +167,12 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     ? 'unknown'
     : skills.length > 0 && skills.filter(blocksMachine).every((skill) => skill.installed) ? 'ready' : 'blocked'
   const operationsState: ReadinessState = snapshot === null ? 'unknown' : snapshot.capabilities.operations === true ? 'ready' : 'blocked'
+  const readinessStates = [dockerState, imageState, codexState, skillState, operationsState]
+  const readinessCounts = {
+    ready: readinessStates.filter((state) => state === 'ready').length,
+    blocked: readinessStates.filter((state) => state === 'blocked').length,
+    unknown: readinessStates.filter((state) => state === 'unknown').length,
+  }
 
   const blockers = useMemo(() => {
     const sourceLabels: Record<string, string> = {
@@ -215,7 +221,10 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
 
       <section data-testid="machine-readiness">
         <h2 className="mb-3 text-sm font-black text-text">{t('machine.readiness')}</h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <p className="sr-only" role="status" aria-live="polite" data-testid="machine-readiness-summary">
+          {t('machine.readiness_summary', readinessCounts)}
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="machine-readiness-grid">
           <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={images ? t('machine.docker_detail', { count: images.images.length }) : t('machine.loading_signal')} testId="machine-docker" />
           <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
           <ReadinessCard icon={KeyRound} label={t('machine.codex')} state={codexState} detail={t('machine.codex_detail', { source: credentialSourceLabel(secretSource, t) })} testId="machine-codex" />
