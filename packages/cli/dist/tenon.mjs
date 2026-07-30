@@ -35270,17 +35270,23 @@ var MAX_TRANSCRIPTS = 32;
 async function inspectHostTranscript(physicalRoot, candidate) {
   try {
     const info = await lstat21(candidate, { bigint: true });
-    if (!info.isFile() || info.isSymbolicLink() || info.size === 0n || info.size > BigInt(MAX_TRANSCRIPT_BYTES)) return void 0;
+    if (!info.isFile() || info.isSymbolicLink() || info.size > BigInt(MAX_TRANSCRIPT_BYTES)) return void 0;
     const physical = await realpath9(candidate);
     if (!isInside2(physicalRoot, physical)) return void 0;
+    if (info.size === 0n) {
+      return { kind: "empty", modifiedAt: Number(info.mtimeMs) };
+    }
     return {
-      path: physical,
-      modifiedAt: Number(info.mtimeMs),
-      size: Number(info.size),
-      device: info.dev,
-      inode: info.ino,
-      modifiedAtNs: info.mtimeNs,
-      changedAtNs: info.ctimeNs
+      kind: "candidate",
+      candidate: {
+        path: physical,
+        modifiedAt: Number(info.mtimeMs),
+        size: Number(info.size),
+        device: info.dev,
+        inode: info.ino,
+        modifiedAtNs: info.mtimeNs,
+        changedAtNs: info.ctimeNs
+      }
     };
   } catch {
     return void 0;
@@ -35298,6 +35304,7 @@ async function recentHostTranscripts(sessionsRoot) {
     return void 0;
   }
   const discovered = [];
+  const emptyModifiedAt = [];
   async function visit(directory, depth) {
     let entries;
     try {
@@ -35313,13 +35320,19 @@ async function recentHostTranscripts(sessionsRoot) {
       }
       if (!entry.name.endsWith(".jsonl")) continue;
       if (!entry.isFile()) return false;
-      const transcript = await inspectHostTranscript(physicalRoot, candidate);
-      if (transcript === void 0) return false;
-      discovered.push(transcript);
+      const inspected = await inspectHostTranscript(physicalRoot, candidate);
+      if (inspected === void 0) return false;
+      if (inspected.kind === "empty") emptyModifiedAt.push(inspected.modifiedAt);
+      else discovered.push(inspected.candidate);
     }
     return true;
   }
   if (!await visit(physicalRoot, 0)) return void 0;
+  const newestReadable = discovered.reduce(
+    (newest, transcript) => Math.max(newest, transcript.modifiedAt),
+    Number.NEGATIVE_INFINITY
+  );
+  if (emptyModifiedAt.some((modifiedAt) => modifiedAt >= newestReadable)) return void 0;
   let remaining = MAX_TOTAL_BYTES;
   const selected = [];
   for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
@@ -35331,7 +35344,8 @@ async function recentHostTranscripts(sessionsRoot) {
 }
 async function exactHostTranscript(sessionsRoot, transcriptPath) {
   try {
-    return await inspectHostTranscript(await realpath9(sessionsRoot), transcriptPath);
+    const inspected = await inspectHostTranscript(await realpath9(sessionsRoot), transcriptPath);
+    return inspected?.kind === "candidate" ? inspected.candidate : void 0;
   } catch {
     return void 0;
   }
