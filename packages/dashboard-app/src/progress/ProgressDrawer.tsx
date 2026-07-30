@@ -4,6 +4,7 @@ import { TaskDetail } from '../shared/TaskDetail'
 import { VerificationEvidenceComposer } from '../verification/VerificationEvidenceComposer'
 import { fieldStr, type FlatRow } from './progressViewModel'
 import { ContextBundlePreview } from './ContextBundlePreview'
+import { ReviewHandshakeStatus } from './ReviewHandshakeStatus'
 import { RunLogPane } from './RunLogPane'
 
 export interface ProgressDrawerProps {
@@ -46,12 +47,15 @@ export function ProgressDrawer({
             badge={badge}
             actions={actions}
             curStageExtra={(
-              <ContextBundlePreview
-                key={`${row.row.root}\u0000${row.row.change.name}\u0000${row.row.change.phase}`}
-                root={row.row.root}
-                change={row.row.change.name}
-                currentPhase={row.row.change.phase}
-              />
+              <>
+                <ReviewHandshakeStatus change={row.row.change} />
+                <ContextBundlePreview
+                  key={`${row.row.root}\u0000${row.row.change.name}\u0000${row.row.change.phase}`}
+                  root={row.row.root}
+                  change={row.row.change.name}
+                  currentPhase={row.row.change.phase}
+                />
+              </>
             )}
             collapseTechnical
             documentsExtra={row.row.change.phase === 'verify'

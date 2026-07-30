@@ -20451,6 +20451,36 @@ function listAllSkillsDetailed(repoRoot, claudeDir) {
 import { lstat as lstat14, readFile as readFile18, readdir as readdir4, stat as stat5 } from "node:fs/promises";
 import { join as join39, resolve as resolve12 } from "node:path";
 
+// packages/server/src/reviewHandshake.ts
+function stringField2(value) {
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function projectReviewHandshake(state, plan, phase) {
+  const receipt = {
+    phase: stringField2(state.fields.review_gate_phase),
+    status: stringField2(state.fields.review_gate_status),
+    event: stringField2(state.fields.review_gate_event),
+    requestedAt: stringField2(state.fields.review_requested_at),
+    acknowledgedAt: stringField2(state.fields.review_acknowledged_at)
+  };
+  if (Object.values(receipt).every((value) => value === "")) {
+    return { status: "not-requested" };
+  }
+  const step = plan.workflow.steps.find((candidate) => candidate.id === phase);
+  const eventExists = step?.transitions.some((transition) => transition.event === receipt.event) ?? false;
+  const pending = receipt.status === "pending" && receipt.acknowledgedAt === "";
+  const approved = receipt.status === "approved" && receipt.acknowledgedAt !== "";
+  if (step?.gate !== "review" || receipt.phase !== phase || receipt.event === "" || !eventExists || receipt.requestedAt === "" || !pending && !approved) {
+    throw new Error("review handshake canonical receipt \u4E0E\u5F53\u524D\u51BB\u7ED3 workflow \u4E0D\u4E00\u81F4");
+  }
+  return pending ? { status: "pending", event: receipt.event, requestedAt: receipt.requestedAt } : {
+    status: "approved",
+    event: receipt.event,
+    requestedAt: receipt.requestedAt,
+    acknowledgedAt: receipt.acknowledgedAt
+  };
+}
+
 // packages/server/src/projectCapabilities.ts
 import { statSync as statSync5 } from "node:fs";
 import { join as join38 } from "node:path";
@@ -20718,6 +20748,7 @@ async function scanProject(deps, root, nowMs) {
           e.name,
           capabilityDeps
         ),
+        reviewHandshake: projectReviewHandshake(state, plan, phase),
         todo,
         documents,
         ...terminalActivity === void 0 ? {} : { terminalActivity }

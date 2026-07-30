@@ -87,6 +87,71 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     }).workflowRules.default.nonemptyOutputByStep).toHaveProperty('open')
   })
 
+  it('从 canonical receipt 投影未请求、待确认和已批准的 exact-event handshake', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'review-handshake')
+    await store.set(dir, 'phase', 'verify')
+
+    const idle = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(idle.projects[0]?.changes[0]?.reviewHandshake).toEqual({
+      status: 'not-requested',
+    })
+
+    await store.setMany(dir, {
+      review_gate_phase: 'verify',
+      review_gate_status: 'pending',
+      review_gate_event: 'verify-pass',
+      review_requested_at: '2026-07-30T02:00:00Z',
+      review_acknowledged_at: '',
+    })
+    const pending = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(pending.projects[0]?.changes[0]?.reviewHandshake).toEqual({
+      status: 'pending',
+      event: 'verify-pass',
+      requestedAt: '2026-07-30T02:00:00Z',
+    })
+
+    await store.setMany(dir, {
+      review_gate_status: 'approved',
+      review_acknowledged_at: '2026-07-30T02:01:00Z',
+    })
+    const approved = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(approved.projects[0]?.changes[0]?.reviewHandshake).toEqual({
+      status: 'approved',
+      event: 'verify-pass',
+      requestedAt: '2026-07-30T02:00:00Z',
+      acknowledgedAt: '2026-07-30T02:01:00Z',
+    })
+  })
+
+  it('非法或漂移的 canonical receipt 必须 fail-loud，不能美化成未请求', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'invalid-review-handshake')
+    await store.setMany(dir, {
+      phase: 'verify',
+      review_gate_phase: 'verify',
+      review_gate_status: 'pending',
+      review_gate_event: 'spec-complete',
+      review_requested_at: '2026-07-30T02:00:00Z',
+      review_acknowledged_at: '',
+    })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't',
+    })
+    expect(snapshot.projects[0]?.ok).toBe(false)
+    expect(snapshot.projects[0]?.error).toMatch(/invalid-review-handshake.*review handshake/i)
+    expect(snapshot.change_count).toBe(0)
+  })
+
   it('default Build readiness 投影 pre-Verify 全量收敛门，pending 不得显示可冻结', async () => {
     const store = newStore()
     const root = await makeProject()

@@ -145,7 +145,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         changes: p.changes.map((c) => {
           const patch = patches.get(rowKeyOf(p.root, c.name))
           if (!patch) return c
-          return { ...c, phase: patch.phase ?? c.phase, fields: { ...c.fields, ...patch.fields } }
+          const phaseChanged = patch.phase !== undefined && patch.phase !== c.phase
+          return {
+            ...c,
+            phase: patch.phase ?? c.phase,
+            fields: { ...c.fields, ...patch.fields },
+            reviewHandshake: phaseChanged && c.reviewHandshake !== undefined
+              ? { status: 'not-requested' as const }
+              : c.reviewHandshake,
+          }
         }),
       })),
     }

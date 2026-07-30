@@ -66,6 +66,21 @@ const MULTI_EDGE_RULES = rulesFromDef({
   ],
 })
 
+const REVIEW_CHAIN_RULES = rulesFromDef({
+  name: 'review-chain',
+  steps: [
+    {
+      id: 'explore', label: '调研', gate: 'review', skills: [], inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'explore-complete', to: 'spec' }],
+    },
+    {
+      id: 'spec', label: '规格', gate: 'review', skills: [], inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'spec-complete', to: 'build' }],
+    },
+    { id: 'build', label: '实现', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+})
+
 function readyWorkflowExecution(rules: WorkflowRulesSnapshot): WorkflowExecutionSnapshot {
   return {
     readinessByTransition: Object.fromEntries(rules.steps.map((step) => [
@@ -103,6 +118,7 @@ function snapshotRules(rules: WorkflowRules & StepOutputRules): WorkflowRulesSna
 
 const RELEASE_TRAIN_SNAPSHOT_RULES = snapshotRules(RELEASE_TRAIN_RULES)
 const MULTI_EDGE_SNAPSHOT_RULES = snapshotRules(MULTI_EDGE_RULES)
+const REVIEW_CHAIN_SNAPSHOT_RULES = snapshotRules(REVIEW_CHAIN_RULES)
 
 function makeFixture(): Snapshot {
   return makeSnapshot([
@@ -655,6 +671,11 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
           fields: { workflow: 'multi-edge' },
           workflowRules: MULTI_EDGE_SNAPSHOT_RULES,
           workflowExecution: readyWorkflowExecution(MULTI_EDGE_SNAPSHOT_RULES),
+          reviewHandshake: {
+            status: 'pending',
+            event: 'fast-track',
+            requestedAt: '2026-07-30T02:00:00Z',
+          },
         })]),
       ]),
       rulesByKey: new Map([[rulesKey(ROOT_A, 'multi-edge'), MULTI_EDGE_RULES]]),
@@ -664,6 +685,9 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
   it('2+ 条同向出边一条不落（评审 P1-1）：首选前进边带目标相位，第 2 条以事件名可点、POST 事件正确', async () => {
     renderMultiEdge()
     await openDrawer('multi-demo')
+    expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('等待明确确认')
+    expect(within(screen.getByTestId('review-handshake-status')).getByText('fast-track'))
+      .toBeInTheDocument()
     expect(screen.getByTestId('prg9-dw-pass-multi-demo').textContent).toContain('放行进入 发布')
     const second = screen.getByTestId('prg9-dw-fw-fast-track-multi-demo')
     expect(second.textContent).toContain('fast-track')
@@ -672,6 +696,54 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
     await waitFor(() => {
       expect(fetchLog.some((l) => l.startsWith('POST /api/change/multi-demo/transition') && l.includes('"event":"fast-track"'))).toBe(true)
     })
+  })
+
+  it('review→review 乐观推进立即消费旧 exact-event receipt，不把 explore 回执显示到 spec', async () => {
+    actionGate = new Promise(() => {})
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('review-chain-demo', 'explore', {
+          fields: { workflow: 'review-chain' },
+          workflowRules: REVIEW_CHAIN_SNAPSHOT_RULES,
+          workflowExecution: readyWorkflowExecution(REVIEW_CHAIN_SNAPSHOT_RULES),
+          reviewHandshake: {
+            status: 'approved',
+            event: 'explore-complete',
+            requestedAt: '2026-07-30T02:00:00Z',
+            acknowledgedAt: '2026-07-30T02:01:00Z',
+          },
+        })]),
+      ]),
+      rulesByKey: new Map([[rulesKey(ROOT_A, 'review-chain'), REVIEW_CHAIN_RULES]]),
+    })
+    await openDrawer('review-chain-demo')
+    fireEvent.click(screen.getByTestId('prg9-dw-pass-review-chain-demo'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('尚未记录复核请求')
+    })
+    expect(screen.queryByText('explore-complete')).not.toBeInTheDocument()
+  })
+
+  it('旧 runtime 缺 handshake capability 时，review→review 乐观推进仍保持 unavailable', async () => {
+    actionGate = new Promise(() => {})
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('old-runtime-review-chain', 'explore', {
+          fields: { workflow: 'review-chain' },
+          workflowRules: REVIEW_CHAIN_SNAPSHOT_RULES,
+          workflowExecution: readyWorkflowExecution(REVIEW_CHAIN_SNAPSHOT_RULES),
+        })]),
+      ]),
+      rulesByKey: new Map([[rulesKey(ROOT_A, 'review-chain'), REVIEW_CHAIN_RULES]]),
+    })
+    await openDrawer('old-runtime-review-chain')
+    fireEvent.click(screen.getByTestId('prg9-dw-pass-old-runtime-review-chain'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('复核状态不可用')
+    })
+    expect(screen.queryByText('尚未记录复核请求')).not.toBeInTheDocument()
   })
 
   it('transition 失败 → 失败 toast（透传 server error）+ 乐观回滚 + 不触发 onRefresh', async () => {

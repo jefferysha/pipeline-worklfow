@@ -157,6 +157,13 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
     expect(existsSync(join(REPO_ROOT, 'skills', 'simple-task', 'SKILL.md'))).toBe(true)
   })
 
+  it('④b3 Tenon 根 Skill 固定 custom exec 完整结果转发契约', () => {
+    const tenonSkill = readFileSync(join(REPO_ROOT, 'skills', 'tenon', 'SKILL.md'), 'utf8')
+    expect(tenonSkill).toContain('text(result);')
+    expect(tenonSkill).toContain('不得使用 `text(result.output)`')
+    expect(tenonSkill).toContain('`exit_code` 可审计')
+  })
+
   it('④c 改名落地：to-spec/to-tickets 在、to-prd/to-issues 不在，且都随包提供', () => {
     expect(by.get('to-spec')).toBeDefined()
     expect(by.get('to-tickets')).toBeDefined()
