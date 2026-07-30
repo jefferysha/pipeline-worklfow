@@ -38,8 +38,11 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "release tag must be a complete stable v-prefixed SemVer" >&2
+            exit 1
+          }
           tag="$RELEASE_TAG"
-          case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid release tag: $tag" >&2; exit 1 ;; esac
           case "$EXPECTED_SHA" in
             *[!0-9a-fA-F]*|'') echo "expected_sha must be a full hexadecimal commit SHA" >&2; exit 1 ;;
           esac

@@ -255,9 +255,11 @@ as the same OS user. Tap interception is off by default.
 CI, the read-only pre-tag candidate, and release packaging all run
 `npm run check:dependencies`, which combines the High/Critical advisory audit
 with `npm ls --all`. A formal release also requires successful canonical push
-CI for the exact current `main` SHA. Only a separate minimal writer job that
-checks out and executes no repository code may create the tag, and packaging
-must prove the peeled tag commit equals that approved SHA.
+CI for the exact current `main` SHA. The candidate publishes only a bounded
+approval artifact. A default-branch-owned `workflow_run` writer revalidates the
+repository, workflow, run, artifact, and current `main` identities before a
+separate minimal job that checks out and executes no repository code creates
+the tag. Packaging must prove the peeled tag commit equals that approved SHA.
 
 [Security model →](docs/usage/security-model.md) ·
 [Report a vulnerability privately →](SECURITY.md)

@@ -221,3 +221,18 @@
 - 新增 4 个精确回归，覆盖 stale/newer/equal/only-empty；focused 4/4、完整 receipt suite
   82/82、CLI TypeScript build 与 `git diff --check` 均通过。
 - `daae7045` 的审查结果保持作废；修复提交后重新执行完整独立审查。
+
+### `0591006f` 独立复审回退
+
+- 精确提交复审发现 2 个 High 与 1 个 Medium：手动 release dispatch 可选择分支拥有的
+  workflow 并触达写入 job；tracked CLI bundle 未包含 transcript fallback 修复；Prompt
+  Routing Bypass 草稿未汇入 Workbench 统一 dirty 守卫。
+- release candidate 现为严格只读，只在 dispatch SHA 与 workflow definition SHA 都等于精确
+  最新 `main`、全部门禁与 canonical push CI 通过后发布 1 天 approval artifact。默认分支拥有的
+  `workflow_run` writer 重验 repository/head repository、canonical workflow id/path、事件、
+  结论、branch/SHA、REST run metadata、artifact run/ref/SHA 与最新 `main` 后，才以最小
+  `contents: write` 创建 tag。candidate、writer、packaging 三段都只接受完整稳定 SemVer。
+- CLI bundle 已从修复源码重新生成。Prompt Routing Bypass 以有效草稿与服务端基线比较 dirty，
+  同时保护站内导航和 `beforeunload`；改回基线或成功保存才清除。
+- release contract 8/8、相关 Dashboard 183/183、receipt 82/82、CLI/Dashboard typecheck 和
+  workflow YAML/shell 静态校验均通过。该复审结果保持作废，需在新提交上重新完整复审。

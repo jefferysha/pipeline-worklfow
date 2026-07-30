@@ -245,8 +245,10 @@ Dashboard 绑定 loopback、校验本地 Host header、为 mutation 使用随机
 CI、pre-tag release candidate 与 tag release workflow 都运行 `npm run check:dependencies`。
 该单一门禁同时执行 High/Critical advisory audit 和 `npm ls --all` 完整解析树校验。正式发布必须先
 对精确、仍为最新 `main` 的 40 位 SHA 手动运行 **Release candidate (pre-tag)**。只读验证 job
-不会持有远端写凭据，并要求该 SHA 的 canonical push CI 已成功；随后不 checkout 或运行仓库代码的
-最小写权限 job 才创建 tag。GitHub Release 打包还会把 peeled tag commit 与获批 SHA 逐字比对。
+不会持有远端写凭据，并要求该 SHA 的 canonical push CI 已成功；验证成功后只发布受限 approval
+artifact。默认分支拥有的 `workflow_run` writer 会重新验证仓库、workflow、run、artifact 与
+最新 `main` 身份，再由不 checkout 或运行仓库代码的最小写权限 job 创建 tag。GitHub Release
+打包还会把 peeled tag commit 与获批 SHA 逐字比对。
 
 [安全模型 →](docs/usage/zh-CN/security-model.md) ·
 [私密报告漏洞 →](SECURITY.md)

@@ -33,9 +33,10 @@ canonical state 只由 Tenon CLI 写。路径必须落在项目允许范围，�
 `npm run check:dependencies`；该单一门禁同时执行 High/Critical advisory audit 与
 `npm ls --all`，invalid、extraneous 或不兼容解析树也会失败。正式发布必须把精确且仍为最新
 `main` 的 40 位 SHA 与新 tag 交给 **Release candidate (pre-tag)**。验证 job 只有读权限且不
-持久化 checkout 凭据，并 fail-closed 要求该 SHA 的 canonical push CI 成功；随后不 checkout、
-不执行仓库代码的最小写权限 job 才创建 tag。GitHub Release 打包还会拒绝 peeled tag commit
-与获批 SHA 不一致的对象。
+持久化 checkout 凭据，并 fail-closed 要求该 SHA 的 canonical push CI 成功；它只发布受限且
+短期保留的 approval artifact。默认分支拥有的 `workflow_run` writer 会重新验证仓库、canonical
+workflow、完成 run、artifact、精确 SHA 与最新 `main` 身份；随后不 checkout、不执行仓库代码的
+最小写权限 job 才创建 tag。GitHub Release 打包还会拒绝 peeled tag commit 与获批 SHA 不一致的对象。
 Pages deploy 只接受已验证 artifact；第三方搜索/分析默认不启用。
 
 ## 报告漏洞

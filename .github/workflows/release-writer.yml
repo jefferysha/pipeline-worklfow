@@ -1,0 +1,174 @@
+name: Release candidate writer
+
+on:
+  workflow_run:
+    workflows: [Release candidate (pre-tag)]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-candidate-writer
+  cancel-in-progress: false
+
+jobs:
+  create-tag:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.default_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Prove the upstream run used the protected default-branch workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY_ID: ${{ github.repository_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WRITER_REF: ${{ github.ref }}
+          WRITER_SHA: ${{ github.sha }}
+          WRITER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          WRITER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+          UPSTREAM_REPOSITORY_ID: ${{ github.event.workflow_run.repository.id }}
+          UPSTREAM_HEAD_REPOSITORY_ID: ${{ github.event.workflow_run.head_repository.id }}
+          UPSTREAM_PATH: ${{ github.event.workflow_run.path }}
+          UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [ "$DEFAULT_BRANCH" = "main" ]
+          [ "$WRITER_REF" = "refs/heads/main" ]
+          [ "$WRITER_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-writer.yml@refs/heads/main" ]
+          [ "$WRITER_WORKFLOW_SHA" = "$WRITER_SHA" ]
+          [ "$UPSTREAM_REPOSITORY_ID" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$UPSTREAM_HEAD_REPOSITORY_ID" = "$CURRENT_REPOSITORY_ID" ]
+          case "$UPSTREAM_PATH" in
+            .github/workflows/release-candidate.yml|\
+            .github/workflows/release-candidate.yml@main|\
+            .github/workflows/release-candidate.yml@refs/heads/main) ;;
+            *) echo "upstream workflow path is not canonical: $UPSTREAM_PATH" >&2; exit 1 ;;
+          esac
+          [ "$UPSTREAM_EVENT" = "workflow_dispatch" ]
+          [ "$UPSTREAM_CONCLUSION" = "success" ]
+          [ "$UPSTREAM_HEAD_BRANCH" = "main" ]
+          case "$UPSTREAM_HEAD_SHA" in
+            *[!0-9a-fA-F]*|'') echo "upstream head SHA is invalid" >&2; exit 1 ;;
+          esac
+          [ "${#UPSTREAM_HEAD_SHA}" -eq 40 ]
+
+          canonical_workflow_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-candidate.yml" --jq '.id'
+          )"
+          [ "$UPSTREAM_WORKFLOW_ID" = "$canonical_workflow_id" ] || {
+            echo "upstream workflow identity is not canonical" >&2
+            exit 1
+          }
+
+          run="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID"
+          )"
+          api_path="$(jq -r '.path' <<<"$run")"
+          case "$api_path" in
+            .github/workflows/release-candidate.yml|\
+            .github/workflows/release-candidate.yml@main|\
+            .github/workflows/release-candidate.yml@refs/heads/main) ;;
+            *) echo "API workflow path is not canonical: $api_path" >&2; exit 1 ;;
+          esac
+          [ "$(jq -r '.id' <<<"$run")" = "$UPSTREAM_RUN_ID" ]
+          [ "$(jq -r '.workflow_id' <<<"$run")" = "$canonical_workflow_id" ]
+          [ "$(jq -r '.repository.id' <<<"$run")" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$(jq -r '.head_repository.id' <<<"$run")" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$(jq -r '.event' <<<"$run")" = "$UPSTREAM_EVENT" ]
+          [ "$(jq -r '.conclusion' <<<"$run")" = "$UPSTREAM_CONCLUSION" ]
+          [ "$(jq -r '.head_branch' <<<"$run")" = "$UPSTREAM_HEAD_BRANCH" ]
+          [ "$(jq -r '.head_sha' <<<"$run")" = "$UPSTREAM_HEAD_SHA" ]
+
+      - name: Download approval evidence from the trusted upstream run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release-candidate
+          gh run download "$UPSTREAM_RUN_ID" \
+            --name release-candidate-approval \
+            --dir .release-candidate
+          [ -f .release-candidate/approved.json ]
+
+      - name: Re-prove main and atomically create the approved annotated tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          approval=.release-candidate/approved.json
+          CANDIDATE_SHA="$(jq -er '.sha | select(type == "string" and length == 40)' "$approval")"
+          RELEASE_TAG="$(jq -er '.tag | select(type == "string" and length > 0)' "$approval")"
+          RELEASE_VERSION="$(jq -er '.version | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_RUN_ID="$(jq -er '.source_run_id | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_WORKFLOW_REF="$(jq -er '.source_workflow_ref | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_WORKFLOW_SHA="$(jq -er '.source_workflow_sha | select(type == "string" and length == 40)' "$approval")"
+
+          [ "$SOURCE_RUN_ID" = "$UPSTREAM_RUN_ID" ]
+          [ "$SOURCE_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml@refs/heads/main" ]
+          [ "$CANDIDATE_SHA" = "$UPSTREAM_HEAD_SHA" ]
+          [ "$SOURCE_WORKFLOW_SHA" = "$UPSTREAM_HEAD_SHA" ]
+          case "$CANDIDATE_SHA" in
+            *[!0-9a-fA-F]*|'') echo "candidate SHA is invalid" >&2; exit 1 ;;
+          esac
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "release tag must be a complete stable v-prefixed SemVer" >&2
+            exit 1
+          }
+          [ "$RELEASE_VERSION" = "${RELEASE_TAG#v}" ]
+
+          main="$(
+            gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          )"
+          [ "$main" = "$CANDIDATE_SHA" ] || {
+            echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
+            exit 1
+          }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release tag already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          tag_object="$(
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+              -f tag="$RELEASE_TAG" \
+              -f message="Tenon $RELEASE_VERSION" \
+              -f object="$CANDIDATE_SHA" \
+              -f type=commit \
+              --jq '.sha'
+          )"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$RELEASE_TAG" \
+            -f sha="$tag_object" >/dev/null
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: create-tag
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.create-tag.outputs.tag }}
+      expected_sha: ${{ needs.create-tag.outputs.sha }}
+    secrets: inherit

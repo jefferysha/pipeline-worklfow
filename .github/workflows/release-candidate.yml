@@ -25,10 +25,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-    outputs:
-      sha: ${{ steps.candidate.outputs.sha }}
-      tag: ${{ steps.candidate.outputs.tag }}
-      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +37,9 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.ref }}
           RELEASE_TAG: ${{ inputs.tag }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           case "$CANDIDATE_SHA" in
@@ -50,15 +49,23 @@ jobs:
             echo "ref must contain exactly 40 hexadecimal characters" >&2
             exit 1
           }
-          case "$RELEASE_TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "tag must be v-prefixed semver" >&2; exit 1 ;;
-          esac
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "tag must be a complete stable v-prefixed SemVer" >&2
+            exit 1
+          }
           git fetch --force --no-tags origin main
           head="$(git rev-parse HEAD)"
           main="$(git rev-parse origin/main)"
           [ "$head" = "$CANDIDATE_SHA" ] && [ "$head" = "$main" ] || {
             echo "candidate drift: input=$CANDIDATE_SHA checkout=$head origin/main=$main" >&2
+            exit 1
+          }
+          [ "$DISPATCH_SHA" = "$CANDIDATE_SHA" ] && [ "$WORKFLOW_SHA" = "$CANDIDATE_SHA" ] || {
+            echo "workflow must be dispatched from the exact candidate main commit" >&2
+            exit 1
+          }
+          [ "$WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml@refs/heads/main" ] || {
+            echo "workflow definition is not owned by refs/heads/main: $WORKFLOW_REF" >&2
             exit 1
           }
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
@@ -136,7 +143,7 @@ jobs:
           npm install --global @openai/codex@0.144.1
           npm run test:clean-install
 
-      - name: Re-prove main identity immediately before tagging
+      - name: Re-prove main identity immediately before approval
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
         run: |
@@ -164,56 +171,37 @@ jobs:
             exit 1
           }
 
-  create-tag:
-    needs: pre-tag
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    outputs:
-      sha: ${{ steps.tag.outputs.sha }}
-      tag: ${{ steps.tag.outputs.tag }}
-    steps:
-      - name: Re-prove main and atomically create the approved annotated tag
-        id: tag
+      - name: Write approval evidence for the default-branch writer
         env:
-          GH_TOKEN: ${{ github.token }}
-          CANDIDATE_SHA: ${{ needs.pre-tag.outputs.sha }}
-          RELEASE_TAG: ${{ needs.pre-tag.outputs.tag }}
-          RELEASE_VERSION: ${{ needs.pre-tag.outputs.version }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          RELEASE_TAG: ${{ steps.candidate.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.candidate.outputs.version }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_WORKFLOW_ID: ${{ github.workflow_ref }}
+          SOURCE_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
-          main="$(
-            gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
-          )"
-          [ "$main" = "$CANDIDATE_SHA" ] || {
-            echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
-            exit 1
-          }
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "release tag already exists: $RELEASE_TAG" >&2
-            exit 1
-          fi
-          tag_object="$(
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
-              -f tag="$RELEASE_TAG" \
-              -f message="Tenon $RELEASE_VERSION" \
-              -f object="$CANDIDATE_SHA" \
-              -f type=commit \
-              --jq '.sha'
-          )"
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/$RELEASE_TAG" \
-            -f sha="$tag_object" >/dev/null
-          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          mkdir -p .release-candidate
+          jq -n \
+            --arg sha "$CANDIDATE_SHA" \
+            --arg tag "$RELEASE_TAG" \
+            --arg version "$RELEASE_VERSION" \
+            --arg source_run_id "$SOURCE_RUN_ID" \
+            --arg source_workflow_ref "$SOURCE_WORKFLOW_ID" \
+            --arg source_workflow_sha "$SOURCE_WORKFLOW_SHA" \
+            '{
+              sha: $sha,
+              tag: $tag,
+              version: $version,
+              source_run_id: $source_run_id,
+              source_workflow_ref: $source_workflow_ref,
+              source_workflow_sha: $source_workflow_sha
+            }' > .release-candidate/approved.json
 
-  release:
-    needs: create-tag
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.create-tag.outputs.tag }}
-      expected_sha: ${{ needs.create-tag.outputs.sha }}
-    secrets: inherit
+      - name: Publish approval evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-approval
+          path: .release-candidate/approved.json
+          if-no-files-found: error
+          retention-days: 1

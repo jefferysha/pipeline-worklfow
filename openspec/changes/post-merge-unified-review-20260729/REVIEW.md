@@ -16,9 +16,11 @@ dependency security, CI/release policy, documentation, and generated assets.
 - Track Settings uses the repository Dialog primitive instead of a new modal/focus system.
 - The dependency update is atomic across manifests, lockfile, resolved tree, CI, release, and
   documentation. No public API, DTO, state file, or compatibility boundary changed.
-- Release packaging is now callable only from a pre-tag candidate workflow that proves an exact
-  current `main` SHA before and after the full gate, then creates the tag. Three static
-  anti-bypass tests keep CI, candidate, and packaging on that contract.
+- Release packaging is reachable only after a read-only pre-tag candidate proves an exact
+  current `main` SHA before and after the full gate and publishes bounded approval evidence.
+  A default-branch-owned `workflow_run` writer re-proves the trusted workflow/run/artifact
+  identities before creating the tag. Static anti-bypass tests keep CI, candidate, writer,
+  and packaging on that contract.
 - Architecture, comment-honesty, repository-hygiene, documentation, identity, and freshness
   checks are part of the frozen-baseline gate.
 
@@ -169,3 +171,24 @@ the exact-transcript path continues to reject empty files. The focused regressio
 4/4, the complete receipt suite passes 82/82, and the CLI TypeScript build passes. The
 `daae7045` review result is invalidated; the next committed candidate must receive a fresh
 C0/H0/M0/L0 review.
+
+## `0591006f` independent review rollback
+
+The exact `0591006f` review reported two High and one Medium findings. The manual release
+candidate could otherwise execute a branch-owned workflow with writer reachability; the
+tracked CLI bundle did not contain the transcript fallback fix; and Prompt Routing Bypass
+edits were absent from the Workbench dirty-navigation aggregate.
+
+The candidate workflow is now strictly read-only and can only emit a one-day approval
+artifact after proving that both the dispatch and workflow definition are the exact current
+`main` commit. Tag creation moved to a default-branch-owned `workflow_run` writer that
+fail-closes on repository, head repository, canonical workflow id/path, event, conclusion,
+head branch/SHA, REST run metadata, artifact run/ref/SHA, and current-main drift. All release
+stages also require a complete stable v-prefixed SemVer.
+
+The CLI bundle was regenerated from the reviewed TypeScript. Prompt Routing Bypass now reports
+effective draft state against its server baseline into the unified Workbench dirty guard,
+clears only on a matching revert or successful save, and protects both in-app navigation and
+`beforeunload`. Release workflow contracts pass 8/8; related Dashboard tests pass 183/183;
+receipt tests pass 82/82; CLI and Dashboard typechecks pass. These fixes invalidate the
+`0591006f` review result. A fresh full review of the new committed candidate remains required.

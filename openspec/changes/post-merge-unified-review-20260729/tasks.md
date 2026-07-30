@@ -118,6 +118,9 @@
 - [x] dirty Workbench 的历史目标即使仍为 Workbench，只要 project root 变化也必须先确认。 (build)
 - [x] Workflow guard decoder 按变体 exact-key 闭集拒绝附加字段和畸形嵌套对象。 (build)
 - [x] fallback transcript discovery 仅跳过严格更旧的零字节残留；最新、同时间或仅空文件时保持 fail-closed。 (build)
+- [x] 从修复源码重新生成 tracked CLI bundle，保证 release freshness 与运行时实现一致。 (build)
+- [x] 将 Prompt Routing Bypass 草稿汇入 Workbench 统一 dirty/navigation/beforeunload 守卫。 (build)
+- [x] 将 release candidate 限制为只读 approval producer，并由 default-branch `workflow_run` writer 重验身份后创建 tag。 (build)
 - [ ] 在最终实现与生成物上重跑全量门禁、生产浏览器矩阵和独立 C0/H0/M0/L0 复审。 (build)
 
 ## 验证

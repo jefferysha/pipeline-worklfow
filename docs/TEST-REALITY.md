@@ -21,8 +21,10 @@
 - CI、pre-tag candidate 与 tag release workflow 现在执行同一
   `npm run check:dependencies`，同时阻断 High/Critical advisory 与 `npm ls --all` 无效解析树。
   `Release candidate (pre-tag)` 的验证 job 为只读且 checkout 不持久化凭据；它只接受精确且仍为
-  最新 `main`、并已有成功 canonical push CI 的完整 SHA。随后不 checkout/不执行仓库代码的最小
-  writer job 创建 tag；packaging 以 `expected_sha` 再验证 peeled tag commit。
+  最新 `main`、并已有成功 canonical push CI 的完整 SHA，成功后只发布短期 approval artifact。
+  默认分支拥有的 `workflow_run` writer 重验仓库、workflow、run、artifact 与最新 `main` 身份后，
+  才由不 checkout/不执行仓库代码的最小 writer job 创建 tag；packaging 以 `expected_sha`
+  再验证 peeled tag commit。
 - 干净 `npm ci` 后，root Vitest 327/327 文件、5741 passed、14 个仓库既有 honest-skip；
   Dashboard 67/67 文件、1210/1210 tests 通过。生产 build、docs check/build/smoke、架构、
   注释、仓库卫生、身份、default workflow freshness、文档模板、npx 包、512 hook tests、
