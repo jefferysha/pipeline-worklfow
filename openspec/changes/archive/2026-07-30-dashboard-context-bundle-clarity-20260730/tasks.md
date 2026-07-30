@@ -35,9 +35,9 @@
 ## 交付
 
 - [x] 应用已验证 spec，提交、普通 push 并创建非草稿 PR。
-- [ ] 完成 PR 说明、标签审计、review/comment 审计与 exact-head CI 终态。
+- [x] 完成 PR 说明、标签审计、review/comment 审计与 exact-head CI 终态。
 
 ## 归档
 
-- [ ] 读取全部治理证据并以官方 Tenon/OpenSpec 路径归档 Change。
-- [ ] 提交并推送归档状态，等待最终 exact-head CI 终态并更新 automation memory。
+- [x] 读取全部治理证据并以官方 Tenon/OpenSpec 路径归档 Change。
+- [x] 提交并推送归档状态，等待最终 exact-head CI 终态并更新 automation memory。
