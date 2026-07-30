@@ -1,12 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronRight, SearchX } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WorkflowRules } from '../model/workflowModel'
 import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
+import { ProjectsFocusToolbar } from './ProjectsFocusToolbar'
+import { countProjectFocus, selectFocusedProjects, type ProjectFocus } from './projectsFocusModel'
 import { buildProjectRows, compareProjectRows, type PhaseCell, type ProjectRow } from './projectsModel'
+import { ProjectsUnreachableSection } from './ProjectsUnreachableSection'
 
 gsap.registerPlugin(useGSAP)
 
@@ -204,7 +207,10 @@ function SectionHead({ label, tone }: { label: string; tone: 'need' | 'quiet' })
 export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const [unreachableOpen, setUnreachableOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [focus, setFocus] = useState<ProjectFocus>('all')
 
   const rows = useMemo(() => buildProjectRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
   const duplicateBasenames = useMemo(() => {
@@ -237,13 +243,21 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
     duplicateBasenames.has(row.basename)
       ? `project-row-${row.basename}-${encodeURIComponent(row.root)}`
       : `project-row-${row.basename}`
-  const { needRows, restRows, unreachable, needCount } = useMemo(() => {
-    const reachable = rows.filter((r) => r.ok)
+  const focusCounts = useMemo(() => countProjectFocus(rows), [rows])
+  const focusedRows = useMemo(() => selectFocusedProjects(rows, query, focus), [focus, query, rows])
+  const { needRows, restRows, unreachable } = useMemo(() => {
+    const reachable = focusedRows.filter((r) => r.ok)
     const need = reachable.filter((r) => r.need > 0).sort(compareProjectRows)
     const rest = reachable.filter((r) => r.need === 0).sort(compareProjectRows)
-    const unreach = rows.filter((r) => !r.ok)
-    return { needRows: need, restRows: rest, unreachable: unreach, needCount: need.length }
-  }, [rows])
+    const unreach = focusedRows.filter((r) => !r.ok)
+    return { needRows: need, restRows: rest, unreachable: unreach }
+  }, [focusedRows])
+
+  function clearConditions(): void {
+    setQuery('')
+    setFocus('all')
+    searchRef.current?.focus()
+  }
 
   // 入场动画依赖键 = 行/分区成员指纹（增删项目才重放 stagger；展开读不到区不整列重播）。
   const animKey = rows.map((r) => `${r.ok ? '1' : '0'}${r.root}`).sort().join('|')
@@ -277,13 +291,26 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
     <section ref={rootRef} data-testid="projects-view" data-page-frame="standard" aria-label={t('projects.title')} className="mx-auto w-full max-w-[1088px] pt-7 pb-5">
       <PageHeader
         title={t('projects.title')}
-        description={<span data-testid="projects-summary">{t('projects.count_summary', { n: rows.length, need: needCount })}</span>}
+        description={<span data-testid="projects-summary">{t('projects.count_summary', { n: rows.length, need: focusCounts.attention })}</span>}
       />
 
       {snapshot === null ? (
         <p className="text-[14px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>
       ) : (
-        <div className="flex flex-col gap-7">
+        <>
+          <ProjectsFocusToolbar
+            t={t}
+            query={query}
+            focus={focus}
+            counts={focusCounts}
+            shown={focusedRows.length}
+            total={rows.length}
+            searchRef={searchRef}
+            onQuery={setQuery}
+            onFocus={setFocus}
+            onClear={clearConditions}
+          />
+          <div className="flex flex-col gap-7">
           {needRows.length > 0 && (
             <div data-testid="section-need">
               <SectionHead label={t('projects.section_need')} tone="need" />
@@ -322,57 +349,39 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
             </div>
           )}
 
-          {unreachable.length > 0 && (
-            <div data-testid="section-unreachable" data-anim="pv-item">
+          {focusedRows.length === 0 && (
+            <div
+              className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-fill/50 px-6 py-10 text-center"
+              data-testid="projects-filter-empty"
+            >
+              <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-text-3">
+                <SearchX aria-hidden="true" className="h-5 w-5" />
+              </span>
+              <h2 className="text-[16px] font-bold text-text">{t('projects.no_results_title')}</h2>
+              <p className="mt-1.5 max-w-md text-[13px] leading-5 text-text-3">{t('projects.no_results_desc')}</p>
               <button
                 type="button"
-                data-testid="unreachable-toggle"
-                aria-expanded={unreachableOpen}
-                onClick={() => setUnreachableOpen((v) => !v)}
-                className="flex items-center gap-1.5 text-[13px] text-text-3 transition-colors hover:text-text-2"
+                onClick={clearConditions}
+                className="mt-5 rounded-xl bg-btn-bg px-4 py-2.5 text-[13px] font-semibold text-btn-fg transition-[background-color,transform] hover:bg-btn-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-bg active:translate-y-px motion-reduce:transform-none"
               >
-                {unreachableOpen ? (
-                  <ChevronDown aria-hidden="true" className="h-4 w-4 flex-none" />
-                ) : (
-                  <ChevronRight aria-hidden="true" className="h-4 w-4 flex-none" />
-                )}
-                <span>{t('projects.unreachable_fold', { n: unreachable.length })}</span>
+                {t('projects.clear_filters')}
               </button>
-              {unreachableOpen && (
-                <div className="mt-2 flex flex-col gap-1">
-                  {unreachable.map((row) => {
-                    const id = rowId(row)
-                    return (
-                      <div
-                        key={row.root}
-                        id={`project-row-${encodeURIComponent(row.root)}`}
-                        data-testid={id}
-                        data-anim="pv-item"
-                        data-ok="false"
-                        role="group"
-                        aria-label={t('projects.unreachable_aria', { name: row.basename, root: row.root })}
-                        aria-disabled="true"
-                        className="flex items-center gap-3.5 rounded-md px-3.5 py-2.5 opacity-70"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="h-2 w-2 flex-none rounded-full border border-border-2 bg-transparent"
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate font-mono text-[14px] text-text-3">{row.basename}</span>
-                          <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
-                            {visibleRoots.get(row.root) ?? row.root}
-                          </span>
-                        </span>
-                        <span className="flex-none text-[12px] font-semibold text-text-3">{t('projects.unreachable')}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
             </div>
           )}
+
+          {unreachable.length > 0 && (
+            <ProjectsUnreachableSection
+              rows={unreachable}
+              expanded={unreachableOpen}
+              forcedOpen={query.trim().length > 0 || focus === 'unreachable'}
+              visibleRoots={visibleRoots}
+              rowId={rowId}
+              t={t}
+              onExpanded={setUnreachableOpen}
+            />
+          )}
         </div>
+        </>
       )}
     </section>
   )

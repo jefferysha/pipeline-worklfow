@@ -2,5 +2,162 @@
   "version": 1,
   "contract": "openspec-v1",
   "createdAt": "2026-07-30T01:05:17Z",
-  "records": []
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/dashboard-projects-focus-20260730/proposal.md",
+      "sha256": "17521225d77a2ab3fbcd7f56fa0d82e21987514af7e5813d1758db0003ec7218",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-30T01:17:42Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "17521225d77a2ab3fbcd7f56fa0d82e21987514af7e5813d1758db0003ec7218",
+          "readAt": "2026-07-30T01:17:43Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "17521225d77a2ab3fbcd7f56fa0d82e21987514af7e5813d1758db0003ec7218",
+          "readAt": "2026-07-30T01:22:53Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "17521225d77a2ab3fbcd7f56fa0d82e21987514af7e5813d1758db0003ec7218",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/dashboard-projects-focus-20260730/design.md",
+      "sha256": "b8ec698c5c503ed87b8794bef8d7ca49a713f44434f03603e9a013ee5fdadaa9",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-30T01:17:42Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "b8ec698c5c503ed87b8794bef8d7ca49a713f44434f03603e9a013ee5fdadaa9",
+          "readAt": "2026-07-30T01:17:43Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b8ec698c5c503ed87b8794bef8d7ca49a713f44434f03603e9a013ee5fdadaa9",
+          "readAt": "2026-07-30T01:22:53Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b8ec698c5c503ed87b8794bef8d7ca49a713f44434f03603e9a013ee5fdadaa9",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-30-dashboard-projects-focus-20260730-explore.md",
+      "sha256": "fee9041cc42391dbe5021f8c62e20db4fc66049389972d6aaf70610fda8b8acc",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-30T01:17:43Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "fee9041cc42391dbe5021f8c62e20db4fc66049389972d6aaf70610fda8b8acc",
+          "readAt": "2026-07-30T01:22:53Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fee9041cc42391dbe5021f8c62e20db4fc66049389972d6aaf70610fda8b8acc",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/dashboard-projects-focus-20260730/specs/dashboard-ui-ux-system/spec.md",
+      "sha256": "98e24d63936164dae396444113aa4150f893ffab1c0ced6c89f465e2f31572e3",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-30T01:22:23Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "98e24d63936164dae396444113aa4150f893ffab1c0ced6c89f465e2f31572e3",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-30-dashboard-projects-focus.md",
+      "sha256": "422f600a4564bcd7433d0aacc0cbece83d314df23004837b11718b508c957ea5",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T01:22:28Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "422f600a4564bcd7433d0aacc0cbece83d314df23004837b11718b508c957ea5",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-30-dashboard-projects-focus.md",
+      "sha256": "422f600a4564bcd7433d0aacc0cbece83d314df23004837b11718b508c957ea5",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T01:22:34Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "422f600a4564bcd7433d0aacc0cbece83d314df23004837b11718b508c957ea5",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-30-dashboard-projects-focus-design.md",
+      "sha256": "033e08472a127d79d6c8315a4992c71d565ccee2f50883e823623cef3a07eb40",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T01:22:47Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "033e08472a127d79d6c8315a4992c71d565ccee2f50883e823623cef3a07eb40",
+          "readAt": "2026-07-30T01:22:53Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "033e08472a127d79d6c8315a4992c71d565ccee2f50883e823623cef3a07eb40",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-projects-focus-20260730/tasks.md",
+      "sha256": "b90d6c8e8f050b4ec87fcffd2deb6f92f925a4225944141d5be5582bb2e1ba67",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-30T01:42:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b90d6c8e8f050b4ec87fcffd2deb6f92f925a4225944141d5be5582bb2e1ba67",
+          "readAt": "2026-07-30T01:43:37Z",
+          "visitId": "[\"7d978ba5-6f13-4397-81de-679e49e22692\",3]"
+        }
+      ]
+    }
+  ]
 }
