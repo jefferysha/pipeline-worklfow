@@ -1,7 +1,7 @@
 # Applied Spec Receipt
 
-> Change：`frozen-workflow-definition-status-20260730`
-> 应用日期：`2026-07-30`
+> Change：`frozen-workflow-definition-status-20260730`  
+> 应用日期：`2026-07-30`  
 > Producer：`openspec-apply-change`
 
 ## 应用结果

@@ -39,9 +39,9 @@
 
 ## 交付
 
-- [ ] 应用 spec、提交、push，并创建包含固定来源、验证、风险与回滚的非草稿 PR。
-- [ ] 检查远端 PR URL、merge state 和 CI；修复可复现失败。
+- [x] 应用 spec、提交、push，并创建包含固定来源、验证、风险与回滚的非草稿 PR。
+- [x] 检查远端 PR URL、merge state 和 CI；修复可复现失败。
 
 ## 归档
 
-- [ ] 通过 Tenon CLI 完成 applied spec、Ship 与 Archive，并确认 archived canonical state。
+- [x] 通过 Tenon CLI 完成 applied spec、Ship 与 Archive，并确认 archived canonical state。

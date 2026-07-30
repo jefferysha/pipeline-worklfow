@@ -1,8 +1,8 @@
 # Chorus-inspired Orchestration Graph 验证报告
 
-> Change：`frozen-workflow-definition-status-20260730`
-> 冻结构建：`4ac76511be2fbfb55fc822109ac7c48a188657ce`
-> 对比基线：`ef728bf63f6902251e87fb9495a3dfafe10e42b7`
+> Change：`frozen-workflow-definition-status-20260730`  
+> 冻结构建：`4ac76511be2fbfb55fc822109ac7c48a188657ce`  
+> 对比基线：`ef728bf63f6902251e87fb9495a3dfafe10e42b7`  
 > 结论：PASS — Critical 0 / High 0 / Medium 0 / Low 2
 
 ## 结论
