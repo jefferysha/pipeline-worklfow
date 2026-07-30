@@ -364,13 +364,15 @@ may record PASS.
   extraction. The architecture gate then caught WorkflowCanvas at 413 lines;
   moving the overflow observer into the existing positioning hook restored the
   717-file gate, and the affected Progress tests pass 85/85.
-- Production `index-CRRTQLIW.js` passed the complete 21-scene matrix at
-  1024/1440/1920 CSS pixels across zh/en, light/dark and reduced-motion:
-  zero document overflow, alerts, loading residue, console errors and CDP
+- Production `index-CRRTQLIW.js` passed the corrected complete 21-scene matrix
+  using a fixed desktop viewport capture after a 2.6-second per-route settle.
+  At 1024/1440/1920 CSS pixels across zh/en, light/dark and reduced-motion, each
+  scene reports the exact `innerWidth`, desktop navigation and zero document
+  overflow, alerts, route-loading/busy residue, console errors and CDP
   exceptions. Machine has zero heading/badge overlap and one live region; the
   seven-stage track reports its real 1624/1046 overflow; the live 142-node /
   149-edge graph renders only 21 canvas nodes at 532px high while preserving
   the full accessible list.
 - Evidence is stored under
-  `/tmp/tenon-unified-final-dashboard-CRRTQLIW`. A fresh exact-SHA three-track
+  `/tmp/tenon-unified-final-dashboard-736da232-v2`. A fresh exact-SHA three-track
   review is still mandatory before Build freeze.

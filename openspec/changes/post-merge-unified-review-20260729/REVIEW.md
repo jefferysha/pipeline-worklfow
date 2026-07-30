@@ -545,16 +545,19 @@ Architecture initially rejected the 413-line WorkflowCanvas; overflow
 measurement was then extracted into the existing positioning hook module, and
 the 717-file architecture gate plus the 85 affected Progress tests pass.
 
-Production acceptance uses `index-CRRTQLIW.js`. The 21-scene matrix covers all
-seven Dashboard views at 1024/1440/1920 CSS pixels, Chinese/English,
-light/dark, and reduced-motion. Every scene has zero page-level horizontal
-overflow, visible alert, loading residue, console error, or CDP exception.
+Production acceptance uses `index-CRRTQLIW.js`. The corrected 21-scene matrix
+waits 2.6 seconds per route and captures the fixed desktop viewport rather than
+misleading tall full-page images. It covers all seven Dashboard views at
+1024/1440/1920 CSS pixels, Chinese/English, light/dark, and reduced-motion.
+Every scene has the exact requested `innerWidth`, desktop navigation, and zero
+page-level horizontal overflow, visible alert, route loading, busy residue,
+console error, or CDP exception.
 The live seven-stage track is 1624px wide inside a 1046px viewport and exposes
 its labelled hint and `tabIndex=0`. Machine English cards are 354px wide with
 zero heading/badge overlap and exactly one live region. The real All graph has
 142 nodes / 149 edges but renders 21 buttons in a 532px canvas while retaining
 the full accessible list. Evidence is under
-`/tmp/tenon-unified-final-dashboard-CRRTQLIW`.
+`/tmp/tenon-unified-final-dashboard-736da232-v2`.
 
 This section is pre-freeze evidence. A new exact committed SHA must still pass
 all three independent review tracks; no prior PASS is carried forward.
