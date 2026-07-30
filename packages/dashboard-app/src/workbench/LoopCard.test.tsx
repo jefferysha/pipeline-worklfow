@@ -332,9 +332,10 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
   })
 
   it.each([
-    ['halt', '停止后续运行'],
+    ['halt', '停止本轮（兼容值）'],
     ['skip-run', '跳过本次运行'],
     ['pause-loop', '暂停定时任务'],
+    ['halt-round', '停止本轮后续任务'],
   ])('合法超限策略 %s 保留精确值并提供唯一 tab stop', async (policy, label) => {
     rows = [makeRow({ budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: policy, max_tokens_per_day: 100000 } })]
     renderCard()
@@ -681,6 +682,38 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
       root: ROOT,
       id: 'restyle-loop',
       patch: { goal: '保存期间继续编辑的第二版' },
+    }))
+  })
+
+  it('保存期间改回旧基线仍保留为新草稿，reload 后可精确保存第二版', async () => {
+    const originalGoal = '把旧版工单卡样式逐个迁移到 SaaS 卡片风'
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保存中的第一版' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: originalGoal } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue(originalGoal))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: originalGoal },
     }))
   })
 

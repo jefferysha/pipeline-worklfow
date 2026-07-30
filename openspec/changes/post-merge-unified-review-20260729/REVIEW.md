@@ -328,3 +328,38 @@ Two consecutive production builds are byte-identical at CLI
 new exact commit must still pass three independent zero-finding reviews, the
 21-scene production browser matrix and canonical CI before Build can be marked
 complete.
+
+## `67af09a7` final independent review rollback
+
+The exact backend/security, Dashboard/design and release/E2E reviews returned
+**C0/H0/M0/L1**, **C0/H0/M1/L1** and **C0/H1/M1/L1**. The candidate was rejected
+without waivers.
+
+The legacy typed custom-exec ABI now recognizes only the first ordered item as
+the host header. A later Skill stdout chunk may itself begin with either
+`Script failed` or `Script completed` and contain an `Output:` boundary without
+affecting host completion state or stdout extraction. The regression uses the
+stronger header-shaped body rather than a plain status-like line.
+
+Loop save now records every edit made while a POST is in flight as a new field
+revision, including editing `A → B`, saving `B`, then returning to the former
+baseline `A` before the response. The accepted baseline advances to `B` while
+the new local `A` survives reload and is emitted by the second exact patch.
+
+The help disclosure no longer claims tooltip semantics. It retains
+`aria-expanded`/`aria-controls`, closes on Escape with focus restoration, closes
+on outside pointer interaction, and has keyboard regressions. The exceed-policy
+selector now includes the kernel's complete canonical closed set
+`skip-run | pause-loop | halt-round`; the three historical registry aliases
+remain explicitly labeled as compatibility values instead of being confused
+with canonical actions.
+
+Focused Dashboard coverage passes 174/174 and receipt coverage passes 106/106;
+the full Dashboard suite before the final `halt-round` addition passed 74 files /
+1456 tests. Typecheck, the 699-file architecture gate, OpenSpec 35/35, release
+contracts 23/23, dependency, documentation, comment and diff gates pass.
+Two final builds are byte-identical at CLI `db73f080…caf8`, Server
+`e2327b62…a07`, Dashboard HTML `5f6c63ef…12ae`,
+`index-CWPY3rze.js` (`9ac1c983…c52f`) and
+`index-BpQFUzd2.css` (`035dbdd0…bd93`). Exact committed full-suite, independent
+review, browser and CI evidence remain mandatory.

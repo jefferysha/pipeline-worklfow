@@ -39,6 +39,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
   const saveGeneration = useRef(0)
   const levelGeneration = useRef(0)
   const reviewGeneration = useRef(0)
+  const saveInFlight = useRef(false)
   const draftIdentity = useRef('')
   const draftBase = useRef<LoopDraft | null>(null)
   const editRevision = useRef(0)
@@ -53,6 +54,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
     ++levelGeneration.current
     ++reviewGeneration.current
     setSaving(false)
+    saveInFlight.current = false
     setLevelBusy(false)
     setReviewBusy(false)
     setConfirmLevel(null)
@@ -128,7 +130,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
         const equalsBase = Array.isArray(nextValue) && Array.isArray(baseValue)
           ? JSON.stringify(nextValue) === JSON.stringify(baseValue)
           : nextValue === baseValue
-        if (equalsBase) fieldRevisions.current.delete(key)
+        if (equalsBase && !saveInFlight.current) fieldRevisions.current.delete(key)
         else fieldRevisions.current.set(key, ++editRevision.current)
       }
       return next
@@ -146,6 +148,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       (Object.keys(targetPatch) as Array<keyof LoopDraft>)
         .map((key) => [key, fieldRevisions.current.get(key)] as const),
     )
+    saveInFlight.current = true
     setSaving(true)
     setSaveErrors(null)
     setSaveOk(false)
@@ -172,6 +175,7 @@ export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardP
       }
     } finally {
       if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        saveInFlight.current = false
         setSaving(false)
       }
     }

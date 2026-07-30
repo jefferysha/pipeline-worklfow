@@ -107,7 +107,7 @@ describe('ExecutionTimelineComposer', () => {
     expect(help).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(help)
     expect(help).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('tooltip')).toHaveTextContent('这里按真实执行顺序展示')
+    expect(screen.getByTestId('help-popover-content')).toHaveTextContent('这里按真实执行顺序展示')
   })
 
   it('English locale translates the complete execution surface while preserving user stage names', () => {

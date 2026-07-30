@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { CircleHelp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -13,8 +13,27 @@ export function HelpPopover({
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const contentId = useId()
+  const rootRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (event: PointerEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
   return (
-    <span className="relative inline-flex">
+    <span ref={rootRef} className="relative inline-flex">
       <button
         type="button"
         aria-label={label}
@@ -31,7 +50,7 @@ export function HelpPopover({
       {open && (
         <span
           id={contentId}
-          role="tooltip"
+          data-testid="help-popover-content"
           className="absolute top-full left-1/2 z-50 mt-2 w-72 -translate-x-1/2 rounded-xl border border-border bg-card px-3 py-2.5 text-left text-xs font-normal leading-relaxed whitespace-normal text-text-2 shadow-lg"
         >
           {children}

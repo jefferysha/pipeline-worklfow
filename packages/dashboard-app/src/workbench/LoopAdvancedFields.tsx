@@ -26,7 +26,9 @@ import {
 import { LoopScopePreview } from './LoopScopePreview'
 
 const LEVELS = ['L1', 'L2', 'L3'] as const
-const EXCEED_POLICIES = ['skip', 'pause', 'halt', 'skip-run', 'pause-loop'] as const
+// Keep legacy registry values selectable during migration, while exposing the complete
+// canonical admission action set from kernel loops/binding.ts.
+const EXCEED_POLICIES = ['skip', 'pause', 'halt', 'skip-run', 'pause-loop', 'halt-round'] as const
 
 function policyLabel(policy: string, t: ReturnType<typeof useT>['t']): string {
   if (policy === 'skip') return t('workbench.lp_policy_skip')
@@ -34,6 +36,7 @@ function policyLabel(policy: string, t: ReturnType<typeof useT>['t']): string {
   if (policy === 'halt') return t('workbench.lp_policy_halt')
   if (policy === 'skip-run') return t('workbench.lp_policy_skip_run')
   if (policy === 'pause-loop') return t('workbench.lp_policy_pause_loop')
+  if (policy === 'halt-round') return t('workbench.lp_policy_halt_round')
   return t('workbench.lp_policy_custom', { value: policy })
 }
 

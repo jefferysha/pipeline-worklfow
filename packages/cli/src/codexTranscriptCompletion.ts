@@ -39,16 +39,15 @@ function scriptStates(value: unknown): string[] {
 
 function customHostEnvelopeStrings(value: unknown): string[] {
   const values = Array.isArray(value) ? value : [value]
-  return values.flatMap((item) => {
-    const text = typeof item === 'string'
-      ? item
-      : isRecord(item) && item.type === 'input_text'
-        ? asString(item.text)
-        : undefined
-    if (text === undefined || !/^Script (?:completed|failed)(?:\n|$)/.test(text)) return []
-    const boundary = text.indexOf('\nOutput:\n')
-    return boundary === -1 ? [] : [text.slice(0, boundary)]
-  })
+  const item = values[0]
+  const text = typeof item === 'string'
+    ? item
+    : isRecord(item) && item.type === 'input_text'
+      ? asString(item.text)
+      : undefined
+  if (text === undefined || !/^Script (?:completed|failed)(?:\n|$)/.test(text)) return []
+  const boundary = text.indexOf('\nOutput:\n')
+  return boundary === -1 ? [] : [text.slice(0, boundary)]
 }
 
 export function successfulFunctionOutput(value: unknown): boolean {

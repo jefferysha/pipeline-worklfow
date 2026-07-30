@@ -35246,12 +35246,11 @@ function scriptStates(value) {
 }
 function customHostEnvelopeStrings(value) {
   const values = Array.isArray(value) ? value : [value];
-  return values.flatMap((item2) => {
-    const text2 = typeof item2 === "string" ? item2 : isRecord10(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
-    if (text2 === void 0 || !/^Script (?:completed|failed)(?:\n|$)/.test(text2)) return [];
-    const boundary = text2.indexOf("\nOutput:\n");
-    return boundary === -1 ? [] : [text2.slice(0, boundary)];
-  });
+  const item2 = values[0];
+  const text2 = typeof item2 === "string" ? item2 : isRecord10(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
+  if (text2 === void 0 || !/^Script (?:completed|failed)(?:\n|$)/.test(text2)) return [];
+  const boundary = text2.indexOf("\nOutput:\n");
+  return boundary === -1 ? [] : [text2.slice(0, boundary)];
 }
 function successfulFunctionOutput(value) {
   if (scriptStates(value).includes("failed")) return false;

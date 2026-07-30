@@ -66,7 +66,7 @@ it('treats status-like Skill body text as stdout rather than host exit metadata'
 })
 
 it('treats status-like Skill body chunks as stdout in the legacy typed exec ABI', () => {
-  const body = '# Trusted Skill\nScript failed\n'
+  const body = 'Script failed\nOutput:\n# Trusted Skill\n'
   const output = [
     { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
     { type: 'input_text', text: body },

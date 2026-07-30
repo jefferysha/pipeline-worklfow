@@ -7,13 +7,18 @@ describe('HelpPopover', () => {
     render(<HelpPopover label="阶段帮助">真实执行顺序说明</HelpPopover>)
     const trigger = screen.getByRole('button', { name: '阶段帮助' })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(screen.queryByTestId('help-popover-content')).toBeNull()
 
     fireEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('tooltip')).toHaveTextContent('真实执行顺序说明')
+    expect(screen.getByTestId('help-popover-content')).toHaveTextContent('真实执行顺序说明')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('help-popover-content')).toBeNull()
+    expect(trigger).toHaveFocus()
 
     fireEvent.click(trigger)
-    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByTestId('help-popover-content')).toBeNull()
   })
 })

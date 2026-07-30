@@ -775,7 +775,7 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     expect(help).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(help)
     expect(help).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('tooltip')).toHaveTextContent('轨道是项目级运行配置')
+    expect(screen.getByTestId('help-popover-content')).toHaveTextContent('轨道是项目级运行配置')
   })
 
   it('运行时 registry 未返回前显示加载态，不先闪出任何手抄轨道', async () => {
