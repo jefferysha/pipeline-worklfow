@@ -25,9 +25,17 @@
 
 ## 验证
 
-- [ ] 运行受影响 server/web 定向测试、typecheck:web、test:web、build:web/build、npm test。
-- [ ] 在真实 production Dashboard 完成 1024/1440/1920 成功/失败/空态、中英文和键盘验收。
+- [x] 运行受影响 server/web 定向测试、typecheck:web、test:web、build:web/build、npm test。
+- [x] 在真实 production Dashboard 完成 1024/1440/1920 成功/失败/空态、中英文和键盘验收。
 - [ ] 完成 Verify 多轨审查、修复发现并冻结通过基线。
+
+## 第一轮 Verify 返工
+
+- [x] 将全新 `frozen-workflow-definition-status` delta 修正为 `ADDED Requirements`，同步 proposal/design/ADR/plan。
+- [x] 用 RED 测试约束目标 Change 零写入直读、稳定 error code、唯一 transition edge 与空 label fallback。
+- [x] 用 RED 测试约束有向/相邻边详情、闭集双语以及可辨 focus/selection/filter 状态。
+- [x] 拒绝 Change/canonical/legacy state symlink 逃逸，并闭合 coverage/metadata/status 与有界错误。
+- [x] 重跑全量生成物、静态、测试、OpenSpec 隔离应用与真实 production Dashboard 验收。
 
 ## 交付
 

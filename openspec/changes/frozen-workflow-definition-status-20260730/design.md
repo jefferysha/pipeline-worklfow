@@ -2,8 +2,9 @@
 
 ## 已验证设计
 
-- Server 以现有 `ChangeSnapshot` 为唯一图源，纯函数投影稳定 node/edge id；路由只接受已注册 root
-  和合法 Change，并复用现有 snapshot 构建与 workflow definition 安全比较。
+- Server 以目标 Change 的 canonical state、安全 workflow reader 和既有 evidence readers 为图源，
+  纯函数投影稳定 node/edge id；路由显式要求 registered root 与合法 Change，不通过全局 snapshot
+  扫描读取单一 Change，也不触发 projection repair。
 - `tenon-orchestration-graph/v1` 是独立只读协议。节点闭集为
   `workflow | change | phase | task | document | review | session`，边闭集为
   `governs | contains | transitions | produces | reviews | executes`。
@@ -11,6 +12,8 @@
   plan 仍是阶段、边、任务和 readiness 的执行真相。
 - Dashboard 使用确定性分层布局，不使用随机 force simulation；搜索与类型过滤只改变可见集，
   不改变服务端图。节点选择显示元数据；边详情和语义列表提供图形之外的等价阅读路径。
+- transition edge id 包含 event/稳定 discriminator；合法空 phase label 回退到 phase id；
+  v1 status、error code、metadata/deferred token 都使用闭集，Dashboard 可严格解码与本地化。
 - 协议显式声明 `implemented` 与 `deferred` 能力。`agent`、历史 session/turn、acceptance criteria、
   可写编排和实时 graph SSE 在本轮为 deferred，前端不得暗示已加载。
 
@@ -21,13 +24,21 @@
 - 文档路径、错误原文或 session 标识可能泄露宿主信息；节点只保留文档 kind/status/producer，
   session id 只做截断展示，API 不返回文档绝对路径。
 - 大量 task/document 节点可能挤压详情面板；本轮使用有界滚动、过滤与搜索，后续再做虚拟化。
+- 单 Change endpoint 若复用全局 snapshot 会越界扫描并可能修复 projection；必须使用目标直读，
+  但目标直读仍须复用 registered-root inode anchor，逐层拒绝 `openspec/changes/<change>`、
+  `.pipeline-run`、revisions/review/transition 父目录和 legacy state 叶子的 symlink，并在读取前后
+  复核 realpath/inode。将不存在、损坏、scope 无效和 endpoint unavailable 分成稳定错误 code，
+  响应不得回显底层路径或原始 trusted-fs 错误。
 
 ## 待验证问题
 
 - 浏览器验收必须覆盖真实 production Dashboard 身份、成功/加载/错误/真实空/过滤空、双语、
   1024/1440/1920 和完整键盘路径。
 - Verify 必须证明图端点无写操作、非法 root/change fail closed、严格 decoder 拒绝未知节点/边/
-  悬空边，definition drift 不改变 readiness。
+  悬空边/status、合法重复目标 transition 与空 phase label 可 round-trip，definition drift 不改变
+  readiness。
+- 浏览器必须验证中英文 phase/review/metadata/deferred/status、边方向/类型/相邻详情，以及不依赖
+  低对比颜色的 focus/selection/filter 状态。
 
 ## Explore 结论
 

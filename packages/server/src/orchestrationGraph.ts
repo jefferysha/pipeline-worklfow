@@ -58,13 +58,20 @@ function short(value: string | null): string {
   return value === null ? '' : value.slice(0, 12)
 }
 
+function canonicalTimestamp(value: string): string {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value
+}
+
 function edge(
   kind: OrchestrationEdgeKind,
   source: string,
   target: string,
   label: string,
+  discriminator?: string,
 ): OrchestrationEdge {
-  return { id: `${kind}:${source}:${target}`, kind, source, target, label }
+  const suffix = discriminator === undefined ? '' : `:${encodeURIComponent(discriminator)}`
+  return { id: `${kind}:${source}:${target}${suffix}`, kind, source, target, label }
 }
 
 export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): OrchestrationGraph {
@@ -85,7 +92,7 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     id: changeId,
     kind: 'change',
     label: change.name,
-    status: change.phase_status || change.phase,
+    status: change.phase_status || 'pending',
     metadata: [
       { key: 'phase', value: change.phase },
       { key: 'track', value: change.track || 'unknown' },
@@ -103,7 +110,7 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     nodes.push({
       id,
       kind: 'phase',
-      label: change.workflowRules.labelByStep[step] ?? step,
+      label: change.workflowRules.labelByStep[step] || step,
       status,
       metadata: [
         { key: 'phase_id', value: step },
@@ -119,7 +126,9 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     if (!phaseIds.has(source)) continue
     for (const transition of transitions) {
       const target = `phase:${transition.to}`
-      if (phaseIds.has(target)) edges.push(edge('transitions', source, target, transition.event))
+      if (phaseIds.has(target)) {
+        edges.push(edge('transitions', source, target, transition.event, transition.event))
+      }
     }
   }
 
@@ -158,18 +167,18 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
   }
 
   const reviewFields = [
-    ['pre_verify_review_result', 'Pre-verify review'],
-    ['agent_review_result', 'Agent review'],
-    ['codex_review_result', 'Codex review'],
+    'pre_verify_review_result',
+    'agent_review_result',
+    'codex_review_result',
   ] as const
-  for (const [field, label] of reviewFields) {
+  for (const field of reviewFields) {
     const status = valueOf(change, field)
     if (status === '') continue
     const id = `review:${field}`
     nodes.push({
       id,
       kind: 'review',
-      label,
+      label: field,
       status,
       metadata: [{ key: 'field', value: field }],
     })
@@ -185,8 +194,8 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
       label: `Session ${change.terminalActivity.sessionId.slice(0, 8)}`,
       status: 'active',
       metadata: [
-        { key: 'heartbeat_at', value: change.terminalActivity.heartbeatAt },
-        { key: 'expires_at', value: change.terminalActivity.expiresAt },
+        { key: 'heartbeat_at', value: canonicalTimestamp(change.terminalActivity.heartbeatAt) },
+        { key: 'expires_at', value: canonicalTimestamp(change.terminalActivity.expiresAt) },
       ],
     })
     edges.push(edge('executes', id, changeId, 'executes'))

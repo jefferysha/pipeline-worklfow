@@ -33,6 +33,33 @@ npm run test:web -- packages/dashboard-app/src/api/orchestrationGraphClient.test
 
 **子阶段边界：此处建议 /clear**
 
+## 子阶段 4：第一轮 Verify 返工
+
+1. 先为缺失 root、canonical corruption、目标 Change 直读零写入、重复目标 transition、
+   空 phase label 和 v1 status/error code 闭集补 RED 测试，再最小修改 Server projector/route
+   与 strict client。
+2. 为 arrow/type/edge label、incoming/outgoing detail、本地化 phase/review/metadata/deferred、
+   可辨 focus/selection/pressed filter 补组件 RED 测试，再拆出纯展示 helper 并最小修复。
+3. 重建 Dashboard/Server dist，运行定向与全量矩阵；在隔离副本证明两个 ADDED capability
+   可由 OpenSpec archive/apply。
+4. 启动独立 production Dashboard，在 1024/1440/1920 重验所有状态、双语、对比度、键盘和
+   语义列表；随后重新完成 pre-Verify review、冻结新 SHA 并从零执行 Verify 四轨。
+
+验证：
+
+```bash
+npm test -- packages/server/src/orchestrationGraph.test.ts packages/server/src/serverOrchestrationGraphRoutes.test.ts packages/server/src/server.test.ts
+npm run test:web -- packages/dashboard-app/src/api/orchestrationGraphClient.test.tsx packages/dashboard-app/src/shared/OrchestrationGraphCard.test.tsx
+npm run typecheck:web
+npm run test:web
+npm test
+npm run build
+```
+
+回滚：仍为单提交 revert；没有 migration、canonical schema 或写 API。
+
+**子阶段边界：此处建议 /clear**
+
 ## 子阶段 2：交互、状态、i18n 与安全闭环
 
 1. 以 TDD 补齐稳定排序、文档路径不泄露、review/session 可选节点、非法 scope 和 definition

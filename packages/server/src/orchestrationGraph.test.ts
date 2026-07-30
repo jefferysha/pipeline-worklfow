@@ -120,4 +120,58 @@ describe('buildOrchestrationGraph', () => {
     expect(graph.nodes.some((node) => ['task', 'document', 'review', 'session'].includes(node.kind))).toBe(false)
     expect(graph.coverage.deferred).toContain('agent')
   })
+
+  it('canonicalizes kernel-accepted session timestamps at the graph contract boundary', () => {
+    const fixture = changeFixture()
+    fixture.terminalActivity = {
+      ...fixture.terminalActivity!,
+      heartbeatAt: 'Thu, 30 Jul 2026 00:00:00 GMT',
+      expiresAt: '2026-07-30T00:01:00+00:00',
+    }
+    const graph = buildOrchestrationGraph({
+      root: '/repo',
+      change: fixture,
+      definition: {
+        schema: 'workflow-definition-status/v1',
+        workflow: 'default',
+        status: 'current',
+        frozen_fingerprint: 'a'.repeat(64),
+        current_fingerprint: 'a'.repeat(64),
+      },
+    })
+
+    expect(graph.nodes.find((node) => node.kind === 'session')?.metadata).toEqual([
+      { key: 'heartbeat_at', value: '2026-07-30T00:00:00.000Z' },
+      { key: 'expires_at', value: '2026-07-30T00:01:00.000Z' },
+    ])
+  })
+
+  it('keeps transition ids unique for distinct events with the same endpoints and falls back empty labels', () => {
+    const fixture = changeFixture()
+    fixture.workflowRules.steps = ['open', 'verify']
+    fixture.workflowRules.labelByStep = { open: '', verify: 'Verify' }
+    fixture.workflowRules.transitions = {
+      open: [
+        { event: 'accept', to: 'verify' },
+        { event: 'skip', to: 'verify' },
+      ],
+      verify: [],
+    }
+    const graph = buildOrchestrationGraph({
+      root: '/repo',
+      change: fixture,
+      definition: {
+        schema: 'workflow-definition-status/v1',
+        workflow: 'default',
+        status: 'current',
+        frozen_fingerprint: 'a'.repeat(64),
+        current_fingerprint: 'a'.repeat(64),
+      },
+    })
+
+    const transitions = graph.edges.filter((edge) => edge.kind === 'transitions')
+    expect(transitions).toHaveLength(2)
+    expect(new Set(transitions.map((edge) => edge.id))).toHaveLength(2)
+    expect(graph.nodes.find((node) => node.id === 'phase:open')?.label).toBe('open')
+  })
 })

@@ -29,10 +29,7 @@ Review 生命周期并不是同一个数据模型，不能直接复制或假装 
 ### New Capabilities
 
 - `orchestration-graph`
-
-### Modified Capabilities
-
-- `frozen-workflow-definition-status`：保留现有严格比较器和安全读取，但将其消费面并入 graph
+- `frozen-workflow-definition-status`：新增严格比较器和安全读取，并将其消费面并入 graph
   workflow node。
 
 ## Impact

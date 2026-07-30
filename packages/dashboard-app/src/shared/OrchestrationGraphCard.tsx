@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronRight, RefreshCw, Search, X } from 'lucide-react'
 import {
   fetchOrchestrationGraph,
+  OrchestrationGraphApiError,
   ORCHESTRATION_NODE_KINDS,
   type OrchestrationGraph,
   type OrchestrationNode,
@@ -9,74 +10,28 @@ import {
 } from '../api/orchestrationGraphClient'
 import { ApiError } from '../api/transport'
 import { useT } from '../i18n'
+import {
+  compareNodes,
+  deferredLabel,
+  edgeLabel,
+  graphLayout,
+  metadataLabel,
+  metadataValue,
+  nodeLabel,
+  statusLabel,
+  toneByKind,
+  toggledKinds,
+  usesBuiltinPhaseLabels,
+} from './orchestrationGraphPresentation'
+import { OrchestrationGraphEdge } from './OrchestrationGraphEdge'
 
-interface OrchestrationGraphCardProps {
-  readonly root: string
-  readonly change: string
-}
+interface OrchestrationGraphCardProps { readonly root: string; readonly change: string }
 
 type LoadState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly graph: OrchestrationGraph }
   | { readonly kind: 'unavailable' }
   | { readonly kind: 'error' }
-
-const layerByKind: Record<OrchestrationNodeKind, number> = {
-  workflow: 0,
-  change: 1,
-  phase: 2,
-  task: 3,
-  document: 3,
-  review: 3,
-  session: 3,
-}
-
-const toneByKind: Record<OrchestrationNodeKind, string> = {
-  workflow: 'border-blue-b bg-blue-t',
-  change: 'border-green-b bg-green-t',
-  phase: 'border-border-2 bg-card',
-  task: 'border-green-b bg-green-t',
-  document: 'border-amb-b bg-amb-t',
-  review: 'border-red-b bg-red-t',
-  session: 'border-blue-b bg-blue-t',
-}
-
-function compareNodes(a: OrchestrationNode, b: OrchestrationNode): number {
-  const layer = layerByKind[a.kind] - layerByKind[b.kind]
-  if (layer !== 0) return layer
-  if (a.kind === 'phase' && b.kind === 'phase') {
-    const aOrder = Number(a.metadata.find((item) => item.key === 'order')?.value ?? Number.MAX_SAFE_INTEGER)
-    const bOrder = Number(b.metadata.find((item) => item.key === 'order')?.value ?? Number.MAX_SAFE_INTEGER)
-    if (aOrder !== bOrder) return aOrder - bOrder
-  }
-  return a.id.localeCompare(b.id)
-}
-
-function layout(nodes: readonly OrchestrationNode[]): {
-  readonly positions: Map<string, { x: number; y: number }>
-  readonly height: number
-  readonly width: number
-} {
-  const columns = new Map<number, OrchestrationNode[]>()
-  for (const node of nodes) {
-    const layer = layerByKind[node.kind]
-    columns.set(layer, [...(columns.get(layer) ?? []), node])
-  }
-  const positions = new Map<string, { x: number; y: number }>()
-  let maxRows = 1
-  for (const [column, items] of columns) {
-    const sorted = [...items].sort(compareNodes)
-    const spread = column === 3 ? Math.min(3, sorted.length) : 1
-    maxRows = Math.max(maxRows, Math.ceil(sorted.length / spread))
-    sorted.forEach((node, index) => positions.set(node.id, {
-      x: 12 + (column + (column === 3 ? index % spread : 0)) * 168,
-      y: 14 + Math.floor(index / spread) * 72,
-    }))
-  }
-  const resourceCount = columns.get(3)?.length ?? 0
-  const width = resourceCount === 0 ? 680 : 680 + (Math.min(3, resourceCount) - 1) * 168
-  return { positions, height: Math.max(94, 28 + maxRows * 72), width }
-}
 
 export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardProps): JSX.Element {
   const { t } = useT()
@@ -101,7 +56,10 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
       })
       .catch((error: unknown) => {
         if (requestId.current !== id || controller.signal.aborted) return
-        setState(error instanceof ApiError && error.status === 404
+        const oldServer404 = error instanceof ApiError
+          && error.status === 404
+          && (!(error instanceof OrchestrationGraphApiError) || error.code === undefined)
+        setState(oldServer404
           ? { kind: 'unavailable' }
           : { kind: 'error' })
       })
@@ -109,41 +67,44 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
   }, [attempt, change, root])
 
   const graph = state.kind === 'ready' ? state.graph : null
+  const localizeBuiltinPhaseIds = usesBuiltinPhaseLabels(graph)
+  const renderNodeLabel = (node: OrchestrationNode): string =>
+    nodeLabel(node, t, localizeBuiltinPhaseIds)
   const visibleNodes = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
     return (graph?.nodes ?? [])
       .filter((node) => kinds.size === 0 || kinds.has(node.kind))
-      .filter((node) => needle === '' || node.label.toLocaleLowerCase().includes(needle))
+      .filter((node) => needle === '' || renderNodeLabel(node).toLocaleLowerCase().includes(needle))
       .sort(compareNodes)
-  }, [graph, kinds, query])
+  }, [graph, kinds, localizeBuiltinPhaseIds, query, t])
   const visibleIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes])
   const visibleEdges = (graph?.edges ?? []).filter((edge) =>
     visibleIds.has(edge.source) && visibleIds.has(edge.target))
   const selected = visibleIds.has(selectedId ?? '')
     ? graph?.nodes.find((node) => node.id === selectedId) ?? null
     : null
-  const graphLayout = useMemo(() => layout(visibleNodes), [visibleNodes])
-
-  function statusLabel(status: string | null): string {
-    if (status === null) return ''
-    const known = [
-      'current', 'changed', 'missing', 'invalid', 'unavailable', 'done', 'pending',
-      'active', 'pass', 'fail', 'in_progress',
-      'recorded', 'unread', 'stale',
-    ]
-    return known.includes(status) ? t(`detail.orchestration_graph.status_${status}`) : status
+  const selectedEdges = selected === null ? [] : (graph?.edges ?? [])
+    .filter((edge) => edge.source === selected.id || edge.target === selected.id)
+  const layout = useMemo(() => graphLayout(visibleNodes), [visibleNodes])
+  const nodeById = useMemo(
+    () => new Map((graph?.nodes ?? []).map((node) => [node.id, node])),
+    [graph],
+  )
+  const edgeKinds = [...new Set(visibleEdges.map((edge) => edge.kind))]
+  const labelForId = (id: string): string => {
+    const node = nodeById.get(id)
+    return node === undefined ? id : renderNodeLabel(node)
   }
-
+  const displayMetadataValue = (key: string, value: string): string => {
+    if (key === 'phase' || key === 'phase_id') {
+      const phase = nodeById.get(`phase:${value}`)
+      if (phase !== undefined) return renderNodeLabel(phase)
+    }
+    return metadataValue(key, value, t)
+  }
   function toggleKind(kind: OrchestrationNodeKind): void {
-    setKinds((current) => {
-      if (current.size === 0) return new Set([kind])
-      const next = new Set(current)
-      if (next.has(kind)) next.delete(kind)
-      else next.add(kind)
-      return next
-    })
+    setKinds((current) => toggledKinds(current, kind))
   }
-
   function onNodeKeyDown(event: KeyboardEvent<HTMLButtonElement>, node: OrchestrationNode): void {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -202,7 +163,7 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
           <span className="text-xs text-red-d">{t('detail.orchestration_graph.error')}</span>
           <button
             type="button"
-            className="rounded-md border border-red-b bg-card px-2.5 py-1 text-xs font-semibold text-red-d outline-none hover:bg-red-t focus-visible:shadow-[0_0_0_3px_var(--ring-blue)]"
+            className="rounded-md border border-red-b bg-card px-2.5 py-1 text-xs font-semibold text-red-d outline-none hover:bg-red-t focus-visible:ring-2 focus-visible:ring-(--accent)"
             onClick={() => setAttempt((value) => value + 1)}
           >
             {t('detail.orchestration_graph.retry')}
@@ -216,13 +177,14 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
             <button
               type="button"
               aria-pressed={kinds.size === 0}
-              className={`rounded-full border px-2 py-1 text-[11px] font-semibold outline-none focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] ${
+              className={`rounded-full border px-2 py-1 text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-(--accent) ${
                 kinds.size === 0
                   ? 'border-blue-b bg-blue-t text-blue-d'
                   : 'border-border bg-card text-text-3 hover:bg-fill'
               }`}
               onClick={() => setKinds(new Set())}
             >
+              <span aria-hidden="true">{kinds.size === 0 ? '✓ ' : ''}</span>
               {t('detail.orchestration_graph.kind_all')}
             </button>
             {ORCHESTRATION_NODE_KINDS.map((kind) => (
@@ -230,17 +192,18 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                 key={kind}
                 type="button"
                 aria-pressed={kinds.size === 0 || kinds.has(kind)}
-                className={`rounded-full border px-2 py-1 text-[11px] font-semibold outline-none focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] ${
+                className={`rounded-full border px-2 py-1 text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-(--accent) ${
                   kinds.size === 0 || kinds.has(kind)
                     ? 'border-blue-b bg-blue-t text-blue-d'
                     : 'border-border bg-card text-text-3 hover:bg-fill'
                 }`}
                 onClick={() => toggleKind(kind)}
               >
+                <span aria-hidden="true">{kinds.size === 0 || kinds.has(kind) ? '✓ ' : ''}</span>
                 {t(`detail.orchestration_graph.kind_${kind}`)}
               </button>
             ))}
-            <label className="ml-auto flex min-w-[190px] flex-1 items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5 focus-within:shadow-[0_0_0_3px_var(--ring-blue)]">
+            <label className="ml-auto flex min-w-[190px] flex-1 items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5 focus-within:ring-2 focus-within:ring-(--accent)">
               <Search className="size-3.5 text-text-3" aria-hidden="true" />
               <span className="sr-only">{t('detail.orchestration_graph.search_label')}</span>
               <input
@@ -262,29 +225,39 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
               {t('detail.orchestration_graph.filtered_empty')}
             </p>
           ) : (
-            <div className="max-h-[520px] overflow-auto rounded-xl border border-border bg-fill/30" aria-label={t('detail.orchestration_graph.canvas')}>
-              <div className="relative" style={{ height: graphLayout.height, minWidth: graphLayout.width }}>
+            <>
+              <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-text-2" aria-label={t('detail.orchestration_graph.edge_legend')}>
+                {edgeKinds.map((kind) => (
+                  <span key={kind}><span aria-hidden="true">—›</span> {t(`detail.orchestration_graph.edge_${kind}`)}</span>
+                ))}
+              </div>
+              <div className="max-h-[520px] overflow-auto rounded-xl border border-border bg-fill/30" aria-label={t('detail.orchestration_graph.canvas')}>
+              <div className="relative" style={{ height: layout.height, minWidth: layout.width }}>
                 <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
+                  <defs>
+                    <marker id="orchestration-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-3)" />
+                    </marker>
+                  </defs>
                   {visibleEdges.map((edge) => {
-                    const source = graphLayout.positions.get(edge.source)
-                    const target = graphLayout.positions.get(edge.target)
+                    const source = layout.positions.get(edge.source)
+                    const target = layout.positions.get(edge.target)
                     if (source === undefined || target === undefined) return null
                     return (
-                      <line
+                      <OrchestrationGraphEdge
                         key={edge.id}
-                        x1={source.x + 138}
-                        y1={source.y + 23}
-                        x2={target.x}
-                        y2={target.y + 23}
-                        stroke="var(--border-2)"
-                        strokeWidth="1.5"
+                        edge={edge}
+                        source={source}
+                        target={target}
+                        t={t}
                       />
                     )
                   })}
                 </svg>
                 {visibleNodes.map((node) => {
-                  const position = graphLayout.positions.get(node.id)
+                  const position = layout.positions.get(node.id)
                   if (position === undefined) return null
+                  const label = renderNodeLabel(node)
                   return (
                     <button
                       key={node.id}
@@ -294,35 +267,35 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                       }}
                       type="button"
                       aria-pressed={selectedId === node.id}
-                      aria-label={`${node.label} · ${t(`detail.orchestration_graph.kind_${node.kind}`)}${node.status === null ? '' : ` · ${statusLabel(node.status)}`}`}
-                      className={`absolute w-[140px] rounded-lg border px-2.5 py-2 text-left outline-none transition-shadow hover:shadow-sm focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] motion-reduce:transition-none ${toneByKind[node.kind]} ${
-                        selectedId === node.id ? 'shadow-[0_0_0_2px_var(--blue)]' : ''
-                      }`}
+                      aria-label={`${label} · ${t(`detail.orchestration_graph.kind_${node.kind}`)}${node.status === null ? '' : ` · ${statusLabel(node.status, t)}`}`}
+                      className={`absolute w-[140px] rounded-lg border px-2.5 py-2 text-left outline-none transition-shadow hover:shadow-sm focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card aria-pressed:border-(--accent) aria-pressed:ring-2 aria-pressed:ring-(--accent) aria-pressed:ring-offset-2 aria-pressed:ring-offset-card motion-reduce:transition-none ${toneByKind[node.kind]}`}
                       style={{ left: position.x, top: position.y }}
                       onClick={() => setSelectedId(node.id)}
                       onKeyDown={(event) => onNodeKeyDown(event, node)}
                     >
-                      <span className="block truncate text-[11.5px] font-semibold text-text">{node.label}</span>
+                      {selectedId === node.id && <span className="absolute top-1 right-1 text-accent-d" aria-hidden="true">✓</span>}
+                      <span className="block truncate pr-3 text-[11.5px] font-semibold text-text">{label}</span>
                       <span className="mt-0.5 block truncate text-[10px] text-text-3">
                         {t(`detail.orchestration_graph.kind_${node.kind}`)}
-                        {node.status === null ? '' : ` · ${statusLabel(node.status)}`}
+                        {node.status === null ? '' : ` · ${statusLabel(node.status, t)}`}
                       </span>
                     </button>
                   )
                 })}
               </div>
             </div>
+            </>
           )}
 
           {selected !== null && (
             <div className="mt-2.5 rounded-lg border border-blue-b bg-blue-t px-3 py-2.5" data-testid="orchestration-selection">
               <div className="flex items-baseline justify-between gap-3">
-                <strong className="text-xs text-text">{selected.label}</strong>
+                <strong className="text-xs text-text">{renderNodeLabel(selected)}</strong>
                 <div className="flex items-center gap-2">
                   <span className="text-[10.5px] text-blue-d">{t(`detail.orchestration_graph.kind_${selected.kind}`)}</span>
                   <button
                     type="button"
-                    className="rounded p-0.5 text-text-3 outline-none hover:bg-card focus-visible:shadow-[0_0_0_3px_var(--ring-blue)]"
+                    className="rounded p-0.5 text-text-3 outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-(--accent)"
                     aria-label={t('detail.orchestration_graph.clear_selection')}
                     onClick={() => setSelectedId(null)}
                   >
@@ -330,22 +303,45 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                   </button>
                 </div>
               </div>
-              {selected.status !== null && <p className="mt-1 mb-0 text-xs text-text-2">{statusLabel(selected.status)}</p>}
+              {selected.status !== null && <p className="mt-1 mb-0 text-xs text-text-2">{statusLabel(selected.status, t)}</p>}
               {selected.metadata.length > 0 && (
                 <dl className="mt-2 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
                   {selected.metadata.map((item) => (
                     <div key={item.key} className="contents">
-                      <dt className="text-text-3">{item.key}</dt>
-                      <dd className="m-0 truncate font-mono text-text-2">{item.value}</dd>
+                      <dt className="text-text-3">{metadataLabel(item.key, t)}</dt>
+                      <dd className="m-0 truncate text-text-2">{displayMetadataValue(item.key, item.value)}</dd>
                     </div>
                   ))}
                 </dl>
+              )}
+              {selectedEdges.length > 0 && (
+                <div className="mt-2 grid gap-2 text-[11px] sm:grid-cols-2">
+                  {(['incoming', 'outgoing'] as const).map((direction) => {
+                    const edges = selectedEdges.filter((edge) =>
+                      direction === 'incoming' ? edge.target === selected.id : edge.source === selected.id)
+                    return (
+                      <div key={direction}>
+                        <h4 className="m-0 font-semibold text-text-3">{t(`detail.orchestration_graph.${direction}`)}</h4>
+                        {edges.length === 0 ? (
+                          <p className="mt-1 mb-0 text-text-3">{t('detail.orchestration_graph.no_edges')}</p>
+                        ) : (
+                          <ul className="mt-1 mb-0 space-y-1 pl-4 text-text-2">
+                            {edges.map((edge) => {
+                              const peer = nodeById.get(direction === 'incoming' ? edge.source : edge.target)
+                              return <li key={edge.id}>{edgeLabel(edge, t)} · {peer === undefined ? '?' : renderNodeLabel(peer)}</li>
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}
 
           <details className="group mt-2.5 rounded-lg border border-border bg-card">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-text-2 outline-none focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-text-2 outline-none focus-visible:ring-2 focus-visible:ring-(--accent) [&::-webkit-details-marker]:hidden">
               <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
               {t('detail.orchestration_graph.accessible_list')}
             </summary>
@@ -354,7 +350,7 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                 <h4 className="m-0 text-[11px] font-bold text-text-3">{t('detail.orchestration_graph.nodes')}</h4>
                 <ul className="mt-1.5 mb-0 space-y-1 pl-4 text-text-2">
                   {visibleNodes.map((node) => (
-                    <li key={node.id}>{node.label} · {t(`detail.orchestration_graph.kind_${node.kind}`)}</li>
+                    <li key={node.id}>{renderNodeLabel(node)} · {t(`detail.orchestration_graph.kind_${node.kind}`)}</li>
                   ))}
                 </ul>
               </div>
@@ -362,7 +358,9 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                 <h4 className="m-0 text-[11px] font-bold text-text-3">{t('detail.orchestration_graph.edges')}</h4>
                 <ul className="mt-1.5 mb-0 space-y-1 pl-4 text-text-2">
                   {visibleEdges.map((edge) => (
-                    <li key={edge.id}>{t(`detail.orchestration_graph.edge_${edge.kind}`)}: {edge.source} → {edge.target}</li>
+                    <li key={edge.id}>
+                      {edgeLabel(edge, t)}: {labelForId(edge.source)} → {labelForId(edge.target)}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -371,7 +369,9 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
 
           {graph.coverage.deferred.length > 0 && (
             <p className="mt-2 mb-0 text-[11px] leading-[1.5] text-text-3">
-              {t('detail.orchestration_graph.deferred', { items: graph.coverage.deferred.join(' · ') })}
+              {t('detail.orchestration_graph.deferred', {
+                items: graph.coverage.deferred.map((item) => deferredLabel(item, t)).join(' · '),
+              })}
             </p>
           )}
         </>

@@ -1,20 +1,16 @@
-import { join } from 'node:path'
+import type { PipelineState } from '@tenon/kernel'
 import {
-  builtinWorkflow,
-  compileWorkflow,
-  resolveEffectiveWorkflowPlan,
-  type PipelineState,
-} from '@tenon/kernel'
-import {
-  assertWorkflowRootAnchor,
-  readWorkflowForApi,
-  WorkflowNotFoundError,
+  WorkflowPathError,
   type WorkflowRootAnchor,
 } from './workflows.js'
 import {
   projectWorkflowDefinitionStatus,
   type WorkflowDefinitionCurrent,
 } from './workflowDefinitionStatus.js'
+import { ContextBundlePathError } from './contextBundlePreviewSupport.js'
+import { readCurrentWorkflowDefinition } from './workflowDefinitionReader.js'
+
+export { readCurrentWorkflowDefinition } from './workflowDefinitionReader.js'
 
 type WorkflowRootCheck =
   | { readonly ok: true; readonly anchor: WorkflowRootAnchor }
@@ -22,8 +18,7 @@ type WorkflowRootCheck =
 
 export interface WorkflowDefinitionStatusRouteDeps {
   readonly workflowRootForRequest: (root: string) => WorkflowRootCheck
-  readonly stateStorageExists: (changeDir: string) => boolean
-  readonly readState: (changeDir: string) => Promise<PipelineState>
+  readonly readChangeState: (anchor: WorkflowRootAnchor, change: string) => Promise<PipelineState | null>
   readonly readCurrent: (anchor: WorkflowRootAnchor, workflow: string) => WorkflowDefinitionCurrent
 }
 
@@ -34,24 +29,6 @@ export interface WorkflowDefinitionStatusRouteResult {
 
 function isChangeName(name: string): boolean {
   return name !== '' && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes('..')
-}
-
-export function readCurrentWorkflowDefinition(
-  anchor: WorkflowRootAnchor,
-  workflow: string,
-): WorkflowDefinitionCurrent {
-  try {
-    assertWorkflowRootAnchor(anchor)
-    const plan = resolveEffectiveWorkflowPlan(workflow, (name) => {
-      const definition = builtinWorkflow(name) ?? readWorkflowForApi(anchor, name)
-      return compileWorkflow(definition)
-    })
-    if (plan === null) return { kind: 'missing' }
-    assertWorkflowRootAnchor(anchor)
-    return { kind: 'current', fingerprint: plan.workflowFingerprint }
-  } catch (error) {
-    return error instanceof WorkflowNotFoundError ? { kind: 'missing' } : { kind: 'invalid' }
-  }
 }
 
 export async function resolveWorkflowDefinitionStatusRoute(
@@ -66,20 +43,31 @@ export async function resolveWorkflowDefinitionStatusRoute(
   if (!isChangeName(name)) {
     return { status: 400, body: { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' } }
   }
-  const rootCheck = deps.workflowRootForRequest(params.get('root') ?? '')
+  const requestedRoot = params.get('root')
+  if (!requestedRoot) {
+    return { status: 400, body: { ok: false, error: '缺少 root' } }
+  }
+  const rootCheck = deps.workflowRootForRequest(requestedRoot)
   if (!rootCheck.ok) {
-    return { status: rootCheck.code, body: { ok: false, error: rootCheck.error } }
+    return {
+      status: rootCheck.code,
+      body: { ok: false, error: rootCheck.code === 404 ? 'root 未注册' : 'root 不可信' },
+    }
   }
-  const changeDir = join(rootCheck.anchor.path, 'openspec', 'changes', name)
-  if (!deps.stateStorageExists(changeDir)) {
-    return { status: 400, body: { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' } }
-  }
-
-  let state: PipelineState
+  let state: PipelineState | null
   try {
-    state = await deps.readState(changeDir)
-  } catch {
+    state = await deps.readChangeState(rootCheck.anchor, name)
+  } catch (error) {
+    if (error instanceof WorkflowPathError) {
+      return { status: 403, body: { ok: false, error: 'workflow 定义路径不可信' } }
+    }
+    if (error instanceof ContextBundlePathError && error.status === 403) {
+      return { status: 403, body: { ok: false, error: 'canonical change 路径不可信' } }
+    }
     return { status: 500, body: { ok: false, error: 'canonical change 读取失败' } }
+  }
+  if (state === null) {
+    return { status: 400, body: { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' } }
   }
   const snapshot = state.runMetadata?.workflowPlanSnapshot
   const fieldWorkflow = state.fields.workflow
@@ -87,9 +75,17 @@ export async function resolveWorkflowDefinitionStatusRoute(
     ?? (Array.isArray(fieldWorkflow) ? fieldWorkflow.join(',') : fieldWorkflow)
     ?? 'default'
   const frozenFingerprint = snapshot?.workflowFingerprint ?? null
-  const current = frozenFingerprint === null
-    ? { kind: 'invalid' } as const
-    : deps.readCurrent(rootCheck.anchor, workflow)
+  let current: WorkflowDefinitionCurrent
+  try {
+    current = frozenFingerprint === null
+      ? { kind: 'invalid' } as const
+      : deps.readCurrent(rootCheck.anchor, workflow)
+  } catch (error) {
+    if (error instanceof WorkflowPathError) {
+      return { status: 403, body: { ok: false, error: 'workflow 定义路径不可信' } }
+    }
+    return { status: 500, body: { ok: false, error: 'workflow definition 读取失败' } }
+  }
   return {
     status: 200,
     body: projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current),

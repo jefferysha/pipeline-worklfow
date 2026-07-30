@@ -19,9 +19,15 @@ const graph: OrchestrationGraph = {
     deferred: ['agent', 'live-refresh'],
   },
   nodes: [
-    { id: 'workflow:default', kind: 'workflow', label: 'default', status: 'changed', metadata: [{ key: 'execution_model', value: 'step-graph' }] },
-    { id: 'change:demo', kind: 'change', label: 'demo', status: 'build', metadata: [] },
-    { id: 'phase:build', kind: 'phase', label: 'Build', status: 'current', metadata: [] },
+    { id: 'workflow:default', kind: 'workflow', label: 'default', status: 'changed', metadata: [{ key: 'execution_model', value: 'phase-manifest' }] },
+    {
+      id: 'change:demo',
+      kind: 'change',
+      label: 'demo',
+      status: 'in_progress',
+      metadata: [{ key: 'track', value: 'chat' }, { key: 'preset', value: 'security audit/v2' }],
+    },
+    { id: 'phase:build', kind: 'phase', label: '实现', status: 'current', metadata: [{ key: 'phase_id', value: 'build' }] },
   ],
   edges: [
     { id: 'e1', kind: 'governs', source: 'workflow:default', target: 'change:demo', label: 'governs' },
@@ -53,20 +59,29 @@ describe('OrchestrationGraphCard', () => {
     await screen.findByRole('button', { name: /default/ })
 
     fireEvent.click(screen.getByRole('button', { name: /default/ }))
-    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('step-graph')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('阶段清单')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('传出关系')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('治理')
+
+    expect(screen.getByRole('heading', { name: '编排图' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /demo · 变更/ }))
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('轨道')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('对话')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('预设')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('security audit/v2')
 
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
     fireEvent.click(screen.getByRole('button', { name: '阶段' }))
     expect(screen.queryByRole('button', { name: /default/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Build/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /实现/ })).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'no match' } })
     expect(screen.getByText(/没有匹配的节点/)).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
     fireEvent.click(screen.getByText('可访问节点与边列表'))
-    expect(screen.getByText(/default.*Workflow/)).toBeInTheDocument()
-    expect(screen.getByText(/治理/)).toBeInTheDocument()
+    expect(screen.getByText(/default.*工作流/)).toBeInTheDocument()
+    expect(screen.getByText(/治理.*default.*demo/)).toBeInTheDocument()
   })
 
   it('supports keyboard focus order and Escape clearing selection', async () => {
@@ -142,5 +157,146 @@ describe('OrchestrationGraphCard', () => {
       </I18nProvider>,
     )
     expect(await screen.findByText(/这个 Change 暂无可展示的编排节点/)).toBeInTheDocument()
+  })
+
+  it('localizes canonical labels and tokens, and exposes non-color pressed/selected cues', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      coverage: { ...graph.coverage, deferred: ['agent', 'historical-session-turn'] },
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'review:agent_review_result',
+          kind: 'review',
+          label: 'agent_review_result',
+          status: 'failed',
+          metadata: [{ key: 'field', value: 'agent_review_result' }],
+        },
+      ],
+    })
+    renderCard('en')
+
+    expect(await screen.findByRole('button', { name: /Build · Phase/ })).toBeInTheDocument()
+    expect(screen.queryByText('实现')).not.toBeInTheDocument()
+    expect(screen.getByText(/Agent identity/)).toBeInTheDocument()
+    expect(screen.getByText(/Historical session turns/)).toBeInTheDocument()
+    const all = screen.getByRole('button', { name: 'All' })
+    fireEvent.click(all)
+    expect(all).toHaveTextContent('✓')
+    fireEvent.click(screen.getByRole('button', { name: /Agent review/ }))
+    const selected = screen.getByRole('button', { name: /Agent review.*Failed/ })
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
+    expect(selected).toHaveTextContent('✓')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('Review field')
+  })
+
+  it('localizes the canonical explore event and preserves custom labels even for standard phase ids', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      nodes: [
+        {
+          ...graph.nodes[0],
+          id: 'workflow:custom',
+          label: 'custom',
+          metadata: [{ key: 'execution_model', value: 'step-graph' }],
+        },
+        graph.nodes[1],
+        {
+          ...graph.nodes[2],
+          label: 'Security hardening',
+        },
+        {
+          id: 'phase:security_review',
+          kind: 'phase',
+          label: 'Security review',
+          status: 'handled',
+          metadata: [{ key: 'phase_id', value: 'security_review' }],
+        },
+      ],
+      edges: [{
+        id: 'transition',
+        kind: 'transitions',
+        source: 'phase:build',
+        target: 'phase:security_review',
+        label: 'explore-complete',
+      }],
+    })
+    renderCard('en')
+
+    expect(await screen.findByRole('button', { name: /Security hardening · Phase · Current/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Build · Phase · Current/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Security review · Phase · Handled/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Accessible node and edge list'))
+    expect(screen.getByText(/Transitions · Explore complete.*Security hardening.*Security review/)).toBeInTheDocument()
+    expect(screen.queryByText(/explore-complete/)).not.toBeInTheDocument()
+  })
+
+  it('localizes closed document kinds and the simple built-in track', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      nodes: [
+        graph.nodes[0],
+        {
+          ...graph.nodes[1],
+          metadata: [{ key: 'track', value: 'simple' }],
+        },
+        graph.nodes[2],
+        {
+          id: 'document:delta-spec',
+          kind: 'document',
+          label: 'delta-spec',
+          status: 'recorded',
+          metadata: [{ key: 'required_read', value: 'true' }],
+        },
+      ],
+      edges: [],
+    })
+    renderCard('en')
+
+    await screen.findByRole('button', { name: /demo · Change/ })
+    fireEvent.click(screen.getByRole('button', { name: /demo · Change/ }))
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('Simple task')
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    expect(screen.getByRole('button', { name: /Delta specification · Document/ })).toBeInTheDocument()
+    expect(screen.queryByText('delta-spec')).not.toBeInTheDocument()
+  })
+
+  it('keeps all adjacent edge details when a selected node is the only visible kind', async () => {
+    fetchMock.mockResolvedValue(graph)
+    renderCard()
+    const all = await screen.findByRole('button', { name: '全部' })
+    fireEvent.click(all)
+    fireEvent.click(screen.getByRole('button', { name: '阶段' }))
+    fireEvent.click(screen.getByRole('button', { name: /实现/ }))
+
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('传入关系')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('包含')
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('demo')
+  })
+
+  it('renders a self-transition as a visible curved loop outside the node', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      edges: [
+        ...graph.edges,
+        {
+          id: 'transitions:phase:build:phase:build:archived',
+          kind: 'transitions',
+          source: 'phase:build',
+          target: 'phase:build',
+          label: 'archived',
+        },
+      ],
+    })
+    const view = render(
+      <I18nProvider>
+        <OrchestrationGraphCard root="/repo" change="demo" />
+      </I18nProvider>,
+    )
+    await screen.findByRole('button', { name: /实现/ })
+
+    const loop = view.container.querySelector('[data-self-loop="true"]')
+    expect(loop?.tagName.toLowerCase()).toBe('path')
+    expect(loop).toHaveAttribute('d', expect.stringContaining(' C '))
   })
 })

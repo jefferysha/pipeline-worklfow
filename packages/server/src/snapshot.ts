@@ -52,7 +52,7 @@ function str(v: string | string[] | undefined): string {
   return v ?? ''
 }
 
-async function readTasksMarkdown(changeDir: string): Promise<string | undefined> {
+export async function readTasksMarkdown(changeDir: string): Promise<string | undefined> {
   const target = join(changeDir, 'tasks.md')
   try {
     const info = await lstat(target)
@@ -69,7 +69,7 @@ async function readTasksMarkdown(changeDir: string): Promise<string | undefined>
  * display: a symlink, oversized file, malformed payload, stale heartbeat, or mismatched Change
  * simply means no terminal is currently claimed to be running.
  */
-async function readTerminalActivity(
+export async function readTerminalActivity(
   changeDir: string,
   changeName: string,
   nowMs: number,
@@ -93,7 +93,7 @@ async function readTerminalActivity(
   }
 }
 
-async function documentEvidence(
+export async function documentEvidence(
   root: string,
   changeDir: string,
   plan: EffectiveWorkflowPlan | undefined,
@@ -129,7 +129,7 @@ async function documentEvidence(
   }
 }
 
-function documentTodoItems(
+export function documentTodoItems(
   plan: EffectiveWorkflowPlan | undefined,
   evidence: DocumentEvidenceSnapshot,
 ): Readonly<Record<string, readonly { text: string; completed: boolean }[]>> {

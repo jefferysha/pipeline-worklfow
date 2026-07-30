@@ -1,15 +1,10 @@
-import {
-  stateStorageExistsSync,
-  type StateStore,
-} from '@tenon/kernel'
-import { buildSnapshot, type SnapshotDeps } from './snapshot.js'
-import {
-  readCurrentWorkflowDefinition,
-  resolveWorkflowDefinitionStatusRoute,
-} from './serverWorkflowDefinitionStatusRoutes.js'
+import { type StateStore } from '@tenon/kernel'
+import type { SnapshotDeps } from './snapshot.js'
+import { readAnchoredChangeState, readChangeSnapshot } from './changeSnapshot.js'
+import { resolveWorkflowDefinitionStatusRoute } from './serverWorkflowDefinitionStatusRoutes.js'
 import { resolveOrchestrationGraphRoute } from './serverOrchestrationGraphRoutes.js'
-import type { WorkflowDefinitionStatusResponse } from './workflowDefinitionStatus.js'
 import type { WorkflowRootAnchor } from './workflows.js'
+import { readCurrentWorkflowDefinition } from './workflowDefinitionReader.js'
 
 type WorkflowRootCheck =
   | { readonly ok: true; readonly anchor: WorkflowRootAnchor }
@@ -28,39 +23,14 @@ export async function resolveOrchestrationRoutes(
 ): Promise<{ readonly status: number; readonly body: unknown } | null> {
   const graph = await resolveOrchestrationGraphRoute(rawUrl, path, {
     workflowRootForRequest: deps.workflowRootForRequest,
-    readChange: async (root, name) => {
-      const snapshot = await buildSnapshot(deps.snapshotDeps())
-      return snapshot.projects.find((project) => project.root === root)
-        ?.changes.find((change) => change.name === name) ?? null
-    },
-    readDefinition: async (root, name) => {
-      const params = new URLSearchParams({ root, change: name })
-      const result = await resolveWorkflowDefinitionStatusRoute(
-        `/api/workflow-definition-status?${params.toString()}`,
-        '/api/workflow-definition-status',
-        {
-          workflowRootForRequest: deps.workflowRootForRequest,
-          stateStorageExists: stateStorageExistsSync,
-          readState: (changeDir) => deps.store.read(changeDir),
-          readCurrent: readCurrentWorkflowDefinition,
-        },
-      )
-      if (result?.status !== 200
-        || typeof result.body !== 'object'
-        || result.body === null
-        || !('schema' in result.body)
-        || result.body.schema !== 'workflow-definition-status/v1') {
-        throw new Error('workflow definition status unavailable')
-      }
-      return result.body as WorkflowDefinitionStatusResponse
-    },
+    readChange: async (root, name) => readChangeSnapshot(deps.snapshotDeps(), root, name),
   })
   if (graph !== null) return graph
 
   return resolveWorkflowDefinitionStatusRoute(rawUrl, path, {
     workflowRootForRequest: deps.workflowRootForRequest,
-    stateStorageExists: stateStorageExistsSync,
-    readState: (changeDir) => deps.store.read(changeDir),
+    readChangeState: async (anchor, change) =>
+      (await readAnchoredChangeState(deps.store, anchor, change))?.state ?? null,
     readCurrent: readCurrentWorkflowDefinition,
   })
 }

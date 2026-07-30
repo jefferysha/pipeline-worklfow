@@ -4,161 +4,181 @@
   "createdAt": "2026-07-30T05:09:42Z",
   "records": [
     {
-      "kind": "superpower-plan",
-      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
-      "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
-      "producer": "writing-plans",
-      "recordedAt": "2026-07-30T05:45:09Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "plan",
-      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
-      "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
-      "producer": "writing-plans",
-      "recordedAt": "2026-07-30T05:45:09Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "1aa18f6b5db237c2b886c88c45e26934fe9a2fd471acd4160bc6871b458dcbf4",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
-        }
-      ]
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-30-frozen-workflow-definition-status-20260730-verify-fail.md",
+      "sha256": "6ac9e36376923ce7f83f3d47e3bff90296eb3ce608c265c416219f663e3c45b8",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-30T06:53:43Z",
+      "reads": []
     },
     {
       "kind": "proposal",
       "path": "openspec/changes/frozen-workflow-definition-status-20260730/proposal.md",
-      "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
+      "sha256": "2a00bf16dbaec7f047f62b44eeb4817d72740ef558d571aea24be770b9556f21",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-30T05:45:27Z",
+      "recordedAt": "2026-07-30T06:57:32Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
-          "readAt": "2026-07-30T05:46:50Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+          "sha256": "2a00bf16dbaec7f047f62b44eeb4817d72740ef558d571aea24be770b9556f21",
+          "readAt": "2026-07-30T06:58:07Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",8]"
         },
-        {
-          "phase": "build",
-          "sha256": "563d9ef12a94814a340f7dc1c6c63ff2c4af63f8ab1ff3d7d86e25d8ebf5553d",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "openspec-design",
-      "path": "openspec/changes/frozen-workflow-definition-status-20260730/design.md",
-      "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-30T05:45:50Z",
-      "reads": [
         {
           "phase": "spec",
-          "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
-          "readAt": "2026-07-30T05:46:50Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+          "sha256": "2a00bf16dbaec7f047f62b44eeb4817d72740ef558d571aea24be770b9556f21",
+          "readAt": "2026-07-30T07:59:35Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",10]"
         },
         {
           "phase": "build",
-          "sha256": "587f291a6bc5658c7e3063ad04ea5849568d2aded70a886928652e9fbda473a5",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-design",
-      "path": "docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md",
-      "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-30T05:45:50Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
-          "readAt": "2026-07-30T05:46:50Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
-        },
-        {
-          "phase": "build",
-          "sha256": "e5285d30c77dc3cb886625a9136235f144ffbe78ea6912060a0a47a8c9f30504",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+          "sha256": "2a00bf16dbaec7f047f62b44eeb4817d72740ef558d571aea24be770b9556f21",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
         }
       ]
     },
     {
       "kind": "adr",
       "path": "docs/adr/frozen-workflow-definition-status-20260730.md",
-      "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
+      "sha256": "33c111ecd5811db6d06dd16e1e477f86c3127fecae08987f481daff429b2372e",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-30T05:45:50Z",
+      "recordedAt": "2026-07-30T06:57:42Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
-          "readAt": "2026-07-30T05:46:50Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",4]"
+          "sha256": "33c111ecd5811db6d06dd16e1e477f86c3127fecae08987f481daff429b2372e",
+          "readAt": "2026-07-30T06:58:07Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",8]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "33c111ecd5811db6d06dd16e1e477f86c3127fecae08987f481daff429b2372e",
+          "readAt": "2026-07-30T07:59:35Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",10]"
         },
         {
           "phase": "build",
-          "sha256": "a6dd26cc05a205865731fba677aae0350f38dcb756218504d7336e9fcfd52c8b",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+          "sha256": "33c111ecd5811db6d06dd16e1e477f86c3127fecae08987f481daff429b2372e",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
         }
       ]
     },
     {
       "kind": "delta-spec",
       "path": "openspec/changes/frozen-workflow-definition-status-20260730/specs/frozen-workflow-definition-status/spec.md",
-      "sha256": "242c40b0dfe942c3f94cf463bdb805e5d7837a32dfdfc0826d72e664bc6f3566",
+      "sha256": "3ac378d642517036ccd087688131de53770e60d7c2ab423bfe76c750a7e43338",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-30T05:46:49Z",
+      "recordedAt": "2026-07-30T06:58:05Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "242c40b0dfe942c3f94cf463bdb805e5d7837a32dfdfc0826d72e664bc6f3566",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+          "sha256": "3ac378d642517036ccd087688131de53770e60d7c2ab423bfe76c750a7e43338",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
         }
       ]
     },
     {
       "kind": "delta-spec",
       "path": "openspec/changes/frozen-workflow-definition-status-20260730/specs/orchestration-graph/spec.md",
-      "sha256": "5e6aff643dafb0ccf3859f528aca9ce11c6c639c5e28992308ecf41c5d53887f",
+      "sha256": "f684090f6d7ec354995df53f6989eede01744a4adc9b4123353b04daac59f138",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-30T05:46:49Z",
+      "recordedAt": "2026-07-30T06:58:06Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "5e6aff643dafb0ccf3859f528aca9ce11c6c639c5e28992308ecf41c5d53887f",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+          "sha256": "f684090f6d7ec354995df53f6989eede01744a4adc9b4123353b04daac59f138",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
+      "sha256": "f138bc532f6da980c6924718245435340029cd8d2934817fe00c1d27f4a5a337",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T06:58:06Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f138bc532f6da980c6924718245435340029cd8d2934817fe00c1d27f4a5a337",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md",
+      "sha256": "f138bc532f6da980c6924718245435340029cd8d2934817fe00c1d27f4a5a337",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T06:58:06Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f138bc532f6da980c6924718245435340029cd8d2934817fe00c1d27f4a5a337",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/frozen-workflow-definition-status-20260730/design.md",
+      "sha256": "9dfde86cae04b4178b666d61726d7d238fbcfebd06b00e1af3bb68f4fa03d013",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T07:59:35Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "9dfde86cae04b4178b666d61726d7d238fbcfebd06b00e1af3bb68f4fa03d013",
+          "readAt": "2026-07-30T07:59:35Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9dfde86cae04b4178b666d61726d7d238fbcfebd06b00e1af3bb68f4fa03d013",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md",
+      "sha256": "1a889bfb06b51f84430f74be954dc76dc99de043b28767ecee2af4e943d01fa7",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-30T07:59:35Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1a889bfb06b51f84430f74be954dc76dc99de043b28767ecee2af4e943d01fa7",
+          "readAt": "2026-07-30T07:59:35Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1a889bfb06b51f84430f74be954dc76dc99de043b28767ecee2af4e943d01fa7",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/frozen-workflow-definition-status-20260730/tasks.md",
-      "sha256": "79fd3a9f9f89adda13b93f8e2ee52687b612b9ba4bc99199ff362223184e87c8",
+      "sha256": "5afe0ea8c81389cbc29e944cd04457cb7008a6b6f55fd46799a732399bf66e61",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-30T06:34:58Z",
+      "recordedAt": "2026-07-30T08:24:20Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "79fd3a9f9f89adda13b93f8e2ee52687b612b9ba4bc99199ff362223184e87c8",
-          "readAt": "2026-07-30T06:34:58Z",
-          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",5]"
+          "sha256": "5afe0ea8c81389cbc29e944cd04457cb7008a6b6f55fd46799a732399bf66e61",
+          "readAt": "2026-07-30T08:24:20Z",
+          "visitId": "[\"ccfd350a-66e7-4b7d-89ac-fb80a41f1d64\",11]"
         }
       ]
     }

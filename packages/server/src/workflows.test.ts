@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -9,7 +9,7 @@ import { BUILTIN_TRACK_DEFINITIONS, type TrackRegistry, type WorkflowDef } from 
 import {
   captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor, deleteWorkflowForApi,
   listWorkflowNames, readWorkflowForApi, scanWorkflowReferencesForApi, writeWorkflowForApi,
-  WorkflowDeleteConflictError, WorkflowNotFoundError,
+  WorkflowDeleteConflictError, WorkflowNotFoundError, WorkflowPathError, WorkflowReadError,
 } from './workflows.js'
 
 const execFileAsync = promisify(execFile)
@@ -98,7 +98,30 @@ describe('readWorkflowForApi', () => {
     await writeFile(outsideFile, VALID_WF.replace('onboarding', 'victim'), 'utf8')
     await symlink(outsideFile, join(dir, 'victim.yaml'), 'file')
 
-    expect(() => readWorkflowForApi(root, 'victim')).toThrow()
+    expect(() => readWorkflowForApi(root, 'victim')).toThrow(WorkflowPathError)
+  })
+
+  it.runIf(process.getuid?.() !== 0)('in-root workflow 不可读时归类为 read error，不误报 path violation', async () => {
+    const root = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    const target = join(dir, 'onboarding.yaml')
+    await mkdir(dir, { recursive: true })
+    await writeFile(target, VALID_WF, 'utf8')
+    await chmod(target, 0o000)
+    try {
+      expect(() => readWorkflowForApi(root, 'onboarding')).toThrow(WorkflowReadError)
+    } finally {
+      await chmod(target, 0o600)
+    }
+  })
+
+  it('workflow FIFO 非阻塞地拒绝为不可信普通文件', async () => {
+    const root = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await execFileAsync('mkfifo', [join(dir, 'onboarding.yaml')])
+
+    expect(() => readWorkflowForApi(root, 'onboarding')).toThrow(WorkflowPathError)
   })
 
   it('文件不存在 → 抛错（路由层负责转 404）', async () => {

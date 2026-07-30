@@ -46,6 +46,25 @@ export type {
 } from './workflowTrustedFs.js'
 export { scanWorkflowReferencesForApi } from './workflowReferenceScan.js'
 
+export class WorkflowPathError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = 'WorkflowPathError'
+  }
+}
+
+export class WorkflowReadError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = 'WorkflowReadError'
+  }
+}
+
+function workflowIoError(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined
+  return code === 'EACCES' || code === 'EIO' || code === 'EMFILE' || code === 'ENFILE'
+}
+
 export function captureWorkflowDeletePermit(root: WorkflowRoot, name: string): WorkflowDeletePermit | null {
   assertWorkflowName(name)
   return withWorkflowDirectories(root, false, () => null, (directories) => {
@@ -93,40 +112,70 @@ export function listWorkflowNames(root: WorkflowRoot): string[] {
 /** 从 O_NOFOLLOW 打开的普通文件 fd 读字节，再 parse + validate；不调用会重走 pathname 的 loadWorkflow。 */
 export function readWorkflowForApi(root: WorkflowRoot, name: string): WorkflowDef {
   assertWorkflowName(name)
-  return withWorkflowDirectories(
-    root,
-    false,
-    () => { throw new WorkflowNotFoundError(`workflow '${name}' 未找到`) },
-    (directories) => {
-      const paths = childEntry(directories.workflows, `${name}.yaml`)
-      assertWorkflowDirectoriesStillTrusted(directories)
-      let fd: number
-      try {
-        fd = openSync(paths.operation, constants.O_RDONLY | constants.O_NOFOLLOW)
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-          throw new WorkflowNotFoundError(`workflow '${name}' 未找到`)
-        }
-        throw e
-      }
-      try {
-        const opened = fstatSync(fd)
-        if (!opened.isFile()) throw new Error(`workflow 读取目标不是可信普通文件: ${paths.lexical}`)
-        assertEntryMatches(paths, opened, 'workflow 读取目标')
+  let source: string
+  try {
+    source = withWorkflowDirectories(
+      root,
+      false,
+      () => { throw new WorkflowNotFoundError(`workflow '${name}' 未找到`) },
+      (directories) => {
+        const paths = childEntry(directories.workflows, `${name}.yaml`)
         assertWorkflowDirectoriesStillTrusted(directories)
-        const wf = parseWorkflow(readFileSync(fd, 'utf8'))
-        const errors = validateWorkflow(wf)
-        if (errors.length > 0) {
-          throw new Error(
-            `ERROR: workflow '${name}' 校验失败（${paths.lexical}）：\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+        let fd: number
+        try {
+          fd = openSync(
+            paths.operation,
+            constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
           )
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new WorkflowNotFoundError(`workflow '${name}' 未找到`)
+          }
+          if ((e as NodeJS.ErrnoException).code === 'ELOOP') {
+            throw new WorkflowPathError(`workflow '${name}' 路径不可信`, e)
+          }
+          throw new WorkflowReadError(`workflow '${name}' 读取失败`, e)
         }
-        return wf
-      } finally {
-        safeClose(fd)
-      }
-    },
-  )
+        let opened
+        try {
+          opened = fstatSync(fd)
+        } catch (error) {
+          safeClose(fd)
+          throw new WorkflowReadError(`workflow '${name}' 读取失败`, error)
+        }
+        try {
+          if (!opened.isFile()) {
+            throw new WorkflowPathError(`workflow '${name}' 读取目标不是可信普通文件`)
+          }
+          assertEntryMatches(paths, opened, 'workflow 读取目标')
+          assertWorkflowDirectoriesStillTrusted(directories)
+          try {
+            return readFileSync(fd, 'utf8')
+          } catch (error) {
+            throw new WorkflowReadError(`workflow '${name}' 读取失败`, error)
+          }
+        } finally {
+          safeClose(fd)
+        }
+      },
+    )
+  } catch (error) {
+    if (error instanceof WorkflowNotFoundError
+      || error instanceof WorkflowPathError
+      || error instanceof WorkflowReadError) throw error
+    if (workflowIoError(error)) {
+      throw new WorkflowReadError(`workflow '${name}' 读取失败`, error)
+    }
+    throw new WorkflowPathError(`workflow '${name}' 路径不可信`, error)
+  }
+  const workflow = parseWorkflow(source)
+  const errors = validateWorkflow(workflow)
+  if (errors.length > 0) {
+    throw new Error(
+      `ERROR: workflow '${name}' 校验失败：\n${errors.map((error) => `  - ${error}`).join('\n')}`,
+    )
+  }
+  return workflow
 }
 
 export type WriteWorkflowResult = { ok: true } | { ok: false; errors: string[] }

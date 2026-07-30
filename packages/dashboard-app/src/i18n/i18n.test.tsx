@@ -23,6 +23,17 @@ describe('i18n completeness（zh / en 键结构逐一对齐）', () => {
     const enKeys = keyPaths(en).sort()
     expect(zhKeys).toEqual(enKeys)
   })
+
+  it('编排图标题、核心节点类型和治理元数据提供真正的中文文案', () => {
+    const graph = ((zh.detail as Dict).orchestration_graph as Dict)
+    expect(graph).toMatchObject({
+      heading: '编排图',
+      kind_workflow: '工作流',
+      kind_change: '变更',
+      meta_track: '轨道',
+      meta_preset: '预设',
+    })
+  })
 })
 
 /**

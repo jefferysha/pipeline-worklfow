@@ -30,7 +30,8 @@ metadata 是有序 `{key,value}` 字符串对；客户端仍逐字段、闭集�
 
 1. workflow/change 节点恒存在；workflow node metadata 包含 execution model、frozen fingerprint、
    definition status/current fingerprint。
-2. frozen `workflowRules.steps` 产生 phase nodes；transition entries 产生有向 transition edges。
+2. frozen `workflowRules.steps` 产生 phase nodes；空 label 回退 phase id。transition entries 产生
+   有向 transition edges，edge id 纳入 event/稳定 discriminator，允许不同 event 指向同一 target。
 3. `todo.stages[].tasks` 产生 task nodes和 phase contains task edges。
 4. `documents.items` 只暴露 kind/status/producer count；依据 `outputsByStep` 连接 producing phase，
    不返回 paths。
@@ -41,14 +42,18 @@ metadata 是有序 `{key,value}` 字符串对；客户端仍逐字段、闭集�
 
 ## Dashboard 交互
 
-- 请求状态：`loading → ready | unavailable(404) | error`，Retry 回 loading；scope change abort +
-  generation 防迟到覆盖。
-- visual graph 按 kind 分四层确定性布局并绘制有向连接，不使用 force/random。
+- 请求状态：`loading → ready | unavailable(ENDPOINT_UNAVAILABLE) | error`，Retry 回 loading；
+  scope change abort + generation 防迟到覆盖。scope/change/corruption 使用稳定错误 code，不与旧
+  Server 的 endpoint unavailable 混淆。
+- visual graph 按 kind 分四层确定性布局并绘制带箭头、类型/事件可读的有向连接，不使用
+  force/random。
 - 类型 filter 与标题 search 共同决定 visible nodes；只保留两端均可见的 edges。
 - 每个 node 是真实 button；ArrowLeft/Right、Home/End 移动焦点，Enter/Space 原生选择，Escape 清除。
-- selection panel 显示 status/metadata 与相邻边；原生 `<details>` 内的节点/边列表提供等价阅读路径。
+- selection panel 显示 status/已本地化 metadata 与 incoming/outgoing 相邻边；原生 `<details>` 内
+  的节点/边列表保留 edge kind、label/event 和两端的可读节点标题。
 - `nodes=[]` 是真实空态；搜索/过滤后 `visible=[]` 是过滤空态；两者文案不同。
-- coverage deferred 始终可读，说明后续能力而非宣称“全已实现”。
+- coverage deferred 始终以本地化能力名可读，说明后续能力而非宣称“全已实现”。
+- focus ring、selected node、pressed filter 均有足够对比且带非颜色提示。
 
 ## Assumptions / Decision Log
 
@@ -64,7 +69,7 @@ metadata 是有序 `{key,value}` 字符串对；客户端仍逐字段、闭集�
 ```text
 mount/scope change -> loading
 loading -> ready(non-empty | true-empty)
-loading -> unavailable(404)
+loading -> unavailable(ENDPOINT_UNAVAILABLE)
 loading -> error(network | non-404 | malformed)
 error --retry-> loading
 ready --search/filter no match-> filtered-empty
@@ -73,10 +78,14 @@ ready --clear-> visible graph
 
 ## 安全、性能与兼容
 
-- registered-root + change-name 双锚定；复用 snapshot StateStore 和安全 workflow reader。
+- registered-root + change-name 双锚定；缺 root 在 resolver 前拒绝。只安全直读目标 Change 和
+  workflow definition，不调用会全局扫描/repair projection 的 `buildSnapshot()`。目标 reader
+  复用 registered-root inode anchor，逐层拒绝 Change/canonical 父目录和 legacy state 叶子的
+  symlink，并在读前读后复核 realpath/inode。
 - server 不返回 paths/stack/raw parse error；无写路由、无新依赖、无 schema/migration。
 - 图大小与单 Change 的 frozen steps/tasks/doc evidence 有界；容器横向/纵向滚动。
-- 旧 Server 404 中性 unavailable；未知 v1 字段/枚举/悬空边严格失败。
+- 旧 Server 的 endpoint 404 中性 unavailable；已识别 v1 的 scope/corruption 错误由稳定 code
+  进入 error。未知 v1 字段/枚举/status/悬空边严格失败。
 - 回滚只需删除 endpoint/client/component 与挂载；已有状态无需修复。
 
 ```coverage

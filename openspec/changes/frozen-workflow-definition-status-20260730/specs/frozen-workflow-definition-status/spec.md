@@ -1,6 +1,6 @@
 # OpenSpec 增量规格
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Workflow 定义状态必须作为编排图节点诊断
 

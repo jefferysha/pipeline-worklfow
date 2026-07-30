@@ -17,6 +17,7 @@ import type {
 } from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
+import type { WorkflowDefinitionStatusResponse } from './workflowDefinitionStatus.js'
 
 /** Tenon 产品自有路径。宿主资产发现由 DashboardServerOptions.hostHome 独立表达。 */
 export interface ServerPaths extends ProductPaths {
@@ -39,6 +40,11 @@ export interface ChangeSnapshot {
   fields: Record<FieldName, string | string[]>
   /** Exact immutable workflow plan used by this Change. */
   workflowPlanFingerprint: string
+  /**
+   * Frozen/current workflow diagnostic derived from the same canonical state read as this snapshot.
+   * Present on the exact-Change reader; optional on the bulk snapshot for rolling compatibility.
+   */
+  workflowDefinition?: WorkflowDefinitionStatusResponse
   /** Rules projected from the same immutable plan, never from the current workflow name. */
   workflowRules: WorkflowRulesSnapshot
   /** Change/Track-effective guard projection; intentionally not part of immutable plan identity. */

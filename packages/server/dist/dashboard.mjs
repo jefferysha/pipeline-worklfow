@@ -1560,17 +1560,17 @@ function canonicalState(value, opts = {}) {
   }
   const rawFields = ownRecord(raw.fields);
   const rawKeys = rawFields ? Object.keys(rawFields) : [];
-  const missing3 = rawFields ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field)) : [];
-  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing3.includes(field));
+  const missing4 = rawFields ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field)) : [];
+  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing4.includes(field));
   const isCompleteReviewGateOmission = missingReviewGateFields.length === REVIEW_GATE_FIELDS.length;
   const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1 && missingReviewGateFields[0] === "review_gate_event" && REVIEW_GATE_FIELDS.filter((field) => field !== "review_gate_event").every((field) => rawFields?.[field] === "");
   const legacyReviewGateDefaults = opts.allowLegacyFieldOmissions === true && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent) ? new Set(missingReviewGateFields) : /* @__PURE__ */ new Set();
-  const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true && missing3.includes(PRE_VERIFY_REVIEW_FIELD) ? /* @__PURE__ */ new Set([PRE_VERIFY_REVIEW_FIELD]) : /* @__PURE__ */ new Set();
+  const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true && missing4.includes(PRE_VERIFY_REVIEW_FIELD) ? /* @__PURE__ */ new Set([PRE_VERIFY_REVIEW_FIELD]) : /* @__PURE__ */ new Set();
   const allowedLegacyDefaults = /* @__PURE__ */ new Set([
     ...legacyReviewGateDefaults,
     ...legacyPreVerifyDefault
   ]);
-  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing3.some((field) => !allowedLegacyDefaults.has(field))) {
+  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing4.some((field) => !allowedLegacyDefaults.has(field))) {
     throw new RunStateCorruptError("canonical state.fields \u4E0D\u662F FIELD_ORDER \u95ED\u96C6");
   }
   const fields = {};
@@ -1976,9 +1976,9 @@ async function hydratePreVerifyReview(changeDir, revision) {
   return attach(revision, parseRecord(await readFile4(target, "utf8"), target));
 }
 function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
-  const relative7 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
-  const raw = readText(relative7);
-  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative7)));
+  const relative8 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
+  const raw = readText(relative8);
+  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative8)));
 }
 
 // packages/kernel/dist/state/run-revision-continuity.js
@@ -7386,8 +7386,8 @@ function normalizeDefaultGuardFields(fields) {
   }
   return out;
 }
-function renderPreconditionViolation(event, failure, track) {
-  const { guard, decision } = failure;
+function renderPreconditionViolation(event, failure2, track) {
+  const { guard, decision } = failure2;
   const actual = (decision.kind === "failed" ? decision.actual : void 0) ?? "";
   switch (event) {
     case "explore-complete":
@@ -16152,7 +16152,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep10) {
+function splitTopLevel(s, sep11) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -16164,7 +16164,7 @@ function splitTopLevel(s, sep10) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep10) {
+    } else if (ch === sep11) {
       out.push(cur);
       cur = "";
     } else {
@@ -16882,17 +16882,17 @@ function createTransitionApplication(deps) {
         if (isRejection(prepared))
           return prepared;
         if (deps.missingStepSkills !== void 0) {
-          const missing3 = await deps.missingStepSkills({
+          const missing4 = await deps.missingStepSkills({
             changeDir: command.changeDir,
             stepId: prepared.from,
             capability: effectivePlan.capabilities.skills
           });
-          if (missing3.length > 0) {
+          if (missing4.length > 0) {
             return {
               kind: "step-skills-incomplete",
               workflowName,
               stepId: prepared.from,
-              missing: missing3
+              missing: missing4
             };
           }
         }
@@ -18348,14 +18348,14 @@ function decodeUtf8Strict(bytes, label) {
     throw new Error(`${label} \u4E0D\u662F\u5408\u6CD5 UTF-8\uFF1A${errText3(error)}`);
   }
 }
-function readTrustedRegularFile(directory, root, name, label, missing3) {
+function readTrustedRegularFile(directory, root, name, label, missing4) {
   const paths = childEntry(directory, name);
   assertDirectoryStillTrusted(directory, root);
   let fd;
   try {
     fd = openSync5(paths.operation, constants5.O_RDONLY | constants5.O_NOFOLLOW);
   } catch (error) {
-    if (error.code === "ENOENT" && missing3 === "null") return null;
+    if (error.code === "ENOENT" && missing4 === "null") return null;
     if (error.code === "ENOENT") throw new Error(`${label} \u7F3A\u5931: ${paths.lexical}`);
     throw error;
   }
@@ -18600,6 +18600,22 @@ function scanWorkflowReferencesForApi(root, workflow, registry) {
 }
 
 // packages/server/src/workflows.ts
+var WorkflowPathError = class extends Error {
+  constructor(message, cause) {
+    super(message, cause === void 0 ? void 0 : { cause });
+    this.name = "WorkflowPathError";
+  }
+};
+var WorkflowReadError = class extends Error {
+  constructor(message, cause) {
+    super(message, cause === void 0 ? void 0 : { cause });
+    this.name = "WorkflowReadError";
+  }
+};
+function workflowIoError(error) {
+  const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : void 0;
+  return code === "EACCES" || code === "EIO" || code === "EMFILE" || code === "ENFILE";
+}
 function captureWorkflowDeletePermit(root, name) {
   assertWorkflowName(name);
   return withWorkflowDirectories(root, false, () => null, (directories) => {
@@ -18641,43 +18657,71 @@ function listWorkflowNames(root) {
 }
 function readWorkflowForApi(root, name) {
   assertWorkflowName(name);
-  return withWorkflowDirectories(
-    root,
-    false,
-    () => {
-      throw new WorkflowNotFoundError(`workflow '${name}' \u672A\u627E\u5230`);
-    },
-    (directories) => {
-      const paths = childEntry(directories.workflows, `${name}.yaml`);
-      assertWorkflowDirectoriesStillTrusted(directories);
-      let fd;
-      try {
-        fd = openSync6(paths.operation, constants6.O_RDONLY | constants6.O_NOFOLLOW);
-      } catch (e) {
-        if (e.code === "ENOENT") {
-          throw new WorkflowNotFoundError(`workflow '${name}' \u672A\u627E\u5230`);
-        }
-        throw e;
-      }
-      try {
-        const opened = fstatSync5(fd);
-        if (!opened.isFile()) throw new Error(`workflow \u8BFB\u53D6\u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u6587\u4EF6: ${paths.lexical}`);
-        assertEntryMatches(paths, opened, "workflow \u8BFB\u53D6\u76EE\u6807");
+  let source;
+  try {
+    source = withWorkflowDirectories(
+      root,
+      false,
+      () => {
+        throw new WorkflowNotFoundError(`workflow '${name}' \u672A\u627E\u5230`);
+      },
+      (directories) => {
+        const paths = childEntry(directories.workflows, `${name}.yaml`);
         assertWorkflowDirectoriesStillTrusted(directories);
-        const wf = parseWorkflow(readFileSync16(fd, "utf8"));
-        const errors = validateWorkflow(wf);
-        if (errors.length > 0) {
-          throw new Error(
-            `ERROR: workflow '${name}' \u6821\u9A8C\u5931\u8D25\uFF08${paths.lexical}\uFF09\uFF1A
-${errors.map((e) => `  - ${e}`).join("\n")}`
+        let fd;
+        try {
+          fd = openSync6(
+            paths.operation,
+            constants6.O_RDONLY | constants6.O_NOFOLLOW | constants6.O_NONBLOCK
           );
+        } catch (e) {
+          if (e.code === "ENOENT") {
+            throw new WorkflowNotFoundError(`workflow '${name}' \u672A\u627E\u5230`);
+          }
+          if (e.code === "ELOOP") {
+            throw new WorkflowPathError(`workflow '${name}' \u8DEF\u5F84\u4E0D\u53EF\u4FE1`, e);
+          }
+          throw new WorkflowReadError(`workflow '${name}' \u8BFB\u53D6\u5931\u8D25`, e);
         }
-        return wf;
-      } finally {
-        safeClose(fd);
+        let opened;
+        try {
+          opened = fstatSync5(fd);
+        } catch (error) {
+          safeClose(fd);
+          throw new WorkflowReadError(`workflow '${name}' \u8BFB\u53D6\u5931\u8D25`, error);
+        }
+        try {
+          if (!opened.isFile()) {
+            throw new WorkflowPathError(`workflow '${name}' \u8BFB\u53D6\u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u6587\u4EF6`);
+          }
+          assertEntryMatches(paths, opened, "workflow \u8BFB\u53D6\u76EE\u6807");
+          assertWorkflowDirectoriesStillTrusted(directories);
+          try {
+            return readFileSync16(fd, "utf8");
+          } catch (error) {
+            throw new WorkflowReadError(`workflow '${name}' \u8BFB\u53D6\u5931\u8D25`, error);
+          }
+        } finally {
+          safeClose(fd);
+        }
       }
+    );
+  } catch (error) {
+    if (error instanceof WorkflowNotFoundError || error instanceof WorkflowPathError || error instanceof WorkflowReadError) throw error;
+    if (workflowIoError(error)) {
+      throw new WorkflowReadError(`workflow '${name}' \u8BFB\u53D6\u5931\u8D25`, error);
     }
-  );
+    throw new WorkflowPathError(`workflow '${name}' \u8DEF\u5F84\u4E0D\u53EF\u4FE1`, error);
+  }
+  const workflow = parseWorkflow(source);
+  const errors = validateWorkflow(workflow);
+  if (errors.length > 0) {
+    throw new Error(
+      `ERROR: workflow '${name}' \u6821\u9A8C\u5931\u8D25\uFF1A
+${errors.map((error) => `  - ${error}`).join("\n")}`
+    );
+  }
+  return workflow;
 }
 function writeWorkflowForApi(root, name, wf) {
   assertWorkflowName(name);
@@ -19354,7 +19398,7 @@ function createCadenceScheduler(options) {
 }
 
 // packages/server/src/serverGetRoutes.ts
-import { lstatSync as lstatSync7 } from "node:fs";
+import { lstatSync as lstatSync8 } from "node:fs";
 import { dirname as dirname11, join as join46 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -20493,9 +20537,9 @@ function projectFileExists(root, repoRelativePath) {
 }
 
 // packages/server/src/workflowSnapshot.ts
-function resolveSnapshotEffectivePlan(root, workflowName, binding) {
+function resolveSnapshotEffectivePlan(root, workflowName, binding, loadDefinition = (name) => loadWorkflow(root, name)) {
   const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
-    const definition = builtinWorkflow(name) ?? loadWorkflow(root, name);
+    const definition = builtinWorkflow(name) ?? loadDefinition(name);
     return definition === null ? null : compileWorkflow(definition);
   }, void 0, binding.workflowPlanSnapshot);
   if (plan === null) throw new Error(`workflow '${workflowName}' \u672A\u627E\u5230`);
@@ -22587,8 +22631,17 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
   );
 }
 
-// packages/server/src/serverWorkflowDefinitionStatusRoutes.ts
-import { join as join45 } from "node:path";
+// packages/server/src/changeSnapshot.ts
+import {
+  closeSync as closeSync4,
+  constants as constants10,
+  fstatSync as fstatSync8,
+  lstatSync as lstatSync7,
+  openSync as openSync9,
+  readSync as readSync5,
+  realpathSync as realpathSync6
+} from "node:fs";
+import { isAbsolute as isAbsolute9, join as join45, relative as relative7, sep as sep10 } from "node:path";
 
 // packages/server/src/workflowDefinitionStatus.ts
 function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
@@ -22619,23 +22672,272 @@ function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
   };
 }
 
-// packages/server/src/serverWorkflowDefinitionStatusRoutes.ts
-function isChangeName(name) {
-  return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
+// packages/server/src/workflowDefinitionReader.ts
+function assertDefinitionRoot(anchor) {
+  try {
+    assertWorkflowRootAnchor(anchor);
+  } catch (error) {
+    throw new WorkflowPathError("workflow definition root trust check failed", error);
+  }
 }
 function readCurrentWorkflowDefinition(anchor, workflow) {
   try {
-    assertWorkflowRootAnchor(anchor);
+    assertDefinitionRoot(anchor);
     const plan = resolveEffectiveWorkflowPlan(workflow, (name) => {
       const definition = builtinWorkflow(name) ?? readWorkflowForApi(anchor, name);
       return compileWorkflow(definition);
     });
     if (plan === null) return { kind: "missing" };
-    assertWorkflowRootAnchor(anchor);
+    assertDefinitionRoot(anchor);
     return { kind: "current", fingerprint: plan.workflowFingerprint };
   } catch (error) {
-    return error instanceof WorkflowNotFoundError ? { kind: "missing" } : { kind: "invalid" };
+    if (error instanceof WorkflowNotFoundError) return { kind: "missing" };
+    if (error instanceof WorkflowPathError || error instanceof WorkflowReadError) throw error;
+    return { kind: "invalid" };
   }
+}
+
+// packages/server/src/changeSnapshot.ts
+var CANONICAL_STATE_DIRECTORIES = [
+  ".pipeline-run",
+  ".pipeline-run/revisions",
+  ".pipeline-run/pre-verify-review",
+  ".pipeline-transitions"
+];
+function missing3(error) {
+  return typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
+}
+function isInside(base, candidate) {
+  const fromBase = relative7(base, candidate);
+  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute9(fromBase);
+}
+function captureStateDirectories(changeAnchor) {
+  const directories = [];
+  for (const name of CANONICAL_STATE_DIRECTORIES) {
+    const path7 = join45(changeAnchor.changeDir, name);
+    let info;
+    try {
+      info = lstatSync7(path7);
+    } catch (error) {
+      if (missing3(error)) {
+        directories.push({ kind: "missing", path: path7 });
+        continue;
+      }
+      throw error;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      throw new Error("canonical Change \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09");
+    }
+    const realPath = realpathSync6(path7);
+    if (!isInside(changeAnchor.realPath, realPath)) {
+      throw new Error("canonical Change \u8DEF\u5F84\u5DF2\u9003\u9038 registered root");
+    }
+    directories.push({ kind: "present", path: path7, realPath, dev: info.dev, ino: info.ino });
+  }
+  return directories;
+}
+function assertStateDirectories(directories) {
+  for (const expected of directories) {
+    if (expected.kind === "missing") {
+      try {
+        lstatSync7(expected.path);
+      } catch (error) {
+        if (missing3(error)) continue;
+        throw error;
+      }
+      throw new Error("canonical Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u51FA\u73B0");
+    }
+    const actual = lstatSync7(expected.path);
+    if (actual.isSymbolicLink() || !actual.isDirectory() || actual.dev !== expected.dev || actual.ino !== expected.ino || realpathSync6(expected.path) !== expected.realPath) {
+      throw new Error("canonical Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
+    }
+  }
+}
+function captureStateSource(changeAnchor, source) {
+  const info = lstatSync7(source);
+  if (info.isSymbolicLink() || !info.isFile()) {
+    throw new Error("canonical Change \u72B6\u6001\u6E90\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6");
+  }
+  const realPath = realpathSync6(source);
+  if (!isInside(changeAnchor.realPath, realPath)) {
+    throw new Error("canonical Change \u72B6\u6001\u6E90\u5DF2\u9003\u9038 registered root");
+  }
+  return { path: source, realPath, dev: info.dev, ino: info.ino, size: info.size };
+}
+function assertStateSource(changeDir, expected) {
+  if (stateStorageSourcePathSync(changeDir) !== expected.path) {
+    throw new Error("canonical Change \u72B6\u6001\u6E90\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
+  }
+  const actual = lstatSync7(expected.path);
+  if (actual.isSymbolicLink() || !actual.isFile() || actual.dev !== expected.dev || actual.ino !== expected.ino || actual.size !== expected.size || realpathSync6(expected.path) !== expected.realPath) {
+    throw new Error("canonical Change \u72B6\u6001\u6E90\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
+  }
+}
+var MAX_TASKS_MARKDOWN_BYTES = 256 * 1024;
+function readBoundedTasksSource(fd, maxBytes) {
+  const bytes = Buffer.allocUnsafe(maxBytes + 1);
+  let total = 0;
+  while (total <= maxBytes) {
+    const count = readSync5(fd, bytes, total, maxBytes + 1 - total, null);
+    if (count === 0) break;
+    total += count;
+  }
+  if (total > maxBytes) {
+    throw new Error(`Change tasks \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
+  }
+  return bytes.subarray(0, total).toString("utf8");
+}
+function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource) {
+  const target = join45(changeAnchor.changeDir, "tasks.md");
+  let fd;
+  try {
+    fd = openSync9(
+      target,
+      constants10.O_RDONLY | constants10.O_NOFOLLOW | constants10.O_NONBLOCK
+    );
+  } catch (error) {
+    if (missing3(error)) return void 0;
+    throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u4E0D\u53EF\u4FE1", error);
+  }
+  try {
+    const opened = fstatSync8(fd);
+    if (!opened.isFile()) {
+      throw new ContextBundlePathError(403, "Change tasks \u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6");
+    }
+    const assertOpenedTargetStillAnchored = () => {
+      let current;
+      let realPath;
+      try {
+        assertChangePathAnchor(changeAnchor);
+        current = lstatSync7(target);
+        realPath = realpathSync6(target);
+      } catch (error) {
+        if (error instanceof ContextBundlePathError) throw error;
+        throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316", error);
+      }
+      if (current.isSymbolicLink() || !current.isFile() || current.dev !== opened.dev || current.ino !== opened.ino || current.size !== opened.size || !isInside(changeAnchor.realPath, realPath)) {
+        throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
+      }
+    };
+    assertOpenedTargetStillAnchored();
+    if (opened.size > MAX_TASKS_MARKDOWN_BYTES) {
+      throw new Error(`Change tasks \u8D85\u8FC7 ${MAX_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
+    }
+    const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES);
+    assertOpenedTargetStillAnchored();
+    return source;
+  } finally {
+    closeSync4(fd);
+  }
+}
+async function readAnchoredChangeState(store, root, changeName) {
+  assertWorkflowRootAnchor(root);
+  let changeAnchor;
+  try {
+    changeAnchor = captureChangePathAnchor(root, changeName);
+  } catch (error) {
+    if (error instanceof ContextBundlePathError && error.status === 400) return null;
+    throw error;
+  }
+  const stateDirectories = captureStateDirectories(changeAnchor);
+  const source = stateStorageSourcePathSync(changeAnchor.changeDir);
+  if (source === void 0) {
+    assertChangePathAnchor(changeAnchor);
+    assertStateDirectories(stateDirectories);
+    return null;
+  }
+  const stateSource = captureStateSource(changeAnchor, source);
+  const state = await store.read(changeAnchor.changeDir);
+  assertWorkflowRootAnchor(root);
+  assertChangePathAnchor(changeAnchor);
+  assertStateDirectories(stateDirectories);
+  assertStateSource(changeAnchor.changeDir, stateSource);
+  return { changeDir: changeAnchor.changeDir, state, changeAnchor, stateDirectories, stateSource };
+}
+function stringField3(value) {
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?? Date.now()) {
+  const ownedAnchor = typeof root === "string" ? captureWorkflowRootAnchor(root) : void 0;
+  const anchor = typeof root === "string" ? ownedAnchor : root;
+  try {
+    const anchored = await readAnchoredChangeState(deps.store, anchor, changeName);
+    if (anchored === null) return null;
+    const { changeDir, state } = anchored;
+    const rootPath = anchor.path;
+    const fields = state.fields;
+    const phase = stringField3(fields.phase);
+    const workflowName = stringField3(fields.workflow) || "default";
+    const frozenPlan = state.runMetadata?.workflowPlanSnapshot;
+    const definitionWorkflow = frozenPlan?.workflowId ?? workflowName;
+    const workflowDefinition = projectWorkflowDefinitionStatus(
+      definitionWorkflow,
+      frozenPlan?.workflowFingerprint ?? null,
+      frozenPlan === void 0 ? { kind: "invalid" } : readCurrentWorkflowDefinition(anchor, definitionWorkflow)
+    );
+    const plan = resolveSnapshotEffectivePlan(rootPath, workflowName, {
+      documentProfile: state.runMetadata?.documentProfile,
+      documentGovernanceFingerprint: state.runMetadata?.documentGovernanceFingerprint,
+      workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
+      workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot
+    }, (name) => {
+      try {
+        return readWorkflowForApi(anchor, name);
+      } catch (error) {
+        if (error instanceof WorkflowNotFoundError) return null;
+        throw error;
+      }
+    });
+    const gitHeadSha2 = deps.gitHeadSha;
+    const workspaceFingerprint = deps.workspaceFingerprint;
+    const capabilityDeps = {
+      ...deps.fileExists === void 0 ? {} : { fileExists: deps.fileExists },
+      ...gitHeadSha2 === void 0 ? {} : { gitHeadSha: () => gitHeadSha2(rootPath) },
+      ...workspaceFingerprint === void 0 ? {} : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }
+    };
+    const [documents, terminalActivity, tasksMarkdown, workflowExecution] = await Promise.all([
+      documentEvidence(rootPath, changeDir, plan, phase),
+      readTerminalActivity(changeDir, changeName, nowMs),
+      readAnchoredTasksMarkdown(anchored.changeAnchor),
+      snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps)
+    ]);
+    assertWorkflowRootAnchor(anchor);
+    assertChangePathAnchor(anchored.changeAnchor);
+    assertStateDirectories(anchored.stateDirectories);
+    assertStateSource(anchored.changeDir, anchored.stateSource);
+    const todo = projectPipelineTodo({
+      phase,
+      tasksMarkdown,
+      stages: snapshotTodoStages(plan, phase),
+      additionalItemsByStage: documentTodoItems(plan, documents)
+    });
+    return {
+      name: changeName,
+      path: changeDir,
+      phase,
+      phase_status: stringField3(fields.phase_status),
+      track: stringField3(fields.track),
+      preset: stringField3(fields.preset),
+      archived: stringField3(fields.archived),
+      updated_at: stringField3(fields.updated_at),
+      fields,
+      workflowPlanFingerprint: plan.workflowFingerprint,
+      workflowDefinition,
+      workflowRules: snapshotWorkflowRules(plan),
+      workflowExecution,
+      reviewHandshake: projectReviewHandshake(state, plan, phase),
+      todo,
+      documents,
+      ...terminalActivity === void 0 ? {} : { terminalActivity }
+    };
+  } finally {
+    if (ownedAnchor !== void 0) closeWorkflowRootAnchor(ownedAnchor);
+  }
+}
+
+// packages/server/src/serverWorkflowDefinitionStatusRoutes.ts
+function isChangeName(name) {
+  return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
 }
 async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
   if (path7 !== "/api/workflow-definition-status") return null;
@@ -22644,25 +22946,45 @@ async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
   if (!isChangeName(name)) {
     return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
   }
-  const rootCheck = deps.workflowRootForRequest(params.get("root") ?? "");
-  if (!rootCheck.ok) {
-    return { status: rootCheck.code, body: { ok: false, error: rootCheck.error } };
+  const requestedRoot = params.get("root");
+  if (!requestedRoot) {
+    return { status: 400, body: { ok: false, error: "\u7F3A\u5C11 root" } };
   }
-  const changeDir = join45(rootCheck.anchor.path, "openspec", "changes", name);
-  if (!deps.stateStorageExists(changeDir)) {
-    return { status: 400, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
+  const rootCheck = deps.workflowRootForRequest(requestedRoot);
+  if (!rootCheck.ok) {
+    return {
+      status: rootCheck.code,
+      body: { ok: false, error: rootCheck.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1" }
+    };
   }
   let state;
   try {
-    state = await deps.readState(changeDir);
-  } catch {
+    state = await deps.readChangeState(rootCheck.anchor, name);
+  } catch (error) {
+    if (error instanceof WorkflowPathError) {
+      return { status: 403, body: { ok: false, error: "workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
+    }
+    if (error instanceof ContextBundlePathError && error.status === 403) {
+      return { status: 403, body: { ok: false, error: "canonical change \u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
+    }
     return { status: 500, body: { ok: false, error: "canonical change \u8BFB\u53D6\u5931\u8D25" } };
+  }
+  if (state === null) {
+    return { status: 400, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
   }
   const snapshot = state.runMetadata?.workflowPlanSnapshot;
   const fieldWorkflow = state.fields.workflow;
   const workflow = snapshot?.workflowId ?? (Array.isArray(fieldWorkflow) ? fieldWorkflow.join(",") : fieldWorkflow) ?? "default";
   const frozenFingerprint = snapshot?.workflowFingerprint ?? null;
-  const current = frozenFingerprint === null ? { kind: "invalid" } : deps.readCurrent(rootCheck.anchor, workflow);
+  let current;
+  try {
+    current = frozenFingerprint === null ? { kind: "invalid" } : deps.readCurrent(rootCheck.anchor, workflow);
+  } catch (error) {
+    if (error instanceof WorkflowPathError) {
+      return { status: 403, body: { ok: false, error: "workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
+    }
+    return { status: 500, body: { ok: false, error: "workflow definition \u8BFB\u53D6\u5931\u8D25" } };
+  }
   return {
     status: 200,
     body: projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current)
@@ -22677,8 +22999,13 @@ function valueOf(change, key) {
 function short(value) {
   return value === null ? "" : value.slice(0, 12);
 }
-function edge(kind, source, target, label) {
-  return { id: `${kind}:${source}:${target}`, kind, source, target, label };
+function canonicalTimestamp(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+}
+function edge(kind, source, target, label, discriminator) {
+  const suffix = discriminator === void 0 ? "" : `:${encodeURIComponent(discriminator)}`;
+  return { id: `${kind}:${source}:${target}${suffix}`, kind, source, target, label };
 }
 function buildOrchestrationGraph(input) {
   const { change, definition } = input;
@@ -22698,7 +23025,7 @@ function buildOrchestrationGraph(input) {
     id: changeId,
     kind: "change",
     label: change.name,
-    status: change.phase_status || change.phase,
+    status: change.phase_status || "pending",
     metadata: [
       { key: "phase", value: change.phase },
       { key: "track", value: change.track || "unknown" },
@@ -22715,7 +23042,7 @@ function buildOrchestrationGraph(input) {
     nodes.push({
       id,
       kind: "phase",
-      label: change.workflowRules.labelByStep[step] ?? step,
+      label: change.workflowRules.labelByStep[step] || step,
       status,
       metadata: [
         { key: "phase_id", value: step },
@@ -22730,7 +23057,9 @@ function buildOrchestrationGraph(input) {
     if (!phaseIds.has(source)) continue;
     for (const transition of transitions) {
       const target = `phase:${transition.to}`;
-      if (phaseIds.has(target)) edges.push(edge("transitions", source, target, transition.event));
+      if (phaseIds.has(target)) {
+        edges.push(edge("transitions", source, target, transition.event, transition.event));
+      }
     }
   }
   for (const stage of change.todo?.stages ?? []) {
@@ -22765,18 +23094,18 @@ function buildOrchestrationGraph(input) {
     edges.push(edge("produces", source, id, "produces document"));
   }
   const reviewFields = [
-    ["pre_verify_review_result", "Pre-verify review"],
-    ["agent_review_result", "Agent review"],
-    ["codex_review_result", "Codex review"]
+    "pre_verify_review_result",
+    "agent_review_result",
+    "codex_review_result"
   ];
-  for (const [field, label] of reviewFields) {
+  for (const field of reviewFields) {
     const status = valueOf(change, field);
     if (status === "") continue;
     const id = `review:${field}`;
     nodes.push({
       id,
       kind: "review",
-      label,
+      label: field,
       status,
       metadata: [{ key: "field", value: field }]
     });
@@ -22791,8 +23120,8 @@ function buildOrchestrationGraph(input) {
       label: `Session ${change.terminalActivity.sessionId.slice(0, 8)}`,
       status: "active",
       metadata: [
-        { key: "heartbeat_at", value: change.terminalActivity.heartbeatAt },
-        { key: "expires_at", value: change.terminalActivity.expiresAt }
+        { key: "heartbeat_at", value: canonicalTimestamp(change.terminalActivity.heartbeatAt) },
+        { key: "expires_at", value: canonicalTimestamp(change.terminalActivity.expiresAt) }
       ]
     });
     edges.push(edge("executes", id, changeId, "executes"));
@@ -22819,6 +23148,9 @@ function buildOrchestrationGraph(input) {
 }
 
 // packages/server/src/serverOrchestrationGraphRoutes.ts
+function failure(status, code, error) {
+  return { status, body: { ok: false, code, error } };
+}
 function isChangeName2(name) {
   return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
 }
@@ -22827,53 +23159,59 @@ async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
   const params = new URL(rawUrl, "http://localhost").searchParams;
   const name = params.get("change") ?? "";
   if (!isChangeName2(name)) {
-    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
+    return failure(400, "ORCHESTRATION_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
-  const rootCheck = deps.workflowRootForRequest(params.get("root") ?? "");
-  if (!rootCheck.ok) return { status: rootCheck.code, body: { ok: false, error: rootCheck.error } };
+  const root = params.get("root") ?? "";
+  if (root === "") return failure(400, "ORCHESTRATION_ROOT_REQUIRED", "\u7F3A\u5C11 root \u53C2\u6570");
+  const rootCheck = deps.workflowRootForRequest(root);
+  if (!rootCheck.ok) {
+    return failure(
+      rootCheck.code,
+      rootCheck.code === 404 ? "ORCHESTRATION_ROOT_NOT_REGISTERED" : "ORCHESTRATION_ROOT_FORBIDDEN",
+      rootCheck.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1"
+    );
+  }
+  let change;
   try {
-    const change = await deps.readChange(rootCheck.anchor.path, name);
-    if (change === null) {
-      return { status: 400, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
+    change = await deps.readChange(rootCheck.anchor, name);
+  } catch (error) {
+    if (error instanceof WorkflowPathError) {
+      return failure(403, "ORCHESTRATION_DEFINITION_FORBIDDEN", "Workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1");
     }
-    const definition = await deps.readDefinition(rootCheck.anchor.path, name);
-    return { status: 200, body: buildOrchestrationGraph({ root: rootCheck.anchor.path, change, definition }) };
-  } catch {
-    return { status: 500, body: { ok: false, error: "\u7F16\u6392\u56FE\u8BFB\u53D6\u5931\u8D25" } };
+    if (error instanceof WorkflowReadError) {
+      return failure(500, "ORCHESTRATION_DEFINITION_UNREADABLE", "\u7F16\u6392\u56FE\u8BFB\u53D6\u5931\u8D25");
+    }
+    if (error instanceof ContextBundlePathError && error.status === 403) {
+      return failure(403, "ORCHESTRATION_CHANGE_FORBIDDEN", "Change \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
+    }
+    return failure(500, "ORCHESTRATION_CHANGE_UNREADABLE", "\u7F16\u6392\u56FE\u8BFB\u53D6\u5931\u8D25");
   }
+  if (change === null) {
+    return failure(404, "ORCHESTRATION_CHANGE_NOT_FOUND", "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09");
+  }
+  if (change.workflowDefinition === void 0) {
+    return failure(500, "ORCHESTRATION_DEFINITION_UNREADABLE", "\u7F16\u6392\u56FE\u8BFB\u53D6\u5931\u8D25");
+  }
+  return {
+    status: 200,
+    body: buildOrchestrationGraph({
+      root: rootCheck.anchor.path,
+      change,
+      definition: change.workflowDefinition
+    })
+  };
 }
 
 // packages/server/src/serverOrchestrationRoutes.ts
 async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
   const graph = await resolveOrchestrationGraphRoute(rawUrl, path7, {
     workflowRootForRequest: deps.workflowRootForRequest,
-    readChange: async (root, name) => {
-      const snapshot = await buildSnapshot(deps.snapshotDeps());
-      return snapshot.projects.find((project) => project.root === root)?.changes.find((change) => change.name === name) ?? null;
-    },
-    readDefinition: async (root, name) => {
-      const params = new URLSearchParams({ root, change: name });
-      const result = await resolveWorkflowDefinitionStatusRoute(
-        `/api/workflow-definition-status?${params.toString()}`,
-        "/api/workflow-definition-status",
-        {
-          workflowRootForRequest: deps.workflowRootForRequest,
-          stateStorageExists: stateStorageExistsSync,
-          readState: (changeDir) => deps.store.read(changeDir),
-          readCurrent: readCurrentWorkflowDefinition
-        }
-      );
-      if (result?.status !== 200 || typeof result.body !== "object" || result.body === null || !("schema" in result.body) || result.body.schema !== "workflow-definition-status/v1") {
-        throw new Error("workflow definition status unavailable");
-      }
-      return result.body;
-    }
+    readChange: async (root, name) => readChangeSnapshot(deps.snapshotDeps(), root, name)
   });
   if (graph !== null) return graph;
   return resolveWorkflowDefinitionStatusRoute(rawUrl, path7, {
     workflowRootForRequest: deps.workflowRootForRequest,
-    stateStorageExists: stateStorageExistsSync,
-    readState: (changeDir) => deps.store.read(changeDir),
+    readChangeState: async (anchor, change) => (await readAnchoredChangeState(deps.store, anchor, change))?.state ?? null,
     readCurrent: readCurrentWorkflowDefinition
   });
 }
@@ -22949,7 +23287,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync7(join46(rootCheck.anchor.path, ".pipeline"));
+        lstatSync8(join46(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -22972,7 +23310,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync7(join46(rootCheck.anchor.path, ".pipeline"));
+        lstatSync8(join46(rootCheck.anchor.path, ".pipeline"));
       } catch (e) {
         if (e.code === "ENOENT") pipelineExists = false;
         else throw e;
@@ -23397,7 +23735,7 @@ async function handleDeleteRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostChangesRoutes.ts
-import { lstatSync as lstatSync8 } from "node:fs";
+import { lstatSync as lstatSync9 } from "node:fs";
 import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
@@ -23533,7 +23871,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
         pendingAnchor = captureWorkflowRootAnchor(rawRoot);
       } catch (e) {
         try {
-          if (lstatSync8(resolvePath8(rawRoot)).isSymbolicLink()) {
+          if (lstatSync9(resolvePath8(rawRoot)).isSymbolicLink()) {
             return sendJson(res, 400, { ok: false, error: `registered root \u4E0D\u5F97\u662F symlink\uFF1A${resolvePath8(rawRoot)}` });
           }
         } catch {
@@ -24118,14 +24456,14 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostOperationsRoutes.ts
-import { lstatSync as lstatSync9 } from "node:fs";
+import { lstatSync as lstatSync10 } from "node:fs";
 import { join as join50 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
-  constants as constants10,
-  fstatSync as fstatSync8,
-  openSync as openSync9,
+  constants as constants11,
+  fstatSync as fstatSync9,
+  openSync as openSync10,
   readFileSync as readFileSync21
 } from "node:fs";
 import { posix as posix4 } from "node:path";
@@ -24178,7 +24516,7 @@ function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync21(fd,
             if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
             let fd;
             try {
-              fd = openSync9(paths.operation, constants10.O_RDONLY | constants10.O_NOFOLLOW);
+              fd = openSync10(paths.operation, constants11.O_RDONLY | constants11.O_NOFOLLOW);
             } catch (error) {
               const code = error.code;
               if (code === "ELOOP" || code === "ENOENT") {
@@ -24187,7 +24525,7 @@ function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync21(fd,
               throw registryReadError(error);
             }
             try {
-              const opened = fstatSync8(fd);
+              const opened = fstatSync9(fd);
               if (!opened.isFile() || !sameIdentity(opened, before)) {
                 throw new LoopScopePreviewRootUntrustedError(
                   "during-read",
@@ -24408,7 +24746,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync9(join50(rootCheck.anchor.path, ".pipeline"));
+        lstatSync10(join50(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -25328,9 +25666,9 @@ function isPluginManifestVersion(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function resolveReleaseVersion(pluginRoot2) {
-  for (const relative7 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
+  for (const relative8 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join55(pluginRoot2, relative7), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join55(pluginRoot2, relative8), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }

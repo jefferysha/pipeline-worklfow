@@ -14,6 +14,13 @@ workflow/change/phase/task/document/review/session。Dashboard 提供确定性�
 键盘与语义替代列表。Agent、历史 Session/Turn、AcceptanceCriterion、依赖和写编排列为明确后续阶段。
 原 workflow definition status 作为 workflow node 诊断，不影响 frozen execution/readiness。
 
+第一轮 Verify 进一步决定：单 Change 图端点不得复用会扫描所有 root/Change 并可能 repair projection
+的 `buildSnapshot()`；改为只读目标 Change。协议为 endpoint unavailable、scope invalid、
+Change missing/corrupt 提供稳定 error code；transition id 纳入 event；合法空 phase label 回退 id。
+Dashboard 必须显示有向边、相邻边与闭集双语值，并用高对比、非颜色提示表达 focus/selection/filter。
+`frozen-workflow-definition-status` 在 canonical specs 中尚不存在，因此本 Change 的 delta 是
+`ADDED Requirements`，不是 `MODIFIED Requirements`。
+
 ## 备选方案
 
 - 继续交付窄 drift 卡片：拒绝，无法满足新的编排理解目标。
