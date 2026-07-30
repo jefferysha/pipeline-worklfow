@@ -3,6 +3,9 @@
  * server 是 kernel 消费方：用 StateStore.read（→ parsePipeline）读盘，绝不自造解析器。
  * 对位老仓 dashboard-generator.build_data 的「聚合所有 Project 的活跃 change」核心面。
  */
+import {
+  closeSync, constants, fstatSync, lstatSync, openSync,
+} from 'node:fs'
 import { lstat, readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
@@ -32,6 +35,7 @@ import {
   snapshotWorkflowRules,
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
+import { readBounded } from './contextBundleTrustedReader.js'
 
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
@@ -75,10 +79,23 @@ export async function readTerminalActivity(
   nowMs: number,
 ): Promise<TerminalActivitySnapshot | undefined> {
   const target = join(changeDir, TERMINAL_ACTIVITY_FILE)
+  let fd: number | undefined
   try {
-    const entry = await lstat(target)
-    if (!entry.isFile() || entry.isSymbolicLink() || entry.size > 4096) return undefined
-    const parsed = parseTerminalActivityRecord(JSON.parse(await readFile(target, 'utf8')))
+    fd = openSync(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    const opened = fstatSync(fd)
+    if (!opened.isFile() || opened.size > 4096) return undefined
+    const assertStable = (): boolean => {
+      const current = lstatSync(target)
+      return current.isFile()
+        && !current.isSymbolicLink()
+        && current.dev === opened.dev
+        && current.ino === opened.ino
+        && current.size === opened.size
+    }
+    if (!assertStable()) return undefined
+    const bytes = readBounded(fd, 4096)
+    if (bytes.byteLength > 4096 || !assertStable()) return undefined
+    const parsed = parseTerminalActivityRecord(JSON.parse(bytes.toString('utf8')))
     if (parsed === null || parsed.change !== changeName) return undefined
     const live = liveTerminalActivity(parsed, nowMs)
     if (live === null) return undefined
@@ -90,6 +107,8 @@ export async function readTerminalActivity(
     }
   } catch {
     return undefined
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
 }
 

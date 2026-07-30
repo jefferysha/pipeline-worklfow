@@ -7,12 +7,12 @@ import {
   readSync,
   realpathSync,
 } from 'node:fs'
-import { isAbsolute, join, relative, sep } from 'node:path'
+import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import {
+  LedgerContextBundleError,
   projectPipelineTodo,
-  stateStorageSourcePathSync,
+  readPipelineStateFromSync,
   type PipelineState,
-  type StateStore,
 } from '@tenon/kernel'
 import {
   documentEvidence,
@@ -45,40 +45,16 @@ import {
   WorkflowNotFoundError,
   type WorkflowRootAnchor,
 } from './workflows.js'
-
-interface PresentDirectoryIdentity {
-  readonly kind: 'present'
-  readonly path: string
-  readonly realPath: string
-  readonly dev: number
-  readonly ino: number
-}
-
-interface MissingDirectoryIdentity {
-  readonly kind: 'missing'
-  readonly path: string
-}
-
-type DirectoryIdentity = PresentDirectoryIdentity | MissingDirectoryIdentity
-
-interface FileIdentity extends Omit<PresentDirectoryIdentity, 'kind'> {
-  readonly size: number
-}
+import {
+  ContextBundleTrustedFileError,
+  readTrustedFile,
+} from './contextBundleTrustedReader.js'
 
 export interface AnchoredChangeState {
   readonly changeDir: string
   readonly state: PipelineState
   readonly changeAnchor: ChangePathAnchor
-  readonly stateDirectories: readonly DirectoryIdentity[]
-  readonly stateSource: FileIdentity
 }
-
-const CANONICAL_STATE_DIRECTORIES = [
-  '.pipeline-run',
-  '.pipeline-run/revisions',
-  '.pipeline-run/pre-verify-review',
-  '.pipeline-transitions',
-] as const
 
 function missing(error: unknown): boolean {
   return typeof error === 'object' && error !== null && Reflect.get(error, 'code') === 'ENOENT'
@@ -90,84 +66,6 @@ function isInside(base: string, candidate: string): boolean {
     || (fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase))
 }
 
-function captureStateDirectories(changeAnchor: ChangePathAnchor): DirectoryIdentity[] {
-  const directories: DirectoryIdentity[] = []
-  for (const name of CANONICAL_STATE_DIRECTORIES) {
-    const path = join(changeAnchor.changeDir, name)
-    let info
-    try {
-      info = lstatSync(path)
-    } catch (error) {
-      if (missing(error)) {
-        directories.push({ kind: 'missing', path })
-        continue
-      }
-      throw error
-    }
-    if (info.isSymbolicLink() || !info.isDirectory()) {
-      throw new Error('canonical Change 路径不安全（须为真实目录）')
-    }
-    const realPath = realpathSync(path)
-    if (!isInside(changeAnchor.realPath, realPath)) {
-      throw new Error('canonical Change 路径已逃逸 registered root')
-    }
-    directories.push({ kind: 'present', path, realPath, dev: info.dev, ino: info.ino })
-  }
-  return directories
-}
-
-function assertStateDirectories(directories: readonly DirectoryIdentity[]): void {
-  for (const expected of directories) {
-    if (expected.kind === 'missing') {
-      try {
-        lstatSync(expected.path)
-      } catch (error) {
-        if (missing(error)) continue
-        throw error
-      }
-      throw new Error('canonical Change 路径在读取期间出现')
-    }
-    const actual = lstatSync(expected.path)
-    if (
-      actual.isSymbolicLink()
-      || !actual.isDirectory()
-      || actual.dev !== expected.dev
-      || actual.ino !== expected.ino
-      || realpathSync(expected.path) !== expected.realPath
-    ) {
-      throw new Error('canonical Change 路径在读取期间变化')
-    }
-  }
-}
-
-function captureStateSource(changeAnchor: ChangePathAnchor, source: string): FileIdentity {
-  const info = lstatSync(source)
-  if (info.isSymbolicLink() || !info.isFile()) {
-    throw new Error('canonical Change 状态源必须是非 symlink 普通文件')
-  }
-  const realPath = realpathSync(source)
-  if (!isInside(changeAnchor.realPath, realPath)) {
-    throw new Error('canonical Change 状态源已逃逸 registered root')
-  }
-  return { path: source, realPath, dev: info.dev, ino: info.ino, size: info.size }
-}
-
-function assertStateSource(changeDir: string, expected: FileIdentity): void {
-  if (stateStorageSourcePathSync(changeDir) !== expected.path) {
-    throw new Error('canonical Change 状态源在读取期间变化')
-  }
-  const actual = lstatSync(expected.path)
-  if (
-    actual.isSymbolicLink()
-    || !actual.isFile()
-    || actual.dev !== expected.dev
-    || actual.ino !== expected.ino
-    || actual.size !== expected.size
-    || realpathSync(expected.path) !== expected.realPath
-  ) {
-    throw new Error('canonical Change 状态源在读取期间变化')
-  }
-}
 
 export const MAX_TASKS_MARKDOWN_BYTES = 256 * 1024
 
@@ -245,7 +143,6 @@ export function readAnchoredTasksMarkdown(
 }
 
 export async function readAnchoredChangeState(
-  store: StateStore,
   root: WorkflowRootAnchor,
   changeName: string,
 ): Promise<AnchoredChangeState | null> {
@@ -257,20 +154,38 @@ export async function readAnchoredChangeState(
     if (error instanceof ContextBundlePathError && error.status === 400) return null
     throw error
   }
-  const stateDirectories = captureStateDirectories(changeAnchor)
-  const source = stateStorageSourcePathSync(changeAnchor.changeDir)
-  if (source === undefined) {
-    assertChangePathAnchor(changeAnchor)
-    assertStateDirectories(stateDirectories)
-    return null
+  const prefix = posix.join('openspec', 'changes', changeName)
+  const changeIdentity = changeAnchor.chain.at(-1)
+  if (changeIdentity === undefined) {
+    throw new ContextBundlePathError(403, 'canonical Change 路径身份缺失')
   }
-  const stateSource = captureStateSource(changeAnchor, source)
-  const state = await store.read(changeAnchor.changeDir)
+  const readText = (relativePath: string): string | undefined => {
+    try {
+      return readTrustedFile(
+        root,
+        posix.join(prefix, relativePath.replaceAll(sep, '/')),
+        2 * 1024 * 1024,
+        undefined,
+        changeIdentity,
+      ).text
+    } catch (error) {
+      if (error instanceof LedgerContextBundleError
+        && error.code === 'CONTEXT_BUNDLE_DOCUMENT_MISSING') return undefined
+      if (error instanceof ContextBundleTrustedFileError) {
+        throw new ContextBundlePathError(
+          403,
+          'canonical Change 状态路径不可信（须为非 symlink 普通文件）',
+          error,
+        )
+      }
+      throw error
+    }
+  }
+  const state = readPipelineStateFromSync(readText, 'canonical Change state')
+  if (state === undefined) return null
   assertWorkflowRootAnchor(root)
   assertChangePathAnchor(changeAnchor)
-  assertStateDirectories(stateDirectories)
-  assertStateSource(changeAnchor.changeDir, stateSource)
-  return { changeDir: changeAnchor.changeDir, state, changeAnchor, stateDirectories, stateSource }
+  return { changeDir: changeAnchor.changeDir, state, changeAnchor }
 }
 
 function stringField(value: string | string[] | undefined): string {
@@ -292,7 +207,7 @@ export async function readChangeSnapshot(
     : undefined
   const anchor: WorkflowRootAnchor = typeof root === 'string' ? ownedAnchor as WorkflowRootAnchor : root
   try {
-    const anchored = await readAnchoredChangeState(deps.store, anchor, changeName)
+    const anchored = await readAnchoredChangeState(anchor, changeName)
     if (anchored === null) return null
     const { changeDir, state } = anchored
     const rootPath = anchor.path
@@ -338,8 +253,6 @@ export async function readChangeSnapshot(
     ])
     assertWorkflowRootAnchor(anchor)
     assertChangePathAnchor(anchored.changeAnchor)
-    assertStateDirectories(anchored.stateDirectories)
-    assertStateSource(anchored.changeDir, anchored.stateSource)
     const todo = projectPipelineTodo({
       phase,
       tasksMarkdown,

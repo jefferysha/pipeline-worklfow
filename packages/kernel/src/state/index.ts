@@ -3,6 +3,7 @@
  * 本 barrel 由根 src/index.ts re-export（见 CONTRACT §4）。
  */
 export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
+export { readPipelineStateFromSync } from './sync-reader.js'
 export { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 export { ensureTrustedProjectDirectory } from './trusted-project-path.js'
 export type { StateStoreOptions } from './store.js'
@@ -14,13 +15,13 @@ export {
 export type { DocumentLocalePin } from './document-locale.js'
 export {
   WORKFLOW_GOVERNANCE_BINDING_FILE, attachWorkflowGovernanceBinding,
-  ensureWorkflowGovernanceBinding, readWorkflowGovernanceBinding,
+  ensureWorkflowGovernanceBinding, parseWorkflowGovernanceBinding, readWorkflowGovernanceBinding,
   withoutWorkflowGovernanceBinding,
 } from './workflow-governance-binding.js'
 export type { WorkflowGovernanceBinding } from './workflow-governance-binding.js'
 export {
   WORKFLOW_PLAN_SNAPSHOT_FILE, attachWorkflowPlanSnapshot, ensureWorkflowPlanSnapshot,
-  readWorkflowPlanSnapshot, workflowPlanSnapshotContent,
+  parseWorkflowPlanSnapshot, readWorkflowPlanSnapshot, workflowPlanSnapshotContent,
 } from './workflow-plan-snapshot.js'
 export {
   DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger, initialDocumentLedgerContent,

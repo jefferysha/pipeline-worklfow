@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
+import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -8,7 +9,8 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_TRACK_DEFINITIONS, type TrackRegistry, type WorkflowDef } from '@tenon/kernel'
 import {
   captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor, deleteWorkflowForApi,
-  listWorkflowNames, readWorkflowForApi, scanWorkflowReferencesForApi, writeWorkflowForApi,
+  listWorkflowNames, MAX_WORKFLOW_DEFINITION_BYTES, readBoundedWorkflowSource, readWorkflowForApi,
+  scanWorkflowReferencesForApi, writeWorkflowForApi,
   WorkflowDeleteConflictError, WorkflowNotFoundError, WorkflowPathError, WorkflowReadError,
 } from './workflows.js'
 
@@ -87,6 +89,28 @@ describe('readWorkflowForApi', () => {
     const wf = readWorkflowForApi(root, 'onboarding')
     expect(wf.name).toBe('onboarding')
     expect(wf.steps.map((s) => s.id)).toEqual(['intake', 'done'])
+  })
+
+  it('在 parse 前拒绝超过硬上限的 workflow 文件', async () => {
+    const root = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'onboarding.yaml'), Buffer.alloc(MAX_WORKFLOW_DEFINITION_BYTES + 1, 0x61))
+
+    expect(() => readWorkflowForApi(root, 'onboarding')).toThrow(WorkflowReadError)
+  })
+
+  it('workflow 在 fstat 后增长时仍由 max + 1 fd 读取拒绝', async () => {
+    const root = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    const target = join(dir, 'onboarding.yaml')
+    await mkdir(dir, { recursive: true })
+    await writeFile(target, VALID_WF, 'utf8')
+
+    expect(() => readWorkflowForApi(root, 'onboarding', (fd, maxBytes) => {
+      writeFileSync(target, Buffer.alloc(maxBytes + 1, 0x61))
+      return readBoundedWorkflowSource(fd, maxBytes)
+    })).toThrow(WorkflowReadError)
   })
 
   it('workflow 目标换成指向 root 外文件的 symlink → 拒绝，绝不读取外部 YAML', async () => {

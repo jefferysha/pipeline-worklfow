@@ -23,7 +23,8 @@ import {
   toggledKinds,
   usesBuiltinPhaseLabels,
 } from './orchestrationGraphPresentation'
-import { OrchestrationGraphEdge } from './OrchestrationGraphEdge'
+import { OrchestrationGraphEdge, transitionLanes } from './OrchestrationGraphEdge'
+import { OrchestrationGraphAccessibleList } from './OrchestrationGraphAccessibleList'
 
 interface OrchestrationGraphCardProps { readonly root: string; readonly change: string }
 
@@ -78,8 +79,12 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
       .sort(compareNodes)
   }, [graph, kinds, localizeBuiltinPhaseIds, query, t])
   const visibleIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes])
-  const visibleEdges = (graph?.edges ?? []).filter((edge) =>
-    visibleIds.has(edge.source) && visibleIds.has(edge.target))
+  const visibleEdges = useMemo(
+    () => (graph?.edges ?? []).filter((edge) =>
+      visibleIds.has(edge.source) && visibleIds.has(edge.target)),
+    [graph, visibleIds],
+  )
+  const transitionLaneById = useMemo(() => transitionLanes(visibleEdges), [visibleEdges])
   const selected = visibleIds.has(selectedId ?? '')
     ? graph?.nodes.find((node) => node.id === selectedId) ?? null
     : null
@@ -91,10 +96,6 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
     [graph],
   )
   const edgeKinds = [...new Set(visibleEdges.map((edge) => edge.kind))]
-  const labelForId = (id: string): string => {
-    const node = nodeById.get(id)
-    return node === undefined ? id : renderNodeLabel(node)
-  }
   const displayMetadataValue = (key: string, value: string): string => {
     if (key === 'phase' || key === 'phase_id') {
       const phase = nodeById.get(`phase:${value}`)
@@ -154,7 +155,7 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
         </div>
       )}
       {state.kind === 'unavailable' && (
-        <p className="m-0 rounded-lg border border-border bg-fill px-3 py-2.5 text-xs text-text-3">
+        <p className="m-0 rounded-lg border border-border bg-fill px-3 py-2.5 text-xs text-text-3" role="status">
           {t('detail.orchestration_graph.unavailable')}
         </p>
       )}
@@ -217,11 +218,11 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
           </div>
 
           {graph.nodes.length === 0 ? (
-            <p className="m-0 rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-text-3">
+            <p className="m-0 rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-text-3" role="status">
               {t('detail.orchestration_graph.empty')}
             </p>
           ) : visibleNodes.length === 0 ? (
-            <p className="m-0 rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-text-3">
+            <p className="m-0 rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-text-3" role="status">
               {t('detail.orchestration_graph.filtered_empty')}
             </p>
           ) : (
@@ -249,6 +250,9 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                         edge={edge}
                         source={source}
                         target={target}
+                        transitionLane={transitionLaneById.get(edge.id) ?? 0}
+                        showLabel={selectedId !== null
+                          && (edge.source === selectedId || edge.target === selectedId)}
                         t={t}
                       />
                     )
@@ -345,26 +349,15 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
               <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
               {t('detail.orchestration_graph.accessible_list')}
             </summary>
-            <div className="grid gap-3 border-t border-border px-3 py-2.5 text-xs md:grid-cols-2">
-              <div>
-                <h4 className="m-0 text-[11px] font-bold text-text-3">{t('detail.orchestration_graph.nodes')}</h4>
-                <ul className="mt-1.5 mb-0 space-y-1 pl-4 text-text-2">
-                  {visibleNodes.map((node) => (
-                    <li key={node.id}>{renderNodeLabel(node)} · {t(`detail.orchestration_graph.kind_${node.kind}`)}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h4 className="m-0 text-[11px] font-bold text-text-3">{t('detail.orchestration_graph.edges')}</h4>
-                <ul className="mt-1.5 mb-0 space-y-1 pl-4 text-text-2">
-                  {visibleEdges.map((edge) => (
-                    <li key={edge.id}>
-                      {edgeLabel(edge, t)}: {labelForId(edge.source)} → {labelForId(edge.target)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <OrchestrationGraphAccessibleList
+              nodes={visibleNodes}
+              visibleEdges={visibleEdges}
+              adjacencyEdges={graph.edges}
+              allNodes={nodeById}
+              localizeBuiltinPhaseIds={localizeBuiltinPhaseIds}
+              displayMetadataValue={displayMetadataValue}
+              t={t}
+            />
           </details>
 
           {graph.coverage.deferred.length > 0 && (

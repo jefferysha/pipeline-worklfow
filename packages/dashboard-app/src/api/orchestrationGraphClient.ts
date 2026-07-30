@@ -6,6 +6,10 @@ export const ORCHESTRATION_NODE_KINDS = [
 export const ORCHESTRATION_EDGE_KINDS = [
   'governs', 'contains', 'transitions', 'produces', 'reviews', 'executes',
 ] as const
+export const MAX_ORCHESTRATION_NODES = 512
+export const MAX_ORCHESTRATION_EDGES = 1024
+export const MAX_ORCHESTRATION_NODE_ID_LENGTH = 2048
+export const MAX_ORCHESTRATION_EDGE_ID_LENGTH = 4096
 export const ORCHESTRATION_NODE_STATUSES = [
   'current', 'changed', 'missing', 'invalid', 'unavailable',
   'done', 'pending', 'failed', 'active', 'pass', 'fail', 'handled', 'skipped', 'in_progress',
@@ -28,6 +32,7 @@ export const ORCHESTRATION_GRAPH_ERROR_CODES = [
   'ORCHESTRATION_CHANGE_UNREADABLE',
   'ORCHESTRATION_DEFINITION_FORBIDDEN',
   'ORCHESTRATION_DEFINITION_UNREADABLE',
+  'ORCHESTRATION_GRAPH_LIMIT_EXCEEDED',
 ] as const
 
 export type OrchestrationNodeKind = (typeof ORCHESTRATION_NODE_KINDS)[number]
@@ -175,6 +180,8 @@ export function decodeOrchestrationGraph(value: unknown): OrchestrationGraph | n
     || !closedUniqueStrings(value.coverage.deferred, ORCHESTRATION_DEFERRED_CAPABILITIES)
     || !Array.isArray(value.nodes)
     || !Array.isArray(value.edges)
+    || value.nodes.length > MAX_ORCHESTRATION_NODES
+    || value.edges.length > MAX_ORCHESTRATION_EDGES
   ) return null
 
   const nodes: OrchestrationNode[] = []
@@ -184,10 +191,11 @@ export function decodeOrchestrationGraph(value: unknown): OrchestrationGraph | n
       || !exactKeys(raw, ['id', 'kind', 'label', 'status', 'metadata'])
       || typeof raw.id !== 'string'
       || raw.id === ''
+      || raw.id.length > MAX_ORCHESTRATION_NODE_ID_LENGTH
       || ids.has(raw.id)
       || !nodeKind(raw.kind)
       || typeof raw.label !== 'string'
-      || raw.label === ''
+      || !boundedDisplayValue(raw.label)
       || !nodeStatus(raw.status)
       || !Array.isArray(raw.metadata)
     ) return null
@@ -223,6 +231,7 @@ export function decodeOrchestrationGraph(value: unknown): OrchestrationGraph | n
       || !exactKeys(raw, ['id', 'kind', 'source', 'target', 'label'])
       || typeof raw.id !== 'string'
       || raw.id === ''
+      || raw.id.length > MAX_ORCHESTRATION_EDGE_ID_LENGTH
       || edgeIds.has(raw.id)
       || !edgeKind(raw.kind)
       || typeof raw.source !== 'string'
@@ -230,7 +239,7 @@ export function decodeOrchestrationGraph(value: unknown): OrchestrationGraph | n
       || typeof raw.target !== 'string'
       || !ids.has(raw.target)
       || typeof raw.label !== 'string'
-      || raw.label === ''
+      || !boundedDisplayValue(raw.label)
     ) return null
     edgeIds.add(raw.id)
     edges.push({

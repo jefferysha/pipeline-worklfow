@@ -30,7 +30,7 @@ export async function resolveOrchestrationRoutes(
   return resolveWorkflowDefinitionStatusRoute(rawUrl, path, {
     workflowRootForRequest: deps.workflowRootForRequest,
     readChangeState: async (anchor, change) =>
-      (await readAnchoredChangeState(deps.store, anchor, change))?.state ?? null,
+      (await readAnchoredChangeState(anchor, change))?.state ?? null,
     readCurrent: readCurrentWorkflowDefinition,
   })
 }

@@ -12,7 +12,6 @@ import {
   ensureDocumentLedger,
   loadEffectiveWorkflowPlan,
   TERMINAL_ACTIVITY_TTL_MS,
-  type StateStore,
   workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
@@ -242,49 +241,45 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     }
   })
 
-  it('单 Change 直读在 StateStore 返回后复核状态 leaf identity', async () => {
+  it('单 Change 受信 reader 不把状态 pathname 委托给注入的 StateStore', async () => {
     const store = newStore()
     const root = await makeProject()
     const targetDir = await initChange(store, root, 'target')
-    const current = join(targetDir, '.pipeline-run', 'current.json')
     const racingStore = {
-      read: async (dir: string) => {
-        const state = await store.read(dir)
-        const bytes = await readFile(current)
-        await rename(current, `${current}.raced`)
-        await writeFile(current, bytes)
-        return state
-      },
-    } as StateStore
+      read: async () => { throw new Error('untrusted pathname read must not run') },
+    } as typeof store
 
     await expect(readChangeSnapshot(
       { registry: () => [root], store: racingStore, version: '1', clock: () => 't' },
       root,
       'target',
       0,
-    )).rejects.toThrow(/状态源|读取期间变化|identity/i)
+    )).resolves.toMatchObject({ name: 'target' })
   })
 
-  it('单 Change 直读拒绝读取期间从 legacy 切换到新 canonical 状态源', async () => {
+  it('单 Change legacy 读取不受注入 StateStore 的状态源切换影响', async () => {
     const store = newStore()
     const root = await makeProject()
     const targetDir = await initChange(store, root, 'target')
     const runDir = join(targetDir, '.pipeline-run')
     const parkedRunDir = join(targetDir, '.pipeline-run.parked')
     await rename(runDir, parkedRunDir)
+    let delegated = false
     const racingStore = {
-      read: async (dir: string) => {
+      read: async () => {
+        delegated = true
         await rename(parkedRunDir, runDir)
-        return store.read(dir)
+        return store.read(targetDir)
       },
-    } as StateStore
+    } as typeof store
 
     await expect(readChangeSnapshot(
       { registry: () => [root], store: racingStore, version: '1', clock: () => 't' },
       root,
       'target',
       0,
-    )).rejects.toThrow(/状态源|读取期间变化|canonical|identity/i)
+    )).resolves.toMatchObject({ name: 'target', phase: 'open' })
+    expect(delegated).toBe(false)
   })
 
   it('聚合两个注册项目、计数与相位真实', async () => {

@@ -83,13 +83,15 @@
 
 ## 与其他固定上游的差异映射
 
-- Trellis main `c94d6fc289b7a6fdd9480bdfae4d4639c9ac2d4c`，latest Release API 404，
-  stable tag fallback `v0.6.10` 同 SHA：其 per-task workflow selection 支撑 execution identity 与
-  current config 分离。
-- Comet master `92d418eb93ce07c95b0855b2d36da4f6fdaea92d`，stable `0.3.9`
-  `053f76d8ac6aaa499b1d3f8752cb5637fc4fb914`：其配置入口支撑把配置事实显式展示。
-- Maestro master `5375fb589f182c1c7e9cade69b4acd3ccd03bac1`，stable `v0.5.58`
-  `be4cf1f8f7931574c720abe0dc8d813fb29abc21`：mutable command refresh 与 run evidence 分离。
-- claude-tap main `6cfe45afd7b6d009e839b178dd59b9e338b10309`，stable `v0.1.141`
-  `547925c9bd66f73cdcf9a4779fc88a4ffa247738`：异步 viewer 验收必须等真实内容 ready，不能只看
-  DOM 容器存在。
+发布前于 2026-07-30 再次读取 GitHub 一手 API；下列引用均为固定 commit/tag URL。
+Change proposal 保留立项时的设计输入快照；本表是发布前刷新点。默认分支或 release 的前移没有
+改变已批准的 Graph v1 需求或 Tenon-native 映射，因此不回写 proposal，也不把证据刷新伪装成
+需求变更。
+
+| 上游 | 默认分支固定点 | 稳定 release/tag 固定点 | Tenon 差异映射 |
+| --- | --- | --- | --- |
+| Trellis | [`main@c41c8bd7`](https://github.com/mindfold-ai/Trellis/commit/c41c8bd7cf51c81cba72cf8cb4c8837ce9783ce3) | GitHub latest Release API 为 404，回退最新语义版本 [`v0.6.10@c94d6fc2`](https://github.com/mindfold-ai/Trellis/releases/tag/v0.6.10) | per-task workflow selection 支撑 execution identity 与 current config 分离 |
+| Comet | [`master@92d418eb`](https://github.com/rpamis/comet/commit/92d418eb93ce07c95b0855b2d36da4f6fdaea92d) | GitHub latest 是非 prerelease 标记的 [`0.4.0-beta.11`](https://github.com/rpamis/comet/releases/tag/0.4.0-beta.11)；按严格 SemVer 稳定口径采用 [`0.3.9@053f76d8`](https://github.com/rpamis/comet/releases/tag/0.3.9) | 配置入口支撑把配置事实显式展示 |
+| Chorus | [`main@d590b568`](https://github.com/Chorus-AIDLC/Chorus/commit/d590b568f40fae51f71c9800841c587a3fe94b0b) | [`v0.14.5@be647877`](https://github.com/Chorus-AIDLC/Chorus/releases/tag/v0.14.5) | Resource Graph、Dashboard 交互与编排生命周期是本切片的主要设计依据 |
+| Maestro | [`master@52a4778c`](https://github.com/catlog22/maestro-flow/commit/52a4778c042da72608ccf0f633f0266b3b0d89dc) | [`v0.5.59@ef797e7a`](https://github.com/catlog22/maestro-flow/releases/tag/v0.5.59) | mutable command refresh 与 run evidence 分离 |
+| claude-tap | [`main@6cfe45af`](https://github.com/liaohch3/claude-tap/commit/6cfe45afd7b6d009e839b178dd59b9e338b10309) | [`v0.1.141@547925c9`](https://github.com/liaohch3/claude-tap/releases/tag/v0.1.141) | 异步 viewer 验收必须等真实内容 ready，不能只看 DOM 容器存在 |

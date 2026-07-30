@@ -3,10 +3,10 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md
 plan: docs/superpowers/plans/2026-07-30-frozen-workflow-definition-status.md
-verification_report: docs/superpowers/reports/2026-07-30-frozen-workflow-definition-status-20260730-verify-fail.md
+verification_report: docs/superpowers/reports/2026-07-30-frozen-workflow-definition-status-20260730-verify-fail-2.md
 build_mode: direct
 isolation: worktree
 build_sha: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-30T05:09:42Z
-updated_at: 2026-07-30T07:59:57Z
+updated_at: 2026-07-30T09:46:41Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,9 +39,9 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: ccfd350a-66e7-4b7d-89ac-fb80a41f1d64
-pipeline_transition_sequence: 11
-pipeline_transition_head: dfb03e12-7d10-4a84-abab-72664ee7653d
-pipeline_state_revision: 36
-pipeline_state_revision_id: 84a91a58-a8a0-41a4-81da-602e6aa3a6bb
-pipeline_state_digest: 2baee9e63bd6f2551a54cfca5dcbcc79652f87e921cd02c9d54a69049111bbf5
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MzYsInJldmlzaW9uSWQiOiI4NGE5MWE1OC1hOGEwLTQxYTQtODFkYS02MDJlNmFhM2E2YmIiLCJwYXlsb2FkRGlnZXN0IjoiYTc5OWQ3MWVmNjZlMmM3NDFlMWNhNGZlZmU5NDNiOTAyNjQyOTQzZWQ1YjM2NWUzZjA2ZGQ3ZmZlNDg1Y2ZmNyJ9
+pipeline_transition_sequence: 13
+pipeline_transition_head: f67b0491-6a42-4661-b88c-29689b7a60bd
+pipeline_state_revision: 42
+pipeline_state_revision_id: aa950964-cf64-4a4c-82e7-417b6dd1f119
+pipeline_state_digest: bf6253916c3c18eab213a93d1dcef50d7a153d097a84533318e3e1684db2338e
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NDIsInJldmlzaW9uSWQiOiJhYTk1MDk2NC1jZjY0LTRhNGMtODJlNy00MTdiNmRkMWYxMTkiLCJwYXlsb2FkRGlnZXN0IjoiMTVlZjYzMDZhZDc1M2VmNmM5MWU0OTBmYWI2MTk0OGUyMGYwMmNiNTNjNjE2MTg5NTYxZWVmZjI4NzJmN2I5MiJ9

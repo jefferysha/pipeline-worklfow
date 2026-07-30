@@ -3,6 +3,7 @@ import { ApiError } from './transport'
 import {
   decodeOrchestrationGraph,
   fetchOrchestrationGraph,
+  MAX_ORCHESTRATION_NODES,
   OrchestrationGraphApiError,
 } from './orchestrationGraphClient'
 
@@ -144,6 +145,21 @@ describe('decodeOrchestrationGraph', () => {
       ...graph,
       nodes: [{ ...graph.nodes[0], status: 'handled' }, graph.nodes[1]],
     })?.nodes[0]?.status).toBe('handled')
+  })
+
+  it('rejects arrays and labels beyond the browser rendering budget', () => {
+    const nodes = Array.from({ length: MAX_ORCHESTRATION_NODES + 1 }, (_, index) => ({
+      id: `change:${index}`,
+      kind: 'change',
+      label: `Change ${index}`,
+      status: 'pending',
+      metadata: [],
+    }))
+    expect(decodeOrchestrationGraph({ ...graph, nodes, edges: [] })).toBeNull()
+    expect(decodeOrchestrationGraph({
+      ...graph,
+      nodes: [{ ...graph.nodes[0], label: 'x'.repeat(1025) }, graph.nodes[1]],
+    })).toBeNull()
   })
 
   it('accepts safe custom phase and track identifiers while closing fixed metadata domains', () => {

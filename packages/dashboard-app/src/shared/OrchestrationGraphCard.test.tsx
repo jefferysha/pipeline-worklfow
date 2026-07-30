@@ -137,7 +137,7 @@ describe('OrchestrationGraphCard', () => {
   it('distinguishes old-server unavailable, errors with retry, and true empty', async () => {
     fetchMock.mockRejectedValueOnce(new ApiError('old', 404))
     renderCard()
-    expect(await screen.findByText(/当前 Server 不提供编排图/)).toBeInTheDocument()
+    expect(await screen.findByText(/当前 Server 不提供编排图/)).toHaveAttribute('role', 'status')
 
     fetchMock.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(graph)
     const { unmount } = render(
@@ -156,7 +156,7 @@ describe('OrchestrationGraphCard', () => {
         <OrchestrationGraphCard root="/repo" change="empty" />
       </I18nProvider>,
     )
-    expect(await screen.findByText(/这个 Change 暂无可展示的编排节点/)).toBeInTheDocument()
+    expect(await screen.findByText(/这个 Change 暂无可展示的编排节点/)).toHaveAttribute('role', 'status')
   })
 
   it('localizes canonical labels and tokens, and exposes non-color pressed/selected cues', async () => {
@@ -277,8 +277,25 @@ describe('OrchestrationGraphCard', () => {
   it('renders a self-transition as a visible curved loop outside the node', async () => {
     fetchMock.mockResolvedValue({
       ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'task:1',
+          kind: 'task',
+          label: '受隐藏筛选的任务',
+          status: 'pending',
+          metadata: [{ key: 'phase_id', value: 'build' }],
+        },
+      ],
       edges: [
         ...graph.edges,
+        {
+          id: 'contains:phase:build:task:1',
+          kind: 'contains',
+          source: 'phase:build',
+          target: 'task:1',
+          label: 'task',
+        },
         {
           id: 'transitions:phase:build:phase:build:archived',
           kind: 'transitions',
@@ -298,5 +315,136 @@ describe('OrchestrationGraphCard', () => {
     const loop = view.container.querySelector('[data-self-loop="true"]')
     expect(loop?.tagName.toLowerCase()).toBe('path')
     expect(loop).toHaveAttribute('d', expect.stringContaining(' C '))
+    const labelSelector =
+      '[data-edge-id="transitions:phase:build:phase:build:archived"] text'
+    expect(view.container.querySelector(labelSelector)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /实现/ }))
+    const label = view.container.querySelector(labelSelector)
+    expect(label).toHaveAttribute('text-anchor', 'end')
+  })
+
+  it('routes reciprocal transitions through deterministic separate lanes', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'phase:spec',
+          kind: 'phase',
+          label: '规格',
+          status: 'handled',
+          metadata: [{ key: 'phase_id', value: 'spec' }, { key: 'order', value: '3' }],
+        },
+      ],
+      edges: [
+        ...graph.edges,
+        {
+          id: 'transitions:phase:spec:phase:build:spec-complete',
+          kind: 'transitions',
+          source: 'phase:spec',
+          target: 'phase:build',
+          label: 'spec-complete',
+        },
+        {
+          id: 'transitions:phase:build:phase:spec:requirements-changed',
+          kind: 'transitions',
+          source: 'phase:build',
+          target: 'phase:spec',
+          label: 'requirements-changed',
+        },
+      ],
+    })
+    const view = render(
+      <I18nProvider>
+        <OrchestrationGraphCard root="/repo" change="demo" />
+      </I18nProvider>,
+    )
+    await screen.findByRole('button', { name: /实现/ })
+    expect(view.container.querySelectorAll('[data-edge-id] text')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /实现/ }))
+
+    const forward = view.container.querySelector(
+      '[data-edge-id="transitions:phase:spec:phase:build:spec-complete"] [data-transition-route]',
+    )
+    const reverse = view.container.querySelector(
+      '[data-edge-id="transitions:phase:build:phase:spec:requirements-changed"] [data-transition-route]',
+    )
+    expect(forward).toHaveAttribute('d', expect.stringContaining(' C '))
+    expect(reverse).toHaveAttribute('d', expect.stringContaining(' C '))
+    expect(forward?.getAttribute('d')).not.toBe(reverse?.getAttribute('d'))
+
+    const labels = [
+      view.container.querySelector(
+        '[data-edge-id="transitions:phase:spec:phase:build:spec-complete"] text',
+      ),
+      view.container.querySelector(
+        '[data-edge-id="transitions:phase:build:phase:spec:requirements-changed"] text',
+      ),
+    ]
+    expect(labels[0]?.getAttribute('y')).not.toBe(labels[1]?.getAttribute('y'))
+  })
+
+  it('separates self-transition routes and exposes equivalent node details in the list', async () => {
+    fetchMock.mockResolvedValue({
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'task:hidden',
+          kind: 'task',
+          label: '受隐藏筛选的任务',
+          status: 'pending',
+          metadata: [{ key: 'phase_id', value: 'build' }],
+        },
+      ],
+      edges: [
+        ...graph.edges,
+        {
+          id: 'contains:phase:build:task:hidden',
+          kind: 'contains',
+          source: 'phase:build',
+          target: 'task:hidden',
+          label: 'task',
+        },
+        {
+          id: 'transitions:phase:build:phase:build:archived',
+          kind: 'transitions',
+          source: 'phase:build',
+          target: 'phase:build',
+          label: 'archived',
+        },
+        {
+          id: 'transitions:phase:build:phase:build:retry',
+          kind: 'transitions',
+          source: 'phase:build',
+          target: 'phase:build',
+          label: 'retry',
+        },
+      ],
+    })
+    const view = render(
+      <I18nProvider>
+        <OrchestrationGraphCard root="/repo" change="demo" />
+      </I18nProvider>,
+    )
+    await screen.findByRole('button', { name: /实现/ })
+    const loops = view.container.querySelectorAll('[data-self-loop="true"]')
+    expect(loops).toHaveLength(2)
+    expect(loops[0]?.getAttribute('d')).not.toBe(loops[1]?.getAttribute('d'))
+    fireEvent.click(screen.getByRole('button', { name: /实现/ }))
+    const loopLabels = view.container.querySelectorAll(
+      '[data-edge-id^="transitions:phase:build:phase:build:"] text',
+    )
+    expect(loopLabels).toHaveLength(2)
+    const labelYs = [...loopLabels].map((label) => Number(label.getAttribute('y')))
+    expect(Math.abs((labelYs[1] ?? 0) - (labelYs[0] ?? 0))).toBeGreaterThanOrEqual(12)
+
+    fireEvent.click(screen.getByText('可访问节点与边列表'))
+    const list = screen.getByTestId('orchestration-accessible-list')
+    expect(list).toHaveTextContent('当前阶段')
+    expect(list).toHaveTextContent('阶段')
+    expect(list).toHaveTextContent('传出关系')
+    expect(list).toHaveTextContent('归档')
+    expect(list).toHaveTextContent('任务')
   })
 })

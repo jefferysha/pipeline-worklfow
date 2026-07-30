@@ -109,3 +109,45 @@
 - 最终主会话按 `tenon:code-review` 完成 Standards/Spec 双轴复审，三条独立终审均为
   `C0/H0/M0/L0`。补充的 `codex review --uncommitted` 重跑被账户用量上限外部中断，未伪装为
   通过；其上一轮四项 P2 已逐项修复，并由上述主审、独立 reviewer、安全与上游契约轨复验。
+
+## 第七轮：fd 绑定状态读取与等价无障碍图
+
+- 安全复核发现 `StateStore.read(pathname)` 的读取后 inode 复核仍允许同 UID 写者执行
+  swap-read-restore。Kernel 新增复用 canonical revision、governance binding、frozen plan 原解析器
+  的 `readPipelineStateFromSync`；Graph exact-change 路径改由 registered-root 目录链和
+  `O_NOFOLLOW` leaf fd 提供字节，不再把 pathname 委托给 StateStore。
+- terminal activity sidecar 同样改为 `O_NOFOLLOW | O_NONBLOCK` 打开，从 fd 有界读取，并在读取
+  前后复核 leaf identity；symlink、FIFO、换位、超限或损坏均 fail-closed 为无活动会话。
+- Change canonical path violation 统一成为 bounded 403；canonical 内容损坏继续保持 500，
+  不混淆 scope violation 与数据损坏。
+- UI 复核发现语义列表缺少状态、metadata 与每节点入/出关系；独立可访问列表组件现在提供与
+  selection 详情等价的信息，且继续随过滤/搜索同步。
+- 多条同节点 self-transition 现在按稳定 edge id 分配不同 loop 半径/偏移；transition label 仅在
+  选中相邻节点时出现。unavailable、真实空和过滤空均增加 polite status 语义。
+- 发布复核刷新五个上游固定点：部分默认分支与稳定 release 已前移；研究文档现
+  自包含 default commit URL、stable release/tag URL、读取日期，以及 GitHub latest 与严格
+  SemVer stable 双口径。浏览器截图移到仓外，避免误提交。
+
+## 第八轮：Graph 资源预算与浏览器解码上限
+
+- 安全复核发现 project-controlled workflow、document ledger、文档内容和任务图仍可能放大
+  同步读取、digest 与浏览器渲染成本。API workflow 现于 parse 前以 `fstat` 拒绝超过 256 KiB
+  的定义；document ledger 限 1 MiB/256 records，单文档限 2 MiB，digest 改为有界串行。
+- Graph v1 在生成过程中限制 512 nodes、1024 edges 和 1024 字符 label，超限稳定返回
+  `413 ORCHESTRATION_GRAPH_LIMIT_EXCEEDED`；Dashboard strict decoder 镜像节点、边、id 与
+  label 上限，恶意或漂移 payload 不进入 React 渲染。
+- 新增 workflow、ledger、Graph builder、路由和 Dashboard decoder 的超限回归测试；定向
+  68 条 backend/kernel 与 39 条 Web 断言全绿，架构门禁恢复通过。
+
+## 第九轮：读取期增长封口与契约对称
+
+- 发布复核发现 workflow、document ledger 与 document source 虽在读取前检查 `fstat.size`，
+  仍可能在检查后被同权限写者扩容。三条路径现统一使用 fd 绑定的 `max + 1` 有界读取，并在读取
+  前后复核 fd inode/size、目标目录项与目录锚；读取期增长会 fail-closed，不进入 YAML/JSON
+  解析、digest 或 Graph 构建。
+- Server 与 Dashboard 已统一 512 nodes、1024 edges、2048 字符 node id、4096 字符 edge id、
+  1024 字符 label 以及 C0/C1 控制字符谓词；合法边界不会再出现 Server 200、Client 拒绝，
+  越界统一返回 `413 ORCHESTRATION_GRAPH_LIMIT_EXCEEDED`。
+- 新增 workflow、ledger、document source 三条读取期增长回归。最终发布、安全与 UI 复核均为
+  `C0/H0/M0`；定向 backend/kernel 111 条、Graph Web 39 条通过，最新 production bundle 已包含
+  fd-bound reader 与对称 Graph decoder。

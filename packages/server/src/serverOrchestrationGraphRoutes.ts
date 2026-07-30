@@ -1,6 +1,6 @@
 import { WorkflowPathError, WorkflowReadError, type WorkflowRootAnchor } from './workflows.js'
 import type { ChangeSnapshot } from './types.js'
-import { buildOrchestrationGraph } from './orchestrationGraph.js'
+import { buildOrchestrationGraph, OrchestrationGraphLimitError } from './orchestrationGraph.js'
 import { ContextBundlePathError } from './contextBundlePreviewSupport.js'
 
 type WorkflowRootCheck =
@@ -27,6 +27,7 @@ export const ORCHESTRATION_GRAPH_ERROR_CODES = [
   'ORCHESTRATION_CHANGE_UNREADABLE',
   'ORCHESTRATION_DEFINITION_FORBIDDEN',
   'ORCHESTRATION_DEFINITION_UNREADABLE',
+  'ORCHESTRATION_GRAPH_LIMIT_EXCEEDED',
 ] as const
 
 type OrchestrationGraphErrorCode = (typeof ORCHESTRATION_GRAPH_ERROR_CODES)[number]
@@ -82,12 +83,19 @@ export async function resolveOrchestrationGraphRoute(
   if (change.workflowDefinition === undefined) {
     return failure(500, 'ORCHESTRATION_DEFINITION_UNREADABLE', '编排图读取失败')
   }
-  return {
-    status: 200,
-    body: buildOrchestrationGraph({
-      root: rootCheck.anchor.path,
-      change,
-      definition: change.workflowDefinition,
-    }),
+  try {
+    return {
+      status: 200,
+      body: buildOrchestrationGraph({
+        root: rootCheck.anchor.path,
+        change,
+        definition: change.workflowDefinition,
+      }),
+    }
+  } catch (error) {
+    if (error instanceof OrchestrationGraphLimitError) {
+      return failure(413, 'ORCHESTRATION_GRAPH_LIMIT_EXCEEDED', '编排图超过安全上限')
+    }
+    throw error
   }
 }

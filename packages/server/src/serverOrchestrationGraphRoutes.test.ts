@@ -178,4 +178,38 @@ describe('resolveOrchestrationGraphRoute', () => {
     })
     expect(JSON.stringify(result)).not.toContain('/private/repo')
   })
+
+  it('maps graph capacity failures to a stable 413 contract', async () => {
+    const oversized = {
+      ...structuredClone(change),
+      todo: {
+      hasTaskSource: true,
+      stages: [{
+        id: 'build',
+        label: 'Build',
+        status: 'current',
+        tasks: Array.from({ length: 600 }, (_, index) => ({
+          text: `Task ${index}`,
+          completed: false,
+        })),
+      }],
+      },
+    } as ChangeSnapshot
+    const result = await resolveOrchestrationGraphRoute(
+      '/api/orchestration-graph?root=%2Frepo&change=demo',
+      '/api/orchestration-graph',
+      {
+        workflowRootForRequest: () => ({ ok: true as const, anchor: { path: '/repo' } as never }),
+        readChange: async () => oversized,
+      },
+    )
+    expect(result).toEqual({
+      status: 413,
+      body: {
+        ok: false,
+        code: 'ORCHESTRATION_GRAPH_LIMIT_EXCEEDED',
+        error: '编排图超过安全上限',
+      },
+    })
+  })
 })

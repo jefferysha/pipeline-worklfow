@@ -7,6 +7,18 @@ export const ORCHESTRATION_NODE_KINDS = [
 export const ORCHESTRATION_EDGE_KINDS = [
   'governs', 'contains', 'transitions', 'produces', 'reviews', 'executes',
 ] as const
+export const MAX_ORCHESTRATION_NODES = 512
+export const MAX_ORCHESTRATION_EDGES = 1024
+export const MAX_ORCHESTRATION_LABEL_LENGTH = 1024
+export const MAX_ORCHESTRATION_NODE_ID_LENGTH = 2048
+export const MAX_ORCHESTRATION_EDGE_ID_LENGTH = 4096
+
+export class OrchestrationGraphLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OrchestrationGraphLimitError'
+  }
+}
 
 export type OrchestrationNodeKind = (typeof ORCHESTRATION_NODE_KINDS)[number]
 export type OrchestrationEdgeKind = (typeof ORCHESTRATION_EDGE_KINDS)[number]
@@ -101,16 +113,35 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
   }]
   const edges: OrchestrationEdge[] = [edge('governs', workflowId, changeId, 'governs')]
   const phaseIds = new Set<string>()
+  const assertCapacity = (nodeCount = nodes.length, edgeCount = edges.length): void => {
+    if (nodeCount > MAX_ORCHESTRATION_NODES || edgeCount > MAX_ORCHESTRATION_EDGES) {
+      throw new OrchestrationGraphLimitError('编排图超过节点或边上限')
+    }
+  }
+  const assertLabel = (label: string): void => {
+    if (
+      label.length === 0
+      || label.length > MAX_ORCHESTRATION_LABEL_LENGTH
+      || /[\u0000-\u001f\u007f-\u009f]/.test(label)
+    ) {
+      throw new OrchestrationGraphLimitError('编排图标签超过长度上限')
+    }
+  }
+  assertLabel(definition.workflow)
+  assertLabel(change.name)
 
   change.workflowRules.steps.forEach((step, index) => {
+    assertCapacity(nodes.length + 1, edges.length + 1)
     const id = `phase:${step}`
     phaseIds.add(id)
     const projected = change.todo?.stages.find((stage) => stage.id === step)?.status
     const status = projected ?? (step === change.phase ? 'current' : 'pending')
+    const label = change.workflowRules.labelByStep[step] || step
+    assertLabel(label)
     nodes.push({
       id,
       kind: 'phase',
-      label: change.workflowRules.labelByStep[step] || step,
+      label,
       status,
       metadata: [
         { key: 'phase_id', value: step },
@@ -127,6 +158,8 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     for (const transition of transitions) {
       const target = `phase:${transition.to}`
       if (phaseIds.has(target)) {
+        assertCapacity(nodes.length, edges.length + 1)
+        assertLabel(transition.event)
         edges.push(edge('transitions', source, target, transition.event, transition.event))
       }
     }
@@ -136,6 +169,8 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     const phaseId = `phase:${stage.id}`
     if (!phaseIds.has(phaseId)) continue
     stage.tasks.forEach((task, index) => {
+      assertCapacity(nodes.length + 1, edges.length + 1)
+      assertLabel(task.text)
       const id = `task:${stage.id}:${index}`
       nodes.push({
         id,
@@ -149,6 +184,8 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
   }
 
   for (const item of change.documents?.items ?? []) {
+    assertCapacity(nodes.length + 1, edges.length + 1)
+    assertLabel(item.kind)
     const id = `document:${item.kind}`
     nodes.push({
       id,
@@ -174,6 +211,7 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
   for (const field of reviewFields) {
     const status = valueOf(change, field)
     if (status === '') continue
+    assertCapacity(nodes.length + 1, edges.length + 1)
     const id = `review:${field}`
     nodes.push({
       id,
@@ -187,6 +225,7 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
   }
 
   if (change.terminalActivity !== undefined) {
+    assertCapacity(nodes.length + 1, edges.length + 1)
     const id = 'session:active'
     nodes.push({
       id,
@@ -201,8 +240,21 @@ export function buildOrchestrationGraph(input: BuildOrchestrationGraphInput): Or
     edges.push(edge('executes', id, changeId, 'executes'))
   }
 
+  for (const node of nodes) {
+    assertLabel(node.label)
+    if (node.id.length === 0 || node.id.length > MAX_ORCHESTRATION_NODE_ID_LENGTH) {
+      throw new OrchestrationGraphLimitError('编排图节点标识超过长度上限')
+    }
+  }
+  for (const item of edges) {
+    assertLabel(item.label)
+    if (item.id.length === 0 || item.id.length > MAX_ORCHESTRATION_EDGE_ID_LENGTH) {
+      throw new OrchestrationGraphLimitError('编排图边标识超过长度上限')
+    }
+  }
   nodes.sort((a, b) => a.id.localeCompare(b.id))
   edges.sort((a, b) => a.id.localeCompare(b.id))
+  assertCapacity()
   return {
     schema: 'tenon-orchestration-graph/v1',
     scope: { root: input.root, change: change.name },

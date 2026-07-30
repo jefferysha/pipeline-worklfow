@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
-import { lstat, readFile, realpath } from 'node:fs/promises'
-import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
+import { constants } from 'node:fs'
+import { lstat, open, realpath, type FileHandle } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { DocumentKind } from '../workflow/document-contract.js'
 
 export class DocumentLedgerError extends Error {
@@ -13,6 +14,109 @@ export class DocumentLedgerError extends Error {
 export interface ResolvedDocument {
   readonly relativePath: string
   readonly digest: string
+}
+
+export const MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024
+export type BoundedFileHandleReader = (
+  handle: FileHandle,
+  maxBytes: number,
+) => Promise<Buffer>
+
+export async function readBoundedFileHandle(
+  handle: FileHandle,
+  maxBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let total = 0
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total
+    const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining))
+    const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, null)
+    if (bytesRead === 0) break
+    chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead))
+    total += bytesRead
+  }
+  return Buffer.concat(chunks, total)
+}
+
+export async function readBoundedRegularFile(
+  path: string,
+  maxBytes: number,
+  label: string,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<Buffer> {
+  const parent = dirname(path)
+  const parentBefore = await lstat(parent)
+  if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
+    throw new DocumentLedgerError(`${label} 不得通过 symlink 或路径别名读取`)
+  }
+  const parentRealBefore = await realpath(parent)
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  )
+  try {
+    const opened = await handle.stat()
+    if (!opened.isFile()) throw new DocumentLedgerError(`${label} 必须是非 symlink 普通文件: ${path}`)
+    const assertStable = async (): Promise<void> => {
+      const [parentNow, parentRealNow, targetNow] = await Promise.all([
+        lstat(parent),
+        realpath(parent),
+        lstat(path),
+      ])
+      if (
+        !parentNow.isDirectory()
+        || parentNow.isSymbolicLink()
+        || parentNow.dev !== parentBefore.dev
+        || parentNow.ino !== parentBefore.ino
+        || parentRealNow !== parentRealBefore
+        || !targetNow.isFile()
+        || targetNow.isSymbolicLink()
+        || targetNow.dev !== opened.dev
+        || targetNow.ino !== opened.ino
+        || targetNow.size !== opened.size
+      ) {
+        throw new DocumentLedgerError(`${label} 在读取期间变化: ${path}`)
+      }
+    }
+    await assertStable()
+    if (opened.size > maxBytes) throw new DocumentLedgerError(`${label} 超过 ${maxBytes} bytes 上限`)
+    const content = await readSource(handle, maxBytes)
+    if (content.byteLength > maxBytes) {
+      throw new DocumentLedgerError(`${label} 超过 ${maxBytes} bytes 上限`)
+    }
+    const after = await handle.stat()
+    if (
+      !after.isFile()
+      || after.dev !== opened.dev
+      || after.ino !== opened.ino
+      || after.size !== opened.size
+    ) {
+      throw new DocumentLedgerError(`${label} 在读取期间变化: ${path}`)
+    }
+    await assertStable()
+    return content
+  } finally {
+    await handle.close()
+  }
+}
+
+export async function readOptionalBoundedRegularTextFile(
+  path: string,
+  maxBytes: number,
+  label: string,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<string | undefined> {
+  try {
+    return (await readBoundedRegularFile(path, maxBytes, label, readSource)).toString('utf8')
+  } catch (error) {
+    if (
+      typeof error === 'object'
+      && error !== null
+      && Reflect.get(error, 'code') === 'ENOENT'
+    ) return undefined
+    throw error
+  }
 }
 
 function normalizeRelativePath(path: string): string {
@@ -63,7 +167,11 @@ export function documentSlot(kind: DocumentKind, path: string, changeDir: string
 }
 
 /** Resolve a document without root escape, symlinks/path aliases, or empty/non-file records. */
-export async function resolveDocument(repoRoot: string, path: string): Promise<ResolvedDocument> {
+export async function resolveDocument(
+  repoRoot: string,
+  path: string,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<ResolvedDocument> {
   if (!path || isAbsolute(path)) throw new DocumentLedgerError(`document path 必须是项目相对路径: ${path || '(empty)'}`)
   const lexicalRoot = resolve(repoRoot)
   const lexicalTarget = resolve(repoRoot, path)
@@ -76,8 +184,18 @@ export async function resolveDocument(repoRoot: string, path: string): Promise<R
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new DocumentLedgerError(`document 必须是非 symlink 普通文件: ${relativePath}`)
   }
+  if (info.size > MAX_DOCUMENT_SOURCE_BYTES) {
+    throw new DocumentLedgerError(`document 超过 ${MAX_DOCUMENT_SOURCE_BYTES} bytes 上限: ${relativePath}`)
+  }
   const [realRoot, realTarget, content] = await Promise.all([
-    realpath(repoRoot), realpath(lexicalTarget), readFile(lexicalTarget),
+    realpath(repoRoot),
+    realpath(lexicalTarget),
+    readBoundedRegularFile(
+      lexicalTarget,
+      MAX_DOCUMENT_SOURCE_BYTES,
+      `document ${relativePath}`,
+      readSource,
+    ),
   ])
   if (!inside(realRoot, realTarget)) throw new DocumentLedgerError(`document realpath 越出项目根: ${relativePath}`)
   const realRelativePath = normalizeRelativePath(relative(realRoot, realTarget))

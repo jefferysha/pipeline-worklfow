@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ChangeSnapshot } from './types.js'
-import { buildOrchestrationGraph } from './orchestrationGraph.js'
+import {
+  buildOrchestrationGraph,
+  MAX_ORCHESTRATION_NODES,
+  OrchestrationGraphLimitError,
+} from './orchestrationGraph.js'
 
 function changeFixture(): ChangeSnapshot {
   return {
@@ -173,5 +177,64 @@ describe('buildOrchestrationGraph', () => {
     expect(transitions).toHaveLength(2)
     expect(new Set(transitions.map((edge) => edge.id))).toHaveLength(2)
     expect(graph.nodes.find((node) => node.id === 'phase:open')?.label).toBe('open')
+  })
+
+  it('fails before publishing an oversized task graph', () => {
+    const fixture = changeFixture()
+    fixture.todo = {
+      hasTaskSource: true,
+      stages: [{
+        id: 'build',
+        label: 'Build',
+        status: 'current',
+        tasks: Array.from(
+          { length: MAX_ORCHESTRATION_NODES },
+          (_, index) => ({ text: `Task ${index}`, completed: false }),
+        ),
+      }],
+    }
+    expect(() => buildOrchestrationGraph({
+      root: '/repo',
+      change: fixture,
+      definition: {
+        schema: 'workflow-definition-status/v1',
+        workflow: 'default',
+        status: 'current',
+        frozen_fingerprint: 'a'.repeat(64),
+        current_fingerprint: 'a'.repeat(64),
+      },
+    })).toThrow(OrchestrationGraphLimitError)
+  })
+
+  it('uses the same bounded display predicate as the Dashboard decoder', () => {
+    const fixture = changeFixture()
+    fixture.todo!.stages[1]!.tasks[0]!.text = 'Tabbed\tlabel'
+    expect(() => buildOrchestrationGraph({
+      root: '/repo',
+      change: fixture,
+      definition: {
+        schema: 'workflow-definition-status/v1',
+        workflow: 'default',
+        status: 'current',
+        frozen_fingerprint: 'a'.repeat(64),
+        current_fingerprint: 'a'.repeat(64),
+      },
+    })).toThrow(OrchestrationGraphLimitError)
+
+    const longId = changeFixture()
+    longId.workflowRules.steps = ['x'.repeat(2043)]
+    longId.workflowRules.labelByStep = { [longId.workflowRules.steps[0]!]: 'Safe label' }
+    longId.workflowRules.transitions = { [longId.workflowRules.steps[0]!]: [] }
+    expect(() => buildOrchestrationGraph({
+      root: '/repo',
+      change: longId,
+      definition: {
+        schema: 'workflow-definition-status/v1',
+        workflow: 'default',
+        status: 'current',
+        frozen_fingerprint: 'a'.repeat(64),
+        current_fingerprint: 'a'.repeat(64),
+      },
+    })).toThrow(OrchestrationGraphLimitError)
   })
 })

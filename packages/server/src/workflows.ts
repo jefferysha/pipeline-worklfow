@@ -3,8 +3,8 @@
  */
 import { randomUUID } from 'node:crypto'
 import {
-  constants, fstatSync, fsyncSync, lstatSync, openSync, readFileSync,
-  readdirSync, renameSync, unlinkSync, writeFileSync,
+  constants, fstatSync, fsyncSync, lstatSync, openSync,
+  readSync, readdirSync, renameSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { validateWorkflow, parseWorkflow, serializeWorkflow, validateWorkflowTrackReferences } from '@tenon/kernel'
 import type { WorkflowDef } from '@tenon/kernel'
@@ -60,6 +60,21 @@ export class WorkflowReadError extends Error {
   }
 }
 
+export const MAX_WORKFLOW_DEFINITION_BYTES = 256 * 1024
+export type WorkflowFdReader = (fd: number, maxBytes: number) => string
+
+export function readBoundedWorkflowSource(fd: number, maxBytes: number): string {
+  const bytes = Buffer.allocUnsafe(maxBytes + 1)
+  let total = 0
+  while (total <= maxBytes) {
+    const count = readSync(fd, bytes, total, maxBytes + 1 - total, null)
+    if (count === 0) break
+    total += count
+  }
+  if (total > maxBytes) throw new WorkflowReadError('workflow 超过安全读取上限')
+  return bytes.subarray(0, total).toString('utf8')
+}
+
 function workflowIoError(error: unknown): boolean {
   const code = typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined
   return code === 'EACCES' || code === 'EIO' || code === 'EMFILE' || code === 'ENFILE'
@@ -110,7 +125,11 @@ export function listWorkflowNames(root: WorkflowRoot): string[] {
 }
 
 /** 从 O_NOFOLLOW 打开的普通文件 fd 读字节，再 parse + validate；不调用会重走 pathname 的 loadWorkflow。 */
-export function readWorkflowForApi(root: WorkflowRoot, name: string): WorkflowDef {
+export function readWorkflowForApi(
+  root: WorkflowRoot,
+  name: string,
+  readSource: WorkflowFdReader = readBoundedWorkflowSource,
+): WorkflowDef {
   assertWorkflowName(name)
   let source: string
   try {
@@ -147,11 +166,27 @@ export function readWorkflowForApi(root: WorkflowRoot, name: string): WorkflowDe
           if (!opened.isFile()) {
             throw new WorkflowPathError(`workflow '${name}' 读取目标不是可信普通文件`)
           }
+          if (opened.size > MAX_WORKFLOW_DEFINITION_BYTES) {
+            throw new WorkflowReadError(`workflow '${name}' 超过安全读取上限`)
+          }
           assertEntryMatches(paths, opened, 'workflow 读取目标')
           assertWorkflowDirectoriesStillTrusted(directories)
           try {
-            return readFileSync(fd, 'utf8')
+            const result = readSource(fd, MAX_WORKFLOW_DEFINITION_BYTES)
+            const after = fstatSync(fd)
+            if (
+              !after.isFile()
+              || after.dev !== opened.dev
+              || after.ino !== opened.ino
+              || after.size !== opened.size
+            ) {
+              throw new WorkflowReadError(`workflow '${name}' 在读取期间变化`)
+            }
+            assertEntryMatches(paths, opened, 'workflow 读取目标')
+            assertWorkflowDirectoriesStillTrusted(directories)
+            return result
           } catch (error) {
+            if (error instanceof WorkflowReadError) throw error
             throw new WorkflowReadError(`workflow '${name}' 读取失败`, error)
           }
         } finally {

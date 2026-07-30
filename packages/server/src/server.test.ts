@@ -3101,10 +3101,20 @@ describe('GET /api/orchestration-graph —— Change 编排图', () => {
       runLinked.port,
       `/api/workflow-definition-status?root=${encodeURIComponent(runLinked.root)}&change=${runLinked.name}`,
     )
-    expect(graphRunLinked.status).toBe(500)
-    expect(definitionRunLinked.status).toBe(500)
+    expect(graphRunLinked.status).toBe(403)
+    expect(graphRunLinked.json()).toMatchObject({ code: 'ORCHESTRATION_CHANGE_FORBIDDEN' })
+    expect(definitionRunLinked.status).toBe(403)
     expect(JSON.stringify(graphRunLinked.json())).not.toContain(outsideRunDir)
     expect(JSON.stringify(definitionRunLinked.json())).not.toContain(outsideRunDir)
+  })
+
+  it('可信 canonical state 的非法 UTF-8 是 unreadable 500，不误报 path forbidden', async () => {
+    const h = await start()
+    await writeFile(join(h.changeDir, '.pipeline-run', 'current.json'), Buffer.from([0xff]))
+
+    const response = await reqGet(h.port, route(h.root))
+    expect(response.status).toBe(500)
+    expect(response.json()).toMatchObject({ code: 'ORCHESTRATION_CHANGE_UNREADABLE' })
   })
 
   it('legacy custom workflow leaf 指向 root 外时有界失败且不投影外部定义', async () => {
