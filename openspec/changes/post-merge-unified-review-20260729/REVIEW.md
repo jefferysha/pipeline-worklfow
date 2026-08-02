@@ -857,3 +857,42 @@ branches. Four synthetic writes were intercepted, unexpected writes were zero,
 and the real config remained revision `09bfcc6a14b83e21` with its original six
 Tracks. Build is ready for one exact commit and fresh exact-SHA Verify; no prior
 rejected SHA or asset is reused.
+
+## 2026-08-03 actual-trigger focus and CI test convergence
+
+The exact-SHA Codex and independent reviews both rejected `2448ea13` with the
+same Medium finding: Track editor return focus was inferred from
+`document.activeElement`. Safari/macOS settings and programmatic activation do
+not guarantee that a clicked button becomes active, so close/save could return
+focus to the panel close button instead of the actual Edit/Create trigger. The
+new `fireEvent.click` regression failed on the parent with 1 failed / 3 passed
+and passed on the repair with 4/4. Edit/Create now pass `event.currentTarget`
+through `TrackSettingsList` and commit that trigger only when a deferred dirty
+switch is accepted; choosing Stay preserves the current editor's opener.
+
+The exact parent CI then exposed an unrelated test-order race in the existing
+StrictMode Create Change test. `route-winner` can render one effect cycle before
+the default Workflow's first-step state enables Create. Under CI load the test
+clicked the still-disabled control and later timed out with zero callback calls;
+the final failure DOM showed the button enabled after the lost click. The test
+now waits for the same observable enabled precondition as the neighboring
+creation test before asserting that StrictMode does not suppress `onCreated`.
+The focused file is green for 25 consecutive runs.
+
+Current source passes Dashboard 85 files / 1548 tests and root 330 files /
+5881 tests with 26 honest environment skips. Full build, typecheck, comments,
+architecture (719 production files), OpenSpec 38/38, release workflows 24/24,
+repository hygiene, docs, identity, dependency audit/tree, default workflow
+freshness, and diff whitespace gates pass. The production entry is
+`index-FQ5CIyhA.js`, SHA-256
+`10770c647c3b2e588d9ce5e3abe832b2a3ae3148ba5ed12ac1501d71d5fe1226`;
+a separate fresh Vite build is byte-identical.
+
+Independent source/dist review and fresh production browser acceptance each
+return **C0/H0/M0/L0**. The browser used non-focusing programmatic activation
+for Edit/Create, save, accepted dirty switch, and Stay cancellation; every
+return target was exact. Its only synthetic PATCH was intercepted locally,
+unexpected writes were zero, and the real config remained builtin-only at
+revision `09bfcc6a14b83e21` with the original six Tracks. This repaired tree is
+ready to commit and freeze; all exact-SHA Verify and GitHub CI evidence must be
+rerun on the new commit.

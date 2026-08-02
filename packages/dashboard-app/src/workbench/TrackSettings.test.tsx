@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WbTrackDefinition } from '../api/client'
@@ -118,6 +118,20 @@ describe('TrackSettings', () => {
     await user.click(within(screen.getByTestId('wb-track-unsaved-draft')).getByRole('button', { name: '丢弃并离开' }))
     await user.click(within(screen.getByTestId('wb-track-editor')).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(editFrontend).toHaveFocus())
+  })
+
+  it('returns focus to the clicked editor opener even when activation does not focus it', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    render(<I18nProvider><TrackSettings state={state()} /></I18nProvider>)
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    const editPm = screen.getByTestId('wb-track-edit-pm')
+    expect(editPm).not.toHaveFocus()
+
+    fireEvent.click(editPm)
+    fireEvent.click(within(screen.getByTestId('wb-track-editor')).getByRole('button', { name: '关闭' }))
+
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(editPm).toHaveFocus()
   })
 
   it('preserves the current opener when a dirty editor switch is cancelled', async () => {

@@ -100,12 +100,11 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     if (!busy) discardGuard.request(editorDirty, action)
   }
 
-  function requestEditorSwitch(action: () => void): void {
+  function requestEditorSwitch(action: () => void, trigger: HTMLElement): void {
     if (!busy) {
       // Capture the list/create trigger before a dirty-draft confirmation can move focus into its
       // own dialog, but commit it only if the deferred switch is actually accepted. Choosing Stay
       // must preserve the opener belonging to the editor that remains on screen.
-      const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
       discardGuard.request(editorDirty, () => {
         mutationFocus.captureEditorReturn(trigger)
         action()
@@ -337,7 +336,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
         >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-text-3">{t('workbench.track_settings_description')}</p>
-            <button type="button" className={ADD_CLS} data-testid="wb-track-create" disabled={busy} onClick={() => requestEditorSwitch(openCreate)}>{t('workbench.track_settings_create')}</button>
+            <button type="button" className={ADD_CLS} data-testid="wb-track-create" disabled={busy} onClick={(event) => requestEditorSwitch(openCreate, event.currentTarget)}>{t('workbench.track_settings_create')}</button>
           </div>
           {editor && (
             <form
@@ -382,7 +381,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
               </fieldset>
             </form>
           )}
-          <TrackSettingsList state={state} disabled={busy} onEdit={(track) => requestEditorSwitch(() => openEdit(track))} />
+          <TrackSettingsList state={state} disabled={busy} onEdit={(track, trigger) => requestEditorSwitch(() => openEdit(track), trigger)} />
         </Dialog>
       )}
       <UnsavedDraftDialog

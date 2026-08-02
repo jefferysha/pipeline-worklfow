@@ -10,7 +10,7 @@ export function TrackSettingsList({
   disabled = false,
 }: {
   state: MandatoryState
-  onEdit: (track: WbTrackDefinition) => void
+  onEdit: (track: WbTrackDefinition, trigger: HTMLButtonElement) => void
   disabled?: boolean
 }): JSX.Element {
   const { lang, t } = useT()
@@ -35,7 +35,7 @@ export function TrackSettingsList({
                 className="ml-auto rounded-md border border-border px-2 py-1 text-[11px] font-bold text-text-3 disabled:cursor-not-allowed disabled:opacity-55"
                 data-testid={`wb-track-edit-${track.id}`}
                 disabled={disabled}
-                onClick={() => onEdit(track)}
+                onClick={(event) => onEdit(track, event.currentTarget)}
               >
                 {t('workbench.track_edit')}
               </button>

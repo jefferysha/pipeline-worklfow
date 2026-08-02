@@ -450,3 +450,27 @@ may record PASS.
 - PR #20 is non-draft and mergeable. Exact CI run `30552730210` and Docs build
   `30552730398` succeeded. Verify, merge/main CI, Ship and Archive are not yet
   claimed.
+
+### 2026-08-03 final actual-trigger remediation
+
+- Exact-SHA Codex and independent review rejected parent `2448ea13` at
+  C0/H0/M1/L0 because editor return focus used `document.activeElement` instead
+  of the actual Edit/Create control. A non-focusing `fireEvent.click` regression
+  failed on the parent and passes after passing `event.currentTarget` through
+  the editor-switch boundary.
+- The parent GitHub CI also found the StrictMode Create Change test could click
+  during the observable disabled interval between route winner and first-step
+  readiness. It now waits for the supported enabled precondition before proving
+  that the callback survives StrictMode. The complete file passed 25 consecutive
+  focused runs.
+- Current gates are Dashboard 1548/1548, root 5881 passed with 26 honest skips,
+  full build/typecheck, architecture 719, OpenSpec 38/38, release 24/24,
+  comments, hygiene, docs, identity, dependencies, workflow freshness and diff.
+- Fresh independent review and production browser acceptance return
+  C0/H0/M0/L0. Programmatic non-focusing Edit/Create/save/dirty-switch/Stay
+  paths all return exact focus. The intercepted browser run made zero real
+  writes; project config remains builtin-only at revision `09bfcc6a14b83e21`.
+- The rebuilt entry is `index-FQ5CIyhA.js`, SHA-256
+  `10770c647c3b2e588d9ce5e3abe832b2a3ae3148ba5ed12ac1501d71d5fe1226`,
+  and matches a separate fresh Vite build byte-for-byte. A new commit, frozen
+  Build SHA, exact Verify tracks and GitHub CI are still mandatory.
