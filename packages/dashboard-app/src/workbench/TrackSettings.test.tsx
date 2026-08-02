@@ -81,4 +81,63 @@ describe('TrackSettings', () => {
     await waitFor(() => expect(within(editor).getByTestId('wb-track-editor-save')).toHaveFocus())
     expect(label).toBeEnabled()
   })
+
+  it('returns focus to the editor opener after save success and manual close', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    const user = userEvent.setup()
+    const reloadConfig = vi.fn(async () => {})
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      revision: 'tracks-r2',
+      source: 'project-file',
+      tracks: TRACKS,
+    }), { status: 200 })))
+
+    render(<I18nProvider><TrackSettings state={state(reloadConfig)} /></I18nProvider>)
+    await user.click(screen.getByTestId('wb-track-settings-toggle'))
+    const editPm = screen.getByTestId('wb-track-edit-pm')
+    await user.click(editPm)
+    await user.click(screen.getByTestId('wb-track-editor-save'))
+
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(reloadConfig).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(editPm).toHaveFocus())
+
+    await user.click(editPm)
+    const editor = screen.getByTestId('wb-track-editor')
+    await user.click(within(editor).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(editPm).toHaveFocus()
+
+    await user.click(editPm)
+    const pmLabel = within(screen.getByTestId('wb-track-editor')).getByLabelText('显示名称')
+    await user.clear(pmLabel)
+    await user.type(pmLabel, 'Dirty PM')
+    const editFrontend = screen.getByTestId('wb-track-edit-frontend')
+    await user.click(editFrontend)
+    await user.click(within(screen.getByTestId('wb-track-unsaved-draft')).getByRole('button', { name: '丢弃并离开' }))
+    await user.click(within(screen.getByTestId('wb-track-editor')).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(editFrontend).toHaveFocus())
+  })
+
+  it('preserves the current opener when a dirty editor switch is cancelled', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    const user = userEvent.setup()
+    render(<I18nProvider><TrackSettings state={state()} /></I18nProvider>)
+    await user.click(screen.getByTestId('wb-track-settings-toggle'))
+    const editPm = screen.getByTestId('wb-track-edit-pm')
+    await user.click(editPm)
+    const label = within(screen.getByTestId('wb-track-editor')).getByLabelText('显示名称')
+    await user.clear(label)
+    await user.type(label, 'Dirty PM')
+
+    await user.click(screen.getByTestId('wb-track-edit-frontend'))
+    await user.click(within(screen.getByTestId('wb-track-unsaved-draft')).getByRole('button', { name: '继续编辑' }))
+    expect(label).toHaveValue('Dirty PM')
+
+    await user.click(within(screen.getByTestId('wb-track-editor')).getByRole('button', { name: '关闭' }))
+    await user.click(within(screen.getByTestId('wb-track-unsaved-draft')).getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(editPm).toHaveFocus()
+  })
 })

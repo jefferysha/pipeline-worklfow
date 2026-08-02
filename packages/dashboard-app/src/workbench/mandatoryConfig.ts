@@ -223,7 +223,13 @@ export function peekMandatoryConfig(root: string): MandatoryConfig | null {
  */
 export function primeMandatoryConfig(next: MandatoryConfig, root: string): void {
   if (root.trim() === '') return
-  cfgCache.set(cacheKey(root), next)
+  const key = cacheKey(root)
+  // A successful mutation is a newer authority event than every config GET that was already in
+  // flight. Advance the generation before publishing so a stale reload cannot roll the cache
+  // back after the server has accepted the write.
+  cfgGeneration.set(key, (cfgGeneration.get(key) ?? 0) + 1)
+  cfgInflight.delete(key)
+  cfgCache.set(key, next)
 }
 
 export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {

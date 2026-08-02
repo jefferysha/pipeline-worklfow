@@ -114,6 +114,16 @@ export function useMandatorySkills(root: string): MandatoryState {
   // root B 的同名格子；token 则避免旧操作的 finally 清掉较新的在途状态。
   const rootRef = useRef(root)
   const localeRef = useRef({ t, lang })
+  const reloadRootRef = useRef(root)
+  const reloadRootEpochRef = useRef(0)
+  const reloadRequestRef = useRef(0)
+  const configEffectRootRef = useRef(root)
+  if (reloadRootRef.current !== root) {
+    reloadRootRef.current = root
+    reloadRootEpochRef.current += 1
+    reloadRequestRef.current += 1
+  }
+  const renderRootEpoch = reloadRootEpochRef.current
   rootRef.current = root
   localeRef.current = { t, lang }
   const savingOpsRef = useRef(new Map<string, { token: symbol; root: string; cellKey: string }>())
@@ -134,6 +144,12 @@ export function useMandatorySkills(root: string): MandatoryState {
   // config 探测（cancelled 守卫同 SkillChain：卸载后回来的响应不再 setState）。
   useEffect(() => {
     let cancelled = false
+    // A pending request from an earlier visit to the same root is not authoritative for this root
+    // incarnation. Supersede it before consulting the shared cache/in-flight registry.
+    if (configEffectRootRef.current !== root) {
+      configEffectRootRef.current = root
+      clearMandatoryConfig(root)
+    }
     const cached = peekMandatoryConfig(root)
     setCfg(cached)
     setSaveErrors({})
@@ -274,12 +290,24 @@ export function useMandatorySkills(root: string): MandatoryState {
 
   async function reloadConfig(): Promise<void> {
     const requestRoot = root
+    if (
+      rootRef.current !== requestRoot ||
+      reloadRootRef.current !== requestRoot ||
+      reloadRootEpochRef.current !== renderRootEpoch
+    ) return
+    const request = ++reloadRequestRef.current
     clearMandatoryConfig(requestRoot)
     // Keep the last authoritative config rendered while the replacement is fetched. Publishing
     // a transient null here unmounts Track Settings during a successful mutation and discards the
     // workspace lifecycle before the caller can close only its submitted editor.
     const next = await loadMandatoryConfig(requestRoot)
-    if (rootRef.current === requestRoot) setCfg(next)
+    if (
+      rootRef.current === requestRoot &&
+      reloadRootRef.current === requestRoot &&
+      reloadRootEpochRef.current === renderRootEpoch &&
+      reloadRequestRef.current === request &&
+      peekMandatoryConfig(requestRoot) === next
+    ) setCfg(next)
   }
 
   return {

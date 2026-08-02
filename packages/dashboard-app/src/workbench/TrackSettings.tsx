@@ -101,7 +101,16 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
   }
 
   function requestEditorSwitch(action: () => void): void {
-    if (!busy) discardGuard.request(editorDirty, action)
+    if (!busy) {
+      // Capture the list/create trigger before a dirty-draft confirmation can move focus into its
+      // own dialog, but commit it only if the deferred switch is actually accepted. Choosing Stay
+      // must preserve the opener belonging to the editor that remains on screen.
+      const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      discardGuard.request(editorDirty, () => {
+        mutationFocus.captureEditorReturn(trigger)
+        action()
+      })
+    }
   }
 
   function openCreate(): void {

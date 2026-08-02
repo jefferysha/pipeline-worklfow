@@ -815,3 +815,45 @@ horizontal-overflow boundaries also pass. All writes were intercepted, the
 real project revision and six Tracks remained unchanged, and the visual review
 returned **C0/H0/M0/L0**. The candidate is ready for one exact commit and a
 fresh exact-SHA Verify with GitHub CI.
+
+## 2026-08-03 same-root reload fencing
+
+The exact-SHA Verify correctly rejected `71429fd6` because the module cache's
+per-root generation did not protect the Hook-local state. Two rapid reloads for
+the same root could complete B before A, publish B's newer revision, and then
+let A's older return value execute `setCfg`. The new same-name
+`mandatoryState.test.tsx` regression deterministically failed before the repair
+with `revision-a-old` replacing `revision-b-new`.
+
+The Hook now binds every reload to both the current root incarnation and a
+monotonic request token. A superseding same-root reload, root switch, or later
+root incarnation invalidates the earlier token before it may publish local
+state. The module cache generation remains the authority for cache publication;
+the Hook fence independently protects the rendered snapshot.
+
+The final convergence also covers two neighboring authority/focus boundaries.
+Returning A→B→A now supersedes the first A incarnation's in-flight config, and
+a successful mandatory-skill mutation advances cache authority so a previously
+started GET cannot roll it back. Track editor success, manual close, accepted
+dirty switch, and cancelled dirty switch each return focus to the trigger that
+still owns the visible editor; choosing Stay no longer commits the attempted
+switch's trigger. Every defect first failed a deterministic permanent test.
+
+The final synthetic tree is `141711884df345395602862c60b9319b8fc7499e`.
+Focused E2E passes 212/212 plus API 27/27. Dashboard passes 85 files / 1547
+tests; root passes 330 files / 5881 tests with the same 26 honest environment
+skips. Full production build and typecheck pass, and the rebuilt entry asset is
+`index-DPwGklEj.js` with SHA-256
+`d3eba5d6083db61c3dc2653fb544268e6c0c63dca147a68278f4de8f97a30f28`.
+Architecture (719 production files), comments, OpenSpec 38/38, release workflows
+24/24, repository hygiene, documentation, identity, dependency audit/tree,
+default-workflow freshness, and diff whitespace gates all pass.
+
+The final independent full-range reviewer, isolated E2E track, and production
+browser/visual track each return **C0/H0/M0/L0**. The browser matrix covers
+1024/1440/1920, zh/en, light/dark, reduced motion, same-root response inversion,
+continuous authoritative revisions, busy/error states, and all four focus
+branches. Four synthetic writes were intercepted, unexpected writes were zero,
+and the real config remained revision `09bfcc6a14b83e21` with its original six
+Tracks. Build is ready for one exact commit and fresh exact-SHA Verify; no prior
+rejected SHA or asset is reused.
