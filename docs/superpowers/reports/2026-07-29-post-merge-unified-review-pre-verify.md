@@ -474,3 +474,25 @@ may record PASS.
   `10770c647c3b2e588d9ce5e3abe832b2a3ae3148ba5ed12ac1501d71d5fe1226`,
   and matches a separate fresh Vite build byte-for-byte. A new commit, frozen
   Build SHA, exact Verify tracks and GitHub CI are still mandatory.
+
+### Save/Delete actual-trigger Build repair after `dce8ddb`
+
+- The rejected exact-SHA Verify found one remaining Medium: Save inferred its
+  retry focus from `document.activeElement`, and Delete did not capture the
+  confirmation control. Non-focusing activations returned to the Dialog close
+  button or Save instead of the actual trigger.
+- Two genuine RED tests failed on the old implementation. Save now consumes the
+  native form submitter synchronously, Delete receives `event.currentTarget`,
+  and implicit Enter/no-submitter submission safely falls back to the stable Save
+  ref. The four activation variants all have permanent regression coverage.
+- Focused Track Settings/focus tests pass 11/11; Dashboard passes 85 files /
+  1552 tests; root passes 330 files / 5881 tests with 26 honest skips. Full
+  production build, typecheck, architecture 719, comments, identity,
+  interaction-contract, repository hygiene and diff checks pass.
+- A strict read-only independent review returned **C0/H0/M0/L0** after the two
+  suggested coverage-only cases were added. `TrackSettings.tsx` is 399 lines,
+  within the enforced 400-line component limit. The review's workspace
+  fingerprint was identical before and after.
+- The previous Verify report remains FAIL and is not reused. The repaired tree
+  requires a new commit, Build freeze, isolated four-track Verify and exact-head
+  GitHub CI before merge.

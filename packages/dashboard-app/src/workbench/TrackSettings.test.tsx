@@ -26,6 +26,15 @@ const TRACKS: readonly WbTrackDefinition[] = [
   },
 ]
 
+const CUSTOM_TRACK: WbTrackDefinition = {
+  id: 'custom', label: 'Custom', builtin: false,
+  workflow: { default: 'default', allowed: '*' },
+  policyProfile: {
+    reviewSeed: 'pending', automationEligible: true, coverageProfile: 'backend',
+    routing: { enabled: false }, skills: { matrix: true, profile: 'custom' },
+  },
+}
+
 function state(reloadConfig = vi.fn(async () => {})): MandatoryState {
   return {
     root: '/repo', revision: 'tracks-r1', table: {}, capable: true,
@@ -132,6 +141,96 @@ describe('TrackSettings', () => {
 
     await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
     expect(editPm).toHaveFocus()
+  })
+
+  it('returns focus to the actual save trigger after a failed non-focusing activation', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    let release!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', vi.fn(async () => pending))
+
+    render(<I18nProvider><TrackSettings state={state()} /></I18nProvider>)
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-pm'))
+    const save = screen.getByTestId('wb-track-editor-save')
+    expect(save).not.toHaveFocus()
+    fireEvent.click(save)
+
+    await act(async () => {
+      release(new Response(JSON.stringify({ ok: false, error: 'conflict' }), { status: 409 }))
+      await pending
+    })
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('conflict')
+    await waitFor(() => expect(save).toHaveFocus())
+  })
+
+  it('returns focus to save after a failed implicit keyboard submission', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    const user = userEvent.setup()
+    let release!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', vi.fn(async () => pending))
+
+    render(<I18nProvider><TrackSettings state={state()} /></I18nProvider>)
+    await user.click(screen.getByTestId('wb-track-settings-toggle'))
+    await user.click(screen.getByTestId('wb-track-edit-pm'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const save = within(editor).getByTestId('wb-track-editor-save')
+    await user.click(within(editor).getByLabelText('显示名称'))
+    await user.keyboard('{Enter}')
+
+    await act(async () => {
+      release(new Response(JSON.stringify({ ok: false, error: 'conflict' }), { status: 409 }))
+      await pending
+    })
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('conflict')
+    await waitFor(() => expect(save).toHaveFocus())
+  })
+
+  it('falls back to save after a failed submission without a submitter', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    let release!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', vi.fn(async () => pending))
+
+    render(<I18nProvider><TrackSettings state={state()} /></I18nProvider>)
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-pm'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const save = within(editor).getByTestId('wb-track-editor-save')
+    fireEvent.submit(editor)
+
+    await act(async () => {
+      release(new Response(JSON.stringify({ ok: false, error: 'conflict' }), { status: 409 }))
+      await pending
+    })
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('conflict')
+    await waitFor(() => expect(save).toHaveFocus())
+  })
+
+  it('returns focus to the actual delete trigger after a failed non-focusing activation', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'zh')
+    let release!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', vi.fn(async () => pending))
+    const customState = state()
+    customState.tracks = [...TRACKS, CUSTOM_TRACK]
+    customState.matrixTracks = customState.tracks
+
+    render(<I18nProvider><TrackSettings state={customState} /></I18nProvider>)
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-custom'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-delete'))
+    const confirmDelete = screen.getByTestId('wb-track-delete-confirm')
+    expect(confirmDelete).not.toHaveFocus()
+    fireEvent.click(confirmDelete)
+
+    await act(async () => {
+      release(new Response(JSON.stringify({ ok: false, error: 'blocked' }), { status: 409 }))
+      await pending
+    })
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('blocked')
+    await waitFor(() => expect(confirmDelete).toHaveFocus())
   })
 
   it('preserves the current opener when a dirty editor switch is cancelled', async () => {

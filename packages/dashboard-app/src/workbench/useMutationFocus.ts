@@ -3,7 +3,7 @@ import { useEffect, useRef, type RefObject } from 'react'
 /** Restore the control that started an atomic mutation when a retry remains possible. */
 export function useMutationFocus(busy: boolean, editorOpen: boolean): {
   readonly saveButtonRef: RefObject<HTMLButtonElement>
-  readonly capture: () => void
+  readonly capture: (target?: unknown) => void
   readonly captureEditorReturn: (target?: HTMLElement | null) => void
 } {
   const saveButtonRef = useRef<HTMLButtonElement>(null)
@@ -32,10 +32,10 @@ export function useMutationFocus(busy: boolean, editorOpen: boolean): {
   }, [editorOpen])
   return {
     saveButtonRef,
-    capture: () => {
-      restoreTarget.current = document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null
+    capture: (target) => {
+      restoreTarget.current = target instanceof HTMLElement || target === null
+        ? target
+        : document.activeElement instanceof HTMLElement ? document.activeElement : null
     },
     captureEditorReturn: (target) => {
       editorReturnTarget.current = target === undefined

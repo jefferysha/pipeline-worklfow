@@ -209,7 +209,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     return [summary, ...details].join(' · ')
   }
 
-  async function saveTrack(): Promise<void> {
+  async function saveTrack(trigger: HTMLElement | null): Promise<void> {
     if (!editor || busy) return
     const draft = editor.draft
     const allowed = allowedFromTrackDraft(draft)
@@ -228,7 +228,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     const targetRoot = state.root
     const targetRevision = state.revision
     const targetTrack = draft.id
-    mutationFocus.capture()
+    mutationFocus.capture(trigger)
     const operation = trackMutation.begin('save', targetRevision, targetTrack)
     setError(null)
     try {
@@ -275,11 +275,12 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     }
   }
 
-  async function removeTrack(): Promise<void> {
+  async function removeTrack(trigger: HTMLElement): Promise<void> {
     if (!editor?.original || editor.original.builtin || busy) return
     const targetRoot = state.root
     const targetRevision = state.revision
     const targetTrack = editor.original.id
+    mutationFocus.capture(trigger)
     const operation = trackMutation.begin('delete', targetRevision, targetTrack)
     setError(null)
     try {
@@ -342,7 +343,10 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
             <form
               className="mb-3 rounded-xl border border-accent-b bg-accent-t/35 p-3"
               data-testid="wb-track-editor"
-              onSubmit={(event) => { event.preventDefault(); void saveTrack() }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                const submitter = (event.nativeEvent as SubmitEvent).submitter; void saveTrack(submitter instanceof HTMLElement ? submitter : mutationFocus.saveButtonRef.current)
+              }}
             >
               <fieldset className="contents" disabled={busy}>
                 <div className="mb-3 flex items-center justify-between gap-2">
@@ -373,7 +377,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
                   {editor.mode === 'edit' && !editor.original?.builtin && (
                     deleteConfirm
-                      ? <button type="button" className="rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-delete-confirm" onClick={() => void removeTrack()}>{t('workbench.track_delete_confirm')}</button>
+                      ? <button type="button" className="rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-delete-confirm" onClick={(event) => void removeTrack(event.currentTarget)}>{t('workbench.track_delete_confirm')}</button>
                       : <button type="button" className="mr-auto rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-editor-delete" onClick={() => setDeleteConfirm(true)}>{t('workbench.track_delete')}</button>
                   )}
                   <button ref={mutationFocus.saveButtonRef} type="submit" className="rounded-md bg-btn-bg px-4 py-1.5 text-xs font-bold text-btn-fg disabled:opacity-50" data-testid="wb-track-editor-save" disabled={!trackDraftHasRequiredFields(editor.draft)}>{busy ? t('workbench.track_saving') : t('workbench.track_save')}</button>

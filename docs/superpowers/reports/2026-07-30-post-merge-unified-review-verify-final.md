@@ -2,79 +2,79 @@
 
 ## 冻结身份
 
-- Build SHA：`71429fd6ada9f43acd79558ee65e32d9c6e6175b`
-- Git tree：`c10ad99308d486986a386a2658c945f18a5c4087`
-- 基线：`a86dabb481a8d20e0c50ce8c1b421fac45f886f9`
-- 完整范围：591 files，20,366 additions，3,680 deletions
-- diff SHA-256：`29294e79ce44cf7075462ca6d718a51f1933b164fe20a5a5ddd614a618674fb1`
-- 真实实现指纹前后均为
-  `afa92cb74034c23f6a7a0baa0d043fd9470d4a7a906f61a75eb83e2c4995451a`；
-  `openspec/specs` 无漂移。各轨只写 `/tmp` 隔离副本或外部证据目录。
+- Tenon Build 基线：`workspace:sha256:8c31d06fe699d4fd1aa7bbdf23578b174ba4efe0c23d065e8ef357f5da65fadc`
+- 产品 Git HEAD：`dce8ddbffcb7b40cf9fe627521f1640e6664e6fb`
+- Git tree：`8010a087d420e24d890532455371c98e2ff04703`
+- Git 基线：`a86dabb481a8d20e0c50ce8c1b421fac45f886f9`
+- 完整范围：624 files，21,108 additions，3,684 deletions
+- diff SHA-256：`dc8a008069e0d7612d99ec8b422e6964fbb8eff91ca632091b73f11c7d4bd046`
 
 ## 聚合结论
 
-Verify：**FAIL — C0 / H0 / M1 / L0**。PR #20 不得合并，必须经官方
-`verify-fail` 回 Build 修复并冻结新 SHA。
+Verify：**FAIL — C0 / H0 / M1 / L0**。PR #20 当前 GitHub CI 虽然为绿色，仍不得合并；必须经官方
+`verify-fail` 回 Build 修复，重新冻结并完整重跑所有验证轨。
 
-### Medium — 同 root 晚到旧刷新覆盖较新的 Hook 状态
+### Medium — Save/Delete 失败焦点未绑定实际 mutation trigger
 
-`packages/dashboard-app/src/workbench/mandatoryState.ts:275` 的
-`reloadConfig()` 在 `await loadMandatoryConfig(requestRoot)` 后只校验 root 即执行
-`setCfg(next)`。`mandatoryConfig.ts` 的 per-root generation 能阻止旧响应写模块缓存，
-但不能阻止旧 Promise 的返回值写 Hook-local state。
+独立 Codex 全差异审查确认 `packages/dashboard-app/src/workbench/TrackSettings.tsx:231` 的 Save
+仍通过 `mutationFocus.capture()` 从 `document.activeElement` 推断触发源；Delete 路径没有捕获确认按钮。
+Safari 鼠标行为或程序化 `.click()` 不保证激活按钮取得焦点，因此 409/network failure 后可能把焦点
+返回先前字段或丢失，而不是实际 Save/Delete trigger。这与本轮刚修复的 Edit/Create actual-trigger
+问题同源，也违反失败 mutation 保持编辑器并恢复触发源的焦点契约。
 
-Reviewer 与 E2E 分别在仓库外精确 SHA 隔离副本中确定性复现：连续触发 A/B 两次同 root
-刷新，B 的 `revision-b-new` 先完成并显示，A 的 `revision-a-old` 后完成后，最终 UI
-revision 回退为 `revision-a-old`。永久修复需要在 Hook 层增加 exact root + 当前 reload
-generation/token fence，并加入 A/B 逆序响应回归；不能只依赖模块 cache 测试。
+修复必须让 Save 与 Delete 显式接收并绑定实际 `event.currentTarget`，增加非聚焦程序化 Save/Delete
+失败 RED→GREEN；不能继续从全局 active element 猜测。
+
+### Verify 轨完整性失败 — reviewer 写入真实工作区
+
+完整 reviewer 的源码/治理结论本身为 C0/H0/M0/L0，但它误在真实工作区执行 `docs:build`，瞬时改写
+gitignored `docs-site/dist` 并创建生成目录。即使受管 Git 文件、HEAD 和 tree 未变，Tenon
+repo-zero-output barrier 明确规定任何瞬时 fingerprint 漂移都会使该轨无效，不得通过恢复产物把它
+重新声明为 PASS。因此本轮 reviewer 轨证据作废，下一轮必须在隔离副本中重跑。
 
 ## 四轨证据
 
 | 轨道 | 结论 | 证据 |
 | --- | --- | --- |
-| 完整 reviewer | FAIL，C0/H0/M1/L0 | 全量 591 文件；隔离 probe 复现 late A 覆盖 newer B；archive SHA-256 `501a265ac974436f41c2c7906f6297014d21127300743af28d1dcc79b097109a` |
-| E2E/API | FAIL，M1 | `/tmp/tenon-pr20-verify2.QAsVch`；clean install、全量测试、API、安全与 OpenSpec 均完成，额外 Hook probe 确定性失败 |
-| Dashboard 视觉 | PASS，C0/H0/M0/L0 | `/tmp/tenon-pr20-verify4-71429fd6/audit.json`，SHA-256 `ac0a006e790320845585c858aa141280fa4bf26bdc1492659d20cbf9f6b21ffa` |
-| Codex CLI | 降级，未产最终结论 | 只读隔离副本扫描两个冻结 SHA、591 个路径、OpenSpec、发布工作流与全部生成物；内部子代理线程状态异常导致持续等待，14 分钟后有界中止，未把不完整轨伪报为 PASS |
+| 完整 reviewer | INVALID | 源码审查 C0/H0/M0/L0，但真实工作区发生瞬时生成物写入，违反 repo-zero-output barrier |
+| E2E/API/OpenSpec | PASS，C0/H0/M0/L0 | `/tmp/tenon-pr20-final-verify.753kD7`；全量、隔离 archive/apply 与生成物一致性通过 |
+| Dashboard 浏览器/视觉 | PASS，C0/H0/M0/L0 | `/tmp/tenon-pr20-final-verify-dce8ddb/audit.json`，SHA-256 `4ae47679a3a818439f2bc5f701dc393170a00e8cf921a534d352596282ac177f` |
+| Codex CLI | FAIL，M1 | `/tmp/tenon-pr20-codex-review-dce8.md`；确认 Save/Delete actual-trigger finding |
 
-Codex 已确认两个 SHA、实际 591 文件范围、`git diff --check`、全部 JSON/JSONL 可解析、
-Dashboard chunk 引用完整，以及 CLI、Server、Dashboard JavaScript bundle 语法有效。它在只读
-沙箱内无法安装依赖，release fixture 因临时目录 `EPERM` 失败；这些是环境限制，不是代码
-finding，也不覆盖 reviewer/E2E 已确认的 M1。
+## 已通过但不能覆盖失败结论的证据
 
-## 通过但不能覆盖 M1 的验证
+- `npm ci`：486 packages，0 vulnerabilities。
+- `npm run build`、`npm run typecheck:web`：通过；重建 CLI/Server/Dashboard 与提交资产逐字节一致。
+- Root Vitest：330 files，5,881 passed，26 honest skips。
+- Dashboard Vitest：85 files，1,548 passed。
+- Track/authority/focus 定向：213/213；API 定向：27/27。
+- Hooks：512/512；adapters：272/272；migration CAS：13/13；clean-install：`ok:true`。
+- OpenSpec：当前 strict 38/38；Change 6 deltas；隔离 archive/apply 成功；归档后主 specs strict 32/32。
+- dependencies、release workflows、comments、architecture、identity、repository hygiene、npx、legacy bridge、
+  default workflow freshness、docs 与 document templates 全部通过。
+- GitHub 精确 HEAD CI run `30763024381`：success；Documentation Pages run `30763024379`：build success，
+  deploy 按 PR 规则 skipped。PR 为 `CLEAN/MERGEABLE`，但治理 Verify 结论优先阻止合并。
+- 真实浏览器覆盖 1024/1440/1920、zh/en、light/dark、reduced motion、loading/empty/error/busy、
+  authority response inversion、409、键盘、焦点与程序化非聚焦 Edit/Create；5 个模拟写请求均被拦截。
+- 浏览器轨前后 workspace fingerprint 均命中冻结基线；真实 Track 配置仍为 revision
+  `09bfcc6a14b83e21`、`builtin-only`、原六轨道。
 
-- `npm ci`：486 packages，audit 0。
-- Build 与 build 后 Dashboard typecheck：通过。
-- Root Vitest：330 files，5881 passed，26 honest skips。
-- Dashboard Vitest：84 files，1541 passed，0 skipped。
-- Track UI 专项：205/205；snapshot：47/47；API 安全与 Track CRUD：8/8。
-- Architecture：719 production files，5 个 size-only exceptions。
-- OpenSpec：当前 38/38；`show` 6 deltas；隔离 archive 应用 6 项，archive 后 37/37。
-- Release workflow contracts：24/24。
-- comments、repository hygiene、docs、identity、default workflow freshness、dependency tree、
-  生成资产新鲜度与 diff whitespace：通过。
-- GitHub 精确 head CI run `30760160050`：success；Documentation Pages run
-  `30760160056`：build success、deploy 按 PR 规则 skipped。
-- 视觉矩阵覆盖 1024/1440/1920、zh/en、light/dark、reduced motion、
-  loading/empty/error/busy、连续保存 revision、409、键盘与焦点；4 个模拟写请求全部拦截，
-  真实项目仍为原 revision 和 6 条 Track。
+26 个 honest skips 为 real-Codex 未启用 1 项、Docker daemon 不可用 16 项、macOS 上 Linux-only
+9 项；GitHub PR CI 已在 Linux/Docker 环境完成 canonical 测试。受信 main-push real-Codex 仍只能在
+合并后的主干事件执行，本次不把它写成已通过。
 
-26 个 honest skips 为 real-Codex 未启用 1 项、Docker daemon 不可用 16 项、macOS 上
-Linux-only 9 项；没有与本 finding 相关的 skip。
+## OpenSpec 隔离演练
 
-## 逐文件规范回读与 OpenSpec 隔离演练
+隔离副本执行 OpenSpec 1.6.0 `show`、strict validate、archive/apply 与 archive 后主规格 strict：
 
-冻结 diff 的 591 个文件已逐项映射到受影响 capability，未映射 0；映射 SHA-256 为
-`6c7014cbae0640bbdc6f7275bf09979cad23622fa74b1b21d72ddb98f3ae3426`。
-所有主规格回读集合 SHA-256 为
-`fe389a8629d1eba5206eec62dca60c8d92c30d4e08b9fcb5a4479afdd76b46cd`。
-隔离副本执行 OpenSpec 1.6.0 `show`、strict validate 与 archive；真实主规格前后无变化。
+- apply 前主 specs digest：`fe389a8629d1eba5206eec62dca60c8d92c30d4e08b9fcb5a4479afdd76b46cd`
+- apply 后隔离主 specs digest：`e139915d665483a9d6da2a28b260f6ce9fca4c847c0a559b8a9eb6e0237c8ca7`
+- 真实 `openspec/specs` 未被应用；Ship 仍是唯一真实 apply 边界。
 
 ## 后续动作
 
-1. 使用官方 `verify-fail` 回 Build；不勾选“精确 head CI 与四轨通过”任务。
-2. 先增加 Hook 层同 root A/B 逆序响应 RED，再加入 reload generation/token guard。
-3. 重跑 Dashboard/root/build/static/browser pre-Verify，冻结新 SHA。
-4. 在新 SHA 上重新执行完整 reviewer、E2E、Codex、视觉与 GitHub CI；不得复用本 SHA 的
-   通过结论。
+1. 使用官方 `verify-fail` 回 Build；保持“精确 head 与四轨通过”任务未勾选。
+2. 为非聚焦 Save/Delete 失败建立 RED，并显式传递实际 trigger；同时清理 reviewer 造成的 gitignored
+   生成物漂移，通过官方 workspace fingerprint 重新确认 Build 输入。
+3. 重跑定向、全量、静态门、真实浏览器与 pre-Verify review，提交并冻结新基线。
+4. 在新基线上重新执行完整 reviewer、E2E/OpenSpec、Codex、浏览器与 GitHub CI；不得复用本轮 PASS。

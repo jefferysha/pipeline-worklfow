@@ -896,3 +896,32 @@ unexpected writes were zero, and the real config remained builtin-only at
 revision `09bfcc6a14b83e21` with the original six Tracks. This repaired tree is
 ready to commit and freeze; all exact-SHA Verify and GitHub CI evidence must be
 rerun on the new commit.
+
+## 2026-08-03 Save/Delete actual-trigger convergence
+
+The exact `dce8ddb` Verify correctly found one remaining Medium focus defect:
+Save still inferred its retry target from `document.activeElement`, while Delete
+did not capture its confirmation trigger at all. Non-focusing activation could
+therefore restore focus to the Dialog close control or Save instead of the
+control that actually initiated the failed mutation.
+
+Two deterministic regressions reproduced both failures before implementation.
+Save now captures the synchronous native form `submitter`, with the stable Save
+ref as the implicit-submit fallback; Delete captures `event.currentTarget`.
+The focus hook accepts only an actual `HTMLElement` or explicit `null` as an
+override, preserving its existing direct React-handler behavior for other
+arguments. Keyboard Enter and submit events without a submitter also have
+permanent regressions. No event object crosses an async boundary.
+
+The focused suites pass 11/11 and the complete Dashboard passes 85 files /
+1552 tests. Root passes 330 files / 5881 tests with 26 honest environment skips.
+Typecheck, full production build, architecture (719 production files), comments,
+identity, interaction-contract, repository-hygiene and diff checks pass.
+`TrackSettings.tsx` remains inside the enforced limit at 399 lines.
+
+The independent reviewer first reported C0/H0/M0/L1 for the two missing implicit
+submission tests; after both were added, its strict read-only re-review returned
+**C0/H0/M0/L0**. The reviewer changed no real-workspace bytes and recorded an
+identical before/after workspace fingerprint. This Build tree is ready for one
+exact commit and a wholly fresh Verify; the rejected `dce8ddb` evidence is not
+reused.
