@@ -965,3 +965,82 @@ unchanged. The stable pre-Verify workspace fingerprint is
 `workspace:sha256:4d06919d672a39f4cc1e5202260d9aa858a6682b5bc0c426ee5eabe443344f54`.
 This Build tree is ready to commit and freeze; no result from the rejected
 `796faf62` Verify is reused as new Verify evidence.
+
+## 2026-08-03 unavailable-root and unmarked-Forward convergence
+
+The exact `8293b53a` Verify was rejected at **C0/H1/M1/L0**. A dirty Workbench
+could be unmounted, losing its draft, when an SSE snapshot removed its project
+or changed it to non-writable before the navigation guard obtained authority.
+The browser-history guard also treated every unmarked entry as Back, so an
+unmarked Forward traversal could be compensated and replayed in the wrong
+direction.
+
+Both failures received deterministic RED regressions. A dirty Workbench now
+retains the same keyed editor and root while its project authority is missing,
+keeps the root in the URL, exposes the existing localized unavailable-root
+alert, and applies native `inert` to the retained host before paint so no user
+write can escape. Recovery removes `inert` without losing the draft; only an
+explicit discard permits the editor to unmount. For pre-mount history entries,
+Dashboard-owned monotonic markers remain primary and Chromium's Navigation API
+physical entry index supplies the missing Back/Forward delta. The cancellation
+inverse and confirmation replay both preserve that exact delta; hosts without
+the API retain the prior conservative Back fallback.
+
+The focused App suite passes 65/65 for five consecutive runs. The complete
+Dashboard suite passes 85 files / 1557 tests; root passes 330 files / 5881
+tests with 26 honest environment skips. One earlier high-load Dashboard run had
+three timing failures in existing history tests, but the affected file passed
+five consecutive runs and a subsequent complete run passed; this is recorded
+rather than treated as hidden evidence. Full production build and typecheck
+pass. Consecutive Vite builds are byte-identical; the entry asset is
+`index-OtstPJn7.js` with SHA-256
+`52b5b9eaa87f22d43611bae3014bf057ec5f8768a4faf9d08247b799dcaf9954`.
+
+Architecture (719 production files), comments, OpenSpec 38/38, release
+workflows 24/24, repository hygiene, hooks 512/512, migration CAS 13/13,
+identity, interaction contract, dependency audit 0 and dependency tree,
+documentation checks/build/smoke, document templates, npx package contracts
+and an explicit synthetic package build, legacy bridge, default-workflow
+freshness, and diff whitespace gates all pass. A fresh full-range independent
+Standards + Spec review is in progress; this section does not claim PASS or
+authorize the Build freeze until that review returns C0/H0/M0.
+
+The fresh review then found two adjacent boundaries before freeze. The retained
+Workbench host was inert, but Track Settings uses a React portal under
+`document.body`; without a context-level authority boundary, its Save/Delete
+controls could remain live after the root became unavailable. Separately,
+fallback transcript discovery applied its transcript-count and byte caps only
+after recursively collecting directory metadata, leaving an availability risk
+in a large sessions tree. Neither finding was waived.
+
+Portal-preserved React context now carries the Workbench authority boundary to
+every shared Dialog. A disabled portal receives native `inert` and
+`aria-hidden` before paint, blurs any owned focus, ignores Esc/backdrop, and
+blocks click, key and submit capture; the app-level unsaved-navigation Dialog is
+outside that boundary and remains usable. The integration regression proves
+that a dirty Track editor cannot emit `POST /api/tracks` after SSE root loss,
+while a focused shared-component regression proves the same submit is allowed
+before authority loss and blocked afterward.
+
+Transcript discovery now uses `opendir` streaming traversal with explicit
+4,096-entry and 128-JSONL-candidate ceilings in addition to the existing depth,
+file-size and selected-transcript caps. Exceeding either ceiling fails closed
+before unbounded metadata accumulation. Injected small-limit regressions cover
+both directory-entry and transcript-candidate overflow.
+
+The final Dashboard suite passes 85 files / 1,559 tests; root passes 330 files /
+5,881 tests with the same 26 honest environment skips; the complete receipt
+suite passes 120/120. Full TypeScript/production build, Dashboard typecheck,
+architecture (719 production files) and diff whitespace checks pass. The
+rebuilt entry asset is `index-Cdn_IBMD.js` with SHA-256
+`e480416f8249cf84cff6ef1296f7bcd17a4956cbe16fe8b865486fe836a6e586`;
+the Workbench chunk is `WorkbenchView-Bi75Zcyo.js` with SHA-256
+`2167e6625de93a52cba8e55ec3298c76019564ee4cca35a1e989d90646e1da23`,
+and the rebuilt CLI bundle is
+`6740faba1f48c2a18ae69bb6f7ed90d1e417ea2508f1cde50fe00c509440c539`.
+
+The final independent full-range review covers all committed and uncommitted
+source, generated artifacts, project rules and OpenSpec documents and returns
+**PASS — C0/H0/M0/L0**, with no confirmed, unresolved or advisory finding.
+Build is authorized to freeze one new exact commit; all Verify tracks and
+GitHub CI must still restart from that exact SHA.

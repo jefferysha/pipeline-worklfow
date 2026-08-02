@@ -162,6 +162,9 @@
 - [x] 在修订文档与实现上重新执行完整 pre-Verify Standards + Spec 收敛审查、全量测试和真实浏览器验收，所有 C/H/M 清零后冻结新 SHA。 (build)
 - [x] 将 mandatory partial write 与当前 full config reload 按 generation 合流，保留最新 revision/tracks 并覆盖交错回归。 (build)
 - [x] 在同 id Loop 的权威预算变化时取消旧 slider debounce，禁止迟到 POST 覆盖新快照。 (build)
+- [x] dirty Workbench 遇到 snapshot root 缺失或变为不可写时保留草稿宿主并阻断写入，只有明确丢弃才卸载。 (build)
+- [x] 为未标记 session-history entry 保留真实 Back/Forward 方向，覆盖 Forward 取消补偿与确认重放。 (build)
+- [x] 将失权边界延伸到 `document.body` portal，并以流式有界扫描收紧 Codex transcript discovery；完成全量回归与 C0/H0/M0/L0 独立复审。 (build)
 
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)

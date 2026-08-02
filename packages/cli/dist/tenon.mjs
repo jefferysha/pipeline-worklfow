@@ -34930,7 +34930,7 @@ import { lstat as lstat23 } from "node:fs/promises";
 import { relative as relative12, resolve as resolve23 } from "node:path";
 
 // packages/cli/src/codexSkillReceipt.ts
-import { appendFile as appendFile2, lstat as lstat21, mkdir as mkdir19, readdir as readdir11, readFile as readFile25 } from "node:fs/promises";
+import { appendFile as appendFile2, lstat as lstat21, mkdir as mkdir19, readdir as readdir10, readFile as readFile25 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
 import { basename as basename5, isAbsolute as isAbsolute13, join as join55, relative as relative10, resolve as resolve20, sep as sep12 } from "node:path";
 
@@ -35515,11 +35515,17 @@ function transcriptInputTrustedSkillInvocation(input, skillPath) {
 
 // packages/cli/src/codexTranscriptDiscovery.ts
 import { constants as constants6 } from "node:fs";
-import { lstat as lstat20, open as open7, readdir as readdir10, realpath as realpath9 } from "node:fs/promises";
+import { lstat as lstat20, open as open7, opendir, realpath as realpath9 } from "node:fs/promises";
 import { isAbsolute as isAbsolute11, join as join53, relative as relative8, sep as sep10 } from "node:path";
 var MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_TRANSCRIPTS = 32;
+var MAX_DISCOVERY_ENTRIES = 4096;
+var MAX_DISCOVERED_TRANSCRIPTS = 128;
+var DEFAULT_DISCOVERY_LIMITS = {
+  maxEntries: MAX_DISCOVERY_ENTRIES,
+  maxTranscripts: MAX_DISCOVERED_TRANSCRIPTS
+};
 async function inspectHostTranscript(physicalRoot, candidate) {
   try {
     const info = await lstat20(candidate, { bigint: true });
@@ -35549,7 +35555,8 @@ function isInside2(base, candidate) {
   const fromBase = relative8(base, candidate);
   return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute11(fromBase);
 }
-async function recentHostTranscripts(sessionsRoot) {
+async function recentHostTranscripts(sessionsRoot, limits = DEFAULT_DISCOVERY_LIMITS) {
+  if (!Number.isSafeInteger(limits.maxEntries) || limits.maxEntries <= 0 || !Number.isSafeInteger(limits.maxTranscripts) || limits.maxTranscripts <= 0) return void 0;
   let physicalRoot;
   try {
     physicalRoot = await realpath9(sessionsRoot);
@@ -35558,27 +35565,32 @@ async function recentHostTranscripts(sessionsRoot) {
   }
   const discovered = [];
   const emptyModifiedAt = [];
+  let visitedEntries = 0;
+  let visitedTranscripts = 0;
   async function visit(directory, depth) {
-    let entries;
     try {
-      entries = await readdir10(directory, { withFileTypes: true });
+      const entries = await opendir(directory);
+      for await (const entry of entries) {
+        visitedEntries += 1;
+        if (visitedEntries > limits.maxEntries) return false;
+        const candidate = join53(directory, entry.name);
+        if (entry.isDirectory() && depth < 3) {
+          if (!await visit(candidate, depth + 1)) return false;
+          continue;
+        }
+        if (!entry.name.endsWith(".jsonl")) continue;
+        visitedTranscripts += 1;
+        if (visitedTranscripts > limits.maxTranscripts) return false;
+        if (!entry.isFile()) return false;
+        const inspected = await inspectHostTranscript(physicalRoot, candidate);
+        if (inspected === void 0) return false;
+        if (inspected.kind === "empty") emptyModifiedAt.push(inspected.modifiedAt);
+        else discovered.push(inspected.candidate);
+      }
+      return true;
     } catch {
       return false;
     }
-    for (const entry of entries) {
-      const candidate = join53(directory, entry.name);
-      if (entry.isDirectory() && depth < 3) {
-        if (!await visit(candidate, depth + 1)) return false;
-        continue;
-      }
-      if (!entry.name.endsWith(".jsonl")) continue;
-      if (!entry.isFile()) return false;
-      const inspected = await inspectHostTranscript(physicalRoot, candidate);
-      if (inspected === void 0) return false;
-      if (inspected.kind === "empty") emptyModifiedAt.push(inspected.modifiedAt);
-      else discovered.push(inspected.candidate);
-    }
-    return true;
   }
   if (!await visit(physicalRoot, 0)) return void 0;
   const newestReadable = discovered.reduce(
@@ -36116,7 +36128,7 @@ async function latestBoundHostSessionId(repoRoot, changeName) {
   const bindingsDir = join55(resolve20(repoRoot), TERMINAL_SESSION_BINDINGS_DIR);
   let entries;
   try {
-    entries = await readdir11(bindingsDir);
+    entries = await readdir10(bindingsDir);
   } catch {
     return void 0;
   }
@@ -43142,11 +43154,11 @@ import { dirname as dirname14, isAbsolute as isAbsolute19, relative as relative1
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash31 } from "node:crypto";
-import { copyFile, lstat as lstat25, mkdir as mkdir20, readFile as readFile28, readdir as readdir12 } from "node:fs/promises";
+import { copyFile, lstat as lstat25, mkdir as mkdir20, readFile as readFile28, readdir as readdir11 } from "node:fs/promises";
 import { relative as relative13, resolve as resolve26 } from "node:path";
 async function copyOrdinaryTree(source, target) {
   await mkdir20(target);
-  for (const entry of await readdir12(source, { withFileTypes: true })) {
+  for (const entry of await readdir11(source, { withFileTypes: true })) {
     const sourcePath = resolve26(source, entry.name);
     const targetPath = resolve26(target, entry.name);
     if (entry.isSymbolicLink()) {
@@ -43163,7 +43175,7 @@ async function copyOrdinaryTree(source, target) {
 }
 async function syncUnmanagedOrdinaryTree(source, target, managedPaths) {
   const walk = async (sourceDirectory, targetDirectory) => {
-    for (const entry of await readdir12(sourceDirectory, { withFileTypes: true })) {
+    for (const entry of await readdir11(sourceDirectory, { withFileTypes: true })) {
       const sourcePath = resolve26(sourceDirectory, entry.name);
       const targetPath = resolve26(targetDirectory, entry.name);
       if (entry.isSymbolicLink()) {
@@ -43185,7 +43197,7 @@ async function syncUnmanagedOrdinaryTree(source, target, managedPaths) {
 async function ordinaryTreeDigest(root) {
   const hash = createHash31("sha256");
   const walk = async (directory, prefix) => {
-    const entries = (await readdir12(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
+    const entries = (await readdir11(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
       const pathname = resolve26(directory, entry.name);
@@ -46255,7 +46267,7 @@ import {
   lstat as lstat33,
   mkdir as mkdir25,
   readFile as readFile36,
-  readdir as readdir13,
+  readdir as readdir12,
   rename as rename10,
   rm as rm12,
   stat as stat11
@@ -46470,7 +46482,7 @@ async function copyEntry(source, target) {
   if (sourceStat.isSymbolicLink()) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u5305\u542B\u7B26\u53F7\u94FE\u63A5: ${source}`);
   if (sourceStat.isDirectory()) {
     await mkdir25(target, { recursive: true, mode: sourceStat.mode & 511 });
-    const entries = await readdir13(source, { withFileTypes: true });
+    const entries = await readdir12(source, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) await copyEntry(join73(source, entry.name), join73(target, entry.name));
     return;
@@ -46494,7 +46506,7 @@ async function copyPayload(candidateRoot, payloadRoot) {
 async function hashTree(root) {
   const hash = createHash32("sha256");
   async function visit(dir, rel) {
-    const entries = await readdir13(dir, { withFileTypes: true });
+    const entries = await readdir12(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const child = join73(dir, entry.name);
@@ -46528,7 +46540,7 @@ function commandRunner() {
 async function shellFiles(root) {
   const files = [];
   async function visit(dir) {
-    const entries = await readdir13(dir, { withFileTypes: true });
+    const entries = await readdir12(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const path9 = join73(dir, entry.name);
@@ -46837,7 +46849,7 @@ var RuntimeReleaseStore = class {
   }
   async prune(selection) {
     const protectedIds = new Set([selection.activeRelease, selection.previousRelease].filter((value) => value !== null));
-    const entries = await readdir13(this.paths.releasesRoot, { withFileTypes: true });
+    const entries = await readdir12(this.paths.releasesRoot, { withFileTypes: true });
     const candidates = [];
     for (const entry of entries) {
       if (!entry.isDirectory() || !validReleaseId(entry.name) || protectedIds.has(entry.name)) continue;
@@ -51020,12 +51032,12 @@ function buildProgram(deps, runtimes = {}) {
 
 // packages/cli/src/guardContext.ts
 import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync10 } from "node:fs";
-import { readdir as readdir14 } from "node:fs/promises";
+import { readdir as readdir13 } from "node:fs/promises";
 import { join as join86 } from "node:path";
 async function listChanges(changesRoot2) {
   let entries;
   try {
-    entries = await readdir14(changesRoot2, { withFileTypes: true });
+    entries = await readdir13(changesRoot2, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -51034,7 +51046,7 @@ async function listChanges(changesRoot2) {
 async function listChangeDirs(changesRoot2) {
   let entries;
   try {
-    entries = await readdir14(changesRoot2, { withFileTypes: true });
+    entries = await readdir13(changesRoot2, { withFileTypes: true });
   } catch {
     return [];
   }

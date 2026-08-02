@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { selectInbox } from './inbox/inbox'
@@ -14,6 +14,7 @@ import { useProjectSelection } from './state/useProjectSelection'
 import { isProjectWritable } from './state/projectSelectionModel'
 import { formatApiError } from './api/transport'
 import { UnsavedDraftDialog } from './shared/UnsavedDraftDialog'
+import { DialogInteractionBoundary } from './shared/Dialog'
 import type { DashboardNavigationTarget } from './state/useProjectSelection'
 import { useFlash } from './shared/useFlash'
 import { useDashboardTheme } from './shell/useDashboardTheme'
@@ -79,6 +80,7 @@ function AppShell(): JSX.Element {
   const viewRef = useRef(view)
   const dirtyRef = useRef(workbenchDirty)
   const currentRootRef = useRef('')
+  const retainedWorkbenchRootRef = useRef('')
   viewRef.current = view
 
   const commitView = useCallback((v: View) => {
@@ -103,6 +105,12 @@ function AppShell(): JSX.Element {
     return true
   }, [])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
+  const preserveUnavailableWorkbenchRoot = view === 'workbench'
+    && workbenchDirty
+    && retainedWorkbenchRootRef.current !== ''
+    && !isProjectWritable(snapshot?.projects.find(
+      (project) => project.root === retainedWorkbenchRootRef.current,
+    ))
   const snapshotError = error === null ? null : formatApiError(error, t)
   const staleSnapshotError =
     error === null
@@ -117,6 +125,7 @@ function AppShell(): JSX.Element {
     onPopView: commitView,
     onSelectedChange: setSelectedChange,
     onPopAttempt,
+    preserveUnavailableRoot: preserveUnavailableWorkbenchRoot,
   })
   currentRootRef.current = currentRoot
 
@@ -191,13 +200,42 @@ function AppShell(): JSX.Element {
     if (currentRoot !== '' && okRoots.includes(currentRoot)) return currentRoot
     return ''
   }, [snapshot, currentRoot])
+  if (workbenchRoot !== '') retainedWorkbenchRootRef.current = workbenchRoot
+  const retainedWorkbenchRoot = workbenchRoot !== ''
+    ? workbenchRoot
+    : view === 'workbench' && workbenchDirty
+      ? retainedWorkbenchRootRef.current
+      : ''
+  const retainedWorkbenchProject = snapshot?.projects.find((project) => project.root === retainedWorkbenchRoot)
+  const workbenchAuthorityLost = retainedWorkbenchRoot !== '' && !isProjectWritable(retainedWorkbenchProject)
+  const retainedWorkbenchHostRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const host = retainedWorkbenchHostRef.current
+    if (!host) return
+    if (workbenchAuthorityLost) host.setAttribute('inert', '')
+    else host.removeAttribute('inert')
+  }, [workbenchAuthorityLost])
 
   // Progress 可在仅含 future-version issue 时只读打开；AFK/Workbench 含写入口，仍要求
   // project.ok=true。普通 corruption 与兼容 issue 并存时 selection model 会让 root 失效。
   useEffect(() => {
-    if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot || snapshot.project_count === 0) return
+    if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot) return
+    if (view === 'workbench' && workbenchDirty && retainedWorkbenchRoot !== '') {
+      if (workbenchAuthorityLost) setView('projects')
+      return
+    }
+    if (snapshot.project_count === 0) return
     if (currentRoot === '' || (view !== 'progress' && !currentProjectWritable)) setView('projects')
-  }, [view, snapshot, currentRoot, currentProjectWritable, setView])
+  }, [
+    view,
+    snapshot,
+    currentRoot,
+    currentProjectWritable,
+    retainedWorkbenchRoot,
+    workbenchAuthorityLost,
+    workbenchDirty,
+    setView,
+  ])
 
   // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
   // 动作接线（继续/打回/重试/终止）由 ProgressView 侧按需重建（postTransition 仍在 api/client）。
@@ -301,7 +339,11 @@ function AppShell(): JSX.Element {
           </section>
         ) : view === 'overview' ? (
           <SolutionView />
-        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
+        ) : snapshot
+          && snapshot.project_count === 0
+          && view !== 'machine'
+          && view !== 'hostPlan'
+          && !(view === 'workbench' && workbenchDirty && retainedWorkbenchRoot !== '') ? (
           <Onboarding kind="no-project" />
         ) : snapshot
           && currentProject
@@ -371,17 +413,29 @@ function AppShell(): JSX.Element {
           )
         )}
         {view === 'workbench' && (
-          workbenchRoot !== '' ? (
+          retainedWorkbenchRoot !== '' ? (
             // v6 计划 T11：流程带真实计数/running 脉冲吃同一份已加载的 snapshot（App 是唯一
             // useSnapshot() 调用点，不在 WorkbenchView 内独立开第二条 SSE 订阅——见
             // WorkbenchViewProps.snapshot 头注释）。
-            <WorkbenchView
-              key={workbenchRoot}
-              root={workbenchRoot}
-              onToggleError={(m) => showFlash('error', m)}
-              snapshot={snapshot}
-              onDirtyChange={onWorkbenchDirtyChange}
-            />
+            <>
+              {workbenchAuthorityLost && (
+                <p className="p-5 text-[13px] text-red-d" role="alert">{t('workbench.no_reachable_root')}</p>
+              )}
+              <div
+                data-testid="workbench-retained-host"
+                ref={retainedWorkbenchHostRef}
+              >
+                <DialogInteractionBoundary disabled={workbenchAuthorityLost}>
+                  <WorkbenchView
+                    key={retainedWorkbenchRoot}
+                    root={retainedWorkbenchRoot}
+                    onToggleError={(m) => showFlash('error', m)}
+                    snapshot={snapshot}
+                    onDirtyChange={onWorkbenchDirtyChange}
+                  />
+                </DialogInteractionBoundary>
+              </div>
+            </>
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。

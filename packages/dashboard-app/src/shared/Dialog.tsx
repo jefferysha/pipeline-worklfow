@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useT } from '../i18n'
@@ -54,6 +54,23 @@ export interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement>
 }
 
+const DialogInteractionDisabledContext = createContext(false)
+
+/** Portals preserve React context, so this boundary also disables dialogs rendered under body. */
+export function DialogInteractionBoundary({
+  disabled,
+  children,
+}: {
+  disabled: boolean
+  children: React.ReactNode
+}): JSX.Element {
+  return (
+    <DialogInteractionDisabledContext.Provider value={disabled}>
+      {children}
+    </DialogInteractionDisabledContext.Provider>
+  )
+}
+
 // 当前挂载的 Dialog 实例栈，栈顶（数组末尾）= 最后 mount = 视觉最上层。
 // 模块级、跨组件实例共享，故意不用 React state/context——Esc/Tab 响应资格判断
 // 不需要触发渲染，一个纯数组够用也更省心。
@@ -82,7 +99,11 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 
 export function Dialog({ title, onClose, children, actions, testid, closeLabel, closeTestid, closeDisabled = false, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
   const { t } = useT()
+  const interactionDisabled = useContext(DialogInteractionDisabledContext)
+  const interactionDisabledRef = useRef(interactionDisabled)
+  interactionDisabledRef.current = interactionDisabled
   const resolvedCloseLabel = closeLabel ?? t('common.dialog_close')
+  const overlayRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
@@ -90,12 +111,26 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
   // Symbol 会被直接丢弃，instanceIdRef.current 全生命周期指向同一个 symbol。
   const instanceIdRef = useRef<symbol>(Symbol('dialog'))
 
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current
+    if (!overlay) return
+    if (interactionDisabled) {
+      overlay.setAttribute('inert', '')
+      if (overlay.contains(document.activeElement) && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    } else {
+      overlay.removeAttribute('inert')
+    }
+  }, [interactionDisabled])
+
   // 挂载：记录打开前的焦点 → 聚焦 initialFocusRef 或容器内首个可聚焦元素。
   // 卸载：焦点归位到打开前记录的元素。故意用 [] 依赖只跑一次——
   // 若跟着 initialFocusRef identity 重跑，会用「此刻已被困笼锁在对话框内」的
   // activeElement 覆盖掉 previousFocusRef，卸载归位就指哪儿也回不到打开前了。
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    if (interactionDisabledRef.current) return
     const container = containerRef.current
     const target = initialFocusRef?.current ?? (container ? getFocusableElements(container)[0] : undefined) ?? container
     target?.focus()
@@ -124,6 +159,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
     const id = instanceIdRef.current
     function handleKeyDown(e: KeyboardEvent): void {
       if (dialogStack[dialogStack.length - 1] !== id) return
+      if (interactionDisabledRef.current) return
 
       if (e.key === 'Escape') {
         // onClose synchronously unmounts this Dialog. Without consuming the same native event,
@@ -169,8 +205,25 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-scrim ${variant === 'workspace' ? 'p-4 backdrop-blur-[3px]' : ''}`}
       data-testid={testid}
+      ref={overlayRef}
+      aria-hidden={interactionDisabled || undefined}
+      onClickCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onKeyDownCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onSubmitCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (!interactionDisabled && e.target === e.currentTarget) onClose()
       }}
     >
       <div

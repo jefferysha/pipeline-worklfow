@@ -5,6 +5,9 @@ import { App, ErrorBoundary } from './App'
 import { I18nProvider } from './i18n'
 import { lastEventSource, resetEventSources } from './test-setup'
 import { makeChange, makeProject, makeSnapshot } from './testkit'
+import { invalidateMandatoryConfig } from './workbench/mandatoryConfig'
+
+const originalNavigationDescriptor = Object.getOwnPropertyDescriptor(window, 'navigation')
 
 // T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图。旧断言意图迁移表：
 //   · 「一级导航恰 4 项（3+下拉触发）」→「恰 3 项：收件箱/进度/工作台」
@@ -20,6 +23,7 @@ import { makeChange, makeProject, makeSnapshot } from './testkit'
 beforeEach(() => {
   localStorage.clear()
   resetEventSources()
+  invalidateMandatoryConfig()
   // 大多数既有 App 用例关注已选项目内行为，统一从显式 root 深链进入；无选择契约用例会覆盖 URL。
   window.history.replaceState({}, '', '/?root=%2Frepo')
   try {
@@ -52,6 +56,11 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.restoreAllMocks()
+  if (originalNavigationDescriptor) {
+    Object.defineProperty(window, 'navigation', originalNavigationDescriptor)
+  } else {
+    Reflect.deleteProperty(window, 'navigation')
+  }
 })
 
 const EDITABLE_WORKFLOW = {
@@ -74,6 +83,7 @@ function stubEditableWorkbench(options: {
   preserveLocation?: boolean
   roots?: readonly string[]
   promptRoutingBypass?: boolean
+  trackSettings?: boolean
 } = {}): void {
   const roots = options.roots ?? ['/repo']
   if (!options.preserveLocation) {
@@ -112,7 +122,14 @@ function stubEditableWorkbench(options: {
         source: 'builtin-only',
         mandatory_skills_writable_profiles: [],
         mandatory_skills: {},
-        tracks: [],
+        tracks: options.trackSettings ? [{
+          id: 'pm', label: 'PM', builtin: true,
+          workflow: { default: 'default', allowed: '*' },
+          policyProfile: {
+            reviewSeed: 'pending', automationEligible: true, coverageProfile: 'pm',
+            routing: { enabled: false }, skills: { matrix: true, profile: 'pm' },
+          },
+        }] : [],
       }), { status: 200 })
     }
     if (url === '/api/skills/registry') {
@@ -122,7 +139,10 @@ function stubEditableWorkbench(options: {
   }))
 }
 
-async function renderDirtyWorkbenchApp(options: { preserveLocation?: boolean } = {}): Promise<void> {
+async function renderDirtyWorkbenchApp(options: {
+  preserveLocation?: boolean
+  trackSettings?: boolean
+} = {}): Promise<void> {
   stubEditableWorkbench(options)
   render(<App />)
   await screen.findByTestId('wb-step-draft')
@@ -138,13 +158,21 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   it('旁路词未保存草稿同时触发导航 Dialog 与 beforeunload；改回基线后解除', async () => {
     stubEditableWorkbench({ promptRoutingBypass: true })
     render(<App />)
-    const editor = await screen.findByTestId('wb-prompt-routing-bypass')
+    await screen.findByTestId('wb-prompt-routing-bypass')
+    await waitFor(() => {
+      const currentInput = within(screen.getByTestId('wb-prompt-routing-bypass'))
+        .getByRole('textbox', { name: '单轮旁路词' })
+      expect(currentInput).toBeEnabled()
+      expect(currentInput).toHaveValue('no-tenon')
+    })
+    const editor = screen.getByTestId('wb-prompt-routing-bypass')
     const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
     fireEvent.change(input, { target: { value: 'draft-tenon' } })
-
-    const dirtyEvent = new Event('beforeunload', { cancelable: true })
-    expect(window.dispatchEvent(dirtyEvent)).toBe(false)
-    expect(dirtyEvent.defaultPrevented).toBe(true)
+    await waitFor(() => {
+      const dirtyEvent = new Event('beforeunload', { cancelable: true })
+      expect(window.dispatchEvent(dirtyEvent)).toBe(false)
+      expect(dirtyEvent.defaultPrevented).toBe(true)
+    })
 
     fireEvent.click(screen.getByTestId('nav-overview'))
     const dialog = await screen.findByTestId('app-unsaved-navigation')
@@ -252,6 +280,154 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
     expect(forward).toHaveBeenCalledTimes(3)
     await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('forward-target'))
+  })
+
+  it('未标记的 browser Forward 使用宿主真实 history index 补偿与重放，不误判为 Back', async () => {
+    Object.defineProperty(window, 'navigation', {
+      configurable: true,
+      value: {
+        get currentEntry() {
+          return {
+            index: new URLSearchParams(window.location.search).get('historyMarker') === 'unmarked-forward-target'
+              ? 1
+              : 0,
+          }
+        },
+      },
+    })
+    window.history.replaceState(
+      { page: 'workbench-current' },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
+    window.history.pushState(
+      { page: 'overview-forward' },
+      '',
+      '/?view=overview&historyMarker=unmarked-forward-target',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+
+    const back = vi.spyOn(window.history, 'back')
+    const forward = vi.spyOn(window.history, 'forward')
+    act(() => window.history.forward())
+
+    const firstDialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(forward).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(firstDialog).getByRole('button', { name: '继续编辑' }))
+
+    act(() => window.history.forward())
+    const secondDialog = await screen.findByTestId('app-unsaved-navigation')
+    fireEvent.click(within(secondDialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(forward).toHaveBeenCalledTimes(3)
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('unmarked-forward-target'))
+  })
+
+  it('Dashboard push 后跨多项跳到未标记 entry，按最新宿主 index 完整补偿而不是少走一步', async () => {
+    Object.defineProperty(window, 'navigation', {
+      configurable: true,
+      value: {
+        get currentEntry() {
+          const marker = new URLSearchParams(window.location.search).get('historyMarker')
+          if (marker === 'unmarked-distant-target') return { index: 0 }
+          const position = typeof window.history.state === 'object' && window.history.state !== null
+            ? Reflect.get(window.history.state, '__tenonDashboardPosition')
+            : null
+          return { index: position === 1 ? 2 : 1 }
+        },
+      },
+    })
+    window.history.replaceState(
+      { page: 'unmarked-overview' },
+      '',
+      '/?view=overview&historyMarker=unmarked-distant-target',
+    )
+    window.history.pushState(
+      { page: 'dashboard-projects' },
+      '',
+      '/?view=projects&historyMarker=dashboard-middle',
+    )
+    stubEditableWorkbench({ preserveLocation: true })
+    render(<App />)
+    fireEvent.click(await screen.findByTestId('project-row-repo'))
+    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    await screen.findByTestId('wb-step-draft')
+    await waitFor(() => expect(screen.getByTestId('wb-lane-name-draft').tagName).toBe('BUTTON'))
+    fireEvent.click(screen.getByTestId('wb-lane-name-draft'))
+    const input = await screen.findByTestId('wb-lane-name-input-draft')
+    fireEvent.change(input, { target: { value: '跨多项草稿' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await screen.findByTestId('wb-dirty')
+
+    act(() => window.history.go(-2))
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('跨多项草稿')
+    fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
+  })
+
+  it('dirty Workbench 在 SSE 移除或降级当前项目时保留草稿宿主并禁写，恢复后草稿仍在，只有显式丢弃才卸载', async () => {
+    await renderDirtyWorkbenchApp({ trackSettings: true })
+    const eventSource = lastEventSource()
+    expect(eventSource).toBeDefined()
+    fireEvent.click(await screen.findByTestId('wb-track-settings-toggle'))
+    fireEvent.click(await screen.findByTestId('wb-track-create'))
+    const trackEditor = screen.getByTestId('wb-track-editor')
+    fireEvent.change(within(trackEditor).getByRole('textbox', { name: '轨道 ID' }), { target: { value: 'lost-root' } })
+    fireEvent.change(within(trackEditor).getByRole('textbox', { name: '显示名称' }), { target: { value: '失权草稿' } })
+    const trackSave = within(trackEditor).getByTestId('wb-track-editor-save')
+    expect(trackSave).toBeEnabled()
+
+    act(() => {
+      eventSource!.emit('snapshot', JSON.stringify(makeSnapshot([
+        makeProject('/repo', [makeChange('seed-c', 'build')], { ok: false }),
+      ])))
+    })
+
+    const firstDialog = await screen.findByTestId('app-unsaved-navigation')
+    const retainedHost = screen.getByTestId('workbench-retained-host')
+    expect(retainedHost).toHaveAttribute('inert')
+    const retainedPortal = screen.getByTestId('wb-track-settings-panel')
+    expect(retainedPortal).toHaveAttribute('inert')
+    expect(retainedPortal).toHaveAttribute('aria-hidden', 'true')
+    expect(firstDialog).not.toHaveAttribute('inert')
+    const trackWritesBefore = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, request]) => String(url) === '/api/tracks' && request?.method === 'POST',
+    ).length
+    fireEvent.click(trackSave)
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url, request]) => String(url) === '/api/tracks' && request?.method === 'POST',
+    )).toHaveLength(trackWritesBefore)
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+    fireEvent.click(within(firstDialog).getByRole('button', { name: '继续编辑' }))
+    expect(screen.getByTestId('workbench-retained-host')).toHaveAttribute('inert')
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+    expect(new URLSearchParams(window.location.search).get('root')).toBe('/repo')
+
+    act(() => {
+      eventSource!.emit('snapshot', JSON.stringify(makeSnapshot([
+        makeProject('/repo', [makeChange('seed-c', 'build')]),
+      ])))
+    })
+    await waitFor(() => expect(screen.getByTestId('workbench-retained-host')).not.toHaveAttribute('inert'))
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+    expect(new URLSearchParams(window.location.search).get('root')).toBe('/repo')
+
+    act(() => {
+      eventSource!.emit('snapshot', JSON.stringify(makeSnapshot([])))
+    })
+    const secondDialog = await screen.findByTestId('app-unsaved-navigation')
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+    fireEvent.click(within(secondDialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('onboard-no-project')).toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
   it('一级导航与 Overview 共用可访问 Dialog；取消保留页面、草稿、URL 与触发焦点，确认才离开', async () => {

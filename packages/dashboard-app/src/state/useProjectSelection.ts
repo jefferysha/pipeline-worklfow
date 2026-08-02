@@ -20,10 +20,24 @@ export interface DashboardNavigationTarget {
 
 const HISTORY_POSITION_KEY = '__tenonDashboardPosition'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function historyPosition(state: unknown): number | null {
-  if (typeof state !== 'object' || state === null || Array.isArray(state)) return null
-  const value = (state as Record<string, unknown>)[HISTORY_POSITION_KEY]
+  if (!isRecord(state)) return null
+  const value = state[HISTORY_POSITION_KEY]
   return typeof value === 'number' && Number.isSafeInteger(value) ? value : null
+}
+
+/** Chromium's Navigation API exposes the physical session-history index even for pre-mount entries. */
+function navigationEntryIndex(): number | null {
+  const navigation: unknown = Reflect.get(window, 'navigation')
+  if (!isRecord(navigation)) return null
+  const currentEntry: unknown = Reflect.get(navigation, 'currentEntry')
+  if (!isRecord(currentEntry)) return null
+  const index = currentEntry.index
+  return typeof index === 'number' && Number.isSafeInteger(index) ? index : null
 }
 
 function historyStateAt(position: number): Record<string, unknown> {
@@ -49,11 +63,14 @@ export function useProjectSelection(input: {
   readonly onSelectedChange: (change: string | null) => void
   /** Return false after capturing the target to keep the last committed URL/UI in place. */
   readonly onPopAttempt?: (target: DashboardNavigationTarget) => boolean
+  /** Keeps an unavailable root selected while a retained dirty editor is awaiting recovery/discard. */
+  readonly preserveUnavailableRoot?: boolean
 }): ProjectSelectionController {
   const restoringBlockedPopRef = useRef(false)
   const confirmAfterRestoreRef = useRef(false)
   const allowNextPopRef = useRef(false)
   const historyPositionRef = useRef(historyPosition(window.history.state) ?? 0)
+  const navigationIndexRef = useRef(navigationEntryIndex())
   const blockedTraversalRef = useRef(-1)
   useEffect(() => {
     if (historyPosition(window.history.state) === null) {
@@ -78,8 +95,11 @@ export function useProjectSelection(input: {
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) {
         const nextPosition = historyPositionRef.current + 1
+        const previousNavigationIndex = navigationIndexRef.current
         window.history.pushState(historyStateAt(nextPosition), '', next)
         historyPositionRef.current = nextPosition
+        navigationIndexRef.current = navigationEntryIndex()
+          ?? (previousNavigationIndex === null ? null : previousNavigationIndex + 1)
       }
     } catch {
       // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
@@ -90,7 +110,9 @@ export function useProjectSelection(input: {
 
   useEffect(() => {
     try {
-      const root = input.snapshot ? currentRoot : (preferredRoot ?? '')
+      const root = input.snapshot
+        ? (currentRoot || (input.preserveUnavailableRoot ? (preferredRoot ?? '') : ''))
+        : (preferredRoot ?? '')
       const search = dashboardSearch(window.location.search, {
         view: input.view,
         root,
@@ -102,15 +124,33 @@ export function useProjectSelection(input: {
     } catch {
       // 禁用 history 的宿主只失去可复制 URL，不影响内存中的显式选择。
     }
-  }, [currentRoot, input.selectedChange, input.snapshot, input.view, preferredRoot])
+  }, [
+    currentRoot,
+    input.preserveUnavailableRoot,
+    input.selectedChange,
+    input.snapshot,
+    input.view,
+    preferredRoot,
+  ])
 
   useEffect(() => {
     if (!input.snapshot) return
-    if (input.view === 'projects' || (preferredRoot !== null && currentRoot === '')) {
+    if (
+      input.view === 'projects'
+      || (preferredRoot !== null && currentRoot === '' && !input.preserveUnavailableRoot)
+    ) {
       if (preferredRoot !== null) setPreferredRoot(null)
       if (input.selectedChange !== null) input.onSelectedChange(null)
     }
-  }, [currentRoot, input.onSelectedChange, input.selectedChange, input.snapshot, input.view, preferredRoot])
+  }, [
+    currentRoot,
+    input.onSelectedChange,
+    input.preserveUnavailableRoot,
+    input.selectedChange,
+    input.snapshot,
+    input.view,
+    preferredRoot,
+  ])
 
   const applyLocation = useCallback((target: DashboardNavigationTarget): void => {
     input.onPopView(target.view)
@@ -131,8 +171,12 @@ export function useProjectSelection(input: {
     const onPopState = (event: PopStateEvent): void => {
       const previousPosition = historyPositionRef.current
       const eventPosition = historyPosition(event.state)
+      const previousNavigationIndex = navigationIndexRef.current
+      const eventNavigationIndex = navigationEntryIndex()
       if (restoringBlockedPopRef.current) {
         historyPositionRef.current = eventPosition ?? previousPosition - blockedTraversalRef.current
+        navigationIndexRef.current = eventNavigationIndex
+          ?? (previousNavigationIndex === null ? null : previousNavigationIndex - blockedTraversalRef.current)
         restoringBlockedPopRef.current = false
         if (confirmAfterRestoreRef.current) {
           confirmAfterRestoreRef.current = false
@@ -141,11 +185,18 @@ export function useProjectSelection(input: {
         }
         return
       }
-      // Entries created before the Dashboard mounted do not carry our monotonic marker. They can
-      // only be reached by leaving the current marked entry, so preserve the legacy Back fallback.
-      const targetPosition = eventPosition ?? previousPosition - 1
-      const traversal = targetPosition - previousPosition
+      // Prefer our marker for Dashboard-owned entries. Pre-mount/unmarked entries need the host's
+      // physical Navigation API index: unlike a guessed Back delta it also identifies Forward.
+      const indexedTraversal = previousNavigationIndex !== null && eventNavigationIndex !== null
+        ? eventNavigationIndex - previousNavigationIndex
+        : null
+      const traversal = eventPosition === null
+        ? (indexedTraversal ?? -1)
+        : eventPosition - previousPosition
+      const targetPosition = eventPosition ?? previousPosition + traversal
       historyPositionRef.current = targetPosition
+      navigationIndexRef.current = eventNavigationIndex
+        ?? (previousNavigationIndex === null ? null : previousNavigationIndex + traversal)
       const linked = parseDashboardLocation(window.location.search)
       const target: DashboardNavigationTarget = {
         view: linked.view ?? input.view,

@@ -2132,6 +2132,23 @@ describe('Codex transcript skill receipt', () => {
     await expect(recentHostTranscripts(join(home, '.codex', 'sessions'))).resolves.toBeUndefined()
   })
 
+  it('fails closed before walking beyond the transcript-tree metadata entry budget', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await expect(recentHostTranscripts(join(home, '.codex', 'sessions'), {
+      maxEntries: 3,
+      maxTranscripts: 32,
+    })).resolves.toBeUndefined()
+  })
+
+  it('fails closed before inspecting more JSONL candidates than the discovery budget', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await writeFile(join(dirname(transcript), 'second.jsonl'), sessionScopedEventLines(root), 'utf8')
+    await expect(recentHostTranscripts(join(home, '.codex', 'sessions'), {
+      maxEntries: 16,
+      maxTranscripts: 1,
+    })).resolves.toBeUndefined()
+  })
+
   it('rejects a fallback candidate replaced after discovery', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))

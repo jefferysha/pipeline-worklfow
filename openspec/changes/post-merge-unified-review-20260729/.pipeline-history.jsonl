@@ -327,3 +327,19 @@
 {"ts":"2026-08-02T20:15:36Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-08-02T20:15:36Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-08-02T20:31:35Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-02T20:32:01Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"c216953e-a57f-47d9-b315-f1abce8a6bbe"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: security-review"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-02T20:32:45Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-02T20:55:25Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-02T20:55:25Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-02T20:55:25Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-30-post-merge-unified-review-verify-final.md"}
+{"ts":"2026-08-02T20:55:31Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-02T20:55:32Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-02T19:18:04Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-02T20:55:32Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"d88f4771-b97d-4d4e-9f8e-9cd4ebfb744d"}
+{"ts":"2026-08-02T20:57:58Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-02T21:04:48Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-02T21:39:43Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
