@@ -275,7 +275,9 @@ export function useMandatorySkills(root: string): MandatoryState {
   async function reloadConfig(): Promise<void> {
     const requestRoot = root
     clearMandatoryConfig(requestRoot)
-    setCfg(null)
+    // Keep the last authoritative config rendered while the replacement is fetched. Publishing
+    // a transient null here unmounts Track Settings during a successful mutation and discards the
+    // workspace lifecycle before the caller can close only its submitted editor.
     const next = await loadMandatoryConfig(requestRoot)
     if (rootRef.current === requestRoot) setCfg(next)
   }

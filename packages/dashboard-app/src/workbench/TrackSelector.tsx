@@ -84,7 +84,7 @@ export function TrackSelector({ state, onDirtyChange }: { state: MandatoryState;
           })}
         </div>
       )}
-      {state.table !== null && state.tracks.length > 0 ? <TrackSettings state={state} onDirtyChange={onDirtyChange} /> : null}
+      {state.tracks.length > 0 ? <TrackSettings state={state} onDirtyChange={onDirtyChange} /> : null}
     </div>
   )
 }

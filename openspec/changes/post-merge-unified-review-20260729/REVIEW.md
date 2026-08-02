@@ -756,3 +756,62 @@ candidate now includes direct `useMutationFocus.test.tsx` and
 `TrackSettings.test.tsx` coverage; the same reviewer rechecked the increment
 and returned **C0/H0/M0/L0**, with no remaining confirmed defect, question, or
 advice. This evidence is ready for one exact commit and Build SHA freeze.
+
+## 2026-08-03 bounded Codex Verify follow-up
+
+The full PR input exceeded the Codex CLI 1 MiB request limit, so the Codex
+track reviewed the bounded 134 KiB remediation delta while the independent
+reviewer and E2E tracks retained full frozen-range coverage. It reported that
+the exact-head CI task was checked before the new SHA had been pushed and that
+the new `Dialog.closeDisabled` and `TrackSettingsList.disabled` behavior lacked
+implementation-adjacent same-name tests.
+
+Verify followed the official `verify-fail` path. The exact-head CI task is open
+again and cannot complete before the pushed SHA succeeds in GitHub Actions.
+Direct `Dialog.test.tsx` and `TrackSettingsList.test.tsx` regressions now prove
+the disabled controls are semantically unavailable and cannot dispatch their
+callbacks. The focused direct suites pass 6/6; a new committed Build
+SHA and fresh Verify tracks are still required before the task can close.
+
+The visual track then found one additional Medium integration defect on the
+same rejected SHA: a successful Track save called `reloadConfig()`, which
+published a transient `cfg=null`; `TrackSelector` consequently unmounted the
+entire Track Settings workspace before the caller could close only the
+submitted editor. A genuine RED now rerenders the selector through the pending
+authority state and proves the workspace must remain mounted. The config hook
+keeps its last authoritative value visible while fetching the replacement, and
+the selector no longer ties workspace lifetime to `table !== null`. The real
+CRUD success regression now asserts the editor closes, the settings workspace
+remains open, and a second Track uses the refreshed revision. Focused selector,
+same-name, CRUD, and typecheck gates are green. The complete Dashboard suite
+passes 83 files / 1540 tests, the root suite passes 330 files / 5881 tests with
+26 honest environment skips, and the full build plus repository static gates
+pass. A fresh exact-SHA Verify is still required.
+
+## 2026-08-03 final Build convergence
+
+The fresh full-range reviewer found one Medium refresh-concurrency regression
+before freeze: clearing the shared config cache also detached the active
+in-flight request, so two rapid retries could let an older response overwrite a
+newer revision. A genuine RED now supersedes one request, completes it before
+the current request, and proves it can neither populate the cache nor detach
+the current Promise. The config cache now carries a per-root generation; only
+the current generation may publish a response and only the identical request
+may remove its in-flight entry. The same-name `mandatoryConfig.test.tsx`
+regression passes with the Track lifecycle and direct component suites.
+
+After that repair, the full independent review returned **C0/H0/M0/L0** across
+the complete 565-file PR range and the final Build delta. Dashboard passes 84
+files / 1541 tests; root passes 330 files / 5881 tests with 26 honest
+environment skips. Typecheck, full build, the 719-file architecture gate,
+OpenSpec 38/38, release workflows 24/24, documentation, repository hygiene,
+identity, dependency audit/tree, workflow freshness, and diff checks pass.
+
+The rebuilt production asset `index-BAqHlU2A.js` passed a fresh desktop browser
+matrix at 1024, 1440, and 1920 pixels: successful save closes only the editor,
+keeps Track Settings open, and uses the refreshed revision for the next Track;
+busy, 409 error, Escape, backdrop, focus trap/return, reduced motion, and
+horizontal-overflow boundaries also pass. All writes were intercepted, the
+real project revision and six Tracks remained unchanged, and the visual review
+returned **C0/H0/M0/L0**. The candidate is ready for one exact commit and a
+fresh exact-SHA Verify with GitHub CI.

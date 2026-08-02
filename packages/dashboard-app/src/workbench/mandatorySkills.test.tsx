@@ -1465,6 +1465,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     })
     await waitFor(() => expect(configReads).toBeGreaterThan(1))
     await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(screen.getByTestId('wb-track-settings-panel')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
 

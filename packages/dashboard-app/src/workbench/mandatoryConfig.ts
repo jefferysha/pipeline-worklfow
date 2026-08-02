@@ -22,7 +22,8 @@ export interface MandatoryConfig {
 }
 
 const cfgCache = new Map<string, MandatoryConfig>()
-const cfgInflight = new Map<string, Promise<MandatoryConfig>>()
+const cfgGeneration = new Map<string, number>()
+const cfgInflight = new Map<string, { generation: number; request: Promise<MandatoryConfig> }>()
 
 function cacheKey(root: string): string {
   return root
@@ -200,6 +201,9 @@ function parseConfigSnapshot(value: unknown): ParsedConfigSnapshot | null {
 
 /** 测试钩子 + 未来手动刷新入口：清空 config 探测缓存（同 invalidateWorkflowRules 的命名惯例）。 */
 export function invalidateMandatoryConfig(): void {
+  for (const key of new Set([...cfgCache.keys(), ...cfgInflight.keys(), ...cfgGeneration.keys()])) {
+    cfgGeneration.set(key, (cfgGeneration.get(key) ?? 0) + 1)
+  }
   cfgCache.clear()
   cfgInflight.clear()
 }
@@ -225,10 +229,11 @@ export function primeMandatoryConfig(next: MandatoryConfig, root: string): void 
 export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {
   if (root.trim() === '') return Promise.resolve(unavailableConfig('项目 root 缺失'))
   const key = cacheKey(root)
+  const generation = cfgGeneration.get(key) ?? 0
   const cached = cfgCache.get(key)
   if (cached) return Promise.resolve(cached)
   const running = cfgInflight.get(key)
-  if (running) return running
+  if (running?.generation === generation) return running.request
   const request = fetchConfig(root)
     .then(async (res) => {
       // r.ok 检查必须在 r.json() 之前（SkillTransferModal 同一条既有教训：server 错误
@@ -250,11 +255,11 @@ export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {
     })
     .catch((): MandatoryConfig => unavailableConfig('network'))
     .then((r) => {
-      cfgCache.set(key, r)
-      cfgInflight.delete(key)
+      if ((cfgGeneration.get(key) ?? 0) === generation) cfgCache.set(key, r)
+      if (cfgInflight.get(key)?.request === request) cfgInflight.delete(key)
       return r
     })
-  cfgInflight.set(key, request)
+  cfgInflight.set(key, { generation, request })
   return request
 }
 
@@ -262,6 +267,7 @@ export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {
 
 
 export function clearMandatoryConfig(root: string): void {
-  cfgCache.delete(cacheKey(root))
-  cfgInflight.delete(cacheKey(root))
+  const key = cacheKey(root)
+  cfgGeneration.set(key, (cfgGeneration.get(key) ?? 0) + 1)
+  cfgCache.delete(key)
 }

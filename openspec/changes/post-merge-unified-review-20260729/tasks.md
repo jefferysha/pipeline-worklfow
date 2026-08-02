@@ -164,7 +164,7 @@
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
-- [x] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
+- [ ] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
 
 ## 交付
 
