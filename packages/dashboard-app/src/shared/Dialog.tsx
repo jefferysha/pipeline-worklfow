@@ -75,6 +75,7 @@ export function DialogInteractionBoundary({
 // 模块级、跨组件实例共享，故意不用 React state/context——Esc/Tab 响应资格判断
 // 不需要触发渲染，一个纯数组够用也更省心。
 const dialogStack: symbol[] = []
+const dialogFocusers = new Map<symbol, () => void>()
 
 // 困笼边界只应计入"真正能被 Tab 到达"的元素。disabled 表单控件与 input[type=hidden]
 // 虽然匹配朴素的标签选择器，但原生 Tab 顺序根本不会经过它们——若仍把它们计入
@@ -110,6 +111,13 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
   // 每次 render 都会被求值，但 useRef 只在首次挂载采用它，后续 render 里新建的
   // Symbol 会被直接丢弃，instanceIdRef.current 全生命周期指向同一个 symbol。
   const instanceIdRef = useRef<symbol>(Symbol('dialog'))
+  const focusInsideRef = useRef<() => void>(() => undefined)
+  focusInsideRef.current = () => {
+    if (interactionDisabledRef.current) return
+    const container = containerRef.current
+    const target = initialFocusRef?.current ?? (container ? getFocusableElements(container)[0] : undefined) ?? container
+    target?.focus()
+  }
 
   useLayoutEffect(() => {
     const overlay = overlayRef.current
@@ -121,6 +129,12 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
       }
     } else {
       overlay.removeAttribute('inert')
+      if (
+        dialogStack[dialogStack.length - 1] === instanceIdRef.current
+        && !overlay.contains(document.activeElement)
+      ) {
+        focusInsideRef.current()
+      }
     }
   }, [interactionDisabled])
 
@@ -131,9 +145,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     if (interactionDisabledRef.current) return
-    const container = containerRef.current
-    const target = initialFocusRef?.current ?? (container ? getFocusableElements(container)[0] : undefined) ?? container
-    target?.focus()
+    focusInsideRef.current()
     return () => {
       previousFocusRef.current?.focus()
     }
@@ -146,10 +158,17 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
   // onClose identity 变化只重挂监听器，不会误触发重复 push/pop。
   useEffect(() => {
     const id = instanceIdRef.current
+    dialogFocusers.set(id, () => focusInsideRef.current())
     dialogStack.push(id)
     return () => {
+      const wasTop = dialogStack[dialogStack.length - 1] === id
       const idx = dialogStack.indexOf(id)
       if (idx !== -1) dialogStack.splice(idx, 1)
+      dialogFocusers.delete(id)
+      if (wasTop) {
+        const next = dialogStack[dialogStack.length - 1]
+        if (next !== undefined) dialogFocusers.get(next)?.()
+      }
     }
   }, [])
 

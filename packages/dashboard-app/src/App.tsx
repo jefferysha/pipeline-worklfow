@@ -131,14 +131,16 @@ function AppShell(): JSX.Element {
 
   const setView = useCallback((nextView: View): void => {
     if (viewRef.current === 'workbench' && dirtyRef.current && nextView !== 'workbench') {
-      setPendingNavigation({
-        kind: 'view',
-        target: {
-          view: nextView,
-          root: currentRootRef.current || null,
-          change: nextView === 'progress' ? selectedChange : null,
-        },
-      })
+      setPendingNavigation((current) => current?.kind === 'pop'
+        ? current
+        : {
+            kind: 'view',
+            target: {
+              view: nextView,
+              root: currentRootRef.current || null,
+              change: nextView === 'progress' ? selectedChange : null,
+            },
+          })
       return
     }
     commitView(nextView)

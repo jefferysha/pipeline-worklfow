@@ -1044,3 +1044,53 @@ source, generated artifacts, project rules and OpenSpec documents and returns
 **PASS — C0/H0/M0/L0**, with no confirmed, unresolved or advisory finding.
 Build is authorized to freeze one new exact commit; all Verify tracks and
 GitHub CI must still restart from that exact SHA.
+
+## 2026-08-03 blocked-pop and portal-focus convergence
+
+The exact `c4f0cb58` Verify was rejected at **C0/H0/M2/L0**. An SSE root-loss
+effect could replace an already blocked browser-history request with a generic
+Projects navigation, so Discard no longer reached the user's original Back or
+Forward target. A portal Dialog that blurred its focus while authority was lost
+also removed `inert` without restoring focus when authority returned, leaving an
+active `aria-modal` surface while focus remained on `document.body`.
+
+Both defects first failed deterministic regressions. Dirty navigation now uses
+a functional pending-request update and preserves an existing `pop` request when
+the root-loss effect asks to leave Workbench. Marked Back and unmarked Forward
+tests prove that Stay retains the draft and URL, while Discard replays the exact
+original target even when authority changes between the blocked traversal and
+the decision. Shared Dialog instances register an authority-aware focus restorer
+with the existing LIFO stack. Re-enabling a top Dialog restores its first valid
+focus target; re-enabling beneath an outer guard does not steal focus, and the
+outer guard hands focus to the newly exposed authorized Dialog when it closes.
+
+The focused App/Dialog suites pass 71/71. The complete Dashboard passes 85 files
+/ 1,562 tests; root passes 330 files / 5,883 tests with 26 honest environment
+skips. Production build, Dashboard typecheck and every static/release/governance
+gate pass: dependency audit 0, architecture 719 production files, OpenSpec 38/38,
+release workflows 24/24, hooks 512/512, adapters 272/272, migration CAS 13/13,
+clean install `ok:true`, documentation, identity, interaction contract,
+repository hygiene, default-workflow freshness and diff whitespace. Two
+consecutive Dashboard builds are byte-identical. The entry asset is
+`index-CmHp9ZB5.js` with SHA-256
+`576b586369f02680fa1032f82d02c0163d1c6426601388554829c8e4ef055e01`;
+the Workbench chunk is `WorkbenchView-CFZzpS49.js` with SHA-256
+`574561419b2c63f549e22a921b1d09e49628926d00eb2bf9795452494b3a7999`.
+
+Fresh production-browser pre-Verify passes 5/5 scenario groups at 1024, 1440
+and 1920 across zh/en, light/dark and reduced motion. It proves both Back and
+Forward root-loss races, portal write blocking, exact Discard targets, both
+focus-recovery orders, keyboard paths and zero overflow; console, page and
+network errors are all zero. Evidence is under
+`/tmp/tenon-current-preverify-ZpNcsC/evidence/`, and the browser track wrote no
+real-workspace bytes.
+
+The fresh aggregate Standards + Spec review covers the complete current
+base-to-workspace surface of 712 unique paths, including all original 698 path
+identities, regenerated assets, governance records and the final four
+App/Dialog source/test files. It returns **PASS — C0/H0/M0/L0**, with zero
+confirmed, unconfirmed or advisory findings. The final pre-commit workspace
+fingerprint is
+`workspace:sha256:86732ae923140e88a5d379379656a9adc0c612c6e9833f3456f05d728896345c`.
+This tree is authorized for one new commit and freeze; every exact-SHA Verify
+track and GitHub CI must restart without reusing `c4f0cb58` evidence.

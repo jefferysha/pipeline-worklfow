@@ -54,4 +54,44 @@ describe('Dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save track', hidden: true }))
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
+
+  it('restores focus inside a still-open portal dialog when authority returns after the outer guard closes', () => {
+    const renderDialogs = (disabled: boolean, showGuard: boolean): JSX.Element => (
+      <I18nProvider>
+        <DialogInteractionBoundary disabled={disabled}>
+          <Dialog onClose={vi.fn()} title="Track settings" testid="track-settings-dialog">
+            <button type="button">Save track</button>
+          </Dialog>
+        </DialogInteractionBoundary>
+        {showGuard && (
+          <Dialog onClose={vi.fn()} title="Unsaved changes" testid="unsaved-guard-dialog">
+            <button type="button">Keep editing</button>
+          </Dialog>
+        )}
+      </I18nProvider>
+    )
+    const { rerender } = render(renderDialogs(false, false))
+    const save = screen.getByRole('button', { name: 'Save track' })
+    expect(save).toHaveFocus()
+
+    rerender(renderDialogs(true, true))
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+    expect(screen.getByTestId('track-settings-dialog')).toHaveAttribute('inert')
+
+    rerender(renderDialogs(true, false))
+    expect(document.body).toHaveFocus()
+
+    rerender(renderDialogs(false, false))
+    expect(save).toHaveFocus()
+
+    rerender(renderDialogs(true, true))
+    const keepEditing = screen.getByRole('button', { name: 'Keep editing' })
+    expect(keepEditing).toHaveFocus()
+
+    rerender(renderDialogs(false, true))
+    expect(keepEditing).toHaveFocus()
+
+    rerender(renderDialogs(false, false))
+    expect(save).toHaveFocus()
+  })
 })

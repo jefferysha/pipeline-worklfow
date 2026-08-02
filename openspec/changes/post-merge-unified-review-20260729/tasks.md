@@ -166,6 +166,12 @@
 - [x] 为未标记 session-history entry 保留真实 Back/Forward 方向，覆盖 Forward 取消补偿与确认重放。 (build)
 - [x] 将失权边界延伸到 `document.body` portal，并以流式有界扫描收紧 Codex transcript discovery；完成全量回归与 C0/H0/M0/L0 独立复审。 (build)
 
+## 2026-08-03 第八次 Verify 回退修复
+
+- [x] 保留已阻断的 browser pop 请求，使随后发生的 root 失权不会覆盖原 Back/Forward 目标。 (build)
+- [x] 在 portal Dialog 恢复交互权威后恢复内部焦点，并确保外层 modal 活跃时不抢焦点、关闭后正确交还。 (build)
+- [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门和 Standards + Spec pre-Verify 审查并冻结新 SHA。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

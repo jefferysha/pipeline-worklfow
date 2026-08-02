@@ -430,6 +430,73 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
+  it('已阻断的 browser Back 不会被随后发生的 root 失权覆盖，丢弃后仍到达原历史目标', async () => {
+    window.history.replaceState({ page: 'overview' }, '', '/?view=overview')
+    window.history.pushState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    const eventSource = lastEventSource()
+    expect(eventSource).toBeDefined()
+
+    act(() => window.history.back())
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+
+    act(() => {
+      eventSource!.emit('snapshot', JSON.stringify(makeSnapshot([])))
+    })
+    expect(screen.getByTestId('workbench-retained-host')).toHaveAttribute('inert')
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('overview'))
+  })
+
+  it('已阻断的未标记 browser Forward 在 root 失权后仍按原方向确认重放', async () => {
+    Object.defineProperty(window, 'navigation', {
+      configurable: true,
+      value: {
+        get currentEntry() {
+          return {
+            index: new URLSearchParams(window.location.search).get('historyMarker') === 'forward-target'
+              ? 1
+              : 0,
+          }
+        },
+      },
+    })
+    window.history.replaceState(
+      { page: 'workbench' },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
+    window.history.pushState(
+      { page: 'overview-forward' },
+      '',
+      '/?view=overview&historyMarker=forward-target',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    const eventSource = lastEventSource()
+    expect(eventSource).toBeDefined()
+
+    act(() => window.history.forward())
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+
+    act(() => {
+      eventSource!.emit('snapshot', JSON.stringify(makeSnapshot([])))
+    })
+    expect(screen.getByTestId('workbench-retained-host')).toHaveAttribute('inert')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃并离开' }))
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker')).toBe('forward-target'))
+  })
+
   it('一级导航与 Overview 共用可访问 Dialog；取消保留页面、草稿、URL 与触发焦点，确认才离开', async () => {
     await renderDirtyWorkbenchApp()
     const overview = screen.getByTestId('nav-overview')
