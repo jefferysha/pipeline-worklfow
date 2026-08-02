@@ -4,10 +4,14 @@ import {
   fstatSync,
   lstatSync,
   openSync,
-  readSync,
   realpathSync,
 } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
+import { readBounded as readBoundedBytes } from './contextBundleTrustedReader.js'
+import {
+  captureStableFileVersion,
+  matchesStableFileVersion,
+} from './stableFileMetadata.js'
 
 export const MAX_TASKS_MARKDOWN_BYTES = 256 * 1024
 
@@ -24,16 +28,12 @@ function isInside(base: string, candidate: string): boolean {
     || (fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase))
 }
 
-function readBounded(fd: number, maxBytes: number): string {
-  const bytes = Buffer.allocUnsafe(maxBytes + 1)
-  let total = 0
-  while (total <= maxBytes) {
-    const count = readSync(fd, bytes, total, maxBytes + 1 - total, null)
-    if (count === 0) break
-    total += count
+function readBoundedTasksSource(fd: number, maxBytes: number): string {
+  const bytes = readBoundedBytes(fd, maxBytes)
+  if (bytes.byteLength > maxBytes) {
+    throw new Error('tasks.md exceeds the bounded snapshot budget')
   }
-  if (total > maxBytes) throw new Error('tasks.md exceeds the bounded snapshot budget')
-  return bytes.subarray(0, total).toString('utf8')
+  return bytes.toString('utf8')
 }
 
 /**
@@ -55,12 +55,13 @@ export async function readTasksMarkdown(
     const realChangeDir = realpathSync(changeDir)
     hooks.beforeOpen?.()
     fd = openSync(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
-    const opened = fstatSync(fd)
-    if (!opened.isFile() || opened.size > MAX_TASKS_MARKDOWN_BYTES) return undefined
+    const opened = fstatSync(fd, { bigint: true })
+    if (!opened.isFile() || opened.size > BigInt(MAX_TASKS_MARKDOWN_BYTES)) return undefined
+    const openedVersion = captureStableFileVersion(opened)
 
     const stable = (): boolean => {
       const currentDir = lstatSync(changeDir)
-      const current = lstatSync(target)
+      const current = lstatSync(target, { bigint: true })
       return currentDir.isDirectory()
         && !currentDir.isSymbolicLink()
         && currentDir.dev === openedDir.dev
@@ -68,15 +69,18 @@ export async function readTasksMarkdown(
         && realpathSync(changeDir) === realChangeDir
         && current.isFile()
         && !current.isSymbolicLink()
-        && current.dev === opened.dev
-        && current.ino === opened.ino
-        && current.size === opened.size
+        && matchesStableFileVersion(current, openedVersion)
         && isInside(realChangeDir, realpathSync(target))
     }
 
-    if (!stable()) return undefined
-    const source = (hooks.readSource ?? readBounded)(fd, MAX_TASKS_MARKDOWN_BYTES)
-    if (!stable()) return undefined
+    const fdStable = (): boolean => matchesStableFileVersion(
+      fstatSync(fd as number, { bigint: true }),
+      openedVersion,
+    )
+
+    if (!stable() || !fdStable()) return undefined
+    const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES)
+    if (!fdStable() || !stable()) return undefined
     return source
   } catch {
     return undefined

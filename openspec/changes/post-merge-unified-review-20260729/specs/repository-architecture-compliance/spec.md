@@ -51,3 +51,16 @@ Change。已经结束且仅剩 Tenon 状态证据的历史目录 SHALL 通过 Op
 - **WHEN** release candidate 运行 `openspec validate --all --strict --no-interactive`
 - **THEN** 所有真实 active Change 和主规格均通过
 - **AND** 不以忽略失败、删除证据或伪造 requirement 作为通过手段
+
+### Requirement: 聚合快照 SHALL 只发布稳定的 tasks 内容
+
+服务端读取受项目工作树控制的 `tasks.md` 时 SHALL 使用有界、nofollow 的普通文件 fd，并在读取前后
+同时验证 fd 与 pathname 的文件身份和变化元数据。仅 dev/ino/size 相同不足以证明内容稳定；mtime 或
+ctime 变化、fd/path 身份漂移、特殊文件、越界路径或超限输入均 SHALL fail closed，不发布该 tasks 投影。
+
+#### Scenario: 同 inode同长度原地覆写
+
+- **GIVEN** 服务端已经打开一个合法且有界的 `tasks.md`
+- **WHEN** 文件在 fd 读取期间被原地覆写为相同字节长度，inode 与 size 均保持不变
+- **THEN** fd 读前/读后或 pathname 元数据 fence 检出 mtime/ctime 变化
+- **AND** 聚合快照省略该 tasks 内容，不发布 stale 或 torn bytes

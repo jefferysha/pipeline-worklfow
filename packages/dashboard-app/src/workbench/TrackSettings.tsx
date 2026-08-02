@@ -25,6 +25,7 @@ import { TrackSettingsList } from './TrackSettingsList'
 import { TrackEditorFields } from './TrackEditorFields'
 import { TrackRoutePreview } from './TrackRoutePreview'
 import { useTrackMutationIdentity } from './useTrackMutationIdentity'
+import { useMutationFocus } from './useMutationFocus'
 
 const ADD_CLS =
   'cursor-pointer rounded-lg border-[1.5px] border-dashed border-border-2 bg-transparent px-[11px] py-[5px] text-[12.5px] font-bold whitespace-nowrap text-text-3 transition-colors enabled:hover:border-purple-b enabled:hover:text-purple-d disabled:cursor-not-allowed disabled:opacity-50'
@@ -60,6 +61,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     editor === null ? null : editor.original?.id ?? editor.draft.id,
   )
   const busy = trackMutation.busy
+  const mutationFocus = useMutationFocus(busy, editor !== null)
   const localeIdentity = useRef({ t, lang })
   localeIdentity.current = { t, lang }
   useEffect(() => {
@@ -218,6 +220,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
     const targetRoot = state.root
     const targetRevision = state.revision
     const targetTrack = draft.id
+    mutationFocus.capture()
     const operation = trackMutation.begin('save', targetRevision, targetTrack)
     setError(null)
     try {
@@ -319,6 +322,7 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
           onClose={() => requestDraftClose(closePanel)}
           testid="wb-track-settings-panel"
           closeLabel={t('workbench.track_settings_close')}
+          closeDisabled={busy}
           panelClassName="w-[min(920px,calc(100vw-32px))]"
           variant="workspace"
         >
@@ -332,42 +336,44 @@ export function TrackSettings({ state, onDirtyChange }: TrackSettingsProps): JSX
               data-testid="wb-track-editor"
               onSubmit={(event) => { event.preventDefault(); void saveTrack() }}
             >
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <b className="text-[13px] text-text">{editor.mode === 'create' ? t('workbench.track_create_title') : t('workbench.track_edit_title')}</b>
-                <button type="button" className="text-xs text-text-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={busy} onClick={() => requestDraftClose(clearEditor)}>{t('workbench.track_cancel')}</button>
-              </div>
-              <TrackEditorFields
-                draft={editor.draft}
-                editMode={editor.mode === 'edit'}
-                builtin={editor.original?.builtin === true}
-                tracks={state.tracks}
-                fieldClass={fieldClass}
-                onUpdate={updateDraft}
-              />
-              {!editor.original?.builtin && (
-                <TrackRoutePreview
-                  prompt={routePrompt}
-                  preview={routePreview}
-                  busy={routePreviewBusy}
-                  error={routePreviewError}
+              <fieldset className="contents" disabled={busy}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <b className="text-[13px] text-text">{editor.mode === 'create' ? t('workbench.track_create_title') : t('workbench.track_edit_title')}</b>
+                  <button type="button" className="text-xs text-text-3 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => requestDraftClose(clearEditor)}>{t('workbench.track_cancel')}</button>
+                </div>
+                <TrackEditorFields
+                  draft={editor.draft}
+                  editMode={editor.mode === 'edit'}
+                  builtin={editor.original?.builtin === true}
+                  tracks={state.tracks}
                   fieldClass={fieldClass}
-                  onPrompt={(value) => { setRoutePrompt(value); invalidateRoutePreview() }}
-                  onPreview={() => void previewRoute()}
-                  t={t}
+                  onUpdate={updateDraft}
                 />
-              )}
-              {error && <p className="mt-3 rounded-md border border-red-b bg-red-t p-2 text-xs text-red-d" role="alert" data-testid="wb-track-editor-error">{error}</p>}
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
-                {editor.mode === 'edit' && !editor.original?.builtin && (
-                  deleteConfirm
-                    ? <button type="button" className="rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-delete-confirm" onClick={() => void removeTrack()} disabled={busy}>{t('workbench.track_delete_confirm')}</button>
-                    : <button type="button" className="mr-auto rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-editor-delete" onClick={() => setDeleteConfirm(true)}>{t('workbench.track_delete')}</button>
+                {!editor.original?.builtin && (
+                  <TrackRoutePreview
+                    prompt={routePrompt}
+                    preview={routePreview}
+                    busy={routePreviewBusy}
+                    error={routePreviewError}
+                    fieldClass={fieldClass}
+                    onPrompt={(value) => { setRoutePrompt(value); invalidateRoutePreview() }}
+                    onPreview={() => void previewRoute()}
+                    t={t}
+                  />
                 )}
-                <button type="submit" className="rounded-md bg-btn-bg px-4 py-1.5 text-xs font-bold text-btn-fg disabled:opacity-50" data-testid="wb-track-editor-save" disabled={busy || !trackDraftHasRequiredFields(editor.draft)}>{busy ? t('workbench.track_saving') : t('workbench.track_save')}</button>
-              </div>
+                {error && <p className="mt-3 rounded-md border border-red-b bg-red-t p-2 text-xs text-red-d" role="alert" data-testid="wb-track-editor-error">{error}</p>}
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  {editor.mode === 'edit' && !editor.original?.builtin && (
+                    deleteConfirm
+                      ? <button type="button" className="rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-delete-confirm" onClick={() => void removeTrack()}>{t('workbench.track_delete_confirm')}</button>
+                      : <button type="button" className="mr-auto rounded-md border border-red-b px-3 py-1.5 text-xs font-bold text-red-d" data-testid="wb-track-editor-delete" onClick={() => setDeleteConfirm(true)}>{t('workbench.track_delete')}</button>
+                  )}
+                  <button ref={mutationFocus.saveButtonRef} type="submit" className="rounded-md bg-btn-bg px-4 py-1.5 text-xs font-bold text-btn-fg disabled:opacity-50" data-testid="wb-track-editor-save" disabled={!trackDraftHasRequiredFields(editor.draft)}>{busy ? t('workbench.track_saving') : t('workbench.track_save')}</button>
+                </div>
+              </fieldset>
             </form>
           )}
-          <TrackSettingsList state={state} onEdit={(track) => requestEditorSwitch(() => openEdit(track))} />
+          <TrackSettingsList state={state} disabled={busy} onEdit={(track) => requestEditorSwitch(() => openEdit(track))} />
         </Dialog>
       )}
       <UnsavedDraftDialog

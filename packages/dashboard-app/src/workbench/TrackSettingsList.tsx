@@ -7,9 +7,11 @@ import { trackDisplayName } from './trackPresentation'
 export function TrackSettingsList({
   state,
   onEdit,
+  disabled = false,
 }: {
   state: MandatoryState
   onEdit: (track: WbTrackDefinition) => void
+  disabled?: boolean
 }): JSX.Element {
   const { lang, t } = useT()
   return (
@@ -32,6 +34,7 @@ export function TrackSettingsList({
                 type="button"
                 className="ml-auto rounded-md border border-border px-2 py-1 text-[11px] font-bold text-text-3 disabled:cursor-not-allowed disabled:opacity-55"
                 data-testid={`wb-track-edit-${track.id}`}
+                disabled={disabled}
                 onClick={() => onEdit(track)}
               >
                 {t('workbench.track_edit')}

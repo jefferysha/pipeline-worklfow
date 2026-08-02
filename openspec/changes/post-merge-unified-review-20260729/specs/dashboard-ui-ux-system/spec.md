@@ -102,6 +102,21 @@ identity 任一变化时，旧确认 SHALL 立即失效；旧请求的 response�
 - **THEN** real run、L3、apply、triage、retry 与 Workflow delete/create/save 的确认和 pending state 原子失效
 - **AND** 旧项目的 selector、template、result、toast 与乐观回滚值不在新项目显示
 
+#### Scenario: Track 草稿 dirty 上报稳定
+
+- **GIVEN** 用户从 Workbench 打开 Track editor
+- **WHEN** 用户修改任一草稿字段并使编辑器进入 dirty 状态
+- **THEN** dirty 状态只按真实草稿变化上报，不因父层 render 或 callback identity 变化反复切换
+- **AND** 页面不发生无限 render/effect 循环，导航离开守卫继续保持有效
+
+#### Scenario: Track 保存期间锁定提交 surface
+
+- **GIVEN** 用户提交一个有效 Track 草稿且保存请求仍在进行
+- **WHEN** 用户尝试修改字段、route preview prompt、切换 Track、删除或关闭 editor
+- **THEN** 所有会改变已提交 payload 或导致未提交输入被成功响应覆盖的控件保持禁用
+- **AND** 成功响应关闭 editor 时不存在请求发出后的静默丢失输入
+- **AND** 失败响应恢复同一草稿、错误与焦点语义，允许用户修正后重试
+
 #### Scenario: Progress 创建 Change 草稿不能跨项目复用
 
 - **GIVEN** 用户在项目 A 打开 Create Change 并填写 `name`、`track`、`workflow` 与 `intent`

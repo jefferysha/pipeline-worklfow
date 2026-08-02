@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { deleteWorkflowDef, fetchWorkflow, fetchWorkflowNames, postWorkflowDef } from '../api/client'
@@ -213,6 +213,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
     onDirtyChange,
   })
+  const reportTrackDirty = useCallback((value: boolean) => {
+    setSourceDirty('track', value)
+  }, [setSourceDirty])
   function editLane(laneId: string, patch: Parameters<typeof editLaneInDef>[2]): void {
     setDef((prev) => (prev ? editLaneInDef(prev, laneId, patch) : prev))
   }
@@ -473,7 +476,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
       {def && (
         <>
           <div className="mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm" data-testid="wb-track-context">
-            <TrackSelector state={mandatory} onDirtyChange={(value) => setSourceDirty('track', value)} />
+            <TrackSelector state={mandatory} onDirtyChange={reportTrackDirty} />
           </div>
           <ExecutionTimelineComposer
             workflowName={def.name}

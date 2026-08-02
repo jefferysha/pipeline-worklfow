@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WbSkillEntry, WbTrackDefinition } from '../api/client'
 import { I18nProvider, useT } from '../i18n'
@@ -1332,6 +1333,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
   })
 
   it('Track 保存请求在途时禁止切换编辑器，响应只回写原 Track', async () => {
+    const user = userEvent.setup()
     const baseFetch = global.fetch
     let releaseA!: (response: Response) => void
     const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
@@ -1343,10 +1345,37 @@ describe('TrackSettings v3 真实 CRUD', () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
-    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    const label = screen.getByLabelText('显示名称')
+    fireEvent.change(label, { target: { value: 'Quality request' } })
+    await user.click(screen.getByTestId('wb-track-editor-save'))
 
-    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    const editor = screen.getByTestId('wb-track-editor')
+    expect(Array.from(editor.querySelectorAll('input, select, button'))).not.toHaveLength(0)
+    for (const control of editor.querySelectorAll('input, select, button')) {
+      expect(control).toBeDisabled()
+    }
+    expect(within(editor).getByLabelText('显示名称')).toBeDisabled()
+    expect(within(editor).getByLabelText('默认 Workflow')).toBeDisabled()
+    expect(within(editor).getByLabelText('允许任意 Workflow')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-route-prompt')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-route-preview')).toBeDisabled()
+    expect(within(editor).getByRole('button', { name: '关闭' })).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-editor-delete')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-editor-save')).toBeDisabled()
+    expect(screen.getByTestId('wb-track-edit-frontend')).toBeDisabled()
+    expect(screen.getByLabelText('关闭轨道设置')).toBeDisabled()
+    const patchCall = fetchMock().mock.calls.find(([url, opts]) => url === '/api/tracks/qa' && (opts as RequestInit | undefined)?.method === 'PATCH')
+    const frozenRequestBody = String((patchCall?.[1] as RequestInit).body)
+    expect(JSON.parse(frozenRequestBody)).toMatchObject({ patch: { label: 'Quality request' } })
+
+    await user.type(label, ' blocked edit')
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('wb-track-settings-panel'))
+    await user.click(screen.getByLabelText('关闭轨道设置'))
+    await user.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(label).toHaveValue('Quality request')
+    expect(String((patchCall?.[1] as RequestInit).body)).toBe(frozenRequestBody)
     expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
 
     await act(async () => {
@@ -1355,8 +1384,12 @@ describe('TrackSettings v3 真实 CRUD', () => {
     })
     expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(label).toBeEnabled()
+    await waitFor(() => expect(screen.getByTestId('wb-track-editor-save')).toHaveFocus())
     expect(screen.getByTestId('wb-track-editor-error')).toHaveTextContent('A save error')
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
   })
 
@@ -1390,6 +1423,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
   })
 
   it('Track A 保存成功后重拉 authority 并推进 revision，随后 Track B 使用新 revision', async () => {
+    const user = userEvent.setup()
     let configReads = 0
     let currentRevision = CONFIG_BODY.revision
     configResponse = () => {
@@ -1409,9 +1443,15 @@ describe('TrackSettings v3 真实 CRUD', () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
-    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
-    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    await user.click(screen.getByTestId('wb-track-editor-save'))
+    const firstPatch = fetchMock().mock.calls.find(([url, opts]) => url === '/api/tracks/qa' && (opts as RequestInit | undefined)?.method === 'PATCH')
+    const frozenRequestBody = String((firstPatch?.[1] as RequestInit).body)
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('wb-track-settings-panel'))
+    await user.click(screen.getByLabelText('关闭轨道设置'))
+    await user.click(screen.getByTestId('wb-track-edit-frontend'))
     expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(String((firstPatch?.[1] as RequestInit).body)).toBe(frozenRequestBody)
 
     currentRevision = 'revision-after-a'
     await act(async () => {

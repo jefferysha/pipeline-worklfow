@@ -688,3 +688,71 @@ GitHub PR #20 is non-draft and mergeable at the exact SHA. CI run
 No prior failed candidate is reused. This section freezes Build evidence;
 Verify review receipt, Verify fields, merge/main CI, Ship and Archive remain
 mandatory.
+
+## 2026-08-03 Verify rollback
+
+The prior freeze was reopened because the final independent review found two
+Dashboard defects and one stale scope baseline. The Change returned through the
+official `verify-fail` and `requirements-changed` transitions; proposal, design,
+capability delta, implementation plan, and tasks now use
+`origin/main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9` and cover PR #27/#28.
+
+The Track Settings dirty bridge formerly passed a new callback on every
+Workbench render. Once a draft became dirty, the child effect and cleanup could
+alternate the parent source state indefinitely. The bridge now has stable
+`useCallback` identity. A Workbench integration regression reproduces the old
+hang and proves exactly one dirty=true notification after the repair.
+
+Track save also formerly disabled only action buttons, leaving fields and the
+route-preview prompt editable while the request was in flight. A successful
+response could then close the editor and silently discard edits made after the
+request snapshot. The entire editor form is now one native disabled fieldset
+during the mutation, and every track-list edit entry is disabled as well. The
+regression covers identity/workflow fields, route prompt/preview, cancel,
+delete, save, and list switching; the existing error, discard, focus, and
+late-response suites remain green.
+
+Focused RED→GREEN evidence is followed by 202/202 Workbench and Track Settings
+tests plus Dashboard typecheck. This rollback remains open until full
+Standards/Spec tests, production browser acceptance, independent C0/H0/M0
+review, and a new exact SHA all pass; no evidence from the rejected freeze is
+reused as completion proof.
+
+## 2026-08-03 final remediation convergence
+
+The snapshot race identified by the independent review now has two genuine RED
+regressions: aggregate and single-Change readers both accepted stale bytes after
+a same-inode, same-length in-place overwrite. Both failed before the repair.
+The readers now share the bounded byte primitive and a single stable-file
+metadata fence covering `dev`, `ino`, `size`, `mtimeNs`, and `ctimeNs`. The
+opened fd and current pathname are checked before and after the read, so leaf
+replacement, growth, truncation, and same-size overwrite all fail closed. The
+complete snapshot suite passes 47/47.
+
+Track mutation coverage now drives actual user-event keyboard and pointer
+attempts while the request is pending. Every editor control, route preview,
+track-list switch, and workspace close surface is disabled; Escape, close-icon,
+list, and field attempts preserve both the draft and frozen request body. A
+failed mutation restores enabled controls and focus to the initiating Save
+button; the success branch closes only after a valid authority response. The
+focus lifecycle lives in a bounded hook, restoring the 719-file architecture
+gate.
+
+The final source passes Dashboard 80 files / 1537 tests, root 330 files / 5881
+tests with 26 honest skips, production build/typecheck, OpenSpec 38/38, release
+24/24, comments, architecture, repository hygiene, documentation, identity,
+and diff checks. Production Browser QA on the rebuilt server at port 18766 used
+request interception, so it performed zero real config writes. It proved the
+409 failure and valid-success branches, stable dirty reporting, empty-label
+validation, focus recovery, and locked Escape/mouse/keyboard paths. Desktop
+widths 1024/1440/1920 had no document overflow and a fully visible workspace;
+zh/light and en/dark with reduced motion both passed. A clean final reload had
+zero console errors; `pr20-track-settings-1024-zh-light.png` records the final
+1024px production state outside the repository.
+
+A fresh independent review first returned C0/H0/M0/L1 solely because the new
+Hook and component lacked same-name test files required by `FRONTEND.md`. The
+candidate now includes direct `useMutationFocus.test.tsx` and
+`TrackSettings.test.tsx` coverage; the same reviewer rechecked the increment
+and returned **C0/H0/M0/L0**, with no remaining confirmed defect, question, or
+advice. This evidence is ready for one exact commit and Build SHA freeze.

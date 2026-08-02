@@ -7,8 +7,8 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 
 ## 前提、边界与停止条件
 
-- 基线：`main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`，十三个目标 PR
-  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18/#19/#21/#23）已合并，开放非 Draft PR
+- 基线：`main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`，十五个目标 PR
+  （#8/#14/#13/#11/#12/#9/#15/#16/#17/#18/#19/#21/#23/#27/#28）已合并，开放非 Draft PR
   再查只剩本统一审查 PR #20。
 - 采用当前独立 worktree、`codex/unified-main-review-20260729`、full Change、TDD 和持续授权。
 - 不改变 CLI/HTTP DTO，不增加无关功能，不修改自动化 schedule，不执行 npm publish 或生产部署。
@@ -169,6 +169,37 @@ design-doc: docs/superpowers/specs/2026-07-29-post-merge-unified-review-design.m
 验收：四轨 C0/H0/M0、主干 CI 成功、OpenSpec delta 可应用、repo-zero。
 
 此处建议 `/clear`。
+
+## 子阶段 9：2026-08-03 Verify 回退——Track editor 状态一致性与最终基线收敛
+
+1. 在 `packages/dashboard-app/src/workbench/WorkbenchView.test.tsx` 增加 RED：从真实 Workbench
+   打开 Track Settings、编辑草稿，断言 dirty 上报不会触发 maximum update depth、无限 effect 或
+   不收敛 render；随后在 `WorkbenchView.tsx` 使用稳定 callback identity 完成最小修复。
+2. 在 `TrackSettings.test.tsx` 增加 RED：延迟 save response 后尝试修改全部 Track 字段、route
+   preview prompt、切换/删除/关闭，断言 busy 期间控件不可变且请求 payload 保持冻结；失败后原草稿
+   与焦点可继续编辑，成功后只关闭已提交且未变化的 surface。
+3. 在 `TrackSettings.tsx`、`TrackEditorFields.tsx` 与 `TrackRoutePreview.tsx` 复用现有 `busy` 身份，
+   用 fieldset/显式 disabled 最小化锁定提交 surface，不新增全局状态或协议字段。
+4. 先分别运行两个定向 RED 并保存预期失败，再完成最小实现使其 GREEN；随后运行
+   `npm run typecheck:web`、完整 `npm run test:web`、`npm run build` 与 `git diff --check`。
+5. 在项目专用 production Dashboard 复验 Track edit/save 的鼠标、键盘、busy、失败恢复、取消和
+   dirty navigation；覆盖 1024/1440/1920、zh/en、light/dark 与 reduced-motion。
+6. 对 `origin/main@a86dabb4...<new-head>` 重做完整 Standards + Spec pre-Verify review；所有 C/H/M
+   清零后更新报告、生成物和 tasks，冻结新 `build_sha` 再进入三轨 Verify。
+
+验收：Track 草稿编辑无 render loop，保存期间无静默输入丢失，PR #27/#28 的三个 capability 均在
+覆盖矩阵中可追溯，完整验证和精确 head CI 通过。
+
+此处建议 `/clear`。
+
+## 子阶段 10：2026-08-03 Verify 回退——snapshot 同长度覆写稳定性
+
+1. 在 `packages/server/src/snapshot.test.ts` 增加 RED：通过 `readSource` 对已打开的 `tasks.md`
+   做同 inode、同字节长度原地覆写，断言 reader 返回 `undefined`，旧实现必须因只比较 size 而失败。
+2. 在 `packages/server/src/snapshotTasks.ts` 以 opened fd 的 dev/ino/size/mtimeNs/ctimeNs 为基线，
+   在 bounded read 前后分别 `fstat`，并让 pathname fence 核对同一组变化元数据；任一变化 fail closed。
+3. 运行定向 snapshot 测试、server/full root tests、architecture、typecheck、build 与 `git diff --check`；
+   重建 tracked Dashboard/CLI/server 资产后重新执行完整 pre-Verify review。此处建议 `/clear`。
 
 ## 回滚策略
 

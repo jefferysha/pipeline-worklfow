@@ -1,7 +1,7 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
-import { appendFileSync, symlinkSync, unlinkSync } from 'node:fs'
+import { appendFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -109,6 +109,26 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       readSource: () => {
         appendFileSync(join(changeDir, 'tasks.md'), '\n- [ ] raced growth\n')
         return '- [ ] stale bytes\n'
+      },
+    })
+
+    expect(source).toBeUndefined()
+  })
+
+  it('聚合快照在同 inode 同长度覆写时不发布已过期内容', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'same-size-raced-tasks')
+    const target = join(changeDir, 'tasks.md')
+    const before = '- [ ] before\n'
+    const after = '- [x] after!\n'
+    expect(Buffer.byteLength(after)).toBe(Buffer.byteLength(before))
+    await writeFile(target, before, 'utf8')
+
+    const source = await readTasksMarkdown(changeDir, {
+      readSource: () => {
+        writeFileSync(target, after, 'utf8')
+        return before
       },
     })
 
@@ -391,6 +411,27 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
         return 'should not be read'
       })).toThrow(/tasks.*上限/i)
       expect(readAttempted).toBe(false)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change 的 tasks 在同 inode 同长度覆写时 fail closed', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'same-size-target')
+    const target = join(targetDir, 'tasks.md')
+    const before = '- [ ] before\n'
+    const after = '- [x] after!\n'
+    expect(Buffer.byteLength(after)).toBe(Buffer.byteLength(before))
+    await writeFile(target, before, 'utf8')
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'same-size-target')
+      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+        writeFileSync(target, after, 'utf8')
+        return before
+      })).toThrow(/tasks|路径|读取期间变化/i)
     } finally {
       closeWorkflowRootAnchor(workflowAnchor)
     }

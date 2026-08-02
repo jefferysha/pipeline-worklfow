@@ -20983,25 +20983,36 @@ import {
   fstatSync as fstatSync8,
   lstatSync as lstatSync6,
   openSync as openSync9,
-  readSync as readSync6,
   realpathSync as realpathSync5
 } from "node:fs";
 import { isAbsolute as isAbsolute8, join as join39, relative as relative6, sep as sep9 } from "node:path";
+
+// packages/server/src/stableFileMetadata.ts
+function captureStableFileVersion(stat6) {
+  return {
+    dev: stat6.dev,
+    ino: stat6.ino,
+    size: stat6.size,
+    mtimeNs: stat6.mtimeNs,
+    ctimeNs: stat6.ctimeNs
+  };
+}
+function matchesStableFileVersion(stat6, expected) {
+  return stat6.isFile() && stat6.dev === expected.dev && stat6.ino === expected.ino && stat6.size === expected.size && stat6.mtimeNs === expected.mtimeNs && stat6.ctimeNs === expected.ctimeNs;
+}
+
+// packages/server/src/snapshotTasks.ts
 var MAX_TASKS_MARKDOWN_BYTES = 256 * 1024;
 function isInside(base, candidate) {
   const fromBase = relative6(base, candidate);
   return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep9}`) && !isAbsolute8(fromBase);
 }
-function readBounded2(fd, maxBytes) {
-  const bytes = Buffer.allocUnsafe(maxBytes + 1);
-  let total = 0;
-  while (total <= maxBytes) {
-    const count = readSync6(fd, bytes, total, maxBytes + 1 - total, null);
-    if (count === 0) break;
-    total += count;
+function readBoundedTasksSource(fd, maxBytes) {
+  const bytes = readBounded(fd, maxBytes);
+  if (bytes.byteLength > maxBytes) {
+    throw new Error("tasks.md exceeds the bounded snapshot budget");
   }
-  if (total > maxBytes) throw new Error("tasks.md exceeds the bounded snapshot budget");
-  return bytes.subarray(0, total).toString("utf8");
+  return bytes.toString("utf8");
 }
 async function readTasksMarkdown(changeDir, hooks = {}) {
   const target = join39(changeDir, "tasks.md");
@@ -21012,16 +21023,21 @@ async function readTasksMarkdown(changeDir, hooks = {}) {
     const realChangeDir = realpathSync5(changeDir);
     hooks.beforeOpen?.();
     fd = openSync9(target, constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK);
-    const opened = fstatSync8(fd);
-    if (!opened.isFile() || opened.size > MAX_TASKS_MARKDOWN_BYTES) return void 0;
+    const opened = fstatSync8(fd, { bigint: true });
+    if (!opened.isFile() || opened.size > BigInt(MAX_TASKS_MARKDOWN_BYTES)) return void 0;
+    const openedVersion = captureStableFileVersion(opened);
     const stable = () => {
       const currentDir = lstatSync6(changeDir);
-      const current = lstatSync6(target);
-      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && realpathSync5(changeDir) === realChangeDir && current.isFile() && !current.isSymbolicLink() && current.dev === opened.dev && current.ino === opened.ino && current.size === opened.size && isInside(realChangeDir, realpathSync5(target));
+      const current = lstatSync6(target, { bigint: true });
+      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && realpathSync5(changeDir) === realChangeDir && current.isFile() && !current.isSymbolicLink() && matchesStableFileVersion(current, openedVersion) && isInside(realChangeDir, realpathSync5(target));
     };
-    if (!stable()) return void 0;
-    const source = (hooks.readSource ?? readBounded2)(fd, MAX_TASKS_MARKDOWN_BYTES);
-    if (!stable()) return void 0;
+    const fdStable = () => matchesStableFileVersion(
+      fstatSync8(fd, { bigint: true }),
+      openedVersion
+    );
+    if (!stable() || !fdStable()) return void 0;
+    const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES);
+    if (!fdStable() || !stable()) return void 0;
     return source;
   } catch {
     return void 0;
@@ -22835,7 +22851,6 @@ import {
   fstatSync as fstatSync10,
   lstatSync as lstatSync9,
   openSync as openSync11,
-  readSync as readSync7,
   realpathSync as realpathSync7
 } from "node:fs";
 import { isAbsolute as isAbsolute10, join as join46, posix as posix4, relative as relative8, sep as sep11 } from "node:path";
@@ -22902,20 +22917,14 @@ function isInside2(base, candidate) {
   const fromBase = relative8(base, candidate);
   return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute10(fromBase);
 }
-function readBoundedTasksSource(fd, maxBytes) {
-  const bytes = Buffer.allocUnsafe(maxBytes + 1);
-  let total = 0;
-  while (total <= maxBytes) {
-    const count = readSync7(fd, bytes, total, maxBytes + 1 - total, null);
-    if (count === 0) break;
-    total += count;
-  }
-  if (total > maxBytes) {
+function readBoundedTasksSource2(fd, maxBytes) {
+  const bytes = readBounded(fd, maxBytes);
+  if (bytes.byteLength > maxBytes) {
     throw new Error(`Change tasks \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
   }
-  return bytes.subarray(0, total).toString("utf8");
+  return bytes.toString("utf8");
 }
-function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource) {
+function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource2) {
   const target = join46(changeAnchor.changeDir, "tasks.md");
   let fd;
   try {
@@ -22932,26 +22941,34 @@ function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSo
     if (!opened.isFile()) {
       throw new ContextBundlePathError(403, "Change tasks \u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6");
     }
+    const openedVersion = captureStableFileVersion(fstatSync10(fd, { bigint: true }));
     const assertOpenedTargetStillAnchored = () => {
       let current;
       let realPath;
       try {
         assertChangePathAnchor(changeAnchor);
-        current = lstatSync9(target);
+        current = lstatSync9(target, { bigint: true });
         realPath = realpathSync7(target);
       } catch (error) {
         if (error instanceof ContextBundlePathError) throw error;
         throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316", error);
       }
-      if (current.isSymbolicLink() || !current.isFile() || current.dev !== opened.dev || current.ino !== opened.ino || current.size !== opened.size || !isInside2(changeAnchor.realPath, realPath)) {
+      if (current.isSymbolicLink() || !current.isFile() || !matchesStableFileVersion(current, openedVersion) || !isInside2(changeAnchor.realPath, realPath)) {
+        throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
+      }
+    };
+    const assertOpenedFdStillStable = () => {
+      if (!matchesStableFileVersion(fstatSync10(fd, { bigint: true }), openedVersion)) {
         throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
       }
     };
     assertOpenedTargetStillAnchored();
+    assertOpenedFdStillStable();
     if (opened.size > MAX_TASKS_MARKDOWN_BYTES) {
       throw new Error(`Change tasks \u8D85\u8FC7 ${MAX_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES);
+    assertOpenedFdStillStable();
     assertOpenedTargetStillAnchored();
     return source;
   } finally {

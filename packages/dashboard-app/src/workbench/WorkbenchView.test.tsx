@@ -884,6 +884,19 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
     expect(screen.getByTestId('wb-track-settings-toggle')).toBeEnabled()
   })
+
+  it('Track 草稿 dirty 上报不会因父组件重渲染形成 effect 循环', async () => {
+    const onDirtyChange = vi.fn()
+    renderView({ onDirtyChange })
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-pm'))
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'Product draft' } })
+
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    expect(onDirtyChange.mock.calls.filter(([dirty]) => dirty === true)).toHaveLength(1)
+  })
 })
 
 describe('WorkbenchView 选中态（验收②）', () => {

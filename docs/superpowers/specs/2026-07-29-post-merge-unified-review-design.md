@@ -8,9 +8,9 @@
 
 ## 约束与非目标
 
-- 基线固定为 `main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`；旧 `907dac06`、`c78426e5`、
-  `7c59eecf`、`607c2ed9`、`445aa141` frozen baseline 因后续出现并合并
-  PR #15/#16/#17/#18/#19/#21/#23 已失效。
+- 基线固定为 `main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`；旧 `907dac06`、`c78426e5`、
+  `7c59eecf`、`607c2ed9`、`445aa141`、`ef728bf6` frozen baseline 因后续出现并合并
+  PR #15/#16/#17/#18/#19/#21/#23/#27/#28 已失效。
 - 审查修复只使用当前独立 worktree/Change/`codex/` 分支。
 - 不改变自动化的每四小时配置，不修改 canonical state 或 `.pipeline.yaml`。
 - 不新增无关产品功能，不发布 npm 包或生产部署。
@@ -33,6 +33,8 @@
 | #19 | `dashboard-ui-ux-system` | Progress 状态 tab、context card 禁用、可见筛选摘要 | 复用 snapshot，无 API 变化 | roving keyboard/a11y/i18n/filter scope/full Dashboard |
 | #21 | `codex-skill-receipt-current-turn` | 无产品 UI | Codex transcript/completion/worktree → Skill ledger | ABI/伪造/跨轮/symlink/I/O fail-closed + hooks |
 | #23 | `review-handshake-status` | Progress Drawer receipt 状态卡 | canonical projector → snapshot/SSE strict DTO | unknown/partial/old-runtime、i18n/a11y/API/browser |
+| #27 | `canonical-state-version-status` | canonical version compatibility 状态 | kernel → snapshot → Dashboard strict DTO | future/current/legacy、i18n/a11y/API/browser |
+| #28 | `frozen-workflow-definition-status`、`orchestration-graph` | definition/graph 状态与可视化 | frozen state → graph endpoint → Dashboard | loading/empty/error、strict DTO、keyboard/browser |
 
 `verification-evidence-composer`、`context-bundle-budget-preview`、公开文档和生成物作为相邻组合面纳入
 全量回归。
@@ -60,6 +62,11 @@ PR #21 merge commit `34816a0c79b97bf30b823d0b83d84e2da7a72021` 与 PR #23 merge 
 `ef728bf63f6902251e87fb9495a3dfafe10e42b7` 已进入 `main`。#21 扩大 CLI/Hook 的 Skill receipt
 信任边界，#23 同时改变 Server snapshot/SSE 与 Dashboard Progress 状态；二者必须在最新组合基线上
 重新执行定向、全量和浏览器验证，不能沿用各自原 Change 的 PASS。
+
+PR #27 merge commit `b1048b1248dee93c17818f779b596c414680bae0` 与 PR #28 merge commit
+`a86dabb481a8d20e0c50ce8c1b421fac45f886f9` 已进入 `main`。#27 增加 canonical state version
+compatibility，#28 增加 frozen Workflow definition status 与 governed orchestration graph；三个
+capability 必须纳入最终组合的 API/shared-contract/Dashboard/浏览器验收。
 
 ## 调研结果
 
@@ -90,6 +97,10 @@ PR #21 merge commit `34816a0c79b97bf30b823d0b83d84e2da7a72021` 与 PR #23 merge 
    locale 文案或把 invalid response 谎报为 network。
 10. Progress Create Change 在 root 切换后保留 A 的草稿并用 B 的 router/workflow/root 提交；
     AFK settings 与 enqueue/retry 共享 generation 又会在交错请求时留下永久 busy 或失败乐观值。
+11. Workbench 的 Track dirty callback identity 不稳定，草稿变脏后 cleanup/setup effect 可反复切换
+    dirty 状态并形成无限 render 循环。
+12. Track save 请求在途期间字段和 route preview 仍可编辑，成功响应关闭 editor 时会静默丢弃请求
+    发出后的输入；提交 surface 必须在 busy 期间保持一致。
 
 ### 已验证的依赖候选
 
@@ -123,6 +134,10 @@ override 得到 audit 0、有效依赖树、正式 build、docs check/build 和 
     任何枚举/I/O/类型/时序不确定性失败关闭。
 15. Review handshake 仅展示 canonical exact-event receipt；未知/缺字段/旧 runtime 不得被合成为
     已确认，review→review transition 必须消费旧 receipt。
+16. Track dirty callback 必须具有稳定 identity，父层 render 不得触发 cleanup/setup 的伪状态变更。
+17. Track save 在途期间不得允许修改会被成功响应关闭或覆盖的草稿与 preview 输入。
+18. snapshot tasks reader 必须以 opened fd 和 pathname 的 dev/ino/size/mtime/ctime 读前读后 fence
+    证明内容稳定；同 inode、同长度原地覆写也必须 fail closed。
 
 ## 升档确认状态机
 
@@ -149,7 +164,7 @@ confirming(snapshot-key)
 - Build 先建立三个 RED：等价 row refresh、English Workbench 不含硬编码中文、依赖审计门。
 - 运行 root/full Dashboard/full server/CLI/hook tests、typecheck、build、docs build、资产 freshness、
   OpenSpec、architecture/comments/hygiene 和 `npm audit`/`npm ls`。
-- 真实 production Dashboard 覆盖 390/720/1024/1440、zh/en、light/dark、focus、Escape、
+- 真实 production Dashboard 最终交付覆盖 1024/1440/1920、zh/en、light/dark、focus、Escape、
   loading/empty/error/success/disabled 与 reduced-motion。
 - 若依赖 override 触发任何 docs/build/test/CI 失败，整组回滚并重新选稳定组合。
 - 若 OpenSpec archive 前后任一状态证据摘要变化，停止发布并恢复该目录；全仓 strict validation

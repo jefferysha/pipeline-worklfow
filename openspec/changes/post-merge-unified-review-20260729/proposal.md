@@ -3,11 +3,12 @@
 ## Why
 
 2026-07-29 批次的开放非 Draft PR 已按用户最新授权先全部合入 `main`。统一审查第一次冻结后又出现
-PR #15、#16、#17、治理归档 PR #18、Progress triage PR #19、Codex 同轮 Skill 收据 PR #21
-与 Review Handshake 状态 PR #23，因此旧 `907dac06`、`c78426e5`、`7c59eecf`、`607c2ed9`、
-`445aa141` 基线均已通过
+PR #15、#16、#17、治理归档 PR #18、Progress triage PR #19、Codex 同轮 Skill 收据 PR #21、
+Review Handshake 状态 PR #23、canonical state version PR #27 与 frozen workflow/orchestration
+graph PR #28，因此旧 `907dac06`、`c78426e5`、`7c59eecf`、`607c2ed9`、`445aa141`、
+`ef728bf6` 基线均已通过
 `requirements-changed` 作废；最终审查基线改为
-`main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`，且再次查询开放 PR 时只剩本统一审查 PR #20。
+`main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`，且再次查询开放 PR 时只剩本统一审查 PR #20。
 这些 PR 同时改变了
 Dashboard 交互、CLI、Server 路由、共享解码契约、生成物和 OpenSpec 能力；单个 PR 的绿色检查不能
 替代最终组合状态的系统审查。主干中已经观察到 Dashboard 焦点恢复和 GovernanceRail 确认控件的
@@ -19,6 +20,10 @@ Dashboard 交互、CLI、Server 路由、共享解码契约、生成物和 OpenS
 - 冻结最终批次主干和已合并 PR 清单，逐项映射到现有 capability、前端、后端、共享契约与生成物。
 - 将 #21 的 Codex transcript/Skill receipt 信任边界，以及 #23 的 canonical review-handshake
   projector、Server snapshot、严格 Dashboard decoder 与只读状态卡纳入同一组合审查。
+- 将 #27 的 canonical state version compatibility，以及 #28 的 frozen Workflow definition status
+  与 orchestration graph API/shared-contract/Dashboard 闭环纳入同一组合审查。
+- 收紧聚合 snapshot 对 `tasks.md` 的稳定读取：同 inode、同长度的原地覆写也必须由 fd 与 pathname
+  的读前/读后元数据 fence 检出并 fail closed，不得发布 stale 或 torn 投影。
 - 对组合后的源码执行规则、架构、正确性、安全、依赖和发布就绪审查；Critical、High、Medium
   发现必须修复并复核，Low 发现能安全修复则处理，否则形成明确的后续记录。
 - 将 Dashboard 明确纳入 `tenon:design-taste-frontend`、Web 设计、可访问性、响应式、
@@ -60,13 +65,15 @@ Explore 已将 requirement delta 收窄为：
   还必须在语言切换后保持 tab/canvas 状态，并继续提供当前 locale 的可见摘要与可访问名称。
 - `repository-architecture-compliance`：补充干净安装后的依赖安全门，Critical/High 不得进入可发布
   主干，并要求例外、覆盖和升级兼容性具有可复现证据；同时要求可发布仓库的 active OpenSpec
-  change tree 不得包含已结束的 state-only 残骸，历史证据只能完整归档、不得删除或伪造 delta。
+  change tree 不得包含已结束的 state-only 残骸，历史证据只能完整归档、不得删除或伪造 delta；
+  聚合 snapshot 只可发布经 fd/path 双重元数据 fence 证明稳定的 `tasks.md` 内容。
 
 `host-target-plan`（含 #15 桌面 Host Plan 信息层次）、`document-evidence-timeline`、
 `trace-timeline`（含 #17 桌面 session rail 与 timeline detail workspace）、`loop-scope-preview`、`related-session-memory`、
 `prompt-routing-bypass`、`verification-evidence-composer`、`context-bundle-budget-preview` 与
-`open-source-documentation-experience`、`codex-skill-receipt-current-turn` 和
-`review-handshake-status` 仍属于组合回归范围，但本次调研未发现需要改变其 requirement
+`open-source-documentation-experience`、`codex-skill-receipt-current-turn`、
+`review-handshake-status`、`canonical-state-version-status`、`frozen-workflow-definition-status`
+和 `orchestration-graph` 仍属于组合回归范围，但本次调研未发现需要改变其 requirement
 语义的证据，因此不虚构 delta。PR #19 的 Progress triage requirement 已由其原 Change 写入主规格，
 本 Change 只补充语言切换组合场景，不重复创建同义 requirement。PR #18 仅完整归档 #17 已完成 Change 的 canonical 治理证据，
 不改变 runtime capability；它仍纳入 OpenSpec 完整性、摘要链、路径迁移和秘密扫描。

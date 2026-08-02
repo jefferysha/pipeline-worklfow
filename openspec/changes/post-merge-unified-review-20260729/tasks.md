@@ -107,7 +107,7 @@
 - [x] 复核 #21 的 Codex Skill receipt ABI、current-turn、session/turn、worktree 与 fail-closed 安全边界。 (build)
 - [x] 复核 #23 的 canonical review handshake、snapshot/SSE、严格 decoder 与 Progress 状态卡。 (build)
 - [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
-- [ ] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
+- [x] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
 - [x] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
 
 ## 最终独立复审回退修复
@@ -152,10 +152,19 @@
 - [x] 在 `index-Ci4cbgx1.js` 上重跑 21 场景矩阵并保存最终 bounded audit。 (build)
 - [x] 在新精确提交上完成三轨 C0/H0/M0/L0 独立复审。 (build)
 
-- [ ] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
-- [ ] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
-- [ ] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
-- [ ] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
+## 2026-08-03 Verify 回退修复
+
+- [x] 将 proposal/design 的最终审查基线统一更新为 `origin/main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`，并把 PR #27/#28 纳入 capability 覆盖矩阵与验收边界。 (spec)
+- [x] 为 Track Settings dirty 上报建立稳定 callback 身份，增加从 Workbench 实际编辑草稿时不发生无限 effect/render 循环的 RED→GREEN 回归。 (build)
+- [x] 保存 Track 期间禁用全部会改变已提交草稿或 route preview identity 的输入，保证成功响应不会静默丢弃请求发出后的编辑。 (build)
+- [x] 覆盖保存 busy 状态的字段、路由预览、删除与列表切换键盘/鼠标路径，并保持既有错误、取消与焦点语义。 (build)
+- [x] 为 snapshot tasks reader 增加同 inode、同长度原地覆写 RED，并以 fd/path 的 size/mtime/ctime 读前读后 fence fail closed。 (build)
+- [x] 在修订文档与实现上重新执行完整 pre-Verify Standards + Spec 收敛审查、全量测试和真实浏览器验收，所有 C/H/M 清零后冻结新 SHA。 (build)
+
+- [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
+- [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
+- [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
+- [x] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
 
 ## 交付
 

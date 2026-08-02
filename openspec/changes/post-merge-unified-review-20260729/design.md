@@ -2,8 +2,8 @@
 
 ## 审查基线
 
-- 唯一代码基线为 `origin/main@ef728bf63f6902251e87fb9495a3dfafe10e42b7`。
-- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18、#19；冻结前再次查询以 `main`
+- 唯一代码基线为 `origin/main@a86dabb481a8d20e0c50ce8c1b421fac45f886f9`。
+- 该 SHA 已包含 PR #8、#14、#13、#11、#12、#9、#15、#16、#17、#18、#19、#21、#23、#27、#28；冻结前再次查询以 `main`
   为 base 的开放非 Draft PR，结果为空。
 - PR #16 的 exact-head GitHub Actions run `30452978039` 在
   `55b13b50ad8523b33773fe6b23337a2d7afc658a` 成功后才正常合并。最终 `main` push CI
@@ -24,6 +24,11 @@
   必须在统一交付中完成官方治理收尾。
 - PR #23 的 merge commit `ef728bf63f6902251e87fb9495a3dfafe10e42b7` 增加 canonical
   review-handshake projector、Server snapshot/SSE、严格 Dashboard decoder 与 Progress 只读状态卡；
+  原 Change 已完整归档。
+- PR #27 的 merge commit `b1048b1248dee93c17818f779b596c414680bae0` 增加 canonical state
+  version compatibility 的 kernel/server/Dashboard 状态闭环；原 Change 已完整归档。
+- PR #28 的 merge commit `a86dabb481a8d20e0c50ce8c1b421fac45f886f9` 增加 frozen Workflow
+  definition status 与 governed orchestration graph 的共享契约、Server endpoint 和 Dashboard 视图；
   原 Change 已完整归档。该 SHA 是本统一审查的最新最终主干。
 - 干净 worktree 执行 `npm ci` 后，必须先运行仓库正式 `npm run build` 生成
   `@tenon/kernel`/`@tenon/server` 产物；随后 architecture、comments、repository hygiene、
@@ -45,9 +50,11 @@
 | #16 | document evidence timeline / `document-evidence-timeline` | ledger receipt → snapshot DTO → disclosure | digest/路径脱敏、旧 server 降级、键盘、空/错/加载 |
 | #17 | Trace session workspace / `trace-timeline` | session rail → selected identity → metadata timeline | 并发隔离、Escape/焦点、桌面响应式、长内容与状态矩阵 |
 | #18 | 已完成 Trace Change 治理归档 | canonical Change tree → 日期化 archive | revision/transition/document digest、路径迁移、无 runtime drift |
-| #19 | Progress triage / `dashboard-ui-ux-system` | 状态 tab → workflow context cards → 本地化筛选摘要 | 复用现有 snapshot，无 API 变化 | roving keyboard、禁用/可访问性、i18n、筛选范围、全量 Dashboard/browser |
-| #21 | Codex Skill receipt / `codex-skill-receipt-current-turn` | 无产品 UI | host transcript → trusted completion → Skill ledger | ABI 错型/伪造/跨轮/symlink/I/O fail-closed + hooks |
-| #23 | Review handshake / `review-handshake-status` | Progress Drawer 只读 receipt 状态卡 | canonical state/workflow → snapshot/SSE strict DTO | unknown/partial/old-runtime、i18n、a11y、HTTP/SSE/browser |
+| #19 | Progress triage / `dashboard-ui-ux-system` | 状态 tab → workflow context cards → 本地化筛选摘要 | 复用现有 snapshot、无 API 变化；roving keyboard、禁用/可访问性、i18n、筛选范围、全量 Dashboard/browser |
+| #21 | Codex Skill receipt / `codex-skill-receipt-current-turn`（无产品 UI） | host transcript → trusted completion → Skill ledger | ABI 错型/伪造/跨轮/symlink/I/O fail-closed + hooks |
+| #23 | Review handshake / `review-handshake-status` | Progress Drawer 只读 receipt 状态卡；canonical state/workflow → snapshot/SSE strict DTO | unknown/partial/old-runtime、i18n、a11y、HTTP/SSE/browser |
+| #27 | Canonical state version / `canonical-state-version-status` | canonical version → server snapshot → Dashboard | future/current/legacy version、严格 DTO、只读兼容状态、i18n 与浏览器 |
+| #28 | Frozen workflow + graph / `frozen-workflow-definition-status`、`orchestration-graph` | frozen definition/state → graph endpoint → Dashboard | 注册 root、未知/缺失 definition、严格 DTO、loading/empty/error、键盘与浏览器 |
 
 `verification-evidence-composer` 与 `context-bundle-budget-preview` 已在主干上，作为相邻组合能力继续
 执行回归；它们不是本批次新 requirement。
@@ -145,6 +152,18 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
   已到达响应的 parse/schema failure 映射为带 status 的结构化 `ApiError`，200 malformed 显示
   invalid-response，HTTP 非 2xx 仍显示 HTTP 事实；未选择项目使用本地稳定状态而非伪造网络错误。
 
+### 6. 2026-08-03 Verify 回退 finding
+
+- `WorkbenchView` 向 `TrackSelector` 传入每次 render 都重新创建的 dirty callback；`TrackSettings`
+  又把该 callback 放入上报和 cleanup effect 依赖。Track 草稿首次变脏后，cleanup/setup 交替上报
+  `false/true` 并继续触发父层更新，可能形成无限 render/effect 循环。修复必须使用稳定 callback
+  identity，并以从 Workbench 打开 Track editor、修改字段的组件测试证明循环不再发生。
+- Track save 在请求开始时冻结 payload，但 `TrackEditorFields` 与 route preview 输入仍可在 busy
+  期间修改；成功响应随后关闭 editor，静默丢弃请求发出后的输入。保存期间必须禁用全部会改变已提交
+  草稿或 preview identity 的控件，并覆盖鼠标、键盘、删除与列表切换路径。
+- 上述实现修复不改变 HTTP DTO 或 capability 范围；但本轮 Build 已把审查基线扩展到 PR #27/#28，
+  因此 proposal/design/plan/coverage 必须先经本次 `requirements-changed` 回到 Spec 重新登记与评审。
+
 ## 关键业务规则与不变量
 
 1. 同一 Loop 的逻辑等价轮询快照不得打断已开始的升档决策；决策相关事实改变后，旧确认不得继续。
@@ -181,6 +200,10 @@ Build/Verify 必须以全量 docs、全仓测试和精确 CI 证明，失败则�
     枚举、I/O、session/turn/worktree identity 无法证明时必须失败关闭。
 19. Review handshake 只投影 canonical exact-event receipt；unknown、partial、旧 runtime 和
     review→review 消费旧 receipt 均不得被合成为“已确认”或 readiness。
+20. Track editor 的 dirty 上报 callback 必须保持稳定 identity；effect cleanup 只用于真实卸载或
+    callback 所有者变化，不能在每次父层 render 时制造 `false/true` 抖动。
+21. Track save 的 request payload 与可编辑 surface 必须一致：请求在途期间禁止修改将被成功响应关闭
+    或覆盖的草稿字段，确保不存在“已输入但未提交却静默消失”的状态。
 
 ## 升档确认状态机
 
@@ -215,11 +238,15 @@ key 或显式字段比较，但不得依赖 React row 对象引用。
 
 ## 术语与证据边界
 
-- “最终主干”只指 `445aa1411d45a2c112d296a9fc3530db0f62e31e` 及本 Change 后续合并 SHA。
+- “最终主干”只指 `a86dabb481a8d20e0c50ce8c1b421fac45f886f9` 及本 Change 后续合并 SHA。
 - “逻辑等价快照”指影响当前升档决策的字段完全相同，仅对象身份或非决策展示字段变化。
 - “0 vulnerabilities”只由干净安装后的 `npm audit --json` 元数据证明，不由旧 lockfile 或
   `npm audit fix --force` 声明。
 - 旧 PR 报告用于风险发现，不作为本 Change 的 Verify pass。
+
+新增文件安全不变量：聚合 snapshot 读取 `tasks.md` 时必须同时冻结 opened fd 与 pathname 的
+dev/ino/size/mtime/ctime；fd 读前/读后和 pathname 前/后任一元数据变化均 fail closed，包括
+同 inode、同长度原地覆写。
 
 ```coverage
 touches:

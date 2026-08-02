@@ -44,6 +44,8 @@ export interface DialogProps {
   closeLabel?: string
   /** Stable test hook for the workspace close icon when a caller already exposes one. */
   closeTestid?: string
+  /** Keep the workspace close surface visibly and semantically unavailable during atomic work. */
+  closeDisabled?: boolean
   /** 少数编排型对话框需要更宽的工作面；缺省仍保持既有 420px。 */
   panelClassName?: string
   /** 大型编辑器使用沉浸式工作区骨架；普通确认框保持 default。 */
@@ -78,7 +80,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, closeLabel, closeTestid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, closeLabel, closeTestid, closeDisabled = false, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
   const { t } = useT()
   const resolvedCloseLabel = closeLabel ?? t('common.dialog_close')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -185,7 +187,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel, 
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6 py-3">
               <h2 className="min-w-0 flex-1 break-words whitespace-normal text-[18px] leading-tight font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" data-testid={closeTestid} aria-label={resolvedCloseLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition enabled:hover:bg-fill enabled:hover:text-text disabled:cursor-not-allowed disabled:opacity-50" data-testid={closeTestid} aria-label={resolvedCloseLabel} disabled={closeDisabled} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}
