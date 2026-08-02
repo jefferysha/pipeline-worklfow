@@ -218,18 +218,43 @@ export function peekMandatoryConfig(root: string): MandatoryConfig | null {
 }
 
 /**
- * 缓存写窗（搬迁适配位，非新行为）：原 SkillChain 保存成功后直接 `cfgCache = next`
- * 推进模块缓存；跨模块后同理改为函数。**只在写回成功后调用**——这条路径不是乐观更新。
+ * 将成功的单 cell 写回合并进当前 full-config authority。
+ *
+ * Track mutation 会先 clear cache、再发起 authoritative GET。若 partial write 直接拿旧 render
+ * snapshot prime，它会删除这发更新的 GET，并把旧 revision/tracks 重新发布。这里在 generation
+ * 内等待已有 full GET，等待期间若 authority 再变化则重新取当前 generation；最后一次检查到发布
+ * 之间没有 await，因此 partial cell 与 full snapshot 以同一原子 cache 事件落地。
  */
-export function primeMandatoryConfig(next: MandatoryConfig, root: string): void {
-  if (root.trim() === '') return
+export async function mergeMandatoryConfigCell(
+  root: string,
+  cellKey: string,
+  skills: readonly string[],
+  fallback: MandatoryConfig | null,
+): Promise<MandatoryConfig | null> {
+  if (root.trim() === '') return null
   const key = cacheKey(root)
-  // A successful mutation is a newer authority event than every config GET that was already in
-  // flight. Advance the generation before publishing so a stale reload cannot roll the cache
-  // back after the server has accepted the write.
-  cfgGeneration.set(key, (cfgGeneration.get(key) ?? 0) + 1)
-  cfgInflight.delete(key)
-  cfgCache.set(key, next)
+  for (;;) {
+    const generation = cfgGeneration.get(key) ?? 0
+    let base = cfgCache.get(key) ?? null
+    const running = cfgInflight.get(key)
+    if (base === null && running?.generation === generation) {
+      await running.request
+      if ((cfgGeneration.get(key) ?? 0) !== generation) continue
+      base = cfgCache.get(key) ?? null
+    }
+    base ??= fallback
+    if (base === null) return null
+    if ((cfgGeneration.get(key) ?? 0) !== generation) continue
+
+    const next: MandatoryConfig = {
+      ...base,
+      table: { ...base.table, [cellKey]: [...skills] },
+    }
+    cfgGeneration.set(key, generation + 1)
+    cfgInflight.delete(key)
+    cfgCache.set(key, next)
+    return next
+  }
 }
 
 export function loadMandatoryConfig(root: string): Promise<MandatoryConfig> {

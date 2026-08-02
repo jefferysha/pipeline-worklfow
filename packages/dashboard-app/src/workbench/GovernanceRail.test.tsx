@@ -554,6 +554,23 @@ describe('GovernanceRail §4.11 token 预算滑杆（postLoopUpdate body 精确 
     expect(posts('/api/loops/update')).toHaveLength(1)
   })
 
+  it('同 id Loop 的权威预算在去抖窗口内变化 → 取消旧 timer，不 POST 旧草稿覆盖新快照', async () => {
+    renderRail()
+    const slider = await screen.findByTestId('wb-gov-budget-slider')
+    fireEvent.change(slider, { target: { value: '120' } })
+    expect(screen.getByTestId('wb-gov-budget-slider-val')).toHaveTextContent('120k')
+
+    rows = rows.map((row) => ({
+      ...row,
+      budget_decl: { ...(row.budget_decl as Record<string, unknown>), max_tokens_per_day: 160000 },
+    }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('wb-gov-budget-slider')).toHaveValue('160'))
+
+    await settle()
+    expect(posts('/api/loops/update')).toHaveLength(0)
+  })
+
   /** patch 只带被改的那一键——不夹带未改字段（LoopCard computePatch 的同一条纪律）。 */
   it('patch 只含 max_tokens_per_day 一键，不夹带 cadence/runs/on_exceed 等未改字段', async () => {
     renderRail()

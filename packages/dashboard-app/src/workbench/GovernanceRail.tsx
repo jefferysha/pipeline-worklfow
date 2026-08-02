@@ -52,6 +52,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     setBudgetError(null)
   }, [lang])
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const authoritativeMaxTokens = row?.budget_decl?.max_tokens_per_day ?? null
   // 轮询对象换代不撤确认；只有确认文案与裁决前提中的事实变化才撤。
   const promotionFacts = promotionDecisionKey(root, row)
 
@@ -65,12 +66,13 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     setConfirmLevel(null)
   }, [promotionFacts])
 
-  // 卸载/换行时清掉在飞的去抖计时器（否则 unmount 后仍会发一发 POST）。
+  // 卸载、换行或权威预算变化时取消旧 timer，禁止其 POST 旧草稿覆盖新快照。
   useEffect(
     () => () => {
       if (commitTimer.current !== null) clearTimeout(commitTimer.current)
+      commitTimer.current = null
     },
-    [root, row?.id],
+    [root, row?.id, authoritativeMaxTokens],
   )
 
   /**
@@ -138,7 +140,10 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   function onTokens(v: number): void {
     setTokK(v) // 即时回显
     if (commitTimer.current !== null) clearTimeout(commitTimer.current)
-    commitTimer.current = setTimeout(() => void commitTokens(v), BUDGET_COMMIT_MS) // 停手落盘
+    commitTimer.current = setTimeout(() => {
+      commitTimer.current = null
+      void commitTokens(v)
+    }, BUDGET_COMMIT_MS) // 停手落盘
   }
 
   if (loops.loadError || loops.rows === null || !row) {

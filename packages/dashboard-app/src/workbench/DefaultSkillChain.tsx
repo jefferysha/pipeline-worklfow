@@ -6,8 +6,8 @@ import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
   loadMandatoryConfig,
+  mergeMandatoryConfigCell,
   peekMandatoryConfig,
-  primeMandatoryConfig,
   resolveMandatoryCell,
   type MandatoryConfig,
 } from './mandatorySkills'
@@ -118,10 +118,8 @@ export function DefaultSkillChain({
         return
       }
       if (!mutations.isLatest(op)) return
-      const base = peekMandatoryConfig(root) ?? requestCfg
-      if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: success.skills } }
-        primeMandatoryConfig(next, root)
+      const next = await mergeMandatoryConfigCell(root, cellKey, success.skills, requestCfg)
+      if (next !== null) {
         if (rootRef.current === op.root) setCfg(next)
         if (isCurrentOperation()) setEditing(false)
       }

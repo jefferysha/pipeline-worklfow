@@ -3,6 +3,7 @@ import {
   clearMandatoryConfig,
   invalidateMandatoryConfig,
   loadMandatoryConfig,
+  mergeMandatoryConfigCell,
   peekMandatoryConfig,
 } from './mandatoryConfig'
 
@@ -62,5 +63,31 @@ describe('mandatory config refresh concurrency', () => {
     await current
     expect((await joined).revision).toBe('revision-new')
     expect(peekMandatoryConfig(ROOT)?.revision).toBe('revision-new')
+  })
+
+  it('retries a partial cell merge when a newer full-config generation starts while it waits', async () => {
+    const releases: Array<(response: Response) => void> = []
+    global.fetch = vi.fn(() => new Promise<Response>((resolve) => releases.push(resolve))) as typeof fetch
+
+    const initialRequest = loadMandatoryConfig(ROOT)
+    releases[0](configResponse('revision-initial'))
+    const fallback = await initialRequest
+
+    clearMandatoryConfig(ROOT)
+    const superseded = loadMandatoryConfig(ROOT)
+    const merged = mergeMandatoryConfigCell(ROOT, 'build.pm', ['written-skill'], fallback)
+    clearMandatoryConfig(ROOT)
+    const current = loadMandatoryConfig(ROOT)
+
+    releases[1](configResponse('revision-superseded'))
+    await superseded
+    releases[2](configResponse('revision-current'))
+    await current
+
+    expect(await merged).toMatchObject({
+      revision: 'revision-current',
+      table: { 'build.pm': ['written-skill'] },
+    })
+    expect(peekMandatoryConfig(ROOT)?.revision).toBe('revision-current')
   })
 })

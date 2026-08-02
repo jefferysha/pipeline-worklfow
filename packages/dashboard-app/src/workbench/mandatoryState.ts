@@ -5,8 +5,8 @@ import { useT } from '../i18n'
 import {
   clearMandatoryConfig,
   loadMandatoryConfig,
+  mergeMandatoryConfigCell,
   peekMandatoryConfig,
-  primeMandatoryConfig,
   type MandatoryConfig,
   type MatrixTrack,
 } from './mandatoryConfig'
@@ -258,12 +258,8 @@ export function useMandatorySkills(root: string): MandatoryState {
         if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
         return
       }
-      const base = peekMandatoryConfig(requestRoot) ?? requestCfg
-      if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: success.skills } }
-        primeMandatoryConfig(next, requestRoot)
-        if (isCurrent()) setCfg(next)
-      }
+      const next = await mergeMandatoryConfigCell(requestRoot, cellKey, success.skills, requestCfg)
+      if (next !== null && isCurrent()) setCfg(next)
     } catch (e) {
       if (isCurrent()) {
         const locale = localeRef.current

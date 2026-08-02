@@ -925,3 +925,43 @@ submission tests; after both were added, its strict read-only re-review returned
 identical before/after workspace fingerprint. This Build tree is ready for one
 exact commit and a wholly fresh Verify; the rejected `dce8ddb` evidence is not
 reused.
+
+## 2026-08-03 config authority and budget debounce convergence
+
+The exact `796faf62` Verify correctly rejected two remaining Medium concurrency
+defects. A mandatory-skill partial write could publish its old render snapshot,
+advance the shared generation, and detach a newer full-config GET started by a
+Track mutation. Separately, a pending Governance budget slider timer survived a
+same-id authoritative snapshot whose token limit had changed, and could POST
+the old draft after the new value was already rendered.
+
+Both defects first failed deterministic regressions on the previous
+implementation: the config case retained `revision-initial` instead of the
+Track authority, and the budget case emitted one forbidden update POST. The
+shared config cache now merges a successful cell into the current full snapshot:
+it joins the same-generation GET, retries if another generation starts while it
+waits, and performs the final generation check and cache publication without an
+intervening await. `useMandatorySkills` and `DefaultSkillChain` use the same
+helper while retaining their exact root/cell/operation guards. Governance now
+cancels the debounce when root, Loop id, or authoritative
+`max_tokens_per_day` changes and clears the timer ref on cancellation or fire.
+
+Focused config, mandatory-state, Default Skill Chain and Governance suites pass
+152/152. Dashboard passes 85 files / 1555 tests; root passes 330 files / 5881
+tests with the same 26 honest environment skips. Full production build and
+typecheck pass. Consecutive Vite builds are byte-identical; the entry asset is
+`index-Dizc9CgB.js` (`276ed2ac468d20e3a70e8d46eb48701819e749f21caabc65c850b7541e3a4443`)
+and the Workbench chunk is `WorkbenchView-DLOTivoD.js`
+(`12fb441827cc400e1760bb80d789584b1d165e2f7cfe652dd5f6f76b5ae5375d`).
+Architecture (719 production files), comments, OpenSpec 38/38, dependency audit
+0, dependency tree, release workflows 24/24, identity, interaction contract,
+repository hygiene, docs, document templates, npx package, legacy bridge,
+default-workflow freshness and diff whitespace gates all pass.
+
+The independent full 646-file Standards + Spec re-review returned
+**C0/H0/M0/L0**. It separately ran 57 focused tests, rebuilt Dashboard assets in
+`/tmp` with file-for-file identical hashes, and left the real workspace
+unchanged. The stable pre-Verify workspace fingerprint is
+`workspace:sha256:4d06919d672a39f4cc1e5202260d9aa858a6682b5bc0c426ee5eabe443344f54`.
+This Build tree is ready to commit and freeze; no result from the rejected
+`796faf62` Verify is reused as new Verify evidence.

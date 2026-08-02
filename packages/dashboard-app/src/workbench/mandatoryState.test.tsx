@@ -162,7 +162,7 @@ describe('useMandatorySkills reloadConfig', () => {
     expect(screen.getByTestId('revision')).toHaveTextContent('revision-a-new')
   })
 
-  it('成功写回的 config authority 不会被先发后到的 stale reload 回滚', async () => {
+  it('成功写回的 cell 会合并进先发后到的 full reload，不被其旧 cell 回滚', async () => {
     const mutation = deferredResponse()
     const staleReload = deferredResponse()
     global.fetch = vi.fn((url: string, opts?: RequestInit) => {
@@ -199,11 +199,61 @@ describe('useMandatorySkills reloadConfig', () => {
       }), { status: 200 }))
       await mutation.promise
     })
-    await waitFor(() => expect(screen.getByTestId('skills')).toHaveTextContent('next-skill'))
+    // partial response 不能先把旧 requestCfg 重新发布；等待当前 full snapshot 后再原子合并 cell。
+    expect(screen.getByTestId('skills')).toHaveTextContent('old-skill')
     await act(async () => {
       staleReload.resolve(new Response(JSON.stringify(configBody('revision-stale', ['old-skill'])), { status: 200 }))
       await staleReload.promise
     })
+    await waitFor(() => expect(screen.getByTestId('skills')).toHaveTextContent('next-skill'))
+    expect(screen.getByTestId('revision')).toHaveTextContent('revision-stale')
+  })
+
+  it('partial write 与 Track full reload 交错时保留 full config revision 并合并成功 cell', async () => {
+    const mutation = deferredResponse()
+    const authoritativeReload = deferredResponse()
+    global.fetch = vi.fn((url: string, opts?: RequestInit) => {
+      if (url.startsWith('/api/config?')) {
+        const configCalls = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+          .filter(([candidate]) => String(candidate).startsWith('/api/config?')).length
+        if (configCalls === 1) {
+          return Promise.resolve(new Response(JSON.stringify(configBody('revision-initial', ['old-skill'])), { status: 200 }))
+        }
+        return authoritativeReload.promise
+      }
+      if (url === '/api/config/mandatory-skills' && opts?.method === 'POST') return mutation.promise
+      if (url === '/api/skills/registry') {
+        return Promise.resolve(new Response(JSON.stringify({ skills: [] }), { status: 200 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`))
+    }) as unknown as typeof fetch
+
+    render(
+      <I18nProvider>
+        <Harness />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('revision')).toHaveTextContent('revision-initial'))
+
+    fireEvent.click(screen.getByTestId('save'))
+    fireEvent.click(screen.getByTestId('reload'))
+    await act(async () => {
+      mutation.resolve(new Response(JSON.stringify({
+        ok: true,
+        phase: 'build',
+        track: 'frontend',
+        skills: ['next-skill'],
+      }), { status: 200 }))
+      await mutation.promise
+    })
+    await act(async () => {
+      authoritativeReload.resolve(new Response(JSON.stringify(
+        configBody('revision-track-authority', ['server-visible-skill']),
+      ), { status: 200 }))
+      await authoritativeReload.promise
+    })
+
+    await waitFor(() => expect(screen.getByTestId('revision')).toHaveTextContent('revision-track-authority'))
     expect(screen.getByTestId('skills')).toHaveTextContent('next-skill')
   })
 })
