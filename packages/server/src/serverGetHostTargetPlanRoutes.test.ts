@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
+import { openSync, readdirSync, renameSync, symlinkSync, unlinkSync, type Dirent } from 'node:fs'
 import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
@@ -17,6 +18,7 @@ import {
 } from './test-support.js'
 import type { DashboardServer } from './types.js'
 import type { PipelineCliRunner } from './operations.js'
+import { detectNativeHostTargets } from './hostTargetDetection.js'
 
 const CODEX_TARGET = {
   id: 'codex',
@@ -460,6 +462,69 @@ describe('Host Target Plan route resolver', () => {
         recommended_host: null,
         recommended_operation: null,
         reason: 'none',
+      },
+    })
+  })
+
+  it('fails closed when the validated plugin cache namespace is replaced during enumeration', async () => {
+    const hostHome = await makeTempHome()
+    const outside = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await installCodexPlugin(outside)
+    const namespace = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon')
+    const outsideNamespace = join(outside, '.codex', 'plugins', 'cache', 'tenon', 'tenon')
+    const detector = detectNativeHostTargets as unknown as (
+      home: string,
+      options: { readPluginCacheEntries(path: string): Dirent[] },
+    ) => ReturnType<typeof detectNativeHostTargets>
+
+    const result = detector(hostHome, {
+      readPluginCacheEntries(path) {
+        renameSync(path, `${path}.original`)
+        symlinkSync(outsideNamespace, path, 'dir')
+        return readdirSync(path, { withFileTypes: true })
+      },
+    })
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
+  it('rejects an outside marker opened through a parent swap even when the original parent is restored', async () => {
+    const hostHome = await makeTempHome()
+    const outside = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await installCodexPlugin(outside)
+    const markerParent = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    const outsideMarkerParent = join(outside, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    const detector = detectNativeHostTargets as unknown as (
+      home: string,
+      options: { openPluginMarker(path: string, flags: number): number },
+    ) => ReturnType<typeof detectNativeHostTargets>
+
+    const result = detector(hostHome, {
+      openPluginMarker(path, flags) {
+        renameSync(markerParent, `${markerParent}.original`)
+        symlinkSync(outsideMarkerParent, markerParent, 'dir')
+        const descriptor = openSync(path, flags)
+        unlinkSync(markerParent)
+        renameSync(`${markerParent}.original`, markerParent)
+        return descriptor
+      },
+    })
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
       },
     })
   })

@@ -22683,59 +22683,89 @@ function captureDirectoryChain(hostHome, segments) {
   for (const segment of ["", ...segments]) {
     if (segment !== "") candidate = join49(candidate, segment);
     try {
-      const metadata = lstatSync9(candidate);
-      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return null;
-      identities.push({ path: candidate, dev: metadata.dev, ino: metadata.ino });
+      const descriptor = openSync11(
+        candidate,
+        constants13.O_RDONLY | constants13.O_DIRECTORY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK
+      );
+      const metadata = fstatSync10(descriptor);
+      if (!metadata.isDirectory()) {
+        closeSync6(descriptor);
+        throw new Error("not a directory");
+      }
+      identities.push({ path: candidate, descriptor, dev: metadata.dev, ino: metadata.ino });
     } catch {
+      closeDirectoryChain(identities);
       return null;
     }
+  }
+  if (!directoryChainIsStable(identities)) {
+    closeDirectoryChain(identities);
+    return null;
   }
   return identities;
 }
 function directoryChainIsStable(identities) {
   return identities.every((identity) => {
     try {
-      const metadata = lstatSync9(identity.path);
-      return metadata.isDirectory() && !metadata.isSymbolicLink() && metadata.dev === identity.dev && metadata.ino === identity.ino;
+      const lexical = lstatSync9(identity.path);
+      const anchored = fstatSync10(identity.descriptor);
+      return lexical.isDirectory() && !lexical.isSymbolicLink() && lexical.dev === identity.dev && lexical.ino === identity.ino && anchored.isDirectory() && anchored.dev === identity.dev && anchored.ino === identity.ino;
     } catch {
       return false;
     }
   });
+}
+function closeDirectoryChain(identities) {
+  for (const identity of identities) {
+    try {
+      closeSync6(identity.descriptor);
+    } catch {
+    }
+  }
 }
 function isDirectoryBelowHostHome(hostHome, segments) {
-  let candidate = hostHome;
-  for (const segment of segments) {
-    candidate = join49(candidate, segment);
-    try {
-      const metadata = lstatSync9(candidate);
-      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return false;
-    } catch {
-      return false;
-    }
-  }
+  const identities = captureDirectoryChain(hostHome, segments);
+  if (identities === null) return false;
+  closeDirectoryChain(identities);
   return true;
 }
-function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments) {
-  if (!isDirectoryBelowHostHome(hostHome, namespaceSegments)) return false;
-  let versions;
+function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments, options) {
+  const namespace = captureDirectoryChain(hostHome, namespaceSegments);
+  if (namespace === null) return false;
   try {
-    versions = readdirSync9(join49(hostHome, ...namespaceSegments), { withFileTypes: true });
-  } catch {
-    return false;
-  }
-  if (versions.length > 128) return false;
-  return versions.some((version) => {
-    if (!version.isDirectory() || version.isSymbolicLink()) return false;
-    const segments = [...namespaceSegments, version.name, ...markerSegments];
-    const marker = join49(hostHome, ...segments);
-    if (!isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return false;
     try {
-      const metadata = lstatSync9(marker);
-      return metadata.isFile() && !metadata.isSymbolicLink();
+      const path7 = join49(hostHome, ...namespaceSegments);
+      const versions = options.readPluginCacheEntries?.(path7) ?? readdirSync9(path7, { withFileTypes: true });
+      if (versions.length > 128 || !directoryChainIsStable(namespace)) return false;
+      return versions.some((version) => {
+        if (!version.isDirectory() || version.isSymbolicLink()) return false;
+        const segments = [...namespaceSegments, version.name, ...markerSegments];
+        const directories = captureDirectoryChain(hostHome, segments.slice(0, -1));
+        if (directories === null) return false;
+        const marker = join49(hostHome, ...segments);
+        let descriptor;
+        try {
+          if (!directoryChainIsStable(namespace) || !directoryChainIsStable(directories)) return false;
+          const expected = lstatSync9(marker);
+          if (!expected.isFile() || expected.isSymbolicLink()) return false;
+          const flags = constants13.O_RDONLY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK;
+          descriptor = options.openPluginMarker?.(marker, flags) ?? openSync11(marker, flags);
+          const anchored = fstatSync10(descriptor);
+          const current = lstatSync9(marker);
+          return anchored.isFile() && anchored.dev === expected.dev && anchored.ino === expected.ino && current.isFile() && !current.isSymbolicLink() && current.dev === expected.dev && current.ino === expected.ino && directoryChainIsStable(namespace) && directoryChainIsStable(directories);
+        } catch {
+          return false;
+        } finally {
+          if (descriptor !== void 0) closeSync6(descriptor);
+          closeDirectoryChain(directories);
+        }
+      }) && directoryChainIsStable(namespace);
     } catch {
       return false;
     }
-  });
+  } finally {
+    closeDirectoryChain(namespace);
+  }
 }
 function readBoundedHostFile(hostHome, segments) {
   if (segments.length === 0) return null;
@@ -22771,6 +22801,7 @@ function readBoundedHostFile(hostHome, segments) {
     return null;
   } finally {
     if (descriptor !== void 0) closeSync6(descriptor);
+    closeDirectoryChain(directories);
   }
 }
 function stripTomlComment(line) {
@@ -22832,7 +22863,7 @@ function claudePluginEnabled(hostHome) {
     return false;
   }
 }
-function detectNativeHostTargets(hostHome) {
+function detectNativeHostTargets(hostHome, options = {}) {
   const hosts = [
     {
       id: "codex",
@@ -22850,7 +22881,7 @@ function detectNativeHostTargets(hostHome) {
     }
   ];
   const detectedHosts = hosts.filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments)).map((host) => host.id);
-  const pluginHost = hosts.find((host) => host.active(hostHome) && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments));
+  const pluginHost = hosts.find((host) => host.active(hostHome) && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments, options));
   const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null;
   return {
     status: 200,

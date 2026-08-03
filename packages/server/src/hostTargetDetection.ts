@@ -1,10 +1,11 @@
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
 const MAX_HOST_INVENTORY_BYTES = 256 * 1024
 
 interface PathIdentity {
   readonly path: string
+  readonly descriptor: number
   readonly dev: number
   readonly ino: number
 }
@@ -15,12 +16,24 @@ function captureDirectoryChain(hostHome: string, segments: readonly string[]): r
   for (const segment of ['', ...segments]) {
     if (segment !== '') candidate = join(candidate, segment)
     try {
-      const metadata = lstatSync(candidate)
-      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return null
-      identities.push({ path: candidate, dev: metadata.dev, ino: metadata.ino })
+      const descriptor = openSync(
+        candidate,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      )
+      const metadata = fstatSync(descriptor)
+      if (!metadata.isDirectory()) {
+        closeSync(descriptor)
+        throw new Error('not a directory')
+      }
+      identities.push({ path: candidate, descriptor, dev: metadata.dev, ino: metadata.ino })
     } catch {
+      closeDirectoryChain(identities)
       return null
     }
+  }
+  if (!directoryChainIsStable(identities)) {
+    closeDirectoryChain(identities)
+    return null
   }
   return identities
 }
@@ -28,56 +41,89 @@ function captureDirectoryChain(hostHome: string, segments: readonly string[]): r
 function directoryChainIsStable(identities: readonly PathIdentity[]): boolean {
   return identities.every((identity) => {
     try {
-      const metadata = lstatSync(identity.path)
-      return metadata.isDirectory()
-        && !metadata.isSymbolicLink()
-        && metadata.dev === identity.dev
-        && metadata.ino === identity.ino
+      const lexical = lstatSync(identity.path)
+      const anchored = fstatSync(identity.descriptor)
+      return lexical.isDirectory()
+        && !lexical.isSymbolicLink()
+        && lexical.dev === identity.dev
+        && lexical.ino === identity.ino
+        && anchored.isDirectory()
+        && anchored.dev === identity.dev
+        && anchored.ino === identity.ino
     } catch {
       return false
     }
   })
 }
 
-function isDirectoryBelowHostHome(hostHome: string, segments: readonly string[]): boolean {
-  let candidate = hostHome
-  for (const segment of segments) {
-    candidate = join(candidate, segment)
-    try {
-      const metadata = lstatSync(candidate)
-      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return false
-    } catch {
-      return false
-    }
+function closeDirectoryChain(identities: readonly PathIdentity[]): void {
+  for (const identity of identities) {
+    try { closeSync(identity.descriptor) } catch { /* best-effort cleanup of owned descriptors */ }
   }
+}
+
+function isDirectoryBelowHostHome(hostHome: string, segments: readonly string[]): boolean {
+  const identities = captureDirectoryChain(hostHome, segments)
+  if (identities === null) return false
+  closeDirectoryChain(identities)
   return true
+}
+
+interface HostTargetDetectionOptions {
+  readonly readPluginCacheEntries?: (path: string) => Dirent[]
+  readonly openPluginMarker?: (path: string, flags: number) => number
 }
 
 function hasInstalledPlugin(
   hostHome: string,
   namespaceSegments: readonly string[],
   markerSegments: readonly string[],
+  options: HostTargetDetectionOptions,
 ): boolean {
-  if (!isDirectoryBelowHostHome(hostHome, namespaceSegments)) return false
-  let versions
+  const namespace = captureDirectoryChain(hostHome, namespaceSegments)
+  if (namespace === null) return false
   try {
-    versions = readdirSync(join(hostHome, ...namespaceSegments), { withFileTypes: true })
-  } catch {
-    return false
-  }
-  if (versions.length > 128) return false
-  return versions.some((version) => {
-    if (!version.isDirectory() || version.isSymbolicLink()) return false
-    const segments = [...namespaceSegments, version.name, ...markerSegments]
-    const marker = join(hostHome, ...segments)
-    if (!isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return false
     try {
-      const metadata = lstatSync(marker)
-      return metadata.isFile() && !metadata.isSymbolicLink()
+      const path = join(hostHome, ...namespaceSegments)
+      const versions = options.readPluginCacheEntries?.(path) ?? readdirSync(path, { withFileTypes: true })
+      if (versions.length > 128 || !directoryChainIsStable(namespace)) return false
+      return versions.some((version) => {
+        if (!version.isDirectory() || version.isSymbolicLink()) return false
+        const segments = [...namespaceSegments, version.name, ...markerSegments]
+        const directories = captureDirectoryChain(hostHome, segments.slice(0, -1))
+        if (directories === null) return false
+        const marker = join(hostHome, ...segments)
+        let descriptor: number | undefined
+        try {
+          if (!directoryChainIsStable(namespace) || !directoryChainIsStable(directories)) return false
+          const expected = lstatSync(marker)
+          if (!expected.isFile() || expected.isSymbolicLink()) return false
+          const flags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+          descriptor = options.openPluginMarker?.(marker, flags) ?? openSync(marker, flags)
+          const anchored = fstatSync(descriptor)
+          const current = lstatSync(marker)
+          return anchored.isFile()
+            && anchored.dev === expected.dev
+            && anchored.ino === expected.ino
+            && current.isFile()
+            && !current.isSymbolicLink()
+            && current.dev === expected.dev
+            && current.ino === expected.ino
+            && directoryChainIsStable(namespace)
+            && directoryChainIsStable(directories)
+        } catch {
+          return false
+        } finally {
+          if (descriptor !== undefined) closeSync(descriptor)
+          closeDirectoryChain(directories)
+        }
+      }) && directoryChainIsStable(namespace)
     } catch {
       return false
     }
-  })
+  } finally {
+    closeDirectoryChain(namespace)
+  }
 }
 
 function readBoundedHostFile(hostHome: string, segments: readonly string[]): string | null {
@@ -121,6 +167,7 @@ function readBoundedHostFile(hostHome: string, segments: readonly string[]): str
     return null
   } finally {
     if (descriptor !== undefined) closeSync(descriptor)
+    closeDirectoryChain(directories)
   }
 }
 
@@ -193,7 +240,10 @@ function claudePluginEnabled(hostHome: string): boolean {
   }
 }
 
-export function detectNativeHostTargets(hostHome: string): { status: number; body: unknown } {
+export function detectNativeHostTargets(
+  hostHome: string,
+  options: HostTargetDetectionOptions = {},
+): { status: number; body: unknown } {
   const hosts = [
     {
       id: 'codex' as const,
@@ -214,7 +264,7 @@ export function detectNativeHostTargets(hostHome: string): { status: number; bod
     .filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments))
     .map((host) => host.id)
   const pluginHost = hosts.find((host) => host.active(hostHome)
-    && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments))
+    && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments, options))
   const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null
   return {
     status: 200,

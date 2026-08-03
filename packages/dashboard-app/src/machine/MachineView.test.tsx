@@ -132,6 +132,31 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker available')
   })
 
+  it('Docker 卡片的状态与说明只消费同一个全局探测事实', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith('/api/afk/readiness')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          docker: { available: false },
+          image: { configured: 'sandcastle:local', present: false, build_hint: 'npm run sandcastle:build' },
+          credentials: { 'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } }, codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' } } },
+        }), { status: 200 })
+      }
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ ok: true, available: true, images: ['tenon:latest'] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'ready'))
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('1 local image')
+    expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker daemon unavailable')
+  })
+
   it('Docker 镜像探测失败时结束加载态并只在 AFK 卡片显示明确错误', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {

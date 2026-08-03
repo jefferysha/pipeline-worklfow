@@ -284,7 +284,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     ?? (secrets?.OPENAI_API_KEY.set ? 'secrets' : 'not detected')
   const dockerDetail = dockerProbeError ?? (images === null
     ? t('machine.loading_signal')
-    : images.available === false || readiness?.docker.available === false
+    : images.available === false
       ? t('machine.docker_unavailable_detail')
       : t('machine.docker_detail', { count: images.images.length }))
 

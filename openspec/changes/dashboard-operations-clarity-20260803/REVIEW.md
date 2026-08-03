@@ -39,14 +39,16 @@
 31. `readdir(changesRoot)` 后的 root 稳定性断言曾落在“合法空项目”catch 内，换位错误会被误报为 `ok=true`；现仅将 `ENOENT` 解释为尚无 Changes 的合法空项目，其他 I/O 错误失败关闭，且在降级前复核 anchor、读取成功后于 catch 外复核。换位与 `EACCES` 回归都不会发布健康空项目。
 32. 首轮冻结 Verify 发现 SSE fingerprint 会把 `readdir(openspec/changes)` 的非 `ENOENT` 错误也折叠为空目录，导致合法空目录与 `EACCES`/`EIO`/`EMFILE` 状态之间可能不刷新已连接页面；现与 Snapshot 统一为仅 `ENOENT` 表示合法空目录，其他读取错误生成稳定的 `unreadable:<root>` 指纹，并把同一个目录读取依赖贯穿初始 stream 与轮询路径。新增空目录 → `EACCES` → 恢复及 `ENOENT` 等价性的回归测试。
 33. 第二轮冻结 Verify 发现未选择项目时已成功返回的全局 Docker 探测仍被项目级 readiness 的空值覆盖成“未知”；现 Docker 卡片只消费全局 `/api/docker/images` 权威事实，项目级镜像配置仍保持独立未知。新增无项目选择且 daemon 不可用的红绿回归，状态明确为 AFK `optional-unavailable`，不会进入核心 blocker。
+34. 第二轮隔离 Codex 全量复核发现宿主插件 cache 的版本枚举在校验目录链后仍可能遇到并发 symlink 换位；现对 hostHome 到 namespace、版本和 marker 父目录的每一级使用 `O_NOFOLLOW` 目录描述符锚定，逐次用 `fstat` 与词法 `lstat` 复核设备号/inode。marker 本身也以 `O_NOFOLLOW` 打开，并在打开前后要求 leaf 的 `lstat` 与描述符 `fstat` 身份完全一致；任一父目录或 leaf 漂移即失败关闭为 `setup`。新增枚举瞬间替换 namespace，以及 marker 打开窗口换位后恢复的两条确定性对抗测试。
+35. 同轮复核发现 Docker 状态已切到全局探测后，说明文案仍混入项目 readiness，极短竞态下可能出现“就绪”徽标配“不可以使用”说明；现状态与说明共同只消费 `/api/docker/images`，并用全局成功、项目级旧失败的分歧回归锁定一致性。
 
 ## Re-review
 
-两轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。第二轮 Codex CLI 找到的无项目 Docker 状态问题已按 TDD 修复；最终 Reviewer、Codex、浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
+两轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。第二轮 Codex CLI 找到的无项目 Docker 状态与 plugin-cache 换位问题均已按 TDD 修复；最终 Reviewer、Codex、浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
 
 ## Verification evidence
 
-- Web 全量：87 files / 1632 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示，以及 Machine 在无项目选择时消费全局 Docker 探测的回归均纳入最终全量结果。
+- Web 全量：87 files / 1633 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示，以及 Machine 全局 Docker 状态/说明一致性回归均纳入最终全量结果。
 - Repository 全量：332 files / 5948 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
 - 统一 Reviewer 定向：Server 4 files / 161 tests、Web 9 files / 256 tests，均通过。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。
