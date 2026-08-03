@@ -28,6 +28,7 @@ export interface NativeHostCommandEnvironment {
     command: { readonly cmd: string; readonly args: readonly string[] },
   ): {
     readonly desired: string
+    isEquivalentDesired?(persistedDesired: string): boolean
     observe(): string
     isDesired(observation: string): boolean
   }

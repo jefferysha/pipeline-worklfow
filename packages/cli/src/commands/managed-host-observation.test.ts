@@ -73,6 +73,72 @@ function observationEnv(state: {
 }
 
 describe('managed native-host observation', () => {
+  test('native desired identity tolerates only incidental marketplace HEAD drift', () => {
+    const state = {
+      head: 'a'.repeat(40),
+      remoteHead: 'b'.repeat(40),
+      pluginVersion: '1.0.0',
+    }
+    const env = observationEnv(state)
+    const persisted = desiredNativeHostPostcondition(env, 'codex', 'marketplace-refresh')
+
+    state.head = state.remoteHead
+    const current = desiredNativeHostPostcondition(env, 'codex', 'marketplace-refresh')
+    expect(current.isEquivalentDesired(persisted.serialized)).toBe(true)
+
+    const original = JSON.parse(persisted.serialized) as Record<string, unknown>
+    const marketplace = original.marketplace as Record<string, unknown>
+    const changed = (value: Record<string, unknown>) => JSON.stringify(value)
+    expect(current.isEquivalentDesired(changed({ ...original, head: 'c'.repeat(40) }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, root: '/host/other-marketplace' },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, source: 'https://github.com/example/fork.git' },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, sourceType: 'local' },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, head: 'not-a-git-head' },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, head: 'A'.repeat(40) },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({ ...original, unexpected: true }))).toBe(false)
+    expect(current.isEquivalentDesired('{not-json')).toBe(false)
+  })
+
+  test('plugin desired identity preserves plugin root and version while tolerating marketplace HEAD drift', () => {
+    const state = {
+      head: 'a'.repeat(40),
+      remoteHead: 'b'.repeat(40),
+      pluginVersion: '1.0.0',
+      pluginRoot: '/plugins/tenon/1.0.0',
+    }
+    const env = observationEnv(state)
+    const persisted = desiredNativeHostPostcondition(env, 'codex', 'plugin-install')
+
+    state.head = state.remoteHead
+    const current = desiredNativeHostPostcondition(env, 'codex', 'plugin-install')
+    expect(current.isEquivalentDesired(persisted.serialized)).toBe(true)
+
+    const original = JSON.parse(persisted.serialized) as Record<string, unknown>
+    expect(current.isEquivalentDesired(JSON.stringify({
+      ...original,
+      pluginRoot: '/plugins/tenon/other',
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(JSON.stringify({
+      ...original,
+      pluginVersion: '9.9.9',
+    }))).toBe(false)
+  })
+
   test('marketplace refresh desired state is the remote revision, not command stdout', () => {
     const state = {
       head: 'a'.repeat(40),
@@ -170,6 +236,26 @@ describe('managed native-host observation', () => {
     expect(pluginDesired.isDesired(observeNativeHost(env, 'codex'))).toBe(true)
     state.pluginRoot = '/plugins/tenon/other-root'
     expect(pluginDesired.isDesired(observeNativeHost(env, 'codex'))).toBe(false)
+  })
+
+  test('local marketplace without a readable Git HEAD keeps its explicit target sentinel', () => {
+    const state = {
+      head: 'unavailable',
+      remoteHead: 'b'.repeat(40),
+      pluginVersion: '1.0.0',
+      marketplaceSourceType: 'local',
+      marketplaceSource: '/source/tenon',
+      pluginRoot: '/plugins/tenon/1.0.0',
+    }
+    const env = observationEnv(state)
+    const desired = desiredNativeHostPostcondition(env, 'codex', 'marketplace-refresh')
+
+    expect(JSON.parse(desired.serialized)).toMatchObject({
+      head: 'local-marketplace',
+      marketplace: { head: null },
+    })
+    expect(desired.isDesired(observeNativeHost(env, 'codex'))).toBe(true)
+    expect(desired.isEquivalentDesired(desired.serialized)).toBe(true)
   })
 
   test('malformed host inventory fails closed before any mutation can be checkpointed', () => {

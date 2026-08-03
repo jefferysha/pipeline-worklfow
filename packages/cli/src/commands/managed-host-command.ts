@@ -59,9 +59,14 @@ export async function runManagedHostCommand(
   const injected = env.managedHostReconciliation?.(host, stepId, command)
   const desired = injected === undefined
     ? desiredNativeHostPostcondition(env, host, stepId)
-    : { serialized: injected.desired, isDesired: injected.isDesired }
+    : {
+        serialized: injected.desired,
+        isDesired: injected.isDesired,
+        isEquivalentDesired: injected.isEquivalentDesired,
+      }
   const raw = await transaction.runStep(stepId, {
     desired: desired.serialized,
+    isEquivalentDesired: desired.isEquivalentDesired,
     observe: injected?.observe ?? (() => observeNativeHost(env, host)),
     isDesired: desired.isDesired,
     execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args])),
