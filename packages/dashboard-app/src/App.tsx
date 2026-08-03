@@ -77,6 +77,7 @@ function AppShell(): JSX.Element {
   const { flash, flashRef, showFlash } = useFlash(lang)
   const [workbenchDirty, setWorkbenchDirty] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null)
+  const pendingNavigationRef = useRef<PendingNavigation | null>(null)
   const viewRef = useRef(view)
   const dirtyRef = useRef(workbenchDirty)
   const currentRootRef = useRef('')
@@ -95,15 +96,26 @@ function AppShell(): JSX.Element {
     }
   }, [])
 
+  const capturePendingNavigation = useCallback((candidate: PendingNavigation): void => {
+    if (pendingNavigationRef.current !== null) return
+    pendingNavigationRef.current = candidate
+    setPendingNavigation((current) => current ?? candidate)
+  }, [])
+
+  const clearPendingNavigation = useCallback((): void => {
+    pendingNavigationRef.current = null
+    setPendingNavigation(null)
+  }, [])
+
   const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
     const leavesDirtyWorkbench = target.view !== 'workbench'
       || target.root !== currentRootRef.current
     if (viewRef.current === 'workbench' && dirtyRef.current && leavesDirtyWorkbench) {
-      setPendingNavigation({ kind: 'pop', target })
+      capturePendingNavigation({ kind: 'pop', target })
       return false
     }
     return true
-  }, [])
+  }, [capturePendingNavigation])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
   const preserveUnavailableWorkbenchRoot = view === 'workbench'
     && workbenchDirty
@@ -118,47 +130,68 @@ function AppShell(): JSX.Element {
       : typeof error.status === 'number'
         ? t('common.snapshot_request_failed', { status: error.status })
         : t('common.snapshot_request_failed_unknown')
-  const { currentRoot, selectProject, confirmPopNavigation } = useProjectSelection({
+  const {
+    currentRoot,
+    selectProject,
+    confirmPopNavigation,
+    cancelPopNavigation,
+    supportsNavigationInterception,
+  } = useProjectSelection({
     snapshot,
     view,
     selectedChange,
     onPopView: commitView,
     onSelectedChange: setSelectedChange,
     onPopAttempt,
+    shouldCancelPopBeforeCommit: () => pendingNavigationRef.current?.kind === 'view',
     preserveUnavailableRoot: preserveUnavailableWorkbenchRoot,
   })
   currentRootRef.current = currentRoot
 
   const setView = useCallback((nextView: View): void => {
     if (viewRef.current === 'workbench' && dirtyRef.current && nextView !== 'workbench') {
-      setPendingNavigation((current) => current?.kind === 'pop'
-        ? current
-        : {
-            kind: 'view',
-            target: {
-              view: nextView,
-              root: currentRootRef.current || null,
-              change: nextView === 'progress' ? selectedChange : null,
-            },
-          })
+      if (!supportsNavigationInterception && pendingNavigationRef.current === null) {
+        const discard = window.confirm(`${t('common.unsaved_navigation_title')}\n\n${t('common.unsaved_navigation_body')}`)
+        if (!discard) return
+        dirtyRef.current = false
+        setWorkbenchDirty(false)
+        commitView(nextView)
+        return
+      }
+      capturePendingNavigation({
+        kind: 'view',
+        target: {
+          view: nextView,
+          root: currentRootRef.current || null,
+          change: nextView === 'progress' ? selectedChange : null,
+        },
+      })
       return
     }
     commitView(nextView)
-  }, [commitView, selectedChange])
+  }, [capturePendingNavigation, commitView, selectedChange, supportsNavigationInterception, t])
 
   const closePendingNavigation = useCallback(() => {
-    setPendingNavigation(null)
-  }, [])
+    cancelPopNavigation(clearPendingNavigation)
+  }, [cancelPopNavigation, clearPendingNavigation])
 
   const discardAndNavigate = useCallback(() => {
     if (!pendingNavigation) return
     const pending = pendingNavigation
-    setPendingNavigation(null)
-    dirtyRef.current = false
-    setWorkbenchDirty(false)
-    if (pending.kind === 'pop') confirmPopNavigation()
-    else commitView(pending.target.view)
-  }, [commitView, confirmPopNavigation, pendingNavigation])
+    if (pending.kind === 'pop') {
+      clearPendingNavigation()
+      dirtyRef.current = false
+      setWorkbenchDirty(false)
+      confirmPopNavigation()
+      return
+    }
+    cancelPopNavigation(() => {
+      clearPendingNavigation()
+      dirtyRef.current = false
+      setWorkbenchDirty(false)
+      commitView(pending.target.view)
+    })
+  }, [cancelPopNavigation, clearPendingNavigation, commitView, confirmPopNavigation, pendingNavigation])
 
   const onWorkbenchDirtyChange = useCallback((dirty: boolean): void => {
     dirtyRef.current = dirty

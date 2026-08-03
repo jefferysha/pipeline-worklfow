@@ -172,6 +172,12 @@
 - [x] 在 portal Dialog 恢复交互权威后恢复内部焦点，并确保外层 modal 活跃时不抢焦点、关闭后正确交还。 (build)
 - [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门和 Standards + Spec pre-Verify 审查并冻结新 SHA。 (build)
 
+## 2026-08-03 第九次 Verify 回退修复
+
+- [x] 为“普通页面导航已阻断 + 随后 root 失权”建立确定性 RED，证明旧实现会把 Overview 覆盖为 Projects。 (build)
+- [x] 将 pending navigation 固化为 first-request-wins 事务：在 Navigation API 发起点取消后续 traversal，不可取消时按序列身份等待真实 popstate/inverse restore，并在精确 AbortSignal 中止时只清除对应 barrier；无 API 时同步原生确认；覆盖 Back/Forward 交错、abort 竞态与继续编辑后的新事务。 (build)
+- [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门、production 浏览器与 Standards + Spec pre-Verify 审查后冻结新 SHA。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

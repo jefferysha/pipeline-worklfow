@@ -1094,3 +1094,83 @@ fingerprint is
 `workspace:sha256:86732ae923140e88a5d379379656a9adc0c612c6e9833f3456f05d728896345c`.
 This tree is authorized for one new commit and freeze; every exact-SHA Verify
 track and GitHub CI must restart without reusing `c4f0cb58` evidence.
+
+## Post-`425b3195` ordinary-navigation rollback
+
+The exact `425b3195` four-track Verify was rejected at **C0/H0/M1/L0**. The
+Codex track found that `App.setView` preserved an existing pending request only
+when it was a browser `pop`. If a dirty Workbench first blocked a normal
+Overview click and then lost its project root, the root-loss Projects fallback
+replaced the original `{kind: 'view', target: overview}` request. Discard then
+landed on Projects instead of the page the user had chosen.
+
+A deterministic App regression first failed because `solution-view` never
+appeared after that exact sequence. Pending navigation now follows
+first-request-wins for both `view` and `pop`; fallback navigation is synthesized
+only when no decision is already pending.
+
+The first repair was still insufficient. An independent full-range review found
+that a normal `view` followed immediately by browser Back could commit the view
+before the inverse history traversal settled, and that a later Forward/Back in
+the same dialog could replace the original blocked traversal. The corresponding
+RED landed on Projects rather than Overview. The history controller then kept an
+immutable first blocked traversal and used a two-frame settlement window.
+
+The frozen two-frame candidate was explicitly rejected at **C0/H0/M1/L1**.
+History traversal and `popstate` have no animation-frame ordering guarantee; an
+isolated regression delayed the requested Back beyond both frames and reproduced
+the final Projects override. Consecutive settlements could also leave an older
+frame uncancelled on unmount. Its production-browser matrix happened to pass,
+but that evidence does not override the deterministic scheduling failure.
+
+The replacement has no frame or timer settlement heuristic. On current desktop
+browsers, a pending ordinary-view transaction cancels later same-document
+traversals synchronously at the Navigation API `navigate` start event, before
+`popstate`. If a started traversal is not cancelable, Discard/Stay remains
+deferred until the observed `popstate` and exact inverse restore complete. If
+the Navigation API is absent, ordinary dirty navigation uses a synchronous
+native confirmation instead of exposing an asynchronous competing-traversal
+window. Pending state is mirrored in a synchronous ref, so root-loss, `view`,
+and `pop` all preserve the first request identity.
+
+The first event-start candidate was also explicitly rejected at
+**C0/H0/M1/L0**: a started non-cancelable traversal could abort before
+`popstate`, leaving its restore barrier active forever. Each such traversal now
+owns a monotonic sequence identity and the exact Navigation API abort signal.
+An abort clears only the matching barrier and runs its deferred winner; a later
+traversal cannot be cleared by an older abort. Observed `popstate` and unmount
+remove the same identity-bound listener and state.
+
+The event-start cancellation, non-cancelable restore and abort barriers, native
+fallback, and stale-abort regressions pass; App plus both Dialog suites pass
+94/94, Dashboard passes 1,572/1,572, and the repository passes 5,883 tests with
+26 declared skips. Dashboard typecheck passes. Two clean builds produced the
+same combined CLI/server/Dashboard digest
+`f5937a03b92a70b6f8628128269aa1c1e5ee7b141958b2ef0879ff5970710967`,
+with the current Dashboard entry `index-BYlOsNDd.js`. A new production-browser
+run, complete static gates and an independent full-range review were then run
+from this exact candidate; no earlier candidate PASS was reused.
+
+The final independent pre-Verify review froze the complete workspace as
+`workspace:sha256:846b7c4bbd3186331b71b48bdb4cfde7d6a5f7d9c33205423696494dc3b4a444`
+and returned **PASS — C0/H0/M0/L0**. It independently reproduced focused
+94/94, Dashboard 1,572/1,572, repository 5,883 with 26 declared skips, two
+byte-identical builds, the canonical `f5937a03...0967` artifact digest, all
+static/governance/install/documentation gates, and zero differences across two
+runs of all five Oracle fixtures. Its isolated execution snapshot remained
+byte-equivalent to the read-only real worktree throughout review.
+
+The final production-browser run independently froze the same source candidate
+and returned **PASS — C0/H0/M0/L0**. All 12 navigation/root-loss/Dialog and
+keyboard scenarios passed, including cancelable traverse prevention and the
+non-cancelable AbortSignal barrier before and after Discard. The desktop matrix
+passed 36/36 across 1024/1440/1920, zh/en, light/dark/system and normal/reduced
+motion with zero horizontal overflow. Diagnostics recorded zero console/page
+errors, zero HTTP responses at or above 400 and zero unexpected request
+failures across a 707-entry HAR. The isolated server, port and Chromium profile
+were cleaned, and the source worktree remained unchanged. Chrome cannot emit a
+genuinely non-cancelable same-document traversal through its public API; that
+branch is covered by the production bundle with real AbortSignals plus the
+exact automated suite, so this is an evidence limitation rather than a finding.
+The browser evidence is at
+`/tmp/pr20-browser-byl-final.mUllGH/evidence/README.md`.
