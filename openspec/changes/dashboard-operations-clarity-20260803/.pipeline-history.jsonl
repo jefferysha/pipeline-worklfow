@@ -128,3 +128,4 @@
 {"ts":"2026-08-03T12:17:41Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-08-03T12:17:42Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"96111dcc-8dfb-4896-8817-af147df5507b"}
 {"ts":"2026-08-03T12:20:49Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-03T12:22:05Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/31"}
