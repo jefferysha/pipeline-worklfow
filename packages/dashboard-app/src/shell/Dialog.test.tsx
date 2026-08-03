@@ -3,11 +3,14 @@
  * 用带按钮的宿主组件真实开合（非直接 render Dialog 常驻），让「挂载即聚焦」「卸载归位」
  * 都对应真实的 DOM 生命周期，而不是靠 rerender props 模拟。
  */
-import { useRef, useState, type RefObject } from 'react'
+import { useRef, useState, type ReactElement, type RefObject } from 'react'
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { I18nProvider } from '../i18n'
 import { Dialog } from './Dialog'
+
+const renderWithI18n = (ui: ReactElement) => render(<I18nProvider>{ui}</I18nProvider>)
 
 /** 默认宿主：打开按钮 + Dialog（children 一个输入框，actions 两个按钮）。 */
 function Host({ testid, initialFocusRef }: { testid?: string; initialFocusRef?: RefObject<HTMLElement> } = {}) {
@@ -129,19 +132,19 @@ function HostWorkspace() {
 describe('Dialog（共享组件，Task 3）', () => {
   it('挂载时焦点进入对话框：默认落在容器内首个可聚焦元素；提供 initialFocusRef 时优先聚焦它', async () => {
     const user = userEvent.setup()
-    const { unmount } = render(<Host />)
+    const { unmount } = renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
     expect(document.activeElement).toBe(screen.getByTestId('dlg-input'))
     unmount()
 
-    render(<HostWithInitialFocus />)
+    renderWithI18n(<HostWithInitialFocus />)
     await user.click(screen.getByText('打开'))
     expect(document.activeElement).toBe(screen.getByText('确认'))
   })
 
   it('Esc 触发 onClose', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
@@ -151,7 +154,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('点 backdrop 自身（非冒泡）触发 onClose；点击对话框卡片内部不触发', async () => {
     const user = userEvent.setup()
-    render(<Host testid="t-dialog" />)
+    renderWithI18n(<Host testid="t-dialog" />)
     await user.click(screen.getByText('打开'))
 
     const card = screen.getByRole('dialog')
@@ -165,7 +168,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('Tab 在对话框内循环困笼：末元素 Tab → 回到首元素', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
 
     const input = screen.getByTestId('dlg-input')
@@ -183,7 +186,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('卸载时焦点回到打开前的元素', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     const openBtn = screen.getByText('打开')
     await user.click(openBtn)
     expect(document.activeElement).not.toBe(openBtn)
@@ -195,7 +198,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('role="dialog" aria-modal="true" aria-label={title} 三件套', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
@@ -204,7 +207,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('Tab 在对话框内循环困笼（反向）：首元素 Shift+Tab → 跳到末元素', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
 
     const input = screen.getByTestId('dlg-input')
@@ -217,7 +220,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('困笼边界排除 disabled 元素：确认按钮 disabled 时，从取消 Tab 应困笼回到首个可聚焦元素而非逃逸', async () => {
     const user = userEvent.setup()
-    render(<HostWithDisabledConfirm />)
+    renderWithI18n(<HostWithDisabledConfirm />)
     await user.click(screen.getByText('打开'))
 
     const input = screen.getByTestId('dlg-input')
@@ -234,7 +237,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('焦点落到 body（如子节点被卸载 / 调用 blur）时，Esc 仍能触发 onClose', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
@@ -247,7 +250,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('焦点因子节点卸载落到 body 时，正反向 Tab 都会被顶层 Dialog 拉回困笼', async () => {
     const user = userEvent.setup()
-    render(<Host />)
+    renderWithI18n(<Host />)
     await user.click(screen.getByText('打开'))
 
     const input = screen.getByTestId('dlg-input')
@@ -266,7 +269,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('两层 Dialog 叠加：按一次 Esc 只关最上层，外层 onClose 不被调用', async () => {
     const user = userEvent.setup()
-    render(<HostTwoLayers />)
+    renderWithI18n(<HostTwoLayers />)
     await user.click(screen.getByText('打开外层'))
     expect(screen.getByTestId('outer')).toBeInTheDocument()
 
@@ -281,7 +284,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('workspace 关闭控件使用本地化 accessible label 与共享 Lucide X', async () => {
     const user = userEvent.setup()
-    render(<HostWorkspace />)
+    renderWithI18n(<HostWorkspace />)
     await user.click(screen.getByText('Open workspace'))
 
     const closeButton = screen.getByRole('button', { name: 'Close evidence composer' })
@@ -290,7 +293,7 @@ describe('Dialog（共享组件，Task 3）', () => {
 
   it('workspace 长标题在窄屏允许完整换行，不以省略号截断', async () => {
     const user = userEvent.setup()
-    render(<HostWorkspace />)
+    renderWithI18n(<HostWorkspace />)
     await user.click(screen.getByText('Open workspace'))
 
     const heading = screen.getByRole('heading', { name: 'Evidence composer' })

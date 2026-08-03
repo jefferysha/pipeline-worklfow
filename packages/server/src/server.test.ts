@@ -19,11 +19,12 @@ import {
 } from './test-support.js'
 import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
-  createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
+  builtinTrack, createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
   createTransitionRecordStore, createWorkflowRunRepository,
   DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS,
   machineStateScopeId,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
+  workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 import type { LoopActivationValidator } from './loops.js'
@@ -83,6 +84,7 @@ async function start(opts?: {
   clock?: () => string
   cadence?: false | Omit<CadenceSchedulerOptions, 'roots' | 'clock' | 'runPipelineCli'>
   legacyWithoutRunIdentity?: boolean
+  initialWorkflow?: { workflow: string; phase: string }
   seedGovernedEvidence?: boolean
 }): Promise<Harness> {
   const store = opts?.store ?? newStore()
@@ -90,6 +92,7 @@ async function start(opts?: {
   const name = 'my-change'
   const changeDir = await initChange(store, root, name, {
     legacyWithoutRunIdentity: opts?.legacyWithoutRunIdentity,
+    initialWorkflow: opts?.initialWorkflow,
   })
   if (opts?.seedGovernedEvidence !== false) {
     await seedGovernedDocumentEvidence(root, changeDir, name)
@@ -2964,6 +2967,247 @@ describe('GET /api/afk/:name/log —— 单个 change 的原始运行日志文�
     expect(r.status).toBe(400)
     // 精确匹配 ENOENT 前置校验的错误文案（而非落到路由表尾部「未知端点」兜底 404）——证明真走了 changeDir 存在性校验分支。
     expect(r.json<{ error: string }>().error).toBe('找不到该 change（无 canonical/legacy 状态）')
+  })
+})
+
+describe('GET /api/workflow-definition-status —— frozen/current 只读比较', () => {
+  const route = (root: string, change = 'my-change'): string =>
+    `/api/workflow-definition-status?root=${encodeURIComponent(root)}&change=${encodeURIComponent(change)}`
+
+  it('从真 canonical Change 返回 default current，且读取不修改状态', async () => {
+    const h = await start()
+    const before = await h.store.read(h.changeDir)
+    const response = await reqGet(h.port, route(h.root))
+
+    expect(response.status).toBe(200)
+    const body = response.json<{
+      schema: string
+      workflow: string
+      status: string
+      frozen_fingerprint: string
+      current_fingerprint: string
+    }>()
+    expect(body).toEqual({
+      schema: 'workflow-definition-status/v1',
+      workflow: 'default',
+      status: 'current',
+      frozen_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      current_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
+    expect(body.current_fingerprint).toBe(body.frozen_fingerprint)
+    expect(await h.store.read(h.changeDir)).toEqual(before)
+  })
+
+  it('把旧 Change 诚实投影为 unavailable，并保留输入边界', async () => {
+    const legacy = await start({ legacyWithoutRunIdentity: true })
+    const unavailable = await reqGet(legacy.port, route(legacy.root))
+    expect(unavailable.status).toBe(200)
+    expect(unavailable.json()).toMatchObject({
+      schema: 'workflow-definition-status/v1',
+      workflow: 'default',
+      status: 'unavailable',
+      frozen_fingerprint: null,
+      current_fingerprint: null,
+    })
+
+    const invalid = await reqGet(legacy.port, route(legacy.root, '../escape'))
+    expect(invalid.status).toBe(400)
+    const unregistered = await reqGet(legacy.port, route('/tmp/not-registered'))
+    expect(unregistered.status).toBe(404)
+  })
+
+  it('缺少显式 root 时拒绝请求，不把 server cwd 当作可信项目', async () => {
+    const h = await start()
+    const response = await reqGet(
+      h.port,
+      `/api/workflow-definition-status?change=${encodeURIComponent(h.name)}`,
+    )
+    expect(response.status).toBe(400)
+    expect(response.json()).toEqual({ ok: false, error: '缺少 root' })
+  })
+})
+
+describe('GET /api/orchestration-graph —— Change 编排图', () => {
+  const route = (root: string, change = 'my-change'): string =>
+    `/api/orchestration-graph?root=${encodeURIComponent(root)}&change=${encodeURIComponent(change)}`
+
+  it('从真 canonical Change/snapshot 返回稳定只读图并嵌入 definition 诊断', async () => {
+    const h = await start()
+    const before = await h.store.read(h.changeDir)
+    const response = await reqGet(h.port, route(h.root))
+
+    expect(response.status).toBe(200)
+    const body = response.json<{
+      schema: string
+      scope: { root: string; change: string }
+      nodes: Array<{ id: string; kind: string; status: string | null }>
+      edges: Array<{ id: string; kind: string; source: string; target: string }>
+    }>()
+    expect(body.schema).toBe('tenon-orchestration-graph/v1')
+    expect(body.scope).toEqual({ root: h.root, change: h.name })
+    expect(body.nodes.find((node) => node.kind === 'workflow')).toMatchObject({ status: 'current' })
+    expect(body.nodes.some((node) => node.kind === 'change')).toBe(true)
+    expect(body.nodes.some((node) => node.kind === 'phase')).toBe(true)
+    expect(body.edges.some((edge) => edge.kind === 'governs')).toBe(true)
+    const ids = new Set(body.nodes.map((node) => node.id))
+    expect(body.edges.every((edge) => ids.has(edge.source) && ids.has(edge.target))).toBe(true)
+    expect(await h.store.read(h.changeDir)).toEqual(before)
+  })
+
+  it('拒绝非法 change 与未注册 root', async () => {
+    const h = await start()
+    expect((await reqGet(h.port, route(h.root, '../escape'))).status).toBe(400)
+    expect((await reqGet(h.port, route('/tmp/not-registered'))).status).toBe(404)
+    const missingRoot = await reqGet(h.port, '/api/orchestration-graph?change=my-change')
+    expect(missingRoot.status).toBe(400)
+    expect(missingRoot.json()).toMatchObject({ code: 'ORCHESTRATION_ROOT_REQUIRED' })
+  })
+
+  it('只读目标 canonical Change，不重建缺失的 YAML projection', async () => {
+    const h = await start()
+    await unlink(join(h.changeDir, '.pipeline.yaml'))
+
+    const response = await reqGet(h.port, route(h.root))
+
+    expect(response.status).toBe(200)
+    expect(await h.store.inspectProjection(h.changeDir)).toMatchObject({ status: 'missing' })
+  })
+
+  it('Change 目录或 canonical 父目录是外部 symlink 时 fail closed', async () => {
+    const changeLinked = await start()
+    const outsideRoot = await makeProject()
+    const outsideDir = await initChange(changeLinked.store, outsideRoot, changeLinked.name)
+    await rename(changeLinked.changeDir, `${changeLinked.changeDir}.original`)
+    await symlink(outsideDir, changeLinked.changeDir, 'dir')
+
+    const graphLinked = await reqGet(changeLinked.port, route(changeLinked.root))
+    const definitionLinked = await reqGet(
+      changeLinked.port,
+      `/api/workflow-definition-status?root=${encodeURIComponent(changeLinked.root)}&change=${changeLinked.name}`,
+    )
+    expect(graphLinked.status).toBe(403)
+    expect(graphLinked.json()).toMatchObject({ code: 'ORCHESTRATION_CHANGE_FORBIDDEN' })
+    expect(definitionLinked.status).toBe(403)
+    expect(JSON.stringify(graphLinked.json())).not.toContain(outsideRoot)
+    expect(JSON.stringify(definitionLinked.json())).not.toContain(outsideRoot)
+
+    const runLinked = await start()
+    const runDir = join(runLinked.changeDir, '.pipeline-run')
+    const outsideRunDir = join(await makeProject(), 'outside-run')
+    await rename(runDir, outsideRunDir)
+    await symlink(outsideRunDir, runDir, 'dir')
+    const graphRunLinked = await reqGet(runLinked.port, route(runLinked.root))
+    const definitionRunLinked = await reqGet(
+      runLinked.port,
+      `/api/workflow-definition-status?root=${encodeURIComponent(runLinked.root)}&change=${runLinked.name}`,
+    )
+    expect(graphRunLinked.status).toBe(403)
+    expect(graphRunLinked.json()).toMatchObject({ code: 'ORCHESTRATION_CHANGE_FORBIDDEN' })
+    expect(definitionRunLinked.status).toBe(403)
+    expect(JSON.stringify(graphRunLinked.json())).not.toContain(outsideRunDir)
+    expect(JSON.stringify(definitionRunLinked.json())).not.toContain(outsideRunDir)
+  })
+
+  it('可信 canonical state 的非法 UTF-8 是 unreadable 500，不误报 path forbidden', async () => {
+    const h = await start()
+    await writeFile(join(h.changeDir, '.pipeline-run', 'current.json'), Buffer.from([0xff]))
+
+    const response = await reqGet(h.port, route(h.root))
+    expect(response.status).toBe(500)
+    expect(response.json()).toMatchObject({ code: 'ORCHESTRATION_CHANGE_UNREADABLE' })
+  })
+
+  it('legacy custom workflow leaf 指向 root 外时有界失败且不投影外部定义', async () => {
+    const h = await start({
+      legacyWithoutRunIdentity: true,
+      initialWorkflow: { workflow: 'legacy', phase: 'external' },
+      seedGovernedEvidence: false,
+    })
+    const workflows = join(h.root, '.pipeline', 'workflows')
+    const outsideRoot = await makeProject()
+    const outsideWorkflow = join(outsideRoot, 'legacy.yaml')
+    await mkdir(workflows, { recursive: true })
+    await writeFile(outsideWorkflow, [
+      'name: legacy',
+      'steps:',
+      '  - id: external',
+      '    label: External secret label',
+      '    gate: null',
+      '    skills: []',
+      '    inputs: []',
+      '    outputs: []',
+      '    guards: []',
+      '    transitions: []',
+      '',
+    ].join('\n'), 'utf8')
+    await symlink(outsideWorkflow, join(workflows, 'legacy.yaml'), 'file')
+
+    const response = await reqGet(h.port, route(h.root))
+    expect(response.status).toBe(403)
+    expect(response.json()).toMatchObject({ code: 'ORCHESTRATION_DEFINITION_FORBIDDEN' })
+    expect(JSON.stringify(response.json())).not.toContain(outsideRoot)
+    expect(JSON.stringify(response.json())).not.toContain('External secret label')
+  })
+
+  it('frozen custom workflow 的当前 definition 变成外部 symlink 时返回 definition 403', async () => {
+    const h = await start()
+    const workflows = join(h.root, '.pipeline', 'workflows')
+    const currentWorkflow = join(workflows, 'modern.yaml')
+    await mkdir(workflows, { recursive: true })
+    await writeFile(currentWorkflow, [
+      'name: modern',
+      'steps:',
+      '  - id: external',
+      '    label: Frozen safe label',
+      '    gate: null',
+      '    skills: []',
+      '    inputs: []',
+      '    outputs: []',
+      '    guards: []',
+      '    transitions: []',
+      '',
+    ].join('\n'), 'utf8')
+    const plan = loadEffectiveWorkflowPlan(h.root, 'modern')
+    await createWorkflowRunRepository({
+      store: h.store,
+      recordStore: createTransitionRecordStore(),
+      clock: () => '2026-07-30T00:00:00Z',
+    }).initChange({
+      repoRoot: h.root,
+      name: 'modern-change',
+      track: 'backend',
+      reviewSeed: builtinTrack('backend').policyProfile.reviewSeed,
+      preset: 'full',
+      initialWorkflow: {
+        workflow: 'modern',
+        phase: 'external',
+        ...effectiveWorkflowPlanBinding(plan),
+        workflowPlanSnapshot: workflowPlanSnapshot(plan),
+      },
+    })
+    const outsideRoot = await makeProject()
+    const outsideWorkflow = join(outsideRoot, 'modern.yaml')
+    await writeFile(outsideWorkflow, [
+      'name: modern',
+      'steps:',
+      '  - id: leaked',
+      '    label: External secret label',
+      '    gate: null',
+      '    skills: []',
+      '    inputs: []',
+      '    outputs: []',
+      '    guards: []',
+      '    transitions: []',
+      '',
+    ].join('\n'), 'utf8')
+    await unlink(currentWorkflow)
+    await symlink(outsideWorkflow, currentWorkflow, 'file')
+
+    const response = await reqGet(h.port, route(h.root, 'modern-change'))
+    expect(response.status).toBe(403)
+    expect(response.json()).toMatchObject({ code: 'ORCHESTRATION_DEFINITION_FORBIDDEN' })
+    expect(JSON.stringify(response.json())).not.toContain(outsideRoot)
+    expect(JSON.stringify(response.json())).not.toContain('External secret label')
   })
 })
 

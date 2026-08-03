@@ -18,13 +18,17 @@ import type { TransitionRecord } from '../workflow/run-types.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import { diffWireFieldsToEffects } from './run-metadata.js'
 import {
-  RunStateCorruptError,
   createRunRevision,
   parseRunRevision,
   serializeRunRevision,
   type RunRevision,
   type RunStateMutation,
 } from './run-revision-codec.js'
+import {
+  RUN_STATE_SCHEMA_VERSION,
+  RunStateCorruptError,
+  UnsupportedRunStateVersionError,
+} from './run-revision-validation.js'
 import { TRANSITION_RECORDS_DIR } from './transition-record-store.js'
 import {
   hydratePreVerifyReview,
@@ -43,12 +47,16 @@ import {
 } from './transition-head-anchor.js'
 
 export {
-  RunStateCorruptError,
   hookStateFor,
   type RunHookState,
   type RunRevision,
   type RunStateMutation,
 } from './run-revision-codec.js'
+export {
+  RUN_STATE_SCHEMA_VERSION,
+  RunStateCorruptError,
+  UnsupportedRunStateVersionError,
+} from './run-revision-validation.js'
 
 export const RUN_STATE_DIR = '.pipeline-run'
 export const RUN_CURRENT_FILE = 'current.json'

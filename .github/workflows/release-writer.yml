@@ -1,0 +1,251 @@
+name: Release candidate writer
+
+on:
+  workflow_run:
+    workflows: [Release candidate (pre-tag)]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-candidate-writer
+  cancel-in-progress: false
+
+jobs:
+  create-tag:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.default_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      source_run_id: ${{ steps.tag.outputs.source_run_id }}
+      payload_artifact_id: ${{ steps.tag.outputs.payload_artifact_id }}
+      payload_artifact_name: ${{ steps.tag.outputs.payload_artifact_name }}
+      payload_artifact_digest: ${{ steps.tag.outputs.payload_artifact_digest }}
+      payload_manifest_sha256: ${{ steps.tag.outputs.payload_manifest_sha256 }}
+    steps:
+      - name: Prove the upstream run used the protected default-branch workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_REPOSITORY_ID: ${{ github.repository_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WRITER_REF: ${{ github.ref }}
+          WRITER_SHA: ${{ github.sha }}
+          WRITER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          WRITER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+          UPSTREAM_REPOSITORY_ID: ${{ github.event.workflow_run.repository.id }}
+          UPSTREAM_HEAD_REPOSITORY_ID: ${{ github.event.workflow_run.head_repository.id }}
+          UPSTREAM_PATH: ${{ github.event.workflow_run.path }}
+          UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [ "$DEFAULT_BRANCH" = "main" ]
+          [ "$WRITER_REF" = "refs/heads/main" ]
+          [ "$WRITER_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-writer.yml@refs/heads/main" ]
+          [ "$WRITER_WORKFLOW_SHA" = "$WRITER_SHA" ]
+          [ "$UPSTREAM_REPOSITORY_ID" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$UPSTREAM_HEAD_REPOSITORY_ID" = "$CURRENT_REPOSITORY_ID" ]
+          case "$UPSTREAM_PATH" in
+            .github/workflows/release-candidate.yml|\
+            .github/workflows/release-candidate.yml@main|\
+            .github/workflows/release-candidate.yml@refs/heads/main) ;;
+            *) echo "upstream workflow path is not canonical: $UPSTREAM_PATH" >&2; exit 1 ;;
+          esac
+          [ "$UPSTREAM_EVENT" = "workflow_dispatch" ]
+          [ "$UPSTREAM_CONCLUSION" = "success" ]
+          [ "$UPSTREAM_HEAD_BRANCH" = "main" ]
+          case "$UPSTREAM_HEAD_SHA" in
+            *[!0-9a-fA-F]*|'') echo "upstream head SHA is invalid" >&2; exit 1 ;;
+          esac
+          [ "${#UPSTREAM_HEAD_SHA}" -eq 40 ]
+
+          canonical_workflow_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-candidate.yml" --jq '.id'
+          )"
+          [ "$UPSTREAM_WORKFLOW_ID" = "$canonical_workflow_id" ] || {
+            echo "upstream workflow identity is not canonical" >&2
+            exit 1
+          }
+
+          run="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$UPSTREAM_RUN_ID"
+          )"
+          api_path="$(jq -r '.path' <<<"$run")"
+          case "$api_path" in
+            .github/workflows/release-candidate.yml|\
+            .github/workflows/release-candidate.yml@main|\
+            .github/workflows/release-candidate.yml@refs/heads/main) ;;
+            *) echo "API workflow path is not canonical: $api_path" >&2; exit 1 ;;
+          esac
+          [ "$(jq -r '.id' <<<"$run")" = "$UPSTREAM_RUN_ID" ]
+          [ "$(jq -r '.workflow_id' <<<"$run")" = "$canonical_workflow_id" ]
+          [ "$(jq -r '.repository.id' <<<"$run")" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$(jq -r '.head_repository.id' <<<"$run")" = "$CURRENT_REPOSITORY_ID" ]
+          [ "$(jq -r '.event' <<<"$run")" = "$UPSTREAM_EVENT" ]
+          [ "$(jq -r '.conclusion' <<<"$run")" = "$UPSTREAM_CONCLUSION" ]
+          [ "$(jq -r '.head_branch' <<<"$run")" = "$UPSTREAM_HEAD_BRANCH" ]
+          [ "$(jq -r '.head_sha' <<<"$run")" = "$UPSTREAM_HEAD_SHA" ]
+
+      - name: Download approval evidence from the trusted upstream run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release-candidate
+          gh run download "$UPSTREAM_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name release-candidate-approval \
+            --dir .release-candidate
+          [ -f .release-candidate/approved.json ]
+
+      - name: Validate approval, artifact, and create or recover the approved tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          resolve_tag_commit() {
+            local release_tag="$1"
+            local ref_json object_sha object_type tag_json depth
+            ref_json="$(
+              gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$release_tag" \
+                --jq ".[] | select(.ref == \"refs/tags/$release_tag\")"
+            )"
+            [ -n "$ref_json" ] || return 1
+            object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
+            object_type="$(jq -er '.object.type' <<<"$ref_json")"
+            depth=0
+            while [ "$object_type" = "tag" ]; do
+              depth=$((depth + 1))
+              [ "$depth" -le 8 ] || {
+                echo "tag indirection is too deep: $release_tag" >&2
+                return 2
+              }
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+              object_sha="$(jq -er '.object.sha' <<<"$tag_json")"
+              object_type="$(jq -er '.object.type' <<<"$tag_json")"
+            done
+            [ "$object_type" = "commit" ] || {
+              echo "tag does not peel to a commit: $release_tag ($object_type)" >&2
+              return 2
+            }
+            printf '%s\n' "$object_sha"
+          }
+
+          approval=.release-candidate/approved.json
+          CANDIDATE_SHA="$(jq -er '.sha | select(type == "string" and length == 40)' "$approval")"
+          RELEASE_TAG="$(jq -er '.tag | select(type == "string" and length > 0)' "$approval")"
+          RELEASE_VERSION="$(jq -er '.version | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_RUN_ID="$(jq -er '.source_run_id | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_WORKFLOW_REF="$(jq -er '.source_workflow_ref | select(type == "string" and length > 0)' "$approval")"
+          SOURCE_WORKFLOW_SHA="$(jq -er '.source_workflow_sha | select(type == "string" and length == 40)' "$approval")"
+          PAYLOAD_ARTIFACT_ID="$(jq -er '.payload_artifact_id | select(type == "string" and test("^[0-9]+$"))' "$approval")"
+          PAYLOAD_ARTIFACT_NAME="$(jq -er '.payload_artifact_name | select(type == "string" and length > 0)' "$approval")"
+          PAYLOAD_ARTIFACT_DIGEST="$(jq -er '.payload_artifact_digest | select(type == "string" and test("^sha256:[0-9a-f]{64}$"))' "$approval")"
+          PAYLOAD_MANIFEST_SHA256="$(jq -er '.payload_manifest_sha256 | select(type == "string" and test("^[0-9a-f]{64}$"))' "$approval")"
+
+          [ "$SOURCE_RUN_ID" = "$UPSTREAM_RUN_ID" ]
+          [ "$SOURCE_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml@refs/heads/main" ]
+          [ "$CANDIDATE_SHA" = "$UPSTREAM_HEAD_SHA" ]
+          [ "$SOURCE_WORKFLOW_SHA" = "$UPSTREAM_HEAD_SHA" ]
+          case "$CANDIDATE_SHA" in
+            *[!0-9a-fA-F]*|'') echo "candidate SHA is invalid" >&2; exit 1 ;;
+          esac
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "release tag must be a complete stable v-prefixed SemVer" >&2
+            exit 1
+          }
+          [ "$RELEASE_VERSION" = "${RELEASE_TAG#v}" ]
+          [ "$PAYLOAD_ARTIFACT_NAME" = "release-candidate-payload-$CANDIDATE_SHA" ]
+
+          artifact="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAYLOAD_ARTIFACT_ID"
+          )"
+          [ "$(jq -r '.id' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_ID" ]
+          [ "$(jq -r '.name' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_NAME" ]
+          [ "$(jq -r '.digest' <<<"$artifact")" = "$PAYLOAD_ARTIFACT_DIGEST" ]
+          [ "$(jq -r '.expired' <<<"$artifact")" = "false" ]
+          [ "$(jq -r '.workflow_run.id' <<<"$artifact")" = "$UPSTREAM_RUN_ID" ]
+          [ "$(jq -r '.workflow_run.head_sha' <<<"$artifact")" = "$CANDIDATE_SHA" ]
+
+          existing_commit=""
+          if existing_commit="$(resolve_tag_commit "$RELEASE_TAG")"; then
+            [ "$existing_commit" = "$CANDIDATE_SHA" ] || {
+              echo "existing tag points to a different commit: tag=$RELEASE_TAG expected=$CANDIDATE_SHA actual=$existing_commit" >&2
+              exit 1
+            }
+            echo "tag already exists at approved commit; continuing release recovery"
+          else
+            resolve_status=$?
+            [ "$resolve_status" -eq 1 ] || exit "$resolve_status"
+            main="$(
+              gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+            )"
+            [ "$main" = "$CANDIDATE_SHA" ] || {
+              echo "main advanced before tag creation: candidate=$CANDIDATE_SHA main=$main" >&2
+              exit 1
+            }
+            tag_object="$(
+              gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+                -f tag="$RELEASE_TAG" \
+                -f message="Tenon $RELEASE_VERSION" \
+                -f object="$CANDIDATE_SHA" \
+                -f type=commit \
+                --jq '.sha'
+            )"
+            if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" \
+              -f sha="$tag_object" >/dev/null; then
+              existing_commit="$(resolve_tag_commit "$RELEASE_TAG")"
+              [ "$existing_commit" = "$CANDIDATE_SHA" ] || {
+                echo "tag creation raced with a conflicting ref: tag=$RELEASE_TAG" >&2
+                exit 1
+              }
+            fi
+          fi
+
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_id=$PAYLOAD_ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_name=$PAYLOAD_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "payload_artifact_digest=$PAYLOAD_ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "payload_manifest_sha256=$PAYLOAD_MANIFEST_SHA256" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: create-tag
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.create-tag.outputs.tag }}
+      expected_sha: ${{ needs.create-tag.outputs.sha }}
+      version: ${{ needs.create-tag.outputs.version }}
+      source_run_id: ${{ needs.create-tag.outputs.source_run_id }}
+      payload_artifact_id: ${{ needs.create-tag.outputs.payload_artifact_id }}
+      payload_artifact_name: ${{ needs.create-tag.outputs.payload_artifact_name }}
+      payload_artifact_digest: ${{ needs.create-tag.outputs.payload_artifact_digest }}
+      payload_manifest_sha256: ${{ needs.create-tag.outputs.payload_manifest_sha256 }}

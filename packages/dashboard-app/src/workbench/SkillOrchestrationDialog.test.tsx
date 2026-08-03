@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WbSkillEntry } from '../api/client'
+import { I18nProvider } from '../i18n'
 import type { BoardLane } from './OrchestrationBoard'
 import { SkillOrchestrationDialog } from './SkillOrchestrationDialog'
 
@@ -26,10 +27,32 @@ const REGISTRY: WbSkillEntry[] = [
   { name: 'code-tour', installed: true, source: 'user', description: 'Create a guided code walkthrough.' },
 ]
 
+function renderDialog(component: JSX.Element): void {
+  render(<I18nProvider>{component}</I18nProvider>)
+}
+
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
+
 describe('SkillOrchestrationDialog', () => {
+  it('English locale covers the complete Skill orchestration dialog', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
+
+    const dialog = screen.getByTestId('wb-skill-orchestration')
+    expect(dialog).toHaveTextContent('Skill library')
+    expect(dialog).toHaveTextContent('Execution plan')
+    expect(dialog).toHaveTextContent('Execution order')
+    expect(dialog).not.toHaveTextContent('技能库')
+    expect(dialog).not.toHaveTextContent('执行计划')
+    expect(dialog).not.toHaveTextContent('调用顺序')
+    expect(screen.getByTestId('wb-skill-library-browser-qa')).toHaveTextContent('Inspect the real browser flow.')
+  })
+
   it('左右排版展示技能库与有序执行计划，技能库不再显示加号按钮', () => {
     const onAdd = vi.fn()
-    render(
+    renderDialog(
       <SkillOrchestrationDialog
         lane={LANE}
         registry={REGISTRY}
@@ -54,9 +77,19 @@ describe('SkillOrchestrationDialog', () => {
     expect(onAdd).toHaveBeenCalledWith('build', 'browser-qa')
   })
 
+  it('技能搜索与依赖配置声明稳定表单身份并关闭搜索自动填充', () => {
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
+
+    const search = screen.getByRole('textbox', { name: '搜索技能' })
+    expect(search).toHaveAttribute('name', 'skill-search')
+    expect(search).toHaveAttribute('autocomplete', 'off')
+    fireEvent.click(screen.getByRole('button', { name: 'implement 自定义依赖' }))
+    expect(screen.getByRole('checkbox', { name: /research/ })).toHaveAttribute('name', 'skill-dependency-build-implement-research')
+  })
+
   it('可把技能切为并行或接续上一项，变更映射到 depends_on', () => {
     const onDependencyChange = vi.fn()
-    render(
+    renderDialog(
       <SkillOrchestrationDialog
         lane={LANE}
         registry={REGISTRY}
@@ -75,7 +108,7 @@ describe('SkillOrchestrationDialog', () => {
   it('技能库可拖入计划，计划卡可拖动重排', () => {
     const onAdd = vi.fn()
     const onMove = vi.fn()
-    render(
+    renderDialog(
       <SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={onAdd} onRemove={vi.fn()} onMove={onMove} onDependencyChange={vi.fn()} />,
     )
 
@@ -88,8 +121,17 @@ describe('SkillOrchestrationDialog', () => {
     expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ skillId: 'verify', refSkillId: 'research', after: false }))
   })
 
+  it('计划卡提供键盘可聚焦的前后移动入口', () => {
+    const onMove = vi.fn()
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={onMove} onDependencyChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill implement 向前移动' }))
+    expect(onMove).toHaveBeenCalledWith({
+      skillId: 'implement', fromStage: 'build', toStage: 'build', refSkillId: 'research', after: false,
+    })
+  })
+
   it('用批次拓扑直观区分并行与串行，而不是只显示开关', () => {
-    render(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
 
     const topology = screen.getByTestId('wb-skill-topology')
     expect(topology).toHaveTextContent('3 个批次')
@@ -98,7 +140,7 @@ describe('SkillOrchestrationDialog', () => {
   })
 
   it('拖动经过计划卡时展示明确落点预览', () => {
-    render(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
+    renderDialog(<SkillOrchestrationDialog lane={LANE} registry={REGISTRY} onClose={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} onMove={vi.fn()} onDependencyChange={vi.fn()} />)
 
     fireEvent.dragStart(screen.getByTestId('wb-skill-library-code-tour'))
     fireEvent.dragOver(screen.getByTestId('wb-skill-plan-implement'), { clientY: 0 })

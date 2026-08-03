@@ -117,7 +117,12 @@ function mockFetch(opts?: { snapshotStatus?: number; snapshotBody?: unknown; upd
 /** 出货接线同款 harness：useLoops 住宿主（WorkbenchView 的同一拓扑），本轨纯消费 LoopsState。 */
 function Harness(): JSX.Element {
   const loops = useLoops(ROOT)
-  return <GovernanceRail root={ROOT} loops={loops} />
+  return (
+    <>
+      <button data-testid="test-reload-loops" onClick={() => loops.reload()}>reload</button>
+      <GovernanceRail root={ROOT} loops={loops} />
+    </>
+  )
 }
 
 function renderRail(): void {
@@ -129,7 +134,9 @@ function renderRail(): void {
 }
 
 async function openPromoteDialog(target: 'L2' | 'L3'): Promise<HTMLElement> {
-  fireEvent.click(screen.getByTestId(`wb-gov-lv-${target}`))
+  const trigger = screen.getByTestId(`wb-gov-lv-${target}`)
+  trigger.focus()
+  fireEvent.click(trigger)
   return screen.findByTestId('wb-gov-promote-confirm')
 }
 
@@ -201,9 +208,19 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     const preflight = await screen.findByTestId('wb-gov-graduation')
     expect(preflight).toHaveTextContent('2 项活跃漂移未清')
     expect(preflight).toHaveTextContent('fail_streak=1')
+    expect(preflight).toHaveTextContent('运行 3')
+    expect(preflight).toHaveTextContent('漂移 2')
+    expect(preflight).toHaveAttribute('data-can-graduate', 'false')
+  })
+
+  it('English preflight keeps structured metrics but masks server-authored blocker prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderRail()
+    const preflight = await screen.findByTestId('wb-gov-graduation')
     expect(preflight).toHaveTextContent('runs 3')
     expect(preflight).toHaveTextContent('drift 2')
-    expect(preflight).toHaveAttribute('data-can-graduate', 'false')
+    expect(preflight).toHaveTextContent('Demotion signal')
+    expect(preflight.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   it('三档是一组 radio：当前档 aria-checked=true，其余 false；轨与三张卡都在', async () => {
@@ -216,8 +233,12 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     const group = screen.getByRole('radiogroup', { name: '自主级别' })
     expect(within(group).getAllByRole('radio')).toHaveLength(3)
     expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('tabindex', '0')
     expect(screen.getByTestId('wb-gov-lv-L2')).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByTestId('wb-gov-lv-L2')).toHaveAttribute('tabindex', '-1')
     expect(screen.getByTestId('wb-gov-lv-L3')).toHaveAttribute('aria-checked', 'false')
+    fireEvent.keyDown(screen.getByTestId('wb-gov-lv-L1'), { key: 'ArrowRight' })
+    expect(await screen.findByTestId('wb-gov-promote-confirm')).toHaveTextContent('L2')
   })
 
   /**
@@ -237,6 +258,32 @@ describe('GovernanceRail §4.9 自治级 L1/L2/L3（单选 / postLoopLevel body 
     await settle()
     expect(posts('/api/loops/level')).toHaveLength(0)
     expect(screen.getByTestId('wb-gov-lv-L1')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('升档确认期间收到逻辑等价的新 row 对象 → 保持确认，不把轮询刷新误判成决策失效', async () => {
+    renderRail()
+    await screen.findByTestId('wb-gov-level')
+    await openPromoteDialog('L2')
+
+    rows = rows.map((row) => ({ ...row }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/loops/snapshot', expect.anything()))
+    expect(screen.getByTestId('wb-gov-promote-confirm')).toBeInTheDocument()
+    expect(posts('/api/loops/level')).toHaveLength(0)
+  })
+
+  it('升档确认期间决策事实变化 → 撤销旧确认且把焦点归还升档入口', async () => {
+    renderRail()
+    await screen.findByTestId('wb-gov-level')
+    await openPromoteDialog('L2')
+
+    rows = rows.map((row) => ({ ...row, readiness: { score: 48, band: 'not-ready' } }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.queryByTestId('wb-gov-promote-confirm')).toBeNull())
+    expect(screen.getByTestId('wb-gov-lv-L2')).toHaveFocus()
+    expect(posts('/api/loops/level')).toHaveLength(0)
   })
 
   it('升档 L1→L2：确认后才 POST /api/loops/level，body = {root,id,target}，reload 后回显 L2', async () => {
@@ -507,6 +554,23 @@ describe('GovernanceRail §4.11 token 预算滑杆（postLoopUpdate body 精确 
     expect(posts('/api/loops/update')).toHaveLength(1)
   })
 
+  it('同 id Loop 的权威预算在去抖窗口内变化 → 取消旧 timer，不 POST 旧草稿覆盖新快照', async () => {
+    renderRail()
+    const slider = await screen.findByTestId('wb-gov-budget-slider')
+    fireEvent.change(slider, { target: { value: '120' } })
+    expect(screen.getByTestId('wb-gov-budget-slider-val')).toHaveTextContent('120k')
+
+    rows = rows.map((row) => ({
+      ...row,
+      budget_decl: { ...(row.budget_decl as Record<string, unknown>), max_tokens_per_day: 160000 },
+    }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('wb-gov-budget-slider')).toHaveValue('160'))
+
+    await settle()
+    expect(posts('/api/loops/update')).toHaveLength(0)
+  })
+
   /** patch 只带被改的那一键——不夹带未改字段（LoopCard computePatch 的同一条纪律）。 */
   it('patch 只含 max_tokens_per_day 一键，不夹带 cadence/runs/on_exceed 等未改字段', async () => {
     renderRail()
@@ -534,6 +598,16 @@ describe('GovernanceRail §4.11 token 预算滑杆（postLoopUpdate body 精确 
     const err = await screen.findByTestId('wb-gov-budget-error')
     expect(err).toHaveTextContent('patch 后 schema 校验失败，未落盘')
     expect(err).toHaveAttribute('data-tone', 'error')
+  })
+
+  it('English budget failure keeps the HTTP fact but masks server-authored Chinese prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    mockFetch({ updateStatus: 400, updateBody: { ok: false, error: 'patch 后 schema 校验失败，未落盘' } })
+    renderRail()
+    fireEvent.change(await screen.findByTestId('wb-gov-budget-slider'), { target: { value: '120' } })
+    const err = await screen.findByTestId('wb-gov-budget-error')
+    expect(err).toHaveTextContent('Request failed (HTTP 400).')
+    expect(err.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   /** 未声明预算：滑杆停在推荐位，但显示仍是「未设置」——**不拿推荐值冒充已设置的真值**。 */

@@ -8,6 +8,69 @@
 > 当时语境；v3 最新 source/dist/live/真实浏览器对照见
 > `docs/ux/2026-07-19-v3-backend-to-frontend-gap-inventory.md`。
 
+## 2026-07-30 · 最终独立复审回退修复证据
+
+- 三个独立复审轨在 `8224c75d` 上给出合并结论 C0/H2/M7/L4，所有严重度均未豁免。
+  Release/后端轨发现 release candidate 未固定 OpenSpec CLI 且缺少全仓 strict gate、
+  canonical CI action 使用可移动 tag、Skill transcript 完成态会误扫 Skill stdout。
+  Dashboard 轨发现 Machine 在事实未决时提前显示无阻塞、compact Operations 缺少重试和
+  工具级空态、阶段/Skill 排序只支持指针、radio group 键盘语义不完整、帮助图标与导航计数
+  缺少可访问名称。E2E 轨另发现 Loop refresh/save 会覆盖整份本地草稿、`beforeunload`
+  注册存在时序窗口、测试现实和发布声明已过期。
+- OpenSpec CLI 现在以 `@fission-ai/openspec@1.6.0` 精确锁定在根 lockfile；canonical CI 与
+  release candidate 都运行 `openspec validate --all --strict --no-interactive`。
+  `actions/checkout` 与 `actions/setup-node` 均固定完整 commit SHA，release contract
+  23/23 通过；全仓 OpenSpec strict validation 为 35/35。
+- Skill transcript 状态只从宿主信封读取，不再把 Skill 自身 stdout 中的
+  `Process exited with code 1`、`exit_code: 9` 或 `Script failed` 当作调用失败；
+  receipt 定向套件 105/105 通过。
+- Dashboard 新增完整 Arrow/Home/End roving radio 行为、键盘可达的阶段与 Skill 排序及跨阶段
+  移动、focusable 帮助控件和带名称的导航计数。Machine 等待全部权威事实后才计算阻塞结论；
+  compact Operations 对失败提供就地重试，并按 starter/run/sync 的真实数据呈现独立空态。
+- Loop 草稿以逐字段 revision 与 server 基线重放：刷新只更新未触碰字段，保存只接受本次提交的
+  字段，保存期间继续输入的更高 revision 保留。Workbench 的 dirty ref 在编辑回调内同步更新，
+  `beforeunload` 监听常驻，消除了 commit 与 effect 之间的离开窗口。
+- 当前源码门禁：root 327 files / 5810 passed / 14 honest-skip、Dashboard 73 files /
+  1445 tests、typecheck、698-file architecture、release contract 23/23、OpenSpec 35/35、
+  receipt 105/105 全绿。首次并行高负载运行唯一失败为既有 5 秒集成测试超时；同一 Hook 文件
+  9/9 通过后，完整 root 套件以 15 秒集成上限重新执行并全部通过。
+- 干净 `npm ci` 后连续两次完整 build 逐字节稳定：CLI
+  `74bf6154…c366`、Server `e2327b62…a07`、Dashboard JS
+  `index-CRNCuoIq.js`（`64fbca9d…299`）、CSS `index-CLLRnTB_.css`
+  （`1200acad…226`）。hooks 512/512、adapters 272/272、bundle 31/31、
+  migration CAS 13/13、npx contracts 39/39、双语 docs 和五套 oracle 全绿。
+  最终冻结 SHA 仍须执行生产浏览器 21 场景矩阵与 exact-SHA 独立复审，
+  在这些证据完成前不宣称 Verify 通过。
+
+## 2026-07-29 · 合并后统一审查当前证据
+
+- Dashboard Workbench 的 header、内建阶段、Track 设置、执行时间线、Hook、Skill 编排、mandatory
+  Skill、产出与可访问名称使用同一 `I18nProvider`；英文回归保留用户自定义中文数据，但拒绝已知产品
+  中文残留。root `npm run test:web` 当前 67/67 文件、1210/1210 tests 通过。
+- Governance 升档确认绑定 root、loop id、自治级、就绪、预算和 graduation 决策事实；逻辑等价的
+  snapshot 对象刷新不再关闭确认，事实变化仍关闭并把焦点归还触发器。
+- 依赖基线 5 Moderate / 1 High / 1 Critical 已收敛为 audit total 0。解析树为 AJV 8.20.0、
+  Vite 6.4.3、Vitest 3.2.7、VitePress 1.6.4；VitePress 的 Vite 6.4.3 override 已通过 root build、
+  Dashboard 全量测试与 docs check/build。
+- CI、pre-tag candidate 与 tag release workflow 现在执行同一
+  `npm run check:dependencies`，同时阻断 High/Critical advisory 与 `npm ls --all` 无效解析树。
+  `Release candidate (pre-tag)` 的验证 job 为只读且 checkout 不持久化凭据；它只接受精确且仍为
+  最新 `main`、并已有成功 canonical push CI 的完整 SHA；首次发布接受新 tag，中断恢复只接受
+  peeled commit 精确等于该 SHA 的现有 tag，成功后发布 digest 规范化的 approval evidence。
+  默认分支拥有的 `workflow_run` writer 重验仓库、workflow、run、artifact 与获批 SHA；创建新
+  tag 前再次要求最新 `main` 精确一致，恢复同 SHA 现有 tag 时则幂等继续。writer 与 packaging
+  均不 checkout/不执行仓库代码，packaging 以 `expected_sha` 再验证 peeled tag commit。
+- 干净 `npm ci` 后，root Vitest 327/327 文件、5741 passed、14 个仓库既有 honest-skip；
+  Dashboard 67/67 文件、1210/1210 tests 通过。生产 build、docs check/build/smoke、架构、
+  注释、仓库卫生、身份、default workflow freshness、文档模板、npx 包、512 hook tests、
+  13 migration CAS tests、golden oracle 与 legacy bridge 均通过。
+- 当前第三次 Build clean production 资产 `assets/index-BwFU9uOX.js` /
+  `assets/index-lJPhasUc.css` 已在真实 Chrome 复验 390px 英文 Automation：三操作按钮全部
+  位于视口、自动换行且键盘焦点可见；工具 Dialog 与真实临时失败 Change 的重试 Dialog 均通过
+  首焦点、Shift+Tab 困笼、Escape 关闭及触发器焦点归位，console/page error 为 0。完整
+  390/720/1024/1440、zh/en、主题、状态与全 Dashboard 矩阵仍由冻结 SHA 的下一轮 Verify 判定；
+  Build 证据见 `docs/superpowers/reports/2026-07-29-post-merge-unified-review-pre-verify.md`。
+
 ## 2026-07-29 · Host Target Plan 当前证据
 
 - CLI/server：12 个固定宿主 × setup/update 真值表、严格 query、Host 守卫、固定 argv、

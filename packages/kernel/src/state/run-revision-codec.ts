@@ -13,6 +13,12 @@ import {
 } from '../types.js'
 import type { StateFieldEffect } from '../workflow/run-types.js'
 import { validateAutomationPolicySnapshot } from '../loops/automation-policy.js'
+import {
+  ownRecord, type PreVerifyReviewAnchor,
+  RUN_STATE_SCHEMA_VERSION,
+  RunStateCorruptError,
+  UnsupportedRunStateVersionError,
+} from './run-revision-validation.js'
 import { withoutWorkflowGovernanceBinding } from './workflow-governance-binding.js'
 
 const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/
@@ -20,10 +26,6 @@ const FIELD_SET = new Set<string>(FIELD_ORDER)
 const LIST_FIELD_SET = new Set<string>(LIST_FIELDS)
 const PRE_VERIFY_REVIEW_ANCHOR_PREFIX = '# tenon-internal-pre-verify-review-v1: '
 const SHA256_RE = /^[0-9a-f]{64}$/
-
-export interface PreVerifyReviewAnchor {
-  readonly schemaVersion: 1; readonly revision: number; readonly revisionId: string; readonly payloadDigest: string
-}
 
 export interface RunStateMutation {
   readonly kind: StateMutationKind
@@ -159,15 +161,6 @@ function withoutPreVerifyReviewField(
 /** Exact rollback-compatible state body used by the schemaVersion=1 wire and YAML projection. */
 export function rollbackCompatibleState(revision: RunRevision): PipelineState {
   return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId)
-}
-
-export class RunStateCorruptError extends Error {
-  readonly _tag = 'RunStateCorruptError'
-}
-
-function ownRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  return Object.fromEntries(Object.entries(value))
 }
 
 function stringField(fields: Record<FieldName, string | string[]>, field: FieldName): string {
@@ -408,13 +401,19 @@ export function parseRunRevision(raw: string, source: string): RunRevision {
     throw new RunStateCorruptError(`${source}: JSON 损坏（${String(error)}）`)
   }
   const record = ownRecord(value)
-  if (!record || Object.keys(record).some((key) => ![
+  if (!record) throw new RunStateCorruptError(`${source}: 顶层字段闭集非法`)
+  if (typeof record.schemaVersion === 'number'
+    && Number.isSafeInteger(record.schemaVersion)
+    && record.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
+    throw new UnsupportedRunStateVersionError(record.schemaVersion)
+  }
+  if (Object.keys(record).some((key) => ![
     'schemaVersion', 'hookState', 'revision', 'revisionId', 'previousRevisionId',
     'state', 'mutation', 'stateDigest',
   ].includes(key))) throw new RunStateCorruptError(`${source}: 顶层字段闭集非法`)
   const hook = ownRecord(record.hookState)
   const mutation = ownRecord(record.mutation)
-  if (record.schemaVersion !== 1
+  if (record.schemaVersion !== RUN_STATE_SCHEMA_VERSION
     || typeof record.revision !== 'number' || !Number.isSafeInteger(record.revision) || record.revision < 0
     || typeof record.revisionId !== 'string' || !SAFE_ID_RE.test(record.revisionId)
     || ((record.revision === 0) !== (record.previousRevisionId === undefined))

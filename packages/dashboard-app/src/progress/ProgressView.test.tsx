@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import gsap from 'gsap'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
 import {
   DEFAULT_RULES,
@@ -66,6 +66,21 @@ const MULTI_EDGE_RULES = rulesFromDef({
   ],
 })
 
+const REVIEW_CHAIN_RULES = rulesFromDef({
+  name: 'review-chain',
+  steps: [
+    {
+      id: 'explore', label: '调研', gate: 'review', skills: [], inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'explore-complete', to: 'spec' }],
+    },
+    {
+      id: 'spec', label: '规格', gate: 'review', skills: [], inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'spec-complete', to: 'build' }],
+    },
+    { id: 'build', label: '实现', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+})
+
 function readyWorkflowExecution(rules: WorkflowRulesSnapshot): WorkflowExecutionSnapshot {
   return {
     readinessByTransition: Object.fromEntries(rules.steps.map((step) => [
@@ -103,6 +118,7 @@ function snapshotRules(rules: WorkflowRules & StepOutputRules): WorkflowRulesSna
 
 const RELEASE_TRAIN_SNAPSHOT_RULES = snapshotRules(RELEASE_TRAIN_RULES)
 const MULTI_EDGE_SNAPSHOT_RULES = snapshotRules(MULTI_EDGE_RULES)
+const REVIEW_CHAIN_SNAPSHOT_RULES = snapshotRules(REVIEW_CHAIN_RULES)
 
 function makeFixture(): Snapshot {
   return makeSnapshot([
@@ -152,10 +168,15 @@ function makeRules(): Map<string, WorkflowRules> {
 }
 
 function renderView(over: Partial<Parameters<typeof ProgressView>[0]> = {}) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="progress-language-en" onClick={() => setLang('en')}>en</button>
+  }
   const onToast = vi.fn()
   const onRefresh = vi.fn()
   render(
     <I18nProvider>
+      <LanguageToggle />
       <ProgressView
         snapshot={makeFixture()}
         loading={false}
@@ -265,8 +286,11 @@ describe('ProgressView 单项目 · 下方在制列表退役（负向钉死不�
 
   it('七阶段 workflow 使用独立横向阅读区，任务卡同时给出名称与人话状态', async () => {
     renderView()
-    expect(screen.getByTestId('prg-cv-scroll-proj-a-default')).toBeInTheDocument()
-    expect(screen.getByTestId('prg-cv-scroll-hint-proj-a-default')).toHaveTextContent('横向滚动查看后续阶段')
+    const viewport = screen.getByTestId('prg-cv-scroll-proj-a-default')
+    expect(viewport).toBeInTheDocument()
+    expect(viewport).toHaveAttribute('tabindex', '0')
+    expect(viewport).toHaveAccessibleName('横向滚动查看后续阶段')
+    expect(screen.queryByTestId('prg-cv-scroll-hint-proj-a-default')).toBeNull()
     expect(screen.getByTestId('prg-cv-chg-hotfix-login')).toHaveTextContent('失败')
     expect(screen.getByTestId('prg-cv-chg-afk-demo')).toHaveTextContent('运行中')
     await act(async () => {})
@@ -650,6 +674,11 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
           fields: { workflow: 'multi-edge' },
           workflowRules: MULTI_EDGE_SNAPSHOT_RULES,
           workflowExecution: readyWorkflowExecution(MULTI_EDGE_SNAPSHOT_RULES),
+          reviewHandshake: {
+            status: 'pending',
+            event: 'fast-track',
+            requestedAt: '2026-07-30T02:00:00Z',
+          },
         })]),
       ]),
       rulesByKey: new Map([[rulesKey(ROOT_A, 'multi-edge'), MULTI_EDGE_RULES]]),
@@ -659,6 +688,9 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
   it('2+ 条同向出边一条不落（评审 P1-1）：首选前进边带目标相位，第 2 条以事件名可点、POST 事件正确', async () => {
     renderMultiEdge()
     await openDrawer('multi-demo')
+    expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('等待明确确认')
+    expect(within(screen.getByTestId('review-handshake-status')).getByText('fast-track'))
+      .toBeInTheDocument()
     expect(screen.getByTestId('prg9-dw-pass-multi-demo').textContent).toContain('放行进入 发布')
     const second = screen.getByTestId('prg9-dw-fw-fast-track-multi-demo')
     expect(second.textContent).toContain('fast-track')
@@ -667,6 +699,54 @@ describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => 
     await waitFor(() => {
       expect(fetchLog.some((l) => l.startsWith('POST /api/change/multi-demo/transition') && l.includes('"event":"fast-track"'))).toBe(true)
     })
+  })
+
+  it('review→review 乐观推进立即消费旧 exact-event receipt，不把 explore 回执显示到 spec', async () => {
+    actionGate = new Promise(() => {})
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('review-chain-demo', 'explore', {
+          fields: { workflow: 'review-chain' },
+          workflowRules: REVIEW_CHAIN_SNAPSHOT_RULES,
+          workflowExecution: readyWorkflowExecution(REVIEW_CHAIN_SNAPSHOT_RULES),
+          reviewHandshake: {
+            status: 'approved',
+            event: 'explore-complete',
+            requestedAt: '2026-07-30T02:00:00Z',
+            acknowledgedAt: '2026-07-30T02:01:00Z',
+          },
+        })]),
+      ]),
+      rulesByKey: new Map([[rulesKey(ROOT_A, 'review-chain'), REVIEW_CHAIN_RULES]]),
+    })
+    await openDrawer('review-chain-demo')
+    fireEvent.click(screen.getByTestId('prg9-dw-pass-review-chain-demo'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('尚未记录复核请求')
+    })
+    expect(screen.queryByText('explore-complete')).not.toBeInTheDocument()
+  })
+
+  it('旧 runtime 缺 handshake capability 时，review→review 乐观推进仍保持 unavailable', async () => {
+    actionGate = new Promise(() => {})
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('old-runtime-review-chain', 'explore', {
+          fields: { workflow: 'review-chain' },
+          workflowRules: REVIEW_CHAIN_SNAPSHOT_RULES,
+          workflowExecution: readyWorkflowExecution(REVIEW_CHAIN_SNAPSHOT_RULES),
+        })]),
+      ]),
+      rulesByKey: new Map([[rulesKey(ROOT_A, 'review-chain'), REVIEW_CHAIN_RULES]]),
+    })
+    await openDrawer('old-runtime-review-chain')
+    fireEvent.click(screen.getByTestId('prg9-dw-pass-old-runtime-review-chain'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-handshake-status')).toHaveTextContent('复核状态不可用')
+    })
+    expect(screen.queryByText('尚未记录复核请求')).not.toBeInTheDocument()
   })
 
   it('transition 失败 → 失败 toast（透传 server error）+ 乐观回滚 + 不触发 onRefresh', async () => {
@@ -757,6 +837,20 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
       expect(onToast).toHaveBeenCalledWith(expect.stringContaining('tenon afk enqueue hotfix-login'))
     })
     expect(fetchLog.some((l) => l.includes('/api/afk/hotfix-login/'))).toBe(false)
+  })
+
+  it('命令复制晚到且期间切为英文时，toast 使用当前语言', async () => {
+    let releaseCopy!: () => void
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { releaseCopy = resolve }))
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    const { onToast } = renderView()
+    await openDrawer('hotfix-login')
+
+    fireEvent.click(screen.getByTestId('prg9-dw-cmd-hotfix-login'))
+    fireEvent.click(screen.getByTestId('progress-language-en'))
+    releaseCopy()
+
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Copied: tenon afk enqueue hotfix-login'))
   })
 
   it('失败行（有 worktree 现场）抽屉 chip=「在终端接管」，拷贝值走 shellQuote（含空格单引号安全转义）', async () => {
@@ -1259,6 +1353,17 @@ describe('ProgressView Bug4：乐观 patch 按 change 落地清除，不被无�
 })
 
 describe('ProgressView 空态', () => {
+  it('只读兼容模式仅保留查看与刷新，不渲染创建、transition 或 cancel 写入口', async () => {
+    renderView({ readOnly: true })
+
+    expect(screen.queryByTestId('progress-new-change')).toBeNull()
+    await openDrawer('gate-demo')
+    expect(screen.queryByTestId('prg9-dw-pass-gate-demo')).toBeNull()
+    expect(screen.queryByTestId('prg9-dw-reject-gate-demo')).toBeNull()
+    await openDrawer('afk-demo')
+    expect(screen.queryByTestId('prg9-dw-kill-afk-demo')).toBeNull()
+  })
+
   it('无在制任务 → 主入口可打开 Route Lock，同时保留 tenon init 退路', async () => {
     renderView({ snapshot: makeSnapshot([makeProject(ROOT_A, [])]) })
     expect(screen.getByTestId('prg-empty').textContent).toContain('tenon init')

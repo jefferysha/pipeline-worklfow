@@ -3,7 +3,7 @@ import { ArrowUpRight, Coffee, LayoutGrid, MoveHorizontal, SlidersHorizontal, Te
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
-import { useCurrentStagePosition } from './useCurrentStagePosition'
+import { useCanvasOverflow, useCurrentStagePosition } from './useCurrentStagePosition'
 import { StageNode, type StageState } from './WorkflowCanvasStage'
 
 gsap.registerPlugin(useGSAP)
@@ -145,6 +145,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
   )
 
   useCurrentStagePosition(rootRef, currentPositionKey)
+  const overflowingGroups = useCanvasOverflow(rootRef, animKey)
 
   if (shown.length === 0) return null
 
@@ -164,10 +165,10 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
 
         return (
           <div key={group.key} className="min-w-0">
-            {n >= 6 && (
+            {overflowingGroups.has(group.key) && (
               <p
                 data-testid={`prg-cv-scroll-hint-${group.projName}-${group.workflow}`}
-                className="mb-2 hidden items-center justify-end gap-1.5 text-[11px] font-medium text-text-3 max-[1100px]:flex"
+                className="mb-2 flex items-center justify-end gap-1.5 text-[11px] font-medium text-text-3"
               >
                 <MoveHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                 {t('progress.canvas_scroll_hint')}
@@ -199,7 +200,10 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                 <div
                   data-testid={`prg-cv-scroll-${group.projName}-${group.workflow}`}
                   data-canvas-scroll
+                  data-scroll-key={group.key}
                   data-current-position-key={`${group.key}#${group.steps.find((step) => step.state === 'current')?.id ?? ''}`}
+                  tabIndex={0}
+                  aria-label={t('progress.canvas_scroll_hint')}
                   className="overflow-x-auto pb-2 [scrollbar-width:thin]"
                 >
                   <div

@@ -1,4 +1,5 @@
 import type { OperationResponse } from '../api/client'
+import { formatServerProse } from '../api/transport'
 import { useT } from '../i18n'
 
 type Obj = Record<string, unknown>
@@ -20,6 +21,8 @@ function resultValue(value: unknown, t: Translate): string {
     ok: t('operations.value_healthy'),
     ready: t('operations.value_ready'),
     blocked: t('operations.value_blocked'),
+    planned: t('operations.value_planned'),
+    'dry-run': t('operations.result_dry_run'),
     true: t('operations.value_yes'),
     false: t('operations.value_no'),
     codex: 'Codex',
@@ -62,8 +65,8 @@ function TriageResult({ result, onOpenChange }: { result: Obj; onOpenChange?: (n
         ].map(([label, value]) => <div key={label} className="rounded-lg bg-fill px-3 py-2"><span className="block text-[10.5px] text-text-3">{label}</span><b className="font-mono text-text">{value}</b></div>)}
       </div>
       <div className="mt-2 rounded-lg border border-border bg-bg px-3 py-2 text-xs">
-        <b className="text-text">checkpoint · {str(checkpoint?.commit)}</b>
-        <span className="ml-2 text-text-3">{str(checkpoint?.sourceId)} · has more {str(checkpoint?.hasMore)}</span>
+        <b className="text-text">{t('operations.result_checkpoint')} · {str(checkpoint?.commit)}</b>
+        <span className="ml-2 text-text-3">{str(checkpoint?.sourceId)} · {t('operations.result_has_more')} {resultValue(checkpoint?.hasMore, t)}</span>
       </div>
       {list(runs?.runs).length > 0 && (
         <ul className="mt-2 grid list-none gap-2 p-0 sm:grid-cols-2">
@@ -84,26 +87,26 @@ function TriageResult({ result, onOpenChange }: { result: Obj; onOpenChange?: (n
 }
 
 function SyncResult({ result }: { result: Obj }): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const summary = obj(result.summary)
   const plan = obj(result.plan)
   const preconditions = obj(plan?.preconditions)
   return (
     <section data-testid="ops-result-sync">
-      <h3 className="text-sm font-bold text-text">{t('operations.result_sync')} · {str(result.status)}</h3>
-      <p className="mt-1 font-mono text-xs text-text-3">plan {str(plan?.plan_id)} · {str(result.mode)} · ops {num(summary?.operations)} · unsupported {num(summary?.unsupported)}</p>
+      <h3 className="text-sm font-bold text-text">{t('operations.result_sync')} · {resultValue(result.status, t)}</h3>
+      <p className="mt-1 font-mono text-xs text-text-3">{t('operations.result_plan')} {str(plan?.plan_id)} · {resultValue(result.mode, t)} · {t('operations.result_operations')} {num(summary?.operations)} · {t('operations.result_unsupported')} {num(summary?.unsupported)}</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs"><b className="text-text">registry CAS</b><code className="mt-1 block break-all text-text-3">{epoch(preconditions?.registry_epoch)}</code></div>
-        <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs"><b className="text-text">LOOP.md CAS</b><code className="mt-1 block break-all text-text-3">{epoch(preconditions?.loop_doc_epoch)}</code></div>
+        <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs"><b className="text-text">{t('operations.result_registry_cas')}</b><code className="mt-1 block break-all text-text-3">{epoch(preconditions?.registry_epoch)}</code></div>
+        <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs"><b className="text-text">{t('operations.result_loop_doc_cas')}</b><code className="mt-1 block break-all text-text-3">{epoch(preconditions?.loop_doc_epoch)}</code></div>
       </div>
       {list(plan?.operations).length > 0 && <ul className="mt-2 list-none space-y-1 p-0">{list(plan?.operations).map((value, index) => { const operation = obj(value) ?? {}; return <li key={index} className="rounded bg-fill px-2 py-1 text-xs"><code>{str(operation.kind)}</code> · {str(operation.loop_id)} → {str(operation.target)}</li> })}</ul>}
-      {list(plan?.blockers).length > 0 && <ul className="mt-2 list-none space-y-1 p-0">{list(plan?.blockers).map((value, index) => { const blocker = obj(value) ?? {}; return <li key={index} className="rounded border border-red-b bg-red-t px-2 py-1.5 text-xs text-red-d"><b>{str(blocker.reason)}</b> · {str(blocker.next_step)}</li> })}</ul>}
+      {list(plan?.blockers).length > 0 && <ul className="mt-2 list-none space-y-1 p-0">{list(plan?.blockers).map((value, index) => { const blocker = obj(value) ?? {}; return <li key={index} className="rounded border border-red-b bg-red-t px-2 py-1.5 text-xs text-red-d"><b>{resultValue(blocker.reason, t)}</b> · {formatServerProse(blocker.next_step, t, { exposeServerDetail: lang === 'zh', fallback: t('common.server_detail_unavailable') })}</li> })}</ul>}
     </section>
   )
 }
 
 function RunResult({ result, onOpenChange }: { result: Obj; onOpenChange?: (name: string) => void }): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const previews = list(result.previews)
   const groups = list(result.groups)
   return (
@@ -131,7 +134,7 @@ function RunResult({ result, onOpenChange }: { result: Obj; onOpenChange?: (name
         const targets = list(group.targets)
         return <article key={index} className="rounded-lg border border-border bg-bg px-3 py-2 text-xs">
           <b className="text-text">{str(group.level)}</b>
-          <div className="mt-1 text-text-3">{t('operations.result_targets', { count: targets.length })} · {group.error ? `${t('operations.result_error')} ${str(group.error)}` : `${t('operations.result_status')} ${resultValue(run?.status ?? run?.ok, t)}`}</div>
+          <div className="mt-1 text-text-3">{t('operations.result_targets', { count: targets.length })} · {group.error ? `${t('operations.result_error')} ${formatServerProse(group.error, t, { exposeServerDetail: lang === 'zh', fallback: t('common.server_detail_unavailable') })}` : `${t('operations.result_status')} ${resultValue(run?.status ?? run?.ok, t)}`}</div>
           {onOpenChange && targets.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{targets.map((targetValue, targetIndex) => {
             const target = obj(targetValue)
             const changeName = typeof target?.change === 'string' && target.change !== '' ? target.change : null

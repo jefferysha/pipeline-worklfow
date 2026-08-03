@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import type { WbStepDef } from './WorkbenchView'
 import { StepPolicyEditor } from './StepPolicyEditor'
+
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
 
 const STEP: WbStepDef = {
   id: 'verify', label: '验证', gate: 'review', prompt: 'Run API checks.',
@@ -21,6 +25,36 @@ function setup(): ReturnType<typeof vi.fn> {
 }
 
 describe('StepPolicyEditor · 完整 Workflow Step IR', () => {
+  it('English locale covers the full policy editor, including collapsed sections', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    setup()
+    const editor = screen.getByTestId('step-policy-editor')
+    for (const label of [
+      'Phase settings',
+      'Required inputs',
+      'Phase outputs',
+      'Persisted artifacts',
+      'Event',
+      'Edge guards',
+      'Actions',
+    ]) {
+      expect(editor).toHaveTextContent(label)
+    }
+    expect(editor).not.toHaveTextContent('阶段设置')
+    expect(editor).not.toHaveTextContent('必需输入')
+    expect(editor).not.toHaveTextContent('持久化产物')
+    expect(screen.getByLabelText('verification_report artifact field')).toBeInTheDocument()
+    expect(screen.getByLabelText('verification_report producer policy')).toBeInTheDocument()
+    expect(screen.getByLabelText('verification_report artifact tracks')).toBeInTheDocument()
+  })
+
+  it('中文 artifact 可访问名称本地化，技术字段值保持原样', () => {
+    setup()
+    expect(screen.getByLabelText('verification_report 产物字段')).toBeInTheDocument()
+    expect(screen.getByLabelText('verification_report 产出策略')).toBeInTheDocument()
+    expect(screen.getByLabelText('verification_report 适用轨道')).toBeInTheDocument()
+  })
+
   it('标题说明设置用于自动运行，不重复展示内部 step id 或“高级编排”', () => {
     setup()
     const editor = screen.getByTestId('step-policy-editor')

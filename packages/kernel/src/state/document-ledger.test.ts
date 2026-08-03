@@ -6,11 +6,20 @@ import { afterEach, describe, expect, test } from 'vitest'
 import {
   DocumentLedgerError,
   ensureDocumentLedger,
+  MAX_DOCUMENT_LEDGER_BYTES,
+  MAX_DOCUMENT_LEDGER_RECORDS,
   migrateLegacyDeltaDocument,
+  parseDocumentLedger,
+  readDocumentLedger,
   recordDocument,
   recordDocumentReads,
 } from './document-ledger.js'
 import { evaluateDocumentEvidence } from './document-evidence.js'
+import {
+  MAX_DOCUMENT_SOURCE_BYTES,
+  readBoundedFileHandle,
+  resolveDocument,
+} from './document-path.js'
 import { emptyFields } from './parse.js'
 import { LEGACY_DOCUMENT_GOVERNANCE_POLICY } from '../workflow/document-contract.js'
 import {
@@ -51,6 +60,64 @@ async function writeDoc(root: string, relativePath: string, content = '# evidenc
   await mkdir(join(target, '..'), { recursive: true })
   await writeFile(target, content, 'utf8')
 }
+
+test('document ledger 在解析和磁盘读取前执行条目/字节硬上限', async () => {
+  const { changeDir } = await fixture()
+  const records = Array.from({ length: MAX_DOCUMENT_LEDGER_RECORDS + 1 }, (_, index) => ({
+    kind: 'proposal',
+    path: `docs/${index}.md`,
+    sha256: 'a'.repeat(64),
+    producer: 'tenon-spec',
+    recordedAt: NOW,
+    reads: [],
+  }))
+  expect(() => parseDocumentLedger(JSON.stringify({
+    version: 1,
+    contract: 'openspec-v1',
+    createdAt: NOW,
+    records,
+  }))).toThrow(/records 超过/)
+  await writeFile(
+    join(changeDir, '.pipeline-documents.json'),
+    Buffer.alloc(MAX_DOCUMENT_LEDGER_BYTES + 1, 0x20),
+  )
+  await expect(readDocumentLedger(changeDir)).rejects.toThrow(/bytes 上限/)
+})
+
+test('document record 在 digest 前拒绝超过单文档硬上限的来源', async () => {
+  const { root, changeDir } = await fixture()
+  const relativePath = 'docs/oversized.md'
+  await writeDoc(root, relativePath, 'x'.repeat(MAX_DOCUMENT_SOURCE_BYTES + 1))
+  await expect(recordDocument({
+    repoRoot: root,
+    changeDir,
+    phase: 'open',
+    kind: 'proposal',
+    path: relativePath,
+    producer: 'tenon-spec',
+    recordedAt: NOW,
+  })).rejects.toThrow(/document 超过/)
+})
+
+test('document ledger 在 fstat 后增长时仍由 max + 1 fd 读取拒绝', async () => {
+  const { changeDir } = await fixture()
+  const target = join(changeDir, '.pipeline-documents.json')
+  await expect(readDocumentLedger(changeDir, async (handle, maxBytes) => {
+    await appendFile(target, Buffer.alloc(maxBytes + 1, 0x20))
+    return readBoundedFileHandle(handle, maxBytes)
+  })).rejects.toThrow(/bytes 上限|读取期间变化/)
+})
+
+test('document source 在 fstat 后增长时仍由 max + 1 fd 读取拒绝', async () => {
+  const { root } = await fixture()
+  const relativePath = 'docs/growing.md'
+  const target = join(root, relativePath)
+  await writeDoc(root, relativePath)
+  await expect(resolveDocument(root, relativePath, async (handle, maxBytes) => {
+    await appendFile(target, Buffer.alloc(maxBytes + 1, 0x78))
+    return readBoundedFileHandle(handle, maxBytes)
+  })).rejects.toThrow(/bytes 上限|读取期间变化/)
+})
 
 async function appendSkillHistory(changeDir: string, ...skills: string[]): Promise<void> {
   const jsonl = skills.map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')

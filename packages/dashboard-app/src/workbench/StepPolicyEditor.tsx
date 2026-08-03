@@ -18,9 +18,11 @@ const SUMMARY = 'cursor-pointer select-none py-3 text-[13px] font-bold text-text
 const GUARD_TYPES: WbGuardConfig['type'][] = [
   'tasks-at-least', 'nonempty-output', 'field-nonempty', 'file-exists',
   'field-equals', 'field-in', 'full-direct-override', 'build-head-unchanged',
+  'spec-migration-applied',
 ]
 const ACTION_TYPES: WbActionConfig['type'][] = [
-  'freeze-build-sha', 'mark-verification-passed', 'mark-verification-failed', 'archive-run',
+  'freeze-build-sha', 'mark-verification-passed', 'mark-verification-failed',
+  'reset-pre-verify-review', 'archive-run',
 ]
 
 function csv(value: string): string[] {
@@ -37,6 +39,7 @@ function guardFactory(type: WbGuardConfig['type']): WbGuardConfig {
     case 'field-in': return { type, field: 'isolation', values: ['branch'] }
     case 'full-direct-override': return { type }
     case 'build-head-unchanged': return { type, field: 'build_sha' }
+    case 'spec-migration-applied': return { type }
   }
 }
 
@@ -93,7 +96,7 @@ function GuardRow({ guard, readonly, label, onChange, onRemove }: {
           </>
         )}
         {guard.type === 'build-head-unchanged' && <p className="text-xs text-text-3">build_sha</p>}
-        {(guard.type === 'nonempty-output' || guard.type === 'full-direct-override') && (
+        {(guard.type === 'nonempty-output' || guard.type === 'full-direct-override' || guard.type === 'spec-migration-applied') && (
           <p className="col-span-2 text-xs leading-relaxed text-text-3 mobile:col-span-1">{t(`workbench.step_guard_note_${guard.type}`)}</p>
         )}
       </div>
@@ -199,9 +202,9 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
     <section className="mt-4 rounded-xl border border-border bg-fill/40 p-4" data-testid="step-policy-editor" aria-label={t('workbench.step_editor_label', { id: step.id })}>
       <div className="mb-1 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold tracking-[.12em] text-accent-d">阶段设置</p>
+          <p className="text-[11px] font-bold tracking-[.12em] text-accent-d">{t('workbench.step_settings_kicker')}</p>
           <h3 className="mt-1 text-[16px] font-bold text-text">{step.label || step.id}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-text-3">这些设置会在自动运行进入本阶段时生效。</p>
+          <p className="mt-1 text-xs leading-relaxed text-text-3">{t('workbench.step_settings_note')}</p>
         </div>
       </div>
 
@@ -227,24 +230,24 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
       <details className="border-t border-border">
         <summary className={SUMMARY}>{t('workbench.step_contracts_title', { inputs: step.inputs.length, outputs: step.outputs.length })}</summary>
         <div className="grid grid-cols-2 gap-4 max-[900px]:grid-cols-1">
-          <div className={CARD}><h4 className="mb-2 text-[12.5px] font-bold">所需输入</h4>{renderRefs('inputs', step.inputs)}</div>
-          <div className={CARD}><h4 className="mb-2 text-[12.5px] font-bold">阶段产出</h4>{renderRefs('outputs', step.outputs)}</div>
+          <div className={CARD}><h4 className="mb-2 text-[12.5px] font-bold">{t('workbench.step_inputs_heading')}</h4>{renderRefs('inputs', step.inputs)}</div>
+          <div className={CARD}><h4 className="mb-2 text-[12.5px] font-bold">{t('workbench.step_outputs_heading')}</h4>{renderRefs('outputs', step.outputs)}</div>
         </div>
         <div className={`${CARD} mt-3`}>
-          <h4 className="mb-2 text-[12.5px] font-bold">落盘文件</h4>
+          <h4 className="mb-2 text-[12.5px] font-bold">{t('workbench.step_artifacts_heading')}</h4>
           <div className="grid gap-2">
             {artifacts.length === 0 && <p className="text-xs text-text-3" role="status" aria-live="polite">{t('workbench.step_none')}</p>}
             {artifacts.map((artifact, index) => (
               <div key={`${artifact.field}-${index}`} className="grid grid-cols-[minmax(0,1fr)_190px_140px_minmax(0,1fr)_auto] gap-2 max-[1000px]:grid-cols-2 mobile:grid-cols-1">
-                <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={`${artifact.field} artifact`} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
-                <select className={SELECT} value={artifact.producerPolicy} disabled={readonly} aria-label={`${artifact.field} producer policy`} onChange={(event) => updateArtifact(index, { ...artifact, producerPolicy: event.target.value as WbArtifactConfig['producerPolicy'] })}>
+                <input className={INPUT} value={artifact.field} disabled={readonly} aria-label={t('workbench.step_artifact_field_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, field: event.target.value })} />
+                <select className={SELECT} value={artifact.producerPolicy} disabled={readonly} aria-label={t('workbench.step_artifact_producer_policy_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, producerPolicy: event.target.value as WbArtifactConfig['producerPolicy'] })}>
                   <option value="effective-step-skills">effective-step-skills</option>
                   <option value="effective-phase-skills">effective-phase-skills</option>
                 </select>
                 <select className={SELECT} value={artifact.requiredWhen?.kind ?? ''} disabled={readonly} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: event.target.value === '' ? undefined : { kind: event.target.value as WbTrackPredicate['kind'], values: artifact.requiredWhen?.values ?? ['backend'] } })}>
                   <option value="">{t('workbench.step_all_tracks')}</option><option value="track-in">track-in</option><option value="track-not-in">track-not-in</option>
                 </select>
-                <input className={INPUT} value={artifact.requiredWhen?.values.join(', ') ?? ''} disabled={readonly || !artifact.requiredWhen} aria-label={`${artifact.field} artifact tracks`} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: artifact.requiredWhen ? { ...artifact.requiredWhen, values: csv(event.target.value) } : undefined })} />
+                <input className={INPUT} value={artifact.requiredWhen?.values.join(', ') ?? ''} disabled={readonly || !artifact.requiredWhen} aria-label={t('workbench.step_artifact_tracks_label', { field: artifact.field })} onChange={(event) => updateArtifact(index, { ...artifact, requiredWhen: artifact.requiredWhen ? { ...artifact.requiredWhen, values: csv(event.target.value) } : undefined })} />
                 {!readonly && <button className={DANGER} type="button" onClick={() => onChange({ ...step, artifacts: artifacts.filter((_, i) => i !== index) })}>{t('workbench.step_remove')}</button>}
               </div>
             ))}
@@ -272,14 +275,14 @@ export function StepPolicyEditor({ step, allStepIds, readonly = false, onChange 
             return (
               <div className={CARD} key={`${transition.event}-${index}`}>
                 <div className="grid grid-cols-[minmax(0,1fr)_180px_auto] gap-2 mobile:grid-cols-1">
-                  <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">Event<input className={INPUT} value={transition.event} disabled={readonly} aria-label={`${transition.event} event`} onChange={(event) => update({ event: event.target.value })} /></label>
+                  <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">{t('workbench.step_event_label')}<input className={INPUT} value={transition.event} disabled={readonly} aria-label={`${transition.event} ${t('workbench.step_event_label')}`} onChange={(event) => update({ event: event.target.value })} /></label>
                   <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">{t('workbench.step_target')}<select className={SELECT} value={transition.to} disabled={readonly} aria-label={`${transition.event} ${t('workbench.step_target')}`} onChange={(event) => update({ to: event.target.value })}>{allStepIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
                   {!readonly && <button className={`${DANGER} self-end`} type="button" onClick={() => onChange({ ...step, transitions: step.transitions.filter((_, i) => i !== index) })}>{t('workbench.step_remove')}</button>}
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
-                  <div><h5 className="mb-2 text-xs font-bold">Edge guards</h5><GuardList guards={transition.guards ?? []} readonly={readonly} addLabel={`${transition.event} ${t('workbench.step_add_action_guard')}`} onChange={(guards) => update({ guards })} /></div>
+                  <div><h5 className="mb-2 text-xs font-bold">{t('workbench.step_edge_guards_heading')}</h5><GuardList guards={transition.guards ?? []} readonly={readonly} addLabel={`${transition.event} ${t('workbench.step_add_action_guard')}`} onChange={(guards) => update({ guards })} /></div>
                   <div>
-                    <h5 className="mb-2 text-xs font-bold">Actions</h5>
+                    <h5 className="mb-2 text-xs font-bold">{t('workbench.step_actions_heading')}</h5>
                     <div className="grid gap-2">
                       {(transition.actions ?? []).map((action, actionIndex) => <div key={`${action.type}-${actionIndex}`} className="flex items-center gap-2 rounded-md border border-border bg-bg/60 p-2"><code className="min-w-0 flex-1 text-[11.5px] text-accent-d">{action.type}</code>{!readonly && <button className={DANGER} type="button" onClick={() => update({ actions: (transition.actions ?? []).filter((_, i) => i !== actionIndex) })}>{t('workbench.step_remove')}</button>}</div>)}
                       {!readonly && <select className={SELECT} value="" aria-label={`${transition.event} ${t('workbench.step_add_action')}`} onChange={(event) => event.target.value && update({ actions: [...(transition.actions ?? []), { type: event.target.value as WbActionConfig['type'] }] })}><option value="">{t('workbench.step_add_action')}</option>{ACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select>}

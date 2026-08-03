@@ -12,8 +12,8 @@ export interface EvidencePartProps {
 }
 
 export function StageChip({ chip, onCopy }: EvidencePartProps): JSX.Element {
-  const { t } = useT()
-  const presentation = outputPresentation(chip.key)
+  const { lang, t } = useT()
+  const presentation = outputPresentation(chip.key, lang)
   if (chip.unset) {
     return (
       <span
@@ -30,7 +30,7 @@ export function StageChip({ chip, onCopy }: EvidencePartProps): JSX.Element {
         className="inline-flex h-[22px] items-center gap-1 rounded-[7px] border border-border bg-fill px-[7px] font-mono text-[11.5px] text-text-2"
         data-testid={`dtl-chip-${chip.key}`}
       >
-        <span title={presentation.title}>{presentation.label}</span>：{outputValuePresentation(chip.value)}
+        <span title={presentation.title}>{presentation.label}</span>：{outputValuePresentation(chip.value, lang)}
       </span>
     )
   }
@@ -50,8 +50,8 @@ export function StageChip({ chip, onCopy }: EvidencePartProps): JSX.Element {
 }
 
 export function BoxField({ chip, onCopy }: EvidencePartProps): JSX.Element {
-  const { t } = useT()
-  const presentation = outputPresentation(chip.key)
+  const { lang, t } = useT()
+  const presentation = outputPresentation(chip.key, lang)
   const tone = chip.unset ? 'miss' : chip.tone === 'pass' ? 'pass' : chip.tone === 'fail' ? 'fail' : 'plain'
   const valueClass = tone === 'pass'
     ? 'font-bold text-green-d'
@@ -64,7 +64,7 @@ export function BoxField({ chip, onCopy }: EvidencePartProps): JSX.Element {
       data-state={tone}
       data-testid={`dt-field-${chip.key}`}
     >
-      <div className="text-[11px] font-semibold text-text-2 [overflow-wrap:anywhere]" title={`${presentation.title}（字段：${chip.key}）`}>
+      <div className="text-[11px] font-semibold text-text-2 [overflow-wrap:anywhere]" title={`${presentation.title} (${chip.key})`}>
         {presentation.label}
       </div>
       {chip.copyable && !chip.unset ? (
@@ -79,7 +79,7 @@ export function BoxField({ chip, onCopy }: EvidencePartProps): JSX.Element {
         </button>
       ) : (
         <div className={`text-xs [overflow-wrap:anywhere] ${valueClass}`}>
-          {chip.unset ? t('evidence.unset') : outputValuePresentation(chip.value)}
+          {chip.unset ? t('evidence.unset') : outputValuePresentation(chip.value, lang)}
         </div>
       )}
     </div>

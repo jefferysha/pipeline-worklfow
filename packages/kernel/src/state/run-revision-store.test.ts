@@ -81,6 +81,34 @@ async function rebindCompanion(dir: string, record: Record<string, unknown>): Pr
 }
 
 describe('G1 canonical revision 对抗校验', () => {
+  test('明确未来 schemaVersion 即使含未知顶层字段也给出稳定版本边界，不误报 corruption', () => {
+    let thrown: unknown
+    try {
+      parseRunRevision(JSON.stringify({
+        schemaVersion: 2,
+        futureField: { mustNotBeRead: true },
+      }), '/private/worktree/openspec/changes/future/.pipeline-run/current.json')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({
+      _tag: 'UnsupportedRunStateVersionError',
+      foundVersion: 2,
+      supportedVersion: 1,
+    })
+  })
+
+  test.each([
+    ['字符串', '2'],
+    ['分数', 1.5],
+    ['不安全整数', Number.MAX_SAFE_INTEGER + 1],
+    ['低版本', 0],
+  ])('无法证明为未来版本的 schemaVersion（%s）仍按 corruption 失败关闭', (_label, schemaVersion) => {
+    expect(() => parseRunRevision(JSON.stringify({ schemaVersion }), 'current'))
+      .toThrow(/顶层字段闭集非法|canonical revision 字段非法/)
+  })
+
   test('pre-Verify 逻辑 canonical 值由 revision companion 恢复，wire 对 N-1 保持旧闭集', async () => {
     const { dir } = await fresh()
     const store = createStateStore()

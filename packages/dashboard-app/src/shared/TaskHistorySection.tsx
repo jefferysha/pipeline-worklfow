@@ -8,7 +8,7 @@ export interface TaskHistorySectionProps {
 }
 
 export function TaskHistorySection({ entries }: TaskHistorySectionProps): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
   const flowEntries = entries?.filter(
     (entry) => entry.kind === 'transition' || entry.kind === 'init' || entry.kind === 'import',
   ) ?? null
@@ -23,7 +23,7 @@ export function TaskHistorySection({ entries }: TaskHistorySectionProps): JSX.El
         <ol className="m-0 flex max-h-[180px] list-none flex-col gap-[5px] overflow-y-auto p-0" data-testid="dt-hist">
           {flowEntries.map((entry, index) => (
             <li className="flex items-baseline gap-2 text-xs" data-testid={`dt-hist-${index}`} key={`${entry.ts}-${index}`}>
-              <span className="font-mono whitespace-nowrap text-text-3">{shortTime(entry.ts)}</span>
+              <span className="font-mono whitespace-nowrap text-text-3">{shortTime(entry.ts, lang)}</span>
               <span className="text-text-2 [overflow-wrap:anywhere]">{historyText(entry, t)}</span>
             </li>
           ))}

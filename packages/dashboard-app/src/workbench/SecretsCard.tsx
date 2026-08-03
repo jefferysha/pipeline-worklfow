@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { deleteSecret, fetchSecrets, postSecret, type WbSecretsKeys } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 import { WbAdvanced, WB_TW } from './LoopCard'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -28,16 +29,32 @@ type EditableKey = (typeof EDITABLE_KEYS)[number]
 export interface SecretsCardProps {
   /** 保存/删除成功后的宿主通知(就绪三灯重拉)。 */
   onChanged?: () => void
+  /** write-only 输入里只有真实非空用户草稿才算未保存。 */
+  onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
-export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
-  const { t } = useT()
+export function SecretsCard({ onChanged, onDirtyChange, onBusyChange }: SecretsCardProps): JSX.Element {
+  const { t, lang } = useT()
   const [keys, setKeys] = useState<WbSecretsKeys | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editing, setEditing] = useState<EditableKey | null>(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
-  const [opError, setOpError] = useState<string | null>(null)
+  const [opError, setOpError] = useState<unknown | null>(null)
+  const dirty = editing !== null && draft !== ''
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
+  useEffect(() => {
+    onBusyChange?.(busy)
+  }, [busy, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
 
   // Bug7：reload seq 守卫（参照 SkillChain/SkillHealthPanel）——挂载 + 每次保存/删除后都重拉，
   // 无守卫时慢响应会盖快响应（out-of-order），卸载后回来则 setState-after-unmount。每次 reload 递增
@@ -53,7 +70,7 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
       })
       .catch((err: unknown) => {
         if (seqRef.current !== seq) return
-        setLoadError(t('workbench.sc_load_error', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+        setLoadError(err)
       })
   }
   // 挂载拉一次(机器级资源,与 root 无关)；卸载令在途 reload 失效。
@@ -81,7 +98,7 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
       reload()
       onChanged?.()
     } catch (err) {
-      setOpError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+      setOpError(err)
     } finally {
       setBusy(false)
     }
@@ -96,7 +113,7 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
       reload()
       onChanged?.()
     } catch (err) {
-      setOpError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+      setOpError(err)
     } finally {
       setBusy(false)
     }
@@ -115,8 +132,8 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
         <span className="flex-1" />
         <span className={WB_TW.headSub}>{t('workbench.sc_head_sub')}</span>
       </div>
-      {loadError && <p className={WB_TW.loadError} data-tone="error" data-testid="sc-load-error" role="alert">{loadError}</p>}
-      {opError && <p className={WB_TW.loadError} data-tone="error" role="alert" data-testid="sc-op-error">{opError}</p>}
+      {loadError !== null && <p className={WB_TW.loadError} data-tone="error" data-testid="sc-load-error" role="alert">{t('workbench.sc_load_error', { msg: formatApiError(loadError, t, { exposeServerDetail: lang === 'zh' }) })}</p>}
+      {opError !== null && <p className={WB_TW.loadError} data-tone="error" role="alert" data-testid="sc-op-error">{formatApiError(opError, t, { exposeServerDetail: lang === 'zh' })}</p>}
       {keys && (
         <div className={WB_TW.sec} data-sec="">
           {EDITABLE_KEYS.map((key) => {

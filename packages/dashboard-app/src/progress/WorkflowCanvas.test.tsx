@@ -115,6 +115,37 @@ describe('WorkflowCanvas 组与站点（单项目）', () => {
     const viewport = screen.getByTestId('prg-cv-scroll-proj-a-flow-x')
     expect(viewport).toHaveAttribute('data-canvas-scroll')
     expect(viewport.className).toContain('overflow-x-auto')
+    expect(viewport).toHaveAttribute('tabindex', '0')
+    expect(viewport).toHaveAccessibleName('横向滚动查看后续阶段')
+  })
+
+  it('按真实 scrollWidth 显示宽屏滚动提示，不依赖固定 viewport breakpoint', async () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    const originalScrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() { return this.hasAttribute('data-canvas-scroll') ? 1_000 : 0 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() { return this.hasAttribute('data-canvas-scroll') ? 1_624 : 0 },
+    })
+    try {
+      const steps = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']
+        .map((id) => step(id, { label: id }))
+      renderCanvas([makeGroup({
+        steps,
+        changes: [chg({ key: 'active@/tmp/proj-a', name: 'active', phase: 'build' })],
+      })])
+
+      fireEvent(window, new Event('resize'))
+      expect(await screen.findByTestId('prg-cv-scroll-hint-proj-a-flow-x')).toBeVisible()
+    } finally {
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      if (originalScrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth')
+    }
   })
 
   it('有在制步骤保留阶段、件数和 gate 语义，但按终稿统一使用 done/current/pending 圆形时间线节点', () => {

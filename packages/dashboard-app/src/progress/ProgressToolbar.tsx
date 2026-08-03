@@ -13,7 +13,7 @@ export interface ProgressToolbarProps {
   workflow: string
   onDeckTab: (tab: DeckTab) => void
   onWorkflow: (workflow: string) => void
-  onCreate: () => void
+  onCreate?: () => void
 }
 
 export function ProgressToolbar({
@@ -68,7 +68,7 @@ export function ProgressToolbar({
             {t('progress.realtime_sync')}
           </span>
         )}
-        actions={(
+        actions={onCreate === undefined ? undefined : (
           <button
             type="button"
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-btn-bg px-4 text-sm font-semibold text-btn-fg shadow-sm transition-[background-color,transform,box-shadow] duration-150 hover:bg-btn-hover hover:shadow-md active:translate-y-px motion-reduce:transform-none"

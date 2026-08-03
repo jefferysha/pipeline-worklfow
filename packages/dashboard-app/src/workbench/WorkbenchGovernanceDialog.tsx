@@ -1,25 +1,43 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { ChangeHistoryEntry } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
+import { UnsavedDraftDialog, useDiscardGuard } from '../shared/UnsavedDraftDialog'
 import type { LoopsState } from './useLoops'
 import { WorkbenchSideRail } from './WorkbenchSideRail'
 import { BTN_GHOST, NOTE, SIDE_BODY, SIDE_CARD, SIDE_HEAD, SIDE_HEAD_B, SIDE_ROW, SIDE_ROW_LABEL, SIDE_ROW_VALUE } from './workbenchStyles'
 
-export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recentSilent, onClose }: {
+export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recentSilent, onClose, onDirtyChange }: {
   root: string
   loops: LoopsState
   summary: { stages: number; gates: number; skills: number; hooks: number | null } | null
   recent: Array<ChangeHistoryEntry & { change: string }> | null
   recentSilent: number
   onClose: () => void
+  onDirtyChange?: (source: 'loop' | 'automation' | 'secrets', dirty: boolean) => void
 }): JSX.Element {
   const { t } = useT()
   const [nonce, setNonce] = useState(0)
+  const [drafts, setDrafts] = useState({ loop: false, automation: false, secrets: false })
+  const [mutations, setMutations] = useState({ loop: false, automation: false, secrets: false })
+  const discardGuard = useDiscardGuard()
+  const reportDirty = useCallback((source: 'loop' | 'automation' | 'secrets', dirty: boolean) => {
+    setDrafts((current) => current[source] === dirty ? current : { ...current, [source]: dirty })
+    onDirtyChange?.(source, dirty)
+  }, [onDirtyChange])
+  const reportBusy = useCallback((source: 'loop' | 'automation' | 'secrets', busy: boolean) => {
+    setMutations((current) => current[source] === busy ? current : { ...current, [source]: busy })
+  }, [])
+  const requestClose = useCallback(() => {
+    if (Object.values(mutations).some(Boolean)) return
+    discardGuard.request(Object.values(drafts).some(Boolean), onClose)
+  }, [discardGuard, drafts, mutations, onClose])
+  const mutationBusy = Object.values(mutations).some(Boolean)
   return (
-    <Dialog title="运行治理" onClose={onClose} testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} onClick={onClose}>关闭</button>}>
-      <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
-        <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)}>
+    <>
+      <Dialog title={t('workbench.governance_dialog_title')} onClose={requestClose} closeLabel={t('workbench.track_cancel')} closeTestid="wb-governance-close-icon" testid="wb-advanced-orchestration" panelClassName="w-[min(900px,94vw)]" variant="workspace" actions={<button className={BTN_GHOST} data-testid="wb-governance-close-action" disabled={mutationBusy} onClick={requestClose}>{t('workbench.track_cancel')}</button>}>
+        <aside className="mx-auto w-full max-w-[820px]" data-testid="wb-side-col">
+          <WorkbenchSideRail root={root} loops={loops} rdNonce={nonce} onSecretsChanged={() => setNonce((value) => value + 1)} onDirtyChange={reportDirty} onBusyChange={reportBusy}>
           <div className={SIDE_CARD}>
             <div className={SIDE_HEAD}><b className={SIDE_HEAD_B}>{t('workbench.summary_title')}</b></div>
             <div className={`${SIDE_BODY} divide-y divide-border`}>
@@ -42,8 +60,15 @@ export function WorkbenchGovernanceDialog({ root, loops, summary, recent, recent
               {recent !== null && recentSilent > 0 && <p className={NOTE} data-testid="wb-recent-legacy">{t('workbench.recent_legacy', { n: recentSilent })}</p>}
             </div>
           </div>
-        </WorkbenchSideRail>
-      </aside>
-    </Dialog>
+          </WorkbenchSideRail>
+        </aside>
+      </Dialog>
+      <UnsavedDraftDialog
+        open={discardGuard.confirmOpen}
+        testid="wb-governance-unsaved-draft"
+        onStay={discardGuard.stay}
+        onDiscard={discardGuard.discard}
+      />
+    </>
   )
 }

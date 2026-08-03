@@ -10,6 +10,7 @@ import type {
 import {
   decodeAfkReadiness,
   decodeAutomationSettingsEnvelope,
+  decodeNormalizedAutomationSettings,
   decodeCadenceStatus,
   decodeDockerImages,
   decodeOperationResponse,
@@ -27,6 +28,26 @@ async function decodeResponse<T>(
   const body = decode(await readJson(response))
   if (!body) throw new ApiError(invalidMessage, response.status)
   return body
+}
+
+function decodeOkSuccess(value: unknown): { ok: true } | null {
+  return isRecord(value) && value.ok === true && Object.keys(value).length === 1
+    ? { ok: true }
+    : null
+}
+
+function decodeAutomationSettingsSuccess(value: unknown): WbAutomationSettings | null {
+  return isRecord(value)
+    && value.ok === true
+    && Object.keys(value).length === 2
+    && Object.prototype.hasOwnProperty.call(value, 'settings')
+    ? decodeNormalizedAutomationSettings(value.settings)
+    : null
+}
+
+async function requireOkSuccess(response: Response, fallback: string): Promise<void> {
+  if (!response.ok) await throwApiError(response, fallback)
+  await decodeResponse(response, decodeOkSuccess, `${fallback}响应形状无效`)
 }
 
 export async function fetchAutomationSettings(root: string): Promise<WbAutomationSettings> {
@@ -56,6 +77,7 @@ export async function postAutomationSettings(input: {
     wrapNetwork(error)
   }
   if (!response.ok) await throwApiError(response, 'AFK 执行配置写回失败')
+  await decodeResponse(response, decodeAutomationSettingsSuccess, 'AFK 执行配置写回响应形状无效')
 }
 
 export async function fetchAutomationStarters(root: string): Promise<AutomationStarterTemplate[]> {
@@ -101,7 +123,7 @@ async function postOperation(path: string, input: Record<string, unknown>): Prom
     const detail = isRecord(raw) && typeof raw.error === 'string'
       ? raw.error
       : `操作响应形状无效（${response.status}）`
-    throw new ApiError(detail, response.status)
+    throw new ApiError(detail, response.status, isRecord(raw) && typeof raw.error === 'string')
   }
   return body
 }
@@ -166,7 +188,7 @@ async function postAfkAction(
   } catch (error) {
     wrapNetwork(error)
   }
-  if (!response.ok) await throwApiError(response, fallback)
+  await requireOkSuccess(response, fallback)
 }
 
 export const postAfkEnqueue = (name: string, root: string): Promise<void> =>
@@ -179,33 +201,45 @@ export const postAfkDismiss = (name: string, root: string): Promise<void> =>
   postAfkAction(name, root, 'dismiss', '放弃失败')
 
 export async function fetchDockerImages(): Promise<WbDockerImages> {
-  const response = await fetch('/api/docker/images', { headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  let response: Response
+  try {
+    response = await fetch('/api/docker/images', { headers: { Accept: 'application/json' } })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'Docker 镜像获取失败')
   return decodeResponse(response, decodeDockerImages, 'malformed docker images payload')
 }
 
 export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
-  const response = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, {
-    headers: { Accept: 'application/json' },
-  })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  let response: Response
+  try {
+    response = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'AFK 就绪度获取失败')
   return decodeResponse(response, decodeAfkReadiness, 'malformed readiness payload')
 }
 
 export async function fetchSecrets(): Promise<WbSecretsKeys> {
   const response = await fetch('/api/secrets', { headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`(${response.status})`)
+  if (!response.ok) throw await secretError(response)
   return decodeResponse(response, decodeSecrets, 'malformed secrets payload')
 }
 
-async function secretError(response: Response): Promise<Error> {
+async function secretError(response: Response): Promise<ApiError> {
   try {
     const detail = await readJson(response)
-    if (isRecord(detail) && typeof detail.error === 'string') return new Error(detail.error)
+    if (isRecord(detail) && typeof detail.error === 'string') {
+      return new ApiError(detail.error, response.status, true)
+    }
   } catch {
     // Fall through to the stable HTTP status message.
   }
-  return new Error(`(${response.status})`)
+  return new ApiError(`secret request failed (${response.status})`, response.status)
 }
 
 export async function postSecret(key: string, value: string): Promise<void> {

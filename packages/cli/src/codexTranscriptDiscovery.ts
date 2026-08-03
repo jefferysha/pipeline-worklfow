@@ -1,10 +1,22 @@
-import { constants, type BigIntStats, type Dirent } from 'node:fs'
-import { lstat, open, readdir, realpath, type FileHandle } from 'node:fs/promises'
+import { constants, type BigIntStats } from 'node:fs'
+import { lstat, open, opendir, realpath, type FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 
 const MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024
 const MAX_TOTAL_BYTES = 512 * 1024 * 1024
 const MAX_TRANSCRIPTS = 32
+const MAX_DISCOVERY_ENTRIES = 4096
+const MAX_DISCOVERED_TRANSCRIPTS = 128
+
+export interface HostTranscriptDiscoveryLimits {
+  readonly maxEntries: number
+  readonly maxTranscripts: number
+}
+
+const DEFAULT_DISCOVERY_LIMITS: HostTranscriptDiscoveryLimits = {
+  maxEntries: MAX_DISCOVERY_ENTRIES,
+  maxTranscripts: MAX_DISCOVERED_TRANSCRIPTS,
+}
 
 export interface HostTranscriptCandidate {
   readonly path: string
@@ -16,28 +28,37 @@ export interface HostTranscriptCandidate {
   readonly changedAtNs: bigint
 }
 
+type HostTranscriptInspection =
+  | { readonly kind: 'candidate'; readonly candidate: HostTranscriptCandidate }
+  | { readonly kind: 'empty'; readonly modifiedAt: number }
+
 async function inspectHostTranscript(
   physicalRoot: string,
   candidate: string,
-): Promise<HostTranscriptCandidate | undefined> {
+): Promise<HostTranscriptInspection | undefined> {
   try {
     const info = await lstat(candidate, { bigint: true })
     if (
       !info.isFile()
       || info.isSymbolicLink()
-      || info.size === 0n
       || info.size > BigInt(MAX_TRANSCRIPT_BYTES)
     ) return undefined
     const physical = await realpath(candidate)
     if (!isInside(physicalRoot, physical)) return undefined
+    if (info.size === 0n) {
+      return { kind: 'empty', modifiedAt: Number(info.mtimeMs) }
+    }
     return {
-      path: physical,
-      modifiedAt: Number(info.mtimeMs),
-      size: Number(info.size),
-      device: info.dev,
-      inode: info.ino,
-      modifiedAtNs: info.mtimeNs,
-      changedAtNs: info.ctimeNs,
+      kind: 'candidate',
+      candidate: {
+        path: physical,
+        modifiedAt: Number(info.mtimeMs),
+        size: Number(info.size),
+        device: info.dev,
+        inode: info.ino,
+        modifiedAtNs: info.mtimeNs,
+        changedAtNs: info.ctimeNs,
+      },
     }
   } catch {
     return undefined
@@ -55,10 +76,17 @@ function isInside(base: string, candidate: string): boolean {
 /**
  * Enumerate newest host transcripts within fixed I/O budgets. An unreadable or oversized JSONL
  * candidate makes recency unknowable, so discovery fails closed instead of accepting an older file.
+ * A zero-byte transcript is ignored only when its mtime is strictly older than a readable candidate;
+ * an empty latest/equal-time file may be the current host session and therefore remains ambiguous.
  */
 export async function recentHostTranscripts(
   sessionsRoot: string,
+  limits: HostTranscriptDiscoveryLimits = DEFAULT_DISCOVERY_LIMITS,
 ): Promise<readonly HostTranscriptCandidate[] | undefined> {
+  if (
+    !Number.isSafeInteger(limits.maxEntries) || limits.maxEntries <= 0
+    || !Number.isSafeInteger(limits.maxTranscripts) || limits.maxTranscripts <= 0
+  ) return undefined
   let physicalRoot: string
   try {
     physicalRoot = await realpath(sessionsRoot)
@@ -67,28 +95,41 @@ export async function recentHostTranscripts(
   }
 
   const discovered: HostTranscriptCandidate[] = []
+  const emptyModifiedAt: number[] = []
+  let visitedEntries = 0
+  let visitedTranscripts = 0
   async function visit(directory: string, depth: number): Promise<boolean> {
-    let entries: readonly Dirent<string>[]
     try {
-      entries = await readdir(directory, { withFileTypes: true })
+      const entries = await opendir(directory)
+      for await (const entry of entries) {
+        visitedEntries += 1
+        if (visitedEntries > limits.maxEntries) return false
+        const candidate = join(directory, entry.name)
+        if (entry.isDirectory() && depth < 3) {
+          if (!await visit(candidate, depth + 1)) return false
+          continue
+        }
+        if (!entry.name.endsWith('.jsonl')) continue
+        visitedTranscripts += 1
+        if (visitedTranscripts > limits.maxTranscripts) return false
+        if (!entry.isFile()) return false
+        const inspected = await inspectHostTranscript(physicalRoot, candidate)
+        if (inspected === undefined) return false
+        if (inspected.kind === 'empty') emptyModifiedAt.push(inspected.modifiedAt)
+        else discovered.push(inspected.candidate)
+      }
+      return true
     } catch {
       return false
     }
-    for (const entry of entries) {
-      const candidate = join(directory, entry.name)
-      if (entry.isDirectory() && depth < 3) {
-        if (!await visit(candidate, depth + 1)) return false
-        continue
-      }
-      if (!entry.name.endsWith('.jsonl')) continue
-      if (!entry.isFile()) return false
-      const transcript = await inspectHostTranscript(physicalRoot, candidate)
-      if (transcript === undefined) return false
-      discovered.push(transcript)
-    }
-    return true
   }
   if (!await visit(physicalRoot, 0)) return undefined
+
+  const newestReadable = discovered.reduce(
+    (newest, transcript) => Math.max(newest, transcript.modifiedAt),
+    Number.NEGATIVE_INFINITY,
+  )
+  if (emptyModifiedAt.some((modifiedAt) => modifiedAt >= newestReadable)) return undefined
 
   let remaining = MAX_TOTAL_BYTES
   const selected: HostTranscriptCandidate[] = []
@@ -105,7 +146,8 @@ export async function exactHostTranscript(
   transcriptPath: string,
 ): Promise<HostTranscriptCandidate | undefined> {
   try {
-    return await inspectHostTranscript(await realpath(sessionsRoot), transcriptPath)
+    const inspected = await inspectHostTranscript(await realpath(sessionsRoot), transcriptPath)
+    return inspected?.kind === 'candidate' ? inspected.candidate : undefined
   } catch {
     return undefined
   }

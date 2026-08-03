@@ -1,5 +1,10 @@
 # Effective Workflow Plan Specification
 
+## Purpose
+
+Define the compiled execution plan that lets every runtime consumer apply Workflow, Track, document,
+Skill, review, automation, and projection policy through one capability-based contract.
+
 ## Requirements
 
 ### Requirement: Every Workflow SHALL compile into one effective execution plan

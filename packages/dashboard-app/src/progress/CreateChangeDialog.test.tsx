@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { I18nProvider } from '../i18n'
 import { CreateChangeDialog } from './CreateChangeDialog'
 import type { WbRouterPreview, WbTrackDefinition } from '../api/client'
@@ -43,6 +44,22 @@ preview.winner = preview.candidates[0]!
 
 function okJson(value: unknown): Response {
   return new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
+function workflow(name = 'release', step = 'draft'): Record<string, unknown> {
+  return {
+    name,
+    steps: [{
+      id: step,
+      label: step,
+      gate: null,
+      skills: [],
+      inputs: [],
+      outputs: [],
+      guards: [],
+      transitions: [],
+    }],
+  }
 }
 
 beforeEach(() => {
@@ -92,7 +109,7 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
       if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
       if (url === '/api/router/preview') return okJson(noWinner)
       if (url.startsWith('/api/workflows/release?')) {
-        return okJson({ name: 'release', steps: [{ id: 'draft', label: 'Draft', transitions: [] }] })
+        return okJson(workflow())
       }
       throw new Error(`unexpected fetch ${url}`)
     }))
@@ -117,8 +134,8 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
 
     fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Build a responsive UI' } })
     expect(await screen.findByTestId('route-winner')).toHaveTextContent('Frontend')
-    expect(screen.getByTestId('route-winner')).toHaveTextContent('score 2')
-    expect(screen.getByTestId('route-winner')).toHaveTextContent('priority 300')
+    expect(screen.getByTestId('route-winner')).toHaveTextContent('得分 2')
+    expect(screen.getByTestId('route-winner')).toHaveTextContent('优先级 300')
     expect(screen.getByTestId('route-policy')).toHaveTextContent('frontend')
     const call = fetchMock.mock.calls.find(([url]) => url === '/api/router/preview')
     expect(call?.[1]).toMatchObject({
@@ -133,7 +150,7 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
       if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
       if (url === '/api/router/preview') return okJson(preview)
       if (url.startsWith('/api/workflows/release?')) {
-        return okJson({ name: 'release', steps: [{ id: 'draft', label: 'Draft', transitions: [] }] })
+        return okJson(workflow())
       }
       if (url === '/api/changes') {
         expect(JSON.parse(String(init?.body))).toEqual({
@@ -195,8 +212,11 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
     fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'landing' } })
     fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Create a stable landing page' } })
     await screen.findByTestId('route-winner')
-    fireEvent.click(screen.getByTestId('change-create'))
+    const create = screen.getByTestId('change-create')
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
 
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/changes')).toBe(true))
     await waitFor(() => expect(props.onCreated).toHaveBeenCalledWith('landing'))
     expect(props.onToast).toHaveBeenCalledWith(expect.stringContaining('当前会话未能激活'))
   })
@@ -215,5 +235,144 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
     expect(screen.getByTestId('change-name-error')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('route-candidate-frontend'))
     expect(screen.getByTestId('route-candidate-frontend')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('自定义 Workflow 的 200 非法 schema 显示响应无效，不误报网络错误', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url.startsWith('/api/workflows/release?')) return okJson({})
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Backend release endpoint' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('route-candidate-backend'))
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('route-first-step')).not.toHaveTextContent('网络')
+    expect(screen.getByTestId('change-create')).toBeDisabled()
+  })
+
+  it('自定义 Workflow 没有首 Step 时禁止创建，不向后端提交必然失败的 Change', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url.startsWith('/api/workflows/release?')) return okJson({ name: 'release', steps: [] })
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'empty-workflow' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Backend release endpoint' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('route-candidate-backend'))
+
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('没有首 Step')
+    expect(screen.getByTestId('change-create')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('change-create'))
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/changes')).toBe(false)
+  })
+
+  it('合法首 Step id 恰为 __workflow_empty__ 时仍可创建，不与空 Workflow 状态混淆', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url.startsWith('/api/workflows/release?')) return okJson(workflow('release', '__workflow_empty__'))
+      if (url === '/api/changes') return okJson({ ok: true, name: 'sentinel-step' })
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'sentinel-step' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Backend release endpoint' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('route-candidate-backend'))
+
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('__workflow_empty__')
+    expect(screen.getByTestId('route-first-step')).not.toHaveTextContent('没有首 Step')
+    expect(screen.getByTestId('change-create')).toBeEnabled()
+  })
+
+  it('StrictMode 双 effect 周期不吞掉成功创建回调', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: [] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url === '/api/changes') return okJson({ ok: true, name: 'strict-ui' })
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    const props = { root: '/repo', onClose: vi.fn(), onCreated: vi.fn(), onToast: vi.fn() }
+    render(<StrictMode><I18nProvider><CreateChangeDialog {...props} /></I18nProvider></StrictMode>)
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'strict-ui' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Build strict UI' } })
+    await screen.findByTestId('route-winner')
+    const create = screen.getByTestId('change-create')
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
+    await waitFor(() => expect(props.onCreated).toHaveBeenCalledWith('strict-ui'))
+    expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('对话框卸载后迟到的创建响应不得触发旧项目 onCreated、toast 或关闭回调', async () => {
+    let resolveCreate!: (response: Response) => void
+    const delayedCreate = new Promise<Response>((resolve) => { resolveCreate = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: [] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url === '/api/changes') return delayedCreate
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    const props = { root: '/repo-a', onClose: vi.fn(), onCreated: vi.fn(), onToast: vi.fn() }
+    const view = render(<I18nProvider><CreateChangeDialog {...props} /></I18nProvider>)
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'late-ui' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Build late UI' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('change-create'))
+    view.unmount()
+    await act(async () => {
+      resolveCreate(okJson({ ok: true, name: 'late-ui' }))
+      await delayedCreate
+    })
+    expect(props.onCreated).not.toHaveBeenCalled()
+    expect(props.onToast).not.toHaveBeenCalled()
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
+  it('创建请求进行中禁用取消，并忽略 Esc 与背景点击直至服务器结果完成', async () => {
+    let resolveCreate!: (response: Response) => void
+    const delayedCreate = new Promise<Response>((resolve) => { resolveCreate = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: [] })
+      if (url === '/api/router/preview') return okJson(preview)
+      if (url === '/api/changes') return delayedCreate
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    const props = renderDialog()
+    fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'durable-create' } })
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Create exactly once' } })
+    await screen.findByTestId('route-winner')
+    fireEvent.click(screen.getByTestId('change-create'))
+
+    const cancel = screen.getByTestId('change-create-cancel')
+    await waitFor(() => expect(cancel).toBeDisabled())
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByTestId('create-change-dialog'))
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(screen.getByTestId('create-change-dialog')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveCreate(okJson({
+        ok: true,
+        name: 'durable-create',
+        path: '/repo/openspec/changes/durable-create',
+        task_prompt_saved: true,
+        session: { requested: true, active: true, status: 'active', exit_code: 0 },
+      }))
+      await delayedCreate
+    })
+    await waitFor(() => expect(props.onCreated).toHaveBeenCalledWith('durable-create'))
+    expect(props.onClose).toHaveBeenCalledTimes(1)
   })
 })

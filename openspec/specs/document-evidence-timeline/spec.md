@@ -1,5 +1,9 @@
 # document-evidence-timeline Specification
 
+## Purpose
+
+Define a privacy-preserving, read-only provenance timeline for governed document evidence so operators can distinguish registration, current-phase reading, and unavailable proof without exposing sensitive ledger details or gaining mutation controls.
+
 ## Requirements
 
 ### Requirement: Snapshot exposes current document provenance

@@ -1,5 +1,10 @@
 # Simple Task Routing Specification
 
+## Purpose
+
+Define the bounded, exclusion-first simple-task route and its lightweight Workflow so narrow local
+changes can run with proportionate governance without capturing broader or risky work.
+
 ## Requirements
 
 ### Requirement: The router SHALL provide a first-party simple task track

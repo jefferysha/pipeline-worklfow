@@ -93,9 +93,27 @@ function renderPanel(): void {
   render(<I18nProvider><RunAuditPanel root="/repo" change="change-a" refreshKey="verify" /></I18nProvider>)
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  localStorage.clear()
+  vi.restoreAllMocks()
+})
 
 describe('RunAuditPanel · 用户只看到真实且可行动的运行记录', () => {
+  it('English locale covers phases, results, evidence, usage, and notes without Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async () => new Response(JSON.stringify(DETAIL), { status: 200 })) as unknown as typeof fetch
+    renderPanel()
+    const panel = await screen.findByTestId('run-audit')
+    expect(panel).toHaveTextContent('Run history')
+    expect(panel).toHaveTextContent('Current phase')
+    expect(panel).toHaveTextContent('Verify')
+    expect(panel).toHaveTextContent('Revision 2')
+    expect(panel).toHaveTextContent('Latest execution')
+    expect(panel).toHaveTextContent('Command check failed')
+    expect(panel).toHaveTextContent('Used 1,500 tokens in this run')
+    expect(panel.textContent).not.toMatch(/[\u3400-\u9fff]/)
+  })
+
   it('用中文展示当前工作流、阶段、更新时间和真实来源，不暴露内部标识', async () => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify(DETAIL), { status: 200 })) as unknown as typeof fetch
     renderPanel()

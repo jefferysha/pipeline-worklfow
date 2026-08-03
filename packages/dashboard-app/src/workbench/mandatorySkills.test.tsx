@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WbSkillEntry, WbTrackDefinition } from '../api/client'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import {
   LaneMandatorySkills,
   TrackSelector,
@@ -164,7 +165,8 @@ beforeEach(() => {
   invalidateMandatoryConfig()
   configResponse = () => new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
   registryResponse = () => new Response(JSON.stringify(REGISTRY), { status: 200 })
-  postResponse = (body) => new Response(JSON.stringify({ ok: true, ...body }), { status: 200 })
+  postResponse = ({ phase, track, skills }) =>
+    new Response(JSON.stringify({ ok: true, phase, track, skills }), { status: 200 })
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === '/api/config' || url.startsWith('/api/config?')) return configResponse()
     if (url === '/api/skills/registry') return registryResponse()
@@ -199,6 +201,14 @@ function Harness({ phases, root = '/repo/default' }: { phases: string[]; root?: 
   )
 }
 
+function LanguageHarness({ phases }: { phases: string[] }): JSX.Element {
+  const { setLang } = useT()
+  return <>
+    <button type="button" data-testid="mandatory-language-en" onClick={() => setLang('en')}>en</button>
+    <Harness phases={phases} />
+  </>
+}
+
 /** 渲染并等到 config 探测落地（table===null 时各列渲染「加载中…」）。 */
 async function renderMatrix(phases: string[] = ['build'], root = '/repo/default'): Promise<void> {
   render(
@@ -224,6 +234,9 @@ describe('LaneMandatorySkills §4.7 诚实门：运行时 config/registry 不可
     expect(screen.queryByTestId('wb-mand-chip-build-prototype|huashu-design')).toBeNull()
     expect(screen.getByTestId('wb-track-load-error')).toHaveTextContent('运行时轨道配置加载失败')
     expect(screen.getByTestId('wb-mand-unavailable-build')).toHaveTextContent('运行时轨道配置不可用')
+    configResponse = () => new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
+    fireEvent.click(screen.getByTestId('wb-track-retry'))
+    expect(await screen.findByTestId('wb-track-tabs')).toBeInTheDocument()
   })
 
   it('capable=false → 不渲染假 ×/+，因此不会发 POST', async () => {
@@ -435,7 +448,12 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
   })
 
   it('成功体带 skills 时以响应体为准（server 规范化后的集合才是真相，本地值只是回落）', async () => {
-    postResponse = () => new Response(JSON.stringify({ ok: true, skills: ['server-normalized-skill'] }), { status: 200 })
+    postResponse = () => new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'frontend',
+      skills: ['server-normalized-skill'],
+    }), { status: 200 })
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-frontend'))
     await waitAddReady('build')
@@ -444,6 +462,24 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
     await waitFor(() => expect(screen.getByTestId('wb-mand-chip-build-server-normalized-skill')).toBeInTheDocument())
     // 本地算出来的 ['superpowers:test-driven-development'] 被响应体整体取代
     expect(screen.queryByTestId('wb-mand-chip-build-superpowers:test-driven-development')).toBeNull()
+  })
+
+  it.each([
+    ['错误 phase', { ok: true, phase: 'spec', track: 'frontend', skills: ['server-normalized-skill'] }],
+    ['错误 track', { ok: true, phase: 'build', track: 'backend', skills: ['server-normalized-skill'] }],
+    ['额外字段', { ok: true, phase: 'build', track: 'frontend', skills: ['server-normalized-skill'], extra: true }],
+  ])('HTTP 200 成功体%s时拒绝写入请求 cell/cache', async (_label, responseBody) => {
+    postResponse = () => new Response(JSON.stringify(responseBody), { status: 200 })
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-frontend'))
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-web-design-guidelines'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
+    expect(screen.getByTestId('wb-mand-chip-build-superpowers:test-driven-development')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-mand-chip-build-web-design-guidelines')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-mand-chip-build-server-normalized-skill')).toBeNull()
   })
 
   it('POST 失败（500 + error 原文）→ 集合保持原值不变（不是回滚：它压根没被改过）+ 错误原文可见', async () => {
@@ -474,12 +510,44 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
   })
 
   it('HTTP 200 ok:true 但回读 skills 含逗号 → 拒绝响应，不推进集合/cache', async () => {
-    postResponse = () => new Response(JSON.stringify({ ok: true, skills: ['foo,bar'] }), { status: 200 })
+    postResponse = () => new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['foo,bar'],
+    }), { status: 200 })
     await renderMatrix(['build'])
     await waitAddReady('build')
     fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
-    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('server 返回的技能集合畸形'))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
     expect(screen.getByTestId('wb-mand-chip-build-frontend-design')).toBeInTheDocument()
+  })
+
+  it('错误信封字段类型畸形时按无效响应处理，不把对象渲染成 React child', async () => {
+    postResponse = () => new Response(JSON.stringify({ ok: false, error: {} }), { status: 500 })
+    await renderMatrix(['build'])
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('服务端响应格式无效'))
+    expect(screen.getByTestId('wb-mand-chip-build-frontend-design')).toBeInTheDocument()
+  })
+
+  it('保存响应晚到且期间切为英文时，按当前语言显示失败，不回写发起时的中文文案', async () => {
+    let release!: (response: Response) => void
+    postResponse = () => new Promise<Response>((resolve) => { release = resolve })
+    render(<I18nProvider><LanguageHarness phases={['build']} /></I18nProvider>)
+    await waitFor(() => expect(screen.queryByText('加载中…')).toBeNull())
+    await waitAddReady('build')
+
+    fireEvent.click(screen.getByTestId('wb-mand-rm-build-frontend-design'))
+    fireEvent.click(screen.getByTestId('mandatory-language-en'))
+    release(new Response(JSON.stringify({ ok: false, error: '后端中文错误' }), { status: 500 }))
+
+    const error = await screen.findByTestId('wb-mand-err-build')
+    expect(error).toHaveTextContent('Save failed (500)')
+    expect(error.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   it('root A 的 POST 晚到时只推进 A cache，绝不覆盖已切换到 root B 的 UI/cache', async () => {
@@ -504,7 +572,12 @@ describe('useMandatorySkills §4.9 写回非乐观（等响应才动集合；失
       </I18nProvider>,
     )
     await screen.findByTestId('wb-mand-chip-build-b-only')
-    releaseA(new Response(JSON.stringify({ ok: true, skills: ['a-after-save'] }), { status: 200 }))
+    releaseA(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['a-after-save'],
+    }), { status: 200 }))
     await act(async () => { await Promise.resolve() })
     expect(screen.getByTestId('wb-mand-chip-build-b-only')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-mand-chip-build-a-after-save')).toBeNull()
@@ -560,9 +633,43 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     expect(screen.getByTestId('wb-mand-add-spec')).toBeEnabled()
     expect(screen.getByTestId('wb-mand-rm-spec-superpowers:brainstorming')).toBeEnabled()
 
-    release(new Response(JSON.stringify({ ok: true, skills: ['frontend-design'] }), { status: 200 }))
+    release(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['frontend-design'],
+    }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
     expect(screen.queryByTestId('wb-mand-chip-build-prototype|huashu-design')).toBeNull()
+  })
+
+  it('不同 cell 并发各自保留 busy/token，任一迟到结果不能覆盖另一操作', async () => {
+    const releases = new Map<string, (response: Response) => void>()
+    postResponse = (body) => new Promise<Response>((resolve) => {
+      releases.set(body.phase, resolve)
+    })
+    await renderMatrix(['build', 'spec'])
+    await waitAddReady('build')
+    await waitAddReady('spec')
+
+    act(() => probe.setSkills('build', ['frontend-design']))
+    act(() => probe.setSkills('spec', []))
+    expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
+    expect(screen.getByTestId('wb-mand-add-spec')).toBeDisabled()
+
+    releases.get('spec')?.(new Response(JSON.stringify({
+      ok: true,
+      phase: 'spec',
+      track: 'pm',
+      skills: [],
+    }), { status: 200 }))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-add-spec')).toBeEnabled())
+    expect(screen.getByTestId('wb-mand-add-build')).toBeDisabled()
+
+    releases.get('build')?.(new Response(JSON.stringify({ ok: false, error: 'build failed' }), { status: 409 }))
+    await waitFor(() => expect(screen.getByTestId('wb-mand-err-build')).toHaveTextContent('build failed'))
+    expect(screen.queryByTestId('wb-mand-err-spec')).toBeNull()
+    expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled()
   })
 
   it('在途守卫：同 cell 二次 setSkills 直接 no-op，不叠发第二个 POST', async () => {
@@ -578,7 +685,12 @@ describe('useMandatorySkills §4.10 savingKey：同 cell 在途时该列控件�
     act(() => probe.setSkills('build', []))
     expect(postCalls()).toHaveLength(1)
 
-    release(new Response(JSON.stringify({ ok: true, skills: ['frontend-design'] }), { status: 200 }))
+    release(new Response(JSON.stringify({
+      ok: true,
+      phase: 'build',
+      track: 'pm',
+      skills: ['frontend-design'],
+    }), { status: 200 }))
     await waitFor(() => expect(screen.getByTestId('wb-mand-add-build')).toBeEnabled())
     // 在途结束后同 cell 可以再写
     act(() => probe.setSkills('build', ['frontend-design', 'improve-codebase-architecture']))
@@ -658,6 +770,15 @@ describe('LaneMandatorySkills §4.11 调用链展示', () => {
 })
 
 describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集合跟着换）', () => {
+  it('轨道帮助按钮会展开项目级配置说明', async () => {
+    await renderMatrix(['build'])
+    const help = screen.getByRole('button', { name: '运行轨道说明' })
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(help)
+    expect(help).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('help-popover-content')).toHaveTextContent('轨道是项目级运行配置')
+  })
+
   it('运行时 registry 未返回前显示加载态，不先闪出任何手抄轨道', async () => {
     let release!: (value: Response) => void
     configResponse = () => new Promise<Response>((resolve) => (release = resolve))
@@ -679,9 +800,25 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     expect(within(tabs).getAllByRole('radio')).toHaveLength(4)
     expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('wb-track-qa')).toHaveTextContent('Quality')
-    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', expect.stringContaining('Frontend'))
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · 沿用 前端 轨道技能')
     expect(screen.queryByTestId('wb-track-chat')).toBeNull()
     expect(screen.queryByTestId('wb-track-observer')).toBeNull()
+  })
+
+  it('中文 tooltip 本地化内建 candidate 与 inherited track，自定义名称保持原值', async () => {
+    await renderMatrix(['build'])
+    expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', '产品')
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · 沿用 前端 轨道技能')
+    expect(screen.getByTestId('wb-track-qa')).not.toHaveAttribute('title', expect.stringContaining('Frontend'))
+  })
+
+  it('English tooltip 本地化 inherited built-in track 且不混入中文', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const tracks = CONFIG_BODY.tracks.map((track) => track.id === 'frontend' ? { ...track, label: '前端原始值' } : track)
+    configResponse = () => new Response(JSON.stringify({ ...CONFIG_BODY, tracks }), { status: 200 })
+    await renderMatrix(['build'])
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'Quality · Uses Skills from the Frontend track')
+    expect(screen.getByTestId('wb-track-qa').getAttribute('title')).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   it('轨道滑块不用锁图标制造噪音', async () => {
@@ -791,13 +928,13 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     await waitFor(() => expect(fetchMock()).toHaveBeenCalledWith('/api/config?root=%2Frepo-b', expect.anything()))
     const bodyB = {
       ...CONFIG_BODY,
-      tracks: CONFIG_BODY.tracks.map((track) => track.id === 'pm' ? { ...track, label: 'B Product' } : track),
+      tracks: CONFIG_BODY.tracks.map((track) => track.id === 'qa' ? { ...track, label: 'B Quality' } : track),
     }
     releaseB(new Response(JSON.stringify(bodyB), { status: 200 }))
-    await waitFor(() => expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', 'B Product'))
+    await waitFor(() => expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'B Quality · 沿用 前端 轨道技能'))
     releaseA(new Response(JSON.stringify(CONFIG_BODY), { status: 200 }))
     await act(async () => { await Promise.resolve() })
-    expect(screen.getByTestId('wb-track-pm')).toHaveAttribute('title', 'B Product')
+    expect(screen.getByTestId('wb-track-qa')).toHaveAttribute('title', 'B Quality · 沿用 前端 轨道技能')
     expect(fetchMock().mock.calls.filter(([url]) => String(url).startsWith('/api/config?root=')).map(([url]) => url))
       .toEqual(['/api/config?root=%2Frepo-a', '/api/config?root=%2Frepo-b'])
   })
@@ -846,12 +983,75 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
 })
 
 describe('TrackSettings v3 真实 CRUD', () => {
+  it('有未保存 Track 草稿时，取消、Esc 与折叠入口都必须先确认丢弃', async () => {
+    await renderMatrix(['build'])
+    const toggle = screen.getByTestId('wb-track-settings-toggle')
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    const editor = screen.getByTestId('wb-track-editor')
+    fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'QA draft' } })
+
+    fireEvent.click(within(editor).getByRole('button', { name: '关闭' }))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('显示名称')).toHaveValue('QA draft')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-settings-panel')).toBeNull())
+  })
+
+  it('未保存 Track 草稿阻止直接新建或编辑另一轨道，确认丢弃后才切换', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'QA draft' } })
+
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByLabelText('显示名称')).toHaveValue('QA draft')
+
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+  })
+
+  it('所有可编辑 input/select 都有稳定 name，非认证配置文本禁用浏览器自动填充', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const controls = Array.from(editor.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'))
+    expect(controls.length).toBeGreaterThan(0)
+    for (const control of controls) expect(control.name).not.toBe('')
+    for (const input of Array.from(editor.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])'))) {
+      expect(input).toHaveAttribute('autocomplete', 'off')
+    }
+  })
+
+  it('English 自定义轨编辑器的 Policy template accessible name 不含中文', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    const editor = screen.getByTestId('wb-track-editor')
+    expect(within(editor).getByLabelText('Policy template')).toBeInTheDocument()
+    expect(within(editor).queryByLabelText('Policy 模板')).toBeNull()
+  })
+
   it('列出完整轨道：不注入默认 Skill 的轨道仍在设置里，系统轨道与沿用关系可见', async () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     const panel = screen.getByTestId('wb-track-settings-panel')
     expect(panel.parentElement).toBe(document.body)
-    expect(panel).toHaveAttribute('role', 'dialog')
+    expect(within(panel).getByRole('dialog', { name: '工作轨道' })).toBeInTheDocument()
     expect(within(panel).getAllByTestId(/^wb-track-setting-/)).toHaveLength(CONFIG_BODY.tracks.length)
     expect(screen.getByTestId('wb-track-setting-chat').querySelector('svg')).not.toBeNull()
     expect(screen.getByTestId('wb-track-setting-chat')).toHaveTextContent('不注入默认 Skill')
@@ -871,6 +1071,22 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(panel).not.toHaveTextContent('routing')
   })
 
+  it('新建 Track 在必填身份为空或非法时禁用保存，填写有效值后才允许提交', async () => {
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-create'))
+    const editor = screen.getByTestId('wb-track-editor')
+    const save = within(editor).getByTestId('wb-track-editor-save')
+
+    expect(save).toBeDisabled()
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'INVALID ID' } })
+    fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Release' } })
+    expect(save).toBeDisabled()
+
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'release' } })
+    expect(save).toBeEnabled()
+  })
+
   it('新建自定义 Track：完整定义连同当前 revision 发往 POST，成功后重拉 config', async () => {
     let configReads = 0
     configResponse = () => {
@@ -880,7 +1096,12 @@ describe('TrackSettings v3 真实 CRUD', () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/tracks' && opts?.method === 'POST') {
-        return new Response(JSON.stringify({ ok: true, revision: 'next-revision', tracks: CONFIG_BODY.tracks }), { status: 200 })
+        return new Response(JSON.stringify({
+          ok: true,
+          revision: 'next-revision',
+          source: 'project-file',
+          tracks: CONFIG_BODY.tracks,
+        }), { status: 200 })
       }
       return baseFetch(url, opts)
     }) as unknown as typeof fetch
@@ -889,11 +1110,11 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-create'))
     const editor = screen.getByTestId('wb-track-editor')
-    fireEvent.change(within(editor).getByLabelText('Track ID'), { target: { value: 'release' } })
+    fireEvent.change(within(editor).getByLabelText('轨道 ID'), { target: { value: 'release' } })
     fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Release' } })
     fireEvent.change(within(editor).getByLabelText('默认 Workflow'), { target: { value: 'default' } })
     fireEvent.change(within(editor).getByLabelText('Policy 模板'), { target: { value: 'frontend' } })
-    fireEvent.click(within(editor).getByLabelText('autoEnqueueOnSpecComplete'))
+    fireEvent.click(within(editor).getByLabelText('规格完成后自动进入 AFK'))
     fireEvent.click(within(editor).getByTestId('wb-track-editor-save'))
 
     await waitFor(() => expect(configReads).toBeGreaterThan(1))
@@ -934,13 +1155,13 @@ describe('TrackSettings v3 真实 CRUD', () => {
     await renderMatrix(['build'])
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
-    fireEvent.change(screen.getByLabelText('routing.priority'), { target: { value: '999' } })
-    fireEvent.change(screen.getByLabelText('routing.excludePattern'), { target: { value: '(API|schema)' } })
+    fireEvent.change(screen.getByLabelText('优先级'), { target: { value: '999' } })
+    fireEvent.change(screen.getByLabelText('排除规则（可选）'), { target: { value: '(API|schema)' } })
     fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
     fireEvent.click(screen.getByTestId('wb-track-route-preview'))
     const result = await screen.findByTestId('wb-track-route-result')
     expect(result).toHaveTextContent('Quality')
-    expect(result).toHaveTextContent('score 2')
+    expect(result).toHaveTextContent('得分 2')
     expect(result).toHaveTextContent('Frontend')
     const call = fetchMock().mock.calls.find(([url]) => url === '/api/router/preview')
     expect(JSON.parse(String((call?.[1] as RequestInit).body))).toMatchObject({
@@ -960,11 +1181,311 @@ describe('TrackSettings v3 真实 CRUD', () => {
     })
   })
 
+  it('同一项目内修改 Track 草稿会使在途 Router 预览失效，旧结果不得覆盖新草稿', async () => {
+    const baseFetch = global.fetch
+    let resolvePreview!: (response: Response) => void
+    const previewResponse = new Promise<Response>((resolve) => { resolvePreview = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') return previewResponse
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+    fireEvent.change(screen.getByLabelText('优先级'), { target: { value: '999' } })
+
+    await act(async () => {
+      resolvePreview(new Response(JSON.stringify({
+        ok: true,
+        revision: CONFIG_BODY.revision,
+        source: 'project-file',
+        suppressed_reason: null,
+        winner: { track: CONFIG_BODY.tracks[4], order: 4, priority: 250, score: 2, routable: true, excluded: false },
+        candidates: [],
+      }), { status: 200 }))
+      await previewResponse
+    })
+
+    expect(screen.queryByTestId('wb-track-route-result')).toBeNull()
+    expect(screen.getByTestId('wb-track-route-preview')).toBeEnabled()
+  })
+
+  it('English Router preview network failure uses localized copy without transport Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') {
+        throw new Error('网络错误：连接被拒绝')
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Network error')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English Router preview malformed success is classified as an invalid response', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/router/preview' && opts?.method === 'POST') {
+        return new Response('not json', { status: 200 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
+    fireEvent.click(screen.getByTestId('wb-track-route-preview'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid server response.')
+  })
+
+  it('English Track save non-JSON HTTP failure uses localized status without endpoint fallback Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') {
+        return new Response('upstream unavailable', { status: 503 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    const alert = await screen.findByTestId('wb-track-editor-error')
+    expect(alert).toHaveTextContent('Request failed (HTTP 503).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English Track failure suppresses server-authored reference and blocker prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: '轨道仍被引用',
+          references: ['生产 Change'],
+          blockers: ['请先完成迁移'],
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    const alert = await screen.findByTestId('wb-track-editor-error')
+    expect(alert).toHaveTextContent('Request failed (HTTP 409).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it.each([
+    ['non-JSON', () => new Response('not json', { status: 200 })],
+    ['empty body', () => new Response(null, { status: 200 })],
+    ['ok false', () => new Response(JSON.stringify({ ok: false, error: 'not success' }), { status: 200 })],
+    ['wrong revision field', () => new Response(JSON.stringify({
+      ok: true,
+      revision: 42,
+      source: 'project-file',
+      tracks: CONFIG_BODY.tracks,
+    }), { status: 200 })],
+    ['missing source', () => new Response(JSON.stringify({
+      ok: true,
+      revision: 'next',
+      tracks: CONFIG_BODY.tracks,
+    }), { status: 200 })],
+  ])('Track save 2xx %s fails closed, keeps the draft, and uses current-language invalid-response copy', async (_case, response) => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Unsaved draft' } })
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+
+    expect(await screen.findByTestId('wb-track-editor-error')).toHaveTextContent('Invalid server response.')
+    expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
+    expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved draft')
+  })
+
+  it('Track 保存请求在途时禁止切换编辑器，响应只回写原 Track', async () => {
+    const user = userEvent.setup()
+    const baseFetch = global.fetch
+    let releaseA!: (response: Response) => void
+    const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return pendingA
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    const label = screen.getByLabelText('显示名称')
+    fireEvent.change(label, { target: { value: 'Quality request' } })
+    await user.click(screen.getByTestId('wb-track-editor-save'))
+
+    const editor = screen.getByTestId('wb-track-editor')
+    expect(Array.from(editor.querySelectorAll('input, select, button'))).not.toHaveLength(0)
+    for (const control of editor.querySelectorAll('input, select, button')) {
+      expect(control).toBeDisabled()
+    }
+    expect(within(editor).getByLabelText('显示名称')).toBeDisabled()
+    expect(within(editor).getByLabelText('默认 Workflow')).toBeDisabled()
+    expect(within(editor).getByLabelText('允许任意 Workflow')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-route-prompt')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-route-preview')).toBeDisabled()
+    expect(within(editor).getByRole('button', { name: '关闭' })).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-editor-delete')).toBeDisabled()
+    expect(within(editor).getByTestId('wb-track-editor-save')).toBeDisabled()
+    expect(screen.getByTestId('wb-track-edit-frontend')).toBeDisabled()
+    expect(screen.getByLabelText('关闭轨道设置')).toBeDisabled()
+    const patchCall = fetchMock().mock.calls.find(([url, opts]) => url === '/api/tracks/qa' && (opts as RequestInit | undefined)?.method === 'PATCH')
+    const frozenRequestBody = String((patchCall?.[1] as RequestInit).body)
+    expect(JSON.parse(frozenRequestBody)).toMatchObject({ patch: { label: 'Quality request' } })
+
+    await user.type(label, ' blocked edit')
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('wb-track-settings-panel'))
+    await user.click(screen.getByLabelText('关闭轨道设置'))
+    await user.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(label).toHaveValue('Quality request')
+    expect(String((patchCall?.[1] as RequestInit).body)).toBe(frozenRequestBody)
+    expect(screen.getByTestId('wb-track-editor-save')).toBeDisabled()
+
+    await act(async () => {
+      releaseA(new Response(JSON.stringify({ ok: false, error: 'A save error' }), { status: 409 }))
+      await pendingA
+    })
+    expect(screen.getByTestId('wb-track-editor')).toBeInTheDocument()
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(label).toBeEnabled()
+    await waitFor(() => expect(screen.getByTestId('wb-track-editor-save')).toHaveFocus())
+    expect(screen.getByTestId('wb-track-editor-error')).toHaveTextContent('A save error')
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(screen.getByTestId('wb-track-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+  })
+
+  it('Track 删除请求在途时禁止切换编辑器，错误保留在原 Track', async () => {
+    const baseFetch = global.fetch
+    let releaseDelete!: (response: Response) => void
+    const pendingDelete = new Promise<Response>((resolve) => { releaseDelete = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url.startsWith('/api/tracks/qa?') && opts?.method === 'DELETE') return pendingDelete
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    fireEvent.click(screen.getByTestId('wb-track-editor-delete'))
+    fireEvent.click(screen.getByTestId('wb-track-delete-confirm'))
+
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByTestId('wb-track-delete-confirm')).toBeDisabled()
+
+    await act(async () => {
+      releaseDelete(new Response(JSON.stringify({ ok: false, error: 'delete error' }), { status: 409 }))
+      await pendingDelete
+    })
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(screen.getByTestId('wb-track-editor-error')).toHaveTextContent('delete error')
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+  })
+
+  it('Track A 保存成功后重拉 authority 并推进 revision，随后 Track B 使用新 revision', async () => {
+    const user = userEvent.setup()
+    let configReads = 0
+    let currentRevision = CONFIG_BODY.revision
+    configResponse = () => {
+      configReads += 1
+      return new Response(JSON.stringify({ ...CONFIG_BODY, revision: currentRevision }), { status: 200 })
+    }
+    const baseFetch = global.fetch
+    let releaseA!: (response: Response) => void
+    const pendingA = new Promise<Response>((resolve) => { releaseA = resolve })
+    const pendingB = new Promise<Response>(() => {})
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/tracks/qa' && opts?.method === 'PATCH') return pendingA
+      if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') return pendingB
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    await renderMatrix(['build'])
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
+    await user.click(screen.getByTestId('wb-track-editor-save'))
+    const firstPatch = fetchMock().mock.calls.find(([url, opts]) => url === '/api/tracks/qa' && (opts as RequestInit | undefined)?.method === 'PATCH')
+    const frozenRequestBody = String((firstPatch?.[1] as RequestInit).body)
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByTestId('wb-track-settings-panel'))
+    await user.click(screen.getByLabelText('关闭轨道设置'))
+    await user.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('qa')
+    expect(String((firstPatch?.[1] as RequestInit).body)).toBe(frozenRequestBody)
+
+    currentRevision = 'revision-after-a'
+    await act(async () => {
+      releaseA(new Response(JSON.stringify({
+        ok: true,
+        revision: currentRevision,
+        source: 'project-file',
+        tracks: CONFIG_BODY.tracks,
+      }), { status: 200 }))
+      await pendingA
+    })
+    await waitFor(() => expect(configReads).toBeGreaterThan(1))
+    await waitFor(() => expect(screen.queryByTestId('wb-track-editor')).toBeNull())
+    expect(screen.getByTestId('wb-track-settings-panel')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
+    expect(within(screen.getByTestId('wb-track-editor')).getByLabelText('轨道 ID')).toHaveValue('frontend')
+
+    fireEvent.click(screen.getByTestId('wb-track-editor-save'))
+    await waitFor(() => expect(fetchMock().mock.calls.some(([url, opts]) =>
+      url === '/api/tracks/frontend'
+      && (opts as RequestInit | undefined)?.method === 'PATCH'
+      && JSON.parse(String((opts as RequestInit).body)).revision === currentRevision)).toBe(true))
+  })
+
   it('内建轨编辑器锁住 ID/policy/delete，只 PATCH label 与 workflow', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/tracks/frontend' && opts?.method === 'PATCH') {
-        return new Response(JSON.stringify({ ok: true, revision: 'next', tracks: CONFIG_BODY.tracks }), { status: 200 })
+        return new Response(JSON.stringify({
+          ok: true,
+          revision: 'next',
+          source: 'project-file',
+          tracks: CONFIG_BODY.tracks,
+        }), { status: 200 })
       }
       return baseFetch(url, opts)
     }) as unknown as typeof fetch
@@ -972,7 +1493,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-frontend'))
     const editor = screen.getByTestId('wb-track-editor')
-    expect(within(editor).getByLabelText('Track ID')).toBeDisabled()
+    expect(within(editor).getByLabelText('轨道 ID')).toBeDisabled()
     expect(within(editor).queryByLabelText('Policy 模板')).toBeNull()
     expect(within(editor).queryByTestId('wb-track-editor-delete')).toBeNull()
     fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Web UI' } })

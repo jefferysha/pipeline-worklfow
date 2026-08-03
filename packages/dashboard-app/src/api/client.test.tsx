@@ -8,7 +8,8 @@ import {
   subscribeSnapshot,
 } from './client'
 import { lastEventSource, resetEventSources } from '../test-setup'
-import { makeSnapshot } from '../testkit'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { formatApiError, formatServerProse } from './transport'
 
 beforeEach(() => {
   resetEventSources()
@@ -21,6 +22,39 @@ afterEach(() => {
 describe('getToken（同源注入的 window token）', () => {
   it('读取 window.__TENON_DASHBOARD_TOKEN__', () => {
     expect(getToken()).toBe('tok-abc')
+  })
+})
+
+describe('formatApiError locale boundary', () => {
+  const t = (key: string, vars?: Record<string, string | number>): string => {
+    if (key === 'common.network_error') return '网络错误'
+    if (key === 'common.invalid_response') return '服务端响应格式无效。'
+    if (key === 'common.request_http_error') return `请求失败（HTTP ${String(vars?.status)}）。`
+    return key
+  }
+
+  it('中文也只展示真实 server detail，不把客户端英文 fallback 当成服务端原文', () => {
+    expect(formatApiError(
+      new ApiError('skill registry request failed (503)', 503),
+      t,
+      { exposeServerDetail: true },
+    )).toBe('请求失败（HTTP 503）。')
+    expect(formatApiError(
+      new ApiError('技能注册表暂不可用', 503, true),
+      t,
+      { exposeServerDetail: true },
+    )).toBe('技能注册表暂不可用')
+  })
+})
+
+describe('formatServerProse locale boundary', () => {
+  it('英文隐藏服务端自然语言，中文只在明确允许时展示', () => {
+    const t = (key: string): string => ({
+      'common.request_failed': 'Request failed.',
+    })[key] ?? key
+    expect(formatServerProse('服务端内部原因', t)).toBe('Request failed.')
+    expect(formatServerProse('服务端内部原因', t, { exposeServerDetail: true })).toBe('服务端内部原因')
+    expect(formatServerProse('', t, { exposeServerDetail: true })).toBe('Request failed.')
   })
 })
 
@@ -78,6 +112,13 @@ describe('fetchSnapshot', () => {
   it('!ok → ApiError 带状态码', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }))
     await expect(fetchSnapshot()).rejects.toThrow('500')
+  })
+
+  it('2xx 响应解码失败不伪装成 HTTP 200 错误', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) }))
+    const error = await fetchSnapshot().catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBeUndefined()
   })
 })
 
@@ -170,6 +211,29 @@ describe('subscribeSnapshot（真 EventSource stub，组件真收帧）', () => 
     const es = lastEventSource()!
     expect(() => es.emit('snapshot', '{bad json')).not.toThrow()
     expect(received).toHaveLength(0)
+  })
+
+  it('present but malformed reviewHandshake fails closed through the stream error callback', () => {
+    const received: unknown[] = []
+    const errors: unknown[] = []
+    const change = makeChange('review-change', 'explore')
+    ;(change as unknown as { reviewHandshake: unknown }).reviewHandshake = {
+      status: 'pending',
+      event: 'explore-complete',
+      requestedAt: 42,
+    }
+    subscribeSnapshot(
+      (snapshot) => received.push(snapshot),
+      () => errors.push('invalid-stream-snapshot'),
+    )
+
+    const es = lastEventSource()!
+    expect(() => es.emit(
+      'snapshot',
+      JSON.stringify(makeSnapshot([makeProject('/repo', [change])])),
+    )).not.toThrow()
+    expect(received).toHaveLength(0)
+    expect(errors).toEqual(['invalid-stream-snapshot'])
   })
 })
 

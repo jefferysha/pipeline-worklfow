@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
 import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
@@ -47,6 +47,7 @@ function stubMatchMedia(reduceMatches: boolean): void {
 let histEntries: ChangeHistoryEntry[] = []
 
 beforeEach(() => {
+  localStorage.clear()
   histEntries = []
   global.fetch = vi.fn(async (url: string) => {
     if (/\/api\/change\/[^/]+\/history\?root=/.test(url)) {
@@ -56,6 +57,7 @@ beforeEach(() => {
   }) as unknown as typeof fetch
 })
 afterEach(() => {
+  localStorage.clear()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -78,6 +80,10 @@ const CN_RULES = rulesFromDef({
 })
 
 async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="task-language-en" onClick={() => setLang('en')}>en</button>
+  }
   const props = {
     root: '/repo',
     change: makeChange('c1', 'verify', {
@@ -98,6 +104,7 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
   }
   const { container, rerender } = render(
     <I18nProvider>
+      <LanguageToggle />
       <TaskDetail {...props} />
     </I18nProvider>,
   )
@@ -194,6 +201,19 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
     expect(props.onToast).toHaveBeenCalled()
   })
 
+  it('产物复制晚到且期间切为英文时，toast 使用当前语言', async () => {
+    let releaseCopy!: () => void
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { releaseCopy = resolve }))
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    const props = await renderDetail()
+
+    fireEvent.click(screen.getByTestId('dtl-chip-design_doc'))
+    fireEvent.click(screen.getByTestId('task-language-en'))
+    releaseCopy()
+
+    await waitFor(() => expect(props.onToast).toHaveBeenCalledWith('Copied: docs/design.md'))
+  })
+
   it('OpenSpec tasks.md 投影的 checkbox 只显示在其 pipeline phase，不从原始需求另造通用 Todo', async () => {
     await renderDetail({
       change: makeChange('c1', 'verify', {
@@ -277,7 +297,7 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       rules: CN_RULES,
     })
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('boom: sandbox exploded')
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 2')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('尝试次数 2')
   })
 })
 
@@ -299,7 +319,7 @@ describe('TaskDetail 失败态（automation failed）', () => {
     const box = row.querySelector('[data-testid="dtl-box"]')
     expect(box?.getAttribute('data-tone')).toBe('bad')
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('尝试次数 3')
     // build 阶段声明产出 branch/build_sha 均未设 → 合并为一条 miss 占位
     const miss = screen.getByTestId('dt-field-missing')
     expect(miss.getAttribute('data-state')).toBe('miss')
@@ -565,8 +585,8 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
     expect(fold.querySelector('summary')?.textContent).toContain('automation_last_error')
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('docker daemon')
     const meta = screen.getByTestId('dt8-diag-meta')
-    expect(meta.textContent).toContain('attempts 3')
-    expect(meta.textContent).toContain('cause missing-docker')
+    expect(meta.textContent).toContain('尝试次数 3')
+    expect(meta.textContent).toContain('原因 missing-docker')
     // 非 cancelled 不带琥珀修饰（红 tone）
     expect(screen.getByTestId('dt-diag').getAttribute('data-tone')).toBe('red')
   })
@@ -591,7 +611,7 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
       }),
     })
     expect(screen.queryByTestId('dt8-rawfold')).toBeNull()
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('cause cancelled')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('原因 cancelled')
   })
 })
 
