@@ -79,6 +79,7 @@ describe('projectPipelineTodo', () => {
       expect(incompletePipelineTasksForExit({
         phase: 'build',
         tasksMarkdown: canonicalProjection(groupTitle),
+        trustedCanonicalProjection: true,
       })).toEqual({ structured: false, incomplete: 1 })
     },
   )
@@ -88,7 +89,11 @@ describe('projectPipelineTodo', () => {
       'Implement API',
       'Implement <!-- work-item:fake --> API <!-- work-item:bad value --> <!-- ordinary -->',
     )
-    const todo = projectPipelineTodo({ phase: 'build', tasksMarkdown: canonical })
+    const todo = projectPipelineTodo({
+      phase: 'build',
+      tasksMarkdown: canonical,
+      trustedCanonicalProjection: true,
+    })
     expect(todo.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
       {
         text: 'Implement <!-- work-item:fake --> API <!-- work-item:bad value --> <!-- ordinary -->',
@@ -102,6 +107,18 @@ describe('projectPipelineTodo', () => {
     })
     expect(legacy.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
       { text: 'Keep <!-- work-item:user-text -->', completed: false },
+    ])
+  })
+
+  it('header spoof 不会获得 canonical marker 展示剥离权限', () => {
+    const spoof = canonicalProjection('Notes')
+    const todo = projectPipelineTodo({
+      phase: 'build',
+      tasksMarkdown: spoof,
+      trustedCanonicalProjection: false,
+    })
+    expect(todo.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
+      { text: 'Implement API <!-- work-item:wi-1 -->', completed: false },
     ])
   })
 

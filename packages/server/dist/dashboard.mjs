@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile6 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname17, join as join64 } from "node:path";
+import { dirname as dirname18, join as join64 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -1192,21 +1192,18 @@ function isCanonicalTaskPlanTasksMarkdown(markdown) {
   return /^# Tasks\r?\n\r?\n<!-- tenon-task-plan revision=[^>]+ digest=[^>]+ -->\r?\n/u.test(markdown);
 }
 function adaptLegacyTasksMd(markdown) {
-  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let stage = null;
   const items = [];
   for (const line of markdown.split(/\r?\n/u)) {
     const heading = /^\s{0,3}#{2,6}\s+(.+?)\s*#*\s*$/u.exec(line);
     if (heading) {
-      const rawStage = (heading[1] ?? "").trim();
-      stage = (canonicalTaskPlan ? rawStage.replace(/\s*<!--\s*task-group:[^>]*-->\s*$/u, "").trim() : rawStage) || null;
+      stage = (heading[1] ?? "").trim() || null;
       continue;
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/u.exec(line);
     if (!task)
       continue;
-    const rawTaskTitle = (task[2] ?? "").trim();
-    const rawTitle = canonicalTaskPlan ? rawTaskTitle.replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, "").trim() : rawTaskTitle;
+    const rawTitle = (task[2] ?? "").trim();
     if (rawTitle === "")
       continue;
     const order = items.length;
@@ -7041,23 +7038,23 @@ async function readBoundedFileHandle(handle, maxBytes) {
 }
 async function readBoundedRegularFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
   const parent = dirname2(path7);
-  const parentBefore = await lstat8(parent);
+  const parentBefore = await lstat8(parent, { bigint: true });
   if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
     throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
   }
   const parentRealBefore = await realpath2(parent);
   const handle = await open(path7, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (!opened.isFile())
       throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path7}`);
     const assertStable = async () => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat8(parent),
+        lstat8(parent, { bigint: true }),
         realpath2(parent),
-        lstat8(path7)
+        lstat8(path7, { bigint: true })
       ]);
-      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size) {
+      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
         throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
       }
     };
@@ -7068,8 +7065,8 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
     if (content.byteLength > maxBytes) {
       throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
     }
-    const after = await handle.stat();
-    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
+    const after = await handle.stat({ bigint: true });
+    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
       throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
     }
     await assertStable();
@@ -7685,14 +7682,12 @@ async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
     return void 0;
   throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
 }
-async function readTaskPlanForChange(changeDir) {
+async function readCanonicalTaskPlanState(changeDir) {
   const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
   const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
   const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (currentRaw === void 0) {
-    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
-    return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
-  }
+  if (currentRaw === void 0)
+    return void 0;
   const decoded = decodeTaskPlanRevisionV1(currentRaw.text);
   if (!decoded.ok)
     throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
@@ -7703,6 +7698,21 @@ async function readTaskPlanForChange(changeDir) {
   if (immutableRaw === void 0) {
     throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
   }
+  return { revision: decoded.value, currentBytes: currentRaw.bytes };
+}
+async function isCurrentTaskPlanProjectionForChange(changeDir, source) {
+  const state = await readCanonicalTaskPlanState(changeDir);
+  if (state === void 0)
+    return false;
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
+  return normalizeProjectionCompletion(source) === expected;
+}
+async function readTaskPlanForChange(changeDir) {
+  const state = await readCanonicalTaskPlanState(changeDir);
+  if (state === void 0) {
+    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
+    return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
+  }
   let tasks;
   let projectionReadFailed = false;
   try {
@@ -7710,9 +7720,9 @@ async function readTaskPlanForChange(changeDir) {
   } catch {
     projectionReadFailed = true;
   }
-  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest2(currentRaw.bytes) });
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
   const projection = projectionReadFailed ? { state: "drift", reason: "tasks.md projection is not a readable bounded regular file" } : tasks === void 0 ? { state: "pending", reason: "tasks.md projection missing" } : normalizeProjectionCompletion(tasks) === expected ? { state: "current" } : { state: "drift", reason: "tasks.md projection content mismatch" };
-  return toTaskPlanReadModelV1(decoded.value, projection);
+  return toTaskPlanReadModelV1(state.revision, projection);
 }
 
 // packages/kernel/dist/state/markers.js
@@ -7843,17 +7853,16 @@ function stageForHeading(heading, stages) {
   }
   return void 0;
 }
-function parseTasks(markdown, currentStage, stages) {
+function parseTasks(markdown, currentStage, stages, trustedCanonicalProjection = false) {
   const byStage = /* @__PURE__ */ new Map();
   if (markdown === void 0)
     return { byStage, structured: false };
-  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
   let structured = false;
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
-      if (canonicalTaskPlan && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
+      if (trustedCanonicalProjection && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
         continue;
       const headingStage = stageForHeading(heading[1] ?? "", stages);
       if (headingStage !== void 0) {
@@ -7866,7 +7875,7 @@ function parseTasks(markdown, currentStage, stages) {
     if (!task || target === void 0)
       continue;
     const rawText = (task[2] ?? "").trim();
-    const text3 = canonicalTaskPlan ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
+    const text3 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
     if (text3 === "")
       continue;
     const items = byStage.get(target) ?? [];
@@ -7880,7 +7889,7 @@ function projectPipelineTodo(input) {
   const stages = declared.filter((stage, index) => stage.id !== "" && stage.label !== "" && declared.findIndex((other) => other.id === stage.id) === index);
   const currentIndex = stages.findIndex((stage) => stage.id === input.phase);
   const definitelyCompleted = definitelyCompletedStageIds(stages, input.phase);
-  const tasks = parseTasks(input.tasksMarkdown, input.phase, stages).byStage;
+  const tasks = parseTasks(input.tasksMarkdown, input.phase, stages, input.trustedCanonicalProjection).byStage;
   return {
     hasTaskSource: input.tasksMarkdown !== void 0,
     stages: stages.map((stage, index) => ({
@@ -7897,7 +7906,7 @@ function projectPipelineTodo(input) {
 function incompletePipelineTasksForExit(input) {
   const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES;
   const stages = declared.filter((stage, index) => stage.id !== "" && stage.label !== "" && declared.findIndex((other) => other.id === stage.id) === index);
-  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages);
+  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages, input.trustedCanonicalProjection);
   if (!parsed.structured) {
     const incomplete2 = input.phase === "build" ? [...parsed.byStage.values()].flat().filter((task) => !task.completed).length : 0;
     return { structured: false, incomplete: incomplete2 };
@@ -19318,6 +19327,20 @@ function assertWorkflowRootAnchor(anchor) {
     throw new Error(`registered root canonical realpath \u5DF2\u53D8\u5316: ${anchor.path}`);
   }
 }
+function captureWorkflowRootMutationVersion(anchor) {
+  assertWorkflowRootAnchor(anchor);
+  const stat5 = lstatSync3(anchor.path, { bigint: true });
+  if (stat5.isSymbolicLink() || !stat5.isDirectory() || Number(stat5.dev) !== anchor.dev || Number(stat5.ino) !== anchor.ino) {
+    throw new Error(`registered root \u5728\u7248\u672C\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${anchor.path}`);
+  }
+  return { mtimeNs: stat5.mtimeNs, ctimeNs: stat5.ctimeNs };
+}
+function assertWorkflowRootMutationVersion(anchor, expected) {
+  const current = captureWorkflowRootMutationVersion(anchor);
+  if (current.mtimeNs !== expected.mtimeNs || current.ctimeNs !== expected.ctimeNs) {
+    throw new Error(`registered root \u5728\u8BFB\u53D6\u671F\u95F4\u53D1\u751F\u53D8\u5316: ${anchor.path}`);
+  }
+}
 function closeWorkflowRootAnchor(anchor) {
   safeClose(anchor.fd);
 }
@@ -20423,7 +20446,7 @@ import {
   openSync as openSync8,
   realpathSync as realpathSync5
 } from "node:fs";
-import { isAbsolute as isAbsolute9, join as join34, relative as relative7, sep as sep10 } from "node:path";
+import { dirname as dirname9, isAbsolute as isAbsolute9, join as join34, relative as relative7, sep as sep10 } from "node:path";
 
 // packages/server/src/stableFileMetadata.ts
 function captureStableFileVersion(stat5) {
@@ -20442,13 +20465,21 @@ function matchesStableFileVersion(stat5, expected) {
 // packages/server/src/snapshotTasks.ts
 var MAX_LEGACY_TASKS_MARKDOWN_BYTES = 256 * 1024;
 var MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
-async function hasCurrentCanonicalTaskPlanProjection(changeDir) {
+async function hasCurrentCanonicalTaskPlanProjection(changeDir, source) {
   try {
-    const plan = await readTaskPlanForChange(changeDir);
-    return plan?.source === "canonical" && plan.projection.state === "current";
+    return await isCurrentTaskPlanProjectionForChange(changeDir, source);
   } catch {
     return false;
   }
+}
+function captureDirectoryMutationVersion(path7) {
+  const stat5 = lstatSync6(path7, { bigint: true });
+  if (!stat5.isDirectory() || stat5.isSymbolicLink()) throw new Error("tasks ancestor is not a directory");
+  return { path: path7, dev: stat5.dev, ino: stat5.ino, mtimeNs: stat5.mtimeNs, ctimeNs: stat5.ctimeNs };
+}
+function matchesDirectoryMutationVersion(expected) {
+  const stat5 = lstatSync6(expected.path, { bigint: true });
+  return stat5.isDirectory() && !stat5.isSymbolicLink() && stat5.dev === expected.dev && stat5.ino === expected.ino && stat5.mtimeNs === expected.mtimeNs && stat5.ctimeNs === expected.ctimeNs;
 }
 function isInside(base, candidate) {
   const fromBase = relative7(base, candidate);
@@ -20461,13 +20492,36 @@ function readBoundedTasksSource(fd, maxBytes) {
   }
   return bytes.toString("utf8");
 }
-async function readTasksMarkdown(changeDir, hooks = {}) {
-  const target = join34(changeDir, "tasks.md");
+async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
+  const lexicalTarget = join34(changeDir, "tasks.md");
+  let changeFd;
   let fd;
+  let rootVersion;
+  const assertTrustContext = () => {
+    hooks.assertTrustContext?.();
+    if (rootAnchor !== void 0 && rootVersion !== void 0) {
+      assertWorkflowRootMutationVersion(rootAnchor, rootVersion);
+    }
+  };
   try {
+    if (rootAnchor !== void 0) rootVersion = captureWorkflowRootMutationVersion(rootAnchor);
+    assertTrustContext();
     const openedDir = lstatSync6(changeDir);
     if (!openedDir.isDirectory() || openedDir.isSymbolicLink()) return void 0;
+    const openedDirVersion = lstatSync6(changeDir, { bigint: true });
     const realChangeDir = realpathSync5(changeDir);
+    const changesDir = dirname9(realChangeDir);
+    const openspecDir = dirname9(changesDir);
+    const ancestorVersions = [dirname9(openspecDir), openspecDir, changesDir].map(captureDirectoryMutationVersion);
+    changeFd = openSync8(
+      changeDir,
+      constants9.O_RDONLY | constants9.O_DIRECTORY | constants9.O_NOFOLLOW
+    );
+    const openedChangeDir = fstatSync7(changeFd);
+    const anchoredChangeDir = traversableDirectoryFdPath(changeFd, openedDir) ?? changeDir;
+    if (!openedChangeDir.isDirectory() || !sameIdentity(openedChangeDir, openedDir)) return void 0;
+    assertTrustContext();
+    const target = join34(anchoredChangeDir, "tasks.md");
     hooks.beforeOpen?.();
     fd = openSync8(target, constants9.O_RDONLY | constants9.O_NOFOLLOW | constants9.O_NONBLOCK);
     const opened = fstatSync7(fd, { bigint: true });
@@ -20475,8 +20529,9 @@ async function readTasksMarkdown(changeDir, hooks = {}) {
     const openedVersion = captureStableFileVersion(opened);
     const stable = () => {
       const currentDir = lstatSync6(changeDir);
-      const current = lstatSync6(target, { bigint: true });
-      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && realpathSync5(changeDir) === realChangeDir && current.isFile() && !current.isSymbolicLink() && matchesStableFileVersion(current, openedVersion) && isInside(realChangeDir, realpathSync5(target));
+      const currentDirVersion = lstatSync6(changeDir, { bigint: true });
+      const current = lstatSync6(lexicalTarget, { bigint: true });
+      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && currentDirVersion.mtimeNs === openedDirVersion.mtimeNs && currentDirVersion.ctimeNs === openedDirVersion.ctimeNs && ancestorVersions.every(matchesDirectoryMutationVersion) && realpathSync5(changeDir) === realChangeDir && current.isFile() && !current.isSymbolicLink() && matchesStableFileVersion(current, openedVersion) && isInside(realChangeDir, realpathSync5(lexicalTarget));
     };
     const fdStable = () => matchesStableFileVersion(
       fstatSync7(fd, { bigint: true }),
@@ -20484,17 +20539,18 @@ async function readTasksMarkdown(changeDir, hooks = {}) {
     );
     if (!stable() || !fdStable()) return void 0;
     const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES);
-    if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES)) {
-      if (!isCanonicalTaskPlanTasksMarkdown(source)) return void 0;
-      const authorized = hooks.authorizeCanonicalProjection === void 0 ? await hasCurrentCanonicalTaskPlanProjection(changeDir) : await hooks.authorizeCanonicalProjection(source);
-      if (!authorized) return void 0;
-    }
+    assertTrustContext();
+    const trustedCanonicalProjection = isCanonicalTaskPlanTasksMarkdown(source) && (hooks.authorizeCanonicalProjection === void 0 ? await hasCurrentCanonicalTaskPlanProjection(anchoredChangeDir, source) : await hooks.authorizeCanonicalProjection(source, anchoredChangeDir));
+    assertTrustContext();
+    if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES) && !trustedCanonicalProjection) return void 0;
     if (!fdStable() || !stable()) return void 0;
-    return source;
+    assertTrustContext();
+    return { source, trustedCanonicalProjection };
   } catch {
     return void 0;
   } finally {
     if (fd !== void 0) closeSync4(fd);
+    if (changeFd !== void 0) closeSync4(changeFd);
   }
 }
 
@@ -20518,7 +20574,7 @@ async function mapWithConcurrency(items, limit, mapper) {
 // packages/server/src/repositoryIdentity.ts
 import { execFile } from "node:child_process";
 import { createHash as createHash17 } from "node:crypto";
-import { basename as basename5, dirname as dirname9, isAbsolute as isAbsolute10, join as join35, normalize, resolve as resolve13 } from "node:path";
+import { basename as basename5, dirname as dirname10, isAbsolute as isAbsolute10, join as join35, normalize, resolve as resolve13 } from "node:path";
 var REPOSITORY_IDENTITY_TIMEOUT_MS = 1500;
 var REPOSITORY_IDENTITY_MAX_OUTPUT_BYTES = 4096;
 var REPOSITORY_IDENTITY_ARGS = [
@@ -20594,7 +20650,7 @@ async function probeRepositoryIdentity(root, deps = {}) {
   const gitDirectory = normalize(resolve13(gitDirectoryRaw));
   const commonName = basename5(commonDirectory);
   const conventionalDotGit = commonName === ".git" && (commonDirectory === normalize(resolve13(join35(topLevel, ".git"))) || gitDirectory !== commonDirectory);
-  const label = conventionalDotGit ? basename5(dirname9(commonDirectory)) : commonName.endsWith(".git") && commonName.length > ".git".length ? commonName.slice(0, -".git".length) : basename5(topLevel);
+  const label = conventionalDotGit ? basename5(dirname10(commonDirectory)) : commonName.endsWith(".git") && commonName.length > ".git".length ? commonName.slice(0, -".git".length) : basename5(topLevel);
   if (!label) return void 0;
   return {
     id: createHash17("sha256").update(commonDirectory).digest("hex"),
@@ -20860,9 +20916,11 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
         documentEvidence(readRoot, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs)
       ]);
+      const tasksProjection = await readTasksProjection(changeDir, {}, anchor);
       const todo = projectPipelineTodo({
         phase,
-        tasksMarkdown: await readTasksMarkdown(changeDir),
+        tasksMarkdown: tasksProjection?.source,
+        trustedCanonicalProjection: tasksProjection?.trustedCanonicalProjection,
         stages: snapshotTodoStages(plan, phase),
         additionalItemsByStage: documentTodoItems(plan, documents)
       });
@@ -21150,10 +21208,10 @@ function hasTraceTimelineReader(store) {
 // packages/server/src/operations.ts
 import { execFile as execFile2 } from "node:child_process";
 import { existsSync as existsSync5 } from "node:fs";
-import { dirname as dirname10, join as join39 } from "node:path";
+import { dirname as dirname11, join as join39 } from "node:path";
 import { fileURLToPath } from "node:url";
 function pipelineCliBundlePath() {
-  return join39(dirname10(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "tenon.mjs");
+  return join39(dirname11(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "tenon.mjs");
 }
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
@@ -21552,7 +21610,7 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync11 } from "node:fs";
-import { dirname as dirname13, join as join53 } from "node:path";
+import { dirname as dirname14, join as join53 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -21715,7 +21773,7 @@ function writeAutomationSettings(root, settings) {
 // packages/server/src/config.ts
 import { readFileSync as readFileSync17 } from "node:fs";
 import { readFile as readFile15, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
-import { dirname as dirname11 } from "node:path";
+import { dirname as dirname12 } from "node:path";
 var ConfigError = class extends Error {
   constructor(message) {
     super(message);
@@ -21846,7 +21904,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
     }
   }
   const key = `${phase}.${track}`;
-  await withLock(dirname11(manifestPath2), async () => {
+  await withLock(dirname12(manifestPath2), async () => {
     const original = await readFile15(manifestPath2, "utf8");
     const lines = original.split("\n");
     let sectionStart = -1;
@@ -22406,7 +22464,7 @@ async function removeSecret(path7, key) {
 
 // packages/server/src/skillsRegistry.ts
 import { accessSync as accessSync2, constants as constants12, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
-import { delimiter, dirname as dirname12, join as join44 } from "node:path";
+import { delimiter, dirname as dirname13, join as join44 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
   try {
@@ -22435,7 +22493,7 @@ function installedPluginRoots(claudeDir) {
   }
 }
 function descriptionForSkill(name, repoRoot, claudeDir, meta) {
-  const home = dirname12(claudeDir);
+  const home = dirname13(claudeDir);
   const candidates = [...new Set([
     meta?.contentSkill,
     meta?.skill,
@@ -22520,10 +22578,10 @@ function externalSkillSections(repoRoot) {
 }
 function detectInstalled(claudeDir) {
   const skills = new Set(skillDirsIn(join44(claudeDir, "skills")));
-  for (const name of skillDirsIn(join44(dirname12(claudeDir), ".agents", "skills"))) skills.add(name);
+  for (const name of skillDirsIn(join44(dirname13(claudeDir), ".agents", "skills"))) skills.add(name);
   const pluginBases = /* @__PURE__ */ new Set();
   const codexPluginBases = /* @__PURE__ */ new Set();
-  const codexCache = join44(dirname12(claudeDir), ".codex", "plugins", "cache");
+  const codexCache = join44(dirname13(claudeDir), ".codex", "plugins", "cache");
   for (const marketplace of childDirsIn(codexCache)) {
     for (const plugin of childDirsIn(join44(codexCache, marketplace))) codexPluginBases.add(plugin);
   }
@@ -22853,6 +22911,31 @@ function inside2(base, candidate) {
   const fromBase = relative8(base, candidate);
   return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep12}`) && !isAbsolute11(fromBase);
 }
+function captureDirectoryIdentity(path7) {
+  const info = lstatSync8(path7, { bigint: true });
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
+  }
+  return {
+    path: path7,
+    dev: Number(info.dev),
+    ino: Number(info.ino),
+    mtimeNs: info.mtimeNs,
+    ctimeNs: info.ctimeNs
+  };
+}
+function captureChangeParentPathAnchor(root) {
+  const chain = [];
+  for (const path7 of [join46(root.path, "openspec"), join46(root.path, "openspec", "changes")]) {
+    try {
+      chain.push(captureDirectoryIdentity(path7));
+    } catch (error2) {
+      if (missingCode(error2)) return { chain, missingPath: path7 };
+      throw error2;
+    }
+  }
+  return { chain };
+}
 function captureChangePathAnchor(root, change) {
   const chainPaths = [
     join46(root.path, "openspec"),
@@ -22861,19 +22944,14 @@ function captureChangePathAnchor(root, change) {
   ];
   const chain = [];
   for (const path7 of chainPaths) {
-    let info;
     try {
-      info = lstatSync8(path7);
+      chain.push(captureDirectoryIdentity(path7));
     } catch (error2) {
       if (missingCode(error2)) {
         throw new ContextBundlePathError(400, "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state");
       }
       throw error2;
     }
-    if (info.isSymbolicLink() || !info.isDirectory()) {
-      throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
-    }
-    chain.push({ path: path7, dev: info.dev, ino: info.ino });
   }
   const changeDir = chainPaths.at(2);
   if (changeDir === void 0) {
@@ -22894,21 +22972,42 @@ function captureChangePathAnchor(root, change) {
   }
   return { changeDir, realPath, chain };
 }
-function assertChangePathAnchor(anchor) {
-  for (const expected of anchor.chain) {
+function assertPathIdentityChain(chain) {
+  for (const expected of chain) {
     let actual;
     try {
-      actual = lstatSync8(expected.path);
+      actual = lstatSync8(expected.path, { bigint: true });
     } catch {
       throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u6D88\u5931: ${expected.path}`);
     }
-    if (actual.isSymbolicLink() || !actual.isDirectory() || actual.dev !== expected.dev || actual.ino !== expected.ino) {
+    if (actual.isSymbolicLink() || !actual.isDirectory() || Number(actual.dev) !== expected.dev || Number(actual.ino) !== expected.ino || expected.mtimeNs !== void 0 && actual.mtimeNs !== expected.mtimeNs || expected.ctimeNs !== void 0 && actual.ctimeNs !== expected.ctimeNs) {
       throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u88AB\u66FF\u6362: ${expected.path}`);
     }
   }
+}
+function assertChangePathAnchor(anchor) {
+  assertPathIdentityChain(anchor.chain);
   if (realpathSync6(anchor.changeDir) !== anchor.realPath) {
     throw new ContextBundlePathError(403, `Context Bundle Change realpath \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${anchor.changeDir}`);
   }
+}
+function assertChangeParentPathAnchor(anchor) {
+  assertPathIdentityChain(anchor.chain);
+  if (anchor.missingPath === void 0) return;
+  try {
+    lstatSync8(anchor.missingPath);
+  } catch (error2) {
+    if (missingCode(error2)) return;
+    throw new ContextBundlePathError(
+      403,
+      `Context Bundle Change parent \u8DEF\u5F84\u65E0\u6CD5\u590D\u6838: ${anchor.missingPath}`,
+      error2
+    );
+  }
+  throw new ContextBundlePathError(
+    403,
+    `Context Bundle Change parent \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u51FA\u73B0: ${anchor.missingPath}`
+  );
 }
 function safeContextBundlePreview(preview, fits, aggregateDigest) {
   return {
@@ -24523,8 +24622,41 @@ function readBoundedTasksSource2(fd, maxBytes) {
   }
   return bytes.toString("utf8");
 }
-async function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource2, authorizeCanonicalProjection) {
-  const target = join52(changeAnchor.changeDir, "tasks.md");
+async function readAnchoredTasksProjection(changeAnchor, readSource = readBoundedTasksSource2, authorizeCanonicalProjection, rootAnchor) {
+  let rootVersion;
+  const assertTrustContext = () => {
+    if (rootAnchor === void 0) return;
+    try {
+      rootVersion ??= captureWorkflowRootMutationVersion(rootAnchor);
+      assertWorkflowRootMutationVersion(rootAnchor, rootVersion);
+    } catch (cause) {
+      throw new ContextBundlePathError(403, "Change tasks registered root changed during read", cause);
+    }
+  };
+  assertTrustContext();
+  const lexicalTarget = join52(changeAnchor.changeDir, "tasks.md");
+  const changeIdentity = changeAnchor.chain.at(-1);
+  if (changeIdentity === void 0) {
+    throw new ContextBundlePathError(403, "Change tasks directory identity is missing");
+  }
+  assertChangePathAnchor(changeAnchor);
+  let changeFd;
+  try {
+    changeFd = openSync12(
+      changeAnchor.changeDir,
+      constants14.O_RDONLY | constants14.O_DIRECTORY | constants14.O_NOFOLLOW
+    );
+  } catch (cause) {
+    throw new ContextBundlePathError(403, "Change tasks directory cannot be anchored", cause);
+  }
+  const openedChange = fstatSync11(changeFd);
+  const anchoredChangeDir = traversableDirectoryFdPath(changeFd, changeIdentity) ?? changeAnchor.changeDir;
+  if (!openedChange.isDirectory() || !sameIdentity(openedChange, changeIdentity)) {
+    closeSync7(changeFd);
+    throw new ContextBundlePathError(403, "Change tasks directory identity changed while anchoring");
+  }
+  assertTrustContext();
+  const target = join52(anchoredChangeDir, "tasks.md");
   let fd;
   try {
     fd = openSync12(
@@ -24532,7 +24664,11 @@ async function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedT
       constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
     );
   } catch (error2) {
-    if (missing3(error2)) return void 0;
+    if (missing3(error2)) {
+      closeSync7(changeFd);
+      return void 0;
+    }
+    closeSync7(changeFd);
     throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u4E0D\u53EF\u4FE1", error2);
   }
   try {
@@ -24546,8 +24682,8 @@ async function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedT
       let realPath;
       try {
         assertChangePathAnchor(changeAnchor);
-        current = lstatSync10(target, { bigint: true });
-        realPath = realpathSync7(target);
+        current = lstatSync10(lexicalTarget, { bigint: true });
+        realPath = realpathSync7(lexicalTarget);
       } catch (error2) {
         if (error2 instanceof ContextBundlePathError) throw error2;
         throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316", error2);
@@ -24567,17 +24703,19 @@ async function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedT
       throw new Error(`Change tasks \u8D85\u8FC7 ${MAX_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES);
-    if (opened.size > MAX_LEGACY_TASKS_MARKDOWN_BYTES) {
-      const authorized = isCanonicalTaskPlanTasksMarkdown(source) && authorizeCanonicalProjection !== void 0 && await authorizeCanonicalProjection(source);
-      if (!authorized) {
-        throw new Error(`Legacy Change tasks \u8D85\u8FC7 ${MAX_LEGACY_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
-      }
+    assertTrustContext();
+    const trustedCanonicalProjection = isCanonicalTaskPlanTasksMarkdown(source) && authorizeCanonicalProjection !== void 0 && await authorizeCanonicalProjection(source, anchoredChangeDir);
+    assertTrustContext();
+    if (opened.size > MAX_LEGACY_TASKS_MARKDOWN_BYTES && !trustedCanonicalProjection) {
+      throw new Error(`Legacy Change tasks \u8D85\u8FC7 ${MAX_LEGACY_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
     }
     assertOpenedFdStillStable();
     assertOpenedTargetStillAnchored();
-    return source;
+    assertTrustContext();
+    return { source, trustedCanonicalProjection };
   } finally {
     closeSync7(fd);
+    closeSync7(changeFd);
   }
 }
 async function readAnchoredChangeState(root, changeName) {
@@ -24662,13 +24800,17 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
       ...gitHeadSha2 === void 0 ? {} : { gitHeadSha: () => gitHeadSha2(rootPath) },
       ...workspaceFingerprint === void 0 ? {} : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }
     };
-    const [documents, terminalActivity, tasksMarkdown, workflowExecution] = await Promise.all([
+    const [documents, terminalActivity, tasksProjection, workflowExecution] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
-      readAnchoredTasksMarkdown(
+      readAnchoredTasksProjection(
         anchored.changeAnchor,
         void 0,
-        () => hasCurrentCanonicalTaskPlanProjection(changeDir)
+        (source, anchoredChangeDir) => hasCurrentCanonicalTaskPlanProjection(
+          anchoredChangeDir,
+          source
+        ),
+        anchor
       ),
       snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps)
     ]);
@@ -24676,7 +24818,8 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     assertChangePathAnchor(anchored.changeAnchor);
     const todo = projectPipelineTodo({
       phase,
-      tasksMarkdown,
+      tasksMarkdown: tasksProjection?.source,
+      trustedCanonicalProjection: tasksProjection?.trustedCanonicalProjection,
       stages: snapshotTodoStages(plan, phase),
       additionalItemsByStage: documentTodoItems(plan, documents)
     });
@@ -25040,8 +25183,11 @@ async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
 }
 
 // packages/server/src/serverTaskPlanRoutes.ts
+import { closeSync as closeSync8, constants as constants15, fstatSync as fstatSync12, openSync as openSync13 } from "node:fs";
 var defaultAnchoredReaderDeps = {
   assertRoot: assertWorkflowRootAnchor,
+  captureChangeParent: captureChangeParentPathAnchor,
+  assertChangeParent: assertChangeParentPathAnchor,
   captureChange: captureChangePathAnchor,
   assertChange: assertChangePathAnchor,
   readPlan: readTaskPlanForChange
@@ -25053,34 +25199,81 @@ function assertTrustedRoot(anchor, assertRoot) {
     throw new ContextBundlePathError(403, "TaskPlan registered root identity changed", cause);
   }
 }
+function trustedRootMutationVersion(anchor) {
+  try {
+    return captureWorkflowRootMutationVersion(anchor);
+  } catch (cause) {
+    throw new ContextBundlePathError(
+      403,
+      "TaskPlan registered root changed during read",
+      cause
+    );
+  }
+}
+function assertRootMutationVersion(anchor, expected) {
+  try {
+    assertWorkflowRootMutationVersion(anchor, expected);
+  } catch (cause) {
+    throw new ContextBundlePathError(403, "TaskPlan registered root changed during read");
+  }
+}
 async function readAnchoredTaskPlan(anchor, change, overrides = {}) {
   const deps = { ...defaultAnchoredReaderDeps, ...overrides };
   assertTrustedRoot(anchor, deps.assertRoot);
+  const rootVersion = trustedRootMutationVersion(anchor);
+  const changeParentAnchor = deps.captureChangeParent(anchor);
   let changeAnchor;
   try {
     changeAnchor = deps.captureChange(anchor, change);
   } catch (error2) {
     if (errorStatus(error2) === 400) {
       assertTrustedRoot(anchor, deps.assertRoot);
+      assertRootMutationVersion(anchor, rootVersion);
+      deps.assertChangeParent(changeParentAnchor);
       return null;
     }
     throw error2;
   }
   assertTrustedRoot(anchor, deps.assertRoot);
+  deps.assertChangeParent(changeParentAnchor);
   deps.assertChange(changeAnchor);
+  const changeIdentity = changeAnchor.chain.at(-1);
+  if (changeIdentity === void 0) {
+    throw new ContextBundlePathError(403, "TaskPlan Change directory identity is missing");
+  }
+  let changeFd;
+  try {
+    changeFd = openSync13(
+      changeAnchor.changeDir,
+      constants15.O_RDONLY | constants15.O_DIRECTORY | constants15.O_NOFOLLOW
+    );
+  } catch (cause) {
+    throw new ContextBundlePathError(403, "TaskPlan Change directory cannot be anchored", cause);
+  }
+  const openedChange = fstatSync12(changeFd);
+  const anchoredChangeDir = traversableDirectoryFdPath(changeFd, changeIdentity) ?? changeAnchor.changeDir;
+  if (!openedChange.isDirectory() || !sameIdentity(openedChange, changeIdentity)) {
+    closeSync8(changeFd);
+    throw new ContextBundlePathError(403, "TaskPlan Change directory identity changed while anchoring");
+  }
   let result = null;
   let readFailed = false;
   let readError;
   try {
-    result = await deps.readPlan(changeAnchor.changeDir);
+    result = await deps.readPlan(anchoredChangeDir);
   } catch (error2) {
     readFailed = true;
     readError = error2;
   }
-  deps.assertChange(changeAnchor);
-  assertTrustedRoot(anchor, deps.assertRoot);
-  if (readFailed) throw readError;
-  return result;
+  try {
+    deps.assertChange(changeAnchor);
+    assertTrustedRoot(anchor, deps.assertRoot);
+    assertRootMutationVersion(anchor, rootVersion);
+    if (readFailed) throw readError;
+    return result;
+  } finally {
+    closeSync8(changeFd);
+  }
 }
 function isChangeName4(name) {
   return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
@@ -25128,7 +25321,7 @@ async function resolveTaskPlanRoute(rawUrl, path7, deps) {
 
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join53(dirname13(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join53(dirname14(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
@@ -26343,9 +26536,9 @@ import { join as join57 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
-  constants as constants15,
-  fstatSync as fstatSync12,
-  openSync as openSync13,
+  constants as constants16,
+  fstatSync as fstatSync13,
+  openSync as openSync14,
   readFileSync as readFileSync20
 } from "node:fs";
 import { posix as posix5 } from "node:path";
@@ -26398,7 +26591,7 @@ function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync20(fd,
             if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
             let fd;
             try {
-              fd = openSync13(paths.operation, constants15.O_RDONLY | constants15.O_NOFOLLOW);
+              fd = openSync14(paths.operation, constants16.O_RDONLY | constants16.O_NOFOLLOW);
             } catch (error2) {
               const code = error2.code;
               if (code === "ELOOP" || code === "ENOENT") {
@@ -26407,7 +26600,7 @@ function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync20(fd,
               throw registryReadError(error2);
             }
             try {
-              const opened = fstatSync12(fd);
+              const opened = fstatSync13(fd);
               if (!opened.isFile() || !sameIdentity(opened, before)) {
                 throw new LoopScopePreviewRootUntrustedError(
                   "during-read",
@@ -27033,7 +27226,7 @@ async function handlePostRoute(req, res, path7, deps) {
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync21 } from "node:fs";
-import { dirname as dirname14, join as join59 } from "node:path";
+import { dirname as dirname15, join as join59 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
@@ -27061,7 +27254,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join59(dirname14(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join59(dirname15(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -27559,7 +27752,7 @@ function createRelatedSessionSearchExecutor(runner) {
 
 // packages/server/src/version.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { basename as basename6, dirname as dirname15, join as join62 } from "node:path";
+import { basename as basename6, dirname as dirname16, join as join62 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -27579,7 +27772,7 @@ function resolveReleaseVersion(pluginRoot2) {
 }
 function resolvePayloadReleaseId(pluginRoot2) {
   if (basename6(pluginRoot2) !== "payload") return void 0;
-  const releaseId = basename6(dirname15(pluginRoot2));
+  const releaseId = basename6(dirname16(pluginRoot2));
   return RELEASE_ID.test(releaseId) ? releaseId : void 0;
 }
 
@@ -28126,7 +28319,7 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join64(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join64(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
   return join64(pluginRoot(), "templates", "manifest.yaml");
@@ -28192,7 +28385,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join64(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join64(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源：只读 sessions/records/timeline；完整 reader 才声明 traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

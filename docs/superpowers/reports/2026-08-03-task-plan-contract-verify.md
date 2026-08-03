@@ -839,3 +839,103 @@ aggregate 与 single Change 两类同尺寸并发写入回归证明失败关闭�
 - 兼容专项覆盖 phase-like group title、可信/伪造 marker、真实大于 256 KiB canonical projection、legacy
   硬上限、aggregate/single authorization-window races 与 ABA rename；receipt bridge 的 129+ discovery、
   完整/截断 `max_output_tokens`、exact session/turn/worktree/ABI 及完成态正反矩阵继续保持通过。
+
+---
+
+# 第 18 轮 Verify（冻结基线 `9603c01226f07558567f270632cfb4b4e740b05b`）
+
+## 结论
+
+FAIL，C0/H1/M3/L0。Round17 的三个兼容 finding 与 receipt bridge 专项均保持绿测，但三轨完整冻结
+审查确认了 1 个 HIGH 与 3 个 MEDIUM 的文件身份/信任边界缺口。现有测试只覆盖 replacement 留在位
+或同 inode 写入，没有覆盖完整目录 ABA 在最终 fence 前复位；因此不得以 6110 个全仓测试通过抵消
+确定性复现，必须回 Build 修复并从零重跑三轨。
+
+## 冻结身份与三轨结果
+
+- exact base：`dc53843e61f812938f13c684a41ffe1d935e48bf`；frozen SHA/tree：
+  `9603c01226f07558567f270632cfb4b4e740b05b` /
+  `5a3b00f16bab345f6ce9384f9da363c7b66bfcee`。
+- Reviewer：FAIL，C0/H1/M2/L0。三个 finding 均由真实实现确定性复现，focused 379/379、Dashboard
+  1633/1633、build、静态门禁、OpenSpec strict/archive rehearsal 与 origin/main merge-tree 通过；
+  真实工作树指纹前后一致。证据根 `/tmp/tenon-pr1-r18-reviewer.eMxeeH`。
+- E2E：FAIL，C0/H1/M3/L0。focused 9 files / 388 passed，receipt 154/154、安全专项 27/27、
+  `max_output_tokens` 10/10、snapshot 既有竞态 4/4；全仓 337 files / 6110 passed / 26 honest
+  skipped，Dashboard 87 files / 1633 passed，OpenSpec 隔离 archive `+7/~2` 且前后 strict
+  37/37。真实工作树指纹不变。证据根 `/tmp/tenon-pr1-r18-e2e.6Hp1Wl`。
+- 原生 Codex CLI：FAIL，P2/MEDIUM=2。在 detached read-only clone
+  `/tmp/tenon-pr1-codex-r18.t00V1f/repo` 审 exact frozen SHA/base，exit 0；独立确认大型投影授权未
+  绑定 source bytes，并发现 canonical state 同尺寸原地改写缺少时间元数据 fence。其隔离 clone
+  没有本地依赖，自动 `npx` 取得不兼容 Vitest 并因参数失败，故不把该命令当测试证据；正式测试取
+  Reviewer/E2E 轨。
+
+## 确认 findings
+
+### HIGH — TaskPlan GET 可在完整 registered-root/change ABA 中返回 replacement plan
+
+route 只在异步 pathname reader 前后复核 root/change inode。读取期间把完整注册 root 或 Change 目录
+换成未注册 replacement，读取其 canonical plan，再在最终检查前恢复原 inode，可让首尾身份检查均
+通过并返回 replacement 数据。修复必须把 canonical state 的实际读取绑定到已捕获的目录句柄/身份，
+不能只依赖 pathname 首尾相等。
+
+### MEDIUM — 大型 projection 授权未绑定已读 tasks source
+
+reader 先从稳定 fd 读取超过 256 KiB 的 source，随后 authorizer 却按当前 `changeDir` pathname 读取
+另一时刻的 canonical state。完整 Change-dir ABA 可暂时安装合法 current projection取得授权，再恢复
+原目录，让最终 fd/path fence 通过并返回未授权 source。授权必须逐字节或以 digest 绑定已读 source，
+并与同一 anchored canonical state 联合验证。
+
+### MEDIUM — header spoof 会让 legacy 用户 marker 文本被剥离
+
+没有 canonical current 的 legacy `tasks.md` 只需伪造 `<!-- tenon-task-plan ... -->` header，就会被
+`adaptLegacyTasksMd`/Todo parser 当成 canonical，剥除用户原本的 task-group/work-item marker-shaped
+文本。canonical 展示剥离必须来自可信 store/current 证明，不能由 Markdown 自我声明升级信任。
+
+### MEDIUM — canonical state 同尺寸原地改写缺少 mtime/ctime fence
+
+TaskPlan `current.json` 与 immutable revision 共用的 bounded reader 只复核 dev/inode/size。同一 inode
+在读取窗口被写入不同但等长内容时，reader/CAS 可使用已经失效的旧字节。修复必须捕获并复核纳秒级
+mtime/ctime，且保持原 fd 与当前 pathname 身份、字节预算和 raw identity 约束。
+
+## Receipt bridge 结论与下一步
+
+用户指出的 PR1 首次登记仍确认是 receipt bridge false-negative bug；129+ discovery、合法 inline
+`max_output_tokens` 完成态及所有 session/turn/worktree/ABI/inode/完整输出反例本轮继续通过。当前失败
+来自后续 TaskPlan 文件身份边界，不推翻该 bug 结论。本轮 Verify tasks 保持未完成，不设置
+`branch_status=handled`，不请求 `verify-pass`。登记报告后请求精确 `verify-fail`，按持续授权 delegated
+acknowledge 回 Build，以 TDD 同时修复上述四条并重新执行独立 pre-Verify 与三轨。
+
+---
+
+# 第 19 轮 pre-Verify（Round18 finding 收敛）
+
+## 结论
+
+PASS，C0/H0/M0/L0。Round18 的 1 个 HIGH 与 3 个 MEDIUM 均已按 TDD 闭环：TaskPlan GET
+把 canonical state 读取绑定 registered root、`openspec/changes` parent chain、Change 目录句柄与
+纳秒级 mutation version；大型 projection 的授权绑定已读 source、真实 current/immutable state 与
+同一 root/ancestor trust context；legacy/header spoof 不再获得 marker 剥离权限；canonical bounded
+reader 同时复核 fd/path 的 dev、inode、size、mtime 与 ctime。
+
+独立 Reviewer 又确定性复现并推动修复了 3 个 MEDIUM 窄分支：missing Change 的完整 registered-root
+ABA 会被误报 404；完整 `openspec/changes` ABA 可绕过仅 root 的 missing fence；大型 projection 可在
+authorization window 通过完整 root ABA 借另一 Change 的 canonical state 获得授权。最终实现将每次
+读取的 root mutation version 抽为共享原语，并让 route、aggregate snapshot、single-Change snapshot
+及直接 tasks reader 在 source/authorization 全窗口复核 root 与 ancestor chain；三条攻击回归全部
+失败关闭。
+
+## 独立证据
+
+- Reviewer：PASS，C0/H0/M0/L0；精确冻结副本 build 通过，全量 338/338 files、6119 passed、
+  26 honest skipped；Web、hooks、TypeScript、architecture、comments、OpenSpec strict、docs、
+  repository hygiene、default workflow freshness、migration CAS 与 bundle freshness 全绿。与
+  `origin/main@315f334c9e7f7fa4e6b56389425476e97a789593` 自动合并无冲突，合并态 build、focused
+  297、architecture 与 OpenSpec 37/37 通过。证据：
+  `/tmp/tenon-pr1-r19-preverify.LuXIiA/review-report.md`；Reviewer 对真实工作树零写，前后指纹一致。
+- 主轨 fresh full suite：338 files / 6119 passed / 26 honest skipped；Dashboard：87 files /
+  1633 passed；hooks 512/512；build、TypeScript、architecture、comments、OpenSpec strict 37/37、
+  docs、repository hygiene、default workflow freshness、migration CAS 13/13 与 `git diff --check`
+  全通过。
+- receipt bridge 的 129+ discovery、safe-positive literal `max_output_tokens`、exact
+  session/turn/worktree/ABI、完整 awaited same-result `text(result)` 与截断/动态/pragma/spoofing
+  反例继续保持通过；PR1 首次官方登记仍确认是 bridge false-negative bug，而非缺少真实 Skill 读取。

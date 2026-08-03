@@ -407,14 +407,16 @@ export async function publishTaskPlanRevision(
   })
 }
 
-export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlanReadModelV1 | null> {
+interface CanonicalTaskPlanState {
+  readonly revision: TaskPlanRevisionV1
+  readonly currentBytes: Buffer
+}
+
+async function readCanonicalTaskPlanState(changeDir: string): Promise<CanonicalTaskPlanState | undefined> {
   const stateDir = join(changeDir, TASK_PLAN_STATE_DIR)
   const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
   const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
-  if (currentRaw === undefined) {
-    const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_LEGACY_TASKS_MD_BYTES)
-    return legacy === undefined ? null : adaptLegacyTasksMd(legacy)
-  }
+  if (currentRaw === undefined) return undefined
   const decoded = decodeTaskPlanRevisionV1(currentRaw.text)
   if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
   assertCommittedRevisionSemantics(decoded.value)
@@ -428,6 +430,25 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   if (immutableRaw === undefined) {
     throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
   }
+  return { revision: decoded.value, currentBytes: currentRaw.bytes }
+}
+
+export async function isCurrentTaskPlanProjectionForChange(
+  changeDir: string,
+  source: string,
+): Promise<boolean> {
+  const state = await readCanonicalTaskPlanState(changeDir)
+  if (state === undefined) return false
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) })
+  return normalizeProjectionCompletion(source) === expected
+}
+
+export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlanReadModelV1 | null> {
+  const state = await readCanonicalTaskPlanState(changeDir)
+  if (state === undefined) {
+    const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_LEGACY_TASKS_MD_BYTES)
+    return legacy === undefined ? null : adaptLegacyTasksMd(legacy)
+  }
 
   let tasks: string | undefined
   let projectionReadFailed = false
@@ -436,7 +457,7 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   } catch {
     projectionReadFailed = true
   }
-  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest(currentRaw.bytes) })
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) })
   const projection = projectionReadFailed
     ? { state: 'drift', reason: 'tasks.md projection is not a readable bounded regular file' } as const
     : tasks === undefined
@@ -444,5 +465,5 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
     : normalizeProjectionCompletion(tasks) === expected
       ? { state: 'current' } as const
       : { state: 'drift', reason: 'tasks.md projection content mismatch' } as const
-  return toTaskPlanReadModelV1(decoded.value, projection)
+  return toTaskPlanReadModelV1(state.revision, projection)
 }

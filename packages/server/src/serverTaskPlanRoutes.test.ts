@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  publishTaskPlanRevision,
+  readTaskPlanForChange,
+  type TaskPlanRevisionV1,
+} from '@tenon/kernel'
+import {
   readAnchoredTaskPlan,
   resolveTaskPlanRoute,
   type TaskPlanRouteDeps,
@@ -154,6 +159,53 @@ describe('readAnchoredTaskPlan', () => {
     }
   })
 
+  it('rejects a missing result produced during a full registered-root ABA', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const attackRoot = join(parent, 'attack-root')
+    await mkdir(attackRoot)
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'missing', {
+        captureChange: () => {
+          renameSync(root, replacement)
+          renameSync(attackRoot, root)
+          renameSync(root, attackRoot)
+          renameSync(replacement, root)
+          throw Object.assign(new Error('missing during full root ABA'), { status: 400 })
+        },
+      })).rejects.toMatchObject({ status: 403 })
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a missing result produced during a full changes-directory ABA', async () => {
+    const { parent, root } = await rootFixture()
+    const changes = join(root, 'openspec', 'changes')
+    const displacedChanges = join(root, 'openspec', 'displaced-changes')
+    const attackChanges = join(root, 'openspec', 'attack-changes')
+    await mkdir(attackChanges)
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'missing', {
+        captureChange: (current, change) => {
+          renameSync(changes, displacedChanges)
+          renameSync(attackChanges, changes)
+          try {
+            return captureChangePathAnchor(current, change)
+          } finally {
+            renameSync(changes, attackChanges)
+            renameSync(displacedChanges, changes)
+          }
+        },
+      })).rejects.toMatchObject({ status: 403 })
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
   it('rejects and does not return replacement content when the root changes during the read', async () => {
     const { parent, root, replacement } = await rootFixture()
     const anchor = captureWorkflowRootAnchor(root)
@@ -172,6 +224,44 @@ describe('readAnchoredTaskPlan', () => {
       }
       expect(caught).toMatchObject({ status: 403 })
       expect(String(caught)).not.toContain('replacement-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps reads bound to the captured Change across a full registered-root ABA', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const attackRoot = join(parent, 'attack-root')
+    const attackChange = join(attackRoot, 'openspec', 'changes', 'demo')
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-aba',
+      revision_id: 'revision-aba',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-03T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [],
+      work_items: [],
+    }
+    await mkdir(attackChange, { recursive: true })
+    await publishTaskPlanRevision(attackChange, revision, { expected_current_revision_id: null })
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'demo', {
+        readPlan: async (changeDir) => {
+          await rename(root, replacement)
+          await rename(attackRoot, root)
+          try {
+            return await readTaskPlanForChange(changeDir)
+          } finally {
+            await rename(root, attackRoot)
+            await rename(replacement, root)
+          }
+        },
+      })).rejects.toMatchObject({ status: 403 })
     } finally {
       closeWorkflowRootAnchor(anchor)
       await rm(parent, { recursive: true, force: true })

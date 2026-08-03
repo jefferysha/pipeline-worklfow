@@ -37,7 +37,7 @@ import {
 } from './workflowSnapshot.js'
 import { readBounded } from './contextBundleTrustedReader.js'
 import { dedupeRoots } from './projectRoots.js'
-import { readTasksMarkdown } from './snapshotTasks.js'
+import { readTasksProjection } from './snapshotTasks.js'
 import { mapWithConcurrency } from './concurrentMap.js'
 import { normalizeRepositoryLabels, readRepositoryIdentity } from './repositoryIdentity.js'
 import { computeSnapshotFingerprint } from './snapshotFingerprint.js'
@@ -47,7 +47,6 @@ import {
   closeWorkflowRootAnchor,
   type WorkflowRootAnchor,
 } from './workflowRootAnchor.js'
-
 export { dedupeRoots } from './projectRoots.js'
 export { readTasksMarkdown } from './snapshotTasks.js'
 const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
@@ -275,9 +274,11 @@ async function scanAnchoredProject(
         documentEvidence(readRoot, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs),
       ])
+      const tasksProjection = await readTasksProjection(changeDir, {}, anchor)
       const todo = projectPipelineTodo({
         phase,
-        tasksMarkdown: await readTasksMarkdown(changeDir),
+        tasksMarkdown: tasksProjection?.source,
+        trustedCanonicalProjection: tasksProjection?.trustedCanonicalProjection,
         stages: snapshotTodoStages(plan, phase),
         additionalItemsByStage: documentTodoItems(plan, documents),
       })

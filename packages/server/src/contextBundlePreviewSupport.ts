@@ -13,12 +13,19 @@ interface PathIdentity {
   readonly path: string
   readonly dev: number
   readonly ino: number
+  readonly mtimeNs?: bigint
+  readonly ctimeNs?: bigint
 }
 
 export interface ChangePathAnchor {
   readonly changeDir: string
   readonly realPath: string
   readonly chain: readonly PathIdentity[]
+}
+
+export interface ChangeParentPathAnchor {
+  readonly chain: readonly PathIdentity[]
+  readonly missingPath?: string
 }
 
 export class ContextBundlePathError extends Error {
@@ -45,6 +52,33 @@ function inside(base: string, candidate: string): boolean {
     && !isAbsolute(fromBase)
 }
 
+function captureDirectoryIdentity(path: string): PathIdentity {
+  const info = lstatSync(path, { bigint: true })
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new ContextBundlePathError(403, `Context Bundle 路径不安全（须为真实目录）: ${path}`)
+  }
+  return {
+    path,
+    dev: Number(info.dev),
+    ino: Number(info.ino),
+    mtimeNs: info.mtimeNs,
+    ctimeNs: info.ctimeNs,
+  }
+}
+
+export function captureChangeParentPathAnchor(root: WorkflowRootAnchor): ChangeParentPathAnchor {
+  const chain: PathIdentity[] = []
+  for (const path of [join(root.path, 'openspec'), join(root.path, 'openspec', 'changes')]) {
+    try {
+      chain.push(captureDirectoryIdentity(path))
+    } catch (error) {
+      if (missingCode(error)) return { chain, missingPath: path }
+      throw error
+    }
+  }
+  return { chain }
+}
+
 export function captureChangePathAnchor(
   root: WorkflowRootAnchor,
   change: string,
@@ -56,19 +90,14 @@ export function captureChangePathAnchor(
   ]
   const chain: PathIdentity[] = []
   for (const path of chainPaths) {
-    let info
     try {
-      info = lstatSync(path)
+      chain.push(captureDirectoryIdentity(path))
     } catch (error) {
       if (missingCode(error)) {
         throw new ContextBundlePathError(400, '找不到该 Change 的 canonical workflow state')
       }
       throw error
     }
-    if (info.isSymbolicLink() || !info.isDirectory()) {
-      throw new ContextBundlePathError(403, `Context Bundle 路径不安全（须为真实目录）: ${path}`)
-    }
-    chain.push({ path, dev: info.dev, ino: info.ino })
   }
   const changeDir = chainPaths.at(2)
   if (changeDir === undefined) {
@@ -90,26 +119,51 @@ export function captureChangePathAnchor(
   return { changeDir, realPath, chain }
 }
 
-export function assertChangePathAnchor(anchor: ChangePathAnchor): void {
-  for (const expected of anchor.chain) {
+function assertPathIdentityChain(chain: readonly PathIdentity[]): void {
+  for (const expected of chain) {
     let actual
     try {
-      actual = lstatSync(expected.path)
+      actual = lstatSync(expected.path, { bigint: true })
     } catch {
       throw new ContextBundlePathError(403, `Context Bundle Change 路径在读取期间消失: ${expected.path}`)
     }
     if (
       actual.isSymbolicLink()
       || !actual.isDirectory()
-      || actual.dev !== expected.dev
-      || actual.ino !== expected.ino
+      || Number(actual.dev) !== expected.dev
+      || Number(actual.ino) !== expected.ino
+      || (expected.mtimeNs !== undefined && actual.mtimeNs !== expected.mtimeNs)
+      || (expected.ctimeNs !== undefined && actual.ctimeNs !== expected.ctimeNs)
     ) {
       throw new ContextBundlePathError(403, `Context Bundle Change 路径在读取期间被替换: ${expected.path}`)
     }
   }
+}
+
+export function assertChangePathAnchor(anchor: ChangePathAnchor): void {
+  assertPathIdentityChain(anchor.chain)
   if (realpathSync(anchor.changeDir) !== anchor.realPath) {
     throw new ContextBundlePathError(403, `Context Bundle Change realpath 在读取期间变化: ${anchor.changeDir}`)
   }
+}
+
+export function assertChangeParentPathAnchor(anchor: ChangeParentPathAnchor): void {
+  assertPathIdentityChain(anchor.chain)
+  if (anchor.missingPath === undefined) return
+  try {
+    lstatSync(anchor.missingPath)
+  } catch (error) {
+    if (missingCode(error)) return
+    throw new ContextBundlePathError(
+      403,
+      `Context Bundle Change parent 路径无法复核: ${anchor.missingPath}`,
+      error,
+    )
+  }
+  throw new ContextBundlePathError(
+    403,
+    `Context Bundle Change parent 路径在读取期间出现: ${anchor.missingPath}`,
+  )
 }
 
 export function safeContextBundlePreview(

@@ -1,12 +1,23 @@
 import { readTaskPlanForChange } from '@tenon/kernel'
+import { closeSync, constants, fstatSync, openSync } from 'node:fs'
 import {
+  assertChangeParentPathAnchor,
   assertChangePathAnchor,
+  captureChangeParentPathAnchor,
   captureChangePathAnchor,
   ContextBundlePathError,
+  type ChangeParentPathAnchor,
   type ChangePathAnchor,
 } from './contextBundlePreviewSupport.js'
 import { assertWorkflowRootAnchor } from './workflows.js'
 import type { WorkflowRootAnchor } from './workflows.js'
+import {
+  assertWorkflowRootMutationVersion,
+  captureWorkflowRootMutationVersion,
+  sameIdentity,
+  traversableDirectoryFdPath,
+  type WorkflowRootMutationVersion,
+} from './workflowRootAnchor.js'
 
 type WorkflowRootCheck =
   | { readonly ok: true; readonly anchor: WorkflowRootAnchor }
@@ -24,6 +35,8 @@ export interface TaskPlanRouteResult {
 
 interface AnchoredTaskPlanReaderDeps {
   readonly assertRoot: (anchor: WorkflowRootAnchor) => void
+  readonly captureChangeParent: (anchor: WorkflowRootAnchor) => ChangeParentPathAnchor
+  readonly assertChangeParent: (anchor: ChangeParentPathAnchor) => void
   readonly captureChange: (anchor: WorkflowRootAnchor, change: string) => ChangePathAnchor
   readonly assertChange: (anchor: ChangePathAnchor) => void
   readonly readPlan: (changeDir: string) => Promise<unknown | null>
@@ -31,6 +44,8 @@ interface AnchoredTaskPlanReaderDeps {
 
 const defaultAnchoredReaderDeps: AnchoredTaskPlanReaderDeps = {
   assertRoot: assertWorkflowRootAnchor,
+  captureChangeParent: captureChangeParentPathAnchor,
+  assertChangeParent: assertChangeParentPathAnchor,
   captureChange: captureChangePathAnchor,
   assertChange: assertChangePathAnchor,
   readPlan: readTaskPlanForChange,
@@ -47,6 +62,29 @@ function assertTrustedRoot(
   }
 }
 
+function trustedRootMutationVersion(anchor: WorkflowRootAnchor): WorkflowRootMutationVersion {
+  try {
+    return captureWorkflowRootMutationVersion(anchor)
+  } catch (cause) {
+    throw new ContextBundlePathError(
+      403,
+      'TaskPlan registered root changed during read',
+      cause,
+    )
+  }
+}
+
+function assertRootMutationVersion(
+  anchor: WorkflowRootAnchor,
+  expected: WorkflowRootMutationVersion,
+): void {
+  try {
+    assertWorkflowRootMutationVersion(anchor, expected)
+  } catch (cause) {
+    throw new ContextBundlePathError(403, 'TaskPlan registered root changed during read')
+  }
+}
+
 export async function readAnchoredTaskPlan(
   anchor: WorkflowRootAnchor,
   change: string,
@@ -54,31 +92,61 @@ export async function readAnchoredTaskPlan(
 ): Promise<unknown | null> {
   const deps = { ...defaultAnchoredReaderDeps, ...overrides }
   assertTrustedRoot(anchor, deps.assertRoot)
+  const rootVersion = trustedRootMutationVersion(anchor)
+  const changeParentAnchor = deps.captureChangeParent(anchor)
   let changeAnchor: ChangePathAnchor
   try {
     changeAnchor = deps.captureChange(anchor, change)
   } catch (error) {
     if (errorStatus(error) === 400) {
       assertTrustedRoot(anchor, deps.assertRoot)
+      assertRootMutationVersion(anchor, rootVersion)
+      deps.assertChangeParent(changeParentAnchor)
       return null
     }
     throw error
   }
   assertTrustedRoot(anchor, deps.assertRoot)
+  deps.assertChangeParent(changeParentAnchor)
   deps.assertChange(changeAnchor)
+  const changeIdentity = changeAnchor.chain.at(-1)
+  if (changeIdentity === undefined) {
+    throw new ContextBundlePathError(403, 'TaskPlan Change directory identity is missing')
+  }
+  let changeFd: number
+  try {
+    changeFd = openSync(
+      changeAnchor.changeDir,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    )
+  } catch (cause) {
+    throw new ContextBundlePathError(403, 'TaskPlan Change directory cannot be anchored', cause)
+  }
+  const openedChange = fstatSync(changeFd)
+  const anchoredChangeDir = traversableDirectoryFdPath(changeFd, changeIdentity)
+    ?? changeAnchor.changeDir
+  if (!openedChange.isDirectory() || !sameIdentity(openedChange, changeIdentity)) {
+    closeSync(changeFd)
+    throw new ContextBundlePathError(403, 'TaskPlan Change directory identity changed while anchoring')
+  }
   let result: unknown | null = null
   let readFailed = false
   let readError: unknown
   try {
-    result = await deps.readPlan(changeAnchor.changeDir)
+    result = await deps.readPlan(anchoredChangeDir)
   } catch (error) {
     readFailed = true
     readError = error
   }
-  deps.assertChange(changeAnchor)
-  assertTrustedRoot(anchor, deps.assertRoot)
-  if (readFailed) throw readError
-  return result
+  try {
+    deps.assertChange(changeAnchor)
+    assertTrustedRoot(anchor, deps.assertRoot)
+    assertRootMutationVersion(anchor, rootVersion)
+    if (readFailed) throw readError
+    return result
+  } finally {
+    closeSync(changeFd)
+  }
 }
 
 function isChangeName(name: string): boolean {

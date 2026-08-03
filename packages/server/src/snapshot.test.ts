@@ -11,6 +11,7 @@ import {
   effectiveWorkflowPlanFromSnapshot,
   effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
+  isCurrentTaskPlanProjectionForChange,
   loadEffectiveWorkflowPlan,
   publishTaskPlanRevision,
   TERMINAL_ACTIVITY_TTL_MS,
@@ -340,6 +341,115 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(result).toBeUndefined()
   })
 
+  it('聚合快照把大型投影授权绑定已读 source，拒绝完整 Change-dir ABA', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'canonical-auth-full-aba')
+    const legitimateDir = `${changeDir}.legitimate`
+    const spoofDir = `${changeDir}.spoof`
+    const ids = Array.from({ length: 40 }, (_, index) => `aba-${index}`)
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-auth-aba',
+      revision_id: 'revision-auth-aba',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-03T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [{ id: 'group-auth-aba', title: 'Build', parent_id: null, work_item_ids: ids }],
+      work_items: ids.map((id, index) => ({
+        id,
+        title: `${index}-${'l'.repeat(7_000)}`,
+        group_id: 'group-auth-aba',
+        requirement_refs: [],
+        acceptance_refs: [],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      })),
+    }
+    await publishTaskPlanRevision(changeDir, revision, { expected_current_revision_id: null })
+    await rename(changeDir, legitimateDir)
+    await mkdir(changeDir)
+    const prefix = '# Tasks\n\n<!-- tenon-task-plan revision=spoof digest=spoof -->\n'
+    const spoof = `${prefix}${'x'.repeat(256 * 1024 + 1 - Buffer.byteLength(prefix))}`
+    await writeFile(join(changeDir, 'tasks.md'), spoof, 'utf8')
+
+    const result = await readTasksMarkdown(changeDir, {
+      authorizeCanonicalProjection: async (source, anchoredChangeDir) => {
+        await rename(changeDir, spoofDir)
+        await rename(legitimateDir, changeDir)
+        try {
+          const { hasCurrentCanonicalTaskPlanProjection } = await import('./snapshotTasks.js')
+          return await hasCurrentCanonicalTaskPlanProjection(anchoredChangeDir, source)
+        } finally {
+          await rename(changeDir, legitimateDir)
+          await rename(spoofDir, changeDir)
+        }
+      },
+    })
+    expect(result).toBeUndefined()
+  })
+
+  it('大型投影授权绑定 registered root，拒绝授权窗口中的完整 root ABA', async () => {
+    const parent = await makeTempHome()
+    const root = join(parent, 'root')
+    const legitimateRoot = join(parent, 'legitimate-root')
+    const attackRoot = join(parent, 'attack-root')
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    const attackChange = join(attackRoot, 'openspec', 'changes', 'demo')
+    const ids = Array.from({ length: 40 }, (_, index) => `root-aba-${index}`)
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-root-aba',
+      revision_id: 'revision-root-aba',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-03T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [{ id: 'group-root-aba', title: 'Notes', parent_id: null, work_item_ids: ids }],
+      work_items: ids.map((id, index) => ({
+        id,
+        title: `${index}-${'x'.repeat(7_000)}`,
+        group_id: 'group-root-aba',
+        requirement_refs: [],
+        acceptance_refs: [],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      })),
+    }
+    await mkdir(changeDir, { recursive: true })
+    await mkdir(attackChange, { recursive: true })
+    await publishTaskPlanRevision(attackChange, revision, { expected_current_revision_id: null })
+    const source = await readFile(join(attackChange, 'tasks.md'), 'utf8')
+    await writeFile(join(changeDir, 'tasks.md'), source, 'utf8')
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      const result = await readTasksMarkdown(changeDir, {
+        authorizeCanonicalProjection: async (readSource, anchoredChangeDir) => {
+          await rename(root, legitimateRoot)
+          await rename(attackRoot, root)
+          try {
+            const { hasCurrentCanonicalTaskPlanProjection } = await import('./snapshotTasks.js')
+            return await hasCurrentCanonicalTaskPlanProjection(anchoredChangeDir, readSource)
+          } finally {
+            await rename(root, attackRoot)
+            await rename(legitimateRoot, root)
+          }
+        },
+      }, anchor)
+      expect(result).toBeUndefined()
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
   it('真实 canonical current 授权大型投影，聚合与单 Change snapshot 都读取且不显示 marker', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -370,6 +480,7 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     await publishTaskPlanRevision(changeDir, revision, { expected_current_revision_id: null })
     const source = await readFile(join(changeDir, 'tasks.md'), 'utf8')
     expect(Buffer.byteLength(source)).toBeGreaterThan(256 * 1024)
+    await expect(isCurrentTaskPlanProjectionForChange(changeDir, source)).resolves.toBe(true)
 
     await expect(readTasksMarkdown(changeDir)).resolves.toBe(source)
     const snapshot = await readChangeSnapshot(

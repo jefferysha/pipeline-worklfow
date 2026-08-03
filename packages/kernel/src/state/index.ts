@@ -40,6 +40,7 @@ export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export {
   publishTaskPlanRevision,
+  isCurrentTaskPlanProjectionForChange,
   readTaskPlanForChange,
   TASK_PLAN_CURRENT_FILE,
   TASK_PLAN_REVISIONS_DIR,

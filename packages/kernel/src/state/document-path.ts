@@ -46,7 +46,7 @@ export async function readBoundedRegularFile(
   readSource: BoundedFileHandleReader = readBoundedFileHandle,
 ): Promise<Buffer> {
   const parent = dirname(path)
-  const parentBefore = await lstat(parent)
+  const parentBefore = await lstat(parent, { bigint: true })
   if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
     throw new DocumentLedgerError(`${label} 不得通过 symlink 或路径别名读取`)
   }
@@ -56,13 +56,13 @@ export async function readBoundedRegularFile(
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   )
   try {
-    const opened = await handle.stat()
+    const opened = await handle.stat({ bigint: true })
     if (!opened.isFile()) throw new DocumentLedgerError(`${label} 必须是非 symlink 普通文件: ${path}`)
     const assertStable = async (): Promise<void> => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat(parent),
+        lstat(parent, { bigint: true }),
         realpath(parent),
-        lstat(path),
+        lstat(path, { bigint: true }),
       ])
       if (
         !parentNow.isDirectory()
@@ -75,6 +75,8 @@ export async function readBoundedRegularFile(
         || targetNow.dev !== opened.dev
         || targetNow.ino !== opened.ino
         || targetNow.size !== opened.size
+        || targetNow.mtimeNs !== opened.mtimeNs
+        || targetNow.ctimeNs !== opened.ctimeNs
       ) {
         throw new DocumentLedgerError(`${label} 在读取期间变化: ${path}`)
       }
@@ -85,12 +87,14 @@ export async function readBoundedRegularFile(
     if (content.byteLength > maxBytes) {
       throw new DocumentLedgerError(`${label} 超过 ${maxBytes} bytes 上限`)
     }
-    const after = await handle.stat()
+    const after = await handle.stat({ bigint: true })
     if (
       !after.isFile()
       || after.dev !== opened.dev
       || after.ino !== opened.ino
       || after.size !== opened.size
+      || after.mtimeNs !== opened.mtimeNs
+      || after.ctimeNs !== opened.ctimeNs
     ) {
       throw new DocumentLedgerError(`${label} 在读取期间变化: ${path}`)
     }

@@ -3209,11 +3209,6 @@ var TASK_PLAN_LIMITS = Object.freeze({
   maxDecodeNodes: 65536
 });
 
-// packages/kernel/dist/task-plan/legacy.js
-function isCanonicalTaskPlanTasksMarkdown(markdown) {
-  return /^# Tasks\r?\n\r?\n<!-- tenon-task-plan revision=[^>]+ digest=[^>]+ -->\r?\n/u.test(markdown);
-}
-
 // packages/kernel/dist/product-identity.generated.js
 var PRODUCT_IDENTITY = {
   schemaVersion: 1,
@@ -8721,23 +8716,23 @@ async function readBoundedFileHandle(handle, maxBytes) {
 }
 async function readBoundedRegularFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
   const parent = dirname(path9);
-  const parentBefore = await lstat8(parent);
+  const parentBefore = await lstat8(parent, { bigint: true });
   if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
     throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
   }
   const parentRealBefore = await realpath2(parent);
   const handle = await open(path9, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (!opened.isFile())
       throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path9}`);
     const assertStable = async () => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat8(parent),
+        lstat8(parent, { bigint: true }),
         realpath2(parent),
-        lstat8(path9)
+        lstat8(path9, { bigint: true })
       ]);
-      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size) {
+      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
         throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
       }
     };
@@ -8748,8 +8743,8 @@ async function readBoundedRegularFile(path9, maxBytes, label, readSource = readB
     if (content.byteLength > maxBytes) {
       throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
     }
-    const after = await handle.stat();
-    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
+    const after = await handle.stat({ bigint: true });
+    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
       throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
     }
     await assertStable();
@@ -9680,17 +9675,16 @@ function stageForHeading(heading, stages) {
   }
   return void 0;
 }
-function parseTasks(markdown, currentStage, stages) {
+function parseTasks(markdown, currentStage, stages, trustedCanonicalProjection = false) {
   const byStage = /* @__PURE__ */ new Map();
   if (markdown === void 0)
     return { byStage, structured: false };
-  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
   let structured = false;
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
-      if (canonicalTaskPlan && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
+      if (trustedCanonicalProjection && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
         continue;
       const headingStage = stageForHeading(heading[1] ?? "", stages);
       if (headingStage !== void 0) {
@@ -9703,7 +9697,7 @@ function parseTasks(markdown, currentStage, stages) {
     if (!task || target === void 0)
       continue;
     const rawText = (task[2] ?? "").trim();
-    const text2 = canonicalTaskPlan ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
+    const text2 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
     if (text2 === "")
       continue;
     const items = byStage.get(target) ?? [];
@@ -9715,7 +9709,7 @@ function parseTasks(markdown, currentStage, stages) {
 function incompletePipelineTasksForExit(input) {
   const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES;
   const stages = declared.filter((stage, index) => stage.id !== "" && stage.label !== "" && declared.findIndex((other) => other.id === stage.id) === index);
-  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages);
+  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages, input.trustedCanonicalProjection);
   if (!parsed.structured) {
     const incomplete2 = input.phase === "build" ? [...parsed.byStage.values()].flat().filter((task) => !task.completed).length : 0;
     return { structured: false, incomplete: incomplete2 };

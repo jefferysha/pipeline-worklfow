@@ -50,7 +50,8 @@ describe('legacy tasks.md adapter', () => {
     const legacy = adaptLegacyTasksMd(markdown)
     expect(legacy.schedulable).toBe(false)
     expect(legacy.items[0]?.id).not.toBe('w1')
-    expect(legacy.items[0]?.stage).toBe('Build')
+    expect(legacy.items[0]?.stage).toBe('Build <!-- task-group:g1 -->')
+    expect(legacy.items[0]?.title).toBe('Implement domain <!-- work-item:w1 -->')
   })
 
   it('preserves marker-shaped prose in a genuinely legacy document', () => {
@@ -60,6 +61,21 @@ describe('legacy tasks.md adapter', () => {
     ].join('\n'))
     expect(legacy.items[0]).toMatchObject({
       stage: 'Build <!-- task-group:user-note -->',
+      title: 'Keep <!-- work-item:user-note -->',
+    })
+  })
+
+  it('does not upgrade a header-spoofed legacy document into a trusted canonical projection', () => {
+    const legacy = adaptLegacyTasksMd([
+      '# Tasks',
+      '',
+      '<!-- tenon-task-plan revision=spoof digest=spoof -->',
+      '',
+      '## Notes <!-- task-group:user-note -->',
+      '- [ ] Keep <!-- work-item:user-note -->',
+    ].join('\n'))
+    expect(legacy.items[0]).toMatchObject({
+      stage: 'Notes <!-- task-group:user-note -->',
       title: 'Keep <!-- work-item:user-note -->',
     })
   })

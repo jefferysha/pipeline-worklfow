@@ -21,6 +21,11 @@ export interface WorkflowRootAnchor extends FileIdentity {
   readonly fdPath?: string
 }
 
+export interface WorkflowRootMutationVersion {
+  readonly mtimeNs: bigint
+  readonly ctimeNs: bigint
+}
+
 export function sameIdentity(current: FileIdentity, expected: FileIdentity): boolean {
   return current.dev === expected.dev && current.ino === expected.ino
 }
@@ -104,6 +109,32 @@ export function assertWorkflowRootAnchor(anchor: WorkflowRootAnchor): void {
   }
   if (realpathSync(anchor.path) !== anchor.realPath) {
     throw new Error(`registered root canonical realpath 已变化: ${anchor.path}`)
+  }
+}
+
+export function captureWorkflowRootMutationVersion(
+  anchor: WorkflowRootAnchor,
+): WorkflowRootMutationVersion {
+  assertWorkflowRootAnchor(anchor)
+  const stat = lstatSync(anchor.path, { bigint: true })
+  if (
+    stat.isSymbolicLink()
+    || !stat.isDirectory()
+    || Number(stat.dev) !== anchor.dev
+    || Number(stat.ino) !== anchor.ino
+  ) {
+    throw new Error(`registered root 在版本捕获期间被替换: ${anchor.path}`)
+  }
+  return { mtimeNs: stat.mtimeNs, ctimeNs: stat.ctimeNs }
+}
+
+export function assertWorkflowRootMutationVersion(
+  anchor: WorkflowRootAnchor,
+  expected: WorkflowRootMutationVersion,
+): void {
+  const current = captureWorkflowRootMutationVersion(anchor)
+  if (current.mtimeNs !== expected.mtimeNs || current.ctimeNs !== expected.ctimeNs) {
+    throw new Error(`registered root 在读取期间发生变化: ${anchor.path}`)
   }
 }
 

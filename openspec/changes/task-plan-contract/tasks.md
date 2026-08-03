@@ -49,6 +49,10 @@
 - [x] 使 phase-like TaskGroup 标题不能改变 pipeline exit gate，并补 renderer 到 guard 的红绿回归。 (build)
 - [x] 统一 canonical tasks.md publication 与 snapshot/readers 字节上限，同时保留 legacy 256 KiB 和路径锚边界。 (build)
 - [x] 在 Todo 兼容投影边界剥离受信 WorkItem 尾注，避免内部 identity marker 进入 API/Dashboard 文本。 (build)
+- [x] 将 TaskPlan GET 的 canonical state 读取绑定到已捕获的 root/change 目录身份，拒绝完整目录 ABA。 (build)
+- [x] 将超过 256 KiB 的 canonical projection 授权绑定到已读 tasks source，拒绝 Change-dir ABA。 (build)
+- [x] 仅由可信 canonical state 启用 TaskGroup/WorkItem marker 展示剥离，保留 header-spoof legacy 文本。 (build)
+- [x] 为 canonical current/immutable 稳定读取补 mtime/ctime fence，拒绝同尺寸原地改写。 (build)
 
 ## 验证
 

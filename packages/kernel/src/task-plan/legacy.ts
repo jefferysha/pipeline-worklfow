@@ -18,24 +18,17 @@ export function isCanonicalTaskPlanTasksMarkdown(markdown: string): boolean {
  * unrelated to canonical WorkItem IDs; callers must honor schedulable=false.
  */
 export function adaptLegacyTasksMd(markdown: string): LegacyTaskPlanReadModelV1 {
-  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown)
   let stage: string | null = null
   const items: Array<LegacyTaskPlanReadModelV1['items'][number]> = []
   for (const line of markdown.split(/\r?\n/u)) {
     const heading = /^\s{0,3}#{2,6}\s+(.+?)\s*#*\s*$/u.exec(line)
     if (heading) {
-      const rawStage = (heading[1] ?? '').trim()
-      stage = (canonicalTaskPlan
-        ? rawStage.replace(/\s*<!--\s*task-group:[^>]*-->\s*$/u, '').trim()
-        : rawStage) || null
+      stage = (heading[1] ?? '').trim() || null
       continue
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/u.exec(line)
     if (!task) continue
-    const rawTaskTitle = (task[2] ?? '').trim()
-    const rawTitle = canonicalTaskPlan
-      ? rawTaskTitle.replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, '').trim()
-      : rawTaskTitle
+    const rawTitle = (task[2] ?? '').trim()
     if (rawTitle === '') continue
     const order = items.length
     items.push({

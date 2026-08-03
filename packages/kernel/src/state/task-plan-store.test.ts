@@ -279,6 +279,26 @@ describe('task plan store', () => {
     expect(await readTaskPlanForChange(dir)).toMatchObject({ source: 'legacy', schedulable: false })
   })
 
+  it('keeps marker-shaped prose when a legacy-only tasks file spoofs a canonical header', async () => {
+    const dir = await changeDir()
+    await writeFile(join(dir, 'tasks.md'), [
+      '# Tasks',
+      '',
+      '<!-- tenon-task-plan revision=spoof digest=spoof -->',
+      '',
+      '## Notes <!-- task-group:user-group -->',
+      '- [ ] Preserve this prose <!-- work-item:user-text -->',
+      '',
+    ].join('\n'), 'utf8')
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'legacy',
+      items: [{
+        stage: 'Notes <!-- task-group:user-group -->',
+        title: 'Preserve this prose <!-- work-item:user-text -->',
+      }],
+    })
+  })
+
   it('never falls back to legacy when current exists but is corrupt or lacks its immutable twin', async () => {
     const dir = await changeDir()
     await mkdir(join(dir, TASK_PLAN_STATE_DIR), { recursive: true })
