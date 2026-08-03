@@ -66,9 +66,18 @@ export async function readAnchoredTaskPlan(
   }
   assertTrustedRoot(anchor, deps.assertRoot)
   deps.assertChange(changeAnchor)
-  const result = await deps.readPlan(changeAnchor.changeDir)
+  let result: unknown | null = null
+  let readFailed = false
+  let readError: unknown
+  try {
+    result = await deps.readPlan(changeAnchor.changeDir)
+  } catch (error) {
+    readFailed = true
+    readError = error
+  }
   deps.assertChange(changeAnchor)
   assertTrustedRoot(anchor, deps.assertRoot)
+  if (readFailed) throw readError
   return result
 }
 

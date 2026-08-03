@@ -24927,9 +24927,18 @@ async function readAnchoredTaskPlan(anchor, change, overrides = {}) {
   }
   assertTrustedRoot(anchor, deps.assertRoot);
   deps.assertChange(changeAnchor);
-  const result = await deps.readPlan(changeAnchor.changeDir);
+  let result = null;
+  let readFailed = false;
+  let readError;
+  try {
+    result = await deps.readPlan(changeAnchor.changeDir);
+  } catch (error2) {
+    readFailed = true;
+    readError = error2;
+  }
   deps.assertChange(changeAnchor);
   assertTrustedRoot(anchor, deps.assertRoot);
+  if (readFailed) throw readError;
   return result;
 }
 function isChangeName4(name) {

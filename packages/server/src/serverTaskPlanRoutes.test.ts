@@ -161,4 +161,28 @@ describe('readAnchoredTaskPlan', () => {
       await rm(parent, { recursive: true, force: true })
     }
   })
+
+  it('prioritizes the root trust failure when a replaced-path read also throws', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      let caught: unknown
+      try {
+        await readAnchoredTaskPlan(anchor, 'demo', {
+          readPlan: async () => {
+            await rename(root, replacement)
+            await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
+            throw new Error('replacement-secret-read-error')
+          },
+        })
+      } catch (error) {
+        caught = error
+      }
+      expect(caught).toMatchObject({ status: 403 })
+      expect(String(caught)).not.toContain('replacement-secret-read-error')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
 })
