@@ -9,6 +9,7 @@ import {
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import {
   LedgerContextBundleError,
+  isCanonicalTaskPlanTasksMarkdown,
   projectPipelineTodo,
   readPipelineStateFromSync,
   type PipelineState,
@@ -49,7 +50,11 @@ import {
   readBounded,
   readTrustedFile,
 } from './contextBundleTrustedReader.js'
-import { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
+import {
+  hasCurrentCanonicalTaskPlanProjection,
+  MAX_LEGACY_TASKS_MARKDOWN_BYTES,
+  MAX_TASKS_MARKDOWN_BYTES,
+} from './snapshotTasks.js'
 import {
   captureStableFileVersion,
   matchesStableFileVersion,
@@ -85,10 +90,11 @@ function readBoundedTasksSource(fd: number, maxBytes: number): string {
 }
 
 /** @internal Exported only so the race regression can prove no bytes are read before anchor checks. */
-export function readAnchoredTasksMarkdown(
+export async function readAnchoredTasksMarkdown(
   changeAnchor: ChangePathAnchor,
   readSource: TasksFdReader = readBoundedTasksSource,
-): string | undefined {
+  authorizeCanonicalProjection?: (source: string) => boolean | Promise<boolean>,
+): Promise<string | undefined> {
   const target = join(changeAnchor.changeDir, 'tasks.md')
   let fd: number
   try {
@@ -139,6 +145,14 @@ export function readAnchoredTasksMarkdown(
       throw new Error(`Change tasks 超过 ${MAX_TASKS_MARKDOWN_BYTES} bytes 上限`)
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES)
+    if (opened.size > MAX_LEGACY_TASKS_MARKDOWN_BYTES) {
+      const authorized = isCanonicalTaskPlanTasksMarkdown(source)
+        && authorizeCanonicalProjection !== undefined
+        && await authorizeCanonicalProjection(source)
+      if (!authorized) {
+        throw new Error(`Legacy Change tasks 超过 ${MAX_LEGACY_TASKS_MARKDOWN_BYTES} bytes 上限`)
+      }
+    }
     assertOpenedFdStillStable()
     assertOpenedTargetStillAnchored()
     return source
@@ -253,7 +267,11 @@ export async function readChangeSnapshot(
     const [documents, terminalActivity, tasksMarkdown, workflowExecution] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
-      readAnchoredTasksMarkdown(anchored.changeAnchor),
+      readAnchoredTasksMarkdown(
+        anchored.changeAnchor,
+        undefined,
+        () => hasCurrentCanonicalTaskPlanProjection(changeDir),
+      ),
       snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps),
     ])
     assertWorkflowRootAnchor(anchor)

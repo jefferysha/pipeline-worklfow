@@ -1,5 +1,5 @@
 export { decodeTaskPlanRevisionV1, encodeTaskPlanRevisionV1 } from './codec.js'
-export { adaptLegacyTasksMd, renderTaskPlanTasksMd } from './legacy.js'
+export { adaptLegacyTasksMd, isCanonicalTaskPlanTasksMarkdown, renderTaskPlanTasksMd } from './legacy.js'
 export { toTaskPlanReadModelV1 } from './read-model.js'
 export { validateTaskPlanRevisionV1 } from './validation.js'
 export {

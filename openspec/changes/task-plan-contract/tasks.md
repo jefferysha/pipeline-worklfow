@@ -46,6 +46,9 @@
 - [x] 拒绝字符串末尾 lone high surrogate，保持 object/JSON codec 与 resource normalization 的非法 Unicode 失败关闭。 (build)
 - [x] 分离 JSON closed mode 与 direct object schema-directed mode，彻底移除 typed object 的 own-key enumeration。 (build)
 - [x] 证明大量额外 string/symbol/non-enumerable/accessor 不被读取或复制，JSON unknown-field 与已知字段失败关闭语义保持不变。 (build)
+- [x] 使 phase-like TaskGroup 标题不能改变 pipeline exit gate，并补 renderer 到 guard 的红绿回归。 (build)
+- [x] 统一 canonical tasks.md publication 与 snapshot/readers 字节上限，同时保留 legacy 256 KiB 和路径锚边界。 (build)
+- [x] 在 Todo 兼容投影边界剥离受信 WorkItem 尾注，避免内部 identity marker 进入 API/Dashboard 文本。 (build)
 
 ## 验证
 

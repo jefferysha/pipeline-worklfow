@@ -7,19 +7,36 @@ import {
   realpathSync,
 } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
+import {
+  isCanonicalTaskPlanTasksMarkdown,
+  readTaskPlanForChange,
+  TASK_PLAN_LIMITS,
+} from '@tenon/kernel'
 import { readBounded as readBoundedBytes } from './contextBundleTrustedReader.js'
 import {
   captureStableFileVersion,
   matchesStableFileVersion,
 } from './stableFileMetadata.js'
 
-export const MAX_TASKS_MARKDOWN_BYTES = 256 * 1024
+export const MAX_LEGACY_TASKS_MARKDOWN_BYTES = 256 * 1024
+export const MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes
 
 interface TasksReadHooks {
   /** @internal Test seam for a leaf-swap race immediately before open(2). */
   readonly beforeOpen?: () => void
   /** @internal Test seam proving rejected paths are not read. */
   readonly readSource?: (fd: number, maxBytes: number) => string
+  /** @internal Test seam; production authenticates the marker against canonical current state. */
+  readonly authorizeCanonicalProjection?: (source: string) => boolean | Promise<boolean>
+}
+
+export async function hasCurrentCanonicalTaskPlanProjection(changeDir: string): Promise<boolean> {
+  try {
+    const plan = await readTaskPlanForChange(changeDir)
+    return plan?.source === 'canonical' && plan.projection.state === 'current'
+  } catch {
+    return false
+  }
 }
 
 function isInside(base: string, candidate: string): boolean {
@@ -80,6 +97,13 @@ export async function readTasksMarkdown(
 
     if (!stable() || !fdStable()) return undefined
     const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES)
+    if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES)) {
+      if (!isCanonicalTaskPlanTasksMarkdown(source)) return undefined
+      const authorized = hooks.authorizeCanonicalProjection === undefined
+        ? await hasCurrentCanonicalTaskPlanProjection(changeDir)
+        : await hooks.authorizeCanonicalProjection(source)
+      if (!authorized) return undefined
+    }
     if (!fdStable() || !stable()) return undefined
     return source
   } catch {

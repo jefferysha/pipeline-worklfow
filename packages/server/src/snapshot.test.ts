@@ -12,7 +12,9 @@ import {
   effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
   loadEffectiveWorkflowPlan,
+  publishTaskPlanRevision,
   TERMINAL_ACTIVITY_TTL_MS,
+  type TaskPlanRevisionV1,
   workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
@@ -303,6 +305,95 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(readAttempted).toBe(false)
   })
 
+  it('聚合快照读取超过 legacy 256 KiB、仍在 canonical 上限内的 TaskPlan 投影', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'large-canonical-tasks')
+    const prefix = '# Tasks\n\n<!-- tenon-task-plan revision=r1 digest=sha256:abc -->\n'
+    const source = `${prefix}${'a'.repeat(256 * 1024 + 1 - Buffer.byteLength(prefix))}`
+    expect(Buffer.byteLength(source)).toBe(256 * 1024 + 1)
+    await writeFile(join(changeDir, 'tasks.md'), source, 'utf8')
+
+    await expect(readTasksMarkdown(changeDir)).resolves.toBeUndefined()
+    await expect(readTasksMarkdown(changeDir, {
+      authorizeCanonicalProjection: () => true,
+    })).resolves.toBe(source)
+  })
+
+  it('聚合快照在 canonical 授权窗口替换 tasks 时拒绝旧 fd 与新 pathname', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'canonical-auth-race')
+    const target = join(changeDir, 'tasks.md')
+    const prefix = '# Tasks\n\n<!-- tenon-task-plan revision=r1 digest=sha256:abc -->\n'
+    const before = `${prefix}${'a'.repeat(256 * 1024 + 1 - Buffer.byteLength(prefix))}`
+    const after = before.replace(/a$/u, 'b')
+    await writeFile(target, before, 'utf8')
+
+    const result = await readTasksMarkdown(changeDir, {
+      authorizeCanonicalProjection: (source) => {
+        expect(source).toBe(before)
+        writeFileSync(target, after, 'utf8')
+        return true
+      },
+    })
+    expect(result).toBeUndefined()
+  })
+
+  it('真实 canonical current 授权大型投影，聚合与单 Change snapshot 都读取且不显示 marker', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'large-canonical-current')
+    const ids = Array.from({ length: 40 }, (_, index) => `wi-${index}`)
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-large',
+      revision_id: 'revision-large',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-03T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [{ id: 'group-large', title: 'Verify', parent_id: null, work_item_ids: ids }],
+      work_items: ids.map((id, index) => ({
+        id,
+        title: `${String(index).padStart(2, '0')}-${'a'.repeat(7_000)}`,
+        group_id: 'group-large',
+        requirement_refs: [],
+        acceptance_refs: [],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      })),
+    }
+    await publishTaskPlanRevision(changeDir, revision, { expected_current_revision_id: null })
+    const source = await readFile(join(changeDir, 'tasks.md'), 'utf8')
+    expect(Buffer.byteLength(source)).toBeGreaterThan(256 * 1024)
+
+    await expect(readTasksMarkdown(changeDir)).resolves.toBe(source)
+    const snapshot = await readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 'now' },
+      root,
+      'large-canonical-current',
+      0,
+    )
+    const tasks = (snapshot?.todo.stages.flatMap((stage) => stage.tasks) ?? [])
+      .filter((task) => /^\d{2}-a/u.test(task.text))
+    expect(tasks).toHaveLength(40)
+    expect(tasks.every((task) => !task.text.includes('<!-- work-item:'))).toBe(true)
+  })
+
+  it('聚合快照继续拒绝超过 256 KiB 的 legacy tasks.md', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'large-legacy-tasks')
+    const source = `# Tasks\n${'a'.repeat(256 * 1024 + 1)}`
+    await writeFile(join(changeDir, 'tasks.md'), source, 'utf8')
+
+    await expect(readTasksMarkdown(changeDir)).resolves.toBeUndefined()
+  })
+
   it('聚合快照非阻塞地拒绝 FIFO tasks.md', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -585,10 +676,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       await symlink(outsideChange, targetDir, 'dir')
       let readAttempted = false
 
-      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+      await expect(readAnchoredTasksMarkdown(changeAnchor, () => {
         readAttempted = true
         return 'should not be read'
-      })).toThrow(/Change|tasks|路径|可信|读取期间变化/i)
+      })).rejects.toThrow(/Change|tasks|路径|可信|读取期间变化/i)
       expect(readAttempted).toBe(false)
     } finally {
       closeWorkflowRootAnchor(workflowAnchor)
@@ -619,11 +710,65 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     try {
       const changeAnchor = captureChangePathAnchor(workflowAnchor, 'target')
       let readAttempted = false
-      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+      await expect(readAnchoredTasksMarkdown(changeAnchor, () => {
         readAttempted = true
         return 'should not be read'
-      })).toThrow(/tasks.*上限/i)
+      })).rejects.toThrow(/tasks.*上限/i)
       expect(readAttempted).toBe(false)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change reader 接受超过 legacy 256 KiB、仍在 canonical 上限内的 TaskPlan 投影', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'large-canonical-target')
+    const prefix = '# Tasks\n\n<!-- tenon-task-plan revision=r1 digest=sha256:abc -->\n'
+    const source = `${prefix}${'a'.repeat(256 * 1024 + 1 - Buffer.byteLength(prefix))}`
+    await writeFile(join(targetDir, 'tasks.md'), source, 'utf8')
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'large-canonical-target')
+      await expect(readAnchoredTasksMarkdown(changeAnchor)).rejects.toThrow(/Legacy Change tasks.*262144/u)
+      await expect(readAnchoredTasksMarkdown(changeAnchor, undefined, () => true)).resolves.toBe(source)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change reader 在 canonical 授权窗口替换 tasks 时拒绝旧 fd 与新 pathname', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'canonical-auth-target-race')
+    const target = join(targetDir, 'tasks.md')
+    const prefix = '# Tasks\n\n<!-- tenon-task-plan revision=r1 digest=sha256:abc -->\n'
+    const before = `${prefix}${'a'.repeat(256 * 1024 + 1 - Buffer.byteLength(prefix))}`
+    const after = before.replace(/a$/u, 'b')
+    await writeFile(target, before, 'utf8')
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'canonical-auth-target-race')
+      await expect(readAnchoredTasksMarkdown(changeAnchor, undefined, (source) => {
+        expect(source).toBe(before)
+        writeFileSync(target, after, 'utf8')
+        return true
+      })).rejects.toThrow(/tasks|路径|读取期间变化/iu)
+    } finally {
+      closeWorkflowRootAnchor(workflowAnchor)
+    }
+  })
+
+  it('单 Change reader 继续拒绝超过 256 KiB 的 legacy tasks.md', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'large-legacy-target')
+    const source = `# Tasks\n${'a'.repeat(256 * 1024 + 1)}`
+    await writeFile(join(targetDir, 'tasks.md'), source, 'utf8')
+    const workflowAnchor = captureWorkflowRootAnchor(root)
+    try {
+      const changeAnchor = captureChangePathAnchor(workflowAnchor, 'large-legacy-target')
+      await expect(readAnchoredTasksMarkdown(changeAnchor)).rejects.toThrow(/Legacy Change tasks.*262144/u)
     } finally {
       closeWorkflowRootAnchor(workflowAnchor)
     }
@@ -641,10 +786,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     const workflowAnchor = captureWorkflowRootAnchor(root)
     try {
       const changeAnchor = captureChangePathAnchor(workflowAnchor, 'same-size-target')
-      expect(() => readAnchoredTasksMarkdown(changeAnchor, () => {
+      await expect(readAnchoredTasksMarkdown(changeAnchor, () => {
         writeFileSync(target, after, 'utf8')
         return before
-      })).toThrow(/tasks|路径|读取期间变化/i)
+      })).rejects.toThrow(/tasks|路径|读取期间变化/i)
     } finally {
       closeWorkflowRootAnchor(workflowAnchor)
     }

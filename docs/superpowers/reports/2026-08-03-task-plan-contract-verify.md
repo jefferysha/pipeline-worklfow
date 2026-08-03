@@ -745,3 +745,97 @@ PASS，最终 C0/H0/M0/L0。第 16 轮全量独立审查首先确认 TaskPlan �
 - Round17：C0/H0/M0/L0；完整候选仍为 347 files，TaskPlan、receipt bridge、正式生成物与 origin/main 合并兼容重新审查；精确快照与合并态 focused suites 均 299/299；证据根 `/tmp/tenon-pr1-r17-preverify.7lULdI/`。
 - 主轨 fresh full suite：337 files / 6097 passed / 26 honest skipped；Dashboard：87 files / 1633 passed；build、architecture、comments、OpenSpec strict 37/37、docs、repository hygiene、default workflow freshness 与 hook 512/512 全通过。
 - receipt 专项保持 exact session/turn/worktree/ABI/inode/mtime/ctime 与 nested `exit_code=0` 约束；129+ transcript、完整/截断 `max_output_tokens` 双 ABI、equal-timestamp Unicode path tie 均有正反回归。两轮 reviewer 对真实 worktree 前后指纹一致，所有构建与探针在 `/tmp` 隔离快照完成。
+
+---
+
+# 第 17 轮 Verify（冻结基线 `3621b8de4aa386d027fcf70b20d4a2d25aa41c17`）
+
+## 结论
+
+FAIL，C0/H1/M2/L0。receipt bridge 的首次登记误拒绝、129+ transcript discovery、合法
+`max_output_tokens` 完成态以及 equal-timestamp ordinal tie-break 均已闭环，且 E2E 轨全部通过；
+但 Reviewer 与原生 Codex CLI 独立复现了 canonical `tasks.md` 兼容投影的 1 个 HIGH 与 2 个
+MEDIUM。展示 group 标题可改变 pipeline exit gate，合法大型投影与既有 256 KiB readers 不兼容，
+WorkItem identity comment 又会进入 Dashboard task label。本轮不得以绿测抵消这些 finding，必须回
+Build 修复并从零重跑三轨。
+
+## 冻结身份与三轨结果
+
+- exact base：`dc53843e61f812938f13c684a41ffe1d935e48bf`；frozen SHA/tree：`3621b8de4aa386d027fcf70b20d4a2d25aa41c17` / `c7cbe3d7375ff8517960ed8d369a06a80ec8cf5a`。
+- Reviewer：FAIL，C0/H1/M2/L0。TaskPlan/receipt focused 296/296，hermetic build、静态检查、OpenSpec strict/archive rehearsal 与 current-main merge-tree 均通过；全仓运行完成 336 files / 6079 passed / 26 skipped 后未给最终聚合摘要，剩余 release-store integration 单独 18/18、106.99 秒通过，未把无摘要运行宣称为完整通过。三个 finding 均由独立脚本复现；真实 worktree 指纹不变。证据根 `/tmp/tenon-pr1-r17-reviewer.MxLC21/`。
+- E2E：PASS，C0/H0/M0/L0。build exit 0，8 个聚焦文件 300/300，receipt verbose 164/164；真实 filesystem→store→server→HTTP 验证 missing/unregistered/canonical/root-replacement 400/404/200/403，OpenSpec 隔离 archive 后 strict 37/37。正式 pure snapshot 未解析回真实 worktree，真实 worktree 指纹不变。证据根 `/tmp/tenon-pr1-r17-e2e.TajY07/`。
+- 原生 Codex CLI：FAIL，P1/HIGH=1、P2/MEDIUM=2。在 detached 临时 clone `/tmp/tenon-pr1-codex-r17.LwiRsc/repo` 对 exact frozen SHA/base 执行完整 review，exit 0；启动期 logs DB/models cache 警告未阻止最终输出。其 build 通过，但因共享依赖软链在 bundle source label 写入真实绝对路径而产生临时 bundle diff，该结果不作为 bundle freshness 证据，正式 hermetic 证据取自前两轨。
+
+## 确认 findings
+
+### HIGH — TaskGroup 展示标题可改变 phase exit gate
+
+`renderTaskPlanTasksMd` 把任意 group title 写成普通 `## <title>`；既有
+`incompletePipelineTasksForExit`/`projectPipelineTodo` 又把 `Build`、`Verify` 等同形标题解析成 pipeline
+phase boundary。实测未完成 WorkItem 所在 group 仅从普通标题重命名为 `Verify`，build 的
+`incomplete` 即从 1 变成 0。TaskGroup 本应只表达展示/所有权，不能通过重命名改变 transition
+eligibility。修复必须让 canonical group headings 与 phase headings 无歧义，并以真实 renderer→gate
+回归证明所有 phase-like title 都不能旁路当前阶段检查。
+
+### MEDIUM — canonical projection 上限与既有 readers 错位
+
+TaskPlan/store 接受最高 1,048,577-byte canonical revision/projection，但 `snapshotTasks` 与
+`readAnchoredTasksMarkdown` 仍限制 262,144 bytes。实测 262,145-byte 合法 `tasks.md` 在聚合 snapshot
+中静默成为无 task source，单 Change reader 则报超限；TaskPlan endpoint 同时仍会报告 projection
+current。修复必须统一 canonical publication 与所有消费者的 byte contract，同时保持 legacy 256 KiB
+边界和 fd/inode/root-anchor 失败关闭。
+
+### MEDIUM — WorkItem identity comment 泄漏到 Todo/Dashboard 文本
+
+renderer 为持久 identity 写入 `<!-- work-item:<id> -->`，但 Todo parser 将完整 checkbox payload 作为
+`PipelineTodoItem.text`。实测 API/Dashboard label 为
+`Implement API <!-- work-item:wi-1 -->`。修复必须保留 Markdown identity marker，同时在兼容投影边界
+精确剥离该受信尾注，且不能吞掉普通用户文本或伪造/非尾部注释。
+
+## Receipt bridge bug 结论
+
+PR1 首次登记属于官方 receipt bridge false-negative bug，不是使用者漏读。修复已将有效 transcript
+metadata candidate 上限从错误的 128 对齐到既有 4096 entry budget，仍只全文读取 newest 32，并保留
+512 MiB、fd/inode/mtime/ctime、exact session/turn/worktree/ABI 与 nested `exit_code=0` 边界。inline
+`max_output_tokens` 只接受正 safe-integer literal 且完整结果必须 `text(result)` 转发；截断、pragma、
+动态/非法数值、output-only 与 spoofing 继续拒绝。equal timestamps 现以
+`mtimeNs desc → ctimeNs desc → path UTF-16 code-unit asc` 确定排序。同一命令向 `cat` 传两个 operand
+的后续失败不属于 bug，而是安全命令 grammar 的预期拒绝；逐个完整读取可正常登记。
+
+## 下一步
+
+本轮 Verify tasks 保持未完成，不设置 `branch_status=handled`，不请求 `verify-pass`。登记本失败报告并
+请求确切 `verify-fail` transition event，按持续授权 delegated acknowledge 后回 Build。以 TDD 分别
+覆盖 phase-like group title、262,145-byte canonical reader、identity marker display 三条 RED，再实现
+最小兼容修复、重建正式生成物、完成独立 pre-Verify review，并从零启动下一轮三轨。
+
+---
+
+# 第 18 轮 pre-Verify（Round17 finding 收敛）
+
+## 结论
+
+PASS，C0/H0/M0/L0。Round17 的 1 个 HIGH 与 2 个 MEDIUM 均已按 TDD 闭环：canonical
+TaskGroup 标题不再参与 phase gate；超过 legacy 256 KiB 的投影只有在真实 canonical current state
+授权后才可由 snapshot readers 读取；WorkItem identity 尾注只在受信 canonical 投影边界剥离，legacy
+用户文本保持原样。
+
+独立 Reviewer 在本轮中继续发现并推动修复了两类信任边界问题：仅凭 canonical header spoof 不得扩大
+legacy reader 预算；canonical current 授权不得在读取 tasks source 前缓存，否则会留下授权窗口
+TOCTOU。最终实现采用稳定 fd 读取、真实 current projection 授权、最终 fd/path fence 的顺序，并以
+aggregate 与 single Change 两类同尺寸并发写入回归证明失败关闭。
+
+## 独立证据
+
+- Reviewer：PASS，C0/H0/M0/L0；最新原生快照 8 files / 379 passed，TypeScript、architecture、comments、
+  OpenSpec strict、docs、repository hygiene 与正式 bundle freshness 全通过。与
+  `origin/main@315f334c9e7f7fa4e6b56389425476e97a789593` 自动合并无冲突，合并态重复通过同组
+  379 tests、类型与静态门禁，生成 bundle 与 merge commit 精确一致。证据根
+  `/tmp/tenon-pr1-r18-final2.K2ekzl`；Reviewer 对真实工作树前后指纹一致。
+- 主轨 fresh full suite：337 files / 6110 passed / 26 honest skipped；Dashboard：87 files /
+  1633 passed；build、TypeScript、architecture、comments、OpenSpec strict 37/37、docs、repository
+  hygiene、default workflow freshness、hooks 512/512、migration CAS 13/13 与 `git diff --check`
+  全通过。
+- 兼容专项覆盖 phase-like group title、可信/伪造 marker、真实大于 256 KiB canonical projection、legacy
+  硬上限、aggregate/single authorization-window races 与 ABA rename；receipt bridge 的 129+ discovery、
+  完整/截断 `max_output_tokens`、exact session/turn/worktree/ABI 及完成态正反矩阵继续保持通过。

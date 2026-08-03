@@ -3209,6 +3209,11 @@ var TASK_PLAN_LIMITS = Object.freeze({
   maxDecodeNodes: 65536
 });
 
+// packages/kernel/dist/task-plan/legacy.js
+function isCanonicalTaskPlanTasksMarkdown(markdown) {
+  return /^# Tasks\r?\n\r?\n<!-- tenon-task-plan revision=[^>]+ digest=[^>]+ -->\r?\n/u.test(markdown);
+}
+
 // packages/kernel/dist/product-identity.generated.js
 var PRODUCT_IDENTITY = {
   schemaVersion: 1,
@@ -9679,11 +9684,14 @@ function parseTasks(markdown, currentStage, stages) {
   const byStage = /* @__PURE__ */ new Map();
   if (markdown === void 0)
     return { byStage, structured: false };
+  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
   let structured = false;
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
+      if (canonicalTaskPlan && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
+        continue;
       const headingStage = stageForHeading(heading[1] ?? "", stages);
       if (headingStage !== void 0) {
         target = headingStage;
@@ -9694,7 +9702,8 @@ function parseTasks(markdown, currentStage, stages) {
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
     if (!task || target === void 0)
       continue;
-    const text2 = (task[2] ?? "").trim();
+    const rawText = (task[2] ?? "").trim();
+    const text2 = canonicalTaskPlan ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
     if (text2 === "")
       continue;
     const items = byStage.get(target) ?? [];

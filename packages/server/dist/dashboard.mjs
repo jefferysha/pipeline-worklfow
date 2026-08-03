@@ -1188,19 +1188,25 @@ function decodeTaskPlanRevisionV1(input) {
 function displayId(order) {
   return `legacy-display-${String(order + 1).padStart(4, "0")}`;
 }
+function isCanonicalTaskPlanTasksMarkdown(markdown) {
+  return /^# Tasks\r?\n\r?\n<!-- tenon-task-plan revision=[^>]+ digest=[^>]+ -->\r?\n/u.test(markdown);
+}
 function adaptLegacyTasksMd(markdown) {
+  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let stage = null;
   const items = [];
   for (const line of markdown.split(/\r?\n/u)) {
     const heading = /^\s{0,3}#{2,6}\s+(.+?)\s*#*\s*$/u.exec(line);
     if (heading) {
-      stage = (heading[1] ?? "").trim() || null;
+      const rawStage = (heading[1] ?? "").trim();
+      stage = (canonicalTaskPlan ? rawStage.replace(/\s*<!--\s*task-group:[^>]*-->\s*$/u, "").trim() : rawStage) || null;
       continue;
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/u.exec(line);
     if (!task)
       continue;
-    const rawTitle = (task[2] ?? "").replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, "").trim();
+    const rawTaskTitle = (task[2] ?? "").trim();
+    const rawTitle = canonicalTaskPlan ? rawTaskTitle.replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, "").trim() : rawTaskTitle;
     if (rawTitle === "")
       continue;
     const order = items.length;
@@ -1241,7 +1247,7 @@ function renderTaskPlanTasksMd(revision, input) {
     `<!-- tenon-task-plan revision=${safeComment(revision.revision_id)} digest=${safeComment(input.digest)} -->`
   ];
   for (const group of revision.groups) {
-    lines.push("", `## ${group.title}`, "");
+    lines.push("", `## ${group.title} <!-- task-group:${safeComment(group.id)} -->`, "");
     for (const id of group.work_item_ids) {
       const item2 = itemById.get(id);
       if (item2 !== void 0)
@@ -7841,11 +7847,14 @@ function parseTasks(markdown, currentStage, stages) {
   const byStage = /* @__PURE__ */ new Map();
   if (markdown === void 0)
     return { byStage, structured: false };
+  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown);
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
   let structured = false;
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) {
+      if (canonicalTaskPlan && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
+        continue;
       const headingStage = stageForHeading(heading[1] ?? "", stages);
       if (headingStage !== void 0) {
         target = headingStage;
@@ -7856,7 +7865,8 @@ function parseTasks(markdown, currentStage, stages) {
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
     if (!task || target === void 0)
       continue;
-    const text3 = (task[2] ?? "").trim();
+    const rawText = (task[2] ?? "").trim();
+    const text3 = canonicalTaskPlan ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
     if (text3 === "")
       continue;
     const items = byStage.get(target) ?? [];
@@ -20430,7 +20440,16 @@ function matchesStableFileVersion(stat5, expected) {
 }
 
 // packages/server/src/snapshotTasks.ts
-var MAX_TASKS_MARKDOWN_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MARKDOWN_BYTES = 256 * 1024;
+var MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
+async function hasCurrentCanonicalTaskPlanProjection(changeDir) {
+  try {
+    const plan = await readTaskPlanForChange(changeDir);
+    return plan?.source === "canonical" && plan.projection.state === "current";
+  } catch {
+    return false;
+  }
+}
 function isInside(base, candidate) {
   const fromBase = relative7(base, candidate);
   return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute9(fromBase);
@@ -20465,6 +20484,11 @@ async function readTasksMarkdown(changeDir, hooks = {}) {
     );
     if (!stable() || !fdStable()) return void 0;
     const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES);
+    if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES)) {
+      if (!isCanonicalTaskPlanTasksMarkdown(source)) return void 0;
+      const authorized = hooks.authorizeCanonicalProjection === void 0 ? await hasCurrentCanonicalTaskPlanProjection(changeDir) : await hooks.authorizeCanonicalProjection(source);
+      if (!authorized) return void 0;
+    }
     if (!fdStable() || !stable()) return void 0;
     return source;
   } catch {
@@ -24499,7 +24523,7 @@ function readBoundedTasksSource2(fd, maxBytes) {
   }
   return bytes.toString("utf8");
 }
-function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource2) {
+async function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource2, authorizeCanonicalProjection) {
   const target = join52(changeAnchor.changeDir, "tasks.md");
   let fd;
   try {
@@ -24543,6 +24567,12 @@ function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSo
       throw new Error(`Change tasks \u8D85\u8FC7 ${MAX_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES);
+    if (opened.size > MAX_LEGACY_TASKS_MARKDOWN_BYTES) {
+      const authorized = isCanonicalTaskPlanTasksMarkdown(source) && authorizeCanonicalProjection !== void 0 && await authorizeCanonicalProjection(source);
+      if (!authorized) {
+        throw new Error(`Legacy Change tasks \u8D85\u8FC7 ${MAX_LEGACY_TASKS_MARKDOWN_BYTES} bytes \u4E0A\u9650`);
+      }
+    }
     assertOpenedFdStillStable();
     assertOpenedTargetStillAnchored();
     return source;
@@ -24635,7 +24665,11 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     const [documents, terminalActivity, tasksMarkdown, workflowExecution] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
-      readAnchoredTasksMarkdown(anchored.changeAnchor),
+      readAnchoredTasksMarkdown(
+        anchored.changeAnchor,
+        void 0,
+        () => hasCurrentCanonicalTaskPlanProjection(changeDir)
+      ),
       snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps)
     ]);
     assertWorkflowRootAnchor(anchor);

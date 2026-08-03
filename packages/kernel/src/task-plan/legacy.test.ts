@@ -44,11 +44,23 @@ describe('legacy tasks.md adapter', () => {
     }
     const markdown = renderTaskPlanTasksMd(input, { completed_work_item_ids: ['w1'], digest: 'sha256:abc' })
     expect(markdown).toContain('<!-- tenon-task-plan revision=r1 digest=sha256:abc -->')
-    expect(markdown).toContain('## Build')
+    expect(markdown).toContain('## Build <!-- task-group:g1 -->')
     expect(markdown).toContain('- [x] Implement domain <!-- work-item:w1 -->')
 
     const legacy = adaptLegacyTasksMd(markdown)
     expect(legacy.schedulable).toBe(false)
     expect(legacy.items[0]?.id).not.toBe('w1')
+    expect(legacy.items[0]?.stage).toBe('Build')
+  })
+
+  it('preserves marker-shaped prose in a genuinely legacy document', () => {
+    const legacy = adaptLegacyTasksMd([
+      '## Build <!-- task-group:user-note -->',
+      '- [ ] Keep <!-- work-item:user-note -->',
+    ].join('\n'))
+    expect(legacy.items[0]).toMatchObject({
+      stage: 'Build <!-- task-group:user-note -->',
+      title: 'Keep <!-- work-item:user-note -->',
+    })
   })
 })

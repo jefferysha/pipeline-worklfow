@@ -9,22 +9,33 @@ function displayId(order: number): string {
   return `legacy-display-${String(order + 1).padStart(4, '0')}`
 }
 
+export function isCanonicalTaskPlanTasksMarkdown(markdown: string): boolean {
+  return /^# Tasks\r?\n\r?\n<!-- tenon-task-plan revision=[^>]+ digest=[^>]+ -->\r?\n/u.test(markdown)
+}
+
 /**
  * Read-only compatibility adapter. Display IDs exist only for rendering and are deliberately
  * unrelated to canonical WorkItem IDs; callers must honor schedulable=false.
  */
 export function adaptLegacyTasksMd(markdown: string): LegacyTaskPlanReadModelV1 {
+  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown)
   let stage: string | null = null
   const items: Array<LegacyTaskPlanReadModelV1['items'][number]> = []
   for (const line of markdown.split(/\r?\n/u)) {
     const heading = /^\s{0,3}#{2,6}\s+(.+?)\s*#*\s*$/u.exec(line)
     if (heading) {
-      stage = (heading[1] ?? '').trim() || null
+      const rawStage = (heading[1] ?? '').trim()
+      stage = (canonicalTaskPlan
+        ? rawStage.replace(/\s*<!--\s*task-group:[^>]*-->\s*$/u, '').trim()
+        : rawStage) || null
       continue
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/u.exec(line)
     if (!task) continue
-    const rawTitle = (task[2] ?? '').replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, '').trim()
+    const rawTaskTitle = (task[2] ?? '').trim()
+    const rawTitle = canonicalTaskPlan
+      ? rawTaskTitle.replace(/\s*<!--\s*work-item:[^>]*-->\s*$/u, '').trim()
+      : rawTaskTitle
     if (rawTitle === '') continue
     const order = items.length
     items.push({
@@ -70,7 +81,7 @@ export function renderTaskPlanTasksMd(
     `<!-- tenon-task-plan revision=${safeComment(revision.revision_id)} digest=${safeComment(input.digest)} -->`,
   ]
   for (const group of revision.groups) {
-    lines.push('', `## ${group.title}`, '')
+    lines.push('', `## ${group.title} <!-- task-group:${safeComment(group.id)} -->`, '')
     for (const id of group.work_item_ids) {
       const item = itemById.get(id)
       if (item !== undefined) lines.push(`- [${completed.has(id) ? 'x' : ' '}] ${item.title} <!-- work-item:${safeComment(id)} -->`)

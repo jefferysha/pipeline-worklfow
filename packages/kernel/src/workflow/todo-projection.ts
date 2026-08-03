@@ -7,6 +7,7 @@
  * workflow stage definitions as data.
  */
 import { DEFAULT_WORKFLOW_STEPS } from './default-workflow.generated.js'
+import { isCanonicalTaskPlanTasksMarkdown } from '../task-plan/legacy.js'
 
 export type PipelineTodoStageStatus = 'done' | 'current' | 'pending'
 
@@ -107,11 +108,13 @@ function parseTasks(
 } {
   const byStage = new Map<string, PipelineTodoItem[]>()
   if (markdown === undefined) return { byStage, structured: false }
+  const canonicalTaskPlan = isCanonicalTaskPlanTasksMarkdown(markdown)
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id
   let structured = false
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line)
     if (heading) {
+      if (canonicalTaskPlan && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? '')) continue
       const headingStage = stageForHeading(heading[1] ?? '', stages)
       if (headingStage !== undefined) {
         target = headingStage
@@ -121,7 +124,10 @@ function parseTasks(
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line)
     if (!task || target === undefined) continue
-    const text = (task[2] ?? '').trim()
+    const rawText = (task[2] ?? '').trim()
+    const text = canonicalTaskPlan
+      ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, '').trim()
+      : rawText
     if (text === '') continue
     const items = byStage.get(target) ?? []
     items.push({ text, completed: (task[1] ?? '').toLowerCase() === 'x' })
