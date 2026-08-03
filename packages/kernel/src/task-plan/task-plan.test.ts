@@ -300,6 +300,34 @@ describe('TaskPlan v1 validation and read projection', () => {
       duplicateId: string
     }> = [
       {
+        label: 'plan/revision',
+        input: revision({ revision_id: base.plan_id }),
+        duplicatePath: '$.revision_id',
+        duplicateId: base.plan_id,
+      },
+      {
+        label: 'plan/nested entity',
+        input: revision({
+          requirements: [
+            base.requirements[0]!,
+            { ...base.requirements[0]!, id: base.plan_id, title: 'Plan ID collision' },
+          ],
+        }),
+        duplicatePath: '$.requirements[1].id',
+        duplicateId: base.plan_id,
+      },
+      {
+        label: 'revision/nested entity',
+        input: revision({
+          acceptance_criteria: [
+            base.acceptance_criteria[0]!,
+            { ...base.acceptance_criteria[0]!, id: base.revision_id, title: 'Revision ID collision' },
+          ],
+        }),
+        duplicatePath: '$.acceptance_criteria[1].id',
+        duplicateId: base.revision_id,
+      },
+      {
         label: 'catalog',
         input: revision({
           requirements: [base.requirements[0]!, { ...base.requirements[0]!, title: 'Duplicate requirement' }],

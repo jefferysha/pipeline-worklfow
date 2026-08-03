@@ -302,3 +302,60 @@ codec 会对 catalog/group/work-item/output/validator 的全局重复 ID 返回 
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 补公开 validator 的全局 duplicate ID 失败关闭，重建正式生成物并提交新 frozen SHA，再从零执行第 6 轮三轨 Verify。
+
+---
+
+# 第 6 轮 Verify（冻结基线 `25d18101d7f2f2b1d773a3eceb2d051a9df99bb8`）
+
+## 结论
+
+FAIL。第 5 轮的公开 validator/read-model duplicate ID 缺陷已对 catalog/group/work-item/output/validator 及其跨 kind 碰撞失败关闭，但共享枚举沿用旧 codec 的遗漏，未纳入顶层 `plan_id` 与 `revision_id`。Reviewer 与 E2E 轨通过，原生 Codex CLI 发现该 P2；冻结构建上的独立动态复现确认 decoder、validator 与 read model 会把三个同值顶层/嵌套 ID 接受为 schedulable，必须再次回 Build。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/latest `origin/main`：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`25d18101d7f2f2b1d773a3eceb2d051a9df99bb8` / `ff03285e64de4561dd0b14f7957235a38beb6833`。
+- exact frozen diff：177 files，`+7486/-1392`；Reviewer full-index binary diff SHA-256 `6a87bbb70247122c1c492399d006c98d0fac81bcc1f3bcbabb665879b67d1c5c`，name-status-z SHA-256 `c01f7fe7cf3afafcad49b426699f3d8c4067c8d41779a08b7479a969217a9335`。
+- 三轨前真实 worktree 已有进入 Verify 后的 4 tracked + 3 untracked canonical governance 记录；起始 status SHA-256 `6f20a46a81c75957899f6fca1a8c9bb0685558bb8f9c35d542d8b91319391d8a`，聚合前仍完全一致。E2E 全树起始/中途/最终指纹均为 `8edce67fea8d50da225b5a8adb8a17602594b0f2`；Reviewer 对 index/status/untracked/patch/cached 的逐项 fingerprint 也前后一致。无轨道写真实实现、配置、生成物或治理状态。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L4。177/177 逐文件映射完成；focused 260/260、全仓 6038 passed / 26 honest skipped、build/tsc/static/OpenSpec 37/37、bundle freshness、merge-tree/fsck 与隔离 archive 全通过。
+- E2E：PASS。TaskPlan 69/69、13 类 nested/cross-kind duplicate 矩阵 13/13、历史边界 13/13、route 5/5、receipt 17 项、official registration 1/1；真实 HTTP 覆盖 canonical/legacy/duplicate/malformed/oversized/trust boundaries，全部符合预期。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached clone `/tmp/tenon-pr1-codex-r6.R4nHtV/repo` 运行 `codex exec review --ephemeral --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。其自发 Vitest 因 clone 无本地依赖而使用损坏的 npx optional native binding，exit 1；该环境失败不替代前两轨的隔离测试，也不影响静态 finding。
+
+## 确认 finding
+
+### MEDIUM — 顶层 plan/revision identity 未进入全局 duplicate 检查
+
+`taskPlanEntityIdEntries` 从 requirements 开始枚举，未加入 `$.plan_id` 与 `$.revision_id`。因此 `plan_id === revision_id`，或二者与 requirement/group/work-item/output/validator 任一 ID 相等时，codec 和公开 validator 均无 duplicate issue；合法 frozen typed revision 可被 store 发布并由 read model 标为 `schedulable=true`。这违反“所有实体 ID”及 design 中 revision/entity identity 全局唯一的已冻结语义。
+
+冻结构建独立动态复现：
+
+```json
+{"decodeOk":true,"valid":true,"freezable":true,"issues":[],"schedulable":true}
+```
+
+修复要求：共享枚举以 `plan_id`、`revision_id` 为首，随后保持既有 catalog/group/item/output/validator 原始顺序；codec 对第二次出现稳定返回 `duplicate_id`，public validator 返回 `entity-id-duplicate`，read model 不可调度。测试覆盖 `plan_id↔revision_id`、二者分别与每类嵌套实体的碰撞及无碰撞基线，确保路径、排序与现有 13 类矩阵不漂移。
+
+## 已闭环 finding 与逐文件 capability mapping
+
+- nested/cross-kind duplicate：13 类均产生精确 codec/validator path，`valid/freezable/schedulable=false`；malformed+duplicate 仍整体失败关闭。
+- receipt bridge：129+、4096 metadata/latest-32/512 MiB、current custom/function ABI、exact same-result `text(result)`、safe-positive `max_output_tokens` 与所有 invalid/truncated 对照均保持预期。
+- store/read model/API：最大 persisted bytes、NFC Unicode、revision ID lineage、committed semantics、target admission、projection budget、legacy ceiling、caller non-mutation、ordinal sorting 与 root/change trust/error contract 均通过。
+- 177/177 文件映射：144 个 governance 文件映射两项 delta + governance contract；8 个 Change/docs 文件映射 Change contract；5 个 CLI source/bundle 映射 receipt capability；13 个 kernel/state 文件与 5 个 server/API 文件映射 TaskPlan capability；2 个 delta spec 各自映射对应 capability。142 个 changed JSON 全部解析，无 diff symlink 或确认 secret。
+- 隔离 OpenSpec show/change strict/archive/all strict 均 exit 0，applied `+7/~2`，归档后 37/37；真实 main specs digest 始终为 `513bae7ec8b18dc850f358bac40ce6668b9d53cc3a2aaa6cc3a8f60029b89e25`。
+
+## LOW、环境限制与未完成通过门
+
+- L1：非法 UTF-8 文档 source 使用 replacement decode。
+- L2：path-based atomic publication 在同用户 parent swap-back 下有极窄 TOCTOU。
+- L3：transcript mtime/ctime 完全相同时用 `localeCompare`，极端 tied candidates 可跨宿主 false-negative，不会 false-positive。
+- L4：malformed raw 数组的非法前项被 decoder 压缩后，后续 duplicate 错误 path 相对原始索引左移；输入仍整体拒绝，不生成 revision 或调度状态。
+- hermetic 空 `TENON_MANAGED_HOME` bundle hard gate 27/27；本机 optional previous release 已会写 companion，read/write/current-resume 三项通过，但“缺 companion 应 pending”的环境假设得到 `pass`，脚本 30 pass / 1 fail。未把该可选断言伪报为通过，也未修改无关脚本。
+- 无 UI diff，不运行 browser/视觉轨；Docker 与真实 Codex 凭证相关 26 项保持 honest skip。
+- 因确认的 MEDIUM，Verify tasks 未标完成，未设置 branch handled，未请求 `verify-pass`，也不复用本轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 把 `plan_id`/`revision_id` 纳入共享全局 entity-ID 枚举，重建正式生成物并提交新 frozen SHA，再从零执行第 7 轮三轨 Verify。

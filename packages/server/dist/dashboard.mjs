@@ -651,6 +651,8 @@ var QuoteGateError = class extends Error {
 var encoder = new TextEncoder();
 function taskPlanEntityIdEntries(value) {
   return [
+    { id: value.plan_id, path: "$.plan_id" },
+    { id: value.revision_id, path: "$.revision_id" },
     ...value.requirements.map((entry, index) => ({ id: entry.id, path: `$.requirements[${index}].id` })),
     ...value.acceptance_criteria.map((entry, index) => ({ id: entry.id, path: `$.acceptance_criteria[${index}].id` })),
     ...value.groups.map((entry, index) => ({ id: entry.id, path: `$.groups[${index}].id` })),

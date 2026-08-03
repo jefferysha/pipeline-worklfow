@@ -9,6 +9,8 @@ export interface TaskPlanEntityIdEntry {
 
 export function taskPlanEntityIdEntries(value: TaskPlanRevisionV1): readonly TaskPlanEntityIdEntry[] {
   return [
+    { id: value.plan_id, path: '$.plan_id' },
+    { id: value.revision_id, path: '$.revision_id' },
     ...value.requirements.map((entry, index) => ({ id: entry.id, path: `$.requirements[${index}].id` })),
     ...value.acceptance_criteria.map((entry, index) => ({ id: entry.id, path: `$.acceptance_criteria[${index}].id` })),
     ...value.groups.map((entry, index) => ({ id: entry.id, path: `$.groups[${index}].id` })),
