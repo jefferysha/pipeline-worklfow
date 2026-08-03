@@ -284,15 +284,13 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('网络错误')
   })
 
-  it('未显式选择项目时自动使用首个可达项目读取完整机器事实', async () => {
+  it('未显式选择项目时不借用注册表首项，并明确保留项目级事实未知', async () => {
     const fetchSpy = vi.mocked(global.fetch)
     render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
 
-    await waitFor(() => expect(screen.getByTestId('machine-codex')).toHaveAttribute('data-state', 'ready'))
-    expect(fetchSpy).toHaveBeenCalledWith(
-      `/api/afk/readiness?root=${encodeURIComponent(ROOT)}`,
-      expect.objectContaining({ headers: expect.any(Object) }),
-    )
+    expect(await screen.findByTestId('machine-project-facts-unavailable')).toHaveTextContent('当前未选择项目')
+    expect(screen.getByTestId('machine-codex')).toHaveAttribute('data-state', 'unknown')
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/api/afk/readiness'))).toBe(false)
   })
 
   it('没有任何可达项目时明确保留项目级事实未知，不宣告机器完全无阻断', async () => {
@@ -309,6 +307,6 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     render(<I18nProvider><MachineView snapshot={makeSnapshot([], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
 
     expect(await screen.findByTestId('machine-project-facts-unavailable')).toHaveTextContent('项目相关 AFK 信号保持未知')
-    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未发现机器级阻断')
+    expect(screen.getByTestId('machine-blockers')).toHaveTextContent('仍有核心事实未知')
   })
 })

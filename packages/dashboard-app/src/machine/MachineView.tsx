@@ -195,7 +195,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const [skills, setSkills] = useState<WbSkillEntry[] | null>(null)
   const [loops, setLoops] = useState<WbLoopRow[] | null>(null)
   const [errors, setErrors] = useState<Array<{ source: string; cause: unknown }>>([])
-  const probeRoot = currentRoot || snapshot?.projects.find((project) => project.ok)?.root || ''
+  const probeRoot = currentRoot
 
   const load = useCallback(() => setReloadKey((value) => value + 1), [])
 
@@ -269,7 +269,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     || snapshot === null
     || (probeRoot !== '' && readiness === null)
   )
-  const projectFactsUnavailable = blockers.length === 0 && !blockersPending && probeRoot === ''
+  const coreFactsUnknown = readinessStates.some((state) => state === 'unknown')
 
   const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
   const dockerProbeError = dockerImagesError === undefined
@@ -316,6 +316,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       <section className="mt-4" data-testid="machine-afk-readiness">
         <h2 className="text-sm font-black text-text">{t('machine.afk_readiness')}</h2>
         <p className="mt-1 mb-3 text-xs text-text-3">{t('machine.afk_optional_note')}</p>
+        {probeRoot === '' && <p className="mb-3 text-xs text-text-3" role="status" data-testid="machine-project-facts-unavailable">{t('machine.project_facts_unavailable')}</p>}
         <div className="grid gap-3 md:grid-cols-2">
           <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={dockerDetail} testId="machine-docker" />
           <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
@@ -325,7 +326,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]" data-testid="machine-risk-layout">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
-          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : projectFactsUnavailable ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-project-facts-unavailable">{t('machine.project_facts_unavailable')}</p> : blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
+          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : blockers.length === 0 ? <p className={`mt-3 text-xs ${coreFactsUnknown ? 'text-text-3' : 'text-green-d'}`} role="status" aria-live="polite">{t(coreFactsUnknown ? 'machine.blockers_unknown' : 'machine.blockers_empty')}</p> : (
             <ul className="mt-3 space-y-2 p-0">
               {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
             </ul>

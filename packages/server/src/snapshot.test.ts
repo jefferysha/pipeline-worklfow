@@ -1353,6 +1353,11 @@ steps:
 })
 
 describe('computeFingerprint —— 变更检测', () => {
+  it('registry 增加空的非 Git 项目也改变指纹', async () => {
+    const root = await makeProject()
+    expect(await computeFingerprint([root])).not.toBe(await computeFingerprint([]))
+  })
+
   it('已登记 root 初始化为 Git 时改变指纹并触发 repository 分组刷新', async () => {
     const root = await makeProject()
     const before = await computeFingerprint([root])

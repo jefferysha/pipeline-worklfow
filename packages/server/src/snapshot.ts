@@ -345,6 +345,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
 export async function computeFingerprint(roots: string[], nowMs = Date.now()): Promise<string> {
   const parts: string[] = []
   for (const root of dedupeRoots(roots)) {
+    parts.push(`registry:${root}`)
     parts.push(...await repositoryTopologyFingerprint(root))
     const changesRoot = join(root, 'openspec', 'changes')
     const entries = await readdir(changesRoot, { withFileTypes: true }).catch(() => [])

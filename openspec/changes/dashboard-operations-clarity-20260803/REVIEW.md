@@ -27,8 +27,8 @@
 19. 宿主配置的 `lstat`→路径读取存在 TOCTOU、增长越界与 FIFO 阻塞窗口；已改为 `O_NOFOLLOW | O_NONBLOCK` 打开同一描述符、`fstat`、固定 `MAX+1` 缓冲，并在读取前后复验父目录链与文件 inode/size。
 20. 外置 `.git` 的 primary 与 linked worktree 曾分别生成 top-level 与 metadata 标签；已在聚合层按 repository id 选择 primary 标签并统一投影，用反序 registry、真实 separate-git-dir 与任意 `repository.git` 回归锁定。
 21. 已手动折叠的 repository group 会遮住后续搜索命中的 workspace；查询或 focus 过滤现在强制展开匹配组。
-22. 未显式选择项目时 Machine 可能在项目级事实未知时宣告无阻断；现自动使用首个可达项目探测，零项目时明确保留项目级事实未知。
-23. Git identity 变化未进入 SSE fingerprint；现纳入已登记 root 的 `.git` topology metadata，初始化或 worktree metadata 变化会触发实时快照。
+22. 未显式选择项目时 Machine 可能在项目级事实未知时宣告无阻断；现只呈现全局信号，不借用注册表首项，并明确标记项目级 AFK 与未知核心事实。
+23. Git identity 与 registry 成员变化未完整进入 SSE fingerprint；现纳入每个已登记 root identity 和 `.git` topology metadata，空/非 Git/失效项目增删、初始化或 worktree metadata 变化都会触发实时快照。
 
 ## Re-review
 

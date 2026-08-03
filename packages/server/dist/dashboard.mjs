@@ -21411,6 +21411,7 @@ async function buildSnapshot(deps) {
 async function computeFingerprint(roots, nowMs = Date.now()) {
   const parts = [];
   for (const root of dedupeRoots(roots)) {
+    parts.push(`registry:${root}`);
     parts.push(...await repositoryTopologyFingerprint(root));
     const changesRoot = join42(root, "openspec", "changes");
     const entries = await readdir4(changesRoot, { withFileTypes: true }).catch(() => []);
