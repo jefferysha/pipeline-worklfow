@@ -24919,7 +24919,7 @@ async function readAnchoredTaskPlan(anchor, change, overrides = {}) {
   try {
     changeAnchor = deps.captureChange(anchor, change);
   } catch (error2) {
-    if (error2 instanceof ContextBundlePathError && error2.status === 400) {
+    if (errorStatus(error2) === 400) {
       assertTrustedRoot(anchor, deps.assertRoot);
       return null;
     }

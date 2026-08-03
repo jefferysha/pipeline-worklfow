@@ -58,7 +58,7 @@ export async function readAnchoredTaskPlan(
   try {
     changeAnchor = deps.captureChange(anchor, change)
   } catch (error) {
-    if (error instanceof ContextBundlePathError && error.status === 400) {
+    if (errorStatus(error) === 400) {
       assertTrustedRoot(anchor, deps.assertRoot)
       return null
     }

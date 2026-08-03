@@ -138,6 +138,22 @@ describe('readAnchoredTaskPlan', () => {
     }
   })
 
+  it('revalidates the root for a cross-module missing-change error without relying on instanceof', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'demo', {
+        captureChange: () => {
+          renameSync(root, replacement)
+          throw Object.assign(new Error('cross-module missing Change'), { status: 400 })
+        },
+      })).rejects.toMatchObject({ status: 403 })
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
   it('rejects and does not return replacement content when the root changes during the read', async () => {
     const { parent, root, replacement } = await rootFixture()
     const anchor = captureWorkflowRootAnchor(root)
