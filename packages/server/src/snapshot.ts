@@ -42,10 +42,10 @@ import { dedupeRoots } from './projectRoots.js'
 import { readTasksMarkdown } from './snapshotTasks.js'
 import { mapWithConcurrency } from './concurrentMap.js'
 import { normalizeRepositoryLabels, readRepositoryIdentity } from './repositoryIdentity.js'
+import { repositoryTopologyFingerprint } from './repositoryFingerprint.js'
 
 export { dedupeRoots } from './projectRoots.js'
 export { readTasksMarkdown } from './snapshotTasks.js'
-
 const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
@@ -345,13 +345,9 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
 export async function computeFingerprint(roots: string[], nowMs = Date.now()): Promise<string> {
   const parts: string[] = []
   for (const root of dedupeRoots(roots)) {
+    parts.push(...await repositoryTopologyFingerprint(root))
     const changesRoot = join(root, 'openspec', 'changes')
-    let entries
-    try {
-      entries = await readdir(changesRoot, { withFileTypes: true })
-    } catch {
-      continue
-    }
+    const entries = await readdir(changesRoot, { withFileTypes: true }).catch(() => [])
     for (const e of entries) {
       if (!e.isDirectory() || e.name === 'archive') continue
       const source = stateStorageSourcePathSync(join(changesRoot, e.name))

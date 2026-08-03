@@ -283,4 +283,32 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未选择项目')
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('网络错误')
   })
+
+  it('未显式选择项目时自动使用首个可达项目读取完整机器事实', async () => {
+    const fetchSpy = vi.mocked(global.fetch)
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-codex')).toHaveAttribute('data-state', 'ready'))
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `/api/afk/readiness?root=${encodeURIComponent(ROOT)}`,
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('没有任何可达项目时明确保留项目级事实未知，不宣告机器完全无阻断', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/skills/registry') {
+        return new Response(JSON.stringify({ skills: [
+          { name: 'browser-e2e', installed: true, source: 'user', tier: 'mandatory', available: true },
+        ] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    expect(await screen.findByTestId('machine-project-facts-unavailable')).toHaveTextContent('项目相关 AFK 信号保持未知')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未发现机器级阻断')
+  })
 })

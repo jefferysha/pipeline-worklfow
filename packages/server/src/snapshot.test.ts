@@ -1353,6 +1353,17 @@ steps:
 })
 
 describe('computeFingerprint —— 变更检测', () => {
+  it('已登记 root 初始化为 Git 时改变指纹并触发 repository 分组刷新', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+
+    await execFileAsync('git', ['init'], { cwd: root })
+
+    const after = await computeFingerprint([root])
+    expect(after).not.toBe(before)
+    expect(after).toContain('.git')
+  })
+
   it('dangling canonical current 仍进入 fingerprint，不能因 stat 跟随失败而消失', async () => {
     const store = newStore()
     const root = await makeProject()

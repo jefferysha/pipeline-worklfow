@@ -195,6 +195,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const [skills, setSkills] = useState<WbSkillEntry[] | null>(null)
   const [loops, setLoops] = useState<WbLoopRow[] | null>(null)
   const [errors, setErrors] = useState<Array<{ source: string; cause: unknown }>>([])
+  const probeRoot = currentRoot || snapshot?.projects.find((project) => project.ok)?.root || ''
 
   const load = useCallback(() => setReloadKey((value) => value + 1), [])
 
@@ -212,7 +213,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       setErrors((current) => [...current, { source, cause: error }])
     }
 
-    if (currentRoot !== '') void fetchAfkReadiness(currentRoot).then((value) => { if (live) setReadiness(value) }, (error) => report('readiness', error))
+    if (probeRoot !== '') void fetchAfkReadiness(probeRoot).then((value) => { if (live) setReadiness(value) }, (error) => report('readiness', error))
 
     void fetchDockerImages().then((value) => { if (live) setImages(value) }, (error) => report('docker images', error))
     void fetchSecrets().then((value) => { if (live) setSecrets(value) }, (error) => report('secrets', error))
@@ -222,7 +223,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     void fetchLoopsSnapshot().then((value) => { if (live) setLoops(value.rows) }, (error) => report('loops', error))
 
     return () => { live = false }
-  }, [currentRoot, reloadKey])
+  }, [probeRoot, reloadKey])
 
   const dockerImagesError = errors.find(({ source }) => source === 'docker images')?.cause
   const dockerState: ReadinessState = dockerImagesError !== undefined
@@ -231,7 +232,11 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const imageState: ReadinessState = dockerImagesError !== undefined
     ? 'optional-unavailable'
     : readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'optional-unavailable'
-  const codexState: ReadinessState = readiness === null || secrets === null ? 'unknown' : readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set || secrets.OPENAI_API_KEY.set ? 'ready' : 'unknown'
+  const codexState: ReadinessState = secrets === null
+    ? 'unknown'
+    : readiness?.credentials.codex.OPENAI_API_KEY.set
+      || readiness?.credentials.codex.CODEX_HOME.set
+      || secrets.OPENAI_API_KEY.set ? 'ready' : 'unknown'
   const skillState: ReadinessState = skills === null
     ? 'unknown'
     : skills.length > 0 && skills.filter(blocksMachine).every((skill) => skill.installed) ? 'ready' : 'blocked'
@@ -262,8 +267,9 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     secrets === null
     || skills === null
     || snapshot === null
-    || (currentRoot !== '' && readiness === null)
+    || (probeRoot !== '' && readiness === null)
   )
+  const projectFactsUnavailable = blockers.length === 0 && !blockersPending && probeRoot === ''
 
   const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
   const dockerProbeError = dockerImagesError === undefined
@@ -319,7 +325,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]" data-testid="machine-risk-layout">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
-          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
+          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : projectFactsUnavailable ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-project-facts-unavailable">{t('machine.project_facts_unavailable')}</p> : blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
             <ul className="mt-3 space-y-2 p-0">
               {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
             </ul>

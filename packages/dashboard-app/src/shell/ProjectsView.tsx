@@ -158,9 +158,9 @@ export function ProjectsView({
   const shownGroups = needGroups.length + restGroups.length + unreachable.length
 
   function groupExpanded(group: RepositoryGroup): boolean {
+    if (query.trim().length > 0 || focus !== 'all') return true
     return expandedByGroup[group.id]
-      ?? (group.workspaceCount === 1 || group.need > 0 || group.running > 0
-        || query.trim().length > 0 || focus !== 'all')
+      ?? (group.workspaceCount === 1 || group.need > 0 || group.running > 0)
   }
 
   function renderGroup(group: RepositoryGroup): JSX.Element {

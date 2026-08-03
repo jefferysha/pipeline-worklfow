@@ -78,6 +78,34 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     expect(onOpenProject).toHaveBeenCalledWith(worktreeRoot)
   })
 
+  it('forces a previously collapsed repository group open while search matches one workspace', () => {
+    const primaryRoot = '/code/tenon'
+    const worktreeRoot = '/worktrees/feature/tenon-search-target'
+    const repository = { id: 'c'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(primaryRoot, [makeChange('main', 'open')], { repository }),
+        makeProject(worktreeRoot, [makeChange('feature', 'open')], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+      ]),
+      rulesByKey: rulesFor(primaryRoot, worktreeRoot),
+    })
+
+    const toggle = screen.getByTestId(`repository-toggle-repository:${repository.id}`)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), {
+      target: { value: 'search-target' },
+    })
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('project-row-tenon-search-target')).toBeInTheDocument()
+  })
+
   it('applies attention focus to repository groups without hiding their healthy workspaces', () => {
     const primaryRoot = '/code/tenon'
     const worktreeRoot = '/worktrees/review/tenon'
