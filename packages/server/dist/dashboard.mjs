@@ -648,7 +648,6 @@ var QuoteGateError = class extends Error {
 };
 
 // packages/kernel/dist/task-plan/internal.js
-var encoder = new TextEncoder();
 function taskPlanEntityIdEntries(value) {
   return [
     { id: value.plan_id, path: "$.plan_id" },
@@ -670,7 +669,26 @@ function taskPlanEntityIdEntries(value) {
   ];
 }
 function byteLength(value) {
-  return encoder.encode(value).byteLength;
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value.charCodeAt(index);
+    if (current <= 127)
+      bytes += 1;
+    else if (current <= 2047)
+      bytes += 2;
+    else if (current >= 55296 && current <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 56320 && next <= 57343) {
+        bytes += 4;
+        index += 1;
+      } else {
+        bytes += 3;
+      }
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
 }
 function hasInvalidSurrogate(value) {
   for (let index = 0; index < value.length; index += 1) {
@@ -16392,7 +16410,7 @@ function compileAutomationPolicyTemplate(id, override = {}, version = AUTOMATION
 }
 
 // packages/kernel/dist/loops/reconciliation-operations.js
-var encoder2 = new TextEncoder();
+var encoder = new TextEncoder();
 var decoder = new TextDecoder();
 
 // packages/kernel/dist/compress/markdown.js
@@ -16976,7 +16994,7 @@ var INPUT_FIELDS = /* @__PURE__ */ new Set(["locale", "entries"]);
 var ENTRY_FIELDS = /* @__PURE__ */ new Set(["kind", "title", "status", "command", "result", "skipReason"]);
 var KINDS = /* @__PURE__ */ new Set(["command", "browser", "review", "other"]);
 var STATUSES = /* @__PURE__ */ new Set(["passed", "failed", "skipped"]);
-var encoder3 = new TextEncoder();
+var encoder2 = new TextEncoder();
 function addError(collector, code, path7) {
   if (collector.errors.length < VERIFICATION_EVIDENCE_LIMITS.maxErrors) {
     collector.errors.push(Object.freeze({ code, path: path7 }));
@@ -17076,7 +17094,7 @@ function normalizeText(value, path7, maxBytes, collector, required2, preserveWhi
       addError(collector, "field_required", path7);
     return void 0;
   }
-  if (encoder3.encode(canonical).byteLength > maxBytes) {
+  if (encoder2.encode(canonical).byteLength > maxBytes) {
     addError(collector, "field_too_large", path7);
     return void 0;
   }
@@ -17253,7 +17271,7 @@ function composeVerificationEvidence(input) {
     entries: Object.freeze(entries)
   });
   const markdown = renderDraft(draft);
-  if (encoder3.encode(markdown).byteLength > VERIFICATION_EVIDENCE_LIMITS.outputBytes) {
+  if (encoder2.encode(markdown).byteLength > VERIFICATION_EVIDENCE_LIMITS.outputBytes) {
     addError(collector, "output_too_large", "");
     return Object.freeze({
       ok: false,

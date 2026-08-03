@@ -7,6 +7,7 @@ import {
   validateTaskPlanRevisionV1,
   type TaskPlanRevisionV1,
 } from './index.js'
+import { byteLength } from './internal.js'
 
 function revision(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {
   return {
@@ -48,6 +49,17 @@ function revision(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevision
 }
 
 describe('TaskPlan v1 codec', () => {
+  it.each([
+    '',
+    'ASCII',
+    '计划-ä',
+    'emoji-😀',
+    '\ud800',
+    'a\udc00b',
+  ])('counts UTF-8 bytes without allocating an encoded copy for %j', (value) => {
+    expect(byteLength(value)).toBe(new TextEncoder().encode(value).byteLength)
+  })
+
   it('rejects line-breaking control characters before they can escape a Markdown projection', () => {
     const decoded = decodeTaskPlanRevisionV1(revision({
       work_items: revision().work_items.map((item, index) => index === 0

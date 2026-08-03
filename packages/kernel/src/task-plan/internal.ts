@@ -1,7 +1,5 @@
 import type { TaskPlanRevisionV1 } from './types.js'
 
-const encoder = new TextEncoder()
-
 export interface TaskPlanEntityIdEntry {
   readonly id: string
   readonly path: string
@@ -29,7 +27,26 @@ export function taskPlanEntityIdEntries(value: TaskPlanRevisionV1): readonly Tas
 }
 
 export function byteLength(value: string): number {
-  return encoder.encode(value).byteLength
+  let bytes = 0
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value.charCodeAt(index)
+    if (current <= 0x7f) bytes += 1
+    else if (current <= 0x7ff) bytes += 2
+    else if (current >= 0xd800 && current <= 0xdbff) {
+      const next = value.charCodeAt(index + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        index += 1
+      } else {
+        // TextEncoder replaces an unpaired UTF-16 surrogate with U+FFFD (three UTF-8 bytes).
+        bytes += 3
+      }
+    } else {
+      // BMP scalars and unpaired low surrogates both encode to three bytes (the latter as U+FFFD).
+      bytes += 3
+    }
+  }
+  return bytes
 }
 
 export function hasInvalidSurrogate(value: string): boolean {
