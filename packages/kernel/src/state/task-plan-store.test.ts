@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdtemp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeTaskPlanRevisionV1, TASK_PLAN_LIMITS, type TaskPlanRevisionV1 } from '../task-plan/index.js'
@@ -62,6 +63,11 @@ async function seedCanonicalHistory(
 
 function revisionRaw(revision: TaskPlanRevisionV1): string {
   return `${encodeTaskPlanRevisionV1(revision)}\n`
+}
+
+function canonicalRevisionFileName(revision: TaskPlanRevisionV1): string {
+  const planNamespace = createHash('sha256').update(revision.plan_id).digest('hex')
+  return `${String(revision.revision_number).padStart(6, '0')}-${planNamespace}-${revision.revision_id}.json`
 }
 
 function maximumPersistedRevision(): TaskPlanRevisionV1 {
@@ -156,7 +162,10 @@ describe('task plan store', () => {
       schema_version: 'task-plan-read/v1', source: 'canonical', revision_id: 'revision-1', schedulable: true,
       projection: { state: 'current' },
     })
-    const immutable = await readFile(join(dir, TASK_PLAN_STATE_DIR, 'revisions', '000001-revision-1.json'), 'utf8')
+    const immutable = await readFile(
+      join(dir, TASK_PLAN_STATE_DIR, 'revisions', canonicalRevisionFileName(plan())),
+      'utf8',
+    )
     const current = await readFile(join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE), 'utf8')
     expect(current).toBe(immutable)
     expect(await readFile(join(dir, 'tasks.md'), 'utf8')).toContain('work-item:wi-1')
@@ -342,6 +351,65 @@ describe('task plan store', () => {
     })).resolves.toMatchObject({ revision_id: 'revision-3', revision_number: 3 })
   })
 
+  it('publishes when a different-plan legacy orphan has the same revision number and id', async () => {
+    const dir = await changeDir()
+    await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
+    const revisionsDir = join(dir, TASK_PLAN_STATE_DIR, 'revisions')
+    const legacyOrphanPath = join(revisionsDir, '000002-shared-revision.json')
+    const legacyOrphanRaw = revisionRaw(plan({
+      plan_id: 'other-plan',
+      revision_id: 'shared-revision',
+      revision_number: 2,
+    }))
+    await writeFile(legacyOrphanPath, legacyOrphanRaw, 'utf8')
+
+    await expect(publishTaskPlanRevision(
+      dir,
+      plan({ revision_id: 'shared-revision', revision_number: 2 }),
+      { expected_current_revision_id: 'revision-1' },
+    )).resolves.toMatchObject({
+      plan_id: 'plan-1',
+      revision_id: 'shared-revision',
+      revision_number: 2,
+    })
+
+    expect(await readFile(legacyOrphanPath, 'utf8')).toBe(legacyOrphanRaw)
+    expect((await readdir(revisionsDir)).filter((name) => name.startsWith('000002-'))).toHaveLength(2)
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      plan_id: 'plan-1',
+      revision_id: 'shared-revision',
+      revision_number: 2,
+    })
+  })
+
+  it('reads and idempotently republishes a healthy legacy flat immutable without rewriting it', async () => {
+    const dir = await changeDir()
+    const current = plan()
+    const revisionsDir = await seedCanonicalHistory(dir, [current], current)
+    const legacyPath = join(revisionsDir, '000001-revision-1.json')
+    const legacyRaw = await readFile(legacyPath, 'utf8')
+
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'canonical',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      projection: { state: 'pending' },
+    })
+    await expect(publishTaskPlanRevision(
+      dir,
+      current,
+      { expected_current_revision_id: 'revision-1' },
+    )).resolves.toMatchObject({
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      projection: { state: 'current' },
+    })
+
+    expect(await readFile(legacyPath, 'utf8')).toBe(legacyRaw)
+    await expect(readFile(join(revisionsDir, canonicalRevisionFileName(current)), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('fails closed instead of accepting a reused id hidden behind a seven-digit revision number', async () => {
     const dir = await changeDir()
     const historical = plan({ revision_id: 'historical-big', revision_number: 1_000_000 })
@@ -390,7 +458,10 @@ describe('task plan store', () => {
     const revisionsDir = await seedCanonicalHistory(dir, [invalid], invalid)
     const currentPath = join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE)
     const currentBefore = await readFile(currentPath, 'utf8')
-    const targetPath = join(revisionsDir, '000002-revision-2.json')
+    const targetPath = join(revisionsDir, canonicalRevisionFileName(plan({
+      revision_id: 'revision-2',
+      revision_number: 2,
+    })))
 
     await expect(readTaskPlanForChange(dir)).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
     await expect(publishTaskPlanRevision(
@@ -498,7 +569,7 @@ describe('task plan store', () => {
     const currentPath = join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE)
     const currentBefore = await readFile(currentPath, 'utf8')
     const target = plan({ revision_id: 'revision-257', revision_number: 257 })
-    const targetPath = join(revisionsDir, '000257-revision-257.json')
+    const targetPath = join(revisionsDir, canonicalRevisionFileName(target))
 
     await expect(publishTaskPlanRevision(dir, target, {
       expected_current_revision_id: current.revision_id,
@@ -525,7 +596,7 @@ describe('task plan store', () => {
     await expect(publishTaskPlanRevision(dir, target, {
       expected_current_revision_id: 'revision-1',
     })).rejects.toBeInstanceOf(TaskPlanRevisionConflictError)
-    await expect(readFile(join(revisionsDir, '000002-revision-2.json'), 'utf8'))
+    await expect(readFile(join(revisionsDir, canonicalRevisionFileName(target)), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(currentPath, 'utf8')).toBe(currentBefore)
   })
@@ -540,7 +611,7 @@ describe('task plan store', () => {
 
     await expect(publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null }))
       .rejects.toBeInstanceOf(TaskPlanRevisionConflictError)
-    await expect(readFile(join(revisionsDir, '000001-revision-1.json'), 'utf8'))
+    await expect(readFile(join(revisionsDir, canonicalRevisionFileName(plan())), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
@@ -634,7 +705,10 @@ describe('task plan store', () => {
     const orphanPath = join(revisionsDir, '000002-orphan-revision-2.json')
     const orphanRaw = revisionRaw(orphan)
     await writeFile(orphanPath, orphanRaw, 'utf8')
-    const targetPath = join(revisionsDir, '000002-target-revision-2.json')
+    const targetPath = join(revisionsDir, canonicalRevisionFileName(plan({
+      revision_id: 'target-revision-2',
+      revision_number: 2,
+    })))
 
     await expect(publishTaskPlanRevision(
       dir,
@@ -655,7 +729,10 @@ describe('task plan store', () => {
     const orphanPath = join(revisionsDir, '000009-reserved-revision-id.json')
     const orphanRaw = revisionRaw(orphan)
     await writeFile(orphanPath, orphanRaw, 'utf8')
-    const targetPath = join(revisionsDir, '000002-reserved-revision-id.json')
+    const targetPath = join(revisionsDir, canonicalRevisionFileName(plan({
+      revision_id: 'reserved-revision-id',
+      revision_number: 2,
+    })))
 
     const currentBefore = await readFile(currentPath, 'utf8')
     await expect(publishTaskPlanRevision(

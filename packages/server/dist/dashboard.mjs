@@ -7528,8 +7528,17 @@ var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 var TaskPlanStateCorruptError = class extends Error {
   name = "TaskPlanStateCorruptError";
 };
+function revisionNumberPrefix(revision) {
+  return String(revision.revision_number).padStart(6, "0");
+}
+function planNamespace(planId) {
+  return createHash8("sha256").update(planId).digest("hex");
+}
 function revisionFileName3(revision) {
-  return `${String(revision.revision_number).padStart(6, "0")}-${revision.revision_id}.json`;
+  return `${revisionNumberPrefix(revision)}-${planNamespace(revision.plan_id)}-${revision.revision_id}.json`;
+}
+function legacyRevisionFileName(revision) {
+  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
 }
 function digest2(raw) {
   return `sha256:${createHash8("sha256").update(raw).digest("hex")}`;
@@ -7571,6 +7580,24 @@ function assertCommittedRevisionSemantics(revision) {
     throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
   }
 }
+async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
+  const canonical = await readRegular(join15(revisionsDir, revisionFileName3(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (canonical !== void 0) {
+    if (canonical !== expectedRaw) {
+      throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+    }
+    return canonical;
+  }
+  const legacy = await readRegular(join15(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (legacy === void 0)
+    return void 0;
+  if (legacy === expectedRaw)
+    return legacy;
+  const decoded = decodeTaskPlanRevisionV1(legacy);
+  if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
+    return void 0;
+  throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+}
 async function readTaskPlanForChange(changeDir) {
   const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
   const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
@@ -7585,8 +7612,7 @@ async function readTaskPlanForChange(changeDir) {
   assertCommittedRevisionSemantics(decoded.value);
   await assertOwnedDirectory(changeDir, stateDir);
   await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
-  const immutablePath = join15(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName3(decoded.value));
-  const immutableRaw = await readRegular(immutablePath, TASK_PLAN_LIMITS.maxRevisionBytes);
+  const immutableRaw = await readImmutableTwin(join15(stateDir, TASK_PLAN_REVISIONS_DIR), decoded.value, currentRaw);
   if (immutableRaw === void 0 || immutableRaw !== currentRaw) {
     throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
   }

@@ -522,3 +522,56 @@ FAIL。第 8 轮的同 plan immutable ID 全历史保留与 caller-owned codec-i
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 在 TaskPlan route 的 capture/read 全生命周期复核持久 root anchor，重建/验证相关 bundle，完成独立 pre-Verify review，再从零执行第 10 轮三轨。
+
+---
+
+# 第 10 轮 Verify（冻结基线 `4fa2b1a5b8a8438051c97c50d21cf0bbfc8982bd`）
+
+## 结论
+
+FAIL。第 9 轮 registered-root inode anchor 缺陷已经修复，Reviewer 与 E2E 均通过；但原生 Codex CLI 发现并由主轨使用冻结正式 bundle 独立动态复现 1 个 P2/MEDIUM：immutable revision 文件名没有 `plan_id` namespace，不同 plan 的合法 orphan 可错误占用当前 plan 的 target pathname。未接受偏差，必须回到 Build 修复并从零重跑三轨。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`4fa2b1a5b8a8438051c97c50d21cf0bbfc8982bd` / `2f35919562fd3d2581b4a8ada01a667a159e5e37`。
+- Reviewer binary diff SHA-256：`dedcd4a242f3ec016849e52858cf35a2e4d8a685a0026edc2286345dd4106d60`；name-status SHA-256：`27455dbd56a6900396d56391e9131ad9e5856953f5ddb02ce6440ceed0559054`。
+- Reviewer 与 E2E 对真实 worktree 的 status、tracked/untracked 内容、mode/symlink、HEAD/tree 起止检查均逐字节一致；E2E 全树 fingerprint 始终为 `32ff93e1e1969e43f4b64d4b3951924b2ac4045f`。所有会写入的验证、root replacement、HTTP 与 archive rehearsal 均在仓外隔离副本执行。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L4。完整映射 249/249 paths；聚焦与独立 root-anchor 矩阵 267/267、全仓 337 files / 6062 passed / 26 honest skipped、Dashboard 87 files / 1633 passed、hermetic bundle 27/27、build/static/generated freshness、OpenSpec strict/archive 后 37/37 与 governance continuity 全部通过。
+- E2E：PASS。TaskPlan/store 88/88、route 10/10、receipt 163/163、stable-hook 3/3；root replacement 窄专项 5/5、真实 route runtime 四类替换、真实 HTTP 4/4、OpenSpec archive `+7/~2` 与归档后 37/37 均通过。无 UI diff，browser N/A。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached read-only clone `/tmp/tenon-pr1-codex-r10.H3ldkY/repo` 对 exact frozen SHA/base 完成完整 249-path diff/spec/store/route/receipt 审查，exit 0；启动期 malformed logs DB/models cache 警告未阻止最终输出。
+
+## 确认 finding
+
+### MEDIUM — immutable revision pathname 未按 plan namespace 隔离
+
+`revisionFileName()` 仅使用 `revision_number` 与 `revision_id`。history admission 在看到与 proposed 同 pathname 的 entry 时，先逐字节比较 raw，再检查 `historical.plan_id`；因此不同 plan 的合法 orphan 若与 proposed revision 同号同 ID，会被误判为“target revision already exists with different content”，阻断当前 lineage 的有效发布。
+
+主轨使用冻结 `packages/kernel/dist` 独立复现：先发布 `plan-a/revision-1`，再放入 `plan-b/revision-2/shared-revision` orphan，随后发布 `plan-a/revision-2/shared-revision`。结果为：
+
+```json
+{"accepted":false,"name":"TaskPlanStateCorruptError","message":"TaskPlan target revision already exists with different content"}
+```
+
+这违反已经冻结并通过既有测试证明的 plan-scoped identity 语义：different-plan immutable 不应占用当前 plan 的 revision ID/number/target。修复必须把 immutable storage addressing 纳入 `plan_id` namespace，或以等价方式确保 foreign-plan target 不碰撞；同时保持同 plan exact target 幂等、same-plan future orphan ID/number 拒绝、完整 history budgets、legacy/current compatibility与零写入失败关闭。必须先补 different-plan same-number/same-ID RED 回归，再完成迁移兼容与 GREEN。
+
+## Root anchor 与 receipt bridge 已闭环
+
+- TaskPlan GET 在 Change capture 前、capture 后、read 前后与返回前复核同一个 registered-root anchor；capture 400 也先重验 root，cross-module status-shaped 400 不依赖 `instanceof`。读取 replacement content 或抛 replacement secret 均以 403 trust failure 优先且不泄漏；可信 missing 保持 404。
+- PR1 首次官方登记确属 receipt bridge false-negative bug。metadata discovery 的错误 128 transcript hard cap 已对齐既有 4096 entry budget，仍只全文读取 latest 32、总量 512 MiB，并保持 exact session/turn/worktree/ABI/inode fences；inline `max_output_tokens` 仅接受正安全整数字面量。129+、真实当前 host 完成态、截断/伪造/ABI 错配与动态/零/负/小数/unsafe/pragma 对照均通过。
+
+## LOW、环境限制与未完成通过门
+
+- L1：非法 UTF-8 canonical 文本使用 replacement decode。
+- L2：malformed catalog 前项压缩后，duplicate diagnostic path 相对 raw index 左移。
+- L3：transcript mtimeNs/ctimeNs 完全相同时仍以默认 locale 的 `localeCompare` 排 path，33+ tied Unicode candidates 可能跨宿主 false-negative，不会 false-positive。
+- L4：TaskPlan path-based publication 在同用户 parent swap 下仍有极窄 TOCTOU。
+- fresh Reviewer clone 首轮跨包测试因 workspace dist 尚未生成而无法收集，执行正式 build 后 267/267 与全仓 6062 全绿；这是诚实记录的隔离准备，不是产品失败。
+- 因确认的 MEDIUM，Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，且不复用第 10 轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复 immutable storage 的 plan namespace 与兼容读取，重建正式生成物、完成独立 pre-Verify review，再从零执行第 11 轮三轨。

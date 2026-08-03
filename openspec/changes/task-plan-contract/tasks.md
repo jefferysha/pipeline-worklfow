@@ -38,6 +38,7 @@
 - [x] 将任一可信同 plan immutable revision ID 纳入发布前保留集合，拒绝 future orphan ID 复用且保持 current/target 零写入。 (build)
 - [x] 消除公共 validator/read-model 对 caller-owned codec-invalid 对象的回退，使用安全 decoded candidate 保留 duplicate 诊断，并让 Proxy trap 与未知字段稳定失败关闭。 (build)
 - [x] 在 TaskPlan GET 的 Change capture/read 全生命周期复核持久 registered-root inode anchor，并以 capture 前与读取中 root replacement 回归证明失败关闭。 (build)
+- [x] 将 immutable revision addressing 纳入 plan namespace，兼容读取旧 flat history，并补 different-plan 同号同 ID 的红绿回归。 (build)
 
 ## 验证
 

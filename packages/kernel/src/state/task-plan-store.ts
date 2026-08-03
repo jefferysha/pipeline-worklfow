@@ -35,8 +35,24 @@ export interface PublishTaskPlanOptions {
   readonly completed_work_item_ids?: readonly string[]
 }
 
+function revisionNumberPrefix(revision: TaskPlanRevisionV1): string {
+  return String(revision.revision_number).padStart(6, '0')
+}
+
+function planNamespace(planId: string): string {
+  return createHash('sha256').update(planId).digest('hex')
+}
+
 function revisionFileName(revision: TaskPlanRevisionV1): string {
-  return `${String(revision.revision_number).padStart(6, '0')}-${revision.revision_id}.json`
+  return `${revisionNumberPrefix(revision)}-${planNamespace(revision.plan_id)}-${revision.revision_id}.json`
+}
+
+function legacyRevisionFileName(revision: TaskPlanRevisionV1): string {
+  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`
+}
+
+function isRevisionFileNameFor(name: string, revision: TaskPlanRevisionV1): boolean {
+  return name === revisionFileName(revision) || name === legacyRevisionFileName(revision)
 }
 
 function digest(raw: string): string {
@@ -109,7 +125,6 @@ async function assertCommittedLineageAndAdmission(
   exactCurrent: boolean,
 ): Promise<TaskPlanRevisionAdmission> {
   const proposedBytes = Buffer.byteLength(proposedRaw)
-  const targetName = revisionFileName(proposed)
   const revisionIds = new Set<string>()
   const revisionNumbers = new Set<number>()
   const immutableRevisionIds = new Set<string>()
@@ -145,7 +160,13 @@ async function assertCommittedLineageAndAdmission(
     const decoded = decodeTaskPlanRevisionV1(raw)
     if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan revision history contains malformed state')
     const historical = decoded.value
-    if (entry.name === targetName) {
+    const isProposedIdentity = historical.plan_id === proposed.plan_id
+      && historical.revision_number === proposed.revision_number
+      && historical.revision_id === proposed.revision_id
+    if (!isRevisionFileNameFor(entry.name, historical)) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision history filename disagrees with its content')
+    }
+    if (isProposedIdentity) {
       if (raw !== proposedRaw) {
         throw new TaskPlanStateCorruptError('TaskPlan target revision already exists with different content')
       }
@@ -156,14 +177,14 @@ async function assertCommittedLineageAndAdmission(
         throw new TaskPlanStateCorruptError('TaskPlan immutable history contains a duplicate revision id')
       }
       immutableRevisionIds.add(historical.revision_id)
-      if (historical.revision_id === proposed.revision_id && entry.name !== targetName) {
+      if (historical.revision_id === proposed.revision_id && !isProposedIdentity) {
         proposedIdOccupied = true
       }
     }
     if (
       historical.plan_id === proposed.plan_id
       && historical.revision_number === proposed.revision_number
-      && entry.name !== targetName
+      && !isProposedIdentity
     ) {
       proposedNumberOccupied = true
     }
@@ -173,9 +194,6 @@ async function assertCommittedLineageAndAdmission(
       || historical.revision_number > current.revision_number
     ) continue
     assertCommittedRevisionSemantics(historical)
-    if (entry.name !== revisionFileName(historical)) {
-      throw new TaskPlanStateCorruptError('TaskPlan committed lineage filename disagrees with its content')
-    }
     if (revisionNumbers.has(historical.revision_number)) {
       throw new TaskPlanStateCorruptError('TaskPlan committed lineage contains a duplicate revision number')
     }
@@ -214,6 +232,37 @@ async function assertCommittedLineageAndAdmission(
     throw new TaskPlanRevisionConflictError('TaskPlan proposed revision exceeds the revision history admission budget')
   }
   return { targetExists }
+}
+
+async function readImmutableTwin(
+  revisionsDir: string,
+  revision: TaskPlanRevisionV1,
+  expectedRaw: string,
+): Promise<string | undefined> {
+  const canonical = await readRegular(
+    join(revisionsDir, revisionFileName(revision)),
+    TASK_PLAN_LIMITS.maxRevisionBytes,
+  )
+  if (canonical !== undefined) {
+    if (canonical !== expectedRaw) {
+      throw new TaskPlanStateCorruptError('TaskPlan current immutable revision disagrees with its content')
+    }
+    return canonical
+  }
+  const legacy = await readRegular(
+    join(revisionsDir, legacyRevisionFileName(revision)),
+    TASK_PLAN_LIMITS.maxRevisionBytes,
+  )
+  if (legacy === undefined) return undefined
+  if (legacy === expectedRaw) return legacy
+  const decoded = decodeTaskPlanRevisionV1(legacy)
+  if (
+    decoded.ok
+    && decoded.value.plan_id !== revision.plan_id
+    && decoded.value.revision_number === revision.revision_number
+    && decoded.value.revision_id === revision.revision_id
+  ) return undefined
+  throw new TaskPlanStateCorruptError('TaskPlan current immutable revision disagrees with its content')
 }
 
 async function publishImmutable(path: string, dir: string, raw: string): Promise<void> {
@@ -292,7 +341,7 @@ export async function publishTaskPlanRevision(
       const currentDecoded = decodeTaskPlanRevisionV1(currentRaw)
       if (!currentDecoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
       current = currentDecoded.value
-      const immutable = await readRegular(join(revisionsDir, revisionFileName(current)), TASK_PLAN_LIMITS.maxRevisionBytes)
+      const immutable = await readImmutableTwin(revisionsDir, current, currentRaw)
       if (immutable !== currentRaw) {
         throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
       }
@@ -338,8 +387,11 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   assertCommittedRevisionSemantics(decoded.value)
   await assertOwnedDirectory(changeDir, stateDir)
   await assertOwnedDirectory(changeDir, join(stateDir, TASK_PLAN_REVISIONS_DIR))
-  const immutablePath = join(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName(decoded.value))
-  const immutableRaw = await readRegular(immutablePath, TASK_PLAN_LIMITS.maxRevisionBytes)
+  const immutableRaw = await readImmutableTwin(
+    join(stateDir, TASK_PLAN_REVISIONS_DIR),
+    decoded.value,
+    currentRaw,
+  )
   if (immutableRaw === undefined || immutableRaw !== currentRaw) {
     throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
   }
