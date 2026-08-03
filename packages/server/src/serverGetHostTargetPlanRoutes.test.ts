@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { openSync, readdirSync, renameSync, symlinkSync, unlinkSync, type Dirent } from 'node:fs'
+import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import {
@@ -14,6 +18,7 @@ import {
 } from './test-support.js'
 import type { DashboardServer } from './types.js'
 import type { PipelineCliRunner } from './operations.js'
+import { detectNativeHostTargets } from './hostTargetDetection.js'
 
 const CODEX_TARGET = {
   id: 'codex',
@@ -226,6 +231,23 @@ function deps(
   }
 }
 
+async function installCodexPlugin(hostHome: string): Promise<void> {
+  const pluginRoot = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+  await mkdir(pluginRoot, { recursive: true })
+  await writeFile(join(pluginRoot, 'plugin.json'), '{}')
+  await writeFile(join(hostHome, '.codex', 'config.toml'), '[plugins."tenon@tenon"]\nenabled = true\n')
+}
+
+async function installClaudePlugin(hostHome: string): Promise<void> {
+  const pluginRoot = join(hostHome, '.claude', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.claude-plugin')
+  await mkdir(pluginRoot, { recursive: true })
+  await writeFile(join(pluginRoot, 'plugin.json'), '{}')
+  await writeFile(join(hostHome, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({
+    version: 2,
+    plugins: { 'tenon@tenon': [{ installPath: join(hostHome, '.claude', 'plugins', 'cache', 'tenon') }] },
+  }))
+}
+
 const openServers: DashboardServer[] = []
 afterEach(async () => {
   while (openServers.length > 0) await openServers.pop()?.close()
@@ -246,6 +268,290 @@ async function start(runner: PipelineCliRunner): Promise<{ port: number }> {
 }
 
 describe('Host Target Plan route resolver', () => {
+  it('detects an installed Codex Tenon plugin without running commands or returning host paths', async () => {
+    const hostHome = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    const runner = vi.fn<PipelineCliRunner>()
+
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome },
+    )
+
+    expect(result).toEqual({
+      status: 200,
+      body: {
+        schema_version: 'host-target-detection/v1',
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'update',
+        reason: 'tenon-plugin-detected',
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain(hostHome)
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    '[plugins]\n"tenon@tenon".enabled = true\n',
+    '[ plugins . "tenon@tenon" ] # active plugin\nenabled = true # enabled\n',
+    'plugins."tenon@tenon".enabled = true\n',
+  ])('accepts equivalent valid Codex TOML plugin layouts', async (config) => {
+    const hostHome = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await writeFile(join(hostHome, '.codex', 'config.toml'), config)
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )).resolves.toMatchObject({
+      body: {
+        recommended_host: 'codex',
+        recommended_operation: 'update',
+        reason: 'tenon-plugin-detected',
+      },
+    })
+  })
+
+  it('recommends setup when only a Claude host directory exists without a Tenon plugin', async () => {
+    const hostHome = await makeTempHome()
+    await mkdir(join(hostHome, '.claude'), { recursive: true })
+    const runner = vi.fn<PipelineCliRunner>()
+
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome },
+    )
+
+    expect(result).toEqual({
+      status: 200,
+      body: {
+        schema_version: 'host-target-detection/v1',
+        detected_hosts: ['claude'],
+        recommended_host: 'claude',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  it('treats an empty plugin cache namespace as an uninstall remnant and recommends setup', async () => {
+    const hostHome = await makeTempHome()
+    await mkdir(join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon'), { recursive: true })
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )).resolves.toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
+  it('treats a stale cache marker without an active host inventory entry as uninstalled', async () => {
+    const hostHome = await makeTempHome()
+    const marker = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    await mkdir(marker, { recursive: true })
+    await writeFile(join(marker, 'plugin.json'), '{}')
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )).resolves.toMatchObject({
+      body: {
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
+  it('returns all detected native hosts, prioritizes an installed plugin, and uses catalog order within a tier', async () => {
+    const claudePluginHome = await makeTempHome()
+    await mkdir(join(claudePluginHome, '.codex'), { recursive: true })
+    await installClaudePlugin(claudePluginHome)
+    const runner = vi.fn<PipelineCliRunner>()
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome: claudePluginHome },
+    )).resolves.toMatchObject({
+      status: 200,
+      body: {
+        detected_hosts: ['codex', 'claude'],
+        recommended_host: 'claude',
+        recommended_operation: 'update',
+        reason: 'tenon-plugin-detected',
+      },
+    })
+
+    await installCodexPlugin(claudePluginHome)
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome: claudePluginHome },
+    )).resolves.toMatchObject({
+      body: {
+        detected_hosts: ['codex', 'claude'],
+        recommended_host: 'codex',
+        recommended_operation: 'update',
+      },
+    })
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  it('returns a strict none result for an empty host home and rejects detection query parameters', async () => {
+    const hostHome = await makeTempHome()
+    const runner = vi.fn<PipelineCliRunner>()
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome },
+    )).resolves.toEqual({
+      status: 200,
+      body: {
+        schema_version: 'host-target-detection/v1',
+        detected_hosts: [],
+        recommended_host: null,
+        recommended_operation: null,
+        reason: 'none',
+      },
+    })
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection?root=%2Ftmp',
+      '/api/host-target-detection',
+      { ...deps(runner), hostHome },
+    )).resolves.toEqual({
+      status: 400,
+      body: {
+        ok: false,
+        code: 'HOST_TARGET_QUERY_INVALID',
+        error: '宿主计划查询参数无效',
+      },
+    })
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  it('does not follow a host configuration symlink outside the injected hostHome trust anchor', async () => {
+    const hostHome = await makeTempHome()
+    const outside = await makeTempHome()
+    await mkdir(join(outside, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1'), { recursive: true })
+    await symlink(join(outside, '.codex'), join(hostHome, '.codex'))
+
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: [],
+        recommended_host: null,
+        recommended_operation: null,
+        reason: 'none',
+      },
+    })
+  })
+
+  it('fails closed when the validated plugin cache namespace is replaced during enumeration', async () => {
+    const hostHome = await makeTempHome()
+    const outside = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await installCodexPlugin(outside)
+    const namespace = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon')
+    const outsideNamespace = join(outside, '.codex', 'plugins', 'cache', 'tenon', 'tenon')
+    const detector = detectNativeHostTargets as unknown as (
+      home: string,
+      options: { readPluginCacheEntries(path: string): Dirent[] },
+    ) => ReturnType<typeof detectNativeHostTargets>
+
+    const result = detector(hostHome, {
+      readPluginCacheEntries(path) {
+        renameSync(path, `${path}.original`)
+        symlinkSync(outsideNamespace, path, 'dir')
+        return readdirSync(path, { withFileTypes: true })
+      },
+    })
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
+  it('rejects an outside marker opened through a parent swap even when the original parent is restored', async () => {
+    const hostHome = await makeTempHome()
+    const outside = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await installCodexPlugin(outside)
+    const markerParent = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    const outsideMarkerParent = join(outside, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    const detector = detectNativeHostTargets as unknown as (
+      home: string,
+      options: { openPluginMarker(path: string, flags: number): number },
+    ) => ReturnType<typeof detectNativeHostTargets>
+
+    const result = detector(hostHome, {
+      openPluginMarker(path, flags) {
+        renameSync(markerParent, `${markerParent}.original`)
+        symlinkSync(outsideMarkerParent, markerParent, 'dir')
+        const descriptor = openSync(path, flags)
+        unlinkSync(markerParent)
+        renameSync(`${markerParent}.original`, markerParent)
+        return descriptor
+      },
+    })
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
+  it('rejects a FIFO host inventory without blocking the server event loop', async () => {
+    const hostHome = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    const configPath = join(hostHome, '.codex', 'config.toml')
+    await unlink(configPath)
+    execFileSync('mkfifo', [configPath])
+
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
   it('maps catalog and plan requests to fixed CLI argv and returns strictly decoded DTOs', async () => {
     const runner = vi.fn<PipelineCliRunner>(async (_root, args) =>
       jsonResult(args.includes('--host') ? PLAN : CATALOG))
@@ -542,7 +848,7 @@ describe('Host Target Plan route resolver', () => {
 })
 
 describe('Host Target Plan server assembly', () => {
-  it('serves both read-only APIs through the real GET router', async () => {
+  it('serves all read-only APIs through the real GET router', async () => {
     const runner = vi.fn<PipelineCliRunner>(async (_root, args) =>
       jsonResult(args.includes('--host') ? PLAN : CATALOG))
     const { port } = await start(runner)
@@ -554,6 +860,16 @@ describe('Host Target Plan server assembly', () => {
     const plan = await reqGet(port, '/api/host-target-plan?host=codex&operation=update')
     expect(plan.status).toBe(200)
     expect(plan.json()).toEqual(PLAN)
+
+    const detection = await reqGet(port, '/api/host-target-detection')
+    expect(detection.status).toBe(200)
+    expect(detection.json()).toEqual({
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: [],
+      recommended_host: null,
+      recommended_operation: null,
+      reason: 'none',
+    })
   })
 
   it('inherits the unified GET Host guard before the runner', async () => {

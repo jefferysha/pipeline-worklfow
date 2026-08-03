@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
 import { appendFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -48,6 +48,219 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('registered root 变成外部 symlink 时 fail closed 且不读取目标 Change', async () => {
+    const store = newStore()
+    const outside = await makeProject()
+    await initChange(store, outside, 'outside-change')
+    const root = `${outside}-registered-link`
+    await symlink(outside, root)
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 'now',
+    })
+
+    expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+    expect(snapshot.change_count).toBe(0)
+  })
+
+  it('registered root 的祖先 symlink 在启动后换位时拒绝重新信任外部项目', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+
+    try {
+      await unlink(parentLink)
+      await symlink(outsideParent, parentLink, 'dir')
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+      })
+
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('Git identity 探测期间祖先路径被换位时只使用目录 fd 并丢弃整个项目结果', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+    let probedRoot = ''
+
+    try {
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+        repositoryIdentity: async (probeRoot) => {
+          probedRoot = probeRoot
+          await unlink(parentLink)
+          await symlink(outsideParent, parentLink, 'dir')
+          return { id: 'c'.repeat(64), label: 'trusted', workspace_kind: 'primary' }
+        },
+      })
+
+      expect(probedRoot).toBe(anchor.realPath)
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('Changes 目录枚举返回时 root 已换位，不得被空项目降级 catch 误报为健康', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+
+    try {
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+        readChangesDirectory: async () => {
+          await unlink(parentLink)
+          await symlink(outsideParent, parentLink, 'dir')
+          return []
+        },
+      })
+
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('Changes 目录真实读取故障不得降级成健康空项目', async () => {
+    const root = await makeProject()
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      readChangesDirectory: async () => {
+        throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      },
+    })
+
+    expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+  })
+
+  it('adds repository identity to a reachable empty project snapshot', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async () => ({
+        id: 'a'.repeat(64),
+        label: 'repository',
+        workspace_kind: 'primary' as const,
+      }),
+    })
+
+    expect(snapshot.projects[0]?.repository).toEqual({
+      id: 'a'.repeat(64),
+      label: 'repository',
+      workspace_kind: 'primary',
+    })
+  })
+
+  it('projects the primary repository directory label onto every linked workspace independent of registry order', async () => {
+    const linked = await makeProject()
+    const primary = await makeProject()
+    const primaryReal = await realpath(primary)
+    const id = 'b'.repeat(64)
+    const snapshot = await buildSnapshot({
+      registry: () => [linked, primary],
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async (root) => ({
+        id,
+        label: await realpath(root) === primaryReal ? 'repository' : 'metadata',
+        workspace_kind: await realpath(root) === primaryReal ? 'primary' : 'worktree',
+      }),
+    })
+
+    expect(snapshot.projects.map((project) => project.repository)).toEqual([
+      { id, label: 'repository', workspace_kind: 'worktree' },
+      { id, label: 'repository', workspace_kind: 'primary' },
+    ])
+  })
+
+  it('bounds concurrent project scans so repository probes cannot create an unbounded Git process fan-out', async () => {
+    const roots = await Promise.all(Array.from({ length: 9 }, () => makeProject()))
+    let active = 0
+    let maxActive = 0
+    await buildSnapshot({
+      registry: () => roots,
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async () => {
+        active += 1
+        maxActive = Math.max(maxActive, active)
+        await sleep(5)
+        active -= 1
+        return undefined
+      },
+    })
+
+    expect(maxActive).toBe(4)
+  })
+
   it('聚合快照在 tasks leaf 的 lstat→open 竞态中不跟随替换后的 symlink', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -1288,6 +1501,103 @@ steps:
 })
 
 describe('computeFingerprint —— 变更检测', () => {
+  it('changes 目录在空、不可读与恢复之间切换时改变指纹，SSE 不保留旧健康状态', async () => {
+    const root = await makeProject()
+    const empty = await computeFingerprint([root], 1, undefined, async () => [])
+    const denied = await computeFingerprint([root], 1, undefined, async () => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    })
+    const recovered = await computeFingerprint([root], 1, undefined, async () => [])
+    const missing = await computeFingerprint([root], 1, undefined, async () => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+    })
+
+    expect(denied).not.toBe(empty)
+    expect(denied).toContain(`unreadable:${root}`)
+    expect(recovered).toBe(empty)
+    expect(missing).toBe(empty)
+  })
+
+  it('registry 增加空的非 Git 项目也改变指纹', async () => {
+    const root = await makeProject()
+    expect(await computeFingerprint([root])).not.toBe(await computeFingerprint([]))
+  })
+
+  it('已登记的空项目 root 被删除时改变指纹', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+
+    await rm(root, { recursive: true, force: true })
+
+    expect(await computeFingerprint([root])).not.toBe(before)
+  })
+
+  it('已登记 root 变成 symlink 时不穿透目标的 Git metadata', async () => {
+    const target = await makeProject()
+    await execFileAsync('git', ['init'], { cwd: target })
+    const root = `${target}-link`
+    await symlink(target, root)
+
+    const fingerprint = await computeFingerprint([root])
+
+    expect(fingerprint).toContain(`registry:${root}`)
+    expect(fingerprint).not.toContain(`${root}/.git`)
+  })
+
+  it('项目顶层无关文件变化不触发 fingerprint', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+
+    await writeFile(join(root, 'irrelevant.txt'), 'not snapshot input', 'utf8')
+
+    expect(await computeFingerprint([root])).toBe(before)
+  })
+
+  it('普通 Git index 更新不触发 repository topology fingerprint', async () => {
+    const root = await makeProject()
+    await execFileAsync('git', ['init'], { cwd: root })
+    const before = await computeFingerprint([root])
+
+    await writeFile(join(root, 'ordinary.txt'), 'ordinary workspace content', 'utf8')
+    await execFileAsync('git', ['add', 'ordinary.txt'], { cwd: root })
+
+    expect(await computeFingerprint([root])).toBe(before)
+  })
+
+  it('已登记 root 初始化为 Git 时改变指纹并触发 repository 分组刷新', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+    expect(before).toContain(':directory:')
+
+    await execFileAsync('git', ['init'], { cwd: root })
+
+    const after = await computeFingerprint([root])
+    expect(after).not.toBe(before)
+    expect(after).toContain('.git')
+  })
+
+  it('fd 风格的目录 symlink 根会被遍历而非按 other 提前返回', async () => {
+    const root = await makeProject()
+    const fdPath = `${root}-fd`
+    await symlink(root, fdPath, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchored = { ...anchor, fdPath }
+
+    try {
+      const before = await computeFingerprint([root], 1, () => anchored)
+      expect(before).toContain(':directory:')
+
+      await execFileAsync('git', ['init'], { cwd: root })
+
+      const after = await computeFingerprint([root], 1, () => anchored)
+      expect(after).not.toBe(before)
+      expect(after).toContain(`${fdPath}/.git`)
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await unlink(fdPath)
+    }
+  })
+
   it('dangling canonical current 仍进入 fingerprint，不能因 stat 跟随失败而消失', async () => {
     const store = newStore()
     const root = await makeProject()

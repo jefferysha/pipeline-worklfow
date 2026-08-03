@@ -11,6 +11,9 @@ export interface ProjectsUnreachableSectionProps {
   rowId: (row: ProjectRow) => string
   t: Tr
   onExpanded: (expanded: boolean) => void
+  cleanupBusy: boolean
+  cleanupFailureCount: number
+  onBatchUnregister: () => void
 }
 
 function UnreachableRows({
@@ -58,12 +61,16 @@ export function ProjectsUnreachableSection({
   rowId,
   t,
   onExpanded,
+  cleanupBusy,
+  cleanupFailureCount,
+  onBatchUnregister,
 }: ProjectsUnreachableSectionProps): JSX.Element {
   const open = forcedOpen || expanded
   return (
     <div data-testid="section-unreachable" data-anim="pv-item">
+      <div className="flex flex-wrap items-center justify-between gap-3">
       {forcedOpen ? (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <span className="text-[13px] font-bold text-text-3">
             {t('projects.unreachable_fold', { n: rows.length })}
           </span>
@@ -75,7 +82,7 @@ export function ProjectsUnreachableSection({
           data-testid="unreachable-toggle"
           aria-expanded={expanded}
           onClick={() => onExpanded(!expanded)}
-          className="flex items-center gap-1.5 text-[13px] text-text-3 transition-colors hover:text-text-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-text-3 transition-colors hover:text-text-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
         >
           {expanded ? (
             <ChevronDown aria-hidden="true" className="h-4 w-4 flex-none" />
@@ -84,6 +91,21 @@ export function ProjectsUnreachableSection({
           )}
           <span>{t('projects.unreachable_fold', { n: rows.length })}</span>
         </button>
+      )}
+        <button
+          type="button"
+          data-testid="unreachable-batch-unregister"
+          disabled={cleanupBusy}
+          onClick={onBatchUnregister}
+          className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] font-semibold text-text-2 hover:border-border-2 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+        >
+          {cleanupBusy ? t('projects.cleanup_running') : t('projects.cleanup_action', { n: rows.length })}
+        </button>
+      </div>
+      {cleanupFailureCount > 0 && (
+        <p data-testid="unreachable-cleanup-error" role="status" className="mt-2 text-[12px] text-red-d">
+          {t('projects.cleanup_partial', { n: cleanupFailureCount })}
+        </p>
       )}
       {open && <UnreachableRows rows={rows} visibleRoots={visibleRoots} rowId={rowId} t={t} />}
     </div>

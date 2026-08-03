@@ -1,4 +1,5 @@
 export const HOST_PLAN_SCHEMA_VERSION = 'host-target-plan/v1' as const
+export const HOST_DETECTION_SCHEMA_VERSION = 'host-target-detection/v1' as const
 
 export type HostId =
   | 'codex'
@@ -14,6 +15,8 @@ export type HostId =
   | 'cline'
   | 'amp'
 export type HostOperation = 'setup' | 'update'
+export type NativeHostId = Extract<HostId, 'codex' | 'claude'>
+export type HostDetectionReason = 'tenon-plugin-detected' | 'host-detected' | 'none'
 export type HostTargetKind = 'native' | 'adapter'
 export type HostTargetScope = 'user' | 'project'
 export type HostCapability =
@@ -35,6 +38,14 @@ export interface HostTarget {
 export interface HostTargetCatalog {
   schema_version: typeof HOST_PLAN_SCHEMA_VERSION
   targets: HostTarget[]
+}
+
+export interface HostTargetDetection {
+  schema_version: typeof HOST_DETECTION_SCHEMA_VERSION
+  detected_hosts: NativeHostId[]
+  recommended_host: NativeHostId | null
+  recommended_operation: HostOperation | null
+  reason: HostDetectionReason
 }
 
 export interface HostPlanCommand {

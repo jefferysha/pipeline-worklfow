@@ -1,5 +1,5 @@
-import { decodeHostTargetCatalog, decodeHostTargetPlan } from './hostTargetPlanDecoders'
-import type { HostId, HostOperation, HostTargetCatalog, HostTargetPlan } from './hostTargetPlanTypes'
+import { decodeHostTargetCatalog, decodeHostTargetDetection, decodeHostTargetPlan } from './hostTargetPlanDecoders'
+import type { HostId, HostOperation, HostTargetCatalog, HostTargetDetection, HostTargetPlan } from './hostTargetPlanTypes'
 import { isRecord, readJson } from './transport'
 
 export type HostTargetPlanErrorKind = 'network' | 'http' | 'decoder' | 'mismatch'
@@ -10,6 +10,7 @@ export type HostTargetPlanErrorCode =
   | 'HOST_TARGET_QUERY_INVALID'
   | 'HOST_TARGET_PLAN_UNAVAILABLE'
   | 'HOST_TARGET_PLAN_INVALID'
+  | 'HOST_TARGET_DETECTION_RESPONSE_INVALID'
   | 'HOST_TARGET_CATALOG_RESPONSE_INVALID'
   | 'HOST_TARGET_PLAN_RESPONSE_INVALID'
   | 'HOST_TARGET_PLAN_REQUEST_MISMATCH'
@@ -53,7 +54,7 @@ async function getJson(
   path: string,
   invalidResponseCode: Extract<
     HostTargetPlanErrorCode,
-    'HOST_TARGET_CATALOG_RESPONSE_INVALID' | 'HOST_TARGET_PLAN_RESPONSE_INVALID'
+    'HOST_TARGET_CATALOG_RESPONSE_INVALID' | 'HOST_TARGET_DETECTION_RESPONSE_INVALID' | 'HOST_TARGET_PLAN_RESPONSE_INVALID'
   >,
   signal?: AbortSignal,
 ): Promise<{ response: Response; value: unknown }> {
@@ -80,6 +81,23 @@ async function getJson(
   } catch {
     throw new HostTargetPlanClientError('decoder', invalidResponseCode, response.status)
   }
+}
+
+export async function fetchHostTargetDetection(signal?: AbortSignal): Promise<HostTargetDetection> {
+  const { response, value } = await getJson(
+    '/api/host-target-detection',
+    'HOST_TARGET_DETECTION_RESPONSE_INVALID',
+    signal,
+  )
+  const detection = decodeHostTargetDetection(value)
+  if (!detection) {
+    throw new HostTargetPlanClientError(
+      'decoder',
+      'HOST_TARGET_DETECTION_RESPONSE_INVALID',
+      response.status,
+    )
+  }
+  return detection
 }
 
 export async function fetchHostTargets(signal?: AbortSignal): Promise<HostTargetCatalog> {

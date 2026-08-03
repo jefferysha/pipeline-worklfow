@@ -180,6 +180,57 @@ export function compareNodes(a: OrchestrationNode, b: OrchestrationNode): number
   return a.id.localeCompare(b.id)
 }
 
+export const ORCHESTRATION_RESOURCE_KINDS = [
+  'task', 'document', 'review', 'session',
+] as const satisfies readonly OrchestrationNodeKind[]
+
+export interface OrchestrationGraphSections {
+  readonly scope: readonly OrchestrationNode[]
+  readonly phases: readonly OrchestrationNode[]
+  readonly resources: ReadonlyMap<OrchestrationNodeKind, readonly OrchestrationNode[]>
+  readonly trunkEdgeIds: ReadonlySet<string>
+  readonly secondaryEdges: readonly OrchestrationEdge[]
+}
+
+/**
+ * Projects the transport graph into one deterministic reading path without changing graph facts.
+ * One forward transition per adjacent phase pair becomes a trunk cue; every other edge remains a
+ * secondary relationship and is still available to the semantic list.
+ */
+export function orchestrationGraphSections(
+  nodes: readonly OrchestrationNode[],
+  edges: readonly OrchestrationEdge[],
+): OrchestrationGraphSections {
+  const scope = nodes.filter((node) => node.kind === 'workflow' || node.kind === 'change').sort(compareNodes)
+  const phases = nodes.filter((node) => node.kind === 'phase').sort(compareNodes)
+  const resources = new Map<OrchestrationNodeKind, readonly OrchestrationNode[]>()
+  for (const kind of ORCHESTRATION_RESOURCE_KINDS) {
+    const grouped = nodes.filter((node) => node.kind === kind).sort(compareNodes)
+    if (grouped.length > 0) resources.set(kind, grouped)
+  }
+
+  const trunkEdgeIds = new Set<string>()
+  for (let index = 0; index < phases.length - 1; index += 1) {
+    const source = phases[index]
+    const target = phases[index + 1]
+    if (source === undefined || target === undefined) continue
+    const trunk = edges
+      .filter((edge) => edge.kind === 'transitions'
+        && edge.source === source.id
+        && edge.target === target.id)
+      .sort((a, b) => a.id.localeCompare(b.id))[0]
+    if (trunk !== undefined) trunkEdgeIds.add(trunk.id)
+  }
+
+  return {
+    scope,
+    phases,
+    resources,
+    trunkEdgeIds,
+    secondaryEdges: edges.filter((edge) => !trunkEdgeIds.has(edge.id)),
+  }
+}
+
 export function graphLayout(nodes: readonly OrchestrationNode[]): {
   readonly positions: Map<string, { x: number; y: number }>
   readonly height: number

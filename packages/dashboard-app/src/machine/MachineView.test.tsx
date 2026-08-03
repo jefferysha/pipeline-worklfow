@@ -90,22 +90,23 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(await screen.findByTestId('traffic-empty')).toHaveTextContent('暂无捕获会话')
   })
 
-  it('集中显示 Docker/镜像/Codex/技能事实，缺镜像与未装技能形成可行动 blocker', async () => {
+  it('集中显示核心与 AFK 事实，缺镜像只标记可选能力而未装必备技能仍形成 blocker', async () => {
     const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
     await waitFor(() => {
       expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'ready')
-      expect(screen.getByTestId('machine-image')).toHaveAttribute('data-state', 'blocked')
+      expect(screen.getByTestId('machine-image')).toHaveAttribute('data-state', 'optional-unavailable')
       expect(screen.getByTestId('machine-codex')).toHaveAttribute('data-state', 'ready')
       expect(screen.getByTestId('machine-codex')).toHaveTextContent('默认 Codex 配置目录')
       expect(screen.getByTestId('machine-skills')).toHaveAttribute('data-state', 'blocked')
     })
     expect(screen.getByTestId('machine-codex')).not.toHaveTextContent('default-home')
-    expect(screen.getByTestId('machine-blockers').textContent).toContain('sandcastle:local')
+    expect(screen.getByTestId('machine-afk-readiness')).toContainElement(screen.getByTestId('machine-image'))
+    expect(screen.getByTestId('machine-blockers').textContent).not.toContain('sandcastle:local')
     expect(screen.getByTestId('machine-blockers').textContent).toContain('browser-e2e')
   })
 
-  it('Docker daemon 不可用时卡片说明与 blocked 徽章保持同一事实', async () => {
+  it('Docker daemon 不可用时卡片说明为 AFK 可选能力，不伪装成核心 blocked', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -126,16 +127,59 @@ describe('MachineView 统一就绪与跨项目风险', () => {
 
     render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
 
-    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'blocked'))
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'optional-unavailable'))
     expect(screen.getByTestId('machine-docker')).toHaveTextContent('Docker daemon unavailable')
     expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker available')
+  })
+
+  it('Docker 卡片的状态与说明只消费同一个全局探测事实', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith('/api/afk/readiness')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          docker: { available: false },
+          image: { configured: 'sandcastle:local', present: false, build_hint: 'npm run sandcastle:build' },
+          credentials: { 'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } }, codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' } } },
+        }), { status: 200 })
+      }
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ ok: true, available: true, images: ['tenon:latest'] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'ready'))
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('1 local image')
+    expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker daemon unavailable')
+  })
+
+  it('Docker 镜像探测失败时结束加载态并只在 AFK 卡片显示明确错误', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ error: 'docker probe unavailable' }), { status: 503 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'optional-unavailable'))
+    expect(screen.getByTestId('machine-image')).toHaveAttribute('data-state', 'optional-unavailable')
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('docker probe unavailable')
+    expect(screen.getByTestId('machine-image')).toHaveTextContent('docker probe unavailable')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('docker probe unavailable')
   })
 
   it('就绪卡保持非 live 语义并只用一个聚合状态播报，宽屏不会挤成五个重叠窄列', async () => {
     const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
 
-    await waitFor(() => expect(screen.getByTestId('machine-readiness-summary')).toHaveTextContent('就绪 3，受阻 2，未知 0'))
+    await waitFor(() => expect(screen.getByTestId('machine-readiness-summary')).toHaveTextContent('就绪 2，受阻 1，未知 0'))
     expect(screen.getByTestId('machine-readiness-summary')).toHaveAttribute('role', 'status')
     expect(screen.getByTestId('machine-readiness-grid')).toHaveClass('xl:grid-cols-3')
     for (const testId of ['machine-docker', 'machine-image', 'machine-codex', 'machine-skills', 'machine-operations']) {
@@ -258,9 +302,52 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     await waitFor(() => expect(screen.getByTestId('machine-blockers')).toHaveTextContent('服务端响应格式无效'))
   })
 
-  it('未选择项目是明确本地阻断，不制造 readiness 网络错误', async () => {
+  it('未选择项目不伪装成机器阻断，也不制造 readiness 网络错误', async () => {
     render(<I18nProvider><MachineView snapshot={makeSnapshot([])} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
-    await waitFor(() => expect(screen.getByTestId('machine-blockers')).toHaveTextContent('未选择项目'))
+    await waitFor(() => expect(screen.getByTestId('machine-blockers')).toHaveTextContent('browser-e2e'))
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('未选择项目')
     expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('网络错误')
+  })
+
+  it('未显式选择项目时不借用注册表首项，并明确保留项目级事实未知', async () => {
+    const fetchSpy = vi.mocked(global.fetch)
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    expect(await screen.findByTestId('machine-project-facts-unavailable')).toHaveTextContent('当前未选择项目')
+    expect(screen.getByTestId('machine-codex')).toHaveAttribute('data-state', 'unknown')
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/api/afk/readiness'))).toBe(false)
+  })
+
+  it('未选择项目时仍使用全局 Docker 探测显示 AFK 可选能力不可用', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ ok: true, available: false, images: [] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'optional-unavailable'))
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('Docker daemon 不可用')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('Docker daemon 不可用')
+  })
+
+  it('没有任何可达项目时明确保留项目级事实未知，不宣告机器完全无阻断', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/skills/registry') {
+        return new Response(JSON.stringify({ skills: [
+          { name: 'browser-e2e', installed: true, source: 'user', tier: 'mandatory', available: true },
+        ] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    expect(await screen.findByTestId('machine-project-facts-unavailable')).toHaveTextContent('项目相关 AFK 信号保持未知')
+    expect(screen.getByTestId('machine-blockers')).toHaveTextContent('仍有核心事实未知')
   })
 })

@@ -27,7 +27,7 @@ export function TrackSelector({ state, onDirtyChange }: { state: MandatoryState;
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-wrap items-center gap-2.5 [&_[data-testid=wb-track-settings-toggle]]:min-h-10 [&_[data-testid=wb-track-settings-toggle]]:rounded-xl [&_[data-testid=wb-track-settings-toggle]]:px-3.5 [&_[data-testid=wb-track-settings-toggle]]:outline-none [&_[data-testid=wb-track-settings-toggle]]:focus-visible:ring-2 [&_[data-testid=wb-track-settings-toggle]]:focus-visible:ring-(--accent)" data-testid="wb-track-control-row">
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-bold text-text-3">
         {t('workbench.track_selector_label')}
         <HelpPopover compact label={t('workbench.track_selector_help_label')}>
@@ -54,7 +54,7 @@ export function TrackSelector({ state, onDirtyChange }: { state: MandatoryState;
         <span className={NOTE_CLS} role="status" data-testid="wb-track-empty">{t('workbench.track_empty')}</span>
       ) : (
         <div
-          className="inline-flex flex-wrap gap-1 rounded-xl bg-fill p-1 shadow-inner"
+          className="inline-flex min-w-0 flex-wrap gap-1 rounded-xl bg-fill p-1 shadow-inner"
           role="radiogroup"
           aria-label={t('workbench.mand_track_group')}
           data-testid="wb-track-tabs"
@@ -68,7 +68,7 @@ export function TrackSelector({ state, onDirtyChange }: { state: MandatoryState;
                 key={candidate.id}
                 type="button"
                 role="radio"
-                className="cursor-pointer rounded-lg border-0 bg-transparent px-4 py-2 text-[12.5px] font-bold text-text-3 transition-[background-color,color,box-shadow] motion-reduce:transition-none not-aria-checked:hover:text-text-2 aria-checked:bg-card aria-checked:text-accent-d aria-checked:shadow-sm"
+                className="min-h-10 cursor-pointer rounded-xl border-0 bg-transparent px-3.5 py-2 text-[12.5px] font-bold text-text-3 outline-none transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:transition-none not-aria-checked:hover:text-text-2 aria-checked:bg-card aria-checked:text-accent-d aria-checked:shadow-sm"
                 aria-checked={selected}
                 title={`${trackDisplayName(candidate, lang)}${profile !== candidate.id ? ` · ${t('workbench.track_selector_inherits', { track: inherited ? trackDisplayName(inherited, lang) : profile })}` : ''}`}
                 tabIndex={selected ? 0 : -1}

@@ -166,6 +166,40 @@ describe('API bounded-context response decoders', () => {
     })).toBeNull()
   })
 
+  it('preserves strict repository identity while accepting a legacy project without it', () => {
+    const current = validSnapshot()
+    const currentProject = current.projects[0] as typeof current.projects[number] & {
+      repository?: { id: string; label: string; workspace_kind: 'primary' | 'worktree' }
+    }
+    currentProject.repository = {
+      id: 'b'.repeat(64),
+      label: 'tenon',
+      workspace_kind: 'worktree',
+    }
+    expect(decodeSnapshot(current)?.projects[0]?.repository).toEqual({
+      id: 'b'.repeat(64),
+      label: 'tenon',
+      workspace_kind: 'worktree',
+    })
+
+    const legacy = validSnapshot()
+    expect(decodeSnapshot(legacy)?.projects[0]?.repository).toBeUndefined()
+  })
+
+  it('accepts a POSIX repository label containing a backslash', () => {
+    const snapshot = validSnapshot()
+    const project = snapshot.projects[0] as typeof snapshot.projects[number] & {
+      repository?: { id: string; label: string; workspace_kind: 'primary' | 'worktree' }
+    }
+    project.repository = {
+      id: 'c'.repeat(64),
+      label: 'repo\\name',
+      workspace_kind: 'primary',
+    }
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.repository?.label).toBe('repo\\name')
+  })
+
   it('preserves governed loop telemetry after validating every rendered field', () => {
     const decoded = decodeLoopsSnapshot({
       generated_at: 'now',

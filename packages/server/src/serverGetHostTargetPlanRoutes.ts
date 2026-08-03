@@ -1,4 +1,5 @@
 import type { PipelineCliRunner } from './operations.js'
+import { detectNativeHostTargets } from './hostTargetDetection.js'
 import {
   decodeHostTargetCatalog,
   decodeHostTargetPlan,
@@ -208,8 +209,16 @@ export async function resolveHostTargetPlanRoute(
   path: string,
   deps: HostTargetPlanRouteDeps,
 ): Promise<HostTargetPlanRouteResult | null> {
-  if (path !== '/api/host-targets' && path !== '/api/host-target-plan') return null
+  if (
+    path !== '/api/host-targets'
+    && path !== '/api/host-target-plan'
+    && path !== '/api/host-target-detection'
+  ) return null
   const searchParams = new URL(requestUrl, 'http://localhost').searchParams
+  if (path === '/api/host-target-detection') {
+    if ([...searchParams].length !== 0) return QUERY_INVALID
+    return detectNativeHostTargets(deps.hostHome)
+  }
   if (path === '/api/host-targets') {
     if ([...searchParams].length !== 0) return QUERY_INVALID
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE

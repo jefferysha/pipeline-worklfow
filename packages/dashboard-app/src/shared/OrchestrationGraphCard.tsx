@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { ChevronRight, RefreshCw, Search, X } from 'lucide-react'
+import { ChevronRight, RefreshCw, Search } from 'lucide-react'
 import {
   fetchOrchestrationGraph,
   OrchestrationGraphApiError,
@@ -14,17 +14,17 @@ import {
   compareNodes,
   deferredLabel,
   edgeLabel,
-  graphLayout,
   metadataLabel,
   metadataValue,
   nodeLabel,
+  orchestrationGraphSections,
   statusLabel,
   toneByKind,
   toggledKinds,
   usesBuiltinPhaseLabels,
 } from './orchestrationGraphPresentation'
-import { OrchestrationGraphEdge, transitionLanes } from './OrchestrationGraphEdge'
 import { OrchestrationGraphAccessibleList } from './OrchestrationGraphAccessibleList'
+import { OrchestrationGraphNodeButton, OrchestrationGraphRelationshipList, OrchestrationGraphSelection } from './OrchestrationGraphEdge'
 
 interface OrchestrationGraphCardProps { readonly root: string; readonly change: string }
 
@@ -89,27 +89,35 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
   )
   const canvasNodes = useMemo(() => {
     if (visibleNodes.length <= MAX_CANVAS_NODES) return visibleNodes
-    const core = visibleNodes.filter((node) => CORE_NODE_KINDS.has(node.kind)).slice(0, MAX_CANVAS_NODES)
+    const core = visibleNodes.filter((node) => CORE_NODE_KINDS.has(node.kind))
     const resources = visibleNodes.filter((node) => !CORE_NODE_KINDS.has(node.kind))
-    return [...core, ...resources.slice(0, MAX_CANVAS_NODES - core.length)]
+    return [...core, ...resources.slice(0, Math.max(0, MAX_CANVAS_NODES - core.length))]
   }, [visibleNodes])
   const canvasIds = useMemo(() => new Set(canvasNodes.map((node) => node.id)), [canvasNodes])
   const canvasEdges = useMemo(
     () => visibleEdges.filter((edge) => canvasIds.has(edge.source) && canvasIds.has(edge.target)),
     [canvasIds, visibleEdges],
   )
-  const transitionLaneById = useMemo(() => transitionLanes(canvasEdges), [canvasEdges])
+  const canvasSections = useMemo(
+    () => orchestrationGraphSections(canvasNodes, canvasEdges),
+    [canvasEdges, canvasNodes],
+  )
+  const fullSections = useMemo(
+    () => orchestrationGraphSections(graph?.nodes ?? [], graph?.edges ?? []),
+    [graph],
+  )
   const selected = visibleIds.has(selectedId ?? '')
     ? graph?.nodes.find((node) => node.id === selectedId) ?? null
     : null
   const selectedEdges = selected === null ? [] : (graph?.edges ?? [])
     .filter((edge) => edge.source === selected.id || edge.target === selected.id)
-  const layout = useMemo(() => graphLayout(canvasNodes), [canvasNodes])
   const nodeById = useMemo(
     () => new Map((graph?.nodes ?? []).map((node) => [node.id, node])),
     [graph],
   )
-  const edgeKinds = [...new Set(canvasEdges.map((edge) => edge.kind))]
+  const relationshipEdges = selected === null
+    ? visibleEdges.filter((edge) => !fullSections.trunkEdgeIds.has(edge.id))
+    : selectedEdges
   const displayMetadataValue = (key: string, value: string): string => {
     if (key === 'phase' || key === 'phase_id') {
       const phase = nodeById.get(`phase:${value}`)
@@ -132,15 +140,36 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
       setSelectedId(node.id)
       return
     }
-    const current = canvasNodes.findIndex((item) => item.id === node.id)
+    const navigationNodes = node.kind === 'phase' ? canvasSections.phases : canvasNodes
+    const current = navigationNodes.findIndex((item) => item.id === node.id)
     let target = current
-    if (event.key === 'ArrowRight') target = Math.min(canvasNodes.length - 1, current + 1)
+    if (event.key === 'ArrowRight') target = Math.min(navigationNodes.length - 1, current + 1)
     else if (event.key === 'ArrowLeft') target = Math.max(0, current - 1)
     else if (event.key === 'Home') target = 0
-    else if (event.key === 'End') target = canvasNodes.length - 1
+    else if (event.key === 'End') target = navigationNodes.length - 1
     else return
     event.preventDefault()
-    nodeRefs.current.get(canvasNodes[target]?.id ?? '')?.focus()
+    nodeRefs.current.get(navigationNodes[target]?.id ?? '')?.focus()
+  }
+  function nodeButton(node: OrchestrationNode, className: string): JSX.Element {
+    const label = renderNodeLabel(node)
+    return (
+      <OrchestrationGraphNodeButton
+        key={node.id}
+        label={label}
+        kindLabel={t(`detail.orchestration_graph.kind_${node.kind}`)}
+        statusLabel={statusLabel(node.status, t)}
+        selected={selectedId === node.id}
+        className={className}
+        tone={toneByKind[node.kind]}
+        setRef={(element) => {
+          if (element === null) nodeRefs.current.delete(node.id)
+          else nodeRefs.current.set(node.id, element)
+        }}
+        onSelect={() => setSelectedId(node.id)}
+        onKeyDown={(event) => onNodeKeyDown(event, node)}
+      />
+    )
   }
 
   return (
@@ -225,6 +254,14 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || visibleNodes.length !== 1) return
+                  event.preventDefault()
+                  const node = visibleNodes[0]
+                  if (node === undefined) return
+                  setSelectedId(node.id)
+                  nodeRefs.current.get(node.id)?.focus()
+                }}
                 placeholder={t('detail.orchestration_graph.search_placeholder')}
                 className="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs text-text outline-none placeholder:text-text-3"
               />
@@ -241,126 +278,88 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
             </p>
           ) : (
             <>
-              <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-text-2" aria-label={t('detail.orchestration_graph.edge_legend')}>
-                {edgeKinds.map((kind) => (
-                  <span key={kind}><span aria-hidden="true">—›</span> {t(`detail.orchestration_graph.edge_${kind}`)}</span>
-                ))}
-              </div>
               {canvasNodes.length < visibleNodes.length && (
                 <p className="mb-2 rounded-lg border border-blue-b bg-blue-t px-3 py-2 text-[11px] leading-relaxed text-blue-d" data-testid="orchestration-canvas-limited">
                   {t('detail.orchestration_graph.canvas_limited', { shown: canvasNodes.length, total: visibleNodes.length })}
                 </p>
               )}
-              <div className="max-h-[520px] overflow-auto rounded-xl border border-border bg-fill/30" aria-label={t('detail.orchestration_graph.canvas')} data-testid="orchestration-canvas">
-              <div className="relative" style={{ height: layout.height, minWidth: layout.width }}>
-                <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
-                  <defs>
-                    <marker id="orchestration-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-3)" />
-                    </marker>
-                  </defs>
-                  {canvasEdges.map((edge) => {
-                    const source = layout.positions.get(edge.source)
-                    const target = layout.positions.get(edge.target)
-                    if (source === undefined || target === undefined) return null
-                    return (
-                      <OrchestrationGraphEdge
-                        key={edge.id}
-                        edge={edge}
-                        source={source}
-                        target={target}
-                        transitionLane={transitionLaneById.get(edge.id) ?? 0}
-                        showLabel={selectedId !== null
-                          && (edge.source === selectedId || edge.target === selectedId)}
-                        t={t}
-                      />
-                    )
-                  })}
-                </svg>
-                {canvasNodes.map((node) => {
-                  const position = layout.positions.get(node.id)
-                  if (position === undefined) return null
-                  const label = renderNodeLabel(node)
-                  return (
-                    <button
-                      key={node.id}
-                      ref={(element) => {
-                        if (element === null) nodeRefs.current.delete(node.id)
-                        else nodeRefs.current.set(node.id, element)
-                      }}
-                      type="button"
-                      aria-pressed={selectedId === node.id}
-                      aria-label={`${label} · ${t(`detail.orchestration_graph.kind_${node.kind}`)}${node.status === null ? '' : ` · ${statusLabel(node.status, t)}`}`}
-                      className={`absolute w-[140px] rounded-lg border px-2.5 py-2 text-left outline-none transition-shadow hover:shadow-sm focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card aria-pressed:border-(--accent) aria-pressed:ring-2 aria-pressed:ring-(--accent) aria-pressed:ring-offset-2 aria-pressed:ring-offset-card motion-reduce:transition-none ${toneByKind[node.kind]}`}
-                      style={{ left: position.x, top: position.y }}
-                      onClick={() => setSelectedId(node.id)}
-                      onKeyDown={(event) => onNodeKeyDown(event, node)}
-                    >
-                      {selectedId === node.id && <span className="absolute top-1 right-1 text-accent-d" aria-hidden="true">✓</span>}
-                      <span className="block truncate pr-3 text-[11.5px] font-semibold text-text">{label}</span>
-                      <span className="mt-0.5 block truncate text-[10px] text-text-3">
-                        {t(`detail.orchestration_graph.kind_${node.kind}`)}
-                        {node.status === null ? '' : ` · ${statusLabel(node.status, t)}`}
-                      </span>
-                    </button>
-                  )
-                })}
+              <div className="min-w-0 space-y-3 rounded-xl border border-border bg-fill/30 p-3" aria-label={t('detail.orchestration_graph.canvas')} data-testid="orchestration-canvas">
+                {canvasSections.scope.length > 0 && (
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-2" data-testid="orchestration-scope">
+                    {canvasSections.scope.map((node) => nodeButton(node, 'min-h-[58px] min-w-0'))}
+                  </div>
+                )}
+
+                {canvasSections.phases.length > 0 && (
+                  <div className="max-w-full overflow-x-auto pb-1" data-testid="orchestration-phase-trunk">
+                    <div className="flex min-w-max items-center">
+                      {canvasSections.phases.map((node, index) => {
+                        const next = canvasSections.phases[index + 1]
+                        const connected = next !== undefined && canvasEdges.some((edge) =>
+                          fullSections.trunkEdgeIds.has(edge.id)
+                          && edge.source === node.id
+                          && edge.target === next.id)
+                        return (
+                          <div className="flex items-center" key={node.id}>
+                            {nodeButton(node, 'min-h-[64px] w-[132px] flex-none')}
+                            {next !== undefined && (
+                              <span
+                                className={`mx-1.5 h-px w-5 flex-none ${connected ? 'bg-text-3' : ''}`}
+                                data-phase-connector={connected ? 'transition' : 'gap'}
+                                aria-hidden="true"
+                              >
+                                {connected && <span className="relative -top-[7px] left-[14px] text-[11px] text-text-3">›</span>}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {canvasSections.resources.size > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2" data-testid="orchestration-resources">
+                    {[...canvasSections.resources].map(([kind, nodes]) => (
+                      <section className="min-w-0 rounded-lg border border-border bg-card/70 p-2" data-testid={`orchestration-resource-${kind}`} key={kind}>
+                        <h4 className="mb-1.5 text-[10.5px] font-semibold text-text-3">{t(`detail.orchestration_graph.kind_${kind}`)}</h4>
+                        <div className="grid gap-1.5">
+                          {nodes.map((node) => nodeButton(node, 'min-h-[54px] w-full min-w-0'))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+
+              <OrchestrationGraphRelationshipList
+                edges={relationshipEdges}
+                nodes={nodeById}
+                heading={t('detail.orchestration_graph.edges')}
+                emptyLabel={t('detail.orchestration_graph.no_edges')}
+                nodeLabel={renderNodeLabel}
+                edgeLabel={(edge) => edgeLabel(edge, t)}
+              />
             </>
           )}
 
           {selected !== null && (
-            <div className="mt-2.5 rounded-lg border border-blue-b bg-blue-t px-3 py-2.5" data-testid="orchestration-selection">
-              <div className="flex items-baseline justify-between gap-3">
-                <strong className="text-xs text-text">{renderNodeLabel(selected)}</strong>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10.5px] text-blue-d">{t(`detail.orchestration_graph.kind_${selected.kind}`)}</span>
-                  <button
-                    type="button"
-                    className="rounded p-0.5 text-text-3 outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-(--accent)"
-                    aria-label={t('detail.orchestration_graph.clear_selection')}
-                    onClick={() => setSelectedId(null)}
-                  >
-                    <X className="size-3.5" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              {selected.status !== null && <p className="mt-1 mb-0 text-xs text-text-2">{statusLabel(selected.status, t)}</p>}
-              {selected.metadata.length > 0 && (
-                <dl className="mt-2 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
-                  {selected.metadata.map((item) => (
-                    <div key={item.key} className="contents">
-                      <dt className="text-text-3">{metadataLabel(item.key, t)}</dt>
-                      <dd className="m-0 truncate text-text-2">{displayMetadataValue(item.key, item.value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              {selectedEdges.length > 0 && (
-                <div className="mt-2 grid gap-2 text-[11px] sm:grid-cols-2">
-                  {(['incoming', 'outgoing'] as const).map((direction) => {
-                    const edges = selectedEdges.filter((edge) =>
-                      direction === 'incoming' ? edge.target === selected.id : edge.source === selected.id)
-                    return (
-                      <div key={direction}>
-                        <h4 className="m-0 font-semibold text-text-3">{t(`detail.orchestration_graph.${direction}`)}</h4>
-                        {edges.length === 0 ? (
-                          <p className="mt-1 mb-0 text-text-3">{t('detail.orchestration_graph.no_edges')}</p>
-                        ) : (
-                          <ul className="mt-1 mb-0 space-y-1 pl-4 text-text-2">
-                            {edges.map((edge) => {
-                              const peer = nodeById.get(direction === 'incoming' ? edge.source : edge.target)
-                              return <li key={edge.id}>{edgeLabel(edge, t)} · {peer === undefined ? '?' : renderNodeLabel(peer)}</li>
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <OrchestrationGraphSelection
+              node={selected}
+              edges={selectedEdges}
+              nodes={nodeById}
+              kindLabel={t(`detail.orchestration_graph.kind_${selected.kind}`)}
+              clearLabel={t('detail.orchestration_graph.clear_selection')}
+              incomingLabel={t('detail.orchestration_graph.incoming')}
+              outgoingLabel={t('detail.orchestration_graph.outgoing')}
+              noEdgesLabel={t('detail.orchestration_graph.no_edges')}
+              nodeLabel={renderNodeLabel}
+              statusLabel={(status) => statusLabel(status, t)}
+              metadataLabel={(key) => metadataLabel(key, t)}
+              metadataValue={displayMetadataValue}
+              edgeLabel={(edge) => edgeLabel(edge, t)}
+              onClear={() => setSelectedId(null)}
+            />
           )}
 
           <details className="group mt-2.5 rounded-lg border border-border bg-card">

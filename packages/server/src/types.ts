@@ -121,11 +121,18 @@ export interface CanonicalStateCompatibilityIssueSnapshot {
   action: 'upgrade-runtime'
 }
 
+export interface ProjectRepositoryIdentity {
+  id: string
+  label: string
+  workspace_kind: 'primary' | 'worktree'
+}
+
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  repository?: ProjectRepositoryIdentity
   /** Canonical Changes that this runtime intentionally refuses to decode. */
   compatibilityIssues?: CanonicalStateCompatibilityIssueSnapshot[]
   /** Literal marker: more compatibility issues exist beyond the bounded 100-item response. */

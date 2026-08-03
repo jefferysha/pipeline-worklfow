@@ -39,6 +39,8 @@ function renderView(over: Partial<Parameters<typeof ProjectsView>[0]> = {}) {
     snapshot,
     rulesByKey: over.rulesByKey ?? rulesFor('/code/repo-a', '/code/repo-b'),
     onOpenProject: over.onOpenProject ?? vi.fn(),
+    ...(over.unregisterRoot === undefined ? {} : { unregisterRoot: over.unregisterRoot }),
+    ...(over.onRegistryChanged === undefined ? {} : { onRegistryChanged: over.onRegistryChanged }),
   }
   render(
     <I18nProvider>
@@ -49,6 +51,83 @@ function renderView(over: Partial<Parameters<typeof ProjectsView>[0]> = {}) {
 }
 
 describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', () => {
+  it('renders one repository group with exact primary and worktree navigation targets', () => {
+    const onOpenProject = vi.fn()
+    const primaryRoot = '/code/tenon'
+    const worktreeRoot = '/worktrees/feature/tenon-feature'
+    const repository = { id: 'd'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(worktreeRoot, [makeChange('feature', 'build')], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+        makeProject(primaryRoot, [makeChange('main', 'verify', { fields: { ...EVIDENCE_OK } })], {
+          repository,
+        }),
+      ]),
+      rulesByKey: rulesFor(primaryRoot, worktreeRoot),
+      onOpenProject,
+    })
+
+    const group = screen.getByTestId(`repository-group-repository:${repository.id}`)
+    expect(group).toHaveTextContent('tenon')
+    expect(group).toHaveTextContent('2')
+    expect(screen.getByTestId('projects-focus-all')).toHaveTextContent('1')
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('全部 · 显示 1 / 1 个项目')
+    fireEvent.click(screen.getByTestId('project-row-tenon-feature'))
+    expect(onOpenProject).toHaveBeenCalledWith(worktreeRoot)
+  })
+
+  it('forces a previously collapsed repository group open while search matches one workspace', () => {
+    const primaryRoot = '/code/tenon'
+    const worktreeRoot = '/worktrees/feature/tenon-search-target'
+    const repository = { id: 'c'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(primaryRoot, [makeChange('main', 'open')], { repository }),
+        makeProject(worktreeRoot, [makeChange('feature', 'open')], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+      ]),
+      rulesByKey: rulesFor(primaryRoot, worktreeRoot),
+    })
+
+    const toggle = screen.getByTestId(`repository-toggle-repository:${repository.id}`)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), {
+      target: { value: 'search-target' },
+    })
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('project-row-tenon-search-target')).toBeInTheDocument()
+  })
+
+  it('applies attention focus to repository groups without hiding their healthy workspaces', () => {
+    const primaryRoot = '/code/tenon'
+    const worktreeRoot = '/worktrees/review/tenon'
+    const repository = { id: 'e'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(primaryRoot, [makeChange('healthy', 'open')], { repository }),
+        makeProject(worktreeRoot, [makeChange('review', 'verify', { fields: EVIDENCE_OK })], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+      ]),
+      rulesByKey: rulesFor(primaryRoot, worktreeRoot),
+    })
+
+    fireEvent.click(screen.getByTestId('projects-focus-attention'))
+
+    const group = screen.getByTestId(`repository-group-repository:${repository.id}`)
+    expect(group).toHaveTextContent('2 个 workspace')
+    expect(screen.getByTitle(primaryRoot)).toBeInTheDocument()
+    expect(screen.getByTitle(worktreeRoot)).toBeInTheDocument()
+  })
+
   it('English 下 phase-manifest 忽略中文投影 label，以当前 locale 显示 canonical phase', () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     const root = '/code/repo-english'
@@ -274,6 +353,59 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(screen.getByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(secondRoot)}`)).toBeInTheDocument()
   })
 
+  it('搜索命中单个健康 workspace 时重新计算分组计数与状态', () => {
+    const healthyRoot = '/code/tenon'
+    const gatedRoot = '/worktrees/gated/tenon-review'
+    const repository = { id: 'f'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(healthyRoot, [makeChange('healthy', 'open')], { repository }),
+        makeProject(gatedRoot, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+      ]),
+      rulesByKey: rulesFor(healthyRoot, gatedRoot),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), {
+      target: { value: healthyRoot },
+    })
+
+    const group = screen.getByTestId(`repository-group-repository:${repository.id}`)
+    expect(group).toHaveTextContent('1 个 workspace')
+    expect(within(screen.getByTestId('section-rest')).getByTestId(
+      `repository-group-repository:${repository.id}`,
+    )).toBe(group)
+    expect(screen.queryByTitle(gatedRoot)).toBeNull()
+  })
+
+  it('搜索改变组级优先级后按过滤后的统计重新排列 repository groups', () => {
+    const firstRepository = { id: '1'.repeat(64), label: 'first', workspace_kind: 'primary' as const }
+    const secondRepository = { id: '2'.repeat(64), label: 'second', workspace_kind: 'primary' as const }
+    const firstHealthy = '/shown/first-healthy'
+    const firstGated = '/hidden/first-gated'
+    const secondRunning = '/shown/second-running'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstHealthy, [makeChange('healthy', 'open')], { repository: firstRepository }),
+        makeProject(firstGated, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+          repository: { ...firstRepository, workspace_kind: 'worktree' },
+        }),
+        makeProject(secondRunning, [makeChange('running', 'build', { fields: { automation: 'running' } })], {
+          repository: secondRepository,
+        }),
+      ]),
+      rulesByKey: rulesFor(firstHealthy, firstGated, secondRunning),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '/shown/' } })
+
+    expect(screen.getAllByTestId(/^repository-group-repository:/).map((group) => group.getAttribute('data-testid'))).toEqual([
+      `repository-group-repository:${secondRepository.id}`,
+      `repository-group-repository:${firstRepository.id}`,
+    ])
+  })
+
   it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
     const snapshot = makeSnapshot([
       makeProject('/code/repo-a', [
@@ -452,6 +584,104 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
 })
 
 describe('ProjectsView 读不到（ok=false）可折叠区', () => {
+  it('does not permanently hide a root that is registered again after successful cleanup', async () => {
+    const root = '/missing/recoverable'
+    const unregisterRoot = vi.fn(async () => {})
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { rerender } = render(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([makeProject(root, [], { ok: false })])}
+          rulesByKey={rulesFor(root)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('unreachable-batch-unregister'))
+    expect(await screen.findByTestId('projects-summary')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-row-recoverable')).toBeNull()
+
+    rerender(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([makeProject(root, [makeChange('returned', 'open')])])}
+          rulesByKey={rulesFor(root)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByTestId('project-row-recoverable')).toBeInTheDocument()
+  })
+
+  it('batch unregister keeps failed roots visible and lets the successful roots recover independently', async () => {
+    const firstRoot = '/missing/first'
+    const secondRoot = '/missing/second'
+    const unregisterRoot = vi.fn(async (root: string) => {
+      if (root === secondRoot) throw new Error('registry busy')
+    })
+    const onRegistryChanged = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstRoot, [], { ok: false }),
+        makeProject(secondRoot, [], { ok: false }),
+      ]),
+      unregisterRoot,
+      onRegistryChanged,
+    })
+
+    fireEvent.click(screen.getByTestId('unreachable-batch-unregister'))
+
+    expect(await screen.findByTestId('unreachable-cleanup-error')).toHaveTextContent('1')
+    expect(unregisterRoot.mock.calls.map(([root]) => root)).toEqual([firstRoot, secondRoot])
+    expect(onRegistryChanged).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('project-row-first')).toBeNull()
+    expect(screen.getByTestId('project-row-second')).toBeInTheDocument()
+  })
+
+  it('clears cleanup failure status when the failed root recovers', async () => {
+    const failedRoot = '/missing/failed'
+    const otherRoot = '/missing/other'
+    const unregisterRoot = vi.fn(async (root: string) => {
+      if (root === failedRoot) throw new Error('registry busy')
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { rerender } = render(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([makeProject(failedRoot, [], { ok: false })])}
+          rulesByKey={rulesFor(failedRoot)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('unreachable-batch-unregister'))
+    expect(await screen.findByTestId('unreachable-cleanup-error')).toHaveTextContent('1')
+
+    rerender(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([
+            makeProject(failedRoot, [makeChange('recovered', 'open')]),
+            makeProject(otherRoot, [], { ok: false }),
+          ])}
+          rulesByKey={rulesFor(failedRoot, otherRoot)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    expect(await screen.findByTestId('project-row-failed')).toBeInTheDocument()
+    expect(screen.queryByTestId('unreachable-cleanup-error')).toBeNull()
+  })
+
   it('含兼容问题的混合项目保留可读 Change 摘要与可点击 Progress 入口', () => {
     const onOpenProject = vi.fn()
     const root = '/code/mixed'
