@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path'
 import type { ProjectRepositoryIdentity } from './types.js'
 
 const REPOSITORY_IDENTITY_TIMEOUT_MS = 1_500
@@ -73,10 +73,9 @@ export async function probeRepositoryIdentity(
   const commonDirectory = normalize(resolve(commonDirectoryRaw))
   const topLevel = normalize(resolve(topLevelRaw))
   const gitDirectory = normalize(resolve(gitDirectoryRaw))
-  const conventionalDotGit = basename(commonDirectory) === '.git'
-    && (commonDirectory === normalize(resolve(join(topLevel, '.git')))
-      || gitDirectory !== commonDirectory)
-  const label = conventionalDotGit
+  // The common directory is the only path shared by every linked worktree. For any `.git`
+  // directory, including an external one, its parent therefore supplies the stable group label.
+  const label = basename(commonDirectory) === '.git'
     ? basename(dirname(commonDirectory))
     : basename(topLevel)
   if (!label) return undefined

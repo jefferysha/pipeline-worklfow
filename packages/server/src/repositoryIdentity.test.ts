@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
@@ -73,12 +73,39 @@ describe('probeRepositoryIdentity', () => {
     expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
   })
 
-  it('uses the worktree label when an external Git directory itself is named .git', async () => {
+  it('uses the shared metadata parent when an external Git directory itself is named .git', async () => {
     const identity = await probeRepositoryIdentity('/code/repository', {
       runGit: async () => '/metadata/.git\n/code/repository\n/metadata/.git\n',
     })
 
-    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+    expect(identity).toMatchObject({ label: 'metadata', workspace_kind: 'primary' })
+  })
+
+  it('keeps the primary label for linked worktrees backed by an external .git directory', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'tenon-external-repository-identity-'))
+    tempRoots.push(parent)
+    const primary = join(parent, 'code', 'repository')
+    const gitDirectory = join(parent, 'metadata', '.git')
+    const worktree = join(parent, 'feature-worktree')
+    await mkdir(join(parent, 'code'), { recursive: true })
+    await mkdir(join(parent, 'metadata'), { recursive: true })
+    await git(parent, ['init', `--separate-git-dir=${gitDirectory}`, primary])
+    await git(primary, [
+      '-c', 'user.name=Tenon Test',
+      '-c', 'user.email=tenon@example.invalid',
+      'commit', '--allow-empty', '-m', 'initial',
+    ])
+    await git(primary, ['worktree', 'add', '-b', 'feature', worktree])
+
+    const primaryIdentity = await probeRepositoryIdentity(primary)
+    const worktreeIdentity = await probeRepositoryIdentity(worktree)
+
+    expect(primaryIdentity).toMatchObject({ label: 'metadata', workspace_kind: 'primary' })
+    expect(worktreeIdentity).toEqual({
+      id: primaryIdentity?.id,
+      label: 'metadata',
+      workspace_kind: 'worktree',
+    })
   })
 
   it('omits identity for a non-Git root, a timeout, or malformed output', async () => {

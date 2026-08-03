@@ -22,9 +22,10 @@
 14. 宿主列表超过首屏时缺少滚动提示；已增加固定高度列表和中英文桌面滚动/Tab 提示。
 15. OpenSpec 的 `MODIFIED` requirement 未完整保留既有场景导致归档预演失败；已恢复原 requirement/scenario 并在隔离副本验证严格归档通过。
 16. 统一复审发现搜索后的 repository group 仍沿用过滤前顺序；已按过滤后的 `need/running/wip` 重新稳定排序，并增加优先级翻转测试。
-17. 外置且恰好命名为 `.git` 的 Git directory 会让项目标签取到 metadata 父目录；已区分工作树内 conventional `.git` 与外置目录，标签回到真实 top-level。
+17. 外置且恰好命名为 `.git` 的 Git directory 无法仅从 linked worktree 反推出 primary top-level；现统一从 shared common directory 的父目录生成稳定标签，避免登记顺序造成项目名漂移。
 18. Codex 活动插件检测只接受一种 TOML 序列化；已覆盖插件子表、`[plugins]` dotted key、根 dotted key 及空格/注释等价写法。
-19. 宿主配置的 `lstat`→路径读取存在 TOCTOU 与增长越界；已改为 `O_NOFOLLOW` 打开同一描述符、`fstat`，并用固定 `MAX+1` 缓冲硬限制实际读取。
+19. 宿主配置的 `lstat`→路径读取存在 TOCTOU、增长越界与 FIFO 阻塞窗口；已改为 `O_NOFOLLOW | O_NONBLOCK` 打开同一描述符、`fstat`、固定 `MAX+1` 缓冲，并在读取前后复验父目录链与文件 inode/size。
+20. 外置 `.git` 的 primary 与 linked worktree 曾分别生成 top-level 与 metadata 标签；已改为只从共享 common directory 生成标签，并用真实 separate-git-dir + linked worktree 回归锁定。
 
 ## Re-review
 

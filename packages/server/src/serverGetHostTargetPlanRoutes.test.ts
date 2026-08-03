@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, symlink, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
@@ -459,6 +460,29 @@ describe('Host Target Plan route resolver', () => {
         recommended_host: null,
         recommended_operation: null,
         reason: 'none',
+      },
+    })
+  })
+
+  it('rejects a FIFO host inventory without blocking the server event loop', async () => {
+    const hostHome = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    const configPath = join(hostHome, '.codex', 'config.toml')
+    await unlink(configPath)
+    execFileSync('mkfifo', [configPath])
+
+    const result = await resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )
+
+    expect(result).toMatchObject({
+      body: {
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
       },
     })
   })

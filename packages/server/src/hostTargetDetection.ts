@@ -3,6 +3,42 @@ import { join } from 'node:path'
 
 const MAX_HOST_INVENTORY_BYTES = 256 * 1024
 
+interface PathIdentity {
+  readonly path: string
+  readonly dev: number
+  readonly ino: number
+}
+
+function captureDirectoryChain(hostHome: string, segments: readonly string[]): readonly PathIdentity[] | null {
+  const identities: PathIdentity[] = []
+  let candidate = hostHome
+  for (const segment of ['', ...segments]) {
+    if (segment !== '') candidate = join(candidate, segment)
+    try {
+      const metadata = lstatSync(candidate)
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return null
+      identities.push({ path: candidate, dev: metadata.dev, ino: metadata.ino })
+    } catch {
+      return null
+    }
+  }
+  return identities
+}
+
+function directoryChainIsStable(identities: readonly PathIdentity[]): boolean {
+  return identities.every((identity) => {
+    try {
+      const metadata = lstatSync(identity.path)
+      return metadata.isDirectory()
+        && !metadata.isSymbolicLink()
+        && metadata.dev === identity.dev
+        && metadata.ino === identity.ino
+    } catch {
+      return false
+    }
+  })
+}
+
 function isDirectoryBelowHostHome(hostHome: string, segments: readonly string[]): boolean {
   let candidate = hostHome
   for (const segment of segments) {
@@ -45,13 +81,32 @@ function hasInstalledPlugin(
 }
 
 function readBoundedHostFile(hostHome: string, segments: readonly string[]): string | null {
-  if (segments.length === 0 || !isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return null
+  if (segments.length === 0) return null
+  const directories = captureDirectoryChain(hostHome, segments.slice(0, -1))
+  if (directories === null) return null
   const path = join(hostHome, ...segments)
   let descriptor: number | undefined
   try {
-    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    descriptor = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    )
     const metadata = fstatSync(descriptor)
     if (!metadata.isFile() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null
+    const fileIsStable = (): boolean => {
+      try {
+        const current = lstatSync(path)
+        return current.isFile()
+          && !current.isSymbolicLink()
+          && current.dev === metadata.dev
+          && current.ino === metadata.ino
+          && current.size === metadata.size
+          && directoryChainIsStable(directories)
+      } catch {
+        return false
+      }
+    }
+    if (!fileIsStable()) return null
     const buffer = Buffer.allocUnsafe(MAX_HOST_INVENTORY_BYTES + 1)
     let length = 0
     while (length < buffer.length) {
@@ -59,7 +114,7 @@ function readBoundedHostFile(hostHome: string, segments: readonly string[]): str
       if (read === 0) break
       length += read
     }
-    return length > MAX_HOST_INVENTORY_BYTES
+    return length > MAX_HOST_INVENTORY_BYTES || !fileIsStable()
       ? null
       : buffer.subarray(0, length).toString('utf8')
   } catch {
