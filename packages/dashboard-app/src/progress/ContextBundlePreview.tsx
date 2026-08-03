@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
-import {
-  type ContextBundlePreviewInput,
-  type ContextBundleReasonCode,
-} from '../api/client'
 import { CONTEXT_BUNDLE_PHASES } from '../api/contextBundleTypes'
 import { useT } from '../i18n'
+import {
+  BudgetSummary,
+  ContextBundleLoading,
+  PreviewInputs,
+} from './ContextBundlePreviewParts'
 import { useContextBundlePreview } from './useContextBundlePreview'
 
 export interface ContextBundlePreviewProps {
@@ -37,58 +38,6 @@ const REPAIR_KEYS: Readonly<Record<string, string>> = {
   CONTEXT_BUNDLE_NETWORK_ERROR: 'progress.bundle_repair_network',
   CONTEXT_BUNDLE_INVALID_RESPONSE: 'progress.bundle_repair_invalid_response',
   CONTEXT_BUNDLE_REQUEST_FAILED: 'progress.bundle_repair_request_failed',
-}
-
-const REASON_I18N_KEYS: Readonly<Record<ContextBundleReasonCode, string>> = {
-  'context-bundle.reason.proposal': 'progress.bundle_reason_proposal',
-  'context-bundle.reason.openspec-design': 'progress.bundle_reason_openspec_design',
-  'context-bundle.reason.tasks': 'progress.bundle_reason_tasks',
-  'context-bundle.reason.superpower-design': 'progress.bundle_reason_superpower_design',
-  'context-bundle.reason.adr': 'progress.bundle_reason_adr',
-  'context-bundle.reason.delta-spec': 'progress.bundle_reason_delta_spec',
-  'context-bundle.reason.superpower-plan': 'progress.bundle_reason_superpower_plan',
-  'context-bundle.reason.plan': 'progress.bundle_reason_plan',
-  'context-bundle.reason.verification-report': 'progress.bundle_reason_verification_report',
-  'context-bundle.reason.applied-spec': 'progress.bundle_reason_applied_spec',
-}
-
-function PreviewInputs({
-  inputs,
-  formatNumber,
-}: {
-  inputs: ContextBundlePreviewInput[]
-  formatNumber: (value: number) => string
-}): JSX.Element {
-  const { t } = useT()
-  return (
-    <ul className="space-y-2" aria-label={t('progress.bundle_inputs_label')}>
-      {inputs.map((input) => (
-        <li
-          className="rounded-lg border border-border bg-fill px-3 py-2.5"
-          key={`${input.kind}:${input.path}`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="break-all text-xs font-semibold text-text">{input.path}</code>
-            <span className="rounded-md bg-fill-2 px-1.5 py-0.5 font-mono text-[10px] text-text-2">
-              {input.kind}
-            </span>
-            <span className="rounded-md bg-accent-t px-1.5 py-0.5 font-mono text-[10px] text-accent-d">
-              {input.mode}
-            </span>
-          </div>
-          <p className="mt-1 text-xs leading-5 text-text-3">
-            {t(REASON_I18N_KEYS[input.reasonCode])}
-          </p>
-          <p className="mt-1 font-mono text-[11px] text-text-2">
-            {t('progress.bundle_input_bytes', {
-              source: formatNumber(input.sourceBytes),
-              materialized: formatNumber(input.materializedBytes),
-            })}
-          </p>
-        </li>
-      ))}
-    </ul>
-  )
 }
 
 export function ContextBundlePreview({
@@ -148,6 +97,8 @@ export function ContextBundlePreview({
           <input
             className="h-9 rounded-lg border border-border bg-fill px-2 font-mono text-sm text-text outline-none transition-colors hover:border-border-2 focus-visible:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             type="number"
+            name="budgetBytes"
+            autoComplete="off"
             min="1"
             step="1"
             inputMode="numeric"
@@ -164,36 +115,50 @@ export function ContextBundlePreview({
         </button>
       </form>
 
-      <div className="mt-4" aria-live="polite">
+      <div
+        className="mt-4"
+        aria-live="polite"
+        aria-busy={state.kind === 'loading'}
+        data-testid="context-bundle-result"
+      >
         {state.kind === 'idle' && (
           <p className="text-xs text-text-3">{t('progress.bundle_idle')}</p>
         )}
         {state.kind === 'loading' && (
-          <p className="text-xs text-text-3" role="status">{t('progress.bundle_loading')}</p>
+          <ContextBundleLoading />
         )}
 
         {state.kind === 'success' && state.preview.inputs.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border-2 px-3 py-4 text-xs text-text-3">
+          <div
+            className="rounded-lg border border-dashed border-border-2 px-3 py-4 text-xs text-text-3"
+            role="status"
+          >
             {t('progress.bundle_empty')}
           </div>
         )}
 
         {state.kind === 'success' && state.preview.inputs.length > 0 && (
           <div className="space-y-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <strong className="font-mono text-sm text-text">
-                {formatNumber(state.preview.budget.usedBytes)} / {formatNumber(state.preview.budget.maxBytes)} bytes
-              </strong>
-              <span className="text-xs text-text-3">
-                {t('progress.bundle_document_count', { count: state.preview.documentCount })}
-              </span>
-            </div>
+            <BudgetSummary
+              usedBytes={state.preview.budget.usedBytes}
+              maxBytes={state.preview.budget.maxBytes}
+              documentCount={state.preview.documentCount}
+              formatNumber={formatNumber}
+              tone="success"
+            />
             <PreviewInputs inputs={state.preview.inputs} formatNumber={formatNumber} />
           </div>
         )}
 
         {state.kind === 'budget-error' && (
           <div className="space-y-3">
+            <BudgetSummary
+              usedBytes={state.preview.budget.usedBytes}
+              maxBytes={state.preview.budget.maxBytes}
+              documentCount={state.preview.documentCount}
+              formatNumber={formatNumber}
+              tone="error"
+            />
             <div className="rounded-lg border border-amb-b bg-amb-t px-3 py-2.5 text-xs text-amb-d" role="alert">
               <p className="font-semibold">
                 {t('progress.bundle_budget_error', {

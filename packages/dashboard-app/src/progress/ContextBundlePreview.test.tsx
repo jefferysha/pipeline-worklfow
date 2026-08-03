@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ContextBundlePreviewInput } from '../api/client'
 import { I18nProvider } from '../i18n'
 import { ContextBundlePreview } from './ContextBundlePreview'
 
@@ -15,7 +16,18 @@ const input = {
   materializedBytes: 640,
 } as const
 
-function responseBody(to = 'verify', inputs = [input]) {
+const designInput = {
+  kind: 'openspec-design',
+  path: 'openspec/changes/demo/design.md',
+  digest: `sha256:${'c'.repeat(64)}`,
+  reason: '记录实现边界、风险和恢复策略',
+  reasonCode: 'context-bundle.reason.openspec-design',
+  mode: 'reference',
+  sourceBytes: 1792,
+  materializedBytes: 920,
+} as const
+
+function responseBody(to = 'verify', inputs: ContextBundlePreviewInput[] = [input]) {
   return {
     ok: true,
     preview: {
@@ -56,7 +68,7 @@ afterEach(() => {
 })
 
 describe('ContextBundlePreview', () => {
-  it('mount 时用下一 canonical phase + 120000 请求，loading 后显示 source/materialized bytes', async () => {
+  it('mount 时用下一 canonical phase + 120000 请求，loading 后显示容量结论与有界进度', async () => {
     const pending = deferred<Response>()
     const fetchMock = vi.fn().mockReturnValue(pending.promise)
     vi.stubGlobal('fetch', fetchMock)
@@ -66,15 +78,53 @@ describe('ContextBundlePreview', () => {
     expect(screen.getByText('正在预检 Context Bundle…')).toBeInTheDocument()
     expect(screen.getByLabelText('目标阶段')).toHaveValue('verify')
     expect(screen.getByLabelText('预算（bytes）')).toHaveValue(120000)
+    expect(screen.getByLabelText('预算（bytes）')).toHaveAttribute('name', 'budgetBytes')
+    expect(screen.getByLabelText('预算（bytes）')).toHaveAttribute('autocomplete', 'off')
     pending.resolve(new Response(JSON.stringify(responseBody()), { status: 200 }))
 
     expect(await screen.findByText('640 / 120,000 bytes')).toBeInTheDocument()
+    expect(screen.getByText('已使用 1%')).toBeInTheDocument()
+    expect(screen.getByText('剩余 119,360 bytes')).toBeInTheDocument()
     expect(screen.getByText('1 份文档')).toBeInTheDocument()
+    const progress = screen.getByRole('progressbar', { name: 'Context Bundle 预算：已使用 1%' })
+    expect(progress).toHaveAttribute('aria-valuemin', '0')
+    expect(progress).toHaveAttribute('aria-valuemax', '120000')
+    expect(progress).toHaveAttribute('aria-valuenow', '640')
+    expect(progress).toHaveAttribute('aria-valuetext', '640 / 120,000 bytes，已使用 1%')
+    const fill = screen.getByTestId('context-bundle-budget-fill')
+    expect(fill).toHaveStyle({ transform: 'scaleX(0.005333333333333333)' })
+    expect(fill).toHaveClass(
+      'origin-left',
+      'transition-transform',
+      'duration-200',
+      'motion-reduce:transition-none',
+    )
+    expect(fill).not.toHaveClass('transition-[width]', 'duration-300')
     expect(screen.getByText('源文件 901 bytes · 物化 640 bytes')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('target=verify&budgetBytes=120000'),
       expect.any(Object),
     )
+  })
+
+  it('文档清单保持响应顺序，并完整显示 path、kind、mode 与字节数', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(responseBody('verify', [designInput, input])), { status: 200 }),
+    ))
+
+    renderPreview()
+
+    const list = await screen.findByRole('list', { name: 'Context Bundle 输入文档' })
+    const rows = within(list).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('openspec/changes/demo/design.md')
+    expect(rows[0]).toHaveTextContent('openspec-design')
+    expect(rows[0]).toHaveTextContent('reference')
+    expect(rows[0]).toHaveTextContent('源文件 1,792 bytes · 物化 920 bytes')
+    expect(rows[1]).toHaveTextContent('openspec/changes/demo/proposal.md')
+    expect(rows[1]).toHaveTextContent('proposal')
+    expect(rows[1]).toHaveTextContent('full')
+    expect(rows[1]).toHaveTextContent('源文件 901 bytes · 物化 640 bytes')
   })
 
   it('open 的成功零输入显示 policy-empty，而不是错误', async () => {
@@ -87,7 +137,8 @@ describe('ContextBundlePreview', () => {
     await screen.findByText('640 / 120,000 bytes')
     await user.selectOptions(screen.getByLabelText('目标阶段'), 'open')
 
-    expect(await screen.findByText('该目标阶段不要求读取文档。')).toBeInTheDocument()
+    expect(await screen.findByText('该目标阶段不要求读取文档。')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -116,12 +167,69 @@ describe('ContextBundlePreview', () => {
     await user.type(budget, '100{Enter}')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('预算不足：需要 640 bytes，可用 100 bytes。')
+    expect(screen.getByText('已使用 640%')).toBeInTheDocument()
+    expect(screen.getByText('超出 540 bytes')).toBeInTheDocument()
+    const progress = screen.getByRole('progressbar', { name: 'Context Bundle 预算：已使用 640%' })
+    expect(progress).toHaveAttribute('aria-valuemax', '100')
+    expect(progress).toHaveAttribute('aria-valuenow', '100')
+    expect(progress).toHaveAttribute('aria-valuetext', '640 / 100 bytes，已使用 640%')
+    expect(screen.getByTestId('context-bundle-budget-fill')).toHaveStyle({ transform: 'scaleX(1)' })
     expect(screen.getByText('源文件 901 bytes · 物化 640 bytes')).toBeInTheDocument()
     await user.clear(budget)
     await user.type(budget, '120000')
     await user.click(screen.getByRole('button', { name: '开始预检' }))
 
     expect(await screen.findByText('640 / 120,000 bytes')).toBeInTheDocument()
+  })
+
+  it('小幅预算超限仍显示大于 100% 的真实超限结论', async () => {
+    const slightOverrunInput = {
+      ...input,
+      sourceBytes: 1200,
+      materializedBytes: 1001,
+    }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseBody()), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: false,
+        code: 'CONTEXT_BUNDLE_BUDGET_EXCEEDED',
+        error: 'too small',
+        preview: {
+          ...responseBody('verify', [slightOverrunInput]).preview,
+          budget: { maxBytes: 1000, usedBytes: 1001, fits: false },
+          aggregateDigest: undefined,
+        },
+      }), { status: 422 })))
+    const user = userEvent.setup()
+
+    renderPreview()
+    await screen.findByText('640 / 120,000 bytes')
+    const budget = screen.getByLabelText('预算（bytes）')
+    await user.clear(budget)
+    await user.type(budget, '1000{Enter}')
+
+    expect(await screen.findByText('已使用 101%')).toBeInTheDocument()
+    expect(screen.queryByText('已使用 100%')).not.toBeInTheDocument()
+    expect(screen.getByText('超出 1 bytes')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '1,001 / 1,000 bytes，已使用 101%',
+    )
+  })
+
+  it('loading 提供有界骨架、busy 状态并禁用提交', () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(deferred<Response>().promise))
+
+    renderPreview()
+
+    const result = screen.getByTestId('context-bundle-result')
+    expect(result).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent('正在预检 Context Bundle…')
+    expect(screen.getByTestId('context-bundle-loading-skeleton')).not.toHaveClass(
+      'animate-pulse',
+      'motion-reduce:animate-none',
+    )
+    expect(screen.getByRole('button', { name: '开始预检' })).toBeDisabled()
   })
 
   it('完整性错误显示 server 恢复提示，并能原地重试', async () => {
@@ -329,6 +437,12 @@ describe('ContextBundlePreview', () => {
     expect(screen.getByLabelText('Budget (bytes)')).toBeInTheDocument()
     expect(await screen.findByText('Defines goals, scope, non-goals, and acceptance signals.')).toBeInTheDocument()
     expect(await screen.findByText('Source 901 bytes · materialized 640 bytes')).toBeInTheDocument()
+    expect(screen.getByText('1% used')).toBeInTheDocument()
+    expect(screen.getByText('119,360 bytes remaining')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Context Bundle budget: 1% used' })).toHaveAttribute(
+      'aria-valuetext',
+      '640 / 120,000 bytes, 1% used',
+    )
     expect(screen.getByText('openspec/changes/demo/proposal.md')).toBeInTheDocument()
     expect(screen.getByText('full')).toBeInTheDocument()
   })
