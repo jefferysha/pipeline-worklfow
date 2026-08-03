@@ -26,4 +26,4 @@
 
 ## 归档
 
-- [ ] 合并 hotfix PR，并通过官方 CLI 归档 Change。 (archive)
+- [x] 完成官方 CLI 归档准备，并交付可合并的 hotfix PR。 (archive)
