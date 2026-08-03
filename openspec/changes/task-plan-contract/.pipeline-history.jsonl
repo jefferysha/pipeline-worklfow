@@ -130,3 +130,6 @@
 {"ts":"2026-08-03T15:17:40Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4ae10407-fd39-40f2-aec6-1080348a5a2d"}
 {"ts":"2026-08-03T15:24:11Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-03T15:39:17Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T15:39:38Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T15:39:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T15:39:38Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"85e6bd0a-dd58-4313-aa8b-197782d3c0e2"}
