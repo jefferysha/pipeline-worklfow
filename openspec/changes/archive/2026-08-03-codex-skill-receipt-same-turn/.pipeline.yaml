@@ -2,8 +2,8 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/codex-skill-receipt-same-turn-design.md
 plan: docs/superpowers/plans/codex-skill-receipt-same-turn.md
 verification_report: docs/superpowers/reports/codex-skill-receipt-same-turn-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/21
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,18 +31,18 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T13:18:18Z
-updated_at: 2026-07-29T18:04:58Z
+updated_at: 2026-08-03T05:25:52Z
 verified_at: 2026-07-29T18:04:58Z
-archived_at: null
-archived: false
+archived_at: 2026-08-03T05:25:52Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: ad13c561-fd1c-4912-bd17-f57f1c3c7eaf
-pipeline_transition_sequence: 29
-pipeline_transition_head: f1500767-017d-44b9-9e36-3374af565ebd
-pipeline_state_revision: 78
-pipeline_state_revision_id: 1e03f58f-501d-4aa4-b48e-c82badd53707
-pipeline_state_digest: 1414f9ee807a0e6628a3cb1d79059cf8ff8cc08811994e85a7cfffb874b80c26
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NzgsInJldmlzaW9uSWQiOiIxZTAzZjU4Zi01MDFkLTRhYTQtYjQ4ZS1jODJiYWRkNTM3MDciLCJwYXlsb2FkRGlnZXN0IjoiZmY4YzBiZmRiM2Q4NTg2YzBiYzBjOTFkOWYwMjA2NzhlZmU3ZjA3OWQyYzUxYzBjOGM0YWRmYTgzNWNmNmYzMyJ9
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImFkMTNjNTYxLWZkMWMtNDkxMi1iZDE3LWY1N2YxYzNjN2VhZiIsInNlcXVlbmNlIjoyOSwicmVjb3JkSWQiOiJmMTUwMDc2Ny0wMTdkLTQ0YjktOWUzNi0zMzc0YWY1NjVlYmQiLCJyZWNvcmREaWdlc3QiOiJmOWQ3NzNjMDIxZTVlMmY3NDQyMmIwZjhlOTQzMzNhMDE2YzFhNDliMmRjMmRiYzE5ZGY2NWNmMzNjYTczNWNmIn0
+pipeline_transition_sequence: 31
+pipeline_transition_head: 96c69791-6da5-4ed6-a3cb-f0b2b70f73a1
+pipeline_state_revision: 81
+pipeline_state_revision_id: 53603533-b938-4e48-bfa8-412a16411403
+pipeline_state_digest: 2487d80bfefcd7caf7af005af475815fb857ec159bb910166c01045157c43a46
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6ODEsInJldmlzaW9uSWQiOiI1MzYwMzUzMy1iOTM4LTRlNDgtYmZhOC00MTJhMTY0MTE0MDMiLCJwYXlsb2FkRGlnZXN0IjoiYzY1MTU2M2RhZDlhNmI3MjE1ZmU4ZWI2ZGQxYjJhM2FlNDUyMzIyNzhmMzAwMjM2MjQyNWYxYzJjMTFkNTBiZSJ9
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImFkMTNjNTYxLWZkMWMtNDkxMi1iZDE3LWY1N2YxYzNjN2VhZiIsInNlcXVlbmNlIjozMSwicmVjb3JkSWQiOiI5NmM2OTc5MS02ZGE1LTRlZDYtYTNjYi1mMGIyYjcwZjczYTEiLCJyZWNvcmREaWdlc3QiOiI4ZmM4MjcwZmFjMTQyMDJlZGE0YjU2NmI5NzViNmViMGNmYTYzZjA4OGNhMzUzYjMwYzg5ZmJlYmQ3ZjM5NDE5In0

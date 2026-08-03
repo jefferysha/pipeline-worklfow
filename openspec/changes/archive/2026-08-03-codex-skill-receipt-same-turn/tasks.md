@@ -47,9 +47,9 @@
 
 ## 交付
 
-- [ ] 提交、推送并创建带证据的非草稿 PR。 (ship)
-- [ ] 检查远端 PR、标签与 CI，修复可归因失败。 (ship)
+- [x] 提交、推送并创建带证据的非草稿 PR。 (ship)
+- [x] 检查远端 PR、标签与 CI，修复可归因失败。 (ship)
 
 ## 归档
 
-- [ ] 应用 spec、归档 Change 并记录最终状态。 (archive)
+- [x] 应用 spec、归档 Change 并记录最终状态。 (archive)
