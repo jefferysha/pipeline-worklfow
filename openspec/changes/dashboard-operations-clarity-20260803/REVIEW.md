@@ -44,13 +44,13 @@
 
 ## Re-review
 
-两轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。第二轮 Codex CLI 找到的无项目 Docker 状态与 plugin-cache 换位问题均已按 TDD 修复；最终 Reviewer、Codex、浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
+两轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。第二轮 Codex CLI 找到的无项目 Docker 状态与 plugin-cache 换位问题均已按 TDD 修复。最终 Build HEAD `acf4bf11` 的统一独立 Reviewer 复审为 Critical/High/Medium/Low = 0/0/0/0；隔离、只读 Codex CLI 复审结论为 “No actionable correctness regressions”。浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
 
 ## Verification evidence
 
 - Web 全量：87 files / 1633 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示，以及 Machine 全局 Docker 状态/说明一致性回归均纳入最终全量结果。
-- Repository 全量：332 files / 5948 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
-- 统一 Reviewer 定向：Server 4 files / 161 tests、Web 9 files / 256 tests，均通过。
+- Repository 全量：332 files / 5950 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
+- 统一 Reviewer 定向：Server 465 passed / 9 honest skips、Web 258 passed，均通过；最终严重级别 0/0/0/0。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。
 - OpenSpec 严格归档预演在隔离副本通过：8 个 requirement 新增、约 3 个 requirement 修改，归档后的 32 个 specs 严格检查全部通过。
 - 1024px、1440px 与 1920px 真实桌面浏览器确认 Projects 分组、Machine core/AFK 分层、Host 自动检测与 Workbench 统一 40px 控件均无 root 横向溢出。
