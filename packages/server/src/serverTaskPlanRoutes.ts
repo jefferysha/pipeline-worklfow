@@ -1,3 +1,11 @@
+import { readTaskPlanForChange } from '@tenon/kernel'
+import {
+  assertChangePathAnchor,
+  captureChangePathAnchor,
+  ContextBundlePathError,
+  type ChangePathAnchor,
+} from './contextBundlePreviewSupport.js'
+import { assertWorkflowRootAnchor } from './workflows.js'
 import type { WorkflowRootAnchor } from './workflows.js'
 
 type WorkflowRootCheck =
@@ -12,6 +20,56 @@ export interface TaskPlanRouteDeps {
 export interface TaskPlanRouteResult {
   readonly status: number
   readonly body: unknown
+}
+
+interface AnchoredTaskPlanReaderDeps {
+  readonly assertRoot: (anchor: WorkflowRootAnchor) => void
+  readonly captureChange: (anchor: WorkflowRootAnchor, change: string) => ChangePathAnchor
+  readonly assertChange: (anchor: ChangePathAnchor) => void
+  readonly readPlan: (changeDir: string) => Promise<unknown | null>
+}
+
+const defaultAnchoredReaderDeps: AnchoredTaskPlanReaderDeps = {
+  assertRoot: assertWorkflowRootAnchor,
+  captureChange: captureChangePathAnchor,
+  assertChange: assertChangePathAnchor,
+  readPlan: readTaskPlanForChange,
+}
+
+function assertTrustedRoot(
+  anchor: WorkflowRootAnchor,
+  assertRoot: AnchoredTaskPlanReaderDeps['assertRoot'],
+): void {
+  try {
+    assertRoot(anchor)
+  } catch (cause) {
+    throw new ContextBundlePathError(403, 'TaskPlan registered root identity changed', cause)
+  }
+}
+
+export async function readAnchoredTaskPlan(
+  anchor: WorkflowRootAnchor,
+  change: string,
+  overrides: Partial<AnchoredTaskPlanReaderDeps> = {},
+): Promise<unknown | null> {
+  const deps = { ...defaultAnchoredReaderDeps, ...overrides }
+  assertTrustedRoot(anchor, deps.assertRoot)
+  let changeAnchor: ChangePathAnchor
+  try {
+    changeAnchor = deps.captureChange(anchor, change)
+  } catch (error) {
+    if (error instanceof ContextBundlePathError && error.status === 400) {
+      assertTrustedRoot(anchor, deps.assertRoot)
+      return null
+    }
+    throw error
+  }
+  assertTrustedRoot(anchor, deps.assertRoot)
+  deps.assertChange(changeAnchor)
+  const result = await deps.readPlan(changeAnchor.changeDir)
+  deps.assertChange(changeAnchor)
+  assertTrustedRoot(anchor, deps.assertRoot)
+  return result
 }
 
 function isChangeName(name: string): boolean {

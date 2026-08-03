@@ -1,8 +1,15 @@
+import { mkdirSync, renameSync } from 'node:fs'
+import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  readAnchoredTaskPlan,
   resolveTaskPlanRoute,
   type TaskPlanRouteDeps,
 } from './serverTaskPlanRoutes.js'
+import { captureChangePathAnchor } from './contextBundlePreviewSupport.js'
+import { captureWorkflowRootAnchor, closeWorkflowRootAnchor } from './workflows.js'
 
 function deps(overrides: Partial<TaskPlanRouteDeps> = {}): TaskPlanRouteDeps {
   return {
@@ -88,5 +95,70 @@ describe('resolveTaskPlanRoute', () => {
     )
     expect(result).toEqual({ status: 409, body: { ok: false, error: 'canonical TaskPlan 损坏' } })
     expect(JSON.stringify(result)).not.toContain('/private')
+  })
+})
+
+describe('readAnchoredTaskPlan', () => {
+  async function rootFixture(): Promise<{ parent: string; root: string; replacement: string }> {
+    const parent = await mkdtemp(join(tmpdir(), 'tenon-task-plan-root-anchor-'))
+    const root = join(parent, 'root')
+    const replacement = join(parent, 'displaced-root')
+    await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
+    return { parent, root, replacement }
+  }
+
+  it('returns missing only while the registered root remains trusted', async () => {
+    const { parent, root } = await rootFixture()
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'missing')).resolves.toBeNull()
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a registered-root replacement introduced while capturing the Change', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const anchor = captureWorkflowRootAnchor(root)
+    const readPlan = vi.fn(async () => ({ private_payload: 'replacement-secret' }))
+    try {
+      await expect(readAnchoredTaskPlan(anchor, 'demo', {
+        captureChange: (current, change) => {
+          renameSync(root, replacement)
+          mkdirSync(join(root, 'openspec', 'changes', change), { recursive: true })
+          return captureChangePathAnchor(current, change)
+        },
+        readPlan,
+      })).rejects.toMatchObject({ status: 403 })
+      expect(readPlan).not.toHaveBeenCalled()
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects and does not return replacement content when the root changes during the read', async () => {
+    const { parent, root, replacement } = await rootFixture()
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      let caught: unknown
+      try {
+        await readAnchoredTaskPlan(anchor, 'demo', {
+          readPlan: async () => {
+            await rename(root, replacement)
+            await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
+            return { private_payload: 'replacement-secret' }
+          },
+        })
+      } catch (error) {
+        caught = error
+      }
+      expect(caught).toMatchObject({ status: 403 })
+      expect(String(caught)).not.toContain('replacement-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(parent, { recursive: true, force: true })
+    }
   })
 })

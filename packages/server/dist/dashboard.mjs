@@ -24899,6 +24899,39 @@ async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
 }
 
 // packages/server/src/serverTaskPlanRoutes.ts
+var defaultAnchoredReaderDeps = {
+  assertRoot: assertWorkflowRootAnchor,
+  captureChange: captureChangePathAnchor,
+  assertChange: assertChangePathAnchor,
+  readPlan: readTaskPlanForChange
+};
+function assertTrustedRoot(anchor, assertRoot) {
+  try {
+    assertRoot(anchor);
+  } catch (cause) {
+    throw new ContextBundlePathError(403, "TaskPlan registered root identity changed", cause);
+  }
+}
+async function readAnchoredTaskPlan(anchor, change, overrides = {}) {
+  const deps = { ...defaultAnchoredReaderDeps, ...overrides };
+  assertTrustedRoot(anchor, deps.assertRoot);
+  let changeAnchor;
+  try {
+    changeAnchor = deps.captureChange(anchor, change);
+  } catch (error2) {
+    if (error2 instanceof ContextBundlePathError && error2.status === 400) {
+      assertTrustedRoot(anchor, deps.assertRoot);
+      return null;
+    }
+    throw error2;
+  }
+  assertTrustedRoot(anchor, deps.assertRoot);
+  deps.assertChange(changeAnchor);
+  const result = await deps.readPlan(changeAnchor.changeDir);
+  deps.assertChange(changeAnchor);
+  assertTrustedRoot(anchor, deps.assertRoot);
+  return result;
+}
 function isChangeName4(name) {
   return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
 }
@@ -25000,18 +25033,7 @@ async function handleGet(req, res, path7, deps) {
   if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body);
   const taskPlan = await resolveTaskPlanRoute(req.url ?? "/", path7, {
     workflowRootForRequest,
-    readPlan: async (anchor, change) => {
-      let changeAnchor;
-      try {
-        changeAnchor = captureChangePathAnchor(anchor, change);
-      } catch (error2) {
-        if (error2 instanceof ContextBundlePathError && error2.status === 400) return null;
-        throw error2;
-      }
-      const result = await readTaskPlanForChange(changeAnchor.changeDir);
-      assertChangePathAnchor(changeAnchor);
-      return result;
-    }
+    readPlan: readAnchoredTaskPlan
   });
   if (taskPlan !== null) return sendJson(res, taskPlan.status, taskPlan.body);
   if (path7 === "/api/loops/snapshot") {
