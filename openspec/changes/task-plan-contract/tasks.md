@@ -14,6 +14,7 @@
 - [x] 冻结 TaskPlan v1、legacy 投影、原子 store、只读 API 和校验语义。 (spec)
 - [x] 将 receipt discovery 与 `max_output_tokens` 登记为既有 capability 修改，并冻结 revision lineage、projection purity 与 ordinal ordering 语义。 (spec)
 - [x] 冻结 revision store 公开预算、target 预计入、typed 零写入拒绝与幂等重试 lineage 校验语义。 (spec)
+- [x] 将闭集 hostile-input 冻结到 byte-bounded JSON，并将 direct typed object 冻结为不枚举额外属性的 schema-directed snapshot。 (spec)
 
 ## 实现
 
@@ -43,6 +44,8 @@
 - [x] 将 object field-name UTF-8 bytes 纳入 decoder 总预算，并使 unknown-field diagnostic path 保持有界。 (build)
 - [x] 在任何 Unicode/trim 扫描前以有界 UTF-8 counter 拒绝超限 object key/text，确保 hostile object CPU 工作受契约预算约束。 (build)
 - [x] 拒绝字符串末尾 lone high surrogate，保持 object/JSON codec 与 resource normalization 的非法 Unicode 失败关闭。 (build)
+- [x] 分离 JSON closed mode 与 direct object schema-directed mode，彻底移除 typed object 的 own-key enumeration。 (build)
+- [x] 证明大量额外 string/symbol/non-enumerable/accessor 不被读取或复制，JSON unknown-field 与已知字段失败关闭语义保持不变。 (build)
 
 ## 验证
 

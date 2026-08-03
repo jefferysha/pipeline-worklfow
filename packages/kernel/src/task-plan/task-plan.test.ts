@@ -223,7 +223,7 @@ describe('TaskPlan v1 codec', () => {
 
   it.each([
     ['future schema', { ...revision(), schema_version: 'task-plan/v2' }, 'schema_version'],
-    ['unknown field', { ...revision(), surprise: true }, '$.surprise'],
+    ['unknown field', JSON.stringify({ ...revision(), surprise: true }), '$.surprise'],
     ['control character', { ...revision(), plan_id: 'bad\u0000id' }, '$.plan_id'],
     ['duplicate ID', { ...revision(), work_items: [revision().work_items[0], revision().work_items[0]] }, '$.work_items[1].id'],
   ])('rejects %s with bounded structured errors', (_label, input, expectedPath) => {
@@ -297,7 +297,64 @@ describe('TaskPlan v1 codec', () => {
     expect(decoded.errors.map((entry) => entry.code)).toContain('document_too_large')
   })
 
-  it('counts hostile object field-name bytes before copying values or building diagnostics', () => {
+  it('snapshots only schema-owned typed-object descriptors without any own-key enumeration', () => {
+    const expected = revision()
+    const input = revision() as TaskPlanRevisionV1 & Record<PropertyKey, unknown>
+    for (let index = 0; index < TASK_PLAN_LIMITS.maxDecodeNodes * 2; index += 1) {
+      input[`hostile-${index}`] = true
+    }
+    let unknownGetterCalls = 0
+    Object.defineProperty(input, Symbol('hostile-symbol'), {
+      enumerable: true,
+      get() {
+        unknownGetterCalls += 1
+        return true
+      },
+    })
+    Object.defineProperty(input, 'hidden-hostile', {
+      enumerable: false,
+      get() {
+        unknownGetterCalls += 1
+        return true
+      },
+    })
+    let ownKeysCalls = 0
+    const hostile = new Proxy(input, {
+      ownKeys() {
+        ownKeysCalls += 1
+        throw new Error('own keys must remain unread')
+      },
+    })
+
+    expect(decodeTaskPlanRevisionV1(hostile)).toEqual({ ok: true, value: expected })
+    expect(ownKeysCalls).toBe(0)
+    expect(unknownGetterCalls).toBe(0)
+  })
+
+  it('ignores non-JSON array metadata without invoking its accessors', () => {
+    const expected = revision()
+    const requirements = [...expected.requirements] as unknown[] & Record<PropertyKey, unknown>
+    let unknownGetterCalls = 0
+    Object.defineProperty(requirements, 'hostile-extra', {
+      enumerable: true,
+      get() {
+        unknownGetterCalls += 1
+        return true
+      },
+    })
+    Object.defineProperty(requirements, Symbol('hostile-symbol'), {
+      enumerable: true,
+      get() {
+        unknownGetterCalls += 1
+        return true
+      },
+    })
+
+    expect(decodeTaskPlanRevisionV1({ ...expected, requirements })).toEqual({ ok: true, value: expected })
+    expect(unknownGetterCalls).toBe(0)
+  })
+
+  it('does not scan or copy an oversized unknown typed-object field name', () => {
     const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
     const oversizedKey = 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes + 1)
     Object.defineProperty(input, oversizedKey, {
@@ -306,11 +363,18 @@ describe('TaskPlan v1 codec', () => {
       value: true,
     })
 
-    expect(decodeTaskPlanRevisionV1(input)).toEqual({
-      ok: false,
-      errors: [{ code: 'document_too_large', path: '$' }],
-      overflow: false,
+    const originalCharCodeAt = String.prototype.charCodeAt
+    let oversizedScans = 0
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt').mockImplementation(function (index) {
+      if (String(this) === oversizedKey) oversizedScans += 1
+      return originalCharCodeAt.call(this, index)
     })
+    try {
+      expect(decodeTaskPlanRevisionV1(input)).toEqual({ ok: true, value: revision() })
+      expect(oversizedScans).toBe(0)
+    } finally {
+      charCodeAt.mockRestore()
+    }
   })
 
   it('rejects a many-times-over-budget text value before Unicode and whitespace validation', () => {
@@ -341,27 +405,7 @@ describe('TaskPlan v1 codec', () => {
     expect(oversizedScans).toBe(0)
   })
 
-  it.each([
-    ['cumulative ASCII keys', ['x'.repeat(600_000), 'y'.repeat(600_000)]],
-    ['one multibyte key', ['界'.repeat(Math.floor(TASK_PLAN_LIMITS.maxDocumentBytes / 3) + 1)]],
-  ])('counts %s by UTF-8 bytes against the aggregate document budget', (_label, keys) => {
-    const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
-    for (const key of keys) {
-      Object.defineProperty(input, key, {
-        enumerable: true,
-        configurable: true,
-        value: true,
-      })
-    }
-
-    expect(decodeTaskPlanRevisionV1(input)).toEqual({
-      ok: false,
-      errors: [{ code: 'document_too_large', path: '$' }],
-      overflow: false,
-    })
-  })
-
-  it('does not invoke an accessor after an oversized property name exhausts the budget', () => {
+  it('does not invoke an unknown typed-object accessor regardless of its property-name size', () => {
     const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
     let getterCalls = 0
     Object.defineProperty(input, 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes + 1), {
@@ -373,10 +417,7 @@ describe('TaskPlan v1 codec', () => {
       },
     })
 
-    expect(decodeTaskPlanRevisionV1(input)).toMatchObject({
-      ok: false,
-      errors: [{ code: 'document_too_large', path: '$' }],
-    })
+    expect(decodeTaskPlanRevisionV1(input)).toEqual({ ok: true, value: revision() })
     expect(getterCalls).toBe(0)
   })
 
@@ -389,7 +430,7 @@ describe('TaskPlan v1 codec', () => {
       value: true,
     })
 
-    const decoded = decodeTaskPlanRevisionV1(input)
+    const decoded = decodeTaskPlanRevisionV1(JSON.stringify(input))
     expect(decoded.ok).toBe(false)
     if (decoded.ok) return
     expect(decoded.errors).toContainEqual({
@@ -688,7 +729,6 @@ describe('TaskPlan v1 validation and read projection', () => {
 
   it.each([
     ['future schema', { ...revision(), schema_version: 'task-plan/v2' } as TaskPlanRevisionV1, '$.schema_version', 'enum_invalid'],
-    ['unknown field', { ...revision(), unexpected: true } as TaskPlanRevisionV1, '$.unexpected', 'unknown_field'],
     ['invalid identifier', revision({ revision_id: '../escape' }), '$.revision_id', 'identifier_invalid'],
     ['non-NFC identifier', revision({ revision_id: 'revision-a\u0308' }), '$.revision_id', 'identifier_invalid'],
     ['invalid status', revision({ status: 'future' as TaskPlanRevisionV1['status'] }), '$.status', 'enum_invalid'],
@@ -738,7 +778,17 @@ describe('TaskPlan v1 validation and read projection', () => {
       .toThrow(`TaskPlan revision cannot be projected at ${path}`)
   })
 
-  it('rejects nested unknown fields without copying them into the stable read DTO', () => {
+  it('keeps typed-object metadata outside validation and the stable read DTO', () => {
+    const input = { ...revision(), unexpected: true } as TaskPlanRevisionV1 & { unexpected: boolean }
+    const validation = validateTaskPlanRevisionV1(input)
+    const readModel = toTaskPlanReadModelV1(input, { state: 'current' })
+
+    expect(validation.valid).toBe(true)
+    expect(validation.freezable).toBe(true)
+    expect(readModel).not.toHaveProperty('unexpected')
+  })
+
+  it('does not copy nested typed-object metadata into the stable read DTO', () => {
     const input = revision({
       work_items: revision().work_items.map((item, index) => index === 0
         ? { ...item, private_payload: 'leaked' }
@@ -746,15 +796,9 @@ describe('TaskPlan v1 validation and read projection', () => {
     })
 
     const validation = validateTaskPlanRevisionV1(input)
-    expect(validation).toMatchObject({ valid: false, freezable: false })
-    expect(validation.issues).toContainEqual({
-      severity: 'error',
-      code: 'task-plan-contract-invalid',
-      path: '$.work_items[0].private_payload',
-      related_ids: ['unknown_field'],
-    })
-    expect(() => toTaskPlanReadModelV1(input, { state: 'current' }))
-      .toThrow('TaskPlan revision cannot be projected at $.work_items[0].private_payload')
+    expect(validation).toMatchObject({ valid: true, freezable: true })
+    const readModel = toTaskPlanReadModelV1(input, { state: 'current' })
+    expect(readModel.items[0]).not.toHaveProperty('private_payload')
   })
 
   it.each([
@@ -960,7 +1004,7 @@ describe('TaskPlan v1 validation and read projection', () => {
       output_ids: ['unknown-output'],
       command: 'rm -rf .',
     }]
-    const decoded = decodeTaskPlanRevisionV1(raw)
+    const decoded = decodeTaskPlanRevisionV1(JSON.stringify(raw))
     expect(decoded.ok).toBe(false)
     if (decoded.ok) throw new Error('expected decode failure')
     expect(decoded.errors.map((error) => error.code)).toEqual(expect.arrayContaining(['enum_invalid', 'unknown_field']))

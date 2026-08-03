@@ -72,3 +72,14 @@ design-doc: docs/superpowers/specs/2026-08-03-task-plan-contract-design.md
 4. 运行 store/TaskPlan/receipt/server 聚焦测试、`npm test -- --minWorkers=4 --maxWorkers=4`、kernel/server TypeScript、architecture、OpenSpec strict、bundle freshness；重新生成 server bundle 并完成独立 pre-Verify review。
 
 回滚：删除本子阶段实现会重新暴露“本次成功、下次永久失败”的历史预算状态，因此只允许整体回退到本 Change 前，不得保留未预计 target 的半修复 store。
+
+**此处建议 /clear**
+
+## 子阶段 7：object/JSON hostile-input 边界收敛
+
+1. 在 `packages/kernel/src/task-plan/task-plan.test.ts` 先增加 RED：131k+ 普通键与 Proxy `ownKeys` trap 的 typed object 不得触发 `Reflect.ownKeys`、`Object.keys` 或 `for...in` 对根/嵌套 record；额外 string/symbol/non-enumerable/accessor 均不读取、不复制。相同未知字段放入 byte-bounded JSON 时仍返回精确 `unknown_field`。
+2. 在 `packages/kernel/src/task-plan/codec.ts` 为 JSON parse 结果与 direct object 建立显式 source mode。JSON mode 在原始 byte gate 后保留严格 closed enumeration；object mode 的每种 record 只读取固定 allowed descriptors，array 只读取有上限的 `length` 与 dense indices，schema-owned accessor 失败关闭。
+3. 更新 validator/read-model/store 回归：typed extras 不进入 DTO/持久 JSON，已知字段 getter 零执行，Proxy descriptor trap 数受 schema 上限约束；canonical store 的 fatal UTF-8、raw identity、历史预算和零写入语义不漂移。
+4. 运行 TaskPlan/store/server/receipt 聚焦套件、`npm test -- --minWorkers=4 --maxWorkers=4`、Dashboard、build、architecture、comments、OpenSpec strict、docs/hygiene 与正式 bundle；完成独立 pre-Verify 全量审查后再冻结新 SHA。
+
+回滚：object mode 只改变额外 JavaScript metadata 的处理，不改变 canonical JSON 字节、TaskPlan DTO 或持久格式；若调用方需要 closed diagnostics，改走现有 JSON 输入即可。

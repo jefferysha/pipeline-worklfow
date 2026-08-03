@@ -26,5 +26,6 @@
 - revision store 的公开上限为单 revision 1,048,577 bytes、目录 256 entries、256 次 revision-like read、累计 16,777,216 bytes；若 target 尚不存在，必须先把它的 entry/read/实际 bytes 加入预算再写 immutable。target 导致越界是 typed conflict，已有历史越界或损坏是 typed corrupt，二者均保持 current 与 target 零进展。
 - 逐字节相同的 current 重试仅用于 projection 恢复，不是 lineage 校验旁路；所有 publish 调用必须先验证 committed history，再决定发布或重建投影。
 - read-model projection 是无副作用纯转换，不冻结或改写调用方输入；所有稳定排序使用 locale-independent ordinal comparator。
+- 不可信闭集输入只接受先受 1,048,577-byte 上限保护的 JSON；JSON parse 后的 key 总量天然受原始字节约束，允许严格拒绝未知字段。直接 typed object 兼容面不得枚举 own keys，而应只读取各层固定 allow-list 的 enumerable own data descriptors 与有上限的数组索引；额外 string/symbol/non-enumerable 属性不读取、不复制，也不进入输出。已知字段 accessor 失败关闭，Proxy descriptor trap 调用次数受 schema/array 上限约束。
 - AFK/互动/授权不进入 WorkItem；后续按 frozen TaskPlan + policy + evidence 求交。
 - receipt discovery 与 `max_output_tokens` 行为作为既有 `codex-skill-receipt-current-turn` Modified Capability 登记并补完整 reconcile 回归，门禁和文件身份约束保持不变。

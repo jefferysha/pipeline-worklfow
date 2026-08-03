@@ -35563,6 +35563,12 @@ var DEFAULT_DISCOVERY_LIMITS = {
   maxEntries: MAX_DISCOVERY_ENTRIES,
   maxTranscripts: MAX_DISCOVERED_TRANSCRIPTS
 };
+function compareHostTranscriptsNewestFirst(left, right) {
+  if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1;
+  if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1;
+  if (left.path === right.path) return 0;
+  return left.path < right.path ? -1 : 1;
+}
 async function inspectHostTranscript(physicalRoot, candidate) {
   try {
     const info = await lstat20(candidate, { bigint: true });
@@ -35637,11 +35643,7 @@ async function recentHostTranscripts(sessionsRoot, limits = DEFAULT_DISCOVERY_LI
   if (emptyModifiedAt.some((modifiedAt) => modifiedAt >= newestReadable)) return void 0;
   let remaining = MAX_TOTAL_BYTES;
   const selected = [];
-  for (const transcript of discovered.sort((left, right) => {
-    if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1;
-    if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1;
-    return left.path.localeCompare(right.path);
-  })) {
+  for (const transcript of discovered.sort(compareHostTranscriptsNewestFirst)) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break;
     selected.push(transcript);
     remaining -= transcript.size;

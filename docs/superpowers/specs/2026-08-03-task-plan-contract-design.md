@@ -27,6 +27,21 @@ Each WorkItem has exact `requirement_refs`, `acceptance_refs`, `depends_on`, nor
 8. Validation is bounded, read-once, recursively frozen, and returns stable sorted issues with `severity/code/path/related_ids`.
    Projection freezes only DTO-owned copies and never changes caller-owned inputs; deterministic ordering uses locale-independent ordinal comparison.
 
+## Input trust boundary
+
+Raw JSON is the only untrusted closed-schema input. Its UTF-8 bytes are rejected before `JSON.parse`
+when they exceed the revision limit; therefore every parsed key and node is already bounded by the
+accepted source bytes, and strict unknown-field diagnostics remain safe.
+
+Direct JavaScript object input is a typed compatibility surface, not a proof that arbitrary object
+metadata is absent. ECMAScript exposes no incremental own-key API: `Reflect.ownKeys`, `Object.keys`,
+and `for...in` all obtain the complete `[[OwnPropertyKeys]]` list before a caller can stop. The codec
+therefore reads only the finite schema allow-list via own enumerable data descriptors and bounded
+array indices. Extra string, symbol, and non-enumerable properties are never read or copied into the
+canonical DTO. Accessors on schema-owned fields fail closed; Proxy descriptor operations are bounded
+by the fixed schema and collection limits. Callers that require extras to be diagnosed as unknown
+fields MUST submit byte-bounded JSON instead.
+
 ## Persistence and projection
 
 Under one Change lock, publish an immutable revision file with no-replace semantics, then atomically replace `current.json` as the commit point. Afterwards rebuild `tasks.md` as a compatibility projection carrying revision/digest markers. Projection failure is explicit `pending/drift`; a valid current plan never falls back to hand-edited Markdown.
@@ -54,6 +69,8 @@ The transcript discovery repair aligns valid transcript count with the existing 
 - Bidirectional JSON/Markdown editing: no cross-file transaction and inevitable drift.
 - Inferring legacy dependencies or coverage from prose: fabricated evidence.
 - Arbitrary command validators: TaskPlan is description, not execution authority.
+- Enumerating arbitrary object keys before applying the node budget: impossible to bound in portable
+  ECMAScript because every standard enumeration path first obtains the full own-key list.
 
 ## Assumptions / Decision Log
 
@@ -64,10 +81,12 @@ The transcript discovery repair aligns valid transcript count with the existing 
 - Decision: legacy display IDs are non-canonical and non-schedulable.
 - Decision: transcript fix gets an end-to-end reconcile regression in addition to discovery-helper coverage.
 - Decision: proposed revision resources count before publication, so a successful publish cannot create a state that the next publish must reject solely because the prior target crossed a store budget.
+- Decision: closed-schema rejection belongs to byte-bounded JSON; direct typed objects use a bounded
+  schema-directed snapshot and discard all non-schema JavaScript metadata.
 
 ## Verification matrix
 
-Tests cover closed/future schema, budgets and hostile objects, round-trip/freeze, identity stability, ownership/tree errors, dependency cycles, full coverage, resource normalization/conflict, outputs/validators, immutable publication/current CAS/projection recovery, exact-cap target accounting, idempotent lineage validation, zero-write budget rejection, legacy no-inference, and 129+ transcript end-to-end reconciliation.
+Tests cover JSON closed/future schema, schema-directed hostile typed objects without own-key enumeration, budgets, round-trip/freeze, identity stability, ownership/tree errors, dependency cycles, full coverage, resource normalization/conflict, outputs/validators, immutable publication/current CAS/projection recovery, exact-cap target accounting, idempotent lineage validation, zero-write budget rejection, legacy no-inference, and 129+ transcript end-to-end reconciliation.
 
 ```coverage
 touches: kernel-data, api-boundary, filesystem-trust, skill-provenance

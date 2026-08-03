@@ -28,6 +28,7 @@ import {
 
 interface Collector {
   readonly errors: TaskPlanCodecError[]
+  readonly source: 'json' | 'object'
   overflow: boolean
   decodeNodes: number
   textBytes: number
@@ -60,7 +61,12 @@ function consumeBudget(collector: Collector, nodes: number, bytes: number, path:
   return true
 }
 
-function record(value: unknown, path: string, collector: Collector): Record<string, unknown> | undefined {
+function record(
+  value: unknown,
+  path: string,
+  collector: Collector,
+  allowed: readonly string[],
+): Record<string, unknown> | undefined {
   try {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       error(collector, 'object_invalid', path)
@@ -72,15 +78,18 @@ function record(value: unknown, path: string, collector: Collector): Record<stri
       return undefined
     }
     const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>
-    const keys = Reflect.ownKeys(value)
-    if (!consumeBudget(collector, keys.length + 1, 0, path)) return undefined
+    if (!consumeBudget(collector, 1, 0, path)) return undefined
+    // JSON keys are safe to enumerate only after the raw source passed maxRevisionBytes. Direct
+    // objects have no portable incremental own-key API, so inspect only the finite schema allow-list.
+    const keys: readonly PropertyKey[] = collector.source === 'json' ? Reflect.ownKeys(value) : allowed
     for (const key of keys) {
       if (typeof key !== 'string') {
         error(collector, 'object_invalid', path)
         return undefined
       }
-      // Object input bypasses JSON parsing, so its field names must consume the same document
-      // budget before we copy descriptor values or echo a hostile key into a diagnostic path.
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)
+      if (descriptor === undefined && collector.source === 'object') continue
+      if (!consumeBudget(collector, 1, 0, path)) return undefined
       const remainingBytes = TASK_PLAN_LIMITS.maxDocumentBytes - collector.textBytes
       const keyBytes = byteLengthWithin(key, remainingBytes)
       if (keyBytes === undefined) {
@@ -88,7 +97,6 @@ function record(value: unknown, path: string, collector: Collector): Record<stri
         return undefined
       }
       if (!consumeBudget(collector, 0, keyBytes, path)) return undefined
-      const descriptor = Object.getOwnPropertyDescriptor(value, key)
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
         error(collector, 'object_invalid', path)
         return undefined
@@ -142,10 +150,12 @@ function array(value: unknown, path: string, limit: number, collector: Collector
       return undefined
     }
     if (!consumeBudget(collector, length + 1, 0, path)) return undefined
-    const keys = Reflect.ownKeys(value)
-    if (keys.length !== length + 1 || keys.some((key) => typeof key !== 'string')) {
-      error(collector, 'array_invalid', path)
-      return undefined
+    if (collector.source === 'json') {
+      const keys = Reflect.ownKeys(value)
+      if (keys.length !== length + 1 || keys.some((key) => typeof key !== 'string')) {
+        error(collector, 'array_invalid', path)
+        return undefined
+      }
     }
     const result: unknown[] = []
     for (let index = 0; index < length; index += 1) {
@@ -248,9 +258,10 @@ function catalog(value: unknown, path: string, collector: Collector): readonly T
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
+    const allowed = ['id', 'title'] as const
+    const raw = record(entry, itemPath, collector, allowed)
     if (raw === undefined) return []
-    closed(raw, ['id', 'title'], itemPath, collector)
+    closed(raw, allowed, itemPath, collector)
     const id = identifier(raw.id, `${itemPath}.id`, collector)
     const title = text(raw.title, `${itemPath}.title`, collector)
     return id === undefined || title === undefined ? [] : [{ id, title }]
@@ -263,9 +274,10 @@ function groups(value: unknown, collector: Collector): readonly TaskGroupV1[] {
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
+    const allowed = ['id', 'title', 'parent_id', 'work_item_ids'] as const
+    const raw = record(entry, itemPath, collector, allowed)
     if (raw === undefined) return []
-    closed(raw, ['id', 'title', 'parent_id', 'work_item_ids'], itemPath, collector)
+    closed(raw, allowed, itemPath, collector)
     const id = identifier(raw.id, `${itemPath}.id`, collector)
     const title = text(raw.title, `${itemPath}.title`, collector)
     const parent = raw.parent_id === null ? null : identifier(raw.parent_id, `${itemPath}.parent_id`, collector)
@@ -286,9 +298,10 @@ function resourceClaims(value: unknown, path: string, collector: Collector): rea
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
+    const allowed = ['kind', 'access', 'key'] as const
+    const raw = record(entry, itemPath, collector, allowed)
     if (raw === undefined) return []
-    closed(raw, ['kind', 'access', 'key'], itemPath, collector)
+    closed(raw, allowed, itemPath, collector)
     const kind = enumValue(raw.kind, RESOURCE_KINDS, `${itemPath}.kind`, collector)
     const access = enumValue(raw.access, RESOURCE_ACCESS, `${itemPath}.access`, collector)
     const key = text(raw.key, `${itemPath}.key`, collector, TASK_PLAN_LIMITS.maxResourceBytes)
@@ -305,9 +318,10 @@ function outputs(value: unknown, path: string, collector: Collector): readonly E
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
+    const allowed = ['id', 'kind', 'ref'] as const
+    const raw = record(entry, itemPath, collector, allowed)
     if (raw === undefined) return []
-    closed(raw, ['id', 'kind', 'ref'], itemPath, collector)
+    closed(raw, allowed, itemPath, collector)
     const id = identifier(raw.id, `${itemPath}.id`, collector)
     const kind = enumValue(raw.kind, OUTPUT_KINDS, `${itemPath}.kind`, collector)
     const ref = text(raw.ref, `${itemPath}.ref`, collector, TASK_PLAN_LIMITS.maxResourceBytes)
@@ -324,9 +338,10 @@ function validators(value: unknown, path: string, collector: Collector): readonl
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
+    const allowed = ['id', 'kind', 'version', 'output_ids'] as const
+    const raw = record(entry, itemPath, collector, allowed)
     if (raw === undefined) return []
-    closed(raw, ['id', 'kind', 'version', 'output_ids'], itemPath, collector)
+    closed(raw, allowed, itemPath, collector)
     const id = identifier(raw.id, `${itemPath}.id`, collector)
     const kind = enumValue(raw.kind, VALIDATOR_KINDS, `${itemPath}.kind`, collector)
     if (raw.version !== 1) error(collector, typeof raw.version === 'number' ? 'enum_invalid' : 'field_type', `${itemPath}.version`)
@@ -341,12 +356,13 @@ function workItems(value: unknown, collector: Collector): readonly WorkItemV1[] 
   if (values === undefined) return []
   return values.flatMap((entry, index) => {
     const itemPath = `${path}[${index}]`
-    const raw = record(entry, itemPath, collector)
-    if (raw === undefined) return []
-    closed(raw, [
+    const allowed = [
       'id', 'title', 'description', 'group_id', 'requirement_refs', 'acceptance_refs', 'depends_on',
       'resource_claims', 'expected_outputs', 'validators',
-    ], itemPath, collector)
+    ] as const
+    const raw = record(entry, itemPath, collector, allowed)
+    if (raw === undefined) return []
+    closed(raw, allowed, itemPath, collector)
     const id = identifier(raw.id, `${itemPath}.id`, collector)
     const title = text(raw.title, `${itemPath}.title`, collector)
     const description = raw.description === undefined ? undefined : text(raw.description, `${itemPath}.description`, collector)
@@ -373,12 +389,13 @@ function duplicateIds(value: TaskPlanRevisionV1, collector: Collector): void {
 }
 
 function decodeUnknown(input: unknown, collector: Collector): TaskPlanRevisionV1 | undefined {
-  const raw = record(input, '$', collector)
-  if (raw === undefined) return undefined
-  closed(raw, [
+  const allowed = [
     'schema_version', 'plan_id', 'revision_id', 'revision_number', 'status', 'created_at',
     'requirements', 'acceptance_criteria', 'groups', 'work_items',
-  ], '$', collector)
+  ] as const
+  const raw = record(input, '$', collector, allowed)
+  if (raw === undefined) return undefined
+  closed(raw, allowed, '$', collector)
   if (raw.schema_version !== TASK_PLAN_SCHEMA_VERSION) {
     error(collector, typeof raw.schema_version === 'string' ? 'enum_invalid' : 'field_type', '$.schema_version')
   }
@@ -413,8 +430,9 @@ function decodeUnknown(input: unknown, collector: Collector): TaskPlanRevisionV1
 }
 
 export function decodeTaskPlanRevisionAttemptV1(input: string | unknown): TaskPlanDecodeAttemptV1 {
+  const source = typeof input === 'string' ? 'json' : 'object'
   const collector: Collector = {
-    errors: [], overflow: false, decodeNodes: 0, textBytes: 0, budgetExceeded: false,
+    errors: [], source, overflow: false, decodeNodes: 0, textBytes: 0, budgetExceeded: false,
   }
   let candidate = input
   if (typeof input === 'string') {

@@ -780,7 +780,7 @@ function consumeBudget(collector, nodes, bytes, path7) {
   }
   return true;
 }
-function record(value, path7, collector) {
+function record(value, path7, collector, allowed) {
   try {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       error(collector, "object_invalid", path7);
@@ -792,14 +792,19 @@ function record(value, path7, collector) {
       return void 0;
     }
     const result = /* @__PURE__ */ Object.create(null);
-    const keys = Reflect.ownKeys(value);
-    if (!consumeBudget(collector, keys.length + 1, 0, path7))
+    if (!consumeBudget(collector, 1, 0, path7))
       return void 0;
+    const keys = collector.source === "json" ? Reflect.ownKeys(value) : allowed;
     for (const key of keys) {
       if (typeof key !== "string") {
         error(collector, "object_invalid", path7);
         return void 0;
       }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === void 0 && collector.source === "object")
+        continue;
+      if (!consumeBudget(collector, 1, 0, path7))
+        return void 0;
       const remainingBytes = TASK_PLAN_LIMITS.maxDocumentBytes - collector.textBytes;
       const keyBytes = byteLengthWithin(key, remainingBytes);
       if (keyBytes === void 0) {
@@ -808,7 +813,6 @@ function record(value, path7, collector) {
       }
       if (!consumeBudget(collector, 0, keyBytes, path7))
         return void 0;
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
         error(collector, "object_invalid", path7);
         return void 0;
@@ -854,10 +858,12 @@ function array(value, path7, limit, collector) {
     }
     if (!consumeBudget(collector, length + 1, 0, path7))
       return void 0;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== length + 1 || keys.some((key) => typeof key !== "string")) {
-      error(collector, "array_invalid", path7);
-      return void 0;
+    if (collector.source === "json") {
+      const keys = Reflect.ownKeys(value);
+      if (keys.length !== length + 1 || keys.some((key) => typeof key !== "string")) {
+        error(collector, "array_invalid", path7);
+        return void 0;
+      }
     }
     const result = [];
     for (let index = 0; index < length; index += 1) {
@@ -941,10 +947,11 @@ function catalog(value, path7, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
+    const allowed = ["id", "title"];
+    const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
       return [];
-    closed(raw, ["id", "title"], itemPath, collector);
+    closed(raw, allowed, itemPath, collector);
     const id = identifier(raw.id, `${itemPath}.id`, collector);
     const title = text(raw.title, `${itemPath}.title`, collector);
     return id === void 0 || title === void 0 ? [] : [{ id, title }];
@@ -957,10 +964,11 @@ function groups(value, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
+    const allowed = ["id", "title", "parent_id", "work_item_ids"];
+    const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
       return [];
-    closed(raw, ["id", "title", "parent_id", "work_item_ids"], itemPath, collector);
+    closed(raw, allowed, itemPath, collector);
     const id = identifier(raw.id, `${itemPath}.id`, collector);
     const title = text(raw.title, `${itemPath}.title`, collector);
     const parent = raw.parent_id === null ? null : identifier(raw.parent_id, `${itemPath}.parent_id`, collector);
@@ -983,10 +991,11 @@ function resourceClaims(value, path7, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
+    const allowed = ["kind", "access", "key"];
+    const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
       return [];
-    closed(raw, ["kind", "access", "key"], itemPath, collector);
+    closed(raw, allowed, itemPath, collector);
     const kind = enumValue(raw.kind, RESOURCE_KINDS, `${itemPath}.kind`, collector);
     const access = enumValue(raw.access, RESOURCE_ACCESS, `${itemPath}.access`, collector);
     const key = text(raw.key, `${itemPath}.key`, collector, TASK_PLAN_LIMITS.maxResourceBytes);
@@ -1003,10 +1012,11 @@ function outputs(value, path7, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
+    const allowed = ["id", "kind", "ref"];
+    const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
       return [];
-    closed(raw, ["id", "kind", "ref"], itemPath, collector);
+    closed(raw, allowed, itemPath, collector);
     const id = identifier(raw.id, `${itemPath}.id`, collector);
     const kind = enumValue(raw.kind, OUTPUT_KINDS, `${itemPath}.kind`, collector);
     const ref = text(raw.ref, `${itemPath}.ref`, collector, TASK_PLAN_LIMITS.maxResourceBytes);
@@ -1023,10 +1033,11 @@ function validators(value, path7, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
+    const allowed = ["id", "kind", "version", "output_ids"];
+    const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
       return [];
-    closed(raw, ["id", "kind", "version", "output_ids"], itemPath, collector);
+    closed(raw, allowed, itemPath, collector);
     const id = identifier(raw.id, `${itemPath}.id`, collector);
     const kind = enumValue(raw.kind, VALIDATOR_KINDS, `${itemPath}.kind`, collector);
     if (raw.version !== 1)
@@ -1042,10 +1053,7 @@ function workItems(value, collector) {
     return [];
   return values.flatMap((entry, index) => {
     const itemPath = `${path7}[${index}]`;
-    const raw = record(entry, itemPath, collector);
-    if (raw === void 0)
-      return [];
-    closed(raw, [
+    const allowed = [
       "id",
       "title",
       "description",
@@ -1056,7 +1064,11 @@ function workItems(value, collector) {
       "resource_claims",
       "expected_outputs",
       "validators"
-    ], itemPath, collector);
+    ];
+    const raw = record(entry, itemPath, collector, allowed);
+    if (raw === void 0)
+      return [];
+    closed(raw, allowed, itemPath, collector);
     const id = identifier(raw.id, `${itemPath}.id`, collector);
     const title = text(raw.title, `${itemPath}.title`, collector);
     const description = raw.description === void 0 ? void 0 : text(raw.description, `${itemPath}.description`, collector);
@@ -1086,10 +1098,7 @@ function duplicateIds(value, collector) {
   }
 }
 function decodeUnknown(input, collector) {
-  const raw = record(input, "$", collector);
-  if (raw === void 0)
-    return void 0;
-  closed(raw, [
+  const allowed = [
     "schema_version",
     "plan_id",
     "revision_id",
@@ -1100,7 +1109,11 @@ function decodeUnknown(input, collector) {
     "acceptance_criteria",
     "groups",
     "work_items"
-  ], "$", collector);
+  ];
+  const raw = record(input, "$", collector, allowed);
+  if (raw === void 0)
+    return void 0;
+  closed(raw, allowed, "$", collector);
   if (raw.schema_version !== TASK_PLAN_SCHEMA_VERSION) {
     error(collector, typeof raw.schema_version === "string" ? "enum_invalid" : "field_type", "$.schema_version");
   }
@@ -1133,8 +1146,10 @@ function decodeUnknown(input, collector) {
   return result;
 }
 function decodeTaskPlanRevisionAttemptV1(input) {
+  const source = typeof input === "string" ? "json" : "object";
   const collector = {
     errors: [],
+    source,
     overflow: false,
     decodeNodes: 0,
     textBytes: 0,

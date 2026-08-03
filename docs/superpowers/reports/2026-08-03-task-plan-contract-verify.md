@@ -672,3 +672,76 @@ FAIL。第 11 轮确认的 canonical 非法 UTF-8 与未知字段名预算/诊�
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail`；按持续授权 delegated acknowledge 后回 Build。以 TDD 先证明 oversized hostile strings 在常数/预算上界内拒绝，再实现 bounded counter/前置拒绝、重建正式生成物、完成独立 pre-Verify review，并从零执行第 13 轮三轨。
+
+---
+
+# 第 14 轮 Verify（冻结基线 `507317153478a07343d4e1b9af1d9074a7f97828`）
+
+## 结论
+
+FAIL。第 13 轮发现的 terminal lone high surrogate 已由显式终点检查修复，Reviewer 与 E2E 均通过；但原生 Codex CLI 完整冻结审查发现 1 个新的 P2/MEDIUM：object-form decoder 在预算判断前以 `Reflect.ownKeys(value)` 物化全部 own keys，任意多属性 hostile object 可先消耗无界 CPU/内存。该问题违反冻结的 bounded hostile-input 契约，必须回 Build 修复并从零重跑三轨。
+
+## 冻结身份与三轨结果
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`；frozen SHA/tree：`507317153478a07343d4e1b9af1d9074a7f97828` / `907b775759ce94f9526e24793bb322628a49b419`。
+- Reviewer：PASS，C0/H0/M0/L1。逐文件审查 317 paths；focused 298/298、全仓 337 files / 6096 passed / 26 honest skipped、Dashboard 87 files / 1633 passed、OpenSpec strict 37/37、archive rehearsal与 bundle 27/27 均通过。唯一 LOW 为同纳秒 transcript 候选用 locale-sensitive path tie-break，只可能 honest false-negative。证据根 `/tmp/tenon-pr1-r14v-track1.g7k2KQ/`。
+- E2E：PASS，C0/H0/M0/L0。TaskPlan 122/122、atomic publish 3/3、route 10/10、receipt 163/163、stable hook 3/3；focused 29+20+46 全通过；terminal surrogate 全字段 object/JSON 116/116；真实 codec→store→filesystem→HTTP、非法 UTF-8、历史预算/namespace、129+ receipt 与 OpenSpec archive rehearsal 全通过。证据根 `/tmp/tenon-pr1-verify14.1T6B8P/`。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached read-only clone `/tmp/tenon-pr1-codex-r14.gcdi4c/repo` 对 exact frozen SHA/base 执行 `codex exec --sandbox read-only --ephemeral review --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。其自发 `npx` 测试因只读沙箱代理网络 EPERM 失败，不替代前两轨正式测试；启动期 logs DB/models cache 警告未阻止最终 review。
+
+## 确认 finding
+
+### MEDIUM — object key 枚举在节点预算拒绝前无界物化
+
+`packages/kernel/src/task-plan/codec.ts` 的 `record()` 先执行 `Reflect.ownKeys(value)`，随后才以 `keys.length + 1` 调用 `consumeBudget()`。因此即使最终稳定返回 `document_too_large`，具有远超 `maxDecodeNodes` own properties 的公开 object-form 输入已经让 runtime 枚举并分配全部 key array；节点预算不能约束拒绝前的 CPU/内存工作。
+
+修复要求：以不会先物化全部键的有界枚举策略在预算上限处停止，或在公共 object-form 边界采用等价的前置有界表示；保持 symbol/accessor/Proxy 失败关闭、getter 零执行、普通闭集与 unknown-field 精确诊断，并新增大于节点预算的真实对象回归，证明不会调用 `Reflect.ownKeys` 且结果有界。
+
+## Receipt bridge 结论与未完成通过门
+
+- PR1 首次登记确属 receipt bridge false-negative bug；129+ transcript discovery 与正安全整数字面量 `max_output_tokens` 完成态回归、真实 current-host 官方登记及截断/伪造/ABI 错配对照在本轮均保持通过。
+- 本轮 Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，不得复用 Reviewer/E2E 的通过证据抵消原生 Codex finding。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail`；按持续授权 delegated acknowledge 后回 Build。先写键数超限且禁止 `Reflect.ownKeys` 的 RED 回归，再实现 bounded enumeration、构建正式生成物、完成独立 pre-Verify review，并从零执行第 15 轮三轨。
+
+---
+
+# 第 15 轮 pre-Verify（requirements-changed）
+
+## 结论
+
+FAIL，C0/H0/M2/L1，不设置 `pre_verify_review_result=pass`。Round14 finding 的首个修复用 `for...in` 代替显式 `Reflect.ownKeys/Object.keys` 并在 yield 后计数；全量测试虽绿，但独立 Reviewer 证明它没有满足拒绝前预算，且改变了 symbol/non-enumerable 闭集语义。主轨已执行官方 `requirements-changed` 从 Build 回到 Spec，重新冻结可实现的 object/JSON trust boundary。
+
+## 确认 findings
+
+1. MEDIUM：ECMAScript `for...in` 在逐项 yield 前仍经内部 `[[OwnPropertyKeys]]` 获得完整 key list。131k+ Proxy harness 观察到一次性交付全部 keys，随后才在 65,536 次 descriptor 处理预算处停止；`enumeratedKeys` 与 spy=0 只约束后续工作，未闭环前置物化。
+2. MEDIUM：`for...in` 忽略 symbol 与 non-enumerable own properties，object/array harness 均从原先失败关闭变为 `ok:true`；这与本轮修复前的 frozen closed-schema 语义冲突。
+3. LOW：同纳秒 transcript 候选仍以 locale-sensitive path tie-break，只可能造成 honest false-negative。
+
+## 独立证据
+
+- 完整映射 338 files；focused 7 files / 299 passed；全仓 337 files / 6097 passed / 26 honest skipped。
+- build、architecture、comments、OpenSpec strict 37/37、docs、hygiene、default freshness、hermetic bundle 27/27 均通过；绿色测试不能抵消上述语义缺陷。
+- Reviewer 对真实 worktree 零写入，最终稳定 status/diff/index/content 指纹前后一致。证据根：`/tmp/tenon-pr1-r15-preverify-track1.vm1jsE/`。
+
+## Spec 修订方向
+
+不可信 closed-schema 输入只走先受原始 UTF-8 byte gate 保护的 JSON；parsed key 数天然受 source bytes 约束，可以安全保留严格 unknown-field 拒绝。Direct typed object 不枚举任意 own keys，只读取固定 schema allow-list 的 enumerable own data descriptors和有上限数组索引；额外 string/symbol/non-enumerable/accessor 不读取、不复制。需要额外属性诊断的调用方必须提交 byte-bounded JSON。
+
+---
+
+# 第 16/17 轮 pre-Verify（最终 Build 收敛）
+
+## 结论
+
+PASS，最终 C0/H0/M0/L0。第 16 轮全量独立审查首先确认 TaskPlan 的 JSON closed mode 与 direct object schema-directed mode 已正确分离，C0/H0/M0；同时识别一个 LOW：mtimeNs/ctimeNs 完全相同的 transcript 用 locale-sensitive path tie-break，仍可能诚实漏掉 newest-32 中的有效当前 receipt。该 LOW 与本 Change 修复的 false-negative 属于同类，未作为剩余风险接受。
+
+主轨按 TDD 先以强制 `localeCompare` 返回相等的回归证明不确定排序，再改为 `(mtimeNs desc, ctimeNs desc, path UTF-16 code-unit asc)` 的确定性全序并重建 CLI。第 17 轮重新审查完整待冻结 diff，确认原 LOW 消除且无新 finding。
+
+## 独立证据
+
+- Round16：C0/H0/M0/L1；完整候选 347 files，精确候选与合并 `origin/main` 后 focused suites 均 298/298；证据根 `/tmp/tenon-pr1-r16-preverify-track1.wyeaCw/`。
+- Round17：C0/H0/M0/L0；完整候选仍为 347 files，TaskPlan、receipt bridge、正式生成物与 origin/main 合并兼容重新审查；精确快照与合并态 focused suites 均 299/299；证据根 `/tmp/tenon-pr1-r17-preverify.7lULdI/`。
+- 主轨 fresh full suite：337 files / 6097 passed / 26 honest skipped；Dashboard：87 files / 1633 passed；build、architecture、comments、OpenSpec strict 37/37、docs、repository hygiene、default workflow freshness 与 hook 512/512 全通过。
+- receipt 专项保持 exact session/turn/worktree/ABI/inode/mtime/ctime 与 nested `exit_code=0` 约束；129+ transcript、完整/截断 `max_output_tokens` 双 ABI、equal-timestamp Unicode path tie 均有正反回归。两轮 reviewer 对真实 worktree 前后指纹一致，所有构建与探针在 `/tmp` 隔离快照完成。

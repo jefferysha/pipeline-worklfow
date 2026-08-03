@@ -11,10 +11,20 @@
 - **WHEN** 同一 revision lineage 中的 WorkItem 仅调整标题、顺序或所属展示组
 - **THEN** WorkItem ID 保持不变且 codec round-trip 深等价
 
-#### Scenario: 非法或未来契约失败关闭
+#### Scenario: 不可信 JSON 的非法或未来契约失败关闭
 
-- **WHEN** 输入包含未知字段、未来 schema、重复 ID、控制字符或超过预算的数据
+- **WHEN** 有原始字节上限的不可信 JSON 输入包含未知字段、未来 schema、重复 ID、控制字符或超过预算的数据
 - **THEN** decoder 返回有界结构化错误且不生成任何新 ID
+
+#### Scenario: typed object 按 schema 有界快照
+
+- **WHEN** 调用方直接传入 typed JavaScript object，且该对象同时携带大量额外 string、symbol、non-enumerable 属性或未知 accessor
+- **THEN** decoder/validator/read-model 只按固定 allow-list 读取 enumerable own data descriptors 与有上限的数组索引，不调用 own-key enumeration，不读取或复制额外属性；schema-owned accessor 或非法已知字段仍失败关闭
+
+#### Scenario: 额外属性需要闭集诊断
+
+- **WHEN** 调用方要求额外属性产生 `unknown_field` 诊断
+- **THEN** 调用方必须提交受原始 UTF-8 byte 上限约束的 JSON，系统不得通过枚举任意 typed object 的全部 own keys 来证明闭集
 
 #### Scenario: revision lineage 身份不复用
 

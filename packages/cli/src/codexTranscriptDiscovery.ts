@@ -31,6 +31,16 @@ export interface HostTranscriptCandidate {
   readonly changedAtNs: bigint
 }
 
+export function compareHostTranscriptsNewestFirst(
+  left: HostTranscriptCandidate,
+  right: HostTranscriptCandidate,
+): number {
+  if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1
+  if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1
+  if (left.path === right.path) return 0
+  return left.path < right.path ? -1 : 1
+}
+
 type HostTranscriptInspection =
   | { readonly kind: 'candidate'; readonly candidate: HostTranscriptCandidate }
   | { readonly kind: 'empty'; readonly modifiedAt: number }
@@ -136,11 +146,7 @@ export async function recentHostTranscripts(
 
   let remaining = MAX_TOTAL_BYTES
   const selected: HostTranscriptCandidate[] = []
-  for (const transcript of discovered.sort((left, right) => {
-    if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1
-    if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1
-    return left.path.localeCompare(right.path)
-  })) {
+  for (const transcript of discovered.sort(compareHostTranscriptsNewestFirst)) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break
     selected.push(transcript)
     remaining -= transcript.size

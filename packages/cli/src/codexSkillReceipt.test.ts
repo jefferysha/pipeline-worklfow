@@ -14,7 +14,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryWriter } from '@tenon/kernel'
 import {
   cmdInternalCodexSkillReceipt,
@@ -25,6 +25,7 @@ import { trustedCodexSkillPath } from './codexSkillTrust.js'
 import type { CodexSkillTrustRoots } from './codexSkillTrust.js'
 import { transcriptExecInvocations } from './codexToolProgram.js'
 import {
+  compareHostTranscriptsNewestFirst,
   hostTranscriptUnchanged,
   openVerifiedHostTranscript,
   recentHostTranscripts,
@@ -2423,6 +2424,29 @@ describe('Codex transcript skill receipt', () => {
       maxEntries: 16,
       maxTranscripts: 1,
     })).resolves.toBeUndefined()
+  })
+
+  it('orders equal-timestamp transcript candidates by locale-independent code units', () => {
+    const common = {
+      modifiedAt: 1,
+      size: 1,
+      device: 1n,
+      inode: 1n,
+      modifiedAtNs: 1n,
+      changedAtNs: 1n,
+    }
+    const localeCompare = vi.spyOn(String.prototype, 'localeCompare').mockReturnValue(0)
+    try {
+      const paths = [
+        { ...common, path: '/sessions/ä.jsonl' },
+        { ...common, path: '/sessions/z.jsonl' },
+      ].sort(compareHostTranscriptsNewestFirst).map((candidate) => candidate.path)
+
+      expect(paths).toEqual(['/sessions/z.jsonl', '/sessions/ä.jsonl'])
+      expect(localeCompare).not.toHaveBeenCalled()
+    } finally {
+      localeCompare.mockRestore()
+    }
   })
 
   it('keeps the newest bounded candidates discoverable after more than 128 valid transcripts', async () => {
