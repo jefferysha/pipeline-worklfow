@@ -67,7 +67,7 @@ function revisionRaw(revision: TaskPlanRevisionV1): string {
 
 function canonicalRevisionFileName(revision: TaskPlanRevisionV1): string {
   const planNamespace = createHash('sha256').update(revision.plan_id).digest('hex')
-  return `${String(revision.revision_number).padStart(6, '0')}-${planNamespace}-${revision.revision_id}.json`
+  return `${String(revision.revision_number).padStart(6, '0')}--${planNamespace}--${revision.revision_id}.json`
 }
 
 function maximumPersistedRevision(): TaskPlanRevisionV1 {
@@ -378,6 +378,42 @@ describe('task plan store', () => {
     await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
       plan_id: 'plan-1',
       revision_id: 'shared-revision',
+      revision_number: 2,
+    })
+  })
+
+  it('publishes when a legal foreign legacy id collides with the old single-hyphen namespace shape', async () => {
+    const dir = await changeDir()
+    await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
+    const revisionsDir = join(dir, TASK_PLAN_STATE_DIR, 'revisions')
+    const target = plan({ revision_id: 'target-revision', revision_number: 2 })
+    const targetPlanHash = createHash('sha256').update(target.plan_id).digest('hex')
+    const foreign = plan({
+      plan_id: 'other-plan',
+      revision_id: `${targetPlanHash}-target-revision`,
+      revision_number: 2,
+    })
+    const collidingLegacyPath = join(
+      revisionsDir,
+      `${String(foreign.revision_number).padStart(6, '0')}-${foreign.revision_id}.json`,
+    )
+    const foreignRaw = revisionRaw(foreign)
+    await writeFile(collidingLegacyPath, foreignRaw, 'utf8')
+
+    await expect(publishTaskPlanRevision(
+      dir,
+      target,
+      { expected_current_revision_id: 'revision-1' },
+    )).resolves.toMatchObject({
+      plan_id: 'plan-1',
+      revision_id: 'target-revision',
+      revision_number: 2,
+    })
+
+    expect(await readFile(collidingLegacyPath, 'utf8')).toBe(foreignRaw)
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      plan_id: 'plan-1',
+      revision_id: 'target-revision',
       revision_number: 2,
     })
   })

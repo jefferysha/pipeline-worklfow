@@ -44,7 +44,8 @@ function planNamespace(planId: string): string {
 }
 
 function revisionFileName(revision: TaskPlanRevisionV1): string {
-  return `${revisionNumberPrefix(revision)}-${planNamespace(revision.plan_id)}-${revision.revision_id}.json`
+  // TaskPlan identifiers reject `--`, keeping this address disjoint from legacy `<number>-<id>` files.
+  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`
 }
 
 function legacyRevisionFileName(revision: TaskPlanRevisionV1): string {

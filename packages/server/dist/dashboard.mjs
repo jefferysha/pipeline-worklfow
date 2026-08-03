@@ -7535,7 +7535,7 @@ function planNamespace(planId) {
   return createHash8("sha256").update(planId).digest("hex");
 }
 function revisionFileName3(revision) {
-  return `${revisionNumberPrefix(revision)}-${planNamespace(revision.plan_id)}-${revision.revision_id}.json`;
+  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`;
 }
 function legacyRevisionFileName(revision) {
   return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
