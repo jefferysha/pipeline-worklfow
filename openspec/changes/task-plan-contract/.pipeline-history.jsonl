@@ -170,3 +170,7 @@
 {"ts":"2026-08-03T17:43:32Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-08-03T17:43:32Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
 {"ts":"2026-08-03T17:43:32Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"f2b2aaad-15f3-42ff-91ef-83c3e6cc2449"}
+{"ts":"2026-08-03T17:43:56Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T17:43:56Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:53:58Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T17:44:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T17:44:07Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"305d41dc-cfb6-400c-ab1e-5ef33c61c1c9"}

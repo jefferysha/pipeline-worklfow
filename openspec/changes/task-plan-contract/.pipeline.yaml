@@ -2,14 +2,14 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: verify
-phase_status: pending
+phase: build
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-08-03-task-plan-contract-design.md
 plan: docs/superpowers/plans/2026-08-03-task-plan-contract.md
 verification_report: docs/superpowers/reports/2026-08-03-task-plan-contract-verify.md
 build_mode: subagent-driven-development
 isolation: worktree
-build_sha: 639141ef4b9239123cb5ba488438bab0a6cb8dc1
+build_sha: null
 agent_review_result: pass
 codex_review_result: fail
 verify_result: fail
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-08-03T09:19:49Z
-updated_at: 2026-08-03T17:43:32Z
+updated_at: 2026-08-03T17:44:07Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,10 +39,10 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: b0011d7a-9075-416b-8f89-7d66e61debe2
-pipeline_transition_sequence: 28
-pipeline_transition_head: f2b2aaad-15f3-42ff-91ef-83c3e6cc2449
-pipeline_state_revision: 101
-pipeline_state_revision_id: 9838b4ed-361e-404a-a654-c80b773e080b
-pipeline_state_digest: 6b9f4eb18d3519cb4b1583ac12f04ae5099dc0dcb06c77b1a3429a63837c484a
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTAxLCJyZXZpc2lvbklkIjoiOTgzOGI0ZWQtMzYxZS00MDRhLWE2NTQtYzgwYjc3M2UwODBiIiwicGF5bG9hZERpZ2VzdCI6IjQ4ODIwMGM3MDRlNjRiNDEzYjEwMzc3MTY2N2NhM2M4ZGZlNGI1NjY5MWRhMGU4NjM4OTkzODI1MjA1MTY1M2EifQ
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImIwMDExZDdhLTkwNzUtNDE2Yi04Zjg5LTdkNjZlNjFkZWJlMiIsInNlcXVlbmNlIjoyOCwicmVjb3JkSWQiOiJmMmIyYWFhZC0xNWYzLTQyZmYtOTFlZi04M2MzZTZjYzI0NDkiLCJyZWNvcmREaWdlc3QiOiIwNjg3YTA2OTBjOWIzMTJmOGUyNDIxNzFiYzNjYThhMjA2MTc0NjQ1ZDE2MDIzMzdiNDI5OGU0ZmYxYWI1YTYxIn0
+pipeline_transition_sequence: 29
+pipeline_transition_head: 305d41dc-cfb6-400c-ab1e-5ef33c61c1c9
+pipeline_state_revision: 104
+pipeline_state_revision_id: b6a6e53e-ada1-40bd-8f18-316a20598418
+pipeline_state_digest: 9fd74ee86e3705d6a1587db56a78b247928fffb6709d05af0ca6861adc484fb3
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTA0LCJyZXZpc2lvbklkIjoiYjZhNmU1M2UtYWRhMS00MGJkLThmMTgtMzE2YTIwNTk4NDE4IiwicGF5bG9hZERpZ2VzdCI6IjRkNjM0MWQ5YzFmMmNlNmE0NTdmMGNiNTk5ZjMwYmNlMjJjOWRkZGJkZWY2N2YzNmM2Mzk4ZTE5YzcwZDc0YzMifQ
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImIwMDExZDdhLTkwNzUtNDE2Yi04Zjg5LTdkNjZlNjFkZWJlMiIsInNlcXVlbmNlIjoyOSwicmVjb3JkSWQiOiIzMDVkNDFkYy1jZmI2LTQwMGMtYWIxZS01ZWYzM2M2MWMxYzkiLCJyZWNvcmREaWdlc3QiOiJhMGM1OGY5NjVkOGY0MjIzZGFlMzVhNTg4MDVjZjUyMzBjZTM4OTIyNDE5ZmFmNWJmZjhiNzdlNWYwMTU4MzllIn0
