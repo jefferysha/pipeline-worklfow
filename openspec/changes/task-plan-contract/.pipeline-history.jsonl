@@ -93,3 +93,16 @@
 {"ts":"2026-08-03T13:39:42Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:53:58Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
 {"ts":"2026-08-03T13:39:43Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"98c0fa98-6fe5-440f-b247-56f40fa63f52"}
 {"ts":"2026-08-03T13:42:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T13:54:13Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T13:54:13Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T13:54:13Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T13:54:13Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"f2fa193d-1a27-4265-bb20-170fe0675442"}
+{"ts":"2026-08-03T14:07:35Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-03T14:07:35Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-03T14:07:35Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-03-task-plan-contract-verify.md"}
+{"ts":"2026-08-03T14:07:35Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T14:07:36Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T14:07:36Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:53:58Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T14:07:36Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"495a0ec2-9f6a-4ed7-b7ca-dda8f95f58cd"}
+{"ts":"2026-08-03T14:10:49Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T14:10:49Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

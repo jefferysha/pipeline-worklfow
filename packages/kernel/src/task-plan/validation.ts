@@ -1,4 +1,4 @@
-import { deepFreeze, exactResourceKey } from './internal.js'
+import { deepFreeze, exactResourceKey, taskPlanEntityIdEntries } from './internal.js'
 import { TASK_PLAN_LIMITS } from './types.js'
 import type {
   TaskPlanCoverageEntry,
@@ -185,6 +185,11 @@ function resourceDiagnostics(
 
 export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPlanValidationResult {
   const collector: IssueCollector = { items: [], truncated: false }
+  const entityIds = new Set<string>()
+  for (const { id, path } of taskPlanEntityIdEntries(revision)) {
+    if (entityIds.has(id)) issue(collector, 'entity-id-duplicate', path, [id])
+    else entityIds.add(id)
+  }
   const groupIds = new Set(revision.groups.map((group) => group.id))
   const itemIds = new Set(revision.work_items.map((item) => item.id))
   const requirementIds = new Set(revision.requirements.map((entry) => entry.id))

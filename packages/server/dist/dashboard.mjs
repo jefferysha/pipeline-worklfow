@@ -649,6 +649,24 @@ var QuoteGateError = class extends Error {
 
 // packages/kernel/dist/task-plan/internal.js
 var encoder = new TextEncoder();
+function taskPlanEntityIdEntries(value) {
+  return [
+    ...value.requirements.map((entry, index) => ({ id: entry.id, path: `$.requirements[${index}].id` })),
+    ...value.acceptance_criteria.map((entry, index) => ({ id: entry.id, path: `$.acceptance_criteria[${index}].id` })),
+    ...value.groups.map((entry, index) => ({ id: entry.id, path: `$.groups[${index}].id` })),
+    ...value.work_items.flatMap((item2, index) => [
+      { id: item2.id, path: `$.work_items[${index}].id` },
+      ...item2.expected_outputs.map((entry, outputIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].expected_outputs[${outputIndex}].id`
+      })),
+      ...item2.validators.map((entry, validatorIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].validators[${validatorIndex}].id`
+      }))
+    ])
+  ];
+}
 function byteLength(value) {
   return encoder.encode(value).byteLength;
 }
@@ -1012,17 +1030,7 @@ function workItems(value, collector) {
 }
 function duplicateIds(value, collector) {
   const seen = /* @__PURE__ */ new Set();
-  const entries = [
-    ...value.requirements.map((entry, index) => [entry.id, `$.requirements[${index}].id`]),
-    ...value.acceptance_criteria.map((entry, index) => [entry.id, `$.acceptance_criteria[${index}].id`]),
-    ...value.groups.map((entry, index) => [entry.id, `$.groups[${index}].id`]),
-    ...value.work_items.flatMap((item2, index) => [
-      [item2.id, `$.work_items[${index}].id`],
-      ...item2.expected_outputs.map((entry, outputIndex) => [entry.id, `$.work_items[${index}].expected_outputs[${outputIndex}].id`]),
-      ...item2.validators.map((entry, validatorIndex) => [entry.id, `$.work_items[${index}].validators[${validatorIndex}].id`])
-    ])
-  ];
-  for (const [id, path7] of entries) {
+  for (const { id, path: path7 } of taskPlanEntityIdEntries(value)) {
     if (seen.has(id))
       error(collector, "duplicate_id", path7);
     else
@@ -1324,6 +1332,13 @@ function resourceDiagnostics(revision, dependents, collector) {
 }
 function validateTaskPlanRevisionV1(revision) {
   const collector = { items: [], truncated: false };
+  const entityIds = /* @__PURE__ */ new Set();
+  for (const { id, path: path7 } of taskPlanEntityIdEntries(revision)) {
+    if (entityIds.has(id))
+      issue(collector, "entity-id-duplicate", path7, [id]);
+    else
+      entityIds.add(id);
+  }
   const groupIds = new Set(revision.groups.map((group) => group.id));
   const itemIds = new Set(revision.work_items.map((item2) => item2.id));
   const requirementIds = new Set(revision.requirements.map((entry) => entry.id));

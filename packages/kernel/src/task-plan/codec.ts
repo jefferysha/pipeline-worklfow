@@ -1,4 +1,11 @@
-import { byteLength, deepFreeze, exactResourceKey, hasInvalidSurrogate, hasUnsafeControl } from './internal.js'
+import {
+  byteLength,
+  deepFreeze,
+  exactResourceKey,
+  hasInvalidSurrogate,
+  hasUnsafeControl,
+  taskPlanEntityIdEntries,
+} from './internal.js'
 import {
   TASK_PLAN_LIMITS,
   TASK_PLAN_SCHEMA_VERSION,
@@ -327,17 +334,7 @@ function workItems(value: unknown, collector: Collector): readonly WorkItemV1[] 
 
 function duplicateIds(value: TaskPlanRevisionV1, collector: Collector): void {
   const seen = new Set<string>()
-  const entries: readonly (readonly [string, string])[] = [
-    ...value.requirements.map((entry, index) => [entry.id, `$.requirements[${index}].id`] as const),
-    ...value.acceptance_criteria.map((entry, index) => [entry.id, `$.acceptance_criteria[${index}].id`] as const),
-    ...value.groups.map((entry, index) => [entry.id, `$.groups[${index}].id`] as const),
-    ...value.work_items.flatMap((item, index) => [
-      [item.id, `$.work_items[${index}].id`] as const,
-      ...item.expected_outputs.map((entry, outputIndex) => [entry.id, `$.work_items[${index}].expected_outputs[${outputIndex}].id`] as const),
-      ...item.validators.map((entry, validatorIndex) => [entry.id, `$.work_items[${index}].validators[${validatorIndex}].id`] as const),
-    ]),
-  ]
-  for (const [id, path] of entries) {
+  for (const { id, path } of taskPlanEntityIdEntries(value)) {
     if (seen.has(id)) error(collector, 'duplicate_id', path)
     else seen.add(id)
   }

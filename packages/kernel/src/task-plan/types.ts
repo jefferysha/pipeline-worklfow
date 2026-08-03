@@ -120,6 +120,7 @@ export type TaskPlanValidationIssueCode =
   | 'dependency-duplicate'
   | 'dependency-self'
   | 'dependency-unknown'
+  | 'entity-id-duplicate'
   | 'group-cycle'
   | 'group-parent-unknown'
   | 'group-work-item-unknown'

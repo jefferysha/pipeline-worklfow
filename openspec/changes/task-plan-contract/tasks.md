@@ -32,6 +32,7 @@
 - [x] 使 NFC Unicode opaque ID 通过 codec/store/ordinal validation，并保留 NFD、分隔符、空白与控制字符拒绝。 (build)
 - [x] 对 current 与 committed lineage 执行 frozen/freezable 语义校验，以 typed corrupt 和零写入拒绝 draft、coverage 缺口与 dependency cycle 历史。 (build)
 - [x] 分离 legacy 与 canonical projection 字节预算，使超过旧 256 KiB 的合法 canonical tasks.md 在 publish/read 间保持 current。 (build)
+- [x] 让公开 validator 与 codec 共用全局 entity ID 唯一性枚举，拒绝未经 codec round-trip 的重复 ID 并阻止错误 schedulable。 (build)
 
 ## 验证
 

@@ -291,6 +291,89 @@ describe('TaskPlan v1 validation and read projection', () => {
     }
   })
 
+  it('rejects duplicate entity IDs in the public validator without requiring a codec round-trip', () => {
+    const base = revision()
+    const cases: ReadonlyArray<{
+      label: string
+      input: TaskPlanRevisionV1
+      duplicatePath: string
+      duplicateId: string
+    }> = [
+      {
+        label: 'catalog',
+        input: revision({
+          requirements: [base.requirements[0]!, { ...base.requirements[0]!, title: 'Duplicate requirement' }],
+        }),
+        duplicatePath: '$.requirements[1].id',
+        duplicateId: 'req-1',
+      },
+      {
+        label: 'cross-kind catalog/group',
+        input: revision({
+          groups: [{ ...base.groups[0]!, id: 'req-1' }],
+          work_items: base.work_items.map((item) => ({ ...item, group_id: 'req-1' })),
+        }),
+        duplicatePath: '$.groups[0].id',
+        duplicateId: 'req-1',
+      },
+      {
+        label: 'group',
+        input: revision({
+          groups: [base.groups[0]!, { ...base.groups[0]!, work_item_ids: [] }],
+        }),
+        duplicatePath: '$.groups[1].id',
+        duplicateId: 'group-1',
+      },
+      {
+        label: 'work item',
+        input: revision({
+          groups: [{ ...base.groups[0]!, work_item_ids: ['wi-a'] }],
+          work_items: [base.work_items[0]!, { ...base.work_items[0]!, title: 'Duplicate work item' }],
+        }),
+        duplicatePath: '$.work_items[1].id',
+        duplicateId: 'wi-a',
+      },
+      {
+        label: 'output across work items',
+        input: revision({
+          work_items: base.work_items.map((item, index) => index === 1
+            ? { ...item, expected_outputs: [{ ...item.expected_outputs[0]!, id: 'out-a' }] }
+            : item),
+        }),
+        duplicatePath: '$.work_items[1].expected_outputs[0].id',
+        duplicateId: 'out-a',
+      },
+      {
+        label: 'validator across work items',
+        input: revision({
+          work_items: base.work_items.map((item, index) => index === 1
+            ? { ...item, validators: [{ ...item.validators[0]!, id: 'validator-a' }] }
+            : item),
+        }),
+        duplicatePath: '$.work_items[1].validators[0].id',
+        duplicateId: 'validator-a',
+      },
+    ]
+
+    for (const { label, input, duplicatePath, duplicateId } of cases) {
+      const decoded = decodeTaskPlanRevisionV1(input)
+      expect(decoded.ok, label).toBe(false)
+      if (decoded.ok) throw new Error(`expected duplicate ${label} decode failure`)
+      expect(decoded.errors, label).toContainEqual({ code: 'duplicate_id', path: duplicatePath })
+
+      const validation = validateTaskPlanRevisionV1(input)
+      expect(validation.issues, label).toContainEqual({
+        severity: 'error',
+        code: 'entity-id-duplicate',
+        path: duplicatePath,
+        related_ids: [duplicateId],
+      })
+      expect(validation.valid, label).toBe(false)
+      expect(validation.freezable, label).toBe(false)
+      expect(toTaskPlanReadModelV1(input, { state: 'current' }).schedulable, label).toBe(false)
+    }
+  })
+
   it('returns stable sorted issues for ownership, refs, cycles, and uncovered catalogs', () => {
     const input = revision({
       groups: [

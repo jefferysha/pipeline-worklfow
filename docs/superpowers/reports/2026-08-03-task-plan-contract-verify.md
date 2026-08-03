@@ -244,3 +244,61 @@ FAIL。第 3 轮的 persisted-byte 对称性和 NFC Unicode opaque ID 缺陷均�
 ## 下一步
 
 登记本报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复 committed history 语义验证与 projection 预算对称性，重建正式生成物、提交新冻结 SHA，再从零执行第 5 轮完整三轨。
+
+---
+
+# 第 5 轮 Verify（冻结基线 `2d88a6a6728e43dd75ab33e33773b5e4c7f05ebd`）
+
+## 结论
+
+FAIL。第 4 轮的 committed history 语义验证与 canonical projection 预算对称性均已修复；Reviewer 与 E2E 轨通过，但原生 Codex CLI 发现公开 validator/read-model 可绕过 codec 对 duplicate ID 的拒绝并错误产生 `schedulable=true`。独立动态复现确认该 finding，必须回到 Build 失败关闭。
+
+## 冻结身份与零输出 barrier
+
+- exact base/latest `origin/main`：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`2d88a6a6728e43dd75ab33e33773b5e4c7f05ebd` / `e49f4c949ad9c2f99052d3ddfe465c626b248c03`。
+- exact diff：157 files，`+7170/-1392`；binary diff SHA-256 `7cd839d327f0e1308d6371f68676f63e9c7378f8f848527deeda1a2e6e15aee1`；name-status SHA-256 `ab5c848184a0ac2f09afb15324ae1e9ffb22a803f961a473a38f9292d369af5a`。
+- Reviewer 轨确认真实 governance-dirty worktree 的 tracked patch、untracked 内容和 mode/size/mtime/ctime/inode 前后不变；E2E 全树指纹在起始、archive 后、完整测试后与最终均为 `e2c394ff788d581d89830c969f85fde9b16141c6`。所有会写入的验证均位于仓库外隔离副本。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L3。完整回读 157-file diff 与全部 capability；重点 259/259、全仓 6037 passed / 26 honest skipped、三包 TypeScript、OpenSpec、architecture/comments/docs/hygiene、bundle 27/27、生成物 freshness 和 merge-tree 均通过。
+- E2E：PASS。TaskPlan canonical/legacy/store 68/68、关键边界 10/10、route 5/5、receipt/current wrapper/129+ 17 项、stable hook→current Skill registration 1/1；真实 HTTP 覆盖 NFC Unicode、325,809-byte canonical projection、legacy exact/+1 ceiling、400/403/404/409 trust/error 状态。无适用 E2E 跳过，无真实写入。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached clone `/tmp/tenon-pr1-codex-r5.2mu72j/repo` 运行 `codex exec review --ephemeral --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。启动期 malformed logs DB/models cache 与 clone 无 `node_modules` 的生成物探测失败不影响最终静态 finding；不把该环境探测当测试通过证据。
+
+## 确认 finding
+
+### MEDIUM — 公开 validator/read-model 未拒绝 duplicate entity IDs
+
+codec 会对 catalog/group/work-item/output/validator 的全局重复 ID 返回 `duplicate_id`，但公开 `validateTaskPlanRevisionV1` 直接把 ID 映射到 `Set`/`Map`，未产生对应 validation issue。`toTaskPlanReadModelV1` 又直接依赖该 validator，因此合法 TypeScript 形状或内部调用方无需 codec round-trip 即可把两个相同 `wi-a` 的 frozen revision 标记为 valid/freezable/schedulable。
+
+真实冻结构建的独立动态复现：
+
+```json
+{"valid":true,"freezable":true,"issues":[],"schedulable":true,"itemCount":2}
+```
+
+修复要求：公开 validator 必须独立执行与 codec 对齐的全局 entity ID uniqueness 校验，稳定报告重复位置并使 `valid/freezable/schedulable=false`；覆盖 catalog、group、work item、output、validator 的同类与跨类碰撞，以及非重复 revision 的稳定结果。store 的 committed/proposed 语义验证必须继承该失败关闭，不得要求调用方先自行 codec round-trip。
+
+## 第 4 轮 finding 与 receipt bridge 闭环复核
+
+- committed current/lineage 对 frozen/freezable 语义失败关闭；无效 non-current committed history 的 read/publish 均 typed corrupt、current 字节不变且 target 不存在，future/different-plan draft orphan 未被误拒。
+- legacy reader 保持 256 KiB ceiling，canonical producer/reader 对称使用 1,048,577 bytes；超过旧 ceiling 的合法 canonical projection 在 publish/read 间保持 `current`。
+- receipt discovery 继续使用 4096 metadata、latest-32 full read、512 MiB 与 session/turn/worktree/ABI/inode fences；129+ reconcile 与 literal awaited same-result `text(result)` registration 通过。动态/零/负/小数/unsafe/truncated `max_output_tokens` 继续拒绝，未扩大证据接受面。
+
+## OpenSpec 与 Step 1.5 capability 回读
+
+- 隔离 archive applied 7 added + 2 modified，随后全量 strict validate `37/37`；真实主规格 digest 前后均为 `513bae7ec8b18dc850f358bac40ce6668b9d53cc3a2aaa6cc3a8f60029b89e25`。
+- 157/157 path 均已回读：122 个 governance JSON/history/revision/receipt/transition 与 proposal/design/tasks 映射两项 delta + governance contract；5 个 supporting docs 映射 Change contract；CLI receipt source/bundle 映射 `codex-skill-receipt-current-turn`；kernel task-plan/store/export 与 server route/bundle 共 23 个生产/测试/生成路径映射 `task-plan-contract`。未发现 diff symlink 或 secret。
+
+## 保留 LOW 与未完成通过门
+
+- L1：bounded text reader 对非法 UTF-8 使用 replacement decode。
+- L2：path-based atomic publication 在同用户父目录替换下仍有极窄 TOCTOU。
+- L3：mtime/ctime 完全相同时 transcript path 用 `localeCompare`；超过 32 个同时间候选可跨宿主 false-negative，不能形成 false-positive receipt。
+- 本 Change 无前端源码 diff，因此不运行浏览器视觉轨；生产 Web build 已由 Reviewer/全仓测试覆盖。Docker daemon 与真实 Codex 凭证相关套件保持 26 项 honest skip。
+- 因确认的 MEDIUM，Verify tasks 未标完成，未设置 branch handled，未请求 `verify-pass`，也未复用第 5 轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 补公开 validator 的全局 duplicate ID 失败关闭，重建正式生成物并提交新 frozen SHA，再从零执行第 6 轮三轨 Verify。

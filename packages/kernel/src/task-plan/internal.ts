@@ -1,4 +1,30 @@
+import type { TaskPlanRevisionV1 } from './types.js'
+
 const encoder = new TextEncoder()
+
+export interface TaskPlanEntityIdEntry {
+  readonly id: string
+  readonly path: string
+}
+
+export function taskPlanEntityIdEntries(value: TaskPlanRevisionV1): readonly TaskPlanEntityIdEntry[] {
+  return [
+    ...value.requirements.map((entry, index) => ({ id: entry.id, path: `$.requirements[${index}].id` })),
+    ...value.acceptance_criteria.map((entry, index) => ({ id: entry.id, path: `$.acceptance_criteria[${index}].id` })),
+    ...value.groups.map((entry, index) => ({ id: entry.id, path: `$.groups[${index}].id` })),
+    ...value.work_items.flatMap((item, index) => [
+      { id: item.id, path: `$.work_items[${index}].id` },
+      ...item.expected_outputs.map((entry, outputIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].expected_outputs[${outputIndex}].id`,
+      })),
+      ...item.validators.map((entry, validatorIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].validators[${validatorIndex}].id`,
+      })),
+    ]),
+  ]
+}
 
 export function byteLength(value: string): number {
   return encoder.encode(value).byteLength
