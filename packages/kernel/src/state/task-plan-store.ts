@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
-import { lstat, mkdir, realpath } from 'node:fs/promises'
+import { lstat, mkdir, opendir, realpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import {
   adaptLegacyTasksMd,
   decodeTaskPlanRevisionV1,
   encodeTaskPlanRevisionV1,
   renderTaskPlanTasksMd,
+  TASK_PLAN_LIMITS,
   toTaskPlanReadModelV1,
   validateTaskPlanRevisionV1,
   type TaskPlanReadModelV1,
@@ -88,12 +89,116 @@ async function readRegular(path: string, maxBytes: number): Promise<string | und
   }
 }
 
+interface TaskPlanRevisionAdmission {
+  readonly targetExists: boolean
+}
+
+async function assertCommittedLineageAndAdmission(
+  revisionsDir: string,
+  proposed: TaskPlanRevisionV1,
+  proposedRaw: string,
+  current: TaskPlanRevisionV1 | undefined,
+  exactCurrent: boolean,
+): Promise<TaskPlanRevisionAdmission> {
+  const proposedBytes = Buffer.byteLength(proposedRaw)
+  const targetName = revisionFileName(proposed)
+  const revisionIds = new Set<string>()
+  const revisionNumbers = new Set<number>()
+  let targetExists = false
+  let proposedNumberOccupied = false
+  let entries = 0
+  let reads = 0
+  let bytesRead = 0
+  const directory = await opendir(revisionsDir)
+  for await (const entry of directory) {
+    entries += 1
+    if (entries > TASK_PLAN_LIMITS.maxRevisionHistoryEntries) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision directory entry budget exceeded')
+    }
+    if (!/^\d+-.+\.json$/u.test(entry.name)) continue
+    reads += 1
+    if (reads > TASK_PLAN_LIMITS.maxRevisionHistoryReads) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision history read budget exceeded')
+    }
+    const path = join(revisionsDir, entry.name)
+    const remainingBytes = TASK_PLAN_LIMITS.maxRevisionHistoryBytes - bytesRead
+    const info = await lstat(path)
+    if (info.isFile() && info.size > remainingBytes) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision history byte budget exceeded')
+    }
+    const raw = await readRegular(path, Math.min(TASK_PLAN_LIMITS.maxRevisionBytes, remainingBytes))
+    if (raw === undefined) continue
+    bytesRead += Buffer.byteLength(raw)
+    if (bytesRead > TASK_PLAN_LIMITS.maxRevisionHistoryBytes) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision history byte budget exceeded')
+    }
+    const decoded = decodeTaskPlanRevisionV1(raw)
+    if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan revision history contains malformed state')
+    const historical = decoded.value
+    if (entry.name === targetName) {
+      if (raw !== proposedRaw) {
+        throw new TaskPlanStateCorruptError('TaskPlan target revision already exists with different content')
+      }
+      targetExists = true
+    }
+    if (
+      historical.plan_id === proposed.plan_id
+      && historical.revision_number === proposed.revision_number
+      && entry.name !== targetName
+    ) {
+      proposedNumberOccupied = true
+    }
+    if (
+      current === undefined
+      || historical.plan_id !== current.plan_id
+      || historical.revision_number > current.revision_number
+    ) continue
+    if (entry.name !== revisionFileName(historical)) {
+      throw new TaskPlanStateCorruptError('TaskPlan committed lineage filename disagrees with its content')
+    }
+    if (revisionNumbers.has(historical.revision_number)) {
+      throw new TaskPlanStateCorruptError('TaskPlan committed lineage contains a duplicate revision number')
+    }
+    if (revisionIds.has(historical.revision_id)) {
+      throw new TaskPlanStateCorruptError('TaskPlan committed lineage contains a duplicate revision id')
+    }
+    revisionNumbers.add(historical.revision_number)
+    revisionIds.add(historical.revision_id)
+  }
+  if (current !== undefined) {
+    if (
+      revisionNumbers.size !== current.revision_number
+      || !revisionNumbers.has(1)
+      || !revisionNumbers.has(current.revision_number)
+    ) {
+      throw new TaskPlanStateCorruptError('TaskPlan committed lineage revision numbers are not continuous')
+    }
+    if (!exactCurrent && revisionIds.has(proposed.revision_id)) {
+      throw new TaskPlanRevisionConflictError('TaskPlan revision id already exists in the current lineage')
+    }
+  }
+  if (!exactCurrent && proposedNumberOccupied) {
+    throw new TaskPlanRevisionConflictError('TaskPlan proposed revision number is already occupied')
+  }
+  if (proposedBytes > TASK_PLAN_LIMITS.maxRevisionBytes) {
+    throw new TaskPlanRevisionConflictError('TaskPlan proposed revision exceeds the revision byte budget')
+  }
+  if (!targetExists && (
+    entries + 1 > TASK_PLAN_LIMITS.maxRevisionHistoryEntries
+    || reads + 1 > TASK_PLAN_LIMITS.maxRevisionHistoryReads
+    || bytesRead + proposedBytes > TASK_PLAN_LIMITS.maxRevisionHistoryBytes
+  )) {
+    throw new TaskPlanRevisionConflictError('TaskPlan proposed revision exceeds the revision history admission budget')
+  }
+  return { targetExists }
+}
+
 async function publishImmutable(path: string, dir: string, raw: string): Promise<void> {
   try {
     await atomicLinkPublish(dir, '.revision.tmp', path, raw)
   } catch (error) {
     if (typeof error !== 'object' || error === null || Reflect.get(error, 'code') !== 'EEXIST') throw error
-    const existing = await readRegular(path, raw.length * 4 + 16)
+    const existing = await readRegular(path, TASK_PLAN_LIMITS.maxRevisionBytes)
     if (existing !== raw) throw new TaskPlanStateCorruptError('TaskPlan revision id already exists with different content')
   }
 }
@@ -125,7 +230,12 @@ export async function publishTaskPlanRevision(
   options: PublishTaskPlanOptions,
 ): Promise<TaskPlanReadModelV1> {
   const decoded = decodeTaskPlanRevisionV1(revision)
-  if (!decoded.ok) throw new Error('TaskPlan revision does not satisfy task-plan/v1')
+  if (!decoded.ok) {
+    if (decoded.errors.some((error) => error.code === 'document_too_large')) {
+      throw new TaskPlanRevisionConflictError('TaskPlan proposed revision exceeds the revision byte budget')
+    }
+    throw new Error('TaskPlan revision does not satisfy task-plan/v1')
+  }
   const accepted = decoded.value
   const validation = validateTaskPlanRevisionV1(accepted)
   if (accepted.status !== 'frozen' || !validation.freezable) {
@@ -146,36 +256,40 @@ export async function publishTaskPlanRevision(
     await ensureOwnedDirectory(changeDir, stateDir)
     await ensureOwnedDirectory(changeDir, revisionsDir)
     const raw = `${encodeTaskPlanRevisionV1(accepted)}\n`
-    const currentRaw = await readRegular(join(stateDir, TASK_PLAN_CURRENT_FILE), 1024 * 1024 + 1)
+    const currentRaw = await readRegular(join(stateDir, TASK_PLAN_CURRENT_FILE), TASK_PLAN_LIMITS.maxRevisionBytes)
     let current: TaskPlanRevisionV1 | undefined
+    let exactCurrent = false
     if (currentRaw !== undefined) {
       const currentDecoded = decodeTaskPlanRevisionV1(currentRaw)
       if (!currentDecoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
       current = currentDecoded.value
-      const immutable = await readRegular(
-        join(revisionsDir, revisionFileName(current)),
-        1024 * 1024 + 1,
-      )
+      const immutable = await readRegular(join(revisionsDir, revisionFileName(current)), TASK_PLAN_LIMITS.maxRevisionBytes)
       if (immutable !== currentRaw) {
         throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
       }
-      if (currentRaw === raw) return publishProjection(changeDir, accepted, raw, completed)
+      exactCurrent = currentRaw === raw
     }
-    const actualCurrentId = current?.revision_id ?? null
-    if (actualCurrentId !== options.expected_current_revision_id) {
-      throw new TaskPlanRevisionConflictError('TaskPlan current revision changed')
-    }
-    if (current === undefined) {
-      if (accepted.revision_number !== 1) {
-        throw new TaskPlanRevisionConflictError('TaskPlan initial revision number must be 1')
+    if (!exactCurrent) {
+      const actualCurrentId = current?.revision_id ?? null
+      if (actualCurrentId !== options.expected_current_revision_id) {
+        throw new TaskPlanRevisionConflictError('TaskPlan current revision changed')
       }
-    } else if (
-      accepted.plan_id !== current.plan_id
-      || accepted.revision_number !== current.revision_number + 1
-    ) {
-      throw new TaskPlanRevisionConflictError('TaskPlan revision does not extend the current lineage')
+      if (current === undefined) {
+        if (accepted.revision_number !== 1) {
+          throw new TaskPlanRevisionConflictError('TaskPlan initial revision number must be 1')
+        }
+      } else if (
+        accepted.plan_id !== current.plan_id
+        || accepted.revision_number !== current.revision_number + 1
+      ) {
+        throw new TaskPlanRevisionConflictError('TaskPlan revision does not extend the current lineage')
+      }
     }
-    await publishImmutable(join(revisionsDir, revisionFileName(accepted)), revisionsDir, raw)
+    const admission = await assertCommittedLineageAndAdmission(revisionsDir, accepted, raw, current, exactCurrent)
+    if (exactCurrent) return publishProjection(changeDir, accepted, raw, completed)
+    if (!admission.targetExists) {
+      await publishImmutable(join(revisionsDir, revisionFileName(accepted)), revisionsDir, raw)
+    }
     await atomicReplaceFile(join(stateDir, TASK_PLAN_CURRENT_FILE), raw)
 
     return publishProjection(changeDir, accepted, raw, completed)
@@ -185,7 +299,7 @@ export async function publishTaskPlanRevision(
 export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlanReadModelV1 | null> {
   const stateDir = join(changeDir, TASK_PLAN_STATE_DIR)
   const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
-  const currentRaw = await readRegular(currentPath, 1024 * 1024 + 1)
+  const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
   if (currentRaw === undefined) {
     const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_TASKS_MD_BYTES)
     return legacy === undefined ? null : adaptLegacyTasksMd(legacy)
@@ -195,7 +309,7 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   await assertOwnedDirectory(changeDir, stateDir)
   await assertOwnedDirectory(changeDir, join(stateDir, TASK_PLAN_REVISIONS_DIR))
   const immutablePath = join(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName(decoded.value))
-  const immutableRaw = await readRegular(immutablePath, 1024 * 1024 + 1)
+  const immutableRaw = await readRegular(immutablePath, TASK_PLAN_LIMITS.maxRevisionBytes)
   if (immutableRaw === undefined || immutableRaw !== currentRaw) {
     throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
   }

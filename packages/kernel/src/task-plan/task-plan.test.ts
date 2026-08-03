@@ -184,6 +184,54 @@ describe('TaskPlan v1 validation and read projection', () => {
     expect(read.dependencies.edges).toEqual([])
   })
 
+  it('deep-freezes the read DTO without changing caller descriptors or frozen state', () => {
+    const input = revision()
+    const requirement = input.requirements[0]!
+    Object.defineProperty(requirement, 'title', {
+      value: requirement.title,
+      enumerable: true,
+      configurable: true,
+      writable: false,
+    })
+    Object.freeze(input.work_items[0]!.resource_claims[0])
+    const tracked = [
+      input,
+      input.requirements,
+      requirement,
+      input.groups,
+      input.groups[0]!,
+      input.groups[0]!.work_item_ids,
+      input.work_items,
+      input.work_items[0]!,
+      input.work_items[0]!.resource_claims,
+      input.work_items[0]!.resource_claims[0]!,
+      input.work_items[0]!.validators[0]!,
+      input.work_items[0]!.validators[0]!.output_ids,
+    ] as const
+    const before = tracked.map((value) => ({
+      frozen: Object.isFrozen(value),
+      descriptors: Object.getOwnPropertyDescriptors(value),
+    }))
+
+    const read = toTaskPlanReadModelV1(input, { state: 'pending', reason: 'projection queued' })
+
+    for (const [index, value] of tracked.entries()) {
+      expect(Object.isFrozen(value)).toBe(before[index]!.frozen)
+      expect(Object.getOwnPropertyDescriptors(value)).toEqual(before[index]!.descriptors)
+    }
+    const pending: unknown[] = [read]
+    const visited = new Set<object>()
+    while (pending.length > 0) {
+      const value = pending.pop()
+      if (value === null || typeof value !== 'object' || visited.has(value)) continue
+      visited.add(value)
+      expect(Object.isFrozen(value)).toBe(true)
+      for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value))) {
+        if ('value' in descriptor) pending.push(descriptor.value)
+      }
+    }
+  })
+
   it('returns stable sorted issues for ownership, refs, cycles, and uncovered catalogs', () => {
     const input = revision({
       groups: [
@@ -208,10 +256,81 @@ describe('TaskPlan v1 validation and read projection', () => {
       'requirement-uncovered',
       'work-item-multiple-groups',
     ]))
-    expect(first.issues).toEqual([...first.issues].sort((left, right) =>
-      `${left.code}\u0000${left.path}\u0000${left.related_ids.join('\u0000')}`
-        .localeCompare(`${right.code}\u0000${right.path}\u0000${right.related_ids.join('\u0000')}`),
-    ))
+    expect(first.issues).toEqual([...first.issues].sort((left, right) => {
+      const leftKey = `${left.code}\u0000${left.path}\u0000${left.related_ids.join('\u0000')}`
+      const rightKey = `${right.code}\u0000${right.path}\u0000${right.related_ids.join('\u0000')}`
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
+    }))
+  })
+
+  it('sorts every diagnostic projection with locale-independent ordinal semantics', () => {
+    const baseItems = revision().work_items
+    const ids = ['wi-z', 'wi-ä', 'wi-A'] as const
+    const input = revision({
+      requirements: [
+        { id: 'req-ä', title: 'Unicode' },
+        { id: 'req-z', title: 'Lower ASCII' },
+        { id: 'req-A', title: 'Upper ASCII' },
+      ],
+      acceptance_criteria: [
+        { id: 'acc-ä', title: 'Unicode' },
+        { id: 'acc-z', title: 'Lower ASCII' },
+        { id: 'acc-A', title: 'Upper ASCII' },
+      ],
+      groups: [{ id: 'group-1', title: 'Kernel', parent_id: null, work_item_ids: [...ids] }],
+      work_items: ids.map((id, index) => ({
+        ...baseItems[index % baseItems.length]!,
+        id,
+        requirement_refs: index === 0 ? ['req-ä'] : index === 1 ? ['req-z'] : ['req-A', 'missing-ä'],
+        acceptance_refs: index === 0 ? ['acc-ä'] : index === 1 ? ['acc-z'] : ['acc-A', 'missing-z'],
+        depends_on: index === 0 ? ['wi-A'] : index === 1 ? ['wi-A'] : [],
+        resource_claims: [
+          { kind: 'path' as const, access: 'write' as const, key: 'z/resource' },
+          { kind: 'path' as const, access: 'write' as const, key: 'ä/resource' },
+          { kind: 'path' as const, access: 'write' as const, key: 'A/resource' },
+        ],
+      })),
+    })
+    const originalLocaleCompare = String.prototype.localeCompare
+    const ordinal = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0
+    const assertSorted = <T>(values: readonly T[], key: (value: T) => string): void => {
+      expect(values).toEqual([...values].sort((left, right) => ordinal(key(left), key(right))))
+    }
+
+    const baseline = validateTaskPlanRevisionV1(input)
+    let adversarial: ReturnType<typeof validateTaskPlanRevisionV1>
+    try {
+      Object.defineProperty(String.prototype, 'localeCompare', {
+        configurable: true,
+        writable: true,
+        value(this: string, other: string) {
+          return -ordinal(String(this), String(other))
+        },
+      })
+      adversarial = validateTaskPlanRevisionV1(input)
+    } finally {
+      Object.defineProperty(String.prototype, 'localeCompare', {
+        configurable: true,
+        writable: true,
+        value: originalLocaleCompare,
+      })
+    }
+
+    expect(JSON.stringify(adversarial)).toBe(JSON.stringify(baseline))
+    assertSorted(adversarial.coverage.requirements, (entry) => entry.id)
+    assertSorted(adversarial.coverage.acceptance_criteria, (entry) => entry.id)
+    for (const entry of [...adversarial.coverage.requirements, ...adversarial.coverage.acceptance_criteria]) {
+      assertSorted(entry.work_item_ids, (id) => id)
+    }
+    assertSorted(adversarial.dependencies.edges, (edge) => `${edge.from_work_item_id}\u0000${edge.to_work_item_id}`)
+    assertSorted(adversarial.resources.conflicts, (entry) => `${entry.resource}\u0000${entry.work_item_ids.join('\u0000')}`)
+    assertSorted(adversarial.resources.serialized, (entry) =>
+      `${entry.resource}\u0000${entry.before_work_item_id}\u0000${entry.after_work_item_id}`,
+    )
+    assertSorted(adversarial.issues, (entry) =>
+      `${entry.code}\u0000${entry.path}\u0000${entry.related_ids.join('\u0000')}`,
+    )
+    for (const entry of adversarial.issues) assertSorted(entry.related_ids, (id) => id)
   })
 
   it('rejects unordered exact writer overlap but allows distinct exact resources', () => {

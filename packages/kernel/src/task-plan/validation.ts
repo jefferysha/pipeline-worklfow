@@ -15,6 +15,10 @@ interface IssueCollector {
   truncated: boolean
 }
 
+function ordinalCompare(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
 function issue(
   collector: IssueCollector,
   code: TaskPlanValidationIssueCode,
@@ -25,7 +29,12 @@ function issue(
     collector.truncated = true
     return
   }
-  collector.items.push({ severity: 'error', code, path, related_ids: [...new Set(relatedIds)].sort() })
+  collector.items.push({
+    severity: 'error',
+    code,
+    path,
+    related_ids: [...new Set(relatedIds)].sort(ordinalCompare),
+  })
 }
 
 function truncate(collector: IssueCollector): void {
@@ -39,7 +48,7 @@ function duplicates(values: readonly string[]): readonly string[] {
     if (seen.has(value)) repeated.add(value)
     else seen.add(value)
   }
-  return [...repeated].sort()
+  return [...repeated].sort(ordinalCompare)
 }
 
 function cyclicIds(graph: ReadonlyMap<string, readonly string[]>): readonly string[] {
@@ -64,8 +73,8 @@ function cyclicIds(graph: ReadonlyMap<string, readonly string[]>): readonly stri
     visiting.delete(id)
     visited.add(id)
   }
-  for (const id of [...graph.keys()].sort()) visit(id)
-  return [...cycle].sort()
+  for (const id of [...graph.keys()].sort(ordinalCompare)) visit(id)
+  return [...cycle].sort(ordinalCompare)
 }
 
 function coverageEntries(
@@ -88,8 +97,8 @@ function coverageEntries(
       relationCount += 1
     }
   }
-  return [...covered.entries()].sort(([left], [right]) => left.localeCompare(right))
-    .map(([id, workItemIds]) => ({ id, work_item_ids: workItemIds.sort() }))
+  return [...covered.entries()].sort(([left], [right]) => ordinalCompare(left, right))
+    .map(([id, workItemIds]) => ({ id, work_item_ids: workItemIds.sort(ordinalCompare) }))
 }
 
 function isReachable(
@@ -137,8 +146,8 @@ function resourceDiagnostics(
   const traversalBudget = { remaining: TASK_PLAN_LIMITS.maxValidationSteps }
   let diagnosticCount = 0
   resourceLoop:
-  for (const [resource, members] of [...writers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-    const ids = [...members].sort()
+  for (const [resource, members] of [...writers.entries()].sort(([left], [right]) => ordinalCompare(left, right))) {
+    const ids = [...members].sort(ordinalCompare)
     for (let leftIndex = 0; leftIndex < ids.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < ids.length; rightIndex += 1) {
         if (diagnosticCount >= TASK_PLAN_LIMITS.maxDiagnosticEntries) {
@@ -260,7 +269,10 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
   const dependencyCycle = cyclicIds(dependencyGraph)
   if (dependencyCycle.length > 0) issue(collector, 'dependency-cycle', '$.work_items', dependencyCycle)
   edges.sort((left, right) =>
-    `${left.from_work_item_id}\u0000${left.to_work_item_id}`.localeCompare(`${right.from_work_item_id}\u0000${right.to_work_item_id}`),
+    ordinalCompare(
+      `${left.from_work_item_id}\u0000${left.to_work_item_id}`,
+      `${right.from_work_item_id}\u0000${right.to_work_item_id}`,
+    ),
   )
 
   const requirementCoverage = coverageEntries(
@@ -290,8 +302,10 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
     })
   }
   issues.sort((left, right) =>
-    `${left.code}\u0000${left.path}\u0000${left.related_ids.join('\u0000')}`
-      .localeCompare(`${right.code}\u0000${right.path}\u0000${right.related_ids.join('\u0000')}`),
+    ordinalCompare(
+      `${left.code}\u0000${left.path}\u0000${left.related_ids.join('\u0000')}`,
+      `${right.code}\u0000${right.path}\u0000${right.related_ids.join('\u0000')}`,
+    ),
   )
   const coverage = {
     complete: uncoveredRequirementIds.length === 0 && uncoveredAcceptanceIds.length === 0,

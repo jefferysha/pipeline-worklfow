@@ -16,6 +16,11 @@
 - **WHEN** 输入包含未知字段、未来 schema、重复 ID、控制字符或超过预算的数据
 - **THEN** decoder 返回有界结构化错误且不生成任何新 ID
 
+#### Scenario: revision lineage 身份不复用
+
+- **WHEN** 发布的新 revision ID 与同一 plan lineage 的 current 或任一历史 immutable revision 相同
+- **THEN** store 拒绝发布且 current pointer 保持不变
+
 ### Requirement: 显式覆盖、归属与依赖
 
 系统 MUST 以显式 requirement/acceptance catalog 为全集，并校验 WorkItem 引用、唯一归属、组树与精确 `depends_on`。
@@ -55,7 +60,7 @@ WorkItem MUST 声明闭集的 read/write resource claims、expected outputs 与 
 
 ### Requirement: 原子 revision store
 
-系统 MUST 在 Change lock 下先发布 immutable revision，再原子替换 current pointer；current 是唯一提交点。
+系统 MUST 在 Change lock 下先验证完整 committed lineage 与有界历史，再发布 immutable revision、原子替换 current pointer；current 是唯一提交点。单个 revision 原始 UTF-8 MUST 不超过 1,048,577 bytes；revision 目录最多枚举 256 个 entry、最多读取 256 个 revision-like 文件，累计读取的 revision 原始 UTF-8 最多 16,777,216 bytes。准备发布的 target 若尚不存在，其一个目录 entry、一次读取和实际原始字节 MUST 在任何写入前计入预算；若同名 target 已存在且内容完全相同，则只按已存在文件计数一次。
 
 #### Scenario: current 发布前中断
 
@@ -66,6 +71,21 @@ WorkItem MUST 声明闭集的 read/write resource claims、expected outputs 与 
 
 - **WHEN** current 已提交但 tasks.md 重建失败
 - **THEN** canonical reader 返回新 revision 并报告 projection pending/drift
+
+#### Scenario: target 会越过历史预算
+
+- **WHEN** 现有可信历史仍在预算内，但加入准备发布的 target 后会超过 entry、read 或累计 UTF-8 byte 上限
+- **THEN** store 以稳定的 `TaskPlanRevisionConflictError` 拒绝发布，target immutable 不得出现且 current pointer 逐字节不变
+
+#### Scenario: 已有历史损坏或超出预算
+
+- **WHEN** 任一发布调用发现 committed lineage 不连续、revision number 或 ID 重复、文件名与内容不一致，或已有目录超过任一读取预算
+- **THEN** store 以 `TaskPlanStateCorruptError` 失败关闭，不发布 target、不替换 current，也不自动重写历史
+
+#### Scenario: 幂等重试仍验证 lineage
+
+- **WHEN** 调用方重发与 current 逐字节相同的 revision 以修复 projection
+- **THEN** store 在重建 projection 前仍完整验证 committed lineage 和历史预算；current 自身的 revision ID 不被误判为复用，但任何既有损坏仍失败关闭
 
 ### Requirement: legacy tasks.md 不伪造语义
 
@@ -85,16 +105,12 @@ kernel MUST 导出 `TaskPlanReadModelV1`，server MUST 提供受信 root/change 
 - **WHEN** 客户端请求存在的 canonical plan
 - **THEN** 返回版本、revision、validation/completeness、groups/items、coverage、dependency/resource diagnostics 和 projection status
 
-### Requirement: 长生命周期 receipt discovery
+#### Scenario: projection 不改变调用方输入
 
-Codex adapter MUST 在 4096 metadata-entry 预算内发现超过 128 个合法 transcript 后的精确 host-session evidence，同时保留最新 32 全文候选、字节预算和全部身份/ABI 检查。
+- **WHEN** 调用方以仍可编辑的 draft revision 生成只读 DTO
+- **THEN** 返回 DTO 被递归冻结，但输入 revision 及其 catalogs、groups、items 与嵌套数组的 descriptor 和 frozen 状态保持不变
 
-#### Scenario: 129 个历史 transcript
+#### Scenario: 排序跨 locale 确定
 
-- **WHEN** 精确当前 session Skill read 位于 129 个合法历史 transcript 之后
-- **THEN** 完整 reconcile 只追加该当前 phase 的 `CodexSkillRead`
-
-#### Scenario: 证据不完整或错绑
-
-- **WHEN** output 不完整、session/turn/worktree/ABI 不匹配或文件读取中被替换
-- **THEN** 不产生完成态证据且 document gate 继续拒绝
+- **WHEN** revision 含混合大小写或非 ASCII 的 ID、path 与 resource key，且在不同默认 ICU locale 的宿主验证
+- **THEN** coverage、dependencies、resources 与 issues 使用相同 ordinal 顺序并生成逐字节稳定结果

@@ -20,6 +20,20 @@ describe('Codex transcript exec program', () => {
     )).toEqual(expected)
   })
 
+  it('accepts the pretty-printed current host wrapper with a descriptive result binding', () => {
+    expect(transcriptExecInvocations(`const result = await tools.exec_command({
+  cmd: "cat /trusted/SKILL.md",
+  workdir: "/repo",
+  yield_time_ms: 10000,
+  max_output_tokens: 20000
+});
+text(result);
+`)).toEqual([{
+      command: 'cat /trusted/SKILL.md',
+      workdir: '/repo',
+    }])
+  })
+
   it.each([
     '0',
     '-1',

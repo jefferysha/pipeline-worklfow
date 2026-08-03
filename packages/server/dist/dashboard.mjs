@@ -699,6 +699,10 @@ var TASK_PLAN_SCHEMA_VERSION = "task-plan/v1";
 var TASK_PLAN_READ_SCHEMA_VERSION = "task-plan-read/v1";
 var TASK_PLAN_LIMITS = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
+  maxRevisionBytes: 1024 * 1024 + 1,
+  maxRevisionHistoryEntries: 256,
+  maxRevisionHistoryReads: 256,
+  maxRevisionHistoryBytes: 16 * 1024 * 1024,
   maxErrors: 64,
   maxGroups: 256,
   maxWorkItems: 1024,
@@ -1170,12 +1174,20 @@ function renderTaskPlanTasksMd(revision, input) {
 }
 
 // packages/kernel/dist/task-plan/validation.js
+function ordinalCompare(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
 function issue(collector, code, path7, relatedIds) {
   if (collector.items.length >= TASK_PLAN_LIMITS.maxValidationIssues - 1) {
     collector.truncated = true;
     return;
   }
-  collector.items.push({ severity: "error", code, path: path7, related_ids: [...new Set(relatedIds)].sort() });
+  collector.items.push({
+    severity: "error",
+    code,
+    path: path7,
+    related_ids: [...new Set(relatedIds)].sort(ordinalCompare)
+  });
 }
 function truncate(collector) {
   collector.truncated = true;
@@ -1189,7 +1201,7 @@ function duplicates(values) {
     else
       seen.add(value);
   }
-  return [...repeated].sort();
+  return [...repeated].sort(ordinalCompare);
 }
 function cyclicIds(graph) {
   const visiting = /* @__PURE__ */ new Set();
@@ -1215,9 +1227,9 @@ function cyclicIds(graph) {
     visiting.delete(id);
     visited.add(id);
   };
-  for (const id of [...graph.keys()].sort())
+  for (const id of [...graph.keys()].sort(ordinalCompare))
     visit(id);
-  return [...cycle].sort();
+  return [...cycle].sort(ordinalCompare);
 }
 function coverageEntries(catalogIds, workItems2, refs, collector) {
   const covered = new Map(catalogIds.map((id) => [id, []]));
@@ -1235,7 +1247,7 @@ function coverageEntries(catalogIds, workItems2, refs, collector) {
       relationCount += 1;
     }
   }
-  return [...covered.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, workItemIds]) => ({ id, work_item_ids: workItemIds.sort() }));
+  return [...covered.entries()].sort(([left], [right]) => ordinalCompare(left, right)).map(([id, workItemIds]) => ({ id, work_item_ids: workItemIds.sort(ordinalCompare) }));
 }
 function isReachable(before, after, dependents, budget) {
   const pending = [...dependents.get(before) ?? []];
@@ -1274,8 +1286,8 @@ function resourceDiagnostics(revision, dependents, collector) {
   const serialized = [];
   const traversalBudget = { remaining: TASK_PLAN_LIMITS.maxValidationSteps };
   let diagnosticCount = 0;
-  resourceLoop: for (const [resource, members] of [...writers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-    const ids = [...members].sort();
+  resourceLoop: for (const [resource, members] of [...writers.entries()].sort(([left], [right]) => ordinalCompare(left, right))) {
+    const ids = [...members].sort(ordinalCompare);
     for (let leftIndex = 0; leftIndex < ids.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < ids.length; rightIndex += 1) {
         if (diagnosticCount >= TASK_PLAN_LIMITS.maxDiagnosticEntries) {
@@ -1401,7 +1413,7 @@ function validateTaskPlanRevisionV1(revision) {
   const dependencyCycle = cyclicIds(dependencyGraph);
   if (dependencyCycle.length > 0)
     issue(collector, "dependency-cycle", "$.work_items", dependencyCycle);
-  edges.sort((left, right) => `${left.from_work_item_id}\0${left.to_work_item_id}`.localeCompare(`${right.from_work_item_id}\0${right.to_work_item_id}`));
+  edges.sort((left, right) => ordinalCompare(`${left.from_work_item_id}\0${left.to_work_item_id}`, `${right.from_work_item_id}\0${right.to_work_item_id}`));
   const requirementCoverage = coverageEntries([...requirementIds], revision.work_items, (item2) => item2.requirement_refs, collector);
   const acceptanceCoverage = coverageEntries([...acceptanceIds], revision.work_items, (item2) => item2.acceptance_refs, collector);
   const uncoveredRequirementIds = requirementCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id);
@@ -1426,7 +1438,7 @@ function validateTaskPlanRevisionV1(revision) {
       related_ids: []
     });
   }
-  issues.sort((left, right) => `${left.code}\0${left.path}\0${left.related_ids.join("\0")}`.localeCompare(`${right.code}\0${right.path}\0${right.related_ids.join("\0")}`));
+  issues.sort((left, right) => ordinalCompare(`${left.code}\0${left.path}\0${left.related_ids.join("\0")}`, `${right.code}\0${right.path}\0${right.related_ids.join("\0")}`));
   const coverage = {
     complete: uncoveredRequirementIds.length === 0 && uncoveredAcceptanceIds.length === 0,
     requirements: requirementCoverage,
@@ -1448,6 +1460,25 @@ function validateTaskPlanRevisionV1(revision) {
 // packages/kernel/dist/task-plan/read-model.js
 function toTaskPlanReadModelV1(revision, projection) {
   const validation = validateTaskPlanRevisionV1(revision);
+  const requirements = revision.requirements.map((entry) => ({ ...entry }));
+  const acceptanceCriteria = revision.acceptance_criteria.map((entry) => ({ ...entry }));
+  const groups2 = revision.groups.map((group) => ({
+    ...group,
+    work_item_ids: [...group.work_item_ids]
+  }));
+  const items = revision.work_items.map((item2) => ({
+    ...item2,
+    requirement_refs: [...item2.requirement_refs],
+    acceptance_refs: [...item2.acceptance_refs],
+    depends_on: [...item2.depends_on],
+    resource_claims: item2.resource_claims.map((claim2) => ({ ...claim2 })),
+    expected_outputs: item2.expected_outputs.map((output) => ({ ...output })),
+    validators: item2.validators.map((validator) => ({
+      ...validator,
+      output_ids: [...validator.output_ids]
+    })),
+    identity_quality: "canonical"
+  }));
   return deepFreeze({
     schema_version: TASK_PLAN_READ_SCHEMA_VERSION,
     source: "canonical",
@@ -1458,14 +1489,14 @@ function toTaskPlanReadModelV1(revision, projection) {
     revision_status: revision.status,
     validation,
     completeness: { state: validation.coverage.complete ? "complete" : "incomplete" },
-    requirements: revision.requirements,
-    acceptance_criteria: revision.acceptance_criteria,
-    groups: revision.groups,
-    items: revision.work_items.map((item2) => ({ ...item2, identity_quality: "canonical" })),
+    requirements,
+    acceptance_criteria: acceptanceCriteria,
+    groups: groups2,
+    items,
     coverage: validation.coverage,
     dependencies: validation.dependencies,
     resources: validation.resources,
-    projection
+    projection: { ...projection }
   });
 }
 
@@ -7420,7 +7451,7 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
 
 // packages/kernel/dist/state/task-plan-store.js
 import { createHash as createHash8 } from "node:crypto";
-import { lstat as lstat10, mkdir as mkdir7, realpath as realpath4 } from "node:fs/promises";
+import { lstat as lstat10, mkdir as mkdir7, opendir, realpath as realpath4 } from "node:fs/promises";
 import { isAbsolute as isAbsolute4, join as join15, relative as relative4, sep as sep5 } from "node:path";
 var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
 var TASK_PLAN_CURRENT_FILE = "current.json";
@@ -7469,7 +7500,7 @@ async function readRegular(path7, maxBytes) {
 async function readTaskPlanForChange(changeDir) {
   const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
   const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
-  const currentRaw = await readRegular(currentPath, 1024 * 1024 + 1);
+  const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
   if (currentRaw === void 0) {
     const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_TASKS_MD_BYTES);
     return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
@@ -7480,7 +7511,7 @@ async function readTaskPlanForChange(changeDir) {
   await assertOwnedDirectory(changeDir, stateDir);
   await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
   const immutablePath = join15(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName3(decoded.value));
-  const immutableRaw = await readRegular(immutablePath, 1024 * 1024 + 1);
+  const immutableRaw = await readRegular(immutablePath, TASK_PLAN_LIMITS.maxRevisionBytes);
   if (immutableRaw === void 0 || immutableRaw !== currentRaw) {
     throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
   }

@@ -12,6 +12,8 @@
 ## 规格
 
 - [x] 冻结 TaskPlan v1、legacy 投影、原子 store、只读 API 和校验语义。 (spec)
+- [x] 将 receipt discovery 与 `max_output_tokens` 登记为既有 capability 修改，并冻结 revision lineage、projection purity 与 ordinal ordering 语义。 (spec)
+- [x] 冻结 revision store 公开预算、target 预计入、typed 零写入拒绝与幂等重试 lineage 校验语义。 (spec)
 
 ## 实现
 
@@ -22,6 +24,10 @@
 - [x] 修复合法 `max_output_tokens` receipt ABI 漂移并补完成态回归。 (build)
 - [x] 修复数组 accessor descriptor 边界且确保 getter 零执行。 (build)
 - [x] 清理 validator 非空断言并按职责拆分超限 HTTP handler。 (build)
+- [x] 拒绝同一 plan lineage 的 revision ID 复用并补 current/history 红绿回归。 (build)
+- [x] 使 read-model projection 不冻结调用方输入并补 descriptor/frozen-state 回归。 (build)
+- [x] 统一 locale-independent ordinal 排序并覆盖混合 ASCII/Unicode 结果。 (build)
+- [x] 在任何写入前把 proposed target 计入 revision 历史预算，并让逐字节幂等重试先验证完整 lineage；补 exact-cap、byte-cap、零写入和损坏历史红绿回归。 (build)
 
 ## 验证
 

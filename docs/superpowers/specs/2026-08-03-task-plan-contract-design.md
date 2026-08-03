@@ -17,6 +17,7 @@ Each WorkItem has exact `requirement_refs`, `acceptance_refs`, `depends_on`, nor
 ## Key rules
 
 1. Every group/item/revision/validator/output ID is unique and stable across title, order, and grouping edits.
+   A revision ID is unique for the lifetime of its plan lineage, including current and immutable history.
 2. Every WorkItem belongs to exactly one group; parent groups exist and the group tree is acyclic.
 3. `depends_on` uses exact same-revision WorkItem IDs. Self, missing, duplicate, and cyclic edges are errors.
 4. Requirement/acceptance catalogs are the explicit expected universes. Unknown refs, uncovered catalog entries, and duplicate assignment are reported deterministically.
@@ -24,10 +25,15 @@ Each WorkItem has exact `requirement_refs`, `acceptance_refs`, `depends_on`, nor
 6. Unordered overlapping writes are conflicts; dependency-ordered writes are valid and reported as serialized, not conflicts.
 7. Expected outputs are typed declarations with stable IDs and safe relative refs where applicable. Validators are allow-listed declarations, never arbitrary shell commands.
 8. Validation is bounded, read-once, recursively frozen, and returns stable sorted issues with `severity/code/path/related_ids`.
+   Projection freezes only DTO-owned copies and never changes caller-owned inputs; deterministic ordering uses locale-independent ordinal comparison.
 
 ## Persistence and projection
 
 Under one Change lock, publish an immutable revision file with no-replace semantics, then atomically replace `current.json` as the commit point. Afterwards rebuild `tasks.md` as a compatibility projection carrying revision/digest markers. Projection failure is explicit `pending/drift`; a valid current plan never falls back to hand-edited Markdown.
+
+The store enumerates at most 256 directory entries, reads at most 256 revision-like files, accepts at most 16,777,216 cumulative raw UTF-8 bytes, and accepts at most 1,048,577 raw UTF-8 bytes per revision. A not-yet-present target consumes one prospective entry/read and its actual raw bytes before immutable publication; an identical existing target is counted once. Existing over-budget or malformed lineage is typed corrupt state, while a target that alone would cross a remaining budget is a typed revision conflict. Both fail before the target or current changes.
+
+Every publish call validates committed lineage and these budgets. A byte-identical current retry may repair only the Markdown projection after validation; it never bypasses duplicate-ID, continuity, filename/content, or budget checks, and its own current revision ID is not treated as a new reuse.
 
 ## Legacy compatibility
 
@@ -39,7 +45,7 @@ Without canonical current, parse `tasks.md` into `source=legacy`. Preserve phase
 
 ## Receipt bridge prerequisite
 
-The transcript discovery repair aligns valid transcript count with the existing 4096 metadata-entry budget while preserving the newest-32 full-read limit, byte budgets, exact session/turn/worktree/ABI checks, and inode/version fences. Regression coverage includes 129+ valid transcripts through the full completed-read reconciliation path.
+The transcript discovery repair aligns valid transcript count with the existing 4096 metadata-entry budget while preserving the newest-32 full-read limit, byte budgets, exact session/turn/worktree/ABI checks, and inode/version fences. Inline `max_output_tokens` is accepted only as a positive safe integer; pragma, dynamic/invalid values, truncated Skill bytes, and ABI mismatches remain rejected. Regression coverage includes 129+ valid transcripts through the full completed-read reconciliation path and a real current-host registration using the rebuilt CLI bundle.
 
 ## Alternatives rejected
 
@@ -57,10 +63,11 @@ The transcript discovery repair aligns valid transcript count with the existing 
 - Decision: dependency-ordered writers are valid serialization, while unordered writers conflict.
 - Decision: legacy display IDs are non-canonical and non-schedulable.
 - Decision: transcript fix gets an end-to-end reconcile regression in addition to discovery-helper coverage.
+- Decision: proposed revision resources count before publication, so a successful publish cannot create a state that the next publish must reject solely because the prior target crossed a store budget.
 
 ## Verification matrix
 
-Tests cover closed/future schema, budgets and hostile objects, round-trip/freeze, identity stability, ownership/tree errors, dependency cycles, full coverage, resource normalization/conflict, outputs/validators, immutable publication/current CAS/projection recovery, legacy no-inference, and 129+ transcript end-to-end reconciliation.
+Tests cover closed/future schema, budgets and hostile objects, round-trip/freeze, identity stability, ownership/tree errors, dependency cycles, full coverage, resource normalization/conflict, outputs/validators, immutable publication/current CAS/projection recovery, exact-cap target accounting, idempotent lineage validation, zero-write budget rejection, legacy no-inference, and 129+ transcript end-to-end reconciliation.
 
 ```coverage
 touches: kernel-data, api-boundary, filesystem-trust, skill-provenance

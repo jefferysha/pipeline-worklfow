@@ -49,3 +49,26 @@ design-doc: docs/superpowers/specs/2026-08-03-task-plan-contract-design.md
 3. 更新 OpenSpec task evidence，提交并推送独立 PR1。
 
 回滚：保留新增 revision 文件但不再读取不会影响 legacy；禁止手工删除用户数据。
+
+**此处建议 /clear**
+
+## 子阶段 5：Verify finding 收敛
+
+1. 在 `packages/kernel/src/state/task-plan-store.test.ts` 先增加 current/history revision ID 复用红测，再让 store 在 current commit 前拒绝同 lineage 重复 ID；合法新 ID 与无关 orphan 保持可发布。
+2. 在 `packages/kernel/src/task-plan/task-plan.test.ts` 增加 projection 输入 descriptor/frozen 状态红测，完整 clone DTO-owned 结构，确保 `toTaskPlanReadModelV1` 不改变调用方 revision。
+3. 为 coverage、resource、dependency 与 issue 排序增加混合 ASCII/Unicode 红测，统一改用 locale-independent ordinal comparator。
+4. 把 129+ discovery 与 inline safe-positive `max_output_tokens`、pragma/dynamic/zero/negative/截断拒绝场景登记到 `codex-skill-receipt-current-turn` delta，并通过正式 CLI bundle 在当前真实 host transcript 上验证旧安装拒绝、新 bundle 成功。
+5. 运行聚焦测试，再运行 `npm test -- --minWorkers=4 --maxWorkers=4`、TypeScript、architecture、comments、OpenSpec strict 与 CLI/server bundle freshness；完成全量 pre-Verify review 后生成新冻结 SHA。
+
+回滚：identity/purity/order 修复均为拒绝歧义或移除副作用，不迁移已提交数据；若发现历史 lineage 已复用 ID则失败关闭并报告 corrupt，不自动重写 immutable history。
+
+**此处建议 /clear**
+
+## 子阶段 6：revision 预算原子边界收敛
+
+1. 在 `packages/kernel/src/state/task-plan-store.test.ts` 先增加 exact 256-entry lineage、target 导致累计字节越界、逐字节 current 重试遇到损坏历史的红测；每个拒绝场景同时断言 target immutable 不存在且 current 原始字节不变。
+2. 重构 `assertCommittedLineage` 返回一次有界枚举的 entry/read/byte totals 与 target 状态；完整校验既有 committed lineage 后，若 target 尚不存在，再把它的一个 entry、一次读取和实际 raw bytes 计入预算。
+3. 已有历史损坏或超限返回 `TaskPlanStateCorruptError`；仅 proposed target 会越界返回 `TaskPlanRevisionConflictError`；逐字节相同 current 重试在 lineage 校验通过后才允许重建 projection，并允许 current 自身 ID。
+4. 运行 store/TaskPlan/receipt/server 聚焦测试、`npm test -- --minWorkers=4 --maxWorkers=4`、kernel/server TypeScript、architecture、OpenSpec strict、bundle freshness；重新生成 server bundle 并完成独立 pre-Verify review。
+
+回滚：删除本子阶段实现会重新暴露“本次成功、下次永久失败”的历史预算状态，因此只允许整体回退到本 Change 前，不得保留未预计 target 的半修复 store。

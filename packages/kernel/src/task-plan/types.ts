@@ -3,6 +3,10 @@ export const TASK_PLAN_READ_SCHEMA_VERSION = 'task-plan-read/v1' as const
 
 export const TASK_PLAN_LIMITS = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
+  maxRevisionBytes: 1024 * 1024 + 1,
+  maxRevisionHistoryEntries: 256,
+  maxRevisionHistoryReads: 256,
+  maxRevisionHistoryBytes: 16 * 1024 * 1024,
   maxErrors: 64,
   maxGroups: 256,
   maxWorkItems: 1024,
