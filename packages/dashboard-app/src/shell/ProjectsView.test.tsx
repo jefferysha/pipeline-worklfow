@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
+import gsap from 'gsap'
 import { I18nProvider } from '../i18n'
 import { ProjectsView } from './ProjectsView'
 import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
@@ -7,6 +8,11 @@ import { DEFAULT_WORKFLOW_RULES, makeChange, makeProject, makeSnapshot } from '.
 
 beforeEach(() => {
   localStorage.clear()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 // default workflow 的 gate 判定需 rulesByKey 命中 DEFAULT_RULES（否则 verify 门被判 agent，
@@ -228,6 +234,220 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     }
     fireEvent.click(row)
     expect(onOpenProject).toHaveBeenCalledWith('/code/empty')
+  })
+})
+
+describe('ProjectsView 电脑端检索与状态聚焦', () => {
+  it('按 basename 或完整 root 片段过滤，并用 live status 说明当前结果', () => {
+    renderView()
+    const search = screen.getByRole('searchbox', { name: '搜索项目' })
+    const searchLabel = document.querySelector('label[for="projects-focus-search"]')
+
+    expect(search).toHaveAttribute('id', 'projects-focus-search')
+    expect(searchLabel).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: 'REPO-B' } })
+    const clearQuery = screen.getByRole('button', { name: '清空项目搜索' })
+    expect(searchLabel).not.toContainElement(clearQuery)
+    expect(screen.queryByTestId('project-row-repo-a')).toBeNull()
+    expect(screen.getByTestId('project-row-repo-b')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('全部 · 显示 1 / 2 个项目')
+
+    fireEvent.change(search, { target: { value: 'code/repo-a' } })
+    expect(screen.getByTestId('project-row-repo-a')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-row-repo-b')).toBeNull()
+  })
+
+  it('查询完整 root 时只保留同 basename worktree 的精确匹配身份', () => {
+    const firstRoot = '/Users/me/.codex/worktrees/alpha/pipeline-worklfow'
+    const secondRoot = '/Users/me/.codex/worktrees/beta/pipeline-worklfow'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstRoot, [makeChange('alpha', 'open')]),
+        makeProject(secondRoot, [makeChange('beta', 'open')]),
+      ]),
+      rulesByKey: rulesFor(firstRoot, secondRoot),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '/beta/' } })
+    expect(screen.queryByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(firstRoot)}`)).toBeNull()
+    expect(screen.getByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(secondRoot)}`)).toBeInTheDocument()
+  })
+
+  it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
+    const snapshot = makeSnapshot([
+      makeProject('/code/repo-a', [
+        makeChange('c-gate', 'verify', { fields: { ...EVIDENCE_OK } }),
+        makeChange('c-run', 'build', { fields: { automation: 'running' } }),
+      ]),
+      makeProject('/code/repo-b', [makeChange('b-open', 'open')]),
+      makeProject('/code/broken', [], { ok: false }),
+    ])
+    renderView({ snapshot, rulesByKey: rulesFor('/code/repo-a', '/code/repo-b') })
+
+    expect(screen.getByTestId('projects-focus-all')).toHaveTextContent('3')
+    expect(screen.getByTestId('projects-focus-attention')).toHaveTextContent('1')
+    expect(screen.getByTestId('projects-focus-running')).toHaveTextContent('1')
+    expect(screen.getByTestId('projects-focus-unreachable')).toHaveTextContent('1')
+
+    fireEvent.click(screen.getByTestId('projects-focus-running'))
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('运行中 · 显示 1 / 3 个项目')
+    expect(screen.getByTestId('project-row-repo-a')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-row-repo-b')).toBeNull()
+    expect(screen.queryByTestId('project-row-broken')).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'missing' } })
+    expect(screen.getByTestId('projects-focus-all')).toHaveTextContent('3')
+    expect(screen.getByRole('status', { name: '项目筛选结果' })).toHaveTextContent('运行中 · 显示 0 / 3 个项目')
+  })
+
+  it('查询或不可达聚焦直接揭示匹配的不可达只读行，默认 all 仍保持折叠', () => {
+    const onOpenProject = vi.fn()
+    const snapshot = makeSnapshot([
+      makeProject('/code/live', [makeChange('live', 'open')]),
+      makeProject('/code/broken', [], { ok: false }),
+    ])
+    renderView({ snapshot, rulesByKey: rulesFor('/code/live'), onOpenProject })
+    expect(screen.queryByTestId('project-row-broken')).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'broken' } })
+    const broken = screen.getByTestId('project-row-broken')
+    expect(broken).toHaveAttribute('aria-disabled', 'true')
+    expect(broken).not.toHaveClass('opacity-70')
+
+    fireEvent.click(screen.getByTestId('projects-focus-unreachable'))
+    expect(screen.getByTestId('project-row-broken').tagName).not.toBe('BUTTON')
+    expect(onOpenProject).not.toHaveBeenCalled()
+  })
+
+  it('状态 radiogroup 使用 aria-checked 与 roving focus，支持方向键循环与 Home/End', () => {
+    renderView()
+    const all = screen.getByTestId('projects-focus-all')
+    const attention = screen.getByTestId('projects-focus-attention')
+    const unreachable = screen.getByTestId('projects-focus-unreachable')
+
+    expect(screen.getByRole('radiogroup', { name: '项目状态聚焦' })).toBeInTheDocument()
+    expect(all).toHaveAttribute('role', 'radio')
+    expect(all).toHaveAttribute('aria-checked', 'true')
+    expect(all).not.toHaveAttribute('role', 'tab')
+
+    all.focus()
+    fireEvent.keyDown(all, { key: 'ArrowLeft' })
+    expect(unreachable).toHaveFocus()
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(unreachable, { key: 'ArrowRight' })
+    expect(all).toHaveFocus()
+    expect(all).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(all, { key: 'ArrowRight' })
+    expect(attention).toHaveFocus()
+    expect(attention).toHaveAttribute('aria-checked', 'true')
+    expect(all).toHaveAttribute('tabindex', '-1')
+
+    fireEvent.keyDown(attention, { key: 'End' })
+    expect(unreachable).toHaveFocus()
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(unreachable, { key: 'Home' })
+    expect(all).toHaveFocus()
+    expect(all).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(all, { key: 'ArrowUp' })
+    expect(unreachable).toHaveFocus()
+    expect(unreachable).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(unreachable, { key: 'ArrowDown' })
+    expect(all).toHaveFocus()
+    expect(all).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('Escape 只清空查询；零结果清除恢复 all 并把焦点交还搜索框', () => {
+    renderView()
+    const search = screen.getByRole('searchbox', { name: '搜索项目' })
+    const attention = screen.getByTestId('projects-focus-attention')
+    fireEvent.click(attention)
+    fireEvent.change(search, { target: { value: 'missing' } })
+
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(search).toHaveValue('')
+    expect(attention).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.change(search, { target: { value: 'missing' } })
+    expect(screen.getByRole('heading', { name: '没有符合当前条件的项目' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '清除条件' }))
+    expect(search).toHaveValue('')
+    expect(screen.getByTestId('projects-focus-all')).toHaveAttribute('aria-checked', 'true')
+    expect(search).toHaveFocus()
+  })
+
+  it('真实项目源为空时显示来源空态，不误报为可清除的筛选结果', () => {
+    renderView({ snapshot: makeSnapshot([]), rulesByKey: rulesFor() })
+
+    expect(screen.getByRole('heading', { name: '当前没有项目' })).toBeInTheDocument()
+    expect(screen.queryByTestId('projects-filter-empty')).toBeNull()
+    expect(screen.queryByRole('button', { name: '清除条件' })).toBeNull()
+  })
+
+  it('rows 不变时查询与状态切换只过滤，不重复排序', () => {
+    renderView()
+    const search = screen.getByRole('searchbox', { name: '搜索项目' })
+    const attention = screen.getByTestId('projects-focus-attention')
+    const sort = vi.spyOn(Array.prototype, 'sort')
+
+    fireEvent.change(search, { target: { value: 'repo' } })
+    fireEvent.click(attention)
+
+    expect(sort).not.toHaveBeenCalled()
+    sort.mockRestore()
+  })
+
+  it('查询与状态切换不重播集合级 GSAP；reduced-motion 直接落终态', () => {
+    const media = vi.fn((query: string) => ({
+      matches: query.includes('prefers-reduced-motion: reduce'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    vi.stubGlobal('matchMedia', media)
+    const set = vi.spyOn(gsap, 'set')
+    const fromTo = vi.spyOn(gsap, 'fromTo')
+
+    renderView()
+    expect(media.mock.calls.some(([query]) => query.includes('prefers-reduced-motion: reduce'))).toBe(true)
+    expect(set).toHaveBeenCalled()
+    expect(fromTo).not.toHaveBeenCalled()
+    const setCalls = set.mock.calls.length
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'repo-b' } })
+    fireEvent.click(screen.getByTestId('projects-focus-attention'))
+    expect(set).toHaveBeenCalledTimes(setCalls)
+    expect(fromTo).not.toHaveBeenCalled()
+  })
+
+  it('普通动效只在 rows 集合变化时播放，查询与状态切换不重播', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query.includes('prefers-reduced-motion: no-preference'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+    const fromTo = vi.spyOn(gsap, 'fromTo')
+
+    renderView()
+    expect(fromTo).toHaveBeenCalledTimes(1)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: 'repo-b' } })
+    fireEvent.click(screen.getByTestId('projects-focus-attention'))
+    expect(fromTo).toHaveBeenCalledTimes(1)
   })
 })
 
