@@ -210,11 +210,12 @@
 
 ## 交付
 
-- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
-- [ ] 应用确认的 capability delta，创建并合并统一审查修复 PR。 (ship)
-- [ ] 确认精确合并 SHA 的主干 CI 通过，再启动独立 release Change。 (ship)
+- [x] 应用确认的 capability delta，并创建统一审查修复 PR。 (ship)
+- [ ] 确认非草稿 PR 的精确 head CI 通过。 (ship)
 
 ## 归档
 
+- [ ] 合并统一审查修复 PR，并确认精确 merge SHA 的主干 CI 通过。 (archive)
+- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (archive)
 - [ ] 在合并可达性、主干 CI、spec apply 和文档证据全部通过后归档 Change。 (archive)
 - [ ] 仅清理已确认无进程、无未推送提交且可安全删除的批次 worktree。 (archive)
