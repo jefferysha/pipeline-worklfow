@@ -55,6 +55,25 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     expect(screen.getByTestId('onboard-no-project')).not.toHaveTextContent('tenon setup')
   })
 
+  it('只在 1024px 起启用宽卡与步骤卡视觉，保留既有小屏契约', () => {
+    renderOb()
+    const card = screen.getByTestId('onboard-no-project')
+    const steps = card.querySelectorAll('ol > li')
+
+    expect(card).toHaveClass('max-w-[620px]', 'min-[1024px]:max-w-[920px]')
+    expect(steps).toHaveLength(2)
+    for (const step of steps) {
+      expect(step).toHaveClass(
+        'flex',
+        'gap-3',
+        'min-[1024px]:rounded-xl',
+        'min-[1024px]:border',
+        'min-[1024px]:bg-fill/55',
+        'min-[1024px]:p-3.5',
+      )
+    }
+  })
+
   it('每条命令逐个可复制：clipboard 写入对应命令 + 文案切「已复制」', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
@@ -68,13 +87,115 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('tenon doctor'))
   })
 
+  it('复制进行中禁用当前行，并保持另一条命令可操作', async () => {
+    let resolveWrite: (() => void) | undefined
+    const copyText = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve
+        }),
+    )
+    renderOb({ copyText })
+
+    const initCopy = screen.getByTestId('onboard-copy')
+    const doctorCopy = screen.getByTestId('onboard-copy-doctor')
+    fireEvent.click(initCopy)
+
+    expect(initCopy).toHaveAttribute('aria-disabled', 'true')
+    expect(initCopy).toHaveTextContent('复制中')
+    expect(doctorCopy).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByRole('status')).toHaveTextContent('正在复制命令')
+    fireEvent.click(initCopy)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(copyText).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveWrite?.()
+      await Promise.resolve()
+    })
+    expect(initCopy).toHaveAttribute('aria-disabled', 'false')
+    expect(initCopy).toHaveTextContent('已复制')
+  })
+
+  it('Clipboard API 缺失时显示可恢复错误并保留命令', async () => {
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined })
+    renderOb()
+
+    const copy = screen.getByTestId('onboard-copy')
+    copy.focus()
+    fireEvent.click(copy)
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('未能复制，请手动选择上方命令')
+    expect(copy).toHaveTextContent('重试复制')
+    expect(screen.getByTestId('onboard-cli')).toHaveTextContent('tenon init my-change --track chat')
+    expect(copy).toHaveFocus()
+  })
+
+  it.each([
+    ['同步抛错', () => {
+      throw new Error('clipboard blocked')
+    }],
+    ['异步拒绝', () => Promise.reject(new Error('clipboard denied'))],
+  ])('%s统一进入错误状态且没有未处理 rejection', async (_label, copyText) => {
+    renderOb({ copyText })
+    fireEvent.click(screen.getByTestId('onboard-copy'))
+    expect(await screen.findByRole('status')).toHaveTextContent('未能复制，请手动选择上方命令')
+  })
+
+  it('英文 locale 提供成对的 pending 与失败恢复文案', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const copyText = vi.fn().mockRejectedValue(new Error('denied'))
+    renderOb({ copyText })
+
+    const copy = screen.getByTestId('onboard-copy')
+    fireEvent.click(copy)
+    expect(copy).toHaveTextContent('Copying')
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Could not copy. Select the command above to copy it manually.',
+    )
+    expect(copy).toHaveTextContent('Retry copy')
+  })
+
+  it('成功与错误按各自时序回到 idle', async () => {
+    vi.useFakeTimers()
+    const copyText = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('denied'))
+    renderOb({ copyText })
+    const copy = screen.getByTestId('onboard-copy')
+
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+    })
+    expect(copy).toHaveTextContent('已复制')
+    act(() => vi.advanceTimersByTime(1999))
+    expect(copy).toHaveTextContent('已复制')
+    act(() => vi.advanceTimersByTime(1))
+    expect(copy).toHaveTextContent('复制')
+
+    await act(async () => {
+      fireEvent.click(copy)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(copy).toHaveTextContent('重试复制')
+    act(() => vi.advanceTimersByTime(3999))
+    expect(copy).toHaveTextContent('重试复制')
+    act(() => vi.advanceTimersByTime(1))
+    expect(copy).toHaveTextContent('复制')
+  })
+
   it('重复复制以最后一次为准，并在命令行卸载时清理反馈 timer', async () => {
     vi.useFakeTimers()
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const result = render(
       <I18nProvider>
-        <Onboarding kind="no-project" />
+        <Onboarding kind="no-project" copyText={vi.fn().mockResolvedValue(undefined)} />
       </I18nProvider>,
     )
     const copy = screen.getByTestId('onboard-copy')
@@ -99,24 +220,22 @@ describe('Onboarding no-project（自动发现 + 终端初始化 checklist）', 
   it('剪贴板写入在命令行卸载后才完成时，不再创建反馈 timer', async () => {
     vi.useFakeTimers()
     let resolveWrite: (() => void) | undefined
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      clipboard: {
-        writeText: vi.fn(
-          () =>
-            new Promise<void>((resolve) => {
-              resolveWrite = resolve
-            }),
-        ),
-      },
-    })
+    const copyText = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve
+        }),
+    )
     const result = render(
       <I18nProvider>
-        <Onboarding kind="no-project" />
+        <Onboarding kind="no-project" copyText={copyText} />
       </I18nProvider>,
     )
 
     fireEvent.click(screen.getByTestId('onboard-copy'))
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(resolveWrite).toBeTypeOf('function')
     result.unmount()
     await act(async () => {
@@ -151,5 +270,39 @@ describe('Onboarding no-change（有项目零 change：Route Lock 主入口 + CL
     fireEvent.click(screen.getByTestId('onboard-new-change'))
     expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
     expect(screen.getByText('选择执行路线')).toBeInTheDocument()
+  })
+
+  it('root 切换会清理旧命令的 pending 与迟到结果', async () => {
+    let resolveOldWrite: (() => void) | undefined
+    const copyText = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOldWrite = resolve
+        }),
+    )
+    const result = render(
+      <I18nProvider>
+        <Onboarding kind="no-change" root="/repo-a" copyText={copyText} />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('onboard-copy'))
+    expect(screen.getByTestId('onboard-copy')).toHaveAttribute('aria-disabled', 'true')
+
+    result.rerender(
+      <I18nProvider>
+        <Onboarding kind="no-change" root="/repo-b" copyText={copyText} />
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('onboard-cli')).toHaveTextContent('cd /repo-b')
+    expect(screen.getByTestId('onboard-copy')).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.queryByRole('status')).toBeNull()
+
+    await act(async () => {
+      resolveOldWrite?.()
+      await Promise.resolve()
+    })
+    expect(screen.getByTestId('onboard-copy')).toHaveTextContent('复制')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
