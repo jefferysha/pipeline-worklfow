@@ -166,6 +166,22 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(result.warnings).toEqual([])
     })
 
+    test('tasks-through-phase 在 transition 锁内重验失败时零提交', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const dir = await initChange(deps, root, 'demo')
+      const result = await createTransitionApplication(deps).execute({
+        root, changeDir: dir, changeName: 'demo', event: 'open-complete',
+        context: { tasksThroughPhase: async () => ({ pass: false, failure: 'open 出口：canonical TaskPlan tasks.md 投影认证失败' }) },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(result).toEqual({
+        kind: 'precondition-violated',
+        lines: ['open 出口：canonical TaskPlan tasks.md 投影认证失败'],
+      })
+      expect((await createStateStore().read(dir)).fields.phase).toBe('open')
+    })
+
     test('所有 default track（含 PM）缺 OpenSpec 文档/读取证据 → document-evidence-failed 且零提交', async () => {
       for (const track of ['backend', 'pm'] as const) {
         const root = await freshRepoRoot()

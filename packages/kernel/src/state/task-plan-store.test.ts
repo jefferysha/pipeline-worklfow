@@ -279,6 +279,39 @@ describe('task plan store', () => {
     expect(await readTaskPlanForChange(dir)).toMatchObject({ source: 'legacy', schedulable: false })
   })
 
+  it('recovers a byte-identical immutable revision after failure before current publication', async () => {
+    const dir = await changeDir()
+    const previous = plan()
+    const revision = plan({ revision_id: 'revision-2', revision_number: 2 })
+    const injectedFailure = new Error('injected failure after immutable publication')
+    await publishTaskPlanRevision(dir, previous, { expected_current_revision_id: null })
+
+    await expect(publishTaskPlanRevision(dir, revision, {
+      expected_current_revision_id: previous.revision_id,
+      __test_after_immutable_publish: () => { throw injectedFailure },
+    })).rejects.toBe(injectedFailure)
+
+    expect(await readFile(
+      join(dir, TASK_PLAN_STATE_DIR, 'revisions', canonicalRevisionFileName(revision)),
+      'utf8',
+    )).toBe(revisionRaw(revision))
+    expect(await readFile(join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE), 'utf8'))
+      .toBe(revisionRaw(previous))
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'canonical', revision_id: 'revision-1', projection: { state: 'current' },
+    })
+
+    await expect(publishTaskPlanRevision(dir, revision, { expected_current_revision_id: previous.revision_id }))
+      .resolves.toMatchObject({ revision_id: 'revision-2', projection: { state: 'current' } })
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'canonical', revision_id: 'revision-2', projection: { state: 'current' },
+    })
+    expect((await readdir(join(dir, TASK_PLAN_STATE_DIR, 'revisions'))).sort()).toEqual([
+      canonicalRevisionFileName(previous),
+      canonicalRevisionFileName(revision),
+    ].sort())
+  })
+
   it('keeps marker-shaped prose when a legacy-only tasks file spoofs a canonical header', async () => {
     const dir = await changeDir()
     await writeFile(join(dir, 'tasks.md'), [

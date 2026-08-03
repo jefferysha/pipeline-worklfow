@@ -53,6 +53,10 @@
 - [x] 将超过 256 KiB 的 canonical projection 授权绑定到已读 tasks source，拒绝 Change-dir ABA。 (build)
 - [x] 仅由可信 canonical state 启用 TaskGroup/WorkItem marker 展示剥离，保留 header-spoof legacy 文本。 (build)
 - [x] 为 canonical current/immutable 稳定读取补 mtime/ctime fence，拒绝同尺寸原地改写。 (build)
+- [x] 让真实 tasks-through-phase guard 从可信 canonical state 获取 projection 信任位，补 renderer 到 guard 的红绿回归并拒绝 phase-like TaskGroup 绕过。 (build)
+- [x] 分离 TaskPlan domain aggregate 与 snake_case persistence/API record，在兼容边界执行显式转换。 (build)
+- [x] 增加 TaskPlan 跨进程 publication contention 与 immutable/current 中断恢复验收。 (build)
+- [x] 为 TaskPlan HTTP 失败语义增加稳定 machine code 并收紧只读 response contract。 (build)
 
 ## 验证
 

@@ -1184,6 +1184,63 @@ function decodeTaskPlanRevisionV1(input) {
   return deepFreeze({ ok: true, value: attempt.value });
 }
 
+// packages/kernel/dist/task-plan/domain.js
+function taskPlanAggregateEntityIdEntries(value) {
+  return [
+    { id: value.planId, path: "$.plan_id" },
+    { id: value.revisionId, path: "$.revision_id" },
+    ...value.requirements.map((entry, index) => ({ id: entry.id, path: `$.requirements[${index}].id` })),
+    ...value.acceptanceCriteria.map((entry, index) => ({
+      id: entry.id,
+      path: `$.acceptance_criteria[${index}].id`
+    })),
+    ...value.groups.map((entry, index) => ({ id: entry.id, path: `$.groups[${index}].id` })),
+    ...value.workItems.flatMap((item2, index) => [
+      { id: item2.id, path: `$.work_items[${index}].id` },
+      ...item2.expectedOutputs.map((entry, outputIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].expected_outputs[${outputIndex}].id`
+      })),
+      ...item2.validators.map((entry, validatorIndex) => ({
+        id: entry.id,
+        path: `$.work_items[${index}].validators[${validatorIndex}].id`
+      }))
+    ])
+  ];
+}
+function freezeTaskPlanAggregate(aggregate) {
+  for (const value of aggregate.requirements)
+    Object.freeze(value);
+  for (const value of aggregate.acceptanceCriteria)
+    Object.freeze(value);
+  for (const group of aggregate.groups) {
+    Object.freeze(group.workItemIds);
+    Object.freeze(group);
+  }
+  for (const item2 of aggregate.workItems) {
+    Object.freeze(item2.requirementRefs);
+    Object.freeze(item2.acceptanceRefs);
+    Object.freeze(item2.dependsOn);
+    for (const claim2 of item2.resourceClaims)
+      Object.freeze(claim2);
+    Object.freeze(item2.resourceClaims);
+    for (const output of item2.expectedOutputs)
+      Object.freeze(output);
+    Object.freeze(item2.expectedOutputs);
+    for (const validator of item2.validators) {
+      Object.freeze(validator.outputIds);
+      Object.freeze(validator);
+    }
+    Object.freeze(item2.validators);
+    Object.freeze(item2);
+  }
+  Object.freeze(aggregate.requirements);
+  Object.freeze(aggregate.acceptanceCriteria);
+  Object.freeze(aggregate.groups);
+  Object.freeze(aggregate.workItems);
+  return Object.freeze(aggregate);
+}
+
 // packages/kernel/dist/task-plan/legacy.js
 function displayId(order) {
   return `legacy-display-${String(order + 1).padStart(4, "0")}`;
@@ -1253,6 +1310,50 @@ function renderTaskPlanTasksMd(revision, input) {
   }
   return `${lines.join("\n")}
 `;
+}
+
+// packages/kernel/dist/task-plan/persistence.js
+function decodeTaskPlanRevisionRecordV1(input) {
+  const decoded = decodeTaskPlanRevisionV1(input);
+  return decoded.ok ? { ok: true, value: decoded.value } : decoded;
+}
+function taskPlanRecordToDomain(record3) {
+  return freezeTaskPlanAggregate({
+    schemaVersion: record3.schema_version,
+    planId: record3.plan_id,
+    revisionId: record3.revision_id,
+    revisionNumber: record3.revision_number,
+    status: record3.status,
+    createdAt: record3.created_at,
+    requirements: record3.requirements.map((entry) => ({ ...entry })),
+    acceptanceCriteria: record3.acceptance_criteria.map((entry) => ({ ...entry })),
+    groups: record3.groups.map((group) => ({
+      id: group.id,
+      title: group.title,
+      parentId: group.parent_id,
+      workItemIds: [...group.work_item_ids]
+    })),
+    workItems: record3.work_items.map((item2) => ({
+      id: item2.id,
+      title: item2.title,
+      ...item2.description === void 0 ? {} : { description: item2.description },
+      groupId: item2.group_id,
+      requirementRefs: [...item2.requirement_refs],
+      acceptanceRefs: [...item2.acceptance_refs],
+      dependsOn: [...item2.depends_on],
+      resourceClaims: item2.resource_claims.map((claim2) => ({ ...claim2 })),
+      expectedOutputs: item2.expected_outputs.map((output) => ({ ...output })),
+      validators: item2.validators.map((validator) => ({
+        id: validator.id,
+        kind: validator.kind,
+        version: validator.version,
+        outputIds: [...validator.output_ids]
+      }))
+    }))
+  });
+}
+function taskPlanDtoToDomain(dto) {
+  return taskPlanRecordToDomain(dto);
 }
 
 // packages/kernel/dist/task-plan/validation.js
@@ -1350,12 +1451,12 @@ function isReachable(before, after, dependents, budget) {
 }
 function resourceDiagnostics(revision, dependents, collector) {
   const writers = /* @__PURE__ */ new Map();
-  for (const [itemIndex, item2] of revision.work_items.entries()) {
-    const claimKeys = item2.resource_claims.map((claim2) => `${claim2.access}:${exactResourceKey(claim2.kind, claim2.key) ?? `${claim2.kind}:${claim2.key}`}`);
+  for (const [itemIndex, item2] of revision.workItems.entries()) {
+    const claimKeys = item2.resourceClaims.map((claim2) => `${claim2.access}:${exactResourceKey(claim2.kind, claim2.key) ?? `${claim2.kind}:${claim2.key}`}`);
     for (const repeated of duplicates(claimKeys)) {
       issue(collector, "resource-claim-duplicate", `$.work_items[${itemIndex}].resource_claims`, [item2.id, repeated]);
     }
-    for (const claim2 of item2.resource_claims) {
+    for (const claim2 of item2.resourceClaims) {
       if (claim2.access !== "write")
         continue;
       const key = exactResourceKey(claim2.kind, claim2.key) ?? `${claim2.kind}:${claim2.key}`;
@@ -1408,7 +1509,7 @@ function validateTaskPlanRevisionV1(revision) {
   const decoded = decodeTaskPlanRevisionAttemptV1(revision);
   const hasNonDuplicateCodecError = decoded.errors.some((entry) => entry.code !== "duplicate_id");
   if (decoded.value === void 0 || decoded.overflow || hasNonDuplicateCodecError) {
-    const issues2 = decoded.errors.slice(0, TASK_PLAN_LIMITS.maxValidationIssues - 1).map((entry) => ({
+    const issues = decoded.errors.slice(0, TASK_PLAN_LIMITS.maxValidationIssues - 1).map((entry) => ({
       severity: "error",
       code: "task-plan-contract-invalid",
       path: entry.path,
@@ -1416,19 +1517,19 @@ function validateTaskPlanRevisionV1(revision) {
     }));
     const truncated = decoded.overflow || decoded.errors.length >= TASK_PLAN_LIMITS.maxValidationIssues;
     if (truncated) {
-      issues2.push({
+      issues.push({
         severity: "error",
         code: "diagnostic-budget-exceeded",
         path: "$",
         related_ids: []
       });
     }
-    issues2.sort((left, right) => ordinalCompare(`${left.code}\0${left.path}\0${left.related_ids.join("\0")}`, `${right.code}\0${right.path}\0${right.related_ids.join("\0")}`));
+    issues.sort((left, right) => ordinalCompare(`${left.code}\0${left.path}\0${left.related_ids.join("\0")}`, `${right.code}\0${right.path}\0${right.related_ids.join("\0")}`));
     return deepFreeze({
       valid: false,
       freezable: false,
       truncated,
-      issues: issues2,
+      issues,
       coverage: {
         complete: false,
         requirements: [],
@@ -1440,27 +1541,29 @@ function validateTaskPlanRevisionV1(revision) {
       resources: { conflicts: [], serialized: [] }
     });
   }
-  const validatedRevision = decoded.value;
+  return validateTaskPlanAggregate(taskPlanDtoToDomain(decoded.value));
+}
+function validateTaskPlanAggregate(validatedRevision) {
   const collector = { items: [], truncated: false };
   const entityIds = /* @__PURE__ */ new Set();
-  for (const { id, path: path7 } of taskPlanEntityIdEntries(validatedRevision)) {
+  for (const { id, path: path7 } of taskPlanAggregateEntityIdEntries(validatedRevision)) {
     if (entityIds.has(id))
       issue(collector, "entity-id-duplicate", path7, [id]);
     else
       entityIds.add(id);
   }
   const groupIds = new Set(validatedRevision.groups.map((group) => group.id));
-  const itemIds = new Set(validatedRevision.work_items.map((item2) => item2.id));
+  const itemIds = new Set(validatedRevision.workItems.map((item2) => item2.id));
   const requirementIds = new Set(validatedRevision.requirements.map((entry) => entry.id));
-  const acceptanceIds = new Set(validatedRevision.acceptance_criteria.map((entry) => entry.id));
+  const acceptanceIds = new Set(validatedRevision.acceptanceCriteria.map((entry) => entry.id));
   const memberships = /* @__PURE__ */ new Map();
   const groupGraph = /* @__PURE__ */ new Map();
   for (const [groupIndex, group] of validatedRevision.groups.entries()) {
-    groupGraph.set(group.id, group.parent_id === null ? [] : [group.parent_id]);
-    if (group.parent_id !== null && !groupIds.has(group.parent_id)) {
-      issue(collector, "group-parent-unknown", `$.groups[${groupIndex}].parent_id`, [group.id, group.parent_id]);
+    groupGraph.set(group.id, group.parentId === null ? [] : [group.parentId]);
+    if (group.parentId !== null && !groupIds.has(group.parentId)) {
+      issue(collector, "group-parent-unknown", `$.groups[${groupIndex}].parent_id`, [group.id, group.parentId]);
     }
-    for (const workItemId of group.work_item_ids) {
+    for (const workItemId of group.workItemIds) {
       if (!itemIds.has(workItemId)) {
         issue(collector, "group-work-item-unknown", `$.groups[${groupIndex}].work_item_ids`, [group.id, workItemId]);
       }
@@ -1475,38 +1578,38 @@ function validateTaskPlanRevisionV1(revision) {
   const dependencyGraph = /* @__PURE__ */ new Map();
   const dependents = /* @__PURE__ */ new Map();
   const edges = [];
-  for (const [itemIndex, item2] of validatedRevision.work_items.entries()) {
+  for (const [itemIndex, item2] of validatedRevision.workItems.entries()) {
     const owners = memberships.get(item2.id) ?? [];
     if (owners.length === 0)
       issue(collector, "work-item-unowned", `$.work_items[${itemIndex}].group_id`, [item2.id]);
     if (owners.length > 1)
       issue(collector, "work-item-multiple-groups", `$.work_items[${itemIndex}].group_id`, [item2.id, ...owners]);
     const soleOwner = owners.length === 1 ? owners[0] : void 0;
-    if (soleOwner !== void 0 && soleOwner !== item2.group_id) {
-      issue(collector, "work-item-group-mismatch", `$.work_items[${itemIndex}].group_id`, [item2.id, item2.group_id, soleOwner]);
+    if (soleOwner !== void 0 && soleOwner !== item2.groupId) {
+      issue(collector, "work-item-group-mismatch", `$.work_items[${itemIndex}].group_id`, [item2.id, item2.groupId, soleOwner]);
     }
-    if (!groupIds.has(item2.group_id)) {
-      issue(collector, "work-item-group-mismatch", `$.work_items[${itemIndex}].group_id`, [item2.id, item2.group_id]);
+    if (!groupIds.has(item2.groupId)) {
+      issue(collector, "work-item-group-mismatch", `$.work_items[${itemIndex}].group_id`, [item2.id, item2.groupId]);
     }
-    for (const repeated of duplicates(item2.requirement_refs)) {
+    for (const repeated of duplicates(item2.requirementRefs)) {
       issue(collector, "requirement-ref-duplicate", `$.work_items[${itemIndex}].requirement_refs`, [item2.id, repeated]);
     }
-    for (const ref of item2.requirement_refs)
+    for (const ref of item2.requirementRefs)
       if (!requirementIds.has(ref)) {
         issue(collector, "requirement-ref-unknown", `$.work_items[${itemIndex}].requirement_refs`, [item2.id, ref]);
       }
-    for (const repeated of duplicates(item2.acceptance_refs)) {
+    for (const repeated of duplicates(item2.acceptanceRefs)) {
       issue(collector, "acceptance-ref-duplicate", `$.work_items[${itemIndex}].acceptance_refs`, [item2.id, repeated]);
     }
-    for (const ref of item2.acceptance_refs)
+    for (const ref of item2.acceptanceRefs)
       if (!acceptanceIds.has(ref)) {
         issue(collector, "acceptance-ref-unknown", `$.work_items[${itemIndex}].acceptance_refs`, [item2.id, ref]);
       }
-    for (const repeated of duplicates(item2.depends_on)) {
+    for (const repeated of duplicates(item2.dependsOn)) {
       issue(collector, "dependency-duplicate", `$.work_items[${itemIndex}].depends_on`, [item2.id, repeated]);
     }
     const validDependencies = [];
-    for (const dependency of [...new Set(item2.depends_on)]) {
+    for (const dependency of [...new Set(item2.dependsOn)]) {
       if (dependency === item2.id)
         issue(collector, "dependency-self", `$.work_items[${itemIndex}].depends_on`, [item2.id]);
       else if (!itemIds.has(dependency))
@@ -1523,9 +1626,9 @@ function validateTaskPlanRevisionV1(revision) {
       }
     }
     dependencyGraph.set(item2.id, validDependencies);
-    const outputIds = new Set(item2.expected_outputs.map((output) => output.id));
+    const outputIds = new Set(item2.expectedOutputs.map((output) => output.id));
     for (const [validatorIndex, validator] of item2.validators.entries()) {
-      for (const outputId of validator.output_ids)
+      for (const outputId of validator.outputIds)
         if (!outputIds.has(outputId)) {
           issue(collector, "validator-output-unknown", `$.work_items[${itemIndex}].validators[${validatorIndex}].output_ids`, [
             item2.id,
@@ -1539,8 +1642,8 @@ function validateTaskPlanRevisionV1(revision) {
   if (dependencyCycle.length > 0)
     issue(collector, "dependency-cycle", "$.work_items", dependencyCycle);
   edges.sort((left, right) => ordinalCompare(`${left.from_work_item_id}\0${left.to_work_item_id}`, `${right.from_work_item_id}\0${right.to_work_item_id}`));
-  const requirementCoverage = coverageEntries([...requirementIds], validatedRevision.work_items, (item2) => item2.requirement_refs, collector);
-  const acceptanceCoverage = coverageEntries([...acceptanceIds], validatedRevision.work_items, (item2) => item2.acceptance_refs, collector);
+  const requirementCoverage = coverageEntries([...requirementIds], validatedRevision.workItems, (item2) => item2.requirementRefs, collector);
+  const acceptanceCoverage = coverageEntries([...acceptanceIds], validatedRevision.workItems, (item2) => item2.acceptanceRefs, collector);
   const uncoveredRequirementIds = requirementCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id);
   const uncoveredAcceptanceIds = acceptanceCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id);
   for (const id of uncoveredRequirementIds)
@@ -7584,216 +7687,6 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
 import { createHash as createHash8 } from "node:crypto";
 import { lstat as lstat10, mkdir as mkdir7, opendir, realpath as realpath4 } from "node:fs/promises";
 import { isAbsolute as isAbsolute4, join as join15, relative as relative4, sep as sep5 } from "node:path";
-var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
-var TASK_PLAN_CURRENT_FILE = "current.json";
-var TASK_PLAN_REVISIONS_DIR = "revisions";
-var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
-var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
-var TaskPlanStateCorruptError = class extends Error {
-  name = "TaskPlanStateCorruptError";
-};
-function revisionNumberPrefix(revision) {
-  return String(revision.revision_number).padStart(6, "0");
-}
-function planNamespace(planId) {
-  return createHash8("sha256").update(planId).digest("hex");
-}
-function revisionFileName3(revision) {
-  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`;
-}
-function legacyRevisionFileName(revision) {
-  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
-}
-function digest2(raw) {
-  return `sha256:${createHash8("sha256").update(raw).digest("hex")}`;
-}
-function normalizeProjectionCompletion(markdown) {
-  return markdown.split("\n").map((line) => {
-    const item2 = /^- \[[ xX]\] (.+ <!-- work-item:[^>]+ -->)$/u.exec(line);
-    return item2 === null ? line : `- [ ] ${item2[1]}`;
-  }).join("\n");
-}
-async function assertOwnedDirectory(base, candidate) {
-  try {
-    const [baseReal, candidateInfo, candidateReal] = await Promise.all([
-      realpath4(base),
-      lstat10(candidate),
-      realpath4(candidate)
-    ]);
-    const fromBase = relative4(baseReal, candidateReal);
-    if (candidateInfo.isSymbolicLink() || !candidateInfo.isDirectory() || fromBase === "" || fromBase === ".." || fromBase.startsWith(`..${sep5}`) || isAbsolute4(fromBase))
-      throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
-  } catch (error2) {
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
-  }
-}
-async function readRegular(path7, maxBytes) {
-  try {
-    return await readOptionalBoundedRegularTextFile(path7, maxBytes, "TaskPlan state file");
-  } catch (error2) {
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
-  }
-}
-async function readStateFile(path7, maxBytes) {
-  let bytes;
-  try {
-    bytes = await readBoundedRegularFile(path7, maxBytes, "TaskPlan state file");
-  } catch (error2) {
-    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
-      return void 0;
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
-  }
-  try {
-    return {
-      bytes,
-      text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-    };
-  } catch {
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not valid UTF-8");
-  }
-}
-function assertCommittedRevisionSemantics(revision) {
-  const validation = validateTaskPlanRevisionV1(revision);
-  if (revision.status !== "frozen" || !validation.freezable) {
-    throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
-  }
-}
-async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
-  const canonical = await readStateFile(join15(revisionsDir, revisionFileName3(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (canonical !== void 0) {
-    if (!canonical.bytes.equals(expectedRaw)) {
-      throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
-    }
-    return canonical;
-  }
-  const legacy = await readStateFile(join15(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (legacy === void 0)
-    return void 0;
-  if (legacy.bytes.equals(expectedRaw))
-    return legacy;
-  const decoded = decodeTaskPlanRevisionV1(legacy.text);
-  if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
-    return void 0;
-  throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
-}
-async function readCanonicalTaskPlanState(changeDir) {
-  const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
-  const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
-  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (currentRaw === void 0)
-    return void 0;
-  const decoded = decodeTaskPlanRevisionV1(currentRaw.text);
-  if (!decoded.ok)
-    throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
-  assertCommittedRevisionSemantics(decoded.value);
-  await assertOwnedDirectory(changeDir, stateDir);
-  await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
-  const immutableRaw = await readImmutableTwin(join15(stateDir, TASK_PLAN_REVISIONS_DIR), decoded.value, currentRaw.bytes);
-  if (immutableRaw === void 0) {
-    throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
-  }
-  return { revision: decoded.value, currentBytes: currentRaw.bytes };
-}
-async function isCurrentTaskPlanProjectionForChange(changeDir, source) {
-  const state = await readCanonicalTaskPlanState(changeDir);
-  if (state === void 0)
-    return false;
-  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
-  return normalizeProjectionCompletion(source) === expected;
-}
-async function readTaskPlanForChange(changeDir) {
-  const state = await readCanonicalTaskPlanState(changeDir);
-  if (state === void 0) {
-    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
-    return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
-  }
-  let tasks;
-  let projectionReadFailed = false;
-  try {
-    tasks = await readRegular(join15(changeDir, "tasks.md"), MAX_CANONICAL_TASKS_MD_BYTES);
-  } catch {
-    projectionReadFailed = true;
-  }
-  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
-  const projection = projectionReadFailed ? { state: "drift", reason: "tasks.md projection is not a readable bounded regular file" } : tasks === void 0 ? { state: "pending", reason: "tasks.md projection missing" } : normalizeProjectionCompletion(tasks) === expected ? { state: "current" } : { state: "drift", reason: "tasks.md projection content mismatch" };
-  return toTaskPlanReadModelV1(state.revision, projection);
-}
-
-// packages/kernel/dist/state/markers.js
-import { writeFile as writeFile4 } from "node:fs/promises";
-import { join as join16 } from "node:path";
-var BREADCRUMB_FILE = ".breadcrumb";
-function createBreadcrumbWriter() {
-  return {
-    async write(changeDir, content) {
-      await writeFile4(join16(changeDir, BREADCRUMB_FILE), content, "utf8");
-    }
-  };
-}
-
-// packages/kernel/dist/state/review-gate.js
-var REVIEW_GATE_PENDING = "pending";
-var REVIEW_GATE_APPROVED = "approved";
-function scalar(state, field) {
-  const value = state.fields[field];
-  return Array.isArray(value) ? value.join(",") : value ?? "";
-}
-function reviewGateStatus(state) {
-  const value = scalar(state, "review_gate_status");
-  return value === REVIEW_GATE_PENDING || value === REVIEW_GATE_APPROVED ? value : null;
-}
-function reviewGateEvent(state) {
-  return scalar(state, "review_gate_event");
-}
-function reviewGateMatches(state, phase, event) {
-  return scalar(state, "review_gate_phase") === phase && (event === void 0 || reviewGateEvent(state) === event);
-}
-function reviewGateApprovedFor(state, phase, event) {
-  return reviewGateMatches(state, phase, event) && reviewGateStatus(state) === REVIEW_GATE_APPROVED;
-}
-function clearReviewGatePatch() {
-  return {
-    review_gate_phase: "",
-    review_gate_status: "",
-    review_gate_event: "",
-    review_requested_at: "",
-    review_acknowledged_at: ""
-  };
-}
-
-// packages/kernel/dist/state/transitionTail.js
-async function applyBreadcrumbTail(port, args) {
-  if (!port)
-    return { ok: true };
-  try {
-    await port.write(args.changeDir, `pipeline:${args.name} phase=${args.to}
-`);
-    return { ok: true };
-  } catch (error2) {
-    return { ok: false, error: error2 };
-  }
-}
-
-// packages/kernel/dist/state/workflow-run-repository.js
-import { randomUUID as randomUUID5 } from "node:crypto";
-
-// packages/kernel/dist/workflow/stepGuard.js
-import { readFileSync as readFileSync4 } from "node:fs";
-import path5 from "node:path";
-
-// packages/kernel/dist/workflow/predicates.js
-function matchesTrackPredicate(predicate, track) {
-  const listed = predicate.values.includes(track);
-  return predicate.kind === "track-in" ? listed : !listed;
-}
-var NON_PM = { kind: "track-not-in", values: ["pm"] };
-var NON_PM_OR_FREE = { kind: "track-not-in", values: ["pm", "free"] };
 
 // packages/kernel/dist/workflow/todo-projection.js
 var DEFAULT_WORKFLOW_TODO_STAGES = DEFAULT_WORKFLOW_STEPS.map((step) => ({ id: step.id, label: step.label }));
@@ -7917,6 +7810,241 @@ function incompletePipelineTasksForExit(input) {
   const incomplete = stages.slice(0, phaseIndex + 1).flatMap((stage) => parsed.byStage.get(stage.id) ?? []).filter((task) => !task.completed).length;
   return { structured: true, incomplete };
 }
+
+// packages/kernel/dist/state/task-plan-store.js
+var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
+var TASK_PLAN_CURRENT_FILE = "current.json";
+var TASK_PLAN_REVISIONS_DIR = "revisions";
+var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
+var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
+var TaskPlanStateCorruptError = class extends Error {
+  name = "TaskPlanStateCorruptError";
+};
+function revisionNumberPrefix(revision) {
+  return String(revision.revision_number).padStart(6, "0");
+}
+function planNamespace(planId) {
+  return createHash8("sha256").update(planId).digest("hex");
+}
+function revisionFileName3(revision) {
+  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`;
+}
+function legacyRevisionFileName(revision) {
+  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
+}
+function digest2(raw) {
+  return `sha256:${createHash8("sha256").update(raw).digest("hex")}`;
+}
+function normalizeProjectionCompletion(markdown) {
+  return markdown.split("\n").map((line) => {
+    const item2 = /^- \[[ xX]\] (.+ <!-- work-item:[^>]+ -->)$/u.exec(line);
+    return item2 === null ? line : `- [ ] ${item2[1]}`;
+  }).join("\n");
+}
+async function assertOwnedDirectory(base, candidate) {
+  try {
+    const [baseReal, candidateInfo, candidateReal] = await Promise.all([
+      realpath4(base),
+      lstat10(candidate),
+      realpath4(candidate)
+    ]);
+    const fromBase = relative4(baseReal, candidateReal);
+    if (candidateInfo.isSymbolicLink() || !candidateInfo.isDirectory() || fromBase === "" || fromBase === ".." || fromBase.startsWith(`..${sep5}`) || isAbsolute4(fromBase))
+      throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
+  } catch (error2) {
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
+  }
+}
+async function readRegular(path7, maxBytes) {
+  try {
+    return await readOptionalBoundedRegularTextFile(path7, maxBytes, "TaskPlan state file");
+  } catch (error2) {
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
+  }
+}
+async function readStateFile(path7, maxBytes) {
+  let bytes;
+  try {
+    bytes = await readBoundedRegularFile(path7, maxBytes, "TaskPlan state file");
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
+      return void 0;
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
+  }
+  try {
+    return {
+      bytes,
+      text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+    };
+  } catch {
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not valid UTF-8");
+  }
+}
+function assertCommittedRevisionSemantics(revision) {
+  const validation = validateTaskPlanAggregate(taskPlanRecordToDomain(revision));
+  if (revision.status !== "frozen" || !validation.freezable) {
+    throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
+  }
+}
+async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
+  const canonical = await readStateFile(join15(revisionsDir, revisionFileName3(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (canonical !== void 0) {
+    if (!canonical.bytes.equals(expectedRaw)) {
+      throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+    }
+    return canonical;
+  }
+  const legacy = await readStateFile(join15(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (legacy === void 0)
+    return void 0;
+  if (legacy.bytes.equals(expectedRaw))
+    return legacy;
+  const decoded = decodeTaskPlanRevisionRecordV1(legacy.text);
+  if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
+    return void 0;
+  throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+}
+async function readCanonicalTaskPlanState(changeDir) {
+  const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
+  const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
+  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (currentRaw === void 0)
+    return void 0;
+  const decoded = decodeTaskPlanRevisionRecordV1(currentRaw.text);
+  if (!decoded.ok)
+    throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
+  const revision = decoded.value;
+  assertCommittedRevisionSemantics(revision);
+  await assertOwnedDirectory(changeDir, stateDir);
+  await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
+  const immutableRaw = await readImmutableTwin(join15(stateDir, TASK_PLAN_REVISIONS_DIR), revision, currentRaw.bytes);
+  if (immutableRaw === void 0) {
+    throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
+  }
+  return { revision, currentBytes: currentRaw.bytes };
+}
+async function isCurrentTaskPlanProjectionForChange(changeDir, source) {
+  return await classifyTaskPlanProjectionForChange(changeDir, source) === "current";
+}
+async function classifyTaskPlanProjectionForChange(changeDir, source) {
+  const state = await readCanonicalTaskPlanState(changeDir);
+  if (state === void 0)
+    return "legacy";
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
+  return normalizeProjectionCompletion(source) === expected ? "current" : "invalid";
+}
+async function taskPlanTasksThroughPhaseForChange(changeDir, phase, sourceOverride) {
+  const state = await readCanonicalTaskPlanState(changeDir);
+  const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES;
+  let source = sourceOverride ?? void 0;
+  if (sourceOverride === void 0)
+    try {
+      source = await readRegular(join15(changeDir, "tasks.md"), limit);
+    } catch {
+      return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
+    }
+  if (source === void 0)
+    return phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
+  if (Buffer.byteLength(source) > limit)
+    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
+  if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) }))
+    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Acanonical TaskPlan tasks.md \u6295\u5F71\u8BA4\u8BC1\u5931\u8D25` };
+  const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: source, trustedCanonicalProjection: state !== void 0 });
+  return status.incomplete > 0 ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4ECD\u6709 ${status.incomplete} \u9879\u672A\u52FE` } : { pass: true };
+}
+async function readTaskPlanForChange(changeDir) {
+  const state = await readCanonicalTaskPlanState(changeDir);
+  if (state === void 0) {
+    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
+    return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
+  }
+  let tasks;
+  let projectionReadFailed = false;
+  try {
+    tasks = await readRegular(join15(changeDir, "tasks.md"), MAX_CANONICAL_TASKS_MD_BYTES);
+  } catch {
+    projectionReadFailed = true;
+  }
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
+  const projection = projectionReadFailed ? { state: "drift", reason: "tasks.md projection is not a readable bounded regular file" } : tasks === void 0 ? { state: "pending", reason: "tasks.md projection missing" } : normalizeProjectionCompletion(tasks) === expected ? { state: "current" } : { state: "drift", reason: "tasks.md projection content mismatch" };
+  return toTaskPlanReadModelV1(state.revision, projection);
+}
+
+// packages/kernel/dist/state/markers.js
+import { writeFile as writeFile4 } from "node:fs/promises";
+import { join as join16 } from "node:path";
+var BREADCRUMB_FILE = ".breadcrumb";
+function createBreadcrumbWriter() {
+  return {
+    async write(changeDir, content) {
+      await writeFile4(join16(changeDir, BREADCRUMB_FILE), content, "utf8");
+    }
+  };
+}
+
+// packages/kernel/dist/state/review-gate.js
+var REVIEW_GATE_PENDING = "pending";
+var REVIEW_GATE_APPROVED = "approved";
+function scalar(state, field) {
+  const value = state.fields[field];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function reviewGateStatus(state) {
+  const value = scalar(state, "review_gate_status");
+  return value === REVIEW_GATE_PENDING || value === REVIEW_GATE_APPROVED ? value : null;
+}
+function reviewGateEvent(state) {
+  return scalar(state, "review_gate_event");
+}
+function reviewGateMatches(state, phase, event) {
+  return scalar(state, "review_gate_phase") === phase && (event === void 0 || reviewGateEvent(state) === event);
+}
+function reviewGateApprovedFor(state, phase, event) {
+  return reviewGateMatches(state, phase, event) && reviewGateStatus(state) === REVIEW_GATE_APPROVED;
+}
+function clearReviewGatePatch() {
+  return {
+    review_gate_phase: "",
+    review_gate_status: "",
+    review_gate_event: "",
+    review_requested_at: "",
+    review_acknowledged_at: ""
+  };
+}
+
+// packages/kernel/dist/state/transitionTail.js
+async function applyBreadcrumbTail(port, args) {
+  if (!port)
+    return { ok: true };
+  try {
+    await port.write(args.changeDir, `pipeline:${args.name} phase=${args.to}
+`);
+    return { ok: true };
+  } catch (error2) {
+    return { ok: false, error: error2 };
+  }
+}
+
+// packages/kernel/dist/state/workflow-run-repository.js
+import { randomUUID as randomUUID5 } from "node:crypto";
+
+// packages/kernel/dist/workflow/stepGuard.js
+import { readFileSync as readFileSync4 } from "node:fs";
+import path5 from "node:path";
+
+// packages/kernel/dist/workflow/predicates.js
+function matchesTrackPredicate(predicate, track) {
+  const listed = predicate.values.includes(track);
+  return predicate.kind === "track-in" ? listed : !listed;
+}
+var NON_PM = { kind: "track-not-in", values: ["pm"] };
+var NON_PM_OR_FREE = { kind: "track-not-in", values: ["pm", "free"] };
 
 // packages/kernel/dist/flow/guard.js
 var PM_ONLY = { kind: "track-in", values: ["pm"] };
@@ -8217,7 +8345,19 @@ function evaluateGuard(state, ctx) {
             failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42\u622A\u81F3\u5F53\u524D\u9636\u6BB5\u7684 tasks.md \u5168\u90E8\u52FE\u9009\uFF08tasks.md \u7F3A\u5931\uFF09`);
           }
         } else {
-          const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: content });
+          const projectionStatus = ctx.canonicalTasksProjectionStatus?.({
+            changeDirRel: changeDir,
+            tasksMarkdown: content
+          }) ?? "legacy";
+          if (projectionStatus === "invalid") {
+            failures.push(`${phase} \u51FA\u53E3\uFF1Acanonical TaskPlan tasks.md \u6295\u5F71\u8BA4\u8BC1\u5931\u8D25`);
+            break;
+          }
+          const status = incompletePipelineTasksForExit({
+            phase,
+            tasksMarkdown: content,
+            trustedCanonicalProjection: projectionStatus === "current"
+          });
           if (status.incomplete > 0) {
             failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42\u622A\u81F3\u5F53\u524D\u9636\u6BB5\u7684 tasks.md \u5168\u90E8\u52FE\u9009\uFF08\u4ECD\u6709 ${status.incomplete} \u9879\u672A\u52FE\uFF09`);
           }
@@ -8606,8 +8746,8 @@ function normalizeDefaultGuardFields(fields) {
   }
   return out;
 }
-function renderPreconditionViolation(event, failure2, track) {
-  const { guard, decision } = failure2;
+function renderPreconditionViolation(event, failure3, track) {
+  const { guard, decision } = failure3;
   const actual = (decision.kind === "failed" ? decision.actual : void 0) ?? "";
   switch (event) {
     case "explore-complete":
@@ -17969,6 +18109,10 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
   const violations = await checkDefaultEventPreconditions(event, state, command.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
+  const tasks = await command.context.tasksThroughPhase?.(edge2.from);
+  if (tasks && !tasks.pass) {
+    return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge2.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
+  }
   let result;
   try {
     result = flow.transition(state, edge2.to, clock);
@@ -23622,7 +23766,8 @@ async function performTransition(deps, root, name, event) {
     fileExists: fileExists ? (p) => fileExists(root, p) : void 0,
     gitHeadSha: gitHeadSha2 ? () => gitHeadSha2(root) : void 0,
     workspaceFingerprint: workspaceFingerprint ? () => workspaceFingerprint(root, name) : void 0,
-    specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name)
+    specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name),
+    tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(dir, phase)
   };
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
@@ -25283,39 +25428,39 @@ function errorStatus(error2) {
   const status = Reflect.get(error2, "status");
   return typeof status === "number" ? status : void 0;
 }
+function failure2(status, code, error2) {
+  return { status, body: { ok: false, code, error: error2 } };
+}
 async function resolveTaskPlanRoute(rawUrl, path7, deps) {
   const match = /^\/api\/task-plans\/([^/]+)$/.exec(path7);
   if (match === null) return null;
   const segment = match[1];
   if (segment === void 0) {
-    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 TaskPlan \u8DEF\u5F84" } };
+    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 TaskPlan \u8DEF\u5F84");
   }
   let change;
   try {
     change = decodeURIComponent(segment);
   } catch {
-    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
+    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   if (!isChangeName4(change)) {
-    return { status: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
+    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   const root = new URL(rawUrl, "http://localhost").searchParams.get("root") ?? "";
-  if (root === "") return { status: 400, body: { ok: false, error: "\u7F3A\u5C11 root" } };
+  if (root === "") return failure2(400, "TASK_PLAN_ROOT_REQUIRED", "\u7F3A\u5C11 root");
   const rootCheck = deps.workflowRootForRequest(root);
   if (!rootCheck.ok) {
-    return {
-      status: rootCheck.code,
-      body: { ok: false, error: rootCheck.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1" }
-    };
+    return rootCheck.code === 404 ? failure2(404, "TASK_PLAN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure2(403, "TASK_PLAN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
   }
   try {
     const plan = await deps.readPlan(rootCheck.anchor, change);
-    return plan === null ? { status: 404, body: { ok: false, error: "TaskPlan \u4E0D\u5B58\u5728" } } : { status: 200, body: plan };
+    return plan === null ? failure2(404, "TASK_PLAN_NOT_FOUND", "TaskPlan \u4E0D\u5B58\u5728") : { status: 200, body: plan };
   } catch (error2) {
     if (errorStatus(error2) === 403) {
-      return { status: 403, body: { ok: false, error: "canonical TaskPlan \u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
+      return failure2(403, "TASK_PLAN_PATH_FORBIDDEN", "canonical TaskPlan \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
     }
-    return { status: 409, body: { ok: false, error: "canonical TaskPlan \u635F\u574F" } };
+    return failure2(409, "TASK_PLAN_CORRUPT", "canonical TaskPlan \u635F\u574F");
   }
 }
 

@@ -1,12 +1,41 @@
 export { decodeTaskPlanRevisionV1, encodeTaskPlanRevisionV1 } from './codec.js'
+export { freezeTaskPlanAggregate, taskPlanAggregateEntityIdEntries } from './domain.js'
 export { adaptLegacyTasksMd, isCanonicalTaskPlanTasksMarkdown, renderTaskPlanTasksMd } from './legacy.js'
+export {
+  decodeTaskPlanRevisionRecordV1,
+  encodeTaskPlanRevisionRecordV1,
+  taskPlanDomainToDto,
+  taskPlanDomainToRecord,
+  taskPlanDtoToDomain,
+  taskPlanRecordToDomain,
+} from './persistence.js'
 export { toTaskPlanReadModelV1 } from './read-model.js'
-export { validateTaskPlanRevisionV1 } from './validation.js'
+export { validateTaskPlanAggregate, validateTaskPlanRevisionV1 } from './validation.js'
 export {
   TASK_PLAN_LIMITS,
   TASK_PLAN_READ_SCHEMA_VERSION,
   TASK_PLAN_SCHEMA_VERSION,
 } from './types.js'
+export type {
+  TaskPlanAggregate,
+  TaskPlanAggregateEntityIdEntry,
+  TaskPlanCatalogItem,
+  TaskPlanExpectedOutput,
+  TaskPlanGroup,
+  TaskPlanResourceClaim,
+  TaskPlanValidator,
+  TaskPlanWorkItem,
+} from './domain.js'
+export type {
+  TaskPlanCatalogRecordV1,
+  TaskPlanExpectedOutputRecordV1,
+  TaskPlanGroupRecordV1,
+  TaskPlanResourceClaimRecordV1,
+  TaskPlanRecordDecodeResultV1,
+  TaskPlanRevisionRecordV1,
+  TaskPlanValidatorRecordV1,
+  TaskPlanWorkItemRecordV1,
+} from './persistence.js'
 export type {
   CanonicalTaskPlanReadModelV1,
   ExpectedOutputKind,

@@ -6,6 +6,7 @@ import { IllegalTransitionError, TRANSITION_EVENTS, eventEdge as kernelEventEdge
 import type { Phase, PipelineState, TransitionResult } from '@tenon/kernel'
 import { cmdTransition } from './transition.js'
 import { EVENTS, eventEdge } from '../events.js'
+import { makeGuardCtx } from '../guardContext.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
 function approvedReviewState(fields: Parameters<typeof mockState>[0]): PipelineState {
@@ -67,6 +68,25 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.store.write.calls).toHaveLength(1)
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.fields.phase).toBe('verify')
+  })
+
+  test('生产 guardContext 会在 transition 锁内重验未完成 tasks 并阻止提交', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-task-gate-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'tasks.md'), '# Tasks\n\n## Build\n\n- [ ] Finish implementation\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', build_mode: 'direct', isolation: 'worktree', pre_verify_review_result: 'pass' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    try {
+      expect(await cmdTransition(deps, 'demo', 'build-complete')).toBe(1)
+      expect(deps.errLines).toContain('build 出口：tasks.md 仍有 1 项未勾')
+      expect(deps.store.write.calls).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test('verify-fail 回退边：verify -> build（stderr），且 build_sha 清 null', async () => {

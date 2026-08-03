@@ -1,17 +1,24 @@
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, opendir, realpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
+import { incompletePipelineTasksForExit } from '../workflow/todo-projection.js'
 import {
   adaptLegacyTasksMd,
+  decodeTaskPlanRevisionRecordV1,
   decodeTaskPlanRevisionV1,
-  encodeTaskPlanRevisionV1,
+  encodeTaskPlanRevisionRecordV1,
   renderTaskPlanTasksMd,
   TASK_PLAN_LIMITS,
+  taskPlanDomainToRecord,
+  taskPlanDtoToDomain,
+  taskPlanRecordToDomain,
   toTaskPlanReadModelV1,
-  validateTaskPlanRevisionV1,
+  validateTaskPlanAggregate,
   type TaskPlanReadModelV1,
+  type TaskPlanRevisionRecordV1,
   type TaskPlanRevisionV1,
 } from '../task-plan/index.js'
+import type { Phase } from '../types.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from './document-path.js'
 import { withLock } from './lock.js'
@@ -33,9 +40,11 @@ export class TaskPlanRevisionConflictError extends Error {
 export interface PublishTaskPlanOptions {
   readonly expected_current_revision_id: string | null
   readonly completed_work_item_ids?: readonly string[]
+  /** @internal Test-only crash injection at the immutable -> current commit boundary. */
+  readonly __test_after_immutable_publish?: () => void | Promise<void>
 }
 
-function revisionNumberPrefix(revision: TaskPlanRevisionV1): string {
+function revisionNumberPrefix(revision: TaskPlanRevisionRecordV1): string {
   return String(revision.revision_number).padStart(6, '0')
 }
 
@@ -43,16 +52,16 @@ function planNamespace(planId: string): string {
   return createHash('sha256').update(planId).digest('hex')
 }
 
-function revisionFileName(revision: TaskPlanRevisionV1): string {
+function revisionFileName(revision: TaskPlanRevisionRecordV1): string {
   // TaskPlan identifiers reject `--`, keeping this address disjoint from legacy `<number>-<id>` files.
   return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`
 }
 
-function legacyRevisionFileName(revision: TaskPlanRevisionV1): string {
+function legacyRevisionFileName(revision: TaskPlanRevisionRecordV1): string {
   return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`
 }
 
-function isRevisionFileNameFor(name: string, revision: TaskPlanRevisionV1): boolean {
+function isRevisionFileNameFor(name: string, revision: TaskPlanRevisionRecordV1): boolean {
   return name === revisionFileName(revision) || name === legacyRevisionFileName(revision)
 }
 
@@ -139,8 +148,8 @@ interface TaskPlanRevisionAdmission {
   readonly targetExists: boolean
 }
 
-function assertCommittedRevisionSemantics(revision: TaskPlanRevisionV1): void {
-  const validation = validateTaskPlanRevisionV1(revision)
+function assertCommittedRevisionSemantics(revision: TaskPlanRevisionRecordV1): void {
+  const validation = validateTaskPlanAggregate(taskPlanRecordToDomain(revision))
   if (revision.status !== 'frozen' || !validation.freezable) {
     throw new TaskPlanStateCorruptError('TaskPlan committed lineage contains non-freezable state')
   }
@@ -148,9 +157,9 @@ function assertCommittedRevisionSemantics(revision: TaskPlanRevisionV1): void {
 
 async function assertCommittedLineageAndAdmission(
   revisionsDir: string,
-  proposed: TaskPlanRevisionV1,
+  proposed: TaskPlanRevisionRecordV1,
   proposedRaw: string,
-  current: TaskPlanRevisionV1 | undefined,
+  current: TaskPlanRevisionRecordV1 | undefined,
   exactCurrent: boolean,
 ): Promise<TaskPlanRevisionAdmission> {
   const proposedBuffer = Buffer.from(proposedRaw, 'utf8')
@@ -187,7 +196,7 @@ async function assertCommittedLineageAndAdmission(
     if (bytesRead > TASK_PLAN_LIMITS.maxRevisionHistoryBytes) {
       throw new TaskPlanStateCorruptError('TaskPlan revision history byte budget exceeded')
     }
-    const decoded = decodeTaskPlanRevisionV1(raw.text)
+    const decoded = decodeTaskPlanRevisionRecordV1(raw.text)
     if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan revision history contains malformed state')
     const historical = decoded.value
     const isProposedIdentity = historical.plan_id === proposed.plan_id
@@ -266,7 +275,7 @@ async function assertCommittedLineageAndAdmission(
 
 async function readImmutableTwin(
   revisionsDir: string,
-  revision: TaskPlanRevisionV1,
+  revision: TaskPlanRevisionRecordV1,
   expectedRaw: Buffer,
 ): Promise<StrictTaskPlanStateFile | undefined> {
   const canonical = await readStateFile(
@@ -285,7 +294,7 @@ async function readImmutableTwin(
   )
   if (legacy === undefined) return undefined
   if (legacy.bytes.equals(expectedRaw)) return legacy
-  const decoded = decodeTaskPlanRevisionV1(legacy.text)
+  const decoded = decodeTaskPlanRevisionRecordV1(legacy.text)
   if (
     decoded.ok
     && decoded.value.plan_id !== revision.plan_id
@@ -309,7 +318,7 @@ async function publishImmutable(path: string, dir: string, raw: string): Promise
 
 async function publishProjection(
   changeDir: string,
-  revision: TaskPlanRevisionV1,
+  revision: TaskPlanRevisionRecordV1,
   raw: string,
   completedWorkItemIds: readonly string[],
 ): Promise<TaskPlanReadModelV1> {
@@ -346,8 +355,9 @@ export async function publishTaskPlanRevision(
     }
     throw new Error('TaskPlan revision does not satisfy task-plan/v1')
   }
-  const accepted = decoded.value
-  const validation = validateTaskPlanRevisionV1(accepted)
+  const aggregate = taskPlanDtoToDomain(decoded.value)
+  const validation = validateTaskPlanAggregate(aggregate)
+  const accepted = taskPlanDomainToRecord(aggregate)
   if (accepted.status !== 'frozen' || !validation.freezable) {
     throw new Error('TaskPlan revision is not freezable')
   }
@@ -365,13 +375,13 @@ export async function publishTaskPlanRevision(
     const revisionsDir = join(stateDir, TASK_PLAN_REVISIONS_DIR)
     await ensureOwnedDirectory(changeDir, stateDir)
     await ensureOwnedDirectory(changeDir, revisionsDir)
-    const raw = `${encodeTaskPlanRevisionV1(accepted)}\n`
+    const raw = `${encodeTaskPlanRevisionRecordV1(accepted)}\n`
     const rawBytes = Buffer.from(raw, 'utf8')
     const currentRaw = await readStateFile(join(stateDir, TASK_PLAN_CURRENT_FILE), TASK_PLAN_LIMITS.maxRevisionBytes)
-    let current: TaskPlanRevisionV1 | undefined
+    let current: TaskPlanRevisionRecordV1 | undefined
     let exactCurrent = false
     if (currentRaw !== undefined) {
-      const currentDecoded = decodeTaskPlanRevisionV1(currentRaw.text)
+      const currentDecoded = decodeTaskPlanRevisionRecordV1(currentRaw.text)
       if (!currentDecoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
       current = currentDecoded.value
       const immutable = await readImmutableTwin(revisionsDir, current, currentRaw.bytes)
@@ -400,6 +410,7 @@ export async function publishTaskPlanRevision(
     if (exactCurrent) return publishProjection(changeDir, accepted, raw, completed)
     if (!admission.targetExists) {
       await publishImmutable(join(revisionsDir, revisionFileName(accepted)), revisionsDir, raw)
+      await options.__test_after_immutable_publish?.()
     }
     await atomicReplaceFile(join(stateDir, TASK_PLAN_CURRENT_FILE), raw)
 
@@ -408,7 +419,7 @@ export async function publishTaskPlanRevision(
 }
 
 interface CanonicalTaskPlanState {
-  readonly revision: TaskPlanRevisionV1
+  readonly revision: TaskPlanRevisionRecordV1
   readonly currentBytes: Buffer
 }
 
@@ -417,32 +428,51 @@ async function readCanonicalTaskPlanState(changeDir: string): Promise<CanonicalT
   const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
   const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
   if (currentRaw === undefined) return undefined
-  const decoded = decodeTaskPlanRevisionV1(currentRaw.text)
+  const decoded = decodeTaskPlanRevisionRecordV1(currentRaw.text)
   if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
-  assertCommittedRevisionSemantics(decoded.value)
+  const revision = decoded.value
+  assertCommittedRevisionSemantics(revision)
   await assertOwnedDirectory(changeDir, stateDir)
   await assertOwnedDirectory(changeDir, join(stateDir, TASK_PLAN_REVISIONS_DIR))
   const immutableRaw = await readImmutableTwin(
     join(stateDir, TASK_PLAN_REVISIONS_DIR),
-    decoded.value,
+    revision,
     currentRaw.bytes,
   )
   if (immutableRaw === undefined) {
     throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
   }
-  return { revision: decoded.value, currentBytes: currentRaw.bytes }
+  return { revision, currentBytes: currentRaw.bytes }
 }
 
 export async function isCurrentTaskPlanProjectionForChange(
   changeDir: string,
   source: string,
 ): Promise<boolean> {
-  const state = await readCanonicalTaskPlanState(changeDir)
-  if (state === undefined) return false
-  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) })
-  return normalizeProjectionCompletion(source) === expected
+  return (await classifyTaskPlanProjectionForChange(changeDir, source)) === 'current'
 }
 
+export async function classifyTaskPlanProjectionForChange(
+  changeDir: string,
+  source: string,
+): Promise<'current' | 'legacy' | 'invalid'> {
+  const state = await readCanonicalTaskPlanState(changeDir)
+  if (state === undefined) return 'legacy'
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) })
+  return normalizeProjectionCompletion(source) === expected ? 'current' : 'invalid'
+}
+export async function taskPlanTasksThroughPhaseForChange(changeDir: string, phase: Phase, sourceOverride?: string | null): Promise<{ readonly pass: boolean; readonly failure?: string }> {
+  const state = await readCanonicalTaskPlanState(changeDir)
+  const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES
+  let source = sourceOverride ?? undefined
+  if (sourceOverride === undefined) try { source = await readRegular(join(changeDir, 'tasks.md'), limit) } catch { return { pass: false, failure: `${phase} 出口：tasks.md 不可信或超出预算` } }
+  if (source === undefined) return phase === 'build' ? { pass: false, failure: `${phase} 出口：tasks.md 缺失` } : { pass: true }
+  if (Buffer.byteLength(source) > limit) return { pass: false, failure: `${phase} 出口：tasks.md 不可信或超出预算` }
+  if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) }))
+    return { pass: false, failure: `${phase} 出口：canonical TaskPlan tasks.md 投影认证失败` }
+  const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: source, trustedCanonicalProjection: state !== undefined })
+  return status.incomplete > 0 ? { pass: false, failure: `${phase} 出口：tasks.md 仍有 ${status.incomplete} 项未勾` } : { pass: true }
+}
 export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlanReadModelV1 | null> {
   const state = await readCanonicalTaskPlanState(changeDir)
   if (state === undefined) {

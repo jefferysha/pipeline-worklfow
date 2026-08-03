@@ -13,6 +13,7 @@ import {
   evaluateDocumentEvidence,
   evaluateSpecMigrationEvidence,
   evaluateWorkflowIrStepGuards,
+  classifyTaskPlanProjectionForChange,
   isDocumentContractPhase,
   isDocumentPolicyStep,
   resolveStep,
@@ -62,7 +63,37 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
   // state.track 已成 orphan 都 fail-loud，不回退按 track id 的旧静态矩阵。
   const coverageProfile = plan.capabilities.track.coverageProfile
-  const result = deps.flow.guardCheck(state, { ...deps.guardCtx?.(name), coverageProfile })
+  const fileContext = deps.guardCtx?.(name)
+  const tasksPath = fileContext?.changeDirRel === undefined
+    ? undefined
+    : `${fileContext.changeDirRel}/tasks.md`
+  const authenticatedTasksSource = tasksPath === undefined
+    ? undefined
+    : fileContext?.readFile?.(tasksPath)
+  let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' = 'legacy'
+  if (authenticatedTasksSource !== undefined) {
+    try {
+      canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(
+        dir,
+        authenticatedTasksSource,
+      )
+    } catch {
+      // Corrupt or concurrently replaced canonical state is not legacy. It must block the guard.
+      canonicalTasksProjectionStatus = 'invalid'
+    }
+  }
+  const result = deps.flow.guardCheck(state, {
+    ...fileContext,
+    coverageProfile,
+    ...(authenticatedTasksSource === undefined
+      ? {}
+      : {
+          canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) =>
+            changeDirRel === fileContext?.changeDirRel && tasksMarkdown === authenticatedTasksSource
+              ? canonicalTasksProjectionStatus
+              : 'invalid',
+        }),
+  })
   const migration = str(state.fields.phase) === 'ship'
     ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
     : undefined

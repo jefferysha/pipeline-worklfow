@@ -34,6 +34,7 @@ import {
   nodeLoopIoStrict,
   resolveRequiredSkillSlots,
   stateStorageExistsSync,
+  taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
 import type {
   BreadcrumbWriter, EffectiveSkillResolver, FlowEngine, HistoryWriter, StateStore, TrackDefinition,
@@ -225,6 +226,7 @@ export async function performTransition(
       ? (): Promise<string> => workspaceFingerprint(root, name)
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name),
+    tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(dir, phase),
   }
   const app = createTransitionApplication({
     runRepository: deps.runRepo,

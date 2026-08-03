@@ -52,6 +52,7 @@
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
+  taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
 import { evaluateSpecMigrationEvidence, type TransitionContext } from '@tenon/kernel'
 import { enqueueAfterSpecComplete } from '@tenon/automation'
@@ -70,10 +71,11 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   }
 
   const dir = changeDir(deps.cwd, name)
+  const guardContext = deps.guardCtx?.(name)
   // kernel 单源注入面：文件存在性经 guardCtx（缺省降级跳过文件面）；Git HEAD 与 in-place
   // 内容基线均由 production deps 绑定当前 Change。
   const context: TransitionContext = {
-    fileExists: deps.guardCtx?.(name)?.fileExists,
+    fileExists: guardContext?.fileExists,
     gitHeadSha: deps.gitHeadSha,
     workspaceFingerprint: deps.workspaceFingerprint
       ? (() => {
@@ -82,6 +84,11 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         })
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
+    ...(guardContext?.readFile === undefined
+      ? {}
+      : { tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(
+          dir, phase, guardContext.readFile?.(`${guardContext.changeDirRel ?? `openspec/changes/${name}`}/tasks.md`) ?? null,
+        ) }),
   }
 
   // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由

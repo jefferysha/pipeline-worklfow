@@ -57,4 +57,6 @@ export interface TransitionContext {
   workspaceFingerprint?: () => Promise<string>
   /** 当前 Change 的主规格迁移证据；Ship 出口硬门禁，不注入时失败关闭。 */
   specMigrationStatus?: import('../workflow/ir.js').GuardInput['specMigrationStatus']
+  /** 在 transition 持有 Change lock 时重验 tasks-through-phase，关闭 preview→commit TOCTOU。 */
+  tasksThroughPhase?: (phase: Phase) => Promise<{ readonly pass: boolean; readonly failure?: string }>
 }

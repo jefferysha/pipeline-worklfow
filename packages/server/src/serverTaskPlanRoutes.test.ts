@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   publishTaskPlanRevision,
   readTaskPlanForChange,
+  type TaskPlanReadModelV1,
   type TaskPlanRevisionV1,
 } from '@tenon/kernel'
 import {
@@ -16,13 +17,25 @@ import {
 import { captureChangePathAnchor } from './contextBundlePreviewSupport.js'
 import { captureWorkflowRootAnchor, closeWorkflowRootAnchor } from './workflows.js'
 
+function legacyReadModel(): TaskPlanReadModelV1 {
+  return {
+    schema_version: 'task-plan-read/v1',
+    source: 'legacy',
+    schedulable: false,
+    groups: [],
+    items: [],
+    completeness: { state: 'unknown', reason: 'legacy-semantics-unproven' },
+    projection: { state: 'legacy' },
+  }
+}
+
 function deps(overrides: Partial<TaskPlanRouteDeps> = {}): TaskPlanRouteDeps {
   return {
     workflowRootForRequest: vi.fn(() => ({
       ok: true,
       anchor: { path: '/repo', realPath: '/repo' } as never,
     })),
-    readPlan: vi.fn(async () => ({ schema: 'task-plan-read/v1', source: 'canonical' })),
+    readPlan: vi.fn(async () => legacyReadModel()),
     ...overrides,
   }
 }
@@ -38,36 +51,97 @@ describe('resolveTaskPlanRoute', () => {
       '/api/task-plans/..%2Fbad?root=/repo',
       '/api/task-plans/..%2Fbad',
       d,
-    )).toEqual({ status: 400, body: { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' } })
+    )).toEqual({
+      status: 400,
+      body: {
+        ok: false,
+        code: 'TASK_PLAN_CHANGE_INVALID',
+        error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）',
+      },
+    })
     expect(d.workflowRootForRequest).not.toHaveBeenCalled()
   })
 
-  it('requires an explicit registered root', async () => {
+  it('distinguishes required, unregistered, and forbidden roots', async () => {
     const missing = deps()
-    expect(await resolveTaskPlanRoute(
+    expect.soft(await resolveTaskPlanRoute(
       '/api/task-plans/demo',
       '/api/task-plans/demo',
       missing,
-    )).toEqual({ status: 400, body: { ok: false, error: '缺少 root' } })
+    )).toEqual({
+      status: 400,
+      body: { ok: false, code: 'TASK_PLAN_ROOT_REQUIRED', error: '缺少 root' },
+    })
     expect(missing.workflowRootForRequest).not.toHaveBeenCalled()
 
     const unregistered = deps({ workflowRootForRequest: () => ({ ok: false, code: 404, error: 'no' }) })
-    expect(await resolveTaskPlanRoute(
+    expect.soft(await resolveTaskPlanRoute(
       '/api/task-plans/demo?root=/other',
       '/api/task-plans/demo',
       unregistered,
-    )).toEqual({ status: 404, body: { ok: false, error: 'root 未注册' } })
+    )).toEqual({
+      status: 404,
+      body: { ok: false, code: 'TASK_PLAN_ROOT_NOT_REGISTERED', error: 'root 未注册' },
+    })
+
+    const unsafe = deps({ workflowRootForRequest: () => ({ ok: false, code: 403, error: 'unsafe' }) })
+    expect.soft(await resolveTaskPlanRoute(
+      '/api/task-plans/demo?root=/unsafe',
+      '/api/task-plans/demo',
+      unsafe,
+    )).toEqual({
+      status: 403,
+      body: { ok: false, code: 'TASK_PLAN_ROOT_FORBIDDEN', error: 'root 不可信' },
+    })
   })
 
   it('returns the stable read model without local paths', async () => {
-    const model = {
+    const coverage = {
+      complete: true,
+      requirements: [{ id: 'req-1', work_item_ids: ['wi-1'] }],
+      acceptance_criteria: [{ id: 'acc-1', work_item_ids: ['wi-1'] }],
+      uncovered_requirement_ids: [],
+      uncovered_acceptance_ids: [],
+    }
+    const dependencies = { edges: [], cyclic_work_item_ids: [] }
+    const resources = { conflicts: [], serialized: [] }
+    const model: TaskPlanReadModelV1 = {
       schema_version: 'task-plan-read/v1',
       source: 'canonical',
+      schedulable: true,
+      plan_id: 'plan-1',
       revision_id: 'rev-1',
+      revision_number: 1,
+      revision_status: 'frozen',
+      validation: {
+        valid: true,
+        freezable: true,
+        truncated: false,
+        issues: [],
+        coverage,
+        dependencies,
+        resources,
+      },
+      completeness: { state: 'complete' },
       requirements: [{ id: 'req-1', title: 'Readable requirement' }],
       acceptance_criteria: [{ id: 'acc-1', title: 'Readable acceptance' }],
-      groups: [],
-      work_items: [],
+      groups: [{ id: 'group-1', title: 'Build', parent_id: null, work_item_ids: ['wi-1'] }],
+      items: [{
+        id: 'wi-1',
+        identity_quality: 'canonical',
+        title: 'Implement read model',
+        group_id: 'group-1',
+        requirement_refs: ['req-1'],
+        acceptance_refs: ['acc-1'],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      }],
+      coverage,
+      dependencies,
+      resources,
+      projection: { state: 'current' },
     }
     const d = deps({ readPlan: vi.fn(async () => model) })
     const result = await resolveTaskPlanRoute(
@@ -85,20 +159,33 @@ describe('resolveTaskPlanRoute', () => {
 
   it('keeps missing, unsafe, and corrupt state distinct with bounded errors', async () => {
     const missing = deps({ readPlan: vi.fn(async () => null) })
-    expect(await resolveTaskPlanRoute(
+    expect.soft(await resolveTaskPlanRoute(
       '/api/task-plans/demo?root=/repo', '/api/task-plans/demo', missing,
-    )).toEqual({ status: 404, body: { ok: false, error: 'TaskPlan 不存在' } })
+    )).toEqual({
+      status: 404,
+      body: { ok: false, code: 'TASK_PLAN_NOT_FOUND', error: 'TaskPlan 不存在' },
+    })
 
     const unsafe = deps({ readPlan: vi.fn(async () => { throw Object.assign(new Error('/private/path'), { status: 403 }) }) })
-    expect(await resolveTaskPlanRoute(
+    expect.soft(await resolveTaskPlanRoute(
       '/api/task-plans/demo?root=/repo', '/api/task-plans/demo', unsafe,
-    )).toEqual({ status: 403, body: { ok: false, error: 'canonical TaskPlan 路径不可信' } })
+    )).toEqual({
+      status: 403,
+      body: {
+        ok: false,
+        code: 'TASK_PLAN_PATH_FORBIDDEN',
+        error: 'canonical TaskPlan 路径不可信',
+      },
+    })
 
     const corrupt = deps({ readPlan: vi.fn(async () => { throw new Error('/private/corrupt') }) })
     const result = await resolveTaskPlanRoute(
       '/api/task-plans/demo?root=/repo', '/api/task-plans/demo', corrupt,
     )
-    expect(result).toEqual({ status: 409, body: { ok: false, error: 'canonical TaskPlan 损坏' } })
+    expect.soft(result).toEqual({
+      status: 409,
+      body: { ok: false, code: 'TASK_PLAN_CORRUPT', error: 'canonical TaskPlan 损坏' },
+    })
     expect(JSON.stringify(result)).not.toContain('/private')
   })
 })

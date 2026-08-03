@@ -1,10 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import type { GuardResult, PipelineState } from '@tenon/kernel'
+import { classifyTaskPlanProjectionForChange, publishTaskPlanRevision } from '@tenon/kernel'
+import type { GuardResult, PipelineState, TaskPlanRevisionV1 } from '@tenon/kernel'
 import type { GuardFileContext } from '../deps.js'
 import { cmdCheck } from './check.js'
+import { makeGuardCtx } from '../guardContext.js'
 import { makeDeps, mockState, spy } from '../test-support.js'
 
 describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §3）', () => {
@@ -70,6 +72,112 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     expect(seen).toEqual(['demo'])
     expect(deps.flow.guardCheck.calls[0]?.[1]?.changeDirRel).toBe('openspec/changes/demo')
     expect(deps.flow.guardCheck.calls[0]?.[1]?.coverageProfile).toBe('backend')
+  })
+
+  test('真实 check 先认证 exact canonical tasks source，再把信任闭包注入同步 guard', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-canonical-task-plan-'))
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(changeDir, { recursive: true })
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [{ id: 'req-1', title: 'Requirement' }],
+      acceptance_criteria: [{ id: 'acc-1', title: 'Acceptance' }],
+      groups: [{ id: 'group-1', title: 'Verify', parent_id: null, work_item_ids: ['work-1'] }],
+      work_items: [{
+        id: 'work-1',
+        title: 'Finish Build implementation',
+        group_id: 'group-1',
+        requirement_refs: ['req-1'],
+        acceptance_refs: ['acc-1'],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      }],
+    }
+    await publishTaskPlanRevision(changeDir, revision, { expected_current_revision_id: null })
+    const tasksMarkdown = await readFile(join(changeDir, 'tasks.md'), 'utf8')
+    expect(await classifyTaskPlanProjectionForChange(changeDir, tasksMarkdown)).toBe('current')
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo',
+        tasksMarkdown,
+      })
+      return { pass: true, failures: [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(0)
+      expect(status).toBe('current')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('canonical tasks 投影漂移时注入 invalid，不能降级为 legacy phase 解析', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-drifted-task-plan-'))
+    const canonicalDir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(canonicalDir, { recursive: true })
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [{ id: 'req-1', title: 'Requirement' }],
+      acceptance_criteria: [{ id: 'acc-1', title: 'Acceptance' }],
+      groups: [{ id: 'group-1', title: 'Build', parent_id: null, work_item_ids: ['work-1'] }],
+      work_items: [{
+        id: 'work-1',
+        title: 'Finish implementation',
+        group_id: 'group-1',
+        requirement_refs: ['req-1'],
+        acceptance_refs: ['acc-1'],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      }],
+    }
+    await publishTaskPlanRevision(canonicalDir, revision, { expected_current_revision_id: null })
+    const drifted = '# Tasks\n\n## Verify <!-- tenon-task-group:group-1 -->\n\n- [ ] Finish implementation <!-- tenon-work-item:work-1 -->\n'
+    await writeFile(join(canonicalDir, 'tasks.md'), drifted, 'utf8')
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo',
+        tasksMarkdown: drifted,
+      })
+      return { pass: status !== 'invalid', failures: status === 'invalid' ? ['invalid projection'] : [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+      await writeFile(join(canonicalDir, '.pipeline-task-plan', 'current.json'), '{malformed', 'utf8')
+      status = undefined
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test('未注入文件探针也从 effective registry 取 policy，并显式传 coverageProfile 给 engine', async () => {

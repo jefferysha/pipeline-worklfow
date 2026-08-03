@@ -1,5 +1,7 @@
 import { decodeTaskPlanRevisionAttemptV1 } from './codec.js'
-import { deepFreeze, exactResourceKey, taskPlanEntityIdEntries } from './internal.js'
+import { taskPlanAggregateEntityIdEntries, type TaskPlanAggregate } from './domain.js'
+import { deepFreeze, exactResourceKey } from './internal.js'
+import { taskPlanDtoToDomain } from './persistence.js'
 import { TASK_PLAN_LIMITS } from './types.js'
 import type {
   TaskPlanCoverageEntry,
@@ -80,8 +82,8 @@ function cyclicIds(graph: ReadonlyMap<string, readonly string[]>): readonly stri
 
 function coverageEntries(
   catalogIds: readonly string[],
-  workItems: TaskPlanRevisionV1['work_items'],
-  refs: (item: TaskPlanRevisionV1['work_items'][number]) => readonly string[],
+  workItems: TaskPlanAggregate['workItems'],
+  refs: (item: TaskPlanAggregate['workItems'][number]) => readonly string[],
   collector: IssueCollector,
 ): readonly TaskPlanCoverageEntry[] {
   const covered = new Map(catalogIds.map((id) => [id, [] as string[]]))
@@ -123,17 +125,17 @@ function isReachable(
 }
 
 function resourceDiagnostics(
-  revision: TaskPlanRevisionV1,
+  revision: TaskPlanAggregate,
   dependents: ReadonlyMap<string, ReadonlySet<string>>,
   collector: IssueCollector,
 ): TaskPlanResourceDiagnostics {
   const writers = new Map<string, Set<string>>()
-  for (const [itemIndex, item] of revision.work_items.entries()) {
-    const claimKeys = item.resource_claims.map((claim) => `${claim.access}:${exactResourceKey(claim.kind, claim.key) ?? `${claim.kind}:${claim.key}`}`)
+  for (const [itemIndex, item] of revision.workItems.entries()) {
+    const claimKeys = item.resourceClaims.map((claim) => `${claim.access}:${exactResourceKey(claim.kind, claim.key) ?? `${claim.kind}:${claim.key}`}`)
     for (const repeated of duplicates(claimKeys)) {
       issue(collector, 'resource-claim-duplicate', `$.work_items[${itemIndex}].resource_claims`, [item.id, repeated])
     }
-    for (const claim of item.resource_claims) {
+    for (const claim of item.resourceClaims) {
       if (claim.access !== 'write') continue
       const key = exactResourceKey(claim.kind, claim.key) ?? `${claim.kind}:${claim.key}`
       const members = writers.get(key) ?? new Set<string>()
@@ -227,26 +229,30 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
       resources: { conflicts: [], serialized: [] },
     })
   }
-  const validatedRevision = decoded.value
+  return validateTaskPlanAggregate(taskPlanDtoToDomain(decoded.value))
+}
+
+/** Evaluates domain graph invariants without consulting a persistence record or storage. */
+export function validateTaskPlanAggregate(validatedRevision: TaskPlanAggregate): TaskPlanValidationResult {
   const collector: IssueCollector = { items: [], truncated: false }
   const entityIds = new Set<string>()
-  for (const { id, path } of taskPlanEntityIdEntries(validatedRevision)) {
+  for (const { id, path } of taskPlanAggregateEntityIdEntries(validatedRevision)) {
     if (entityIds.has(id)) issue(collector, 'entity-id-duplicate', path, [id])
     else entityIds.add(id)
   }
   const groupIds = new Set(validatedRevision.groups.map((group) => group.id))
-  const itemIds = new Set(validatedRevision.work_items.map((item) => item.id))
+  const itemIds = new Set(validatedRevision.workItems.map((item) => item.id))
   const requirementIds = new Set(validatedRevision.requirements.map((entry) => entry.id))
-  const acceptanceIds = new Set(validatedRevision.acceptance_criteria.map((entry) => entry.id))
+  const acceptanceIds = new Set(validatedRevision.acceptanceCriteria.map((entry) => entry.id))
   const memberships = new Map<string, string[]>()
 
   const groupGraph = new Map<string, readonly string[]>()
   for (const [groupIndex, group] of validatedRevision.groups.entries()) {
-    groupGraph.set(group.id, group.parent_id === null ? [] : [group.parent_id])
-    if (group.parent_id !== null && !groupIds.has(group.parent_id)) {
-      issue(collector, 'group-parent-unknown', `$.groups[${groupIndex}].parent_id`, [group.id, group.parent_id])
+    groupGraph.set(group.id, group.parentId === null ? [] : [group.parentId])
+    if (group.parentId !== null && !groupIds.has(group.parentId)) {
+      issue(collector, 'group-parent-unknown', `$.groups[${groupIndex}].parent_id`, [group.id, group.parentId])
     }
-    for (const workItemId of group.work_item_ids) {
+    for (const workItemId of group.workItemIds) {
       if (!itemIds.has(workItemId)) {
         issue(collector, 'group-work-item-unknown', `$.groups[${groupIndex}].work_item_ids`, [group.id, workItemId])
       }
@@ -261,36 +267,36 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
   const dependencyGraph = new Map<string, readonly string[]>()
   const dependents = new Map<string, Set<string>>()
   const edges: Array<{ from_work_item_id: string; to_work_item_id: string }> = []
-  for (const [itemIndex, item] of validatedRevision.work_items.entries()) {
+  for (const [itemIndex, item] of validatedRevision.workItems.entries()) {
     const owners = memberships.get(item.id) ?? []
     if (owners.length === 0) issue(collector, 'work-item-unowned', `$.work_items[${itemIndex}].group_id`, [item.id])
     if (owners.length > 1) issue(collector, 'work-item-multiple-groups', `$.work_items[${itemIndex}].group_id`, [item.id, ...owners])
     const soleOwner = owners.length === 1 ? owners[0] : undefined
-    if (soleOwner !== undefined && soleOwner !== item.group_id) {
-      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.group_id, soleOwner])
+    if (soleOwner !== undefined && soleOwner !== item.groupId) {
+      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.groupId, soleOwner])
     }
-    if (!groupIds.has(item.group_id)) {
-      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.group_id])
+    if (!groupIds.has(item.groupId)) {
+      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.groupId])
     }
 
-    for (const repeated of duplicates(item.requirement_refs)) {
+    for (const repeated of duplicates(item.requirementRefs)) {
       issue(collector, 'requirement-ref-duplicate', `$.work_items[${itemIndex}].requirement_refs`, [item.id, repeated])
     }
-    for (const ref of item.requirement_refs) if (!requirementIds.has(ref)) {
+    for (const ref of item.requirementRefs) if (!requirementIds.has(ref)) {
       issue(collector, 'requirement-ref-unknown', `$.work_items[${itemIndex}].requirement_refs`, [item.id, ref])
     }
-    for (const repeated of duplicates(item.acceptance_refs)) {
+    for (const repeated of duplicates(item.acceptanceRefs)) {
       issue(collector, 'acceptance-ref-duplicate', `$.work_items[${itemIndex}].acceptance_refs`, [item.id, repeated])
     }
-    for (const ref of item.acceptance_refs) if (!acceptanceIds.has(ref)) {
+    for (const ref of item.acceptanceRefs) if (!acceptanceIds.has(ref)) {
       issue(collector, 'acceptance-ref-unknown', `$.work_items[${itemIndex}].acceptance_refs`, [item.id, ref])
     }
 
-    for (const repeated of duplicates(item.depends_on)) {
+    for (const repeated of duplicates(item.dependsOn)) {
       issue(collector, 'dependency-duplicate', `$.work_items[${itemIndex}].depends_on`, [item.id, repeated])
     }
     const validDependencies: string[] = []
-    for (const dependency of [...new Set(item.depends_on)]) {
+    for (const dependency of [...new Set(item.dependsOn)]) {
       if (dependency === item.id) issue(collector, 'dependency-self', `$.work_items[${itemIndex}].depends_on`, [item.id])
       else if (!itemIds.has(dependency)) issue(collector, 'dependency-unknown', `$.work_items[${itemIndex}].depends_on`, [item.id, dependency])
       else {
@@ -305,9 +311,9 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
     }
     dependencyGraph.set(item.id, validDependencies)
 
-    const outputIds = new Set(item.expected_outputs.map((output) => output.id))
+    const outputIds = new Set(item.expectedOutputs.map((output) => output.id))
     for (const [validatorIndex, validator] of item.validators.entries()) {
-      for (const outputId of validator.output_ids) if (!outputIds.has(outputId)) {
+      for (const outputId of validator.outputIds) if (!outputIds.has(outputId)) {
         issue(collector, 'validator-output-unknown', `$.work_items[${itemIndex}].validators[${validatorIndex}].output_ids`, [
           item.id, validator.id, outputId,
         ])
@@ -325,10 +331,10 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
   )
 
   const requirementCoverage = coverageEntries(
-    [...requirementIds], validatedRevision.work_items, (item) => item.requirement_refs, collector,
+    [...requirementIds], validatedRevision.workItems, (item) => item.requirementRefs, collector,
   )
   const acceptanceCoverage = coverageEntries(
-    [...acceptanceIds], validatedRevision.work_items, (item) => item.acceptance_refs, collector,
+    [...acceptanceIds], validatedRevision.workItems, (item) => item.acceptanceRefs, collector,
   )
   const uncoveredRequirementIds = requirementCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id)
   const uncoveredAcceptanceIds = acceptanceCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id)
