@@ -6,7 +6,7 @@
 import {
   closeSync, constants, fstatSync, lstatSync, openSync,
 } from 'node:fs'
-import { lstat, readdir, stat } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   evaluateDocumentEvidence,
@@ -42,7 +42,13 @@ import { dedupeRoots } from './projectRoots.js'
 import { readTasksMarkdown } from './snapshotTasks.js'
 import { mapWithConcurrency } from './concurrentMap.js'
 import { normalizeRepositoryLabels, readRepositoryIdentity } from './repositoryIdentity.js'
-import { repositoryTopologyFingerprint } from './repositoryFingerprint.js'
+import { computeSnapshotFingerprint } from './snapshotFingerprint.js'
+import {
+  assertWorkflowRootAnchor,
+  captureWorkflowRootAnchor,
+  closeWorkflowRootAnchor,
+  type WorkflowRootAnchor,
+} from './workflowRootAnchor.js'
 
 export { dedupeRoots } from './projectRoots.js'
 export { readTasksMarkdown } from './snapshotTasks.js'
@@ -60,6 +66,17 @@ export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   /** Epoch source for the short-lived terminal activity lease; injectable so expiry is testable. */
   now?: () => number
   repositoryIdentity?: (root: string) => Promise<ProjectRepositoryIdentity | undefined>
+  /**
+   * Resolve the server's long-lived inode anchor for a registered root. When present, an absent
+   * anchor is an authorization failure and must never be replaced with a new point-in-time trust.
+   */
+  rootAnchor?: (root: string) => WorkflowRootAnchor | undefined
+}
+
+export function snapshotDepsFactory(
+  base: Omit<SnapshotDeps, 'now'>,
+): (nowMs?: number) => SnapshotDeps {
+  return (nowMs) => ({ ...base, ...(nowMs === undefined ? {} : { now: () => nowMs }) })
 }
 function str(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v.join(',')
@@ -162,22 +179,23 @@ export function documentTodoItems(
   ]))
 }
 
-async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Promise<ProjectSnapshot> {
+async function scanAnchoredProject(
+  deps: SnapshotDeps,
+  root: string,
+  readRoot: string,
+  anchor: WorkflowRootAnchor,
+  nowMs: number,
+): Promise<ProjectSnapshot> {
   const { store } = deps
-  let isDir = false
-  try {
-    isDir = (await stat(root)).isDirectory()
-  } catch {
-    isDir = false
-  }
-  if (!isDir) return { root, ok: false, changes: [], workflowRules: {}, error: 'root 不存在或不可达' }
+  const repository = await readRepositoryIdentity(readRoot, deps.repositoryIdentity)
+  assertWorkflowRootAnchor(anchor)
 
-  const repository = await readRepositoryIdentity(root, deps.repositoryIdentity)
-
-  const changesRoot = join(root, 'openspec', 'changes')
+  const changesRoot = join(readRoot, 'openspec', 'changes')
+  const displayChangesRoot = join(root, 'openspec', 'changes')
   let entries
   try {
     entries = await readdir(changesRoot, { withFileTypes: true })
+    assertWorkflowRootAnchor(anchor)
   } catch {
     // 已注册但尚无 openspec/changes —— 合法空项目
     return { root, ok: true, changes: [], workflowRules: {}, ...(repository === undefined ? {} : { repository }) }
@@ -197,7 +215,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
       ? {}
       : {
           gitHeadSha: () => {
-            gitHeadPromise ??= gitHeadSha(root)
+            gitHeadPromise ??= gitHeadSha(readRoot)
             return gitHeadPromise
           },
         }),
@@ -207,7 +225,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
           workspaceFingerprint: (_root, changeName) => {
             let pending = workspaceFingerprints.get(changeName)
             if (pending === undefined) {
-              pending = workspaceFingerprint(root, changeName)
+              pending = workspaceFingerprint(readRoot, changeName)
               workspaceFingerprints.set(changeName, pending)
             }
             return pending
@@ -217,6 +235,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   let compatibilityIssueOverflow = 0
   for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === 'archive') continue
+    assertWorkflowRootAnchor(anchor)
     const changeDir = join(changesRoot, e.name)
     let source: string | undefined
     try {
@@ -242,7 +261,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
       const phase = str(f.phase)
       const workflowName = str(f.workflow) || 'default'
       const track = str(f.track)
-      const plan = resolveSnapshotEffectivePlan(root, workflowName, {
+      const plan = resolveSnapshotEffectivePlan(readRoot, workflowName, {
         documentProfile: state.runMetadata?.documentProfile,
         documentGovernanceFingerprint: state.runMetadata?.documentGovernanceFingerprint,
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
@@ -250,7 +269,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
       })
       legacyWorkflowRules[workflowName] ??= legacySnapshotWorkflowRules(plan)
       const [documents, terminalActivity] = await Promise.all([
-        documentEvidence(root, changeDir, plan, phase),
+        documentEvidence(readRoot, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs),
       ])
       const todo = projectPipelineTodo({
@@ -261,7 +280,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
       })
       changes.push({
         name: e.name,
-        path: changeDir,
+        path: join(displayChangesRoot, e.name),
         phase,
         phase_status: str(f.phase_status),
         track,
@@ -274,7 +293,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
         workflowExecution: await snapshotWorkflowExecution(
           plan,
           state,
-          root,
+          readRoot,
           changeDir,
           e.name,
           capabilityDeps,
@@ -320,6 +339,30 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   }
 }
 
+async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Promise<ProjectSnapshot> {
+  let anchor: WorkflowRootAnchor | undefined
+  let ownsAnchor = false
+  try {
+    if (deps.rootAnchor !== undefined) {
+      anchor = deps.rootAnchor(root)
+      if (anchor === undefined) throw new Error('registered root 没有可信目录锚')
+    } else {
+      anchor = captureWorkflowRootAnchor(root)
+      ownsAnchor = true
+    }
+    assertWorkflowRootAnchor(anchor)
+    // Linux 用 fd-relative 根彻底固定 lookup；Darwin/Node 没有可遍历 fd path 时使用捕获时的
+    // canonical 路径，避免词法路径任一祖先 symlink 换位把后续异步读取改道。
+    const project = await scanAnchoredProject(deps, root, anchor.fdPath ?? anchor.realPath, anchor, nowMs)
+    assertWorkflowRootAnchor(anchor)
+    return project
+  } catch {
+    return { root, ok: false, changes: [], workflowRules: {}, error: 'root 不存在、不可达或已被替换' }
+  } finally {
+    if (ownsAnchor && anchor !== undefined) closeWorkflowRootAnchor(anchor)
+  }
+}
+
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const roots = dedupeRoots(deps.registry())
   const nowMs = deps.now?.() ?? Date.now()
@@ -342,55 +385,10 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
  * legacy YAML），取 path:size:mtimeNs（纳秒精度，挡同毫秒内两次写）拼接排序；任一 canonical
  * commit → 指纹变 → 推新快照。损坏 current 仍拥有优先权，不借 YAML 掩盖。
  */
-export async function computeFingerprint(roots: string[], nowMs = Date.now()): Promise<string> {
-  const parts: string[] = []
-  for (const root of dedupeRoots(roots)) {
-    parts.push(`registry:${root}`)
-    parts.push(...await repositoryTopologyFingerprint(root))
-    const changesRoot = join(root, 'openspec', 'changes')
-    const entries = await readdir(changesRoot, { withFileTypes: true }).catch(() => [])
-    for (const e of entries) {
-      if (!e.isDirectory() || e.name === 'archive') continue
-      const source = stateStorageSourcePathSync(join(changesRoot, e.name))
-      if (source === undefined) continue
-      try {
-        // lstat 不跟随链接：dangling/malicious current 仍是需要触发快照重读并暴露错误的状态，
-        // 不能因 stat(2) 跟随失败从 fingerprint 消失。
-        const st = await lstat(source, { bigint: true })
-        parts.push(`${source}:${st.size}:${st.mtimeNs}`)
-      } catch {
-        // 来源在选择与 stat 之间消失/不可达；下一轮 fingerprint 会重算。
-      }
-      const tasks = join(changesRoot, e.name, 'tasks.md')
-      try {
-        // tasks.md is the Todo source, so an edit must wake SSE even if canonical state is unchanged.
-        const st = await lstat(tasks, { bigint: true })
-        parts.push(`${tasks}:${st.size}:${st.mtimeNs}`)
-      } catch {
-        // Absent/unreadable tasks are represented by the phase skeleton; a later create changes fp.
-      }
-      const documents = join(changesRoot, e.name, '.pipeline-documents.json')
-      try {
-        // Document ledger is snapshot-visible evidence.  Editing it must wake SSE even if state and
-        // tasks are unchanged, otherwise the dashboard can falsely keep showing stale proof.
-        const st = await lstat(documents, { bigint: true })
-        parts.push(`${documents}:${st.size}:${st.mtimeNs}`)
-      } catch {
-        // Missing evidence is represented by the snapshot report; a later creation changes fp.
-      }
-      const terminalActivity = join(changesRoot, e.name, TERMINAL_ACTIVITY_FILE)
-      try {
-        const st = await lstat(terminalActivity, { bigint: true })
-        // Liveness has two independently observable transitions: a fresh hook write and TTL expiry.
-        // The fresh/stale suffix causes SSE to publish exactly once when an otherwise unchanged
-        // heartbeat becomes stale, rather than leaving a stopped terminal painted as running.
-        const live = await readTerminalActivity(join(changesRoot, e.name), e.name, nowMs)
-        parts.push(`${terminalActivity}:${st.size}:${st.mtimeNs}:${live === undefined ? 'stale' : 'live'}`)
-      } catch {
-        // No sidecar is the normal idle state.
-      }
-    }
-  }
-  parts.sort()
-  return parts.join('|')
+export async function computeFingerprint(
+  roots: string[],
+  nowMs = Date.now(),
+  rootAnchor?: (root: string) => WorkflowRootAnchor | undefined,
+): Promise<string> {
+  return computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity)
 }

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
 import { appendFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -48,6 +48,100 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('registered root 变成外部 symlink 时 fail closed 且不读取目标 Change', async () => {
+    const store = newStore()
+    const outside = await makeProject()
+    await initChange(store, outside, 'outside-change')
+    const root = `${outside}-registered-link`
+    await symlink(outside, root)
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 'now',
+    })
+
+    expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+    expect(snapshot.change_count).toBe(0)
+  })
+
+  it('registered root 的祖先 symlink 在启动后换位时拒绝重新信任外部项目', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+
+    try {
+      await unlink(parentLink)
+      await symlink(outsideParent, parentLink, 'dir')
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+      })
+
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('Git identity 探测期间祖先路径被换位时只使用目录 fd 并丢弃整个项目结果', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+    let probedRoot = ''
+
+    try {
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+        repositoryIdentity: async (probeRoot) => {
+          probedRoot = probeRoot
+          await unlink(parentLink)
+          await symlink(outsideParent, parentLink, 'dir')
+          return { id: 'c'.repeat(64), label: 'trusted', workspace_kind: 'primary' }
+        },
+      })
+
+      expect(probedRoot).toBe(anchor.realPath)
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
   it('adds repository identity to a reachable empty project snapshot', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -73,6 +167,7 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
   it('projects the primary repository directory label onto every linked workspace independent of registry order', async () => {
     const linked = await makeProject()
     const primary = await makeProject()
+    const primaryReal = await realpath(primary)
     const id = 'b'.repeat(64)
     const snapshot = await buildSnapshot({
       registry: () => [linked, primary],
@@ -81,8 +176,8 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       clock: () => 'now',
       repositoryIdentity: async (root) => ({
         id,
-        label: root === primary ? 'repository' : 'metadata',
-        workspace_kind: root === primary ? 'primary' : 'worktree',
+        label: await realpath(root) === primaryReal ? 'repository' : 'metadata',
+        workspace_kind: await realpath(root) === primaryReal ? 'primary' : 'worktree',
       }),
     })
 

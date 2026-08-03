@@ -33,6 +33,9 @@
 25. POSIX 合法的反斜杠仓库名被前端 decoder 误拒；现只拒绝真正的路径分隔符 `/`，保留合法 repository label。
 26. 批量注销的失败计数会在 root 恢复、消失或被筛选后残留；现随权威不可达 roots 收敛，并只统计当前可见的不可达项。
 27. root 与 `.git` 目录 mtime 会让普通顶层文件或 `git add` 触发无关快照；现目录只记录稳定身份，`.git` 指针文件和 `worktrees` topology 仍保留真实变更信号。
+28. Snapshot 的 root 可达性检查仍使用会跟随 symlink 的 `stat`，与 fingerprint 的停止边界不一致；现统一改为 `lstat`，registered root 被替换为 symlink 时按不可达处理且不读取外部 Change。
+29. 单次 `lstat` 仍会在 Git identity 与 Change 扫描间留下 registered root 换位窗口；Snapshot 与 SSE 现复用 server 长期持有的 inode/fd anchor，Linux 使用 fd-relative 根，Darwin fallback 使用捕获时 canonical realpath，并在异步边界前后复核词法路径、inode 与 realpath。祖先 symlink 在启动后及 Git probe 期间换位均有强制无 `fdPath` 的回归测试。
+30. Anchor/Git 探测增加耗时后，20ms SSE poll 可能重叠并由较早请求回写旧 fingerprint；现用单飞锁串行化 poll，状态转换后稳定推送新的 Snapshot。
 
 ## Re-review
 
@@ -41,7 +44,7 @@
 ## Verification evidence
 
 - Web 全量：87 files / 1631 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
-- Repository 全量：331 files / 5940 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
+- Repository 全量：332 files / 5945 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。
 - OpenSpec 严格归档预演在隔离副本通过：8 个 requirement 新增、约 3 个 requirement 修改，归档后的 32 个 specs 严格检查全部通过。
 - 1024px、1440px 与 1920px 真实桌面浏览器确认 Projects 分组、Machine core/AFK 分层、Host 自动检测与 Workbench 统一 40px 控件均无 root 横向溢出。
