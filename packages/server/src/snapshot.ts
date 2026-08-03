@@ -3,9 +3,7 @@
  * server 是 kernel 消费方：用 StateStore.read（→ parsePipeline）读盘，绝不自造解析器。
  * 对位老仓 dashboard-generator.build_data 的「聚合所有 Project 的活跃 change」核心面。
  */
-import {
-  closeSync, constants, fstatSync, lstatSync, openSync,
-} from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, type Dirent } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
@@ -66,6 +64,7 @@ export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   /** Epoch source for the short-lived terminal activity lease; injectable so expiry is testable. */
   now?: () => number
   repositoryIdentity?: (root: string) => Promise<ProjectRepositoryIdentity | undefined>
+  readChangesDirectory?: (changesRoot: string) => Promise<Dirent[]>
   /**
    * Resolve the server's long-lived inode anchor for a registered root. When present, an absent
    * anchor is an authorization failure and must never be replaced with a new point-in-time trust.
@@ -194,12 +193,16 @@ async function scanAnchoredProject(
   const displayChangesRoot = join(root, 'openspec', 'changes')
   let entries
   try {
-    entries = await readdir(changesRoot, { withFileTypes: true })
+    entries = deps.readChangesDirectory === undefined
+      ? await readdir(changesRoot, { withFileTypes: true })
+      : await deps.readChangesDirectory(changesRoot)
+  } catch (error) {
     assertWorkflowRootAnchor(anchor)
-  } catch {
+    if (typeof error !== 'object' || error === null || Reflect.get(error, 'code') !== 'ENOENT') throw error
     // 已注册但尚无 openspec/changes —— 合法空项目
     return { root, ok: true, changes: [], workflowRules: {}, ...(repository === undefined ? {} : { repository }) }
   }
+  assertWorkflowRootAnchor(anchor)
 
   const changes: ChangeSnapshot[] = []
   const compatibilityIssues: NonNullable<ProjectSnapshot['compatibilityIssues']> = []

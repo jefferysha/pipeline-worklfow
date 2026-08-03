@@ -142,6 +142,59 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     }
   })
 
+  it('Changes 目录枚举返回时 root 已换位，不得被空项目降级 catch 误报为健康', async () => {
+    const store = newStore()
+    const container = await makeTempHome()
+    const trustedParent = join(container, 'trusted')
+    const outsideParent = join(container, 'outside')
+    const trustedRoot = join(trustedParent, 'project')
+    const outsideRoot = join(outsideParent, 'project')
+    const parentLink = join(container, 'registered-parent')
+    const root = join(parentLink, 'project')
+    await mkdir(trustedRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await initChange(store, trustedRoot, 'trusted-change')
+    await initChange(store, outsideRoot, 'outside-secret')
+    await symlink(trustedParent, parentLink, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchorWithoutFdPath = { ...anchor, fdPath: undefined }
+
+    try {
+      const snapshot = await buildSnapshot({
+        registry: () => [root],
+        store,
+        version: '1',
+        clock: () => 'now',
+        rootAnchor: () => anchorWithoutFdPath,
+        readChangesDirectory: async () => {
+          await unlink(parentLink)
+          await symlink(outsideParent, parentLink, 'dir')
+          return []
+        },
+      })
+
+      expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+      expect(JSON.stringify(snapshot)).not.toContain('outside-secret')
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('Changes 目录真实读取故障不得降级成健康空项目', async () => {
+    const root = await makeProject()
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      readChangesDirectory: async () => {
+        throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      },
+    })
+
+    expect(snapshot.projects[0]).toMatchObject({ root, ok: false, changes: [] })
+  })
+
   it('adds repository identity to a reachable empty project snapshot', async () => {
     const store = newStore()
     const root = await makeProject()

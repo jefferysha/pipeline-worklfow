@@ -18924,13 +18924,7 @@ function deleteWorkflowForApi(root, name, permit) {
 }
 
 // packages/server/src/snapshot.ts
-import {
-  closeSync as closeSync5,
-  constants as constants10,
-  fstatSync as fstatSync8,
-  lstatSync as lstatSync7,
-  openSync as openSync9
-} from "node:fs";
+import { closeSync as closeSync5, constants as constants10, fstatSync as fstatSync8, lstatSync as lstatSync7, openSync as openSync9 } from "node:fs";
 import { readdir as readdir5 } from "node:fs/promises";
 import { join as join37 } from "node:path";
 
@@ -19651,11 +19645,13 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
   const displayChangesRoot = join37(root, "openspec", "changes");
   let entries;
   try {
-    entries = await readdir5(changesRoot, { withFileTypes: true });
+    entries = deps.readChangesDirectory === void 0 ? await readdir5(changesRoot, { withFileTypes: true }) : await deps.readChangesDirectory(changesRoot);
+  } catch (error) {
     assertWorkflowRootAnchor(anchor);
-  } catch {
+    if (typeof error !== "object" || error === null || Reflect.get(error, "code") !== "ENOENT") throw error;
     return { root, ok: true, changes: [], workflowRules: {}, ...repository === void 0 ? {} : { repository } };
   }
+  assertWorkflowRootAnchor(anchor);
   const changes = [];
   const compatibilityIssues = [];
   const legacyWorkflowRules = {};
