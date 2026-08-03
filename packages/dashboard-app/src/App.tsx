@@ -107,6 +107,19 @@ function AppShell(): JSX.Element {
     setPendingNavigation(null)
   }, [])
 
+  const onUninterceptablePopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
+    if (pendingNavigationRef.current !== null) return false
+    const leavesDirtyWorkbench = target.view !== 'workbench'
+      || target.root !== currentRootRef.current
+    if (viewRef.current !== 'workbench' || !dirtyRef.current || !leavesDirtyWorkbench) return true
+    const discard = window.confirm(`${t('common.unsaved_navigation_title')}\n\n${t('common.unsaved_navigation_body')}`)
+    if (!discard) return false
+    clearPendingNavigation()
+    dirtyRef.current = false
+    setWorkbenchDirty(false)
+    return true
+  }, [clearPendingNavigation, t])
+
   const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
     const leavesDirtyWorkbench = target.view !== 'workbench'
       || target.root !== currentRootRef.current
@@ -144,6 +157,7 @@ function AppShell(): JSX.Element {
     onSelectedChange: setSelectedChange,
     onPopAttempt,
     shouldCancelPopBeforeCommit: () => pendingNavigationRef.current?.kind === 'view',
+    onUninterceptablePopAttempt,
     preserveUnavailableRoot: preserveUnavailableWorkbenchRoot,
   })
   currentRootRef.current = currentRoot

@@ -34932,11 +34932,11 @@ import { relative as relative12, resolve as resolve23 } from "node:path";
 // packages/cli/src/codexSkillReceipt.ts
 import { appendFile as appendFile2, lstat as lstat21, mkdir as mkdir19, readdir as readdir10, readFile as readFile25 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
-import { basename as basename5, isAbsolute as isAbsolute13, join as join55, relative as relative10, resolve as resolve20, sep as sep12 } from "node:path";
+import { basename as basename5, isAbsolute as isAbsolute14, join as join55, relative as relative10, resolve as resolve20, sep as sep12 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { homedir as homedir8 } from "node:os";
-import { isAbsolute as isAbsolute12, join as join54, relative as relative9, resolve as resolve19, sep as sep11 } from "node:path";
+import { isAbsolute as isAbsolute13, join as join54, relative as relative9, resolve as resolve19, sep as sep11 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
 import { finished } from "node:stream/promises";
 
@@ -35290,7 +35290,7 @@ async function explicitSiblingWorktreeTarget(sessionRoot, commandWorkdir, target
 
 // packages/cli/src/codexTrustedSkillRead.ts
 import { readFile as readFile24 } from "node:fs/promises";
-import { relative as relative7, resolve as resolve18, sep as sep9 } from "node:path";
+import { isAbsolute as isAbsolute11, relative as relative7, resolve as resolve18, sep as sep9 } from "node:path";
 
 // packages/cli/src/codexTranscriptCompletion.ts
 function isRecord10(value) {
@@ -35498,9 +35498,11 @@ function commandTrustedSkillPaths(command2, skillPath) {
   const paths = [];
   for (const segment of segments) {
     const path9 = safeCompleteCatPath(segment);
-    if (path9 === void 0) return void 0;
+    if (path9 === void 0 || !isAbsolute11(path9)) return void 0;
     const resolvedPath = resolve18(path9);
-    const sibling = relative7(skillsRoot, resolvedPath).split(sep9);
+    const siblingPath = relative7(skillsRoot, resolvedPath);
+    if (siblingPath === "" || isAbsolute11(siblingPath) || siblingPath === ".." || siblingPath.startsWith(`..${sep9}`)) return void 0;
+    const sibling = siblingPath.split(sep9);
     if (sibling.length !== 2 || sibling[0] === "" || sibling[1] !== "SKILL.md") return void 0;
     if (resolvedPath === skillPath) observedRead = true;
     paths.push(resolvedPath);
@@ -35516,7 +35518,7 @@ function transcriptInputTrustedSkillInvocation(input, skillPath) {
 // packages/cli/src/codexTranscriptDiscovery.ts
 import { constants as constants6 } from "node:fs";
 import { lstat as lstat20, open as open7, opendir, realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute11, join as join53, relative as relative8, sep as sep10 } from "node:path";
+import { isAbsolute as isAbsolute12, join as join53, relative as relative8, sep as sep10 } from "node:path";
 var MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_TRANSCRIPTS = 32;
@@ -35553,7 +35555,7 @@ async function inspectHostTranscript(physicalRoot, candidate) {
 }
 function isInside2(base, candidate) {
   const fromBase = relative8(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute11(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute12(fromBase);
 }
 async function recentHostTranscripts(sessionsRoot, limits = DEFAULT_DISCOVERY_LIMITS) {
   if (!Number.isSafeInteger(limits.maxEntries) || limits.maxEntries <= 0 || !Number.isSafeInteger(limits.maxTranscripts) || limits.maxTranscripts <= 0) return void 0;
@@ -35652,13 +35654,13 @@ function asString3(value) {
 }
 function isInside3(base, candidate) {
   const fromBase = relative9(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute12(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute13(fromBase);
 }
 function codexSessionsRoot2(homeDir, configured) {
   return join54(codexHomeRoot(homeDir, configured), "sessions");
 }
 function isTrustedTranscriptPath(transcriptPath, homeDir, configured) {
-  if (!isAbsolute12(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
+  if (!isAbsolute13(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
   return isInside3(codexSessionsRoot2(homeDir, configured), resolve19(transcriptPath));
 }
 function responseItemAtOrAfter(event, notBefore) {
@@ -35971,7 +35973,7 @@ function isSafeOpaqueId(value) {
 }
 function isInside4(base, candidate) {
   const fromBase = relative10(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep12}`) && !isAbsolute13(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep12}`) && !isAbsolute14(fromBase);
 }
 function codexSessionsRoot3(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
@@ -35979,7 +35981,7 @@ function codexSessionsRoot3(homeDir, configured) {
   return join55(codexHome, "sessions");
 }
 function isTrustedTranscriptPath2(transcriptPath, homeDir, configured) {
-  if (!isAbsolute13(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
+  if (!isAbsolute14(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
   return isInside4(codexSessionsRoot3(homeDir, configured), resolve20(transcriptPath));
 }
 function parseReceipt2(value) {
@@ -36294,7 +36296,7 @@ async function resolveChangeDocumentLocale(changeDirPath, requestedLocale, pinLe
 
 // packages/cli/src/commands/documentScaffoldSafety.ts
 import { lstat as lstat22, realpath as realpath10 } from "node:fs/promises";
-import { dirname as dirname12, isAbsolute as isAbsolute14, relative as relative11, resolve as resolve22, sep as sep13 } from "node:path";
+import { dirname as dirname12, isAbsolute as isAbsolute15, relative as relative11, resolve as resolve22, sep as sep13 } from "node:path";
 function ordinaryDocumentFile(info) {
   return info.isFile() && !info.isSymbolicLink();
 }
@@ -36313,7 +36315,7 @@ function requiredDeltaCapability(requestedCapability) {
 async function assertSafeChangeRoot(repoRoot, changeRoot) {
   const root = resolve22(repoRoot);
   const lexical = relative11(root, resolve22(changeRoot));
-  if (lexical === ".." || lexical.startsWith(`..${sep13}`) || isAbsolute14(lexical)) {
+  if (lexical === ".." || lexical.startsWith(`..${sep13}`) || isAbsolute15(lexical)) {
     throw new Error(`Change \u6839\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
   const rootInfo = await lstat22(root);
@@ -36330,7 +36332,7 @@ async function assertSafeChangeRoot(repoRoot, changeRoot) {
   }
   const [rootReal, changeReal] = await Promise.all([realpath10(root), realpath10(changeRoot)]);
   const escaped3 = relative11(rootReal, changeReal);
-  if (escaped3 === ".." || escaped3.startsWith(`..${sep13}`) || isAbsolute14(escaped3)) {
+  if (escaped3 === ".." || escaped3.startsWith(`..${sep13}`) || isAbsolute15(escaped3)) {
     throw new Error(`Change \u6839\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${changeRoot}`);
   }
 }
@@ -37295,7 +37297,7 @@ import { join as join58 } from "node:path";
 
 // packages/cli/src/skillBundleAssembly.ts
 import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
-import { isAbsolute as isAbsolute15, join as join57 } from "node:path";
+import { isAbsolute as isAbsolute16, join as join57 } from "node:path";
 
 // packages/cli/src/executionCoordinatePort.ts
 import { createHash as createHash28 } from "node:crypto";
@@ -37550,7 +37552,7 @@ function parseInstalledPluginSkillRoots(json) {
         throw new InstalledPluginRegistryError(`installed_plugins.json \u7684 plugins.${key}[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
       }
       const installPath = entry.installPath;
-      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute15(installPath)) {
+      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute16(installPath)) {
         throw new InstalledPluginRegistryError(
           `installed_plugins.json \u7684 plugins.${key}[${index}].installPath \u5FC5\u987B\u662F\u975E\u7A7A\u7EDD\u5BF9\u8DEF\u5F84`
         );
@@ -38450,7 +38452,7 @@ function nextSeq(lastSeq) {
 }
 
 // packages/channel/dist/paths.js
-import { isAbsolute as isAbsolute16, join as join60, resolve as resolve24 } from "node:path";
+import { isAbsolute as isAbsolute17, join as join60, resolve as resolve24 } from "node:path";
 var GLOBAL_BUCKET = "_global";
 function resolveRoot(defaultRoot, envRoot) {
   const env = (envRoot ?? "").trim();
@@ -38466,7 +38468,7 @@ function projectKey(env) {
   const override = (env.projectOverride ?? "").trim();
   if (override)
     return sanitizeBucket(override);
-  const base = isAbsolute16(env.cwd) ? env.cwd : resolve24(env.cwd);
+  const base = isAbsolute17(env.cwd) ? env.cwd : resolve24(env.cwd);
   return sanitizeBucket(base);
 }
 function bucketFor(env, scope) {
@@ -41176,7 +41178,7 @@ async function cmdInit(deps, name2, opts, env = REAL_INIT_WIZARD_ENV) {
 
 // packages/cli/src/commands/loops.ts
 import { readFileSync as readFileSync22, readdirSync as readdirSync6 } from "node:fs";
-import { isAbsolute as isAbsolute17, join as join63 } from "node:path";
+import { isAbsolute as isAbsolute18, join as join63 } from "node:path";
 
 // packages/cli/src/commands/loop-admission-view.ts
 import { existsSync as existsSync10 } from "node:fs";
@@ -42594,7 +42596,7 @@ function sandboxChangeDir(repoRoot, name2, worktree) {
   let base;
   if (worktree && worktree.trim() !== "") {
     const w = worktree.trim();
-    base = isAbsolute17(w) ? w : join63(repoRoot, w);
+    base = isAbsolute18(w) ? w : join63(repoRoot, w);
   } else {
     base = join63(repoRoot, ".sandcastle", "worktrees", `sandcastle-pipeline-${name2}`);
   }
@@ -43145,12 +43147,12 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 
 // packages/cli/src/commands/scaffold.ts
 import { lstat as lstat28, mkdir as mkdir22, readFile as readFile30, rm as rm8, stat as stat10, unlink as unlink5, writeFile as writeFile13 } from "node:fs/promises";
-import { dirname as dirname15, isAbsolute as isAbsolute20, join as join64, relative as relative16, resolve as resolve29, sep as sep16 } from "node:path";
+import { dirname as dirname15, isAbsolute as isAbsolute21, join as join64, relative as relative16, resolve as resolve29, sep as sep16 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTransaction.ts
 import { lstat as lstat27, mkdir as mkdir21, rename as rename8, rm as rm7, writeFile as writeFile12 } from "node:fs/promises";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { dirname as dirname14, isAbsolute as isAbsolute19, relative as relative15, resolve as resolve28, sep as sep15 } from "node:path";
+import { dirname as dirname14, isAbsolute as isAbsolute20, relative as relative15, resolve as resolve28, sep as sep15 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
 import { createHash as createHash31 } from "node:crypto";
@@ -43233,7 +43235,7 @@ function ordinaryPathKey(target) {
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
 import { lstat as lstat26, readFile as readFile29, rename as rename7, rm as rm6 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname13, isAbsolute as isAbsolute18, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
+import { basename as basename6, dirname as dirname13, isAbsolute as isAbsolute19, relative as relative14, resolve as resolve27, sep as sep14 } from "node:path";
 function errorCode7(error) {
   if (typeof error !== "object" || error === null || !("code" in error)) return void 0;
   const code = Reflect.get(error, "code");
@@ -43241,7 +43243,7 @@ function errorCode7(error) {
 }
 function contained2(root, target) {
   const rel = relative14(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep14}`) && !isAbsolute18(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep14}`) && !isAbsolute19(rel);
 }
 async function existingOrdinaryFile(target) {
   try {
@@ -43416,7 +43418,7 @@ async function acquireTransaction(specDirectory, receipt, anchor) {
 // packages/cli/src/commands/specScaffoldTransaction.ts
 function contained3(root, target) {
   const rel = relative15(root, target);
-  return rel !== ".." && !rel.startsWith(`..${sep15}`) && !isAbsolute19(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep15}`) && !isAbsolute20(rel);
 }
 async function existingOrdinaryDirectory2(target) {
   try {
@@ -43586,15 +43588,15 @@ var REAL_FS = {
 };
 var SPEC_STRATEGY_SIGNAL = "TENON_SPEC_STRATEGY";
 function safeSpecDir(cwd, specDir) {
-  if (isAbsolute20(specDir)) return false;
+  if (isAbsolute21(specDir)) return false;
   const rel = relative16(resolve29(cwd), resolve29(cwd, specDir));
-  return rel !== ".." && !rel.startsWith(`..${sep16}`) && !isAbsolute20(rel);
+  return rel !== ".." && !rel.startsWith(`..${sep16}`) && !isAbsolute21(rel);
 }
 async function assertExistingParentsSafe(cwd, target) {
   const root = resolve29(cwd);
   const parent = dirname15(target);
   const rel = relative16(root, parent);
-  if (rel === ".." || rel.startsWith(`..${sep16}`) || isAbsolute20(rel)) {
+  if (rel === ".." || rel.startsWith(`..${sep16}`) || isAbsolute21(rel)) {
     throw new Error(`scaffold \u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${target}`);
   }
   let cursor = root;
@@ -45316,7 +45318,7 @@ async function cmdMigrateWorkflow(deps, name2) {
 
 // packages/cli/src/commands/state-projection.ts
 import { lstat as lstat31, readFile as readFile33 } from "node:fs/promises";
-import { isAbsolute as isAbsolute21, join as join67, resolve as resolve30 } from "node:path";
+import { isAbsolute as isAbsolute22, join as join67, resolve as resolve30 } from "node:path";
 function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -45356,7 +45358,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
           deps.io.out(opts.json ? JSON.stringify({ status: "already-pinned" }) : `${name2}: workflow snapshot already pinned`);
           return 0;
         }
-        const sourcePath = isAbsolute21(opts.workflowFile) ? opts.workflowFile : resolve30(deps.cwd, opts.workflowFile);
+        const sourcePath = isAbsolute22(opts.workflowFile) ? opts.workflowFile : resolve30(deps.cwd, opts.workflowFile);
         const info = await lstat31(sourcePath);
         if (!info.isFile() || info.isSymbolicLink()) {
           throw new Error(`workflow file \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${sourcePath}`);
@@ -46876,7 +46878,7 @@ var RuntimeReleaseStore = class {
 // packages/cli/src/runtime/managed-release-journal.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
 import { lstat as lstat34, mkdir as mkdir26, readFile as readFile37, unlink as unlink6 } from "node:fs/promises";
-import { dirname as dirname19, isAbsolute as isAbsolute22, join as join74, normalize } from "node:path";
+import { dirname as dirname19, isAbsolute as isAbsolute23, join as join74, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
 function isRecord16(value) {
@@ -46967,7 +46969,7 @@ function decodeRelease(value) {
   };
 }
 function decodeLauncherFile(value) {
-  if (!isRecord17(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute22(value.path) || normalize(value.path) !== value.path) return null;
+  if (!isRecord17(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute23(value.path) || normalize(value.path) !== value.path) return null;
   const state = value.state;
   if (!isRecord17(state) || typeof state.kind !== "string") return null;
   if (state.kind === "missing" && exactKeys2(state, ["kind"])) {
@@ -47074,7 +47076,7 @@ function decodeJournal(raw, paths) {
       "dashboardRestored"
     ]
   )) return null;
-  if (value.version !== 1 || typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId) || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "stopping-candidate" && value.phase !== "reverting-activation" && value.phase !== "restoring-previous" && value.phase !== "previous-restored" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.dashboardPort !== void 0 && (!Number.isSafeInteger(value.dashboardPort) || value.dashboardPort < 1 || value.dashboardPort > 65535) || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute22(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6) || value.compensationReason !== void 0 && (typeof value.compensationReason !== "string" || value.compensationReason === "" || value.compensationReason.length > 4096) || value.dashboardBeforeAbsent !== void 0 && value.dashboardBeforeAbsent !== true) return null;
+  if (value.version !== 1 || typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId) || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "stopping-candidate" && value.phase !== "reverting-activation" && value.phase !== "restoring-previous" && value.phase !== "previous-restored" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.dashboardPort !== void 0 && (!Number.isSafeInteger(value.dashboardPort) || value.dashboardPort < 1 || value.dashboardPort > 65535) || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute23(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6) || value.compensationReason !== void 0 && (typeof value.compensationReason !== "string" || value.compensationReason === "" || value.compensationReason.length > 4096) || value.dashboardBeforeAbsent !== void 0 && value.dashboardBeforeAbsent !== true) return null;
   const activationCheckpoint = value.activationCheckpoint === void 0 ? void 0 : decodeActivationCheckpoint(value.activationCheckpoint);
   const activation = value.activation === void 0 ? void 0 : decodeActivation(value.activation);
   const hostSteps = decodeManagedHostSteps(value.hostSteps);
@@ -47415,7 +47417,7 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
 }
 
 // packages/cli/src/commands/plugin-host.ts
-import { isAbsolute as isAbsolute23, normalize as normalize2 } from "node:path";
+import { isAbsolute as isAbsolute24, normalize as normalize2 } from "node:path";
 var TENON_HOSTS = [
   "codex",
   "claude",
@@ -47465,7 +47467,7 @@ function parseHostPluginInventory(host, stdout) {
       scopes.set(id, registeredScopes);
     }
     const candidateRoot = host === "codex" ? item2.source?.path : item2.installPath;
-    if (candidateRoot !== void 0 && (typeof candidateRoot !== "string" || !isAbsolute23(candidateRoot) || normalize2(candidateRoot) !== candidateRoot)) return null;
+    if (candidateRoot !== void 0 && (typeof candidateRoot !== "string" || !isAbsolute24(candidateRoot) || normalize2(candidateRoot) !== candidateRoot)) return null;
     if (enabled && host === "codex" && item2.name === TENON_PLUGIN_NAME && item2.marketplaceName === TENON_MARKETPLACE_NAME && typeof item2.source?.path === "string") {
       if (tenonRoot !== null) return null;
       tenonRoot = item2.source.path;
@@ -48874,7 +48876,7 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
 }
 
 // packages/cli/src/commands/managed-host-observation.ts
-import { isAbsolute as isAbsolute24, join as join79, normalize as normalize3 } from "node:path";
+import { isAbsolute as isAbsolute25, join as join79, normalize as normalize3 } from "node:path";
 function parseJson3(text2, label) {
   try {
     return JSON.parse(text2);
@@ -48907,7 +48909,7 @@ function marketplaceState(env, host, value) {
     const sourceRecord = host === "codex" && typeof item2.marketplaceSource === "object" && item2.marketplaceSource !== null ? item2.marketplaceSource : null;
     const source = host === "codex" ? sourceRecord?.source : item2.repo;
     const sourceType = host === "codex" ? sourceRecord?.sourceType : item2.source;
-    if (typeof root !== "string" || !isAbsolute24(root) || normalize3(root) !== root || typeof source !== "string" || source === "" || typeof sourceType !== "string" || sourceType === "") {
+    if (typeof root !== "string" || !isAbsolute25(root) || normalize3(root) !== root || typeof source !== "string" || source === "" || typeof sourceType !== "string" || sourceType === "") {
       throw new ManagedRuntimeIndeterminateError(`${host} tenon marketplace identity \u4E0D\u5B8C\u6574`);
     }
     const headResult = env.runCommand("git", ["-C", root, "rev-parse", "HEAD"]);
@@ -48938,7 +48940,7 @@ function pluginState(host, value) {
       throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity \u672A\u542F\u7528`);
     }
     const root = host === "codex" && typeof item2.source === "object" && item2.source !== null ? item2.source.path : item2.installPath;
-    if (typeof item2.version !== "string" || typeof root !== "string" || !isAbsolute24(root) || normalize3(root) !== root) {
+    if (typeof item2.version !== "string" || typeof root !== "string" || !isAbsolute25(root) || normalize3(root) !== root) {
       throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity \u4E0D\u5B8C\u6574`);
     }
     matches.push({ id, version: item2.version, root });
@@ -49111,7 +49113,7 @@ async function runManagedHostCommand(transaction, stepId, env, command2) {
 // packages/cli/src/migration/legacy-project-registry.ts
 import { statSync as statSync9 } from "node:fs";
 import { mkdir as mkdir28, readFile as readFile38 } from "node:fs/promises";
-import { isAbsolute as isAbsolute25, join as join80, posix as posix7, resolve as resolve34, win32 as win325 } from "node:path";
+import { isAbsolute as isAbsolute26, join as join80, posix as posix7, resolve as resolve34, win32 as win325 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
 var MIGRATION_ID = "host-project-registry-v1";
 function resolveHostProjectRegistryCandidates(input) {
@@ -49175,7 +49177,7 @@ async function readPendingMigration(path9) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
   const record2 = value;
-  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || !Array.isArray(record2.roots) || !record2.roots.every((root) => typeof root === "string" && isAbsolute25(root)) || new Set(record2.roots).size !== record2.roots.length || !nonNegativeInteger(record2.rejected)) {
+  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || !Array.isArray(record2.roots) || !record2.roots.every((root) => typeof root === "string" && isAbsolute26(root)) || new Set(record2.roots).size !== record2.roots.length || !nonNegativeInteger(record2.rejected)) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
@@ -49243,7 +49245,7 @@ async function migrateLegacyProjectRegistry(input) {
               return false;
             }
           })());
-          if (typeof item2 !== "string" || !isAbsolute25(item2) || !input.pathExists(item2) || !isDirectory) {
+          if (typeof item2 !== "string" || !isAbsolute26(item2) || !input.pathExists(item2) || !isDirectory) {
             rejected += 1;
             continue;
           }
@@ -49285,7 +49287,7 @@ async function migrateLegacyProjectRegistry(input) {
 }
 
 // packages/cli/src/commands/host-plugin-convergence.ts
-import { dirname as dirname22, isAbsolute as isAbsolute26, join as join81, normalize as normalize4 } from "node:path";
+import { dirname as dirname22, isAbsolute as isAbsolute27, join as join81, normalize as normalize4 } from "node:path";
 function hostPluginConvergencePaths(env, host) {
   const paths = resolveRuntimePaths({ homeDir: env.homeDir(), env: env.runtimeEnv() });
   return {
@@ -49308,7 +49310,7 @@ function parseReceipt3(raw, host) {
   const receiptVersion = Reflect.get(value, "version");
   if (receiptVersion !== 2 && receiptVersion !== 3 || receipt.state !== "cleanup-pending" && receipt.state !== "completed" || receipt.host !== host || receipt.conflictPluginId !== LEGACY_PLUGIN_IDENTITY || !Array.isArray(receipt.conflictScopes) || receipt.state === "cleanup-pending" && receipt.conflictScopes.length === 0 || receipt.conflictScopes.some(
     (scope) => scope !== "user" && scope !== "project" && scope !== "local" && scope !== "managed"
-  ) || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length || !isReleaseId(receipt.releaseId) || typeof receipt.releaseRoot !== "string" || !isAbsolute26(receipt.releaseRoot) || normalize4(receipt.releaseRoot) !== receipt.releaseRoot || typeof receipt.candidateRoot !== "string" || !isAbsolute26(receipt.candidateRoot) || normalize4(receipt.candidateRoot) !== receipt.candidateRoot || typeof receipt.createdAtEpoch !== "number" || !Number.isSafeInteger(receipt.createdAtEpoch) || receipt.createdAtEpoch < 0 || typeof receipt.updatedAt !== "string" || receipt.updatedAt === "") return null;
+  ) || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length || !isReleaseId(receipt.releaseId) || typeof receipt.releaseRoot !== "string" || !isAbsolute27(receipt.releaseRoot) || normalize4(receipt.releaseRoot) !== receipt.releaseRoot || typeof receipt.candidateRoot !== "string" || !isAbsolute27(receipt.candidateRoot) || normalize4(receipt.candidateRoot) !== receipt.candidateRoot || typeof receipt.createdAtEpoch !== "number" || !Number.isSafeInteger(receipt.createdAtEpoch) || receipt.createdAtEpoch < 0 || typeof receipt.updatedAt !== "string" || receipt.updatedAt === "") return null;
   const transactionId = Reflect.get(value, "transactionId");
   if (receiptVersion === 3 && (typeof transactionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(transactionId))) return null;
   return {
@@ -50250,7 +50252,7 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 }
 
 // packages/cli/src/commands/update.ts
-import { isAbsolute as isAbsolute27, join as join85 } from "node:path";
+import { isAbsolute as isAbsolute28, join as join85 } from "node:path";
 function renderPlan2(deps, host, plan) {
   deps.io.out(`[update] ${hostFlag(host)} \u53D1\u5E03\u66F4\u65B0\u8BA1\u5212\uFF08\u53EA\u66F4\u65B0\u6240\u9009\u5BBF\u4E3B\uFF09`);
   for (const item2 of plan) deps.io.out(`  $ ${item2.cmd} ${item2.args.join(" ")}`);
@@ -50456,7 +50458,7 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
   }
   if (!Array.isArray(roots)) return;
   const registeredRoots = [...new Set(
-    roots.filter((root) => typeof root === "string" && isAbsolute27(root))
+    roots.filter((root) => typeof root === "string" && isAbsolute28(root))
   )];
   const outdated = registeredRoots.filter((root) => {
     try {

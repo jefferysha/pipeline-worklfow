@@ -13,7 +13,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { HistoryWriter } from '@tenon/kernel'
 import {
@@ -30,6 +30,7 @@ import {
   recentHostTranscripts,
 } from './codexTranscriptDiscovery.js'
 import { successfulCustomStdout, successfulFunctionStdout } from './codexTranscriptCompletion.js'
+import { commandTrustedSkillPaths } from './codexTrustedSkillRead.js'
 import { makeDeps } from './test-support.js'
 
 let root = ''
@@ -575,6 +576,20 @@ describe('Codex transcript skill receipt', () => {
     expect(transcriptExecInvocations(
       `// @exec: {"max_output_tokens":1}\nconst r = await tools.exec_command({cmd:"cat /trusted/SKILL.md"}); text(r);`,
     )).toEqual([])
+  })
+
+  it('rejects a relative cat operand even when the verifier cwd resolves it to the trusted Skill', () => {
+    const relativeSkillPath = relative(process.cwd(), skillPath)
+    expect(relativeSkillPath).not.toMatch(/^\//)
+    expect(commandTrustedSkillPaths(`cat ${relativeSkillPath}`, skillPath)).toBeUndefined()
+  })
+
+  it('rejects an absolute sibling-shaped path that escapes above the trusted skills root', () => {
+    const escapedSkillPath = resolve(skillPath, '..', '..', '..', 'SKILL.md')
+    expect(commandTrustedSkillPaths(
+      `cat ${skillPath} && cat ${escapedSkillPath}`,
+      skillPath,
+    )).toBeUndefined()
   })
 
   it.each([

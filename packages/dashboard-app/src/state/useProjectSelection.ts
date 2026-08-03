@@ -24,6 +24,11 @@ export interface DashboardNavigationTarget {
 
 const HISTORY_POSITION_KEY = '__tenonDashboardPosition'
 
+interface HistorySnapshot {
+  readonly url: string
+  readonly state: unknown
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -73,6 +78,20 @@ function historyStateAt(position: number): Record<string, unknown> {
   return { ...current, [HISTORY_POSITION_KEY]: position }
 }
 
+function historyStateWithoutPosition(state: unknown): unknown {
+  if (!isRecord(state)) return state
+  const clean = { ...state }
+  delete clean[HISTORY_POSITION_KEY]
+  return clean
+}
+
+function currentHistorySnapshot(): HistorySnapshot {
+  return {
+    url: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    state: window.history.state,
+  }
+}
+
 function traverseHistory(delta: number): void {
   if (delta === -1) window.history.back()
   else if (delta === 1) window.history.forward()
@@ -89,6 +108,8 @@ export function useProjectSelection(input: {
   readonly onPopAttempt?: (target: DashboardNavigationTarget) => boolean
   /** A first ordinary-view request owns the dialog and cancels later traversals before commit. */
   readonly shouldCancelPopBeforeCommit?: () => boolean
+  /** Synchronously confirms an already-committed popstate whose direction cannot be recovered. */
+  readonly onUninterceptablePopAttempt?: (target: DashboardNavigationTarget) => boolean
   /** Keeps an unavailable root selected while a retained dirty editor is awaiting recovery/discard. */
   readonly preserveUnavailableRoot?: boolean
 }): ProjectSelectionController {
@@ -99,14 +120,40 @@ export function useProjectSelection(input: {
   const settlementSequenceRef = useRef(0)
   const allowNextPopRef = useRef(false)
   const historyPositionRef = useRef(historyPosition(window.history.state) ?? 0)
+  const historyPositionKnownRef = useRef(historyPosition(window.history.state) !== null)
   const navigationIndexRef = useRef(navigationEntryIndex())
   const blockedTraversalRef = useRef(-1)
   const blockedTraversalPendingRef = useRef(false)
+  const blockedTraversalReplayableRef = useRef(true)
+  const blockedTargetRef = useRef<{
+    readonly target: DashboardNavigationTarget
+    readonly history: HistorySnapshot
+  } | null>(null)
+  const committedHistoryRef = useRef<HistorySnapshot>(currentHistorySnapshot())
   const uncancelledTraversalSequenceRef = useRef(0)
   const activeUncancelledTraversalRef = useRef<number | null>(null)
   const uncancelledTraversalCleanupRef = useRef<(() => void) | null>(null)
   const navigationTarget = navigationEventTarget()
   const supportsNavigationInterception = navigationTarget !== null
+  const rememberCommittedHistory = useCallback((): void => {
+    committedHistoryRef.current = currentHistorySnapshot()
+  }, [])
+  const clearBlockedTraversal = useCallback((): void => {
+    blockedTraversalPendingRef.current = false
+    blockedTraversalReplayableRef.current = true
+    blockedTargetRef.current = null
+  }, [])
+  const recoverCommittedHistory = useCallback((): void => {
+    const committed = committedHistoryRef.current
+    window.history.pushState(
+      historyStateWithoutPosition(committed.state),
+      '',
+      committed.url,
+    )
+    historyPositionKnownRef.current = false
+    navigationIndexRef.current = null
+    rememberCommittedHistory()
+  }, [rememberCommittedHistory])
   const clearUncancelledTraversal = useCallback((sequence: number): void => {
     if (activeUncancelledTraversalRef.current !== sequence) return
     uncancelledTraversalCleanupRef.current?.()
@@ -116,9 +163,16 @@ export function useProjectSelection(input: {
   const abortUncancelledTraversal = useCallback((sequence: number): void => {
     if (activeUncancelledTraversalRef.current !== sequence) return
     clearUncancelledTraversal(sequence)
-    const afterRestore = afterRestoreRef.current
-    afterRestoreRef.current = null
-    afterRestore?.()
+    const settlementSequence = settlementSequenceRef.current
+    // A superseding Navigation API event is dispatched in the same task after aborting the old
+    // traversal. Let that event establish its own cancel/barrier state before settling the winner.
+    queueMicrotask(() => {
+      if (settlementSequenceRef.current !== settlementSequence) return
+      if (activeUncancelledTraversalRef.current !== null) return
+      const afterRestore = afterRestoreRef.current
+      afterRestoreRef.current = null
+      afterRestore?.()
+    })
   }, [clearUncancelledTraversal])
   const beginUncancelledTraversal = useCallback((event: Event): void => {
     const sequence = uncancelledTraversalSequenceRef.current + 1
@@ -139,7 +193,9 @@ export function useProjectSelection(input: {
     if (historyPosition(window.history.state) === null) {
       window.history.replaceState(historyStateAt(historyPositionRef.current), '')
     }
-  }, [])
+    historyPositionKnownRef.current = true
+    rememberCommittedHistory()
+  }, [rememberCommittedHistory])
   const [preferredRoot, setPreferredRoot] = useState<string | null>(() => {
     try {
       return parseDashboardLocation(window.location.search).root ?? null
@@ -161,17 +217,20 @@ export function useProjectSelection(input: {
         const previousNavigationIndex = navigationIndexRef.current
         window.history.pushState(historyStateAt(nextPosition), '', next)
         historyPositionRef.current = nextPosition
+        historyPositionKnownRef.current = true
         navigationIndexRef.current = navigationEntryIndex()
           ?? (previousNavigationIndex === null ? null : previousNavigationIndex + 1)
+        rememberCommittedHistory()
       }
     } catch {
       // 内存选择仍然生效；仅宿主禁用 history 时失去可后退 URL。
     }
     setPreferredRoot(root)
     input.onSelectedChange(null)
-  }, [input.onSelectedChange])
+  }, [input.onSelectedChange, rememberCommittedHistory])
 
   useEffect(() => {
+    if (restoringBlockedPopRef.current) return
     try {
       const root = input.snapshot
         ? (currentRoot || (input.preserveUnavailableRoot ? (preferredRoot ?? '') : ''))
@@ -184,6 +243,7 @@ export function useProjectSelection(input: {
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.replaceState(window.history.state, '', next)
+      rememberCommittedHistory()
     } catch {
       // 禁用 history 的宿主只失去可复制 URL，不影响内存中的显式选择。
     }
@@ -194,6 +254,7 @@ export function useProjectSelection(input: {
     input.snapshot,
     input.view,
     preferredRoot,
+    rememberCommittedHistory,
   ])
 
   useEffect(() => {
@@ -216,10 +277,26 @@ export function useProjectSelection(input: {
   ])
 
   const applyLocation = useCallback((target: DashboardNavigationTarget): void => {
+    rememberCommittedHistory()
     input.onPopView(target.view)
     setPreferredRoot(target.root)
     input.onSelectedChange(target.change)
-  }, [input.onPopView, input.onSelectedChange])
+  }, [input.onPopView, input.onSelectedChange, rememberCommittedHistory])
+
+  const commitBlockedTargetFallback = useCallback((): boolean => {
+    const blocked = blockedTargetRef.current
+    if (blocked === null) return false
+    window.history.pushState(
+      historyStateWithoutPosition(blocked.history.state),
+      '',
+      blocked.history.url,
+    )
+    historyPositionKnownRef.current = false
+    navigationIndexRef.current = null
+    clearBlockedTraversal()
+    applyLocation(blocked.target)
+    return true
+  }, [applyLocation, clearBlockedTraversal])
 
   const confirmPopNavigation = useCallback((): void => {
     settlementSequenceRef.current += 1
@@ -229,31 +306,35 @@ export function useProjectSelection(input: {
       confirmAfterRestoreRef.current = true
       return
     }
+    if (
+      (!blockedTraversalReplayableRef.current || !historyPositionKnownRef.current)
+      && commitBlockedTargetFallback()
+    ) return
     allowNextPopRef.current = true
     traverseHistory(blockedTraversalRef.current)
-  }, [])
+  }, [commitBlockedTargetFallback])
 
   const cancelPopNavigation = useCallback((afterRestore?: () => void): void => {
     settlementSequenceRef.current += 1
     confirmAfterRestoreRef.current = false
     if (afterRestore === undefined) {
-      blockedTraversalPendingRef.current = false
+      clearBlockedTraversal()
       afterRestoreRef.current = null
       return
     }
     if (activeUncancelledTraversalRef.current !== null) {
-      blockedTraversalPendingRef.current = false
+      clearBlockedTraversal()
       afterRestoreRef.current = afterRestore
       return
     }
     if (restoringBlockedPopRef.current) {
-      blockedTraversalPendingRef.current = false
+      clearBlockedTraversal()
       afterRestoreRef.current = afterRestore
       return
     }
-    blockedTraversalPendingRef.current = false
+    clearBlockedTraversal()
     afterRestore()
-  }, [])
+  }, [clearBlockedTraversal])
 
   useEffect(() => {
     if (navigationTarget === null) return
@@ -289,16 +370,22 @@ export function useProjectSelection(input: {
       const uncancelledSequence = activeUncancelledTraversalRef.current
       if (uncancelledSequence !== null) clearUncancelledTraversal(uncancelledSequence)
       const previousPosition = historyPositionRef.current
+      const previousPositionKnown = historyPositionKnownRef.current
       const eventPosition = historyPosition(event.state)
       const previousNavigationIndex = navigationIndexRef.current
       const eventNavigationIndex = navigationEntryIndex()
       if (restoringBlockedPopRef.current) {
         historyPositionRef.current = eventPosition ?? previousPosition - restoringTraversalRef.current
+        historyPositionKnownRef.current = eventPosition !== null
         navigationIndexRef.current = eventNavigationIndex
           ?? (previousNavigationIndex === null ? null : previousNavigationIndex - restoringTraversalRef.current)
         restoringBlockedPopRef.current = false
         if (confirmAfterRestoreRef.current) {
           confirmAfterRestoreRef.current = false
+          if (
+            (!blockedTraversalReplayableRef.current || !historyPositionKnownRef.current)
+            && commitBlockedTargetFallback()
+          ) return
           allowNextPopRef.current = true
           traverseHistory(blockedTraversalRef.current)
           return
@@ -313,11 +400,16 @@ export function useProjectSelection(input: {
       const indexedTraversal = previousNavigationIndex !== null && eventNavigationIndex !== null
         ? eventNavigationIndex - previousNavigationIndex
         : null
-      const traversal = eventPosition === null
-        ? (indexedTraversal ?? -1)
-        : eventPosition - previousPosition
+      const markedTraversal = previousPositionKnown && eventPosition !== null
+        ? eventPosition - previousPosition
+        : null
+      const traversal = markedTraversal !== null && markedTraversal !== 0
+        ? markedTraversal
+        : (indexedTraversal ?? 0)
+      const directionUnknown = traversal === 0
       const targetPosition = eventPosition ?? previousPosition + traversal
       historyPositionRef.current = targetPosition
+      historyPositionKnownRef.current = eventPosition !== null
       navigationIndexRef.current = eventNavigationIndex
         ?? (previousNavigationIndex === null ? null : previousNavigationIndex + traversal)
       const linked = parseDashboardLocation(window.location.search)
@@ -328,7 +420,29 @@ export function useProjectSelection(input: {
       }
       if (allowNextPopRef.current) {
         allowNextPopRef.current = false
-        blockedTraversalPendingRef.current = false
+        clearBlockedTraversal()
+        applyLocation(target)
+        return
+      }
+      if (directionUnknown) {
+        // Without either our marker or a Navigation API index, popstate arrives after commit and
+        // its direction is unknowable. Guessing an inverse can corrupt Forward into Back (or vice
+        // versa). Ask synchronously; on cancellation, push an unmarked recovery entry for the retained
+        // UI instead of traversing in an invented direction or silently discarding its draft.
+        if (input.onUninterceptablePopAttempt?.(target) === false) {
+          try {
+            recoverCommittedHistory()
+            if (blockedTraversalPendingRef.current) {
+              blockedTraversalReplayableRef.current = false
+            }
+          } catch {
+            historyPositionRef.current = previousPosition
+            historyPositionKnownRef.current = previousPositionKnown
+          }
+          return
+        }
+        clearBlockedTraversal()
+        afterRestoreRef.current = null
         applyLocation(target)
         return
       }
@@ -339,6 +453,11 @@ export function useProjectSelection(input: {
         if (!blockedTraversalPendingRef.current) {
           blockedTraversalRef.current = blockedTraversal
           blockedTraversalPendingRef.current = true
+          blockedTraversalReplayableRef.current = true
+          blockedTargetRef.current = {
+            target,
+            history: currentHistorySnapshot(),
+          }
         }
         restoringTraversalRef.current = blockedTraversal
         restoringBlockedPopRef.current = true
@@ -349,7 +468,16 @@ export function useProjectSelection(input: {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [applyLocation, clearUncancelledTraversal, input.onPopAttempt, input.view])
+  }, [
+    applyLocation,
+    clearUncancelledTraversal,
+    clearBlockedTraversal,
+    commitBlockedTargetFallback,
+    input.onPopAttempt,
+    input.onUninterceptablePopAttempt,
+    input.view,
+    recoverCommittedHistory,
+  ])
 
   return {
     currentRoot,

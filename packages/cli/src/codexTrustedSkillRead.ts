@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   isCompleteOutputSafeExecArguments,
   transcriptExecInvocations,
@@ -95,9 +95,18 @@ export function commandTrustedSkillPaths(
   const paths: string[] = []
   for (const segment of segments) {
     const path = safeCompleteCatPath(segment)
-    if (path === undefined) return undefined
+    // The transcript must identify the trusted asset independently of whichever cwd later
+    // verifies the receipt. Resolving relative operands here would let verifier cwd choose trust.
+    if (path === undefined || !isAbsolute(path)) return undefined
     const resolvedPath = resolve(path)
-    const sibling = relative(skillsRoot, resolvedPath).split(sep)
+    const siblingPath = relative(skillsRoot, resolvedPath)
+    if (
+      siblingPath === ''
+      || isAbsolute(siblingPath)
+      || siblingPath === '..'
+      || siblingPath.startsWith(`..${sep}`)
+    ) return undefined
+    const sibling = siblingPath.split(sep)
     if (sibling.length !== 2 || sibling[0] === '' || sibling[1] !== 'SKILL.md') return undefined
     if (resolvedPath === skillPath) observedRead = true
     paths.push(resolvedPath)

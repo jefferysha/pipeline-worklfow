@@ -200,8 +200,16 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   it('Workbench 内 browser Back 切换项目时，取消保留 root A 草稿，确认才进入 root B', async () => {
     const rootA = '/repo-a'
     const rootB = '/repo-b'
-    window.history.replaceState({ page: 'workbench-b' }, '', `/?view=workbench&root=${encodeURIComponent(rootB)}`)
-    window.history.pushState({ page: 'workbench-a' }, '', `/?view=workbench&root=${encodeURIComponent(rootA)}`)
+    window.history.replaceState(
+      { page: 'workbench-b', __tenonDashboardPosition: 0 },
+      '',
+      `/?view=workbench&root=${encodeURIComponent(rootB)}`,
+    )
+    window.history.pushState(
+      { page: 'workbench-a', __tenonDashboardPosition: 1 },
+      '',
+      `/?view=workbench&root=${encodeURIComponent(rootA)}`,
+    )
     stubEditableWorkbench({ preserveLocation: true, roots: [rootA, rootB] })
     render(<App />)
     await screen.findByTestId('wb-step-draft')
@@ -231,8 +239,16 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   })
 
   it('取消浏览器 Back 用 forward 补偿，不 replace/corrupt 目标历史项；随后仍可确认同一次 Back', async () => {
-    window.history.replaceState({ page: 'overview-target' }, '', '/?view=overview&historyMarker=target')
-    window.history.pushState({ page: 'workbench-current' }, '', '/?view=workbench&root=%2Frepo')
+    window.history.replaceState(
+      { page: 'overview-target', __tenonDashboardPosition: 0 },
+      '',
+      '/?view=overview&historyMarker=target',
+    )
+    window.history.pushState(
+      { page: 'workbench-current', __tenonDashboardPosition: 1 },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
     await renderDirtyWorkbenchApp({ preserveLocation: true })
 
     const replaceState = vi.spyOn(window.history, 'replaceState')
@@ -437,8 +453,16 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   })
 
   it('已阻断的 browser Back 不会被随后发生的 root 失权覆盖，丢弃后仍到达原历史目标', async () => {
-    window.history.replaceState({ page: 'overview' }, '', '/?view=overview')
-    window.history.pushState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+    window.history.replaceState(
+      { page: 'overview', __tenonDashboardPosition: 0 },
+      '',
+      '/?view=overview',
+    )
+    window.history.pushState(
+      { page: 'workbench', __tenonDashboardPosition: 1 },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
     await renderDirtyWorkbenchApp({ preserveLocation: true })
     const eventSource = lastEventSource()
     expect(eventSource).toBeDefined()
@@ -628,6 +652,71 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
   })
 
+  it('旧不可取消 traversal abort 后同一任务派发的 cancelable navigate 仍由首请求事务取消', async () => {
+    await renderDirtyWorkbenchApp()
+    const navigation = Reflect.get(window, 'navigation') as EventTarget
+    const firstController = new AbortController()
+
+    fireEvent.click(screen.getByTestId('nav-overview'))
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    const firstNavigate = new Event('navigate', { cancelable: false })
+    Object.defineProperties(firstNavigate, {
+      navigationType: { value: 'traverse' },
+      canIntercept: { value: false },
+      signal: { value: firstController.signal },
+    })
+    navigation.dispatchEvent(firstNavigate)
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃并离开' }))
+
+    const supersedingNavigate = new Event('navigate', { cancelable: true })
+    Object.defineProperties(supersedingNavigate, {
+      navigationType: { value: 'traverse' },
+      canIntercept: { value: true },
+    })
+    act(() => {
+      firstController.abort()
+      navigation.dispatchEvent(supersedingNavigate)
+    })
+
+    expect(supersedingNavigate.defaultPrevented).toBe(true)
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+
+  it('旧 traversal abort 后若出现新的不可取消 barrier，首请求等待新 signal 再提交', async () => {
+    await renderDirtyWorkbenchApp()
+    const navigation = Reflect.get(window, 'navigation') as EventTarget
+    const firstController = new AbortController()
+    const secondController = new AbortController()
+
+    fireEvent.click(screen.getByTestId('nav-overview'))
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    const firstNavigate = new Event('navigate', { cancelable: false })
+    Object.defineProperties(firstNavigate, {
+      navigationType: { value: 'traverse' },
+      canIntercept: { value: false },
+      signal: { value: firstController.signal },
+    })
+    navigation.dispatchEvent(firstNavigate)
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃并离开' }))
+
+    const supersedingNavigate = new Event('navigate', { cancelable: false })
+    Object.defineProperties(supersedingNavigate, {
+      navigationType: { value: 'traverse' },
+      canIntercept: { value: false },
+      signal: { value: secondController.signal },
+    })
+    act(() => {
+      firstController.abort()
+      navigation.dispatchEvent(supersedingNavigate)
+    })
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+
+    act(() => secondController.abort())
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+
   it('缺少 Navigation API 时普通离开降级为同步原生确认，不暴露异步 traversal 竞态', async () => {
     Reflect.deleteProperty(window, 'navigation')
     await renderDirtyWorkbenchApp()
@@ -644,6 +733,162 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     expect(confirm).toHaveBeenCalledTimes(2)
     expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
     expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+
+  it('缺少 Navigation API 时未标记 Forward 不猜方向、不补偿且不会卡住', async () => {
+    Reflect.deleteProperty(window, 'navigation')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    window.history.replaceState(
+      { page: 'workbench-current' },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
+    window.history.pushState(
+      { page: 'overview-forward' },
+      '',
+      '/?view=overview&historyMarker=unmarked-forward-no-navigation-api',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+
+    const back = vi.spyOn(window.history, 'back')
+    const forward = vi.spyOn(window.history, 'forward')
+    act(() => window.history.forward())
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('historyMarker'))
+      .toBe('unmarked-forward-no-navigation-api')
+    expect(back).not.toHaveBeenCalled()
+    expect(forward).toHaveBeenCalledTimes(1)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+  })
+
+  it('缺少 Navigation API 时未标记 Back 不猜方向、不补偿且不会卡住', async () => {
+    Reflect.deleteProperty(window, 'navigation')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    window.history.replaceState(
+      { page: 'overview-back' },
+      '',
+      '/?view=overview&historyMarker=unmarked-back-no-navigation-api',
+    )
+    window.history.pushState(
+      { page: 'workbench-current' },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+
+    const back = vi.spyOn(window.history, 'back')
+    const forward = vi.spyOn(window.history, 'forward')
+    act(() => window.history.back())
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('historyMarker'))
+      .toBe('unmarked-back-no-navigation-api')
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(forward).not.toHaveBeenCalled()
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+  })
+
+  it('缺少 Navigation API 时取消未标记 traversal 会恢复当前 URL 并保留草稿', async () => {
+    Reflect.deleteProperty(window, 'navigation')
+    window.history.replaceState(
+      { page: 'overview-back', custom: 'target-state' },
+      '',
+      '/?view=overview&debug=target#summary',
+    )
+    window.history.pushState(
+      { page: 'workbench-current', custom: 'draft-state' },
+      '',
+      '/?view=workbench&root=%2Frepo&debug=draft#editor',
+    )
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    act(() => window.history.back())
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+    expect(new URLSearchParams(window.location.search).get('root')).toBe('/repo')
+    expect(new URLSearchParams(window.location.search).get('debug')).toBe('draft')
+    expect(window.location.hash).toBe('#editor')
+    expect(window.history.state).toMatchObject({ page: 'workbench-current', custom: 'draft-state' })
+    expect(window.history.state).not.toHaveProperty('__tenonDashboardPosition')
+    expect(screen.queryByTestId('app-unsaved-navigation')).toBeNull()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+  })
+
+  it('缺少 Navigation API 时取消未标记 Forward 也恢复完整快照并开启无标记 epoch', async () => {
+    Reflect.deleteProperty(window, 'navigation')
+    window.history.replaceState(
+      { page: 'workbench-current', custom: 'forward-draft-state' },
+      '',
+      '/?view=workbench&root=%2Frepo&debug=forward-draft#editor-forward',
+    )
+    window.history.pushState(
+      { page: 'overview-forward', custom: 'forward-target-state' },
+      '',
+      '/?view=overview&debug=forward-target#summary-forward',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    act(() => window.history.forward())
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('workbench-view')).toBeInTheDocument()
+    expect(new URLSearchParams(window.location.search).get('debug')).toBe('forward-draft')
+    expect(window.location.hash).toBe('#editor-forward')
+    expect(window.history.state).toMatchObject({
+      page: 'workbench-current',
+      custom: 'forward-draft-state',
+    })
+    expect(window.history.state).not.toHaveProperty('__tenonDashboardPosition')
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存草稿')
+  })
+
+  it('已有 marked pop 事务时后续未知 traversal 不覆盖首请求，确认仍提交首目标', async () => {
+    Reflect.deleteProperty(window, 'navigation')
+    window.history.replaceState(
+      { page: 'overview-first', __tenonDashboardPosition: -1 },
+      '',
+      '/?view=overview&historyMarker=first-marked-target',
+    )
+    window.history.pushState(
+      { page: 'workbench-current', __tenonDashboardPosition: 0 },
+      '',
+      '/?view=workbench&root=%2Frepo&historyMarker=committed-workbench',
+    )
+    window.history.pushState(
+      { page: 'projects-later' },
+      '',
+      '/?view=projects&historyMarker=later-unmarked-target',
+    )
+    window.history.back()
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+    await renderDirtyWorkbenchApp({ preserveLocation: true })
+    const confirm = vi.spyOn(window, 'confirm')
+
+    act(() => window.history.back())
+    const dialog = await screen.findByTestId('app-unsaved-navigation')
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench'))
+
+    act(() => window.history.forward())
+    await waitFor(() => expect(window.history.state).not.toHaveProperty('__tenonDashboardPosition'))
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('workbench')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(screen.getByTestId('app-unsaved-navigation')).toBe(dialog)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('historyMarker'))
+      .toBe('first-marked-target'))
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
   })
 
   it('同一确认框内后续 Forward 不覆盖最先阻断的 Back，丢弃后重放首个历史目标', async () => {
@@ -841,8 +1086,16 @@ describe('App Workbench 未保存草稿离开守卫', () => {
   })
 
   it('浏览器返回先恢复已提交 URL/UI 并弹确认；取消保持一致，确认才应用目标地址', async () => {
-    window.history.replaceState({ page: 'overview' }, '', '/?view=overview')
-    window.history.pushState({ page: 'workbench' }, '', '/?view=workbench&root=%2Frepo')
+    window.history.replaceState(
+      { page: 'overview', __tenonDashboardPosition: 0 },
+      '',
+      '/?view=overview',
+    )
+    window.history.pushState(
+      { page: 'workbench', __tenonDashboardPosition: 1 },
+      '',
+      '/?view=workbench&root=%2Frepo',
+    )
     await renderDirtyWorkbenchApp({ preserveLocation: true })
     act(() => window.history.back())
 

@@ -178,6 +178,13 @@
 - [x] 将 pending navigation 固化为 first-request-wins 事务：在 Navigation API 发起点取消后续 traversal，不可取消时按序列身份等待真实 popstate/inverse restore，并在精确 AbortSignal 中止时只清除对应 barrier；无 API 时同步原生确认；覆盖 Back/Forward 交错、abort 竞态与继续编辑后的新事务。 (build)
 - [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门、production 浏览器与 Standards + Spec pre-Verify 审查后冻结新 SHA。 (build)
 
+## 2026-08-03 第十次 Verify 回退修复
+
+- [x] 将 Codex Skill `cat` operand 严格绑定受信绝对路径或已验证 exec workdir，拒绝仓库同字节副本铸造 receipt。 (build)
+- [x] 延迟旧 Navigation API AbortSignal 的事务消费，确保 superseding navigate 仍受 first-request-wins 约束。 (build)
+- [x] 无 Navigation API 且 history entry 未标记时使用方向安全降级，覆盖 Forward/Back 且不得卡死。 (build)
+- [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门、production 浏览器与 Standards + Spec pre-Verify 审查；新 SHA 由 `build-complete` 官方 transition 冻结。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

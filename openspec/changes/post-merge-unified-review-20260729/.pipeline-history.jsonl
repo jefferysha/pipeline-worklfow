@@ -365,3 +365,22 @@
 {"ts":"2026-08-02T22:42:25Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"61d1f1a2-c3f8-491a-973f-ea61df431861"}
 {"ts":"2026-08-02T23:02:10Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-03T00:29:23Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T00:29:55Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T00:29:55Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T00:29:55Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-08-03T00:29:55Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-03T00:29:56Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"b1427f42-17d5-4051-81eb-ba1d5353214f"}
+{"ts":"2026-08-03T00:30:47Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T00:51:21Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T00:55:20Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T00:55:20Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-03T00:55:20Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-08-03T00:55:21Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-03T00:55:30Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T00:55:30Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T00:51:21Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T00:55:30Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"d208196f-49aa-43c9-8ec3-d1abf55b9f2c"}
+{"ts":"2026-08-03T00:56:14Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-08-03T00:56:14Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-03T00:56:14Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-08-03T01:38:54Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T01:39:01Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
