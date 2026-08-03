@@ -151,6 +151,17 @@ export function compareRepositoryGroups(left: RepositoryGroup, right: Repository
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
 }
 
+/** Re-rank filtered summaries without mutating groups or replaying Array#sort on every keystroke. */
+export function orderRepositoryGroups(groups: readonly RepositoryGroup[]): RepositoryGroup[] {
+  const ordered: RepositoryGroup[] = []
+  for (const group of groups) {
+    const index = ordered.findIndex((candidate) => compareRepositoryGroups(group, candidate) < 0)
+    if (index < 0) ordered.push(group)
+    else ordered.splice(index, 0, group)
+  }
+  return ordered
+}
+
 export function summarizeRepositoryGroup(
   group: Pick<RepositoryGroup, 'id' | 'label'>,
   rows: readonly ProjectRow[],

@@ -351,6 +351,33 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(screen.queryByTitle(gatedRoot)).toBeNull()
   })
 
+  it('搜索改变组级优先级后按过滤后的统计重新排列 repository groups', () => {
+    const firstRepository = { id: '1'.repeat(64), label: 'first', workspace_kind: 'primary' as const }
+    const secondRepository = { id: '2'.repeat(64), label: 'second', workspace_kind: 'primary' as const }
+    const firstHealthy = '/shown/first-healthy'
+    const firstGated = '/hidden/first-gated'
+    const secondRunning = '/shown/second-running'
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(firstHealthy, [makeChange('healthy', 'open')], { repository: firstRepository }),
+        makeProject(firstGated, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+          repository: { ...firstRepository, workspace_kind: 'worktree' },
+        }),
+        makeProject(secondRunning, [makeChange('running', 'build', { fields: { automation: 'running' } })], {
+          repository: secondRepository,
+        }),
+      ]),
+      rulesByKey: rulesFor(firstHealthy, firstGated, secondRunning),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '/shown/' } })
+
+    expect(screen.getAllByTestId(/^repository-group-repository:/).map((group) => group.getAttribute('data-testid'))).toEqual([
+      `repository-group-repository:${secondRepository.id}`,
+      `repository-group-repository:${firstRepository.id}`,
+    ])
+  })
+
   it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
     const snapshot = makeSnapshot([
       makeProject('/code/repo-a', [

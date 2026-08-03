@@ -21,15 +21,19 @@
 13. 编排搜索仅剩一个节点时 Enter 无动作；已支持唯一结果选择与聚焦，并覆盖键盘测试。
 14. 宿主列表超过首屏时缺少滚动提示；已增加固定高度列表和中英文桌面滚动/Tab 提示。
 15. OpenSpec 的 `MODIFIED` requirement 未完整保留既有场景导致归档预演失败；已恢复原 requirement/scenario 并在隔离副本验证严格归档通过。
+16. 统一复审发现搜索后的 repository group 仍沿用过滤前顺序；已按过滤后的 `need/running/wip` 重新稳定排序，并增加优先级翻转测试。
+17. 外置且恰好命名为 `.git` 的 Git directory 会让项目标签取到 metadata 父目录；已区分工作树内 conventional `.git` 与外置目录，标签回到真实 top-level。
+18. Codex 活动插件检测只接受一种 TOML 序列化；已覆盖插件子表、`[plugins]` dotted key、根 dotted key 及空格/注释等价写法。
+19. 宿主配置的 `lstat`→路径读取存在 TOCTOU 与增长越界；已改为 `O_NOFOLLOW` 打开同一描述符、`fstat`，并用固定 `MAX+1` 缓冲硬限制实际读取。
 
 ## Re-review
 
-首轮 Verify 的六项实现 finding 与一项归档兼容 finding 已全部修复；最终 Standards、Spec/UX 与浏览器三轨将针对同一冻结 SHA 统一复审。当前没有遗留 critical、high 或 medium finding。
+首轮 Verify 的六项实现 finding、一项归档兼容 finding，以及统一复审的四项 medium finding 已全部修复；最终 Standards、Spec/UX 与浏览器三轨将针对同一冻结 SHA 统一复审。当前没有遗留 critical、high 或 medium finding。
 
 ## Verification evidence
 
-- Web 全量：87 files / 1625 tests；新增 Projects 搜索重汇总、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
-- Repository 全量：331 files / 5926 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
+- Web 全量：87 files / 1626 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
+- Repository 全量：331 files / 5930 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。
 - OpenSpec 严格归档预演在隔离副本通过：8 个 requirement 新增、约 3 个 requirement 修改，36 个严格规格检查全部通过。
 - 1024px、1440px 与 1920px 真实桌面浏览器确认 Projects 分组、Machine core/AFK 分层、Host 自动检测与 Workbench 统一 40px 控件均无 root 横向溢出。

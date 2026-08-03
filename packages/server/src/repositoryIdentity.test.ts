@@ -73,6 +73,14 @@ describe('probeRepositoryIdentity', () => {
     expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
   })
 
+  it('uses the worktree label when an external Git directory itself is named .git', async () => {
+    const identity = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/metadata/.git\n/code/repository\n/metadata/.git\n',
+    })
+
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+  })
+
   it('omits identity for a non-Git root, a timeout, or malformed output', async () => {
     const nonGit = await mkdtemp(join(tmpdir(), 'tenon-non-git-'))
     tempRoots.push(nonGit)

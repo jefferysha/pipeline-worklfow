@@ -290,6 +290,28 @@ describe('Host Target Plan route resolver', () => {
     expect(runner).not.toHaveBeenCalled()
   })
 
+  it.each([
+    '[plugins]\n"tenon@tenon".enabled = true\n',
+    '[ plugins . "tenon@tenon" ] # active plugin\nenabled = true # enabled\n',
+    'plugins."tenon@tenon".enabled = true\n',
+  ])('accepts equivalent valid Codex TOML plugin layouts', async (config) => {
+    const hostHome = await makeTempHome()
+    await installCodexPlugin(hostHome)
+    await writeFile(join(hostHome, '.codex', 'config.toml'), config)
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )).resolves.toMatchObject({
+      body: {
+        recommended_host: 'codex',
+        recommended_operation: 'update',
+        reason: 'tenon-plugin-detected',
+      },
+    })
+  })
+
   it('recommends setup when only a Claude host directory exists without a Tenon plugin', async () => {
     const hostHome = await makeTempHome()
     await mkdir(join(hostHome, '.claude'), { recursive: true })

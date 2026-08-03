@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile6 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname17, join as join59 } from "node:path";
+import { dirname as dirname17, join as join60 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -17059,7 +17059,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join58 } from "node:path";
+import { join as join59 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -19510,7 +19510,7 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync11 } from "node:fs";
-import { dirname as dirname13, join as join48 } from "node:path";
+import { dirname as dirname13, join as join49 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -20611,7 +20611,7 @@ import {
   openSync as openSync10
 } from "node:fs";
 import { lstat as lstat13, readdir as readdir4, stat as stat5 } from "node:fs/promises";
-import { join as join40 } from "node:path";
+import { join as join41 } from "node:path";
 
 // packages/server/src/reviewHandshake.ts
 function stringField2(value) {
@@ -21066,7 +21066,7 @@ async function mapWithConcurrency(items, limit, mapper) {
 // packages/server/src/repositoryIdentity.ts
 import { execFile as execFile3 } from "node:child_process";
 import { createHash as createHash16 } from "node:crypto";
-import { basename as basename5, dirname as dirname12, isAbsolute as isAbsolute9, normalize, resolve as resolve13 } from "node:path";
+import { basename as basename5, dirname as dirname12, isAbsolute as isAbsolute9, join as join40, normalize, resolve as resolve13 } from "node:path";
 var REPOSITORY_IDENTITY_TIMEOUT_MS = 1500;
 var REPOSITORY_IDENTITY_MAX_OUTPUT_BYTES = 4096;
 var REPOSITORY_IDENTITY_ARGS = [
@@ -21118,7 +21118,8 @@ async function probeRepositoryIdentity(root, deps = {}) {
   const commonDirectory = normalize(resolve13(commonDirectoryRaw));
   const topLevel = normalize(resolve13(topLevelRaw));
   const gitDirectory = normalize(resolve13(gitDirectoryRaw));
-  const label = basename5(commonDirectory) === ".git" ? basename5(dirname12(commonDirectory)) : basename5(topLevel);
+  const conventionalDotGit = basename5(commonDirectory) === ".git" && (commonDirectory === normalize(resolve13(join40(topLevel, ".git"))) || gitDirectory !== commonDirectory);
+  const label = conventionalDotGit ? basename5(dirname12(commonDirectory)) : basename5(topLevel);
   if (!label) return void 0;
   return {
     id: createHash16("sha256").update(commonDirectory).digest("hex"),
@@ -21134,7 +21135,7 @@ function str(v) {
   return v ?? "";
 }
 async function readTerminalActivity(changeDir, changeName, nowMs) {
-  const target = join40(changeDir, TERMINAL_ACTIVITY_FILE);
+  const target = join41(changeDir, TERMINAL_ACTIVITY_FILE);
   let fd;
   try {
     fd = openSync10(target, constants12.O_RDONLY | constants12.O_NOFOLLOW | constants12.O_NONBLOCK);
@@ -21215,7 +21216,7 @@ async function scanProject(deps, root, nowMs) {
   }
   if (!isDir) return { root, ok: false, changes: [], workflowRules: {}, error: "root \u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8FBE" };
   const repository = await readRepositoryIdentity(root, deps.repositoryIdentity);
-  const changesRoot = join40(root, "openspec", "changes");
+  const changesRoot = join41(root, "openspec", "changes");
   let entries;
   try {
     entries = await readdir4(changesRoot, { withFileTypes: true });
@@ -21252,7 +21253,7 @@ async function scanProject(deps, root, nowMs) {
   let compatibilityIssueOverflow = 0;
   for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === "archive") continue;
-    const changeDir = join40(changesRoot, e.name);
+    const changeDir = join41(changesRoot, e.name);
     let source;
     try {
       source = stateStorageSourcePathSync(changeDir);
@@ -21367,7 +21368,7 @@ async function buildSnapshot(deps) {
 async function computeFingerprint(roots, nowMs = Date.now()) {
   const parts = [];
   for (const root of dedupeRoots(roots)) {
-    const changesRoot = join40(root, "openspec", "changes");
+    const changesRoot = join41(root, "openspec", "changes");
     let entries;
     try {
       entries = await readdir4(changesRoot, { withFileTypes: true });
@@ -21376,29 +21377,29 @@ async function computeFingerprint(roots, nowMs = Date.now()) {
     }
     for (const e of entries) {
       if (!e.isDirectory() || e.name === "archive") continue;
-      const source = stateStorageSourcePathSync(join40(changesRoot, e.name));
+      const source = stateStorageSourcePathSync(join41(changesRoot, e.name));
       if (source === void 0) continue;
       try {
         const st = await lstat13(source, { bigint: true });
         parts.push(`${source}:${st.size}:${st.mtimeNs}`);
       } catch {
       }
-      const tasks = join40(changesRoot, e.name, "tasks.md");
+      const tasks = join41(changesRoot, e.name, "tasks.md");
       try {
         const st = await lstat13(tasks, { bigint: true });
         parts.push(`${tasks}:${st.size}:${st.mtimeNs}`);
       } catch {
       }
-      const documents = join40(changesRoot, e.name, ".pipeline-documents.json");
+      const documents = join41(changesRoot, e.name, ".pipeline-documents.json");
       try {
         const st = await lstat13(documents, { bigint: true });
         parts.push(`${documents}:${st.size}:${st.mtimeNs}`);
       } catch {
       }
-      const terminalActivity = join40(changesRoot, e.name, TERMINAL_ACTIVITY_FILE);
+      const terminalActivity = join41(changesRoot, e.name, TERMINAL_ACTIVITY_FILE);
       try {
         const st = await lstat13(terminalActivity, { bigint: true });
-        const live = await readTerminalActivity(join40(changesRoot, e.name), e.name, nowMs);
+        const live = await readTerminalActivity(join41(changesRoot, e.name), e.name, nowMs);
         parts.push(`${terminalActivity}:${st.size}:${st.mtimeNs}:${live === void 0 ? "stale" : "live"}`);
       } catch {
       }
@@ -21409,12 +21410,12 @@ async function computeFingerprint(roots, nowMs = Date.now()) {
 }
 
 // packages/server/src/serverGetActivityRoutes.ts
-import { join as join45, resolve as resolvePath4 } from "node:path";
+import { join as join46, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
 import { execFile as execFile4 } from "node:child_process";
 import { readFile as readFile16, writeFile as writeFile11 } from "node:fs/promises";
-import { join as join41 } from "node:path";
+import { join as join42 } from "node:path";
 var AFK_LANES = ["queued", "running", "merged", "failed", "conflict", "paused"];
 function isAutomationState(value) {
   return AUTOMATION_STATES.includes(value);
@@ -21535,7 +21536,7 @@ async function cancelAfkRun(store, changeDir) {
     return { ok: false, error: "\u7F3A automation_worktree/automation_sandbox\uFF0C\u65E0\u6CD5\u5B9A\u4F4D\u5BB9\u5668" };
   }
   try {
-    await writeFile11(join41(worktree, CANCEL_MARKER_FILE), "1", "utf8");
+    await writeFile11(join42(worktree, CANCEL_MARKER_FILE), "1", "utf8");
   } catch (err) {
     const code = err?.code ?? "unknown";
     return {
@@ -21591,7 +21592,7 @@ async function enqueueAfkRun(store, changeDir, clock, eligibility) {
 }
 async function readAfkRunLog(changeDir) {
   try {
-    return await readFile16(join41(changeDir, ".sandcastle-run.log"), "utf8");
+    return await readFile16(join42(changeDir, ".sandcastle-run.log"), "utf8");
   } catch {
     return null;
   }
@@ -21599,7 +21600,7 @@ async function readAfkRunLog(changeDir) {
 
 // packages/server/src/contextBundlePreviewSupport.ts
 import { lstatSync as lstatSync8, realpathSync as realpathSync6 } from "node:fs";
-import { isAbsolute as isAbsolute10, join as join42, relative as relative7, sep as sep10 } from "node:path";
+import { isAbsolute as isAbsolute10, join as join43, relative as relative7, sep as sep10 } from "node:path";
 var SCHEMA_VERSION = "context-bundle-preview/v1";
 var SIDE_EFFECTS = "none";
 var ContextBundlePathError = class extends Error {
@@ -21619,9 +21620,9 @@ function inside2(base, candidate) {
 }
 function captureChangePathAnchor(root, change) {
   const chainPaths = [
-    join42(root.path, "openspec"),
-    join42(root.path, "openspec", "changes"),
-    join42(root.path, "openspec", "changes", change)
+    join43(root.path, "openspec"),
+    join43(root.path, "openspec", "changes"),
+    join43(root.path, "openspec", "changes", change)
   ];
   const chain = [];
   for (const path7 of chainPaths) {
@@ -22086,11 +22087,11 @@ async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
 
 // packages/server/src/transition.ts
 import { readFile as readFile18 } from "node:fs/promises";
-import { join as join44 } from "node:path";
+import { join as join45 } from "node:path";
 
 // packages/server/src/transitionHistory.ts
 import { readFile as readFile17 } from "node:fs/promises";
-import { join as join43 } from "node:path";
+import { join as join44 } from "node:path";
 function decodeHistoryEntry(value) {
   if (typeof value !== "object" || value === null) return null;
   const record2 = value;
@@ -22119,7 +22120,7 @@ function decodeHistoryEntry(value) {
 async function readJsonlHistory(changeDir) {
   let text2;
   try {
-    text2 = await readFile17(join43(changeDir, HISTORY_FILE), "utf8");
+    text2 = await readFile17(join44(changeDir, HISTORY_FILE), "utf8");
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -22276,7 +22277,7 @@ async function performTransition(deps, root, name, event) {
   if (!name || !CHANGE_NAME_RE2.test(name) || name.includes("..")) {
     return { code: 400, body: { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" } };
   }
-  const dir = join44(root, "openspec", "changes", name);
+  const dir = join45(root, "openspec", "changes", name);
   if (!stateStorageExistsSync(dir)) {
     return { code: 404, body: { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" } };
   }
@@ -22300,7 +22301,7 @@ async function performTransition(deps, root, name, event) {
       const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId);
       let historyRaw = "";
       try {
-        historyRaw = await readFile18(join44(targetDir, HISTORY_FILE), "utf8");
+        historyRaw = await readFile18(join45(targetDir, HISTORY_FILE), "utf8");
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }
@@ -22463,7 +22464,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root, "openspec", "changes", name);
+    const dir = join46(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -22481,7 +22482,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root, "openspec", "changes", name);
+    const dir = join46(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -22499,7 +22500,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join45(root, "openspec", "changes", name);
+    const dir = join46(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -22574,9 +22575,157 @@ function handleGetTraceRoutes(req, res, path7, deps) {
   return true;
 }
 
-// packages/server/src/serverGetHostTargetPlanRoutes.ts
-import { lstatSync as lstatSync9, readFileSync as readFileSync20, readdirSync as readdirSync9 } from "node:fs";
-import { join as join46 } from "node:path";
+// packages/server/src/hostTargetDetection.ts
+import { closeSync as closeSync6, constants as constants13, fstatSync as fstatSync10, lstatSync as lstatSync9, openSync as openSync11, readSync as readSync6, readdirSync as readdirSync9 } from "node:fs";
+import { join as join47 } from "node:path";
+var MAX_HOST_INVENTORY_BYTES = 256 * 1024;
+function isDirectoryBelowHostHome(hostHome, segments) {
+  let candidate = hostHome;
+  for (const segment of segments) {
+    candidate = join47(candidate, segment);
+    try {
+      const metadata = lstatSync9(candidate);
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments) {
+  if (!isDirectoryBelowHostHome(hostHome, namespaceSegments)) return false;
+  let versions;
+  try {
+    versions = readdirSync9(join47(hostHome, ...namespaceSegments), { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  if (versions.length > 128) return false;
+  return versions.some((version) => {
+    if (!version.isDirectory() || version.isSymbolicLink()) return false;
+    const segments = [...namespaceSegments, version.name, ...markerSegments];
+    const marker = join47(hostHome, ...segments);
+    if (!isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return false;
+    try {
+      const metadata = lstatSync9(marker);
+      return metadata.isFile() && !metadata.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
+}
+function readBoundedHostFile(hostHome, segments) {
+  if (segments.length === 0 || !isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return null;
+  const path7 = join47(hostHome, ...segments);
+  let descriptor;
+  try {
+    descriptor = openSync11(path7, constants13.O_RDONLY | constants13.O_NOFOLLOW);
+    const metadata = fstatSync10(descriptor);
+    if (!metadata.isFile() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null;
+    const buffer = Buffer.allocUnsafe(MAX_HOST_INVENTORY_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync6(descriptor, buffer, length, buffer.length - length, null);
+      if (read === 0) break;
+      length += read;
+    }
+    return length > MAX_HOST_INVENTORY_BYTES ? null : buffer.subarray(0, length).toString("utf8");
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== void 0) closeSync6(descriptor);
+  }
+}
+function stripTomlComment(line) {
+  let quote = null;
+  let escaped3 = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (quote === "double") {
+      if (escaped3) escaped3 = false;
+      else if (character === "\\") escaped3 = true;
+      else if (character === '"') quote = null;
+      continue;
+    }
+    if (quote === "single") {
+      if (character === "'") quote = null;
+      continue;
+    }
+    if (character === '"') quote = "double";
+    else if (character === "'") quote = "single";
+    else if (character === "#") return line.slice(0, index);
+  }
+  return line;
+}
+function codexPluginEnabled(hostHome) {
+  const config = readBoundedHostFile(hostHome, [".codex", "config.toml"]);
+  if (config === null) return false;
+  const pluginKey = String.raw`(?:"tenon@tenon"|'tenon@tenon'|tenon@tenon)`;
+  const pluginTable = new RegExp(String.raw`^\[\s*plugins\s*\.\s*${pluginKey}\s*\]$`);
+  const pluginsTable = /^\[\s*plugins\s*\]$/;
+  const enabled = /^enabled\s*=\s*true$/;
+  const nestedEnabled = new RegExp(String.raw`^${pluginKey}\s*\.\s*enabled\s*=\s*true$`);
+  const dottedEnabled = new RegExp(String.raw`^plugins\s*\.\s*${pluginKey}\s*\.\s*enabled\s*=\s*true$`);
+  let scope = "root";
+  for (const rawLine of config.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line === "") continue;
+    if (pluginTable.test(line)) scope = "plugin";
+    else if (pluginsTable.test(line)) scope = "plugins";
+    else if (line.startsWith("[")) scope = "other";
+    else if (scope === "plugin" && enabled.test(line) || scope === "plugins" && nestedEnabled.test(line) || scope === "root" && dottedEnabled.test(line)) return true;
+  }
+  return false;
+}
+function claudePluginEnabled(hostHome) {
+  const inventory = readBoundedHostFile(hostHome, [".claude", "plugins", "installed_plugins.json"]);
+  if (inventory === null) return false;
+  try {
+    const parsed = JSON.parse(inventory);
+    const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
+    if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return false;
+    const installed = Reflect.get(plugins, "tenon@tenon");
+    if (!Array.isArray(installed) || installed.length === 0) return false;
+    const settingsText = readBoundedHostFile(hostHome, [".claude", "settings.json"]);
+    if (settingsText === null) return true;
+    const settings = JSON.parse(settingsText);
+    const enabledPlugins = typeof settings === "object" && settings !== null ? Reflect.get(settings, "enabledPlugins") : void 0;
+    return !(typeof enabledPlugins === "object" && enabledPlugins !== null && !Array.isArray(enabledPlugins) && Reflect.get(enabledPlugins, "tenon@tenon") === false);
+  } catch {
+    return false;
+  }
+}
+function detectNativeHostTargets(hostHome) {
+  const hosts = [
+    {
+      id: "codex",
+      configSegments: [".codex"],
+      pluginSegments: [".codex", "plugins", "cache", "tenon", "tenon"],
+      markerSegments: [".codex-plugin", "plugin.json"],
+      active: codexPluginEnabled
+    },
+    {
+      id: "claude",
+      configSegments: [".claude"],
+      pluginSegments: [".claude", "plugins", "cache", "tenon", "tenon"],
+      markerSegments: [".claude-plugin", "plugin.json"],
+      active: claudePluginEnabled
+    }
+  ];
+  const detectedHosts = hosts.filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments)).map((host) => host.id);
+  const pluginHost = hosts.find((host) => host.active(hostHome) && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments));
+  const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null;
+  return {
+    status: 200,
+    body: {
+      schema_version: "host-target-detection/v1",
+      detected_hosts: detectedHosts,
+      recommended_host: recommendedHost,
+      recommended_operation: pluginHost !== void 0 ? "update" : recommendedHost !== null ? "setup" : null,
+      reason: pluginHost !== void 0 ? "tenon-plugin-detected" : recommendedHost !== null ? "host-detected" : "none"
+    }
+  };
+}
 
 // packages/server/src/hostTargetPlanProtocol.ts
 var HOST_IDS = [
@@ -22778,7 +22927,6 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
 var MAX_HOST_PLAN_KEYS = 25;
 var DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS = 4;
 var DEFAULT_HOST_PLAN_TIMEOUT_MS = 1e4;
-var MAX_HOST_INVENTORY_BYTES = 256 * 1024;
 var PLAN_UNAVAILABLE = {
   status: 503,
   body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
@@ -22889,111 +23037,6 @@ var PLAN_INVALID = {
   status: 502,
   body: { ok: false, code: "HOST_TARGET_PLAN_INVALID", error: "\u5BBF\u4E3B\u8BA1\u5212\u54CD\u5E94\u65E0\u6548" }
 };
-function isDirectoryBelowHostHome(hostHome, segments) {
-  let candidate = hostHome;
-  for (const segment of segments) {
-    candidate = join46(candidate, segment);
-    try {
-      const metadata = lstatSync9(candidate);
-      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return false;
-    } catch {
-      return false;
-    }
-  }
-  return true;
-}
-function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments) {
-  if (!isDirectoryBelowHostHome(hostHome, namespaceSegments)) return false;
-  let versions;
-  try {
-    versions = readdirSync9(join46(hostHome, ...namespaceSegments), { withFileTypes: true });
-  } catch {
-    return false;
-  }
-  if (versions.length > 128) return false;
-  return versions.some((version) => {
-    if (!version.isDirectory() || version.isSymbolicLink()) return false;
-    const segments = [...namespaceSegments, version.name, ...markerSegments];
-    const marker = join46(hostHome, ...segments);
-    if (!isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return false;
-    try {
-      const metadata = lstatSync9(marker);
-      return metadata.isFile() && !metadata.isSymbolicLink();
-    } catch {
-      return false;
-    }
-  });
-}
-function readBoundedHostFile(hostHome, segments) {
-  if (segments.length === 0 || !isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return null;
-  const path7 = join46(hostHome, ...segments);
-  try {
-    const metadata = lstatSync9(path7);
-    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null;
-    return readFileSync20(path7, "utf8");
-  } catch {
-    return null;
-  }
-}
-function codexPluginEnabled(hostHome) {
-  const config = readBoundedHostFile(hostHome, [".codex", "config.toml"]);
-  if (config === null) return false;
-  const table = /^\s*\[plugins\.(?:"tenon@tenon"|'tenon@tenon'|tenon@tenon)\]\s*$/m.exec(config);
-  if (table === null || table.index === void 0) return false;
-  const bodyStart = table.index + table[0].length;
-  const nextTable = config.slice(bodyStart).search(/^\s*\[/m);
-  const body = nextTable < 0 ? config.slice(bodyStart) : config.slice(bodyStart, bodyStart + nextTable);
-  return /^\s*enabled\s*=\s*true\s*(?:#.*)?$/m.test(body);
-}
-function claudePluginEnabled(hostHome) {
-  const inventory = readBoundedHostFile(hostHome, [".claude", "plugins", "installed_plugins.json"]);
-  if (inventory === null) return false;
-  try {
-    const parsed = JSON.parse(inventory);
-    const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
-    if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return false;
-    const installed = Reflect.get(plugins, "tenon@tenon");
-    if (!Array.isArray(installed) || installed.length === 0) return false;
-    const settingsText = readBoundedHostFile(hostHome, [".claude", "settings.json"]);
-    if (settingsText === null) return true;
-    const settings = JSON.parse(settingsText);
-    const enabledPlugins = typeof settings === "object" && settings !== null ? Reflect.get(settings, "enabledPlugins") : void 0;
-    return !(typeof enabledPlugins === "object" && enabledPlugins !== null && !Array.isArray(enabledPlugins) && Reflect.get(enabledPlugins, "tenon@tenon") === false);
-  } catch {
-    return false;
-  }
-}
-function detectNativeHostTargets(hostHome) {
-  const hosts = [
-    {
-      id: "codex",
-      configSegments: [".codex"],
-      pluginSegments: [".codex", "plugins", "cache", "tenon", "tenon"],
-      markerSegments: [".codex-plugin", "plugin.json"],
-      active: codexPluginEnabled
-    },
-    {
-      id: "claude",
-      configSegments: [".claude"],
-      pluginSegments: [".claude", "plugins", "cache", "tenon", "tenon"],
-      markerSegments: [".claude-plugin", "plugin.json"],
-      active: claudePluginEnabled
-    }
-  ];
-  const detectedHosts = hosts.filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments)).map((host) => host.id);
-  const pluginHost = hosts.find((host) => host.active(hostHome) && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments));
-  const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null;
-  return {
-    status: 200,
-    body: {
-      schema_version: "host-target-detection/v1",
-      detected_hosts: detectedHosts,
-      recommended_host: recommendedHost,
-      recommended_operation: pluginHost !== void 0 ? "update" : recommendedHost !== null ? "setup" : null,
-      reason: pluginHost !== void 0 ? "tenon-plugin-detected" : recommendedHost !== null ? "host-detected" : "none"
-    }
-  };
-}
 function parsePlanQuery(searchParams) {
   const entries = [...searchParams.entries()];
   if (entries.length !== 2 || searchParams.getAll("host").length !== 1 || searchParams.getAll("operation").length !== 1 || entries.some(([key]) => key !== "host" && key !== "operation")) return null;
@@ -23043,14 +23086,14 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
 
 // packages/server/src/changeSnapshot.ts
 import {
-  closeSync as closeSync6,
-  constants as constants13,
-  fstatSync as fstatSync10,
+  closeSync as closeSync7,
+  constants as constants14,
+  fstatSync as fstatSync11,
   lstatSync as lstatSync10,
-  openSync as openSync11,
+  openSync as openSync12,
   realpathSync as realpathSync7
 } from "node:fs";
-import { isAbsolute as isAbsolute11, join as join47, posix as posix4, relative as relative8, sep as sep11 } from "node:path";
+import { isAbsolute as isAbsolute11, join as join48, posix as posix4, relative as relative8, sep as sep11 } from "node:path";
 
 // packages/server/src/workflowDefinitionStatus.ts
 function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
@@ -23122,23 +23165,23 @@ function readBoundedTasksSource2(fd, maxBytes) {
   return bytes.toString("utf8");
 }
 function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSource2) {
-  const target = join47(changeAnchor.changeDir, "tasks.md");
+  const target = join48(changeAnchor.changeDir, "tasks.md");
   let fd;
   try {
-    fd = openSync11(
+    fd = openSync12(
       target,
-      constants13.O_RDONLY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK
+      constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
     );
   } catch (error) {
     if (missing3(error)) return void 0;
     throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u4E0D\u53EF\u4FE1", error);
   }
   try {
-    const opened = fstatSync10(fd);
+    const opened = fstatSync11(fd);
     if (!opened.isFile()) {
       throw new ContextBundlePathError(403, "Change tasks \u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6");
     }
-    const openedVersion = captureStableFileVersion(fstatSync10(fd, { bigint: true }));
+    const openedVersion = captureStableFileVersion(fstatSync11(fd, { bigint: true }));
     const assertOpenedTargetStillAnchored = () => {
       let current;
       let realPath;
@@ -23155,7 +23198,7 @@ function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSo
       }
     };
     const assertOpenedFdStillStable = () => {
-      if (!matchesStableFileVersion(fstatSync10(fd, { bigint: true }), openedVersion)) {
+      if (!matchesStableFileVersion(fstatSync11(fd, { bigint: true }), openedVersion)) {
         throw new ContextBundlePathError(403, "Change tasks \u8DEF\u5F84\u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316");
       }
     };
@@ -23169,7 +23212,7 @@ function readAnchoredTasksMarkdown(changeAnchor, readSource = readBoundedTasksSo
     assertOpenedTargetStillAnchored();
     return source;
   } finally {
-    closeSync6(fd);
+    closeSync7(fd);
   }
 }
 async function readAnchoredChangeState(root, changeName) {
@@ -23629,7 +23672,7 @@ async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
 
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join48(dirname13(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join49(dirname13(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
@@ -23698,7 +23741,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync11(join48(rootCheck.anchor.path, ".pipeline"));
+        lstatSync11(join49(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -23721,7 +23764,7 @@ async function handleGet(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync11(join48(rootCheck.anchor.path, ".pipeline"));
+        lstatSync11(join49(rootCheck.anchor.path, ".pipeline"));
       } catch (e) {
         if (e.code === "ENOENT") pipelineExists = false;
         else throw e;
@@ -23741,7 +23784,7 @@ async function handleGet(req, res, path7, deps) {
   }
   if (path7 === "/api/skills/registry") {
     try {
-      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join48(hostHome, ".claude")) });
+      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join49(hostHome, ".claude")) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -23850,7 +23893,7 @@ async function handleGet(req, res, path7, deps) {
       image,
       secretsPath: paths.secretsPath,
       exec: options.execDocker,
-      defaultCodexHome: join48(hostHome, ".codex")
+      defaultCodexHome: join49(hostHome, ".codex")
     });
     return sendJson(res, 200, r);
   }
@@ -23865,7 +23908,7 @@ async function handleGet(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const changeDir = join48(root, "openspec", "changes", name);
+    const changeDir = join49(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(changeDir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -23886,7 +23929,7 @@ async function handleGet(req, res, path7, deps) {
       roots.map(async (root, i) => {
         const name = names[i] ?? "";
         const key = `${name}@${root}`;
-        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join48(root, "openspec", "changes", name));
+        const valid = name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..") && root !== "" && isRegisteredRoot(root) && stateStorageExistsSync(join49(root, "openspec", "changes", name));
         links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: "invalid" };
       })
     );
@@ -24152,7 +24195,7 @@ import { resolve as resolvePath8 } from "node:path";
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { lstat as lstat14, readFile as readFile19, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
-import { join as join49 } from "node:path";
+import { join as join50 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
 function errorCode6(error) {
@@ -24183,7 +24226,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
   if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     throw new Error("Change \u76EE\u5F55\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF0C\u62D2\u7EDD\u4FDD\u5B58\u4EFB\u52A1\u63D0\u793A\u8BCD");
   }
-  const target = join49(changeDir, CHANGE_TASK_FILE);
+  const target = join50(changeDir, CHANGE_TASK_FILE);
   let targetExists = false;
   try {
     await lstat14(target);
@@ -24192,7 +24235,7 @@ async function writeChangeTaskPrompt(changeDir, prompt) {
     if (errorCode6(error) !== "ENOENT") throw error;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join49(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID8()}.tmp`);
+  const temporary = join50(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID8()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -24224,7 +24267,7 @@ async function activateChangeSession(input) {
   if (result.exitCode !== 0) {
     return { requested: true, active: false, status: "failed", exit_code: result.exitCode };
   }
-  const pointer = join49(input.repoRoot, ".pipeline-active");
+  const pointer = join50(input.repoRoot, ".pipeline-active");
   try {
     const pointerStat = await lstat14(pointer);
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
@@ -24437,7 +24480,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostExecutionRoutes.ts
-import { join as join51 } from "node:path";
+import { join as join52 } from "node:path";
 async function handlePostExecutionRoutes(req, res, path7, deps) {
   const {
     sendJson,
@@ -24489,7 +24532,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join51(root2, "openspec", "changes", name2);
+    const dir = join52(root2, "openspec", "changes", name2);
     const result = await cancelAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -24509,7 +24552,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join51(root2, "openspec", "changes", name2);
+    const dir = join52(root2, "openspec", "changes", name2);
     const result = await retryAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -24529,7 +24572,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join51(root2, "openspec", "changes", name2);
+    const dir = join52(root2, "openspec", "changes", name2);
     const result = await dismissAfkRun(store, dir);
     return sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -24549,7 +24592,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join51(root2, "openspec", "changes", name2);
+    const dir = join52(root2, "openspec", "changes", name2);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -24868,14 +24911,14 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverPostOperationsRoutes.ts
 import { lstatSync as lstatSync13 } from "node:fs";
-import { join as join52 } from "node:path";
+import { join as join53 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
-  constants as constants14,
-  fstatSync as fstatSync11,
-  openSync as openSync12,
-  readFileSync as readFileSync21
+  constants as constants15,
+  fstatSync as fstatSync12,
+  openSync as openSync13,
+  readFileSync as readFileSync20
 } from "node:fs";
 import { posix as posix5 } from "node:path";
 var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
@@ -24900,7 +24943,7 @@ function registryReadError(error) {
   const detail = error instanceof Error ? error.message : String(error);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync21(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync20(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -24927,7 +24970,7 @@ function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync21(fd,
             if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
             let fd;
             try {
-              fd = openSync12(paths.operation, constants14.O_RDONLY | constants14.O_NOFOLLOW);
+              fd = openSync13(paths.operation, constants15.O_RDONLY | constants15.O_NOFOLLOW);
             } catch (error) {
               const code = error.code;
               if (code === "ELOOP" || code === "ENOENT") {
@@ -24936,7 +24979,7 @@ function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync21(fd,
               throw registryReadError(error);
             }
             try {
-              const opened = fstatSync11(fd);
+              const opened = fstatSync12(fd);
               if (!opened.isFile() || !sameIdentity(opened, before)) {
                 throw new LoopScopePreviewRootUntrustedError(
                   "during-read",
@@ -25157,7 +25200,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       assertWorkflowRootAnchor(rootCheck.anchor);
       let pipelineExists = true;
       try {
-        lstatSync13(join52(rootCheck.anchor.path, ".pipeline"));
+        lstatSync13(join53(rootCheck.anchor.path, ".pipeline"));
       } catch (error) {
         if (error.code === "ENOENT") pipelineExists = false;
         else throw error;
@@ -25344,7 +25387,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join52(root, "openspec", "changes", name);
+    const dir = join53(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -25368,7 +25411,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostMemoryRoutes.ts
-import { join as join53 } from "node:path";
+import { join as join54 } from "node:path";
 var RELATED_SEARCH_PATH = "/api/mem/related-sessions/search";
 var PLATFORM_VALUES = /* @__PURE__ */ new Set(["all", "claude", "codex", "opencode", "pi"]);
 var CHANGE_NAME_RE3 = /^[a-zA-Z0-9_-]+$/;
@@ -25407,7 +25450,7 @@ async function handlePostMemoryRoutes(req, res, path7, deps) {
   const anchoredRoot = rootCheck.anchor.path;
   let changeExists = false;
   try {
-    changeExists = stateStorageExistsSync(join53(anchoredRoot, "openspec", "changes", name));
+    changeExists = stateStorageExistsSync(join54(anchoredRoot, "openspec", "changes", name));
   } catch {
     return missingTarget(deps, res);
   }
@@ -25561,21 +25604,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync22 } from "node:fs";
-import { dirname as dirname14, join as join54 } from "node:path";
+import { readFileSync as readFileSync21 } from "node:fs";
+import { dirname as dirname14, join as join55 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync22(join54(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync21(join55(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync22(join54(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync21(join55(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -25590,7 +25633,7 @@ var REAL_GRADUATION_FS = {
   }
 };
 function repoRootForSkills2() {
-  return join54(dirname14(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join55(dirname14(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -25629,8 +25672,8 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync23 } from "node:fs";
-import { join as join55 } from "node:path";
+import { readFileSync as readFileSync22 } from "node:fs";
+import { join as join56 } from "node:path";
 import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
 function createServerTransport(options) {
@@ -25796,7 +25839,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync23(join55(webRoot, "index.html"), "utf8");
+      let html = readFileSync22(join56(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -25810,10 +25853,10 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     if (!webRoot || !path7.startsWith("/assets/")) return false;
     const rel = path7.slice(1);
     if (rel.includes("..")) return false;
-    const abs = join55(webRoot, rel);
-    if (!abs.startsWith(join55(webRoot, "assets"))) return false;
+    const abs = join56(webRoot, rel);
+    if (!abs.startsWith(join56(webRoot, "assets"))) return false;
     try {
-      const source = readFileSync23(abs);
+      const source = readFileSync22(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
       const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
@@ -25850,7 +25893,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
 
 // packages/server/src/serverGovernance.ts
 import { readdir as readdir5 } from "node:fs/promises";
-import { join as join56, resolve as resolvePath11 } from "node:path";
+import { join as join57, resolve as resolvePath11 } from "node:path";
 function createServerGovernance(options) {
   const { registry, store, sendJson, trackSkillProfiles, operationsAvailable, operationRunner } = options;
   function trackRegistryBody(trackRegistry) {
@@ -25862,7 +25905,7 @@ function createServerGovernance(options) {
     };
   }
   async function scanActiveTrackChanges(root) {
-    const changesRoot = join56(root, "openspec", "changes");
+    const changesRoot = join57(root, "openspec", "changes");
     let entries;
     try {
       entries = await readdir5(changesRoot, { withFileTypes: true });
@@ -25875,7 +25918,7 @@ function createServerGovernance(options) {
     const unreadable = [];
     for (const name of names) {
       try {
-        const state = await store.read(join56(changesRoot, name));
+        const state = await store.read(join57(changesRoot, name));
         const track = state.fields.track;
         const workflow = state.fields.workflow;
         refs.push({
@@ -26069,8 +26112,8 @@ function createRelatedSessionSearchExecutor(runner) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync24 } from "node:fs";
-import { basename as basename6, dirname as dirname15, join as join57 } from "node:path";
+import { readFileSync as readFileSync23 } from "node:fs";
+import { basename as basename6, dirname as dirname15, join as join58 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -26079,7 +26122,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative9 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync24(join57(pluginRoot2, relative9), "utf8"));
+      const parsed = JSON.parse(readFileSync23(join58(pluginRoot2, relative9), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -26147,7 +26190,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join58(repoRootForSkills2(), "skills")
+        bundledRoot: join59(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -26232,7 +26275,7 @@ function createDashboardServer(options) {
   });
   let boundPort = 0;
   async function resolveSessionLink(root, name) {
-    const changeDir = join58(root, "openspec", "changes", name);
+    const changeDir = join59(root, "openspec", "changes", name);
     try {
       const wtRaw = await store.get(changeDir, "automation_worktree");
       const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
@@ -26415,7 +26458,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile5 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync25 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -26452,7 +26495,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync24(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {
@@ -26632,10 +26675,10 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join59(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join60(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join59(pluginRoot(), "templates", "manifest.yaml");
+  return join60(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve14) => {
@@ -26698,7 +26741,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join59(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join60(dirname17(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源：只读 sessions/records/timeline；完整 reader 才声明 traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),
