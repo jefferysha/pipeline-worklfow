@@ -171,7 +171,7 @@ function identifier(value: unknown, path: string, collector: Collector): string 
   const candidate = text(value, path, collector, TASK_PLAN_LIMITS.maxIdBytes)
   if (candidate !== undefined && (
     candidate !== candidate.normalize('NFC')
-    || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(candidate)
+    || !/^[\p{L}\p{N}][\p{L}\p{N}\p{M}._-]*$/u.test(candidate)
     || candidate.includes('--')
   )) {
     error(collector, 'identifier_invalid', path)
@@ -389,7 +389,7 @@ export function decodeTaskPlanRevisionV1(input: string | unknown): TaskPlanDecod
   }
   let candidate = input
   if (typeof input === 'string') {
-    if (byteLength(input) > TASK_PLAN_LIMITS.maxDocumentBytes) {
+    if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
       return { ok: false, errors: [{ code: 'document_too_large', path: '$' }], overflow: false }
     }
     try { candidate = JSON.parse(input) as unknown } catch {

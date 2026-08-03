@@ -64,6 +64,42 @@ function revisionRaw(revision: TaskPlanRevisionV1): string {
   return `${encodeTaskPlanRevisionV1(revision)}\n`
 }
 
+function maximumPersistedRevision(): TaskPlanRevisionV1 {
+  const requirements = Array.from({ length: 64 }, (_, index) => ({
+    id: `req-${index}`,
+    title: 'x'.repeat(7_000),
+  }))
+  const acceptanceCriteria = Array.from({ length: 64 }, (_, index) => ({
+    id: `acc-${index}`,
+    title: 'y'.repeat(7_000),
+  }))
+  const revision: TaskPlanRevisionV1 = plan({
+    plan_id: 'plan-boundary',
+    revision_id: 'revision-boundary',
+    requirements,
+    acceptance_criteria: acceptanceCriteria,
+    groups: [{ id: 'group-boundary', title: 'Boundary', parent_id: null, work_item_ids: ['wi-boundary'] }],
+    work_items: [{
+      id: 'wi-boundary', title: 'Boundary', group_id: 'group-boundary',
+      requirement_refs: requirements.map((entry) => entry.id),
+      acceptance_refs: acceptanceCriteria.map((entry) => entry.id),
+      depends_on: [], resource_claims: [], expected_outputs: [], validators: [],
+    }],
+  })
+  let remaining = TASK_PLAN_LIMITS.maxDocumentBytes - Buffer.byteLength(encodeTaskPlanRevisionV1(revision))
+  for (const entry of [...requirements, ...acceptanceCriteria]) {
+    const added = Math.min(TASK_PLAN_LIMITS.maxTextBytes - Buffer.byteLength(entry.title), remaining)
+    entry.title += 'z'.repeat(added)
+    remaining -= added
+    if (remaining === 0) break
+  }
+  if (remaining !== 0) throw new Error('Could not construct exact TaskPlan document boundary fixture')
+  if (Buffer.byteLength(encodeTaskPlanRevisionV1(revision)) !== TASK_PLAN_LIMITS.maxDocumentBytes) {
+    throw new Error('TaskPlan document boundary fixture is not exact')
+  }
+  return revision
+}
+
 function sizedOrphanRaw(index: number, desiredBytes: number): string {
   const requirements: { id: string; title: string }[] = []
   const fixture = (): TaskPlanRevisionV1 => plan({
@@ -124,6 +160,55 @@ describe('task plan store', () => {
     const current = await readFile(join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE), 'utf8')
     expect(current).toBe(immutable)
     expect(await readFile(join(dir, 'tasks.md'), 'utf8')).toContain('work-item:wi-1')
+  })
+
+  it('round-trips the maximum newline-terminated revision and can extend its lineage', async () => {
+    const dir = await changeDir()
+    const boundary = maximumPersistedRevision()
+    const boundaryRaw = revisionRaw(boundary)
+    expect(Buffer.byteLength(boundaryRaw)).toBe(TASK_PLAN_LIMITS.maxRevisionBytes)
+
+    await expect(publishTaskPlanRevision(dir, boundary, { expected_current_revision_id: null }))
+      .resolves.toMatchObject({ revision_id: 'revision-boundary' })
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'canonical', revision_id: 'revision-boundary', projection: { state: 'current' },
+    })
+
+    const next = plan({
+      plan_id: boundary.plan_id,
+      revision_id: 'revision-after-boundary',
+      revision_number: 2,
+    })
+    await expect(publishTaskPlanRevision(
+      dir,
+      next,
+      { expected_current_revision_id: boundary.revision_id },
+    )).resolves.toMatchObject({ revision_id: 'revision-after-boundary', revision_number: 2 })
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({ revision_id: 'revision-after-boundary' })
+  })
+
+  it('publishes and reads a canonical plan with NFC Unicode opaque IDs', async () => {
+    const dir = await changeDir()
+    const unicode = plan({
+      plan_id: 'plan-计划',
+      revision_id: 'revision-修订',
+      requirements: [{ id: 'req-ä', title: 'Unicode requirement' }],
+      acceptance_criteria: [{ id: 'acc-東京', title: 'Unicode acceptance' }],
+      groups: [{ id: 'group-组', title: 'Unicode group', parent_id: null, work_item_ids: ['wi-東京'] }],
+      work_items: [{
+        id: 'wi-東京', title: 'Unicode item', group_id: 'group-组',
+        requirement_refs: ['req-ä'], acceptance_refs: ['acc-東京'], depends_on: [],
+        resource_claims: [], expected_outputs: [{ id: 'out-产物', kind: 'artifact', ref: 'unicode-report' }],
+        validators: [{ id: 'validator-验证', kind: 'test-report', version: 1, output_ids: ['out-产物'] }],
+      }],
+    })
+
+    await expect(publishTaskPlanRevision(dir, unicode, { expected_current_revision_id: null }))
+      .resolves.toMatchObject({ revision_id: 'revision-修订', schedulable: true })
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      source: 'canonical', plan_id: 'plan-计划', revision_id: 'revision-修订',
+      groups: [{ id: 'group-组', work_item_ids: ['wi-東京'] }],
+    })
   })
 
   it('does not expose an immutable orphan without a committed current pointer', async () => {

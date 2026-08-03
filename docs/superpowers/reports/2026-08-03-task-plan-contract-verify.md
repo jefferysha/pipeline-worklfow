@@ -111,3 +111,63 @@ validation 的 coverage、resource、dependency edge 与 issue 排序使用无�
 ## 下一步
 
 先按 `verify-fail` 回 Build，再以 `requirements-changed` 回 Spec 修订 receipt capability；完成显式复核后重新 Build，以 TDD 修复 lineage revision ID 唯一性、read-model 输入副作用和 locale-sensitive 排序，重建生成物、提交新冻结 SHA，并执行完整第三轮 Verify。
+
+---
+
+# 第 3 轮 Verify（冻结基线 `49d04e9e5aba886b99109bac9e7ef314d790b9d5`）
+
+## 结论
+
+FAIL。第 2 轮的 4 个 MEDIUM 及 receipt bridge 两处缺陷均已修复，但原生 Codex CLI 审查确认 2 个新的 P2/MEDIUM 契约边界缺陷；必须回到 Build 修复，不接受偏差。
+
+## 冻结与三轨结果
+
+- Reviewer 轨：PASS，C=0 / H=0 / M=0 / L=2。完整覆盖 `origin/main...49d04e9e` 的 123 个文件；冻结 HEAD/tree、packages 与 build SHA 一致，implementation fingerprint 前后均为 `a8247f69fcde01d156b2b9eaac92241004f6bda01bb715c7bc5b4cc931b4d937`。独立 7-file 246/246、三包 TypeScript、OpenSpec strict、diff-check、fsck、CLI/server 临时重建与逐字节比较均通过。
+- E2E 轨：PASS。隔离 `git archive` 副本运行 generated CLI/server、TypeScript、TaskPlan store/route、receipt、真实 hook 登记和真实 HTTP；TaskPlan 55/55、route 5/5、receipt 15 项、hook 1/1 均通过。HTTP canonical 为 200，非法 change 为 400，未注册 root 与缺失计划均为 404。真实 worktree 起止 HEAD 均为冻结 SHA，内容指纹均为 `8f3a87914b625e8668f52ec9091a357d6785c97d`。
+- Codex CLI 轨：FAIL，P2/MEDIUM=2。运行 `codex exec --ephemeral --sandbox read-only review --base origin/main`，exit 0。启动期 malformed logs DB/models cache 警告未阻止最终 review；其 70/70 聚焦测试通过，但边界动态回读确认下述两个问题。
+
+## 确认 findings
+
+### MEDIUM — 持久化 revision 上限与 decoder 上限错位
+
+store 的公开持久化上限是 1,048,577 bytes，编码 JSON 后追加一个换行；decoder 的字符串输入上限仍是 1,048,576 bytes。于是编码 JSON 恰好 1,048,576 bytes 时，publish 会成功写入 1,048,577-byte immutable/current，随后 reader 立即把它判为 malformed，后续 lineage 扫描也失败。
+
+独立动态复现：
+
+```text
+json_bytes=1048576
+stored_bytes=1048577
+json_decode=true
+stored_decode=false
+publish=revision-boundary
+read=TaskPlanStateCorruptError: TaskPlan current is malformed
+```
+
+修复要求：明确区分 canonical JSON 与 newline-terminated 持久化输入，保证所有公开允许的 persisted bytes 都可被 decoder/store 对称读取；以精确上下界和 publish→read→next-publish 回归钉住，不能只缩小未登记的公开上限。
+
+### MEDIUM — 规格要求的非 ASCII ID 无法经过 codec
+
+Spec 的跨 locale 场景明确要求含“非 ASCII 的 ID、path 与 resource key”的 revision 仍产生逐字节稳定结果，但 `identifier()` 使用 ASCII-only regex。`wi-ä` 在 group ownership 与 work item ID 两处均返回 `identifier_invalid`；现有排序测试直接构造 typed revision，绕过了真实 codec/persistence 路径。
+
+独立动态复现：
+
+```text
+unicode_decode=false
+$.groups[0].work_item_ids[0]=identifier_invalid
+$.work_items[0].id=identifier_invalid
+```
+
+修复要求：按已冻结规格允许 NFC、无危险控制字符且满足稳定闭集约束的 Unicode opaque ID，并以 codec round-trip、publish/read 和跨 locale ordinal 排序回归覆盖；仍须拒绝 NFD、空白边界、路径分隔语义和危险字符。
+
+## 保留的 LOW
+
+- bounded text reader 对非法 UTF-8 使用 replacement decode；影响限于已损坏的本地 canonical 文件。
+- path-based atomic publication 缺少 dirfd/openat，同用户恶意并发替换父目录时仍有极窄 TOCTOU 窗口；本 PR 没有新增公开写 API。
+
+## 本轮未完成的通过门
+
+由于原生 Codex 轨已经形成两个确认的 MEDIUM，未把 Verify tasks 标完成，也未登记通过报告、未设置 branch handled、未请求 `verify-pass`。隔离 archive rehearsal 的既有第 1/2 轮结果不能替代修复后对新冻结 SHA 的重跑；第 4 轮必须重新执行完整三轨、逐文件 capability mapping、隔离 archive rehearsal 和全部正式门禁。
+
+## 下一步
+
+请求确切 `verify-fail` 复核事件并按授权 delegated acknowledge，退回 Build；用 TDD 修复 persisted-byte 对称性和 Unicode opaque ID，重建 CLI/server 生成物、提交新的 build SHA，再从零执行第 4 轮 Verify。

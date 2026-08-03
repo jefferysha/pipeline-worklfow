@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   decodeTaskPlanRevisionV1,
   encodeTaskPlanRevisionV1,
+  TASK_PLAN_LIMITS,
   toTaskPlanReadModelV1,
   validateTaskPlanRevisionV1,
   type TaskPlanRevisionV1,
@@ -84,6 +85,52 @@ describe('TaskPlan v1 codec', () => {
     expect(changed.work_items.map((item) => item.id)).toEqual(['wi-b', 'wi-a'])
   })
 
+  it('round-trips NFC Unicode opaque IDs through the real codec', () => {
+    const unicode = revision({
+      plan_id: 'plan-计划',
+      revision_id: 'revision-修订',
+      requirements: [{ id: 'req-ä', title: 'Unicode requirement' }],
+      acceptance_criteria: [{ id: 'acc-東京', title: 'Unicode acceptance' }],
+      groups: [{ id: 'group-组', title: 'Unicode group', parent_id: null, work_item_ids: ['wi-ä', 'wi-東京'] }],
+      work_items: revision().work_items.map((item, index) => ({
+        ...item,
+        id: index === 0 ? 'wi-ä' : 'wi-東京',
+        group_id: 'group-组',
+        requirement_refs: index === 0 ? ['req-ä'] : [],
+        acceptance_refs: index === 0 ? ['acc-東京'] : [],
+        depends_on: index === 0 ? [] : ['wi-ä'],
+        expected_outputs: item.expected_outputs.map((output) => ({
+          ...output,
+          id: `${output.id}-产物`,
+        })),
+        validators: item.validators.map((validator) => ({
+          ...validator,
+          id: `${validator.id}-验证`,
+          output_ids: validator.output_ids.map((id) => `${id}-产物`),
+        })),
+      })),
+    })
+
+    expect(decodeTaskPlanRevisionV1(encodeTaskPlanRevisionV1(unicode))).toEqual({ ok: true, value: unicode })
+    expect(validateTaskPlanRevisionV1(unicode).freezable).toBe(true)
+  })
+
+  it.each([
+    ['wi-a\u0308', 'identifier_invalid'],
+    ['wi/escape', 'identifier_invalid'],
+    ['wi\\escape', 'identifier_invalid'],
+    [' wi-space', 'field_required'],
+    ['wi space', 'identifier_invalid'],
+  ]) (
+    'rejects non-NFC, separator, or whitespace opaque identifier %s',
+    (id, code) => {
+      const decoded = decodeTaskPlanRevisionV1(revision({ revision_id: id }))
+      expect(decoded.ok).toBe(false)
+      if (decoded.ok) throw new Error('expected decode failure')
+      expect(decoded.errors).toContainEqual({ code, path: '$.revision_id' })
+    },
+  )
+
   it('deep-freezes decoded input and does not retain caller references', () => {
     const raw = JSON.parse(JSON.stringify(revision())) as unknown
     const decoded = decodeTaskPlanRevisionV1(raw)
@@ -110,6 +157,18 @@ describe('TaskPlan v1 codec', () => {
   it('rejects oversized collections before iterating their contents', () => {
     const result = decodeTaskPlanRevisionV1({ ...revision(), groups: Array.from({ length: 257 }, () => null) })
     expect(result).toMatchObject({ ok: false, errors: [{ code: 'array_too_large', path: '$.groups' }] })
+  })
+
+  it('accepts bounded persisted whitespace through maxRevisionBytes and rejects the next byte', () => {
+    const encoded = encodeTaskPlanRevisionV1(revision())
+    const maximumPersisted = encoded.padEnd(TASK_PLAN_LIMITS.maxRevisionBytes, ' ')
+    expect(Buffer.byteLength(maximumPersisted)).toBe(TASK_PLAN_LIMITS.maxRevisionBytes)
+    expect(decodeTaskPlanRevisionV1(maximumPersisted)).toMatchObject({ ok: true })
+    expect(decodeTaskPlanRevisionV1(`${maximumPersisted} `)).toEqual({
+      ok: false,
+      errors: [{ code: 'document_too_large', path: '$' }],
+      overflow: false,
+    })
   })
 
   it('rejects an accessor-backed array without invoking its index getter', () => {

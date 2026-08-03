@@ -28,6 +28,8 @@
 - [x] 使 read-model projection 不冻结调用方输入并补 descriptor/frozen-state 回归。 (build)
 - [x] 统一 locale-independent ordinal 排序并覆盖混合 ASCII/Unicode 结果。 (build)
 - [x] 在任何写入前把 proposed target 计入 revision 历史预算，并让逐字节幂等重试先验证完整 lineage；补 exact-cap、byte-cap、零写入和损坏历史红绿回归。 (build)
+- [x] 使 1,048,577-byte newline-terminated revision 在 publish、read 与后续 lineage 扫描中保持对称，并补精确边界红绿回归。 (build)
+- [x] 使 NFC Unicode opaque ID 通过 codec/store/ordinal validation，并保留 NFD、分隔符、空白与控制字符拒绝。 (build)
 
 ## 验证
 

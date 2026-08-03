@@ -844,7 +844,7 @@ function text(value, path7, collector, maxBytes = TASK_PLAN_LIMITS.maxTextBytes)
 }
 function identifier(value, path7, collector) {
   const candidate = text(value, path7, collector, TASK_PLAN_LIMITS.maxIdBytes);
-  if (candidate !== void 0 && (candidate !== candidate.normalize("NFC") || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(candidate) || candidate.includes("--"))) {
+  if (candidate !== void 0 && (candidate !== candidate.normalize("NFC") || !/^[\p{L}\p{N}][\p{L}\p{N}\p{M}._-]*$/u.test(candidate) || candidate.includes("--"))) {
     error(collector, "identifier_invalid", path7);
     return void 0;
   }
@@ -1086,7 +1086,7 @@ function decodeTaskPlanRevisionV1(input) {
   };
   let candidate = input;
   if (typeof input === "string") {
-    if (byteLength(input) > TASK_PLAN_LIMITS.maxDocumentBytes) {
+    if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
       return { ok: false, errors: [{ code: "document_too_large", path: "$" }], overflow: false };
     }
     try {
