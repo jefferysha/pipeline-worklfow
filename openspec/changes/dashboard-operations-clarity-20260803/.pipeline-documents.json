@@ -45,45 +45,18 @@
           "sha256": "05daa9fc1a4e9adacbb98271666031647ec989f390872142dfda29ff298652e8",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-design",
-      "path": "docs/superpowers/specs/2026-08-03-dashboard-operations-clarity-design.md",
-      "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-      "producer": "brainstorming",
-      "recordedAt": "2026-08-03T07:40:23Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-          "readAt": "2026-08-03T07:44:31Z",
-          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-          "readAt": "2026-08-03T07:46:39Z",
-          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",3]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-          "readAt": "2026-08-03T08:45:14Z",
-          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",4]"
         },
         {
           "phase": "spec",
-          "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-          "readAt": "2026-08-03T09:11:37Z",
-          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",6]"
+          "sha256": "05daa9fc1a4e9adacbb98271666031647ec989f390872142dfda29ff298652e8",
+          "readAt": "2026-08-03T10:55:45Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",8]"
         },
         {
           "phase": "build",
-          "sha256": "9bea865dfc2dd67dcef96f561330f7750b97a994556292c5c0281ad78c9e897f",
-          "readAt": "2026-08-03T09:13:00Z",
-          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+          "sha256": "05daa9fc1a4e9adacbb98271666031647ec989f390872142dfda29ff298652e8",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -123,6 +96,18 @@
           "sha256": "805e7482453674978ec9bd5e68bbddb628dae9b839a5984d8d996e1db5296e23",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "805e7482453674978ec9bd5e68bbddb628dae9b839a5984d8d996e1db5296e23",
+          "readAt": "2026-08-03T10:55:45Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "805e7482453674978ec9bd5e68bbddb628dae9b839a5984d8d996e1db5296e23",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -150,6 +135,12 @@
           "sha256": "27635ed0ae59575925cd229dfb22fa12868b166e2d3bf201e87f1e67c039181e",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "27635ed0ae59575925cd229dfb22fa12868b166e2d3bf201e87f1e67c039181e",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -177,6 +168,12 @@
           "sha256": "27635ed0ae59575925cd229dfb22fa12868b166e2d3bf201e87f1e67c039181e",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "27635ed0ae59575925cd229dfb22fa12868b166e2d3bf201e87f1e67c039181e",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -206,6 +203,18 @@
           "sha256": "a52f51fba382f8c6c83294b0c93dc11614657036e2e13cee50fb1fc5dc5fce27",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "a52f51fba382f8c6c83294b0c93dc11614657036e2e13cee50fb1fc5dc5fce27",
+          "readAt": "2026-08-03T10:55:45Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a52f51fba382f8c6c83294b0c93dc11614657036e2e13cee50fb1fc5dc5fce27",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -221,6 +230,12 @@
           "sha256": "16c7559bc689c610ff10862a0c4ae82450026a3046cb2281cc10cc1973f5b6a9",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "16c7559bc689c610ff10862a0c4ae82450026a3046cb2281cc10cc1973f5b6a9",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -248,6 +263,12 @@
           "sha256": "c5ba38000ff34ddf4db9ea4d4964d369578a062902256a4706f6885ae758d38b",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c5ba38000ff34ddf4db9ea4d4964d369578a062902256a4706f6885ae758d38b",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -263,6 +284,12 @@
           "sha256": "a23d54e7e95b8f2dee812ee17b15572e8e6faeaca519eee5ffa972b57932084e",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a23d54e7e95b8f2dee812ee17b15572e8e6faeaca519eee5ffa972b57932084e",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -278,6 +305,12 @@
           "sha256": "bc04be9072247281efb36624d554b08333f6b8f1cebbffbb118119659e116522",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bc04be9072247281efb36624d554b08333f6b8f1cebbffbb118119659e116522",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     },
@@ -311,6 +344,39 @@
           "sha256": "72ea4add750e831f13c831f33da93d1e770eae81dd3443fc556bb58e0284d634",
           "readAt": "2026-08-03T09:13:00Z",
           "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "72ea4add750e831f13c831f33da93d1e770eae81dd3443fc556bb58e0284d634",
+          "readAt": "2026-08-03T10:55:45Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "72ea4add750e831f13c831f33da93d1e770eae81dd3443fc556bb58e0284d634",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-03-dashboard-operations-clarity-design.md",
+      "sha256": "cf35ac0483aee897153a6e5c1e4a900befa9216961ae83ce9bf7293f566b4fa8",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T10:55:45Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "cf35ac0483aee897153a6e5c1e4a900befa9216961ae83ce9bf7293f566b4fa8",
+          "readAt": "2026-08-03T10:55:45Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cf35ac0483aee897153a6e5c1e4a900befa9216961ae83ce9bf7293f566b4fa8",
+          "readAt": "2026-08-03T10:56:55Z",
+          "visitId": "[\"b6d2c60b-fa69-460a-8473-0342309e87c2\",9]"
         }
       ]
     }
