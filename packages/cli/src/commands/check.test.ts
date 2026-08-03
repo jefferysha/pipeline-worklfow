@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -65,7 +65,10 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
       state: mockState({ phase: 'open', track: 'backend' }),
       guardCtx: (name: string): GuardFileContext => {
         seen.push(name)
-        return { changeDirRel: `openspec/changes/${name}` }
+        return {
+          changeDirRel: `openspec/changes/${name}`,
+          readFileBounded: () => ({ kind: 'missing' }),
+        }
       },
     })
     await cmdCheck(deps, 'demo')
@@ -173,6 +176,64 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
       expect(status).toBe('invalid')
       await writeFile(join(canonicalDir, '.pipeline-task-plan', 'current.json'), '{malformed', 'utf8')
       status = undefined
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('真实 check 在物化前拒绝超过 canonical byte cap 的 sparse tasks.md', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-oversized-task-plan-'))
+    const canonicalDir = join(root, 'openspec', 'changes', 'demo')
+    const tasksPath = join(canonicalDir, 'tasks.md')
+    await mkdir(join(canonicalDir, '.pipeline-task-plan'), { recursive: true })
+    await writeFile(join(canonicalDir, '.pipeline-task-plan', 'current.json'), '{}\n', 'utf8')
+    await writeFile(tasksPath, '# Tasks\n', 'utf8')
+    await truncate(tasksPath, 1_048_578)
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo',
+        tasksMarkdown: '',
+      })
+      return { pass: status !== 'invalid', failures: status === 'invalid' ? ['invalid projection'] : [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('真实 check 在物化前执行更窄的 legacy 256 KiB byte cap', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-oversized-legacy-tasks-'))
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    const tasksPath = join(changeDir, 'tasks.md')
+    await mkdir(changeDir, { recursive: true })
+    await writeFile(tasksPath, '# Tasks\n', 'utf8')
+    await truncate(tasksPath, 256 * 1024 + 1)
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo', tasksMarkdown: '',
+      })
+      return { pass: status !== 'invalid', failures: status === 'invalid' ? ['invalid projection'] : [] }
+    })
+
+    try {
       expect(await cmdCheck(deps, 'demo')).toBe(2)
       expect(status).toBe('invalid')
     } finally {

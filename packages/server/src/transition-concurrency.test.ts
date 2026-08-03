@@ -8,7 +8,7 @@
  * 复现的是同一类真实缺陷：breadcrumb/history/marker 曾经在锁外写，第一次转换的尾部被拖慢时，
  * 第二次转换可能在锁内抢先完成、随后姗姗来迟的第一次尾部写入用旧相位覆盖掉最新状态。
  */
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import {
@@ -92,5 +92,36 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
     const finalState = await store.read(changeDir)
     expect(finalState.fields.phase).toBe('spec')
     expect(await readFile(join(changeDir, '.breadcrumb'), 'utf8')).toContain('phase=spec')
+  })
+
+  test('server 生产 TaskPlan callback 不用未完成 Verify tasks 阻断 verify-fail 回退', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const name = 'rollback'
+    const changeDir = await initChange(store, root, name)
+    await seedGovernedDocumentEvidence(root, changeDir, name)
+    await writeFile(join(changeDir, 'tasks.md'), '# Tasks\n\n## Verify\n\n- [ ] Investigate failure\n', 'utf8')
+    await store.setMany(changeDir, {
+      phase: 'verify',
+      build_sha: 'FROZEN',
+      review_gate_phase: 'verify',
+      review_gate_status: 'approved',
+      review_gate_event: 'verify-fail',
+      review_requested_at: '2026-07-16T00:00:00Z',
+      review_acknowledged_at: '2026-07-16T00:00:00Z',
+    })
+    const deps: TransitionDeps = {
+      store,
+      runRepo: createWorkflowRunRepository({
+        store, recordStore: createTransitionRecordStore(), clock: () => '2026-07-16T00:00:00Z',
+      }),
+      flow: testFlow(),
+      clock: () => '2026-07-16T00:00:00Z',
+    }
+
+    const result = await performTransition(deps, root, name, 'verify-fail')
+
+    expect(result).toMatchObject({ code: 200, body: { ok: true, from: 'verify', to: 'build' } })
+    expect((await store.read(changeDir)).fields.phase).toBe('build')
   })
 })

@@ -57,6 +57,8 @@
 - [x] 分离 TaskPlan domain aggregate 与 snake_case persistence/API record，在兼容边界执行显式转换。 (build)
 - [x] 增加 TaskPlan 跨进程 publication contention 与 immutable/current 中断恢复验收。 (build)
 - [x] 为 TaskPlan HTTP 失败语义增加稳定 machine code 并收紧只读 response contract。 (build)
+- [x] 将 tasks-through-phase 门禁绑定到前向完成事件，保持 requirements-changed 与 verify-fail 回退始终可达。 (build)
+- [x] 为 CLI TaskPlan tasks.md 读取增加 regular-file 身份栅栏与 canonical/legacy 预分配字节上限。 (build)
 
 ## 验证
 

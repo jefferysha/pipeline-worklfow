@@ -97,6 +97,26 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.errLines).toContain('[TRANSITION] demo: verify -> build')
   })
 
+  test('生产 guardContext 不用未完成 Verify tasks 阻断 verify-fail 回退', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-verify-fail-task-gate-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'tasks.md'), '# Tasks\n\n## Verify\n\n- [ ] Reproduce failure\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: approvedReviewState({
+        phase: 'verify', build_sha: 'FROZEN', review_gate_event: 'verify-fail',
+      }),
+      guardCtx: makeGuardCtx(root),
+    })
+    try {
+      expect(await cmdTransition(deps, 'demo', 'verify-fail')).toBe(0)
+      expect(deps.errLines).toContain('[TRANSITION] demo: verify -> build')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('archived 终态自环：archive -> archive（stderr）', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'archive' }) })
     const code = await cmdTransition(deps, 'demo', 'archived')

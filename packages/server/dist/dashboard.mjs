@@ -8681,19 +8681,25 @@ async function evaluateGuards(guards, input, options = {}) {
 
 // packages/kernel/dist/flow/default-event-policy.js
 var DEFAULT_EVENT_POLICY = {
-  "open-complete": { guards: [], actions: [] },
+  "open-complete": { guards: [], actions: [], enforceTaskExit: true },
   "explore-complete": {
     // 老仓 L120-126：design_doc 非空且文件存在。
     guards: [{ type: "file-exists", path: { kind: "field", field: "design_doc" } }],
-    actions: []
+    actions: [],
+    enforceTaskExit: true
   },
   "spec-complete": {
     // 老仓 L127-138：仅非 PM 轨要求 legacy `plan` artifact；PM 的文档链由 OpenSpec ledger
     // 单独强制，不能用一个新增 state 字段要求破坏原有 default transition 兼容性。
     guards: [{ type: "file-exists", path: { kind: "field", field: "plan" }, when: NON_PM }],
-    actions: [{ type: "reset-pre-verify-review" }]
+    actions: [{ type: "reset-pre-verify-review" }],
+    enforceTaskExit: true
   },
-  "requirements-changed": { guards: [], actions: [{ type: "reset-pre-verify-review" }] },
+  "requirements-changed": {
+    guards: [],
+    actions: [{ type: "reset-pre-verify-review" }],
+    enforceTaskExit: false
+  },
   "build-complete": {
     // 首错优先：build_mode 必设 → isolation 必设 → isolation ∈ {branch,worktree,in-place}
     // → full+direct 锁 direct_override → pre-Verify 全量收敛通过。in-place 明确表示受限 agent
@@ -8706,7 +8712,8 @@ var DEFAULT_EVENT_POLICY = {
       { type: "field-equals", field: "pre_verify_review_result", value: "pass" }
     ],
     // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
-    actions: [{ type: "freeze-build-sha" }]
+    actions: [{ type: "freeze-build-sha" }],
+    enforceTaskExit: true
   },
   "verify-pass": {
     // 老仓 L163-199 首错优先：verification_report 非空且文件存在 → branch_status=handled →
@@ -8719,18 +8726,25 @@ var DEFAULT_EVENT_POLICY = {
       { type: "build-head-unchanged", field: "build_sha" }
     ],
     // 老仓 L201-204：verify_result=pass + verified_at=now。
-    actions: [{ type: "mark-verification-passed" }]
+    actions: [{ type: "mark-verification-passed" }],
+    enforceTaskExit: true
   },
   "verify-fail": {
     guards: [],
     // 老仓 L207-210：verify_result=fail + build_sha=null（barrier 复位；phase_status 在 flow）。
-    actions: [{ type: "mark-verification-failed" }, { type: "reset-pre-verify-review" }]
+    actions: [{ type: "mark-verification-failed" }, { type: "reset-pre-verify-review" }],
+    enforceTaskExit: false
   },
-  "ship-complete": { guards: [{ type: "spec-migration-applied" }], actions: [] },
+  "ship-complete": {
+    guards: [{ type: "spec-migration-applied" }],
+    actions: [],
+    enforceTaskExit: true
+  },
   archived: {
     guards: [],
     // 老仓 L213-217：archived=true + archived_at=now（phase_status=done 在 flow）。
-    actions: [{ type: "archive-run" }]
+    actions: [{ type: "archive-run" }],
+    enforceTaskExit: true
   }
 };
 function fstr(v) {
@@ -18109,9 +18123,11 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
   const violations = await checkDefaultEventPreconditions(event, state, command.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
-  const tasks = await command.context.tasksThroughPhase?.(edge2.from);
-  if (tasks && !tasks.pass) {
-    return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge2.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
+  if (policy.enforceTaskExit) {
+    const tasks = await command.context.tasksThroughPhase?.(edge2.from);
+    if (tasks && !tasks.pass) {
+      return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge2.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
+    }
   }
   let result;
   try {

@@ -424,11 +424,17 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       })
       await writeFile(join(dir, 'proposal.md'), '# revised during build\n', 'utf8')
 
+      let taskGateCalled = false
       const result = await createTransitionApplication(deps).execute({
         root, changeDir: dir, changeName: 'demo', event: 'requirements-changed',
-        context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
+        context: { tasksThroughPhase: async () => {
+          taskGateCalled = true
+          return { pass: false, failure: 'build 出口：tasks.md 仍有 1 项未勾' }
+        } },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(result.kind).toBe('applied')
+      expect(taskGateCalled).toBe(false)
       expect((await createStateStore().read(dir)).fields).toMatchObject({
         phase: 'spec',
         phase_status: 'in_progress',
@@ -560,11 +566,17 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
       const app = createTransitionApplication(deps)
+      let taskGateCalled = false
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'verify-fail',
-        context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
+        context: { tasksThroughPhase: async () => {
+          taskGateCalled = true
+          return { pass: false, failure: 'verify 出口：tasks.md 仍有 2 项未勾' }
+        } },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(result.kind).toBe('applied')
+      expect(taskGateCalled).toBe(false)
       const state = await createStateStore().read(dir)
       expect(state.fields.verify_result).toBe('fail')
       expect(state.fields.build_sha).toBe('null')

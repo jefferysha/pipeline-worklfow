@@ -11430,19 +11430,25 @@ async function evaluateGuards(guards, input, options = {}) {
 
 // packages/kernel/dist/flow/default-event-policy.js
 var DEFAULT_EVENT_POLICY = {
-  "open-complete": { guards: [], actions: [] },
+  "open-complete": { guards: [], actions: [], enforceTaskExit: true },
   "explore-complete": {
     // 老仓 L120-126：design_doc 非空且文件存在。
     guards: [{ type: "file-exists", path: { kind: "field", field: "design_doc" } }],
-    actions: []
+    actions: [],
+    enforceTaskExit: true
   },
   "spec-complete": {
     // 老仓 L127-138：仅非 PM 轨要求 legacy `plan` artifact；PM 的文档链由 OpenSpec ledger
     // 单独强制，不能用一个新增 state 字段要求破坏原有 default transition 兼容性。
     guards: [{ type: "file-exists", path: { kind: "field", field: "plan" }, when: NON_PM }],
-    actions: [{ type: "reset-pre-verify-review" }]
+    actions: [{ type: "reset-pre-verify-review" }],
+    enforceTaskExit: true
   },
-  "requirements-changed": { guards: [], actions: [{ type: "reset-pre-verify-review" }] },
+  "requirements-changed": {
+    guards: [],
+    actions: [{ type: "reset-pre-verify-review" }],
+    enforceTaskExit: false
+  },
   "build-complete": {
     // 首错优先：build_mode 必设 → isolation 必设 → isolation ∈ {branch,worktree,in-place}
     // → full+direct 锁 direct_override → pre-Verify 全量收敛通过。in-place 明确表示受限 agent
@@ -11455,7 +11461,8 @@ var DEFAULT_EVENT_POLICY = {
       { type: "field-equals", field: "pre_verify_review_result", value: "pass" }
     ],
     // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
-    actions: [{ type: "freeze-build-sha" }]
+    actions: [{ type: "freeze-build-sha" }],
+    enforceTaskExit: true
   },
   "verify-pass": {
     // 老仓 L163-199 首错优先：verification_report 非空且文件存在 → branch_status=handled →
@@ -11468,18 +11475,25 @@ var DEFAULT_EVENT_POLICY = {
       { type: "build-head-unchanged", field: "build_sha" }
     ],
     // 老仓 L201-204：verify_result=pass + verified_at=now。
-    actions: [{ type: "mark-verification-passed" }]
+    actions: [{ type: "mark-verification-passed" }],
+    enforceTaskExit: true
   },
   "verify-fail": {
     guards: [],
     // 老仓 L207-210：verify_result=fail + build_sha=null（barrier 复位；phase_status 在 flow）。
-    actions: [{ type: "mark-verification-failed" }, { type: "reset-pre-verify-review" }]
+    actions: [{ type: "mark-verification-failed" }, { type: "reset-pre-verify-review" }],
+    enforceTaskExit: false
   },
-  "ship-complete": { guards: [{ type: "spec-migration-applied" }], actions: [] },
+  "ship-complete": {
+    guards: [{ type: "spec-migration-applied" }],
+    actions: [],
+    enforceTaskExit: true
+  },
   archived: {
     guards: [],
     // 老仓 L213-217：archived=true + archived_at=now（phase_status=done 在 flow）。
-    actions: [{ type: "archive-run" }]
+    actions: [{ type: "archive-run" }],
+    enforceTaskExit: true
   }
 };
 function fstr(v) {
@@ -23907,9 +23921,11 @@ async function planDefaultTransition(state, command2, flow, clock, effectivePlan
   const violations = await checkDefaultEventPreconditions(event, state, command2.context);
   if (violations)
     return { kind: "precondition-violated", lines: violations };
-  const tasks = await command2.context.tasksThroughPhase?.(edge.from);
-  if (tasks && !tasks.pass) {
-    return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
+  if (policy.enforceTaskExit) {
+    const tasks = await command2.context.tasksThroughPhase?.(edge.from);
+    if (tasks && !tasks.pass) {
+      return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
+    }
   }
   let result;
   try {
@@ -34679,6 +34695,7 @@ function effectiveWorkflowForState(deps, state) {
 }
 
 // packages/cli/src/commands/check.ts
+var MAX_LEGACY_TASKS_MD_BYTES2 = 256 * 1024;
 async function cmdCheck(deps, name2) {
   if (!isValidChangeName(name2)) {
     deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
@@ -34710,23 +34727,32 @@ async function cmdCheck(deps, name2) {
   const coverageProfile = plan.capabilities.track.coverageProfile;
   const fileContext = deps.guardCtx?.(name2);
   const tasksPath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/tasks.md`;
-  const authenticatedTasksSource = tasksPath === void 0 ? void 0 : fileContext?.readFile?.(tasksPath);
-  let canonicalTasksProjectionStatus = "legacy";
+  const canonicalStatePath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`;
+  const tasksByteLimit = canonicalStatePath !== void 0 && fileContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : MAX_LEGACY_TASKS_MD_BYTES2;
+  const boundedTasks = tasksPath === void 0 ? void 0 : fileContext?.readFileBounded === void 0 ? { kind: "invalid" } : fileContext.readFileBounded(tasksPath, tasksByteLimit);
+  const authenticatedTasksSource = boundedTasks?.kind === "ok" ? boundedTasks.text : void 0;
+  let canonicalTasksProjectionStatus = boundedTasks?.kind === "invalid" ? "invalid" : "legacy";
   if (authenticatedTasksSource !== void 0) {
     try {
       canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(
         dir,
         authenticatedTasksSource
       );
+      if (canonicalTasksProjectionStatus === "legacy" && Buffer.byteLength(authenticatedTasksSource) > MAX_LEGACY_TASKS_MD_BYTES2) canonicalTasksProjectionStatus = "invalid";
     } catch {
       canonicalTasksProjectionStatus = "invalid";
     }
   }
-  const result = deps.flow.guardCheck(state, {
+  const guardedTasksSource = canonicalTasksProjectionStatus === "invalid" && authenticatedTasksSource === void 0 ? "" : authenticatedTasksSource;
+  const guardedFileContext = fileContext === void 0 ? void 0 : {
     ...fileContext,
+    readFile: (path9) => path9 === tasksPath ? guardedTasksSource : fileContext.readFile?.(path9)
+  };
+  const result = deps.flow.guardCheck(state, {
+    ...guardedFileContext,
     coverageProfile,
-    ...authenticatedTasksSource === void 0 ? {} : {
-      canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) => changeDirRel === fileContext?.changeDirRel && tasksMarkdown === authenticatedTasksSource ? canonicalTasksProjectionStatus : "invalid"
+    ...guardedTasksSource === void 0 ? {} : {
+      canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) => changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource ? canonicalTasksProjectionStatus : "invalid"
     }
   });
   const migration = str(state.fields.phase) === "ship" ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name2) : void 0;
@@ -37947,6 +37973,9 @@ async function cmdTransition(deps, name2, event) {
   }
   const dir = changeDir(deps.cwd, name2);
   const guardContext = deps.guardCtx?.(name2);
+  const tasksPath = guardContext?.changeDirRel === void 0 ? void 0 : `${guardContext.changeDirRel}/tasks.md`;
+  const canonicalStatePath = guardContext?.changeDirRel === void 0 ? void 0 : `${guardContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`;
+  const tasksByteLimit = canonicalStatePath !== void 0 && guardContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : 256 * 1024;
   const context = {
     fileExists: guardContext?.fileExists,
     gitHeadSha: deps.gitHeadSha,
@@ -37955,11 +37984,17 @@ async function cmdTransition(deps, name2, event) {
       return fingerprint ? fingerprint(name2) : Promise.reject(new Error("workspace fingerprint capability unavailable"));
     }) : void 0,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name2),
-    ...guardContext?.readFile === void 0 ? {} : { tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(
-      dir,
-      phase,
-      guardContext.readFile?.(`${guardContext.changeDirRel ?? `openspec/changes/${name2}`}/tasks.md`) ?? null
-    ) }
+    ...guardContext === void 0 ? {} : { tasksThroughPhase: async (phase) => {
+      const bounded = tasksPath === void 0 ? void 0 : guardContext.readFileBounded?.(tasksPath, tasksByteLimit);
+      if (bounded?.kind === "invalid") {
+        return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
+      }
+      return taskPlanTasksThroughPhaseForChange(
+        dir,
+        phase,
+        bounded === void 0 ? void 0 : bounded.kind === "ok" ? bounded.text : null
+      );
+    } }
   };
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
@@ -52234,9 +52269,59 @@ function buildProgram(deps, runtimes = {}) {
 }
 
 // packages/cli/src/guardContext.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync10 } from "node:fs";
+import {
+  closeSync as closeSync7,
+  constants as constants9,
+  fstatSync as fstatSync2,
+  lstatSync as lstatSync4,
+  openSync as openSync7,
+  readSync as readSync5,
+  readdirSync as readdirSync8,
+  readFileSync as readFileSync26,
+  statSync as statSync10
+} from "node:fs";
 import { readdir as readdir13 } from "node:fs/promises";
 import { join as join87 } from "node:path";
+function sameBoundedFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
+}
+function readBoundedRegularFileSync(path9, maxBytes) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return { kind: "invalid" };
+  let fd;
+  let inspected = false;
+  try {
+    const lexical = lstatSync4(path9, { bigint: true });
+    inspected = true;
+    if (!lexical.isFile() || lexical.size > BigInt(maxBytes)) return { kind: "invalid" };
+    fd = openSync7(path9, constants9.O_RDONLY | constants9.O_NOFOLLOW);
+    const opened = fstatSync2(fd, { bigint: true });
+    if (!opened.isFile() || !sameBoundedFile(lexical, opened)) return { kind: "invalid" };
+    const raw = Buffer.allocUnsafe(maxBytes + 1);
+    let length = 0;
+    while (length < raw.byteLength) {
+      const read = readSync5(fd, raw, length, raw.byteLength - length, null);
+      if (read === 0) break;
+      length += read;
+    }
+    if (length > maxBytes || BigInt(length) !== opened.size) return { kind: "invalid" };
+    const after = fstatSync2(fd, { bigint: true });
+    const current = lstatSync4(path9, { bigint: true });
+    if (!sameBoundedFile(opened, after) || !sameBoundedFile(opened, current)) return { kind: "invalid" };
+    return {
+      kind: "ok",
+      text: new TextDecoder("utf-8", { fatal: true }).decode(raw.subarray(0, length))
+    };
+  } catch (error2) {
+    return !inspected && error2.code === "ENOENT" ? { kind: "missing" } : { kind: "invalid" };
+  } finally {
+    if (fd !== void 0) {
+      try {
+        closeSync7(fd);
+      } catch {
+      }
+    }
+  }
+}
 async function listChanges(changesRoot2) {
   let entries;
   try {
@@ -52297,6 +52382,7 @@ function makeGuardCtx(cwd) {
         return void 0;
       }
     },
+    readFileBounded: (path9, maxBytes) => readBoundedRegularFileSync(abs(path9), maxBytes),
     dirExists: (path9) => {
       try {
         return statSync10(abs(path9)).isDirectory();

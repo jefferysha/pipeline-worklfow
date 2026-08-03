@@ -6,8 +6,16 @@ import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResol
 import type { AfkReadiness } from './afkReadiness.js'
 import type { CodexAuthStatus } from './codexAuth.js'
 
+export type BoundedFileRead =
+  | { readonly kind: 'ok'; readonly text: string }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'invalid' }
+
 /** fs/env 探针半成品；cmdCheck 必须再注入 effective policy 才能组成 kernel GuardContext。 */
-export type GuardFileContext = Omit<GuardContext, 'coverageProfile'>
+export type GuardFileContext = Omit<GuardContext, 'coverageProfile'> & {
+  /** 先认证普通文件身份和 byte cap，再物化文本；TaskPlan hostile-input 边界不得用 readFile 代替。 */
+  readonly readFileBounded?: (path: string, maxBytes: number) => BoundedFileRead
+}
 
 export interface GateMarkerInfo {
   kind: 'confirm' | 'review' | 'interaction'

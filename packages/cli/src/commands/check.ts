@@ -18,6 +18,9 @@ import {
   isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
+  TASK_PLAN_CURRENT_FILE,
+  TASK_PLAN_LIMITS,
+  TASK_PLAN_STATE_DIR,
 } from '@tenon/kernel'
 import type {
   DocumentEvidenceReport,
@@ -29,6 +32,8 @@ import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
+
+const MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024
 
 export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   if (!isValidChangeName(name)) {
@@ -67,29 +72,57 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   const tasksPath = fileContext?.changeDirRel === undefined
     ? undefined
     : `${fileContext.changeDirRel}/tasks.md`
-  const authenticatedTasksSource = tasksPath === undefined
+  const canonicalStatePath = fileContext?.changeDirRel === undefined
     ? undefined
-    : fileContext?.readFile?.(tasksPath)
-  let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' = 'legacy'
+    : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
+  const tasksByteLimit = canonicalStatePath !== undefined && fileContext?.fileExists?.(canonicalStatePath)
+    ? TASK_PLAN_LIMITS.maxRevisionBytes
+    : MAX_LEGACY_TASKS_MD_BYTES
+  const boundedTasks = tasksPath === undefined
+    ? undefined
+    : fileContext?.readFileBounded === undefined
+      ? { kind: 'invalid' as const }
+      : fileContext.readFileBounded(tasksPath, tasksByteLimit)
+  const authenticatedTasksSource = boundedTasks?.kind === 'ok' ? boundedTasks.text : undefined
+  let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' =
+    boundedTasks?.kind === 'invalid' ? 'invalid' : 'legacy'
   if (authenticatedTasksSource !== undefined) {
     try {
       canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(
         dir,
         authenticatedTasksSource,
       )
+      if (
+        canonicalTasksProjectionStatus === 'legacy'
+        && Buffer.byteLength(authenticatedTasksSource) > MAX_LEGACY_TASKS_MD_BYTES
+      ) canonicalTasksProjectionStatus = 'invalid'
     } catch {
       // Corrupt or concurrently replaced canonical state is not legacy. It must block the guard.
       canonicalTasksProjectionStatus = 'invalid'
     }
   }
+  // Invalid bounded input stays present as an empty sentinel so every phase reaches the explicit
+  // authentication failure instead of treating an oversized legacy file as an absent optional one.
+  const guardedTasksSource = canonicalTasksProjectionStatus === 'invalid'
+    && authenticatedTasksSource === undefined
+    ? ''
+    : authenticatedTasksSource
+  const guardedFileContext = fileContext === undefined
+    ? undefined
+    : {
+        ...fileContext,
+        readFile: (path: string) => path === tasksPath
+          ? guardedTasksSource
+          : fileContext.readFile?.(path),
+      }
   const result = deps.flow.guardCheck(state, {
-    ...fileContext,
+    ...guardedFileContext,
     coverageProfile,
-    ...(authenticatedTasksSource === undefined
+    ...(guardedTasksSource === undefined
       ? {}
       : {
           canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) =>
-            changeDirRel === fileContext?.changeDirRel && tasksMarkdown === authenticatedTasksSource
+            changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource
               ? canonicalTasksProjectionStatus
               : 'invalid',
         }),

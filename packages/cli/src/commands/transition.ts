@@ -52,6 +52,7 @@
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
+  TASK_PLAN_CURRENT_FILE, TASK_PLAN_LIMITS, TASK_PLAN_STATE_DIR,
   taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
 import { evaluateSpecMigrationEvidence, type TransitionContext } from '@tenon/kernel'
@@ -72,6 +73,15 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
 
   const dir = changeDir(deps.cwd, name)
   const guardContext = deps.guardCtx?.(name)
+  const tasksPath = guardContext?.changeDirRel === undefined
+    ? undefined
+    : `${guardContext.changeDirRel}/tasks.md`
+  const canonicalStatePath = guardContext?.changeDirRel === undefined
+    ? undefined
+    : `${guardContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
+  const tasksByteLimit = canonicalStatePath !== undefined && guardContext?.fileExists?.(canonicalStatePath)
+    ? TASK_PLAN_LIMITS.maxRevisionBytes
+    : 256 * 1024
   // kernel 单源注入面：文件存在性经 guardCtx（缺省降级跳过文件面）；Git HEAD 与 in-place
   // 内容基线均由 production deps 绑定当前 Change。
   const context: TransitionContext = {
@@ -84,11 +94,21 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         })
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
-    ...(guardContext?.readFile === undefined
+    ...(guardContext === undefined
       ? {}
-      : { tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(
-          dir, phase, guardContext.readFile?.(`${guardContext.changeDirRel ?? `openspec/changes/${name}`}/tasks.md`) ?? null,
-        ) }),
+      : { tasksThroughPhase: async (phase) => {
+          const bounded = tasksPath === undefined
+            ? undefined
+            : guardContext.readFileBounded?.(tasksPath, tasksByteLimit)
+          if (bounded?.kind === 'invalid') {
+            return { pass: false, failure: `${phase} 出口：tasks.md 不可信或超出预算` }
+          }
+          return taskPlanTasksThroughPhaseForChange(
+            dir,
+            phase,
+            bounded === undefined ? undefined : bounded.kind === 'ok' ? bounded.text : null,
+          )
+        } }),
   }
 
   // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由

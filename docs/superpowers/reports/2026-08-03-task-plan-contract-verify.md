@@ -1007,3 +1007,79 @@ canonical path 同为 403，机器调用方无法用稳定 `code` 区分失败�
 两项 Verify task 保持未勾选，`branch_status` 不设 handled，不请求 `verify-pass`。先用官方 CLI 登记
 本报告与三轨结果，再请求精确 `verify-fail`、delegated acknowledge 并回到 Build；下一轮以 TDD
 修复 P1 与三个实现/验证 P2，并用官方登记消除 ledger stale 后重新冻结和执行三轨。
+
+---
+
+# 第 21 轮 Verify（冻结基线 `288f5c81f8482555be9432a0c5e220610f81aa9a`）
+
+## 聚合结论
+
+FAIL，C0/H1/M1/L2。独立 E2E 为 PASS（C0/H0/M0/L0），但独立 Reviewer 与原生 Codex CLI
+均确定性确认同一个 HIGH/P1 回退死锁；Reviewer 另确认一个 MEDIUM hostile-input 预算缺口。按三轨
+findings 严格并集，不得设置 Verify tasks、`branch_status=handled` 或请求 `verify-pass`。exact base 为
+`dc53843e61f812938f13c684a41ffe1d935e48bf`，三轨审查 target 均为 frozen `build_sha`，没有把后续治理
+提交混入实现结论。
+
+## 三轨证据
+
+- E2E：PASS，C0/H0/M0/L0。隔离冻结副本 focused 13 files / 467 passed；full 340/340 files、
+  6129 passed、26 conditional skips；build 通过。真实 CLI→filesystem、canonical publish/read、
+  isolated live HTTP 200、receipt 154/154、tool program 10/10（含 129+ discovery）、双进程 CAS 与
+  `process.exit(17)` crash recovery 2/2 均通过。OpenSpec show 9 deltas、change strict 1/1、隔离
+  archive rehearsal `+7/~2`、主 specs strict 33/33；源 worktree HEAD/status 与 5 个关键 digest
+  前后一致。证据：`/tmp/tenon-pr1-r21-e2e/SUMMARY.md`。
+- Reviewer：FAIL，C0/H1/M1/L2。生产 CLI/Server 注入路径与 default event policy 的交叉审查确认
+  rollback task gate 回归；hostile oversized `tasks.md` 证明 CLI 在预算检查前已完整分配输入。
+  证据：`/tmp/tenon-pr1-r21-reviewer.md`。
+- 原生 Codex CLI：FAIL，P0=0/P1=1/P2=0/P3=0。read-only 精确范围审查独立确认 rollback gate
+  已进入生产 Server/CLI，且现有 rollback tests 因 `context: {}` 漏掉真实组合；其余重点面未发现
+  同等级问题。两份 tracked bundle 与冻结 tip 源码的内存重建逐字节一致，`git diff --check`
+  通过。证据：`/tmp/tenon-pr1-r21-codex.txt`。
+
+## 变更文件到规格覆盖（Step 1.5）
+
+冻结范围共 426 个 changed paths，以下分区互斥且穷尽：159 个 canonical state revisions、159 个
+pre-Verify review receipts、1 个 canonical current、54 个 Change docs/state、5 个项目 docs、27 个
+kernel、9 个 CLI、12 个 server。前四组与 docs 行属于两份 delta 的官方治理/证据投影；kernel 的
+TaskPlan domain/codec/store/read-model/Todo/guard/transition 文件覆盖 `task-plan-contract`；CLI 的
+receipt discovery/tool-program 文件覆盖 `codex-skill-receipt-current-turn`，CLI check/transition/bundle
+覆盖 `task-plan-contract`；server 的 anchored readers/TaskPlan route/snapshot/transition/bundle 覆盖
+`task-plan-contract`。因此每个 changed path 均落入至少一个 delta 或其治理证据，没有未映射文件。
+
+## 阻断 findings
+
+### HIGH — TaskPlan 前向出口门禁错误阻断失败/需求变化回退
+
+`packages/kernel/src/workflow/transition-application.ts` 对所有 default events 无条件执行
+`tasksThroughPhase(edge.from)`。但 `requirements-changed` 与 `verify-fail` 在
+`default-event-policy.ts` 明确为 `guards: []` 的受控回退边；生产 CLI 和 Server 又都注入该 callback。
+因此 Build 中尚未完成的任务会阻止因需求变化回 Spec，Verify 未勾任务会阻止失败回 Build，形成治理
+死锁。既有 rollback tests 传空 context，未覆盖生产组合。修复必须只让前向 phase-completion 事件执行
+出口 task gate，并为 TransitionApplication、CLI 与 Server 增加带未完成任务的真实 callback 回归。
+
+### MEDIUM — CLI 在 TaskPlan byte budget 前无界读取 `tasks.md`
+
+production `guardContext.readFile` 使用无界 `readFileSync(..., 'utf8')`；`tenon check` 先经它完整读取
+`tasks.md` 再分类，`tenon transition` 也先完整读取后作为 `sourceOverride` 传入 kernel。kernel 虽检查
+canonical/legacy byte limit，但检查发生在整文件已分配之后。恶意或异常超大 checkout 文件可让 CLI
+在按契约 fail-closed 前耗尽内存。修复必须在 stat/open/fstat 与 bounded read 阶段先执行 regular-file
+和 byte cap，或让 transition 直接使用 kernel bounded reader，并补 oversized/sparse CLI 回归。
+
+## Receipt bridge 与运行时结论
+
+用户指出的首次登记确认是 receipt bridge false-negative bug，而不是缺少真实 Skill 读取。冻结实现已
+修复两个实际触发点：发现目录含超过 128 份有效 transcript 时不再提前失败；合法 positive literal
+`max_output_tokens` 不再被当作不可信参数，同时仍用完整 stdout/ABI/session/turn/worktree/inode fence
+拒绝截断和伪造结果。Round21 的 154+10 项及 129+ 真实发现验收继续通过。
+
+E2E harness 首次启动遗漏隔离 runtime home，暴露机器级 managed Dashboard token metadata 指向已停
+PID 的偏差；未写真实 repo。按授权仅对受管 Tenon Dashboard 执行官方 background restart，PID
+`90113` → `39428`，随后 `/api/health` 与 `/api/snapshot` 均 HTTP 200，token metadata 与新 PID
+一致。该项是验收 runtime 恢复，不是冻结源码 finding。
+
+## 处理决定
+
+保持两项 Verify task 未勾、`verify_result=fail`，用官方 CLI 登记本报告与三轨结果后请求 exact
+`verify-fail`。由于新 HIGH 本身会阻断当前带未完成 Verify task 的 repo bundle，回退必须使用同一官方
+Tenon 安装的上一稳定 CLI 执行已批准 event，不手改 canonical state；进入 Build 后以 TDD 修复 HIGH
+与 MEDIUM、重建 tracked bundles、重新冻结 `build_sha` 并从零执行三轨 Verify。
