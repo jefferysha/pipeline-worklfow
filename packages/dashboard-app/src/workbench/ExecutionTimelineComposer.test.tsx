@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WbHookMeta, WbSkillEntry } from '../api/client'
 import { I18nProvider } from '../i18n'
 import type { HooksConfigState } from './HookTimeline'
@@ -89,13 +89,52 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof Execution
         hooks={hooks()}
         skillRegistry={REGISTRY}
         onSelect={vi.fn()}
+        onLaneEdit={vi.fn()}
         {...overrides}
       />
     </I18nProvider>,
   )
 }
 
+afterEach(() => {
+  window.localStorage.removeItem('tenon-dashboard-lang')
+})
+
 describe('ExecutionTimelineComposer', () => {
+  it('阶段帮助按钮会展开真实说明内容', () => {
+    renderComposer()
+    const help = screen.getByRole('button', { name: '阶段执行说明' })
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(help)
+    expect(help).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('help-popover-content')).toHaveTextContent('这里按真实执行顺序展示')
+  })
+
+  it('English locale translates the complete execution surface while preserving user stage names', () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderComposer()
+
+    const editor = screen.getByTestId('step-policy-editor')
+    expect(editor).toHaveTextContent('Run Codex')
+    expect(editor).toHaveTextContent('Prepare input')
+    expect(editor).toHaveTextContent('Check result')
+    expect(editor).toHaveTextContent('Pre-run facts')
+    expect(editor).not.toHaveTextContent('准备输入')
+    expect(editor).not.toHaveTextContent('检查结果')
+    expect(editor).not.toHaveTextContent('运行前事实')
+    expect(editor).not.toHaveTextContent('执行时冻结')
+    expect(screen.getByTestId('wb-selected-gate')).toHaveTextContent('Review gate')
+    expect(screen.getByRole('switch', { name: 'Review gate' })).toBeInTheDocument()
+    expect(editor).not.toHaveTextContent('复核门')
+    expect(screen.getByTestId('wb-timeline-hook-load-context')).toHaveTextContent('Load task context')
+    expect(screen.getByTestId('wb-timeline-hook-guard-write-scope')).toHaveTextContent('Protect write scope')
+    expect(screen.getByTestId('wb-timeline-hook-collect-evidence')).toHaveTextContent('Collect verification evidence')
+    expect(screen.getByTestId('wb-timeline-hook-load-context')).toHaveAttribute(
+      'title',
+      'Technical details: load-context · SessionStart · matcher * · load-context.sh',
+    )
+  })
+
   it('阶段总览完整展示名称，并把复核状态留在阶段设置而不是轨道连接线上', () => {
     const lanes: BoardLane[] = [
       { ...LANES[0], id: 'start', name: 'Start' },
@@ -163,6 +202,19 @@ describe('ExecutionTimelineComposer', () => {
       toStage: 'verify',
       refSkillId: 'test-runner',
       after: false,
+    })
+  })
+
+  it('同阶段 Skill 重排提供键盘可聚焦的前移和后移入口', () => {
+    const onSkillMove = vi.fn()
+    renderComposer({ onSkillMove })
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill evidence-reviewer 向前移动' }))
+    fireEvent.click(screen.getByRole('button', { name: '将 Skill test-runner 向后移动' }))
+    expect(onSkillMove).toHaveBeenNthCalledWith(1, {
+      skillId: 'evidence-reviewer', fromStage: 'verify', toStage: 'verify', refSkillId: 'test-runner', after: false,
+    })
+    expect(onSkillMove).toHaveBeenNthCalledWith(2, {
+      skillId: 'test-runner', fromStage: 'verify', toStage: 'verify', refSkillId: 'evidence-reviewer', after: true,
     })
   })
 

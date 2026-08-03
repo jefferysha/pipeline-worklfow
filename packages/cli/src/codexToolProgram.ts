@@ -32,6 +32,27 @@ export interface TranscriptExecInvocation {
   readonly workdir?: string
 }
 
+const COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS = new Set([
+  'cmd',
+  'command',
+  'justification',
+  'login',
+  'prefix_rule',
+  'sandbox_permissions',
+  'tty',
+  'workdir',
+  'yield_time_ms',
+])
+
+export function isCompleteOutputSafeExecArguments(
+  value: unknown,
+): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && Object.keys(value).every((key) => COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key))
+}
+
 function safePrimitiveEnd(source: string, start: number): number | undefined {
   const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/
     .exec(source.slice(start))
@@ -55,6 +76,7 @@ function invocationFromSafeObjectLiteral(source: string): TranscriptExecInvocati
       key = identifier[0]
       cursor += key.length
     }
+    if (!COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key)) return undefined
     while (/\s/.test(source[cursor] ?? '')) cursor += 1
     if (source[cursor] !== ':') return undefined
     cursor += 1
@@ -85,6 +107,7 @@ function invocationFromObjectLiteral(source: string): TranscriptExecInvocation |
     const parsed = JSON.parse(source) as unknown
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
     const record = parsed as Record<string, unknown>
+    if (!isCompleteOutputSafeExecArguments(record)) return undefined
     if (record.cmd !== undefined && record.command !== undefined) return undefined
     const command = record.cmd ?? record.command
     if (typeof command !== 'string') return undefined
@@ -105,6 +128,17 @@ function invocationFromObjectLiteral(source: string): TranscriptExecInvocation |
  * comments, strings, dead code, extra statements, and self-authored success text fail closed.
  */
 export function transcriptExecInvocations(input: string): readonly TranscriptExecInvocation[] {
+  const pragma = /^\s*\/\/ @exec:([^\r\n]*)/.exec(input)
+  if (pragma?.[1] !== undefined) {
+    try {
+      const parsed = JSON.parse(pragma[1].trim()) as unknown
+      if (
+        !isCompleteOutputSafeExecArguments(parsed)
+      ) return []
+    } catch {
+      return []
+    }
+  }
   const prefix = /^\s*(?:(?:\/\/ @exec:[^\r\n]*\r?\n)\s*)?(?:const|let|var)\s+([$A-Z_a-z][$\w]*)\s*=\s*await\s+tools\.exec_command\s*\(/
     .exec(input)
   if (!prefix) return []

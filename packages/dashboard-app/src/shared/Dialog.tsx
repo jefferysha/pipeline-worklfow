@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useT } from '../i18n'
 
 /**
  * 中立共享 Dialog 组件（评审 P0-5/P1-9 的地基，Task 3）。
@@ -41,6 +42,10 @@ export interface DialogProps {
   testid?: string
   /** Localized accessible label for the workspace close icon. */
   closeLabel?: string
+  /** Stable test hook for the workspace close icon when a caller already exposes one. */
+  closeTestid?: string
+  /** Keep the workspace close surface visibly and semantically unavailable during atomic work. */
+  closeDisabled?: boolean
   /** 少数编排型对话框需要更宽的工作面；缺省仍保持既有 420px。 */
   panelClassName?: string
   /** 大型编辑器使用沉浸式工作区骨架；普通确认框保持 default。 */
@@ -49,10 +54,28 @@ export interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement>
 }
 
+const DialogInteractionDisabledContext = createContext(false)
+
+/** Portals preserve React context, so this boundary also disables dialogs rendered under body. */
+export function DialogInteractionBoundary({
+  disabled,
+  children,
+}: {
+  disabled: boolean
+  children: React.ReactNode
+}): JSX.Element {
+  return (
+    <DialogInteractionDisabledContext.Provider value={disabled}>
+      {children}
+    </DialogInteractionDisabledContext.Provider>
+  )
+}
+
 // 当前挂载的 Dialog 实例栈，栈顶（数组末尾）= 最后 mount = 视觉最上层。
 // 模块级、跨组件实例共享，故意不用 React state/context——Esc/Tab 响应资格判断
 // 不需要触发渲染，一个纯数组够用也更省心。
 const dialogStack: symbol[] = []
+const dialogFocusers = new Map<symbol, () => void>()
 
 // 困笼边界只应计入"真正能被 Tab 到达"的元素。disabled 表单控件与 input[type=hidden]
 // 虽然匹配朴素的标签选择器，但原生 Tab 顺序根本不会经过它们——若仍把它们计入
@@ -75,13 +98,45 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, closeLabel = '关闭', panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, closeLabel, closeTestid, closeDisabled = false, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
+  const { t } = useT()
+  const interactionDisabled = useContext(DialogInteractionDisabledContext)
+  const interactionDisabledRef = useRef(interactionDisabled)
+  interactionDisabledRef.current = interactionDisabled
+  const resolvedCloseLabel = closeLabel ?? t('common.dialog_close')
+  const overlayRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
   // 每次 render 都会被求值，但 useRef 只在首次挂载采用它，后续 render 里新建的
   // Symbol 会被直接丢弃，instanceIdRef.current 全生命周期指向同一个 symbol。
   const instanceIdRef = useRef<symbol>(Symbol('dialog'))
+  const focusInsideRef = useRef<() => void>(() => undefined)
+  focusInsideRef.current = () => {
+    if (interactionDisabledRef.current) return
+    const container = containerRef.current
+    const target = initialFocusRef?.current ?? (container ? getFocusableElements(container)[0] : undefined) ?? container
+    target?.focus()
+  }
+
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current
+    if (!overlay) return
+    if (interactionDisabled) {
+      overlay.setAttribute('inert', '')
+      if (overlay.contains(document.activeElement) && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    } else {
+      overlay.removeAttribute('inert')
+      if (
+        dialogStack[dialogStack.length - 1] === instanceIdRef.current
+        && !overlay.contains(document.activeElement)
+      ) {
+        focusInsideRef.current()
+      }
+    }
+  }, [interactionDisabled])
 
   // 挂载：记录打开前的焦点 → 聚焦 initialFocusRef 或容器内首个可聚焦元素。
   // 卸载：焦点归位到打开前记录的元素。故意用 [] 依赖只跑一次——
@@ -89,9 +144,8 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
   // activeElement 覆盖掉 previousFocusRef，卸载归位就指哪儿也回不到打开前了。
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const container = containerRef.current
-    const target = initialFocusRef?.current ?? (container ? getFocusableElements(container)[0] : undefined) ?? container
-    target?.focus()
+    if (interactionDisabledRef.current) return
+    focusInsideRef.current()
     return () => {
       previousFocusRef.current?.focus()
     }
@@ -104,10 +158,17 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
   // onClose identity 变化只重挂监听器，不会误触发重复 push/pop。
   useEffect(() => {
     const id = instanceIdRef.current
+    dialogFocusers.set(id, () => focusInsideRef.current())
     dialogStack.push(id)
     return () => {
+      const wasTop = dialogStack[dialogStack.length - 1] === id
       const idx = dialogStack.indexOf(id)
       if (idx !== -1) dialogStack.splice(idx, 1)
+      dialogFocusers.delete(id)
+      if (wasTop) {
+        const next = dialogStack[dialogStack.length - 1]
+        if (next !== undefined) dialogFocusers.get(next)?.()
+      }
     }
   }, [])
 
@@ -117,6 +178,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
     const id = instanceIdRef.current
     function handleKeyDown(e: KeyboardEvent): void {
       if (dialogStack[dialogStack.length - 1] !== id) return
+      if (interactionDisabledRef.current) return
 
       if (e.key === 'Escape') {
         // onClose synchronously unmounts this Dialog. Without consuming the same native event,
@@ -162,8 +224,25 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-scrim ${variant === 'workspace' ? 'p-4 backdrop-blur-[3px]' : ''}`}
       data-testid={testid}
+      ref={overlayRef}
+      aria-hidden={interactionDisabled || undefined}
+      onClickCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onKeyDownCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onSubmitCapture={(event) => {
+        if (!interactionDisabled) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (!interactionDisabled && e.target === e.currentTarget) onClose()
       }}
     >
       <div
@@ -180,7 +259,7 @@ export function Dialog({ title, onClose, children, actions, testid, closeLabel =
           <>
             <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6 py-3">
               <h2 className="min-w-0 flex-1 break-words whitespace-normal text-[18px] leading-tight font-bold tracking-[-0.015em] text-text">{title}</h2>
-              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition hover:bg-fill hover:text-text" aria-label={closeLabel} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-text-3 transition enabled:hover:bg-fill enabled:hover:text-text disabled:cursor-not-allowed disabled:opacity-50" data-testid={closeTestid} aria-label={resolvedCloseLabel} disabled={closeDisabled} onClick={onClose}><X className="size-4" strokeWidth={1.75} aria-hidden="true" /></button>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
             {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}

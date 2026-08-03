@@ -22,16 +22,43 @@ function outputStrings(value: unknown): string[] {
   return Object.values(value).flatMap((item) => outputStrings(item))
 }
 
+function hostEnvelopeStrings(value: unknown): string[] {
+  const marker = '\nOutput:\n'
+  return outputStrings(value).map((text) => {
+    const boundary = text.indexOf(marker)
+    return boundary === -1 ? text : text.slice(0, boundary)
+  })
+}
+
 function scriptStates(value: unknown): string[] {
-  return outputStrings(value).flatMap((text) =>
+  return hostEnvelopeStrings(value).flatMap((text) =>
     [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
       .map((match) => match[1] ?? ''),
   )
 }
 
+function customHostHeaderState(item: unknown): 'completed' | 'failed' | undefined {
+  const text = typeof item === 'string'
+    ? item
+    : isRecord(item) && item.type === 'input_text'
+      ? asString(item.text)
+      : undefined
+  if (text === undefined) return undefined
+  const marker = '\nOutput:\n'
+  const boundary = text.indexOf(marker)
+  if (boundary === -1 || boundary !== text.length - marker.length) return undefined
+  const header = text.slice(0, boundary)
+  const firstState = /^Script (completed|failed)(?:\n|$)/.exec(header)?.[1]
+  const states = [...header.matchAll(
+    /(?:^|\n)Script (completed|failed)(?=\n|$)/g,
+  )].map((match) => match[1])
+  if (firstState === undefined || states.length !== 1 || states[0] !== firstState) return undefined
+  return states[0] as 'completed' | 'failed'
+}
+
 export function successfulFunctionOutput(value: unknown): boolean {
   if (scriptStates(value).includes('failed')) return false
-  const textExitCodes = outputStrings(value).flatMap((text) =>
+  const textExitCodes = hostEnvelopeStrings(value).flatMap((text) =>
     [...text.matchAll(
       /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
     )].map((match) => Number(match[1])),
@@ -65,13 +92,109 @@ function completeResultEnvelopeExitCode(value: unknown): number | undefined {
   return topLevelExitCode(value)
 }
 
-function parsedResultEnvelopeExitCode(text: string): number | undefined {
+interface CompleteResultEnvelope {
+  readonly exitCode: number
+  readonly output: string
+}
+
+function topLevelObjectKeys(text: string): string[] {
+  const keys: string[] = []
+  let depth = 0
+  let expectKey = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (character === '"') {
+      const start = index
+      for (index += 1; index < text.length; index += 1) {
+        if (text[index] === '\\') {
+          index += 1
+          continue
+        }
+        if (text[index] === '"') break
+      }
+      if (depth === 1 && expectKey) {
+        keys.push(JSON.parse(text.slice(start, index + 1)) as string)
+        expectKey = false
+      }
+      continue
+    }
+    if (character === '{') {
+      depth += 1
+      if (depth === 1) expectKey = true
+    } else if (character === '}') {
+      depth -= 1
+    } else if (character === ',' && depth === 1) {
+      expectKey = true
+    }
+  }
+  return keys
+}
+
+function parsedCompleteResultEnvelope(text: string): CompleteResultEnvelope | undefined {
   try {
     const value = JSON.parse(text) as unknown
-    return completeResultEnvelopeExitCode(value)
+    const keys = topLevelObjectKeys(text)
+    const requiredKeys = [
+      'chunk_id',
+      'wall_time_seconds',
+      'exit_code',
+      'original_token_count',
+      'output',
+    ]
+    if (requiredKeys.some((key) => keys.filter((candidate) => candidate === key).length !== 1)) {
+      return undefined
+    }
+    const exitCode = completeResultEnvelopeExitCode(value)
+    if (exitCode === undefined || !isRecord(value) || typeof value.output !== 'string') return undefined
+    return { exitCode, output: value.output }
   } catch {
     return undefined
   }
+}
+
+interface CustomCompletion {
+  readonly exitCode: number
+  readonly stdout: string
+}
+
+function parsedCustomCompletion(value: unknown): CustomCompletion | undefined {
+  if (!Array.isArray(value) || value.length < 2) return undefined
+  if (customHostHeaderState(value[0]) !== 'completed') return undefined
+
+  const typedResultIndexes = value.flatMap((item, index) =>
+    isRecord(item) && item.type === 'execution_result' ? [index] : [],
+  )
+  if (typedResultIndexes.length > 0) {
+    const resultIndex = typedResultIndexes[0]
+    if (
+      typedResultIndexes.length !== 1
+      || resultIndex !== value.length - 1
+      || value.slice(1, resultIndex).some((item) =>
+        !isRecord(item) || item.type !== 'input_text' || typeof item.text !== 'string'
+      )
+    ) return undefined
+    const exitCode = topLevelExitCode(value[resultIndex])
+    if (exitCode === undefined) return undefined
+    return {
+      exitCode,
+      stdout: value.slice(1, resultIndex)
+        .map((item) => (item as { readonly text: string }).text)
+        .join(''),
+    }
+  }
+
+  if (value.length !== 2) return undefined
+  const payload = value[1]
+  const text = typeof payload === 'string'
+    ? payload
+    : isRecord(payload) && payload.type === 'input_text'
+      ? asString(payload.text)
+      : undefined
+  if (text === undefined) return undefined
+  const envelope = parsedCompleteResultEnvelope(text)
+  return envelope === undefined
+    ? undefined
+    : { exitCode: envelope.exitCode, stdout: envelope.output }
 }
 
 /**
@@ -80,25 +203,19 @@ function parsedResultEnvelopeExitCode(text: string): number | undefined {
  * execution_result sibling) is authoritative; stdout is untrusted and cannot manufacture it.
  */
 export function successfulCustomOutput(value: unknown): boolean {
-  const states = scriptStates(value)
-  if (!states.includes('completed') || states.includes('failed')) return false
-  const values = Array.isArray(value) ? value : [value]
-  const exitCodes = values.flatMap((item) => {
-    if (typeof item === 'string') {
-      const parsed = parsedResultEnvelopeExitCode(item.trim())
-      return parsed === undefined ? [] : [parsed]
-    }
-    if (!isRecord(item)) return []
-    if (item.type === 'input_text') {
-      const text = asString(item.text)
-      const parsed = text === undefined ? undefined : parsedResultEnvelopeExitCode(text.trim())
-      return parsed === undefined ? [] : [parsed]
-    }
-    if (item.type === 'execution_result') {
-      const code = topLevelExitCode(item)
-      return code === undefined ? [] : [code]
-    }
-    return []
-  })
-  return exitCodes.length > 0 && exitCodes.every((status) => status === 0)
+  return parsedCustomCompletion(value)?.exitCode === 0
+}
+
+/** Return only the stdout bytes forwarded by a successful function-call exec envelope. */
+export function successfulFunctionStdout(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !successfulFunctionOutput(value)) return undefined
+  const marker = '\nOutput:\n'
+  const boundary = value.indexOf(marker)
+  return boundary === -1 ? undefined : value.slice(boundary + marker.length)
+}
+
+/** Return only the stdout bytes forwarded by a successful custom exec envelope. */
+export function successfulCustomStdout(value: unknown): string | undefined {
+  const completion = parsedCustomCompletion(value)
+  return completion?.exitCode === 0 ? completion.stdout : undefined
 }

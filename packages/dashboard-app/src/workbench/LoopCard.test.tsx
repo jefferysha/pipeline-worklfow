@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOOP_RUNNERS as KERNEL_LOOP_RUNNERS } from '@tenon/kernel'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { LOOP_RUNNERS, LoopCard, useLoops } from './LoopCard'
 
 /**
@@ -106,6 +106,32 @@ function Harness(): JSX.Element {
   return <LoopCard root={ROOT} loops={loops} />
 }
 
+function HarnessWithDirty({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }): JSX.Element {
+  const loops = useLoops(ROOT)
+  return <LoopCard root={ROOT} loops={loops} onDirtyChange={onDirtyChange} />
+}
+
+function LanguageHarness(): JSX.Element {
+  const { setLang } = useT()
+  const loops = useLoops(ROOT)
+  return (
+    <>
+      <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+      <LoopCard root={ROOT} loops={loops} />
+    </>
+  )
+}
+
+function ReloadHarness(): JSX.Element {
+  const loops = useLoops(ROOT)
+  return (
+    <>
+      <button type="button" data-testid="test-reload-loops" onClick={loops.reload}>reload</button>
+      <LoopCard root={ROOT} loops={loops} />
+    </>
+  )
+}
+
 function renderCard(): void {
   render(
     <I18nProvider>
@@ -190,9 +216,57 @@ describe('LoopCard 读回显（验收①）', () => {
     openAdv()
     expect(screen.getByText('本 loop 同时走自动化通道的任务数，超出只提醒不硬拦')).toBeInTheDocument()
   })
+
+  it('retired 是不可由普通开关复活的独立终态', async () => {
+    rows = [makeRow({ status: 'retired' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const toggle = screen.getByTestId('lp-enable')
+    expect(toggle).toBeDisabled()
+    expect(screen.getByTestId('lp-pill')).toHaveAttribute('data-state', 'retired')
+    expect(screen.getByTestId('lp-pill')).toHaveTextContent('已退役')
+    fireEvent.click(toggle)
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+    expect(lastPostBody('/api/loops/update')).toBeNull()
+  })
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {
+  it('只在真实未保存修改存在时上报 dirty，保存回读后清除', async () => {
+    const onDirtyChange = vi.fn()
+    render(
+      <I18nProvider>
+        <HarnessWithDirty onDirtyChange={onDirtyChange} />
+      </I18nProvider>,
+    )
+    const goal = await screen.findByTestId('lp-goal')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(goal, { target: { value: '待保存目标' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await screen.findByTestId('lp-save-ok')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
+  it('运行时切换语言不 refetch，也不覆盖未保存的 Loop 草稿', async () => {
+    render(<I18nProvider><LanguageHarness /></I18nProvider>)
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: 'keep this dirty draft' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    const getCount = () => (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([input]) => input === '/api/loops/snapshot').length
+    expect(getCount()).toBe(1)
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    expect(getCount()).toBe(1)
+    expect(screen.getByTestId('lp-goal')).toHaveValue('keep this dirty draft')
+    expect(screen.getByTestId('lp-dirty')).toHaveTextContent('Unsaved')
+  })
+
   it('仅路径策略未保存时阻止预检，其他草稿不阻断；保存回读后重新启用', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
@@ -233,6 +307,56 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     expect(screen.getByTestId('lp-save')).toBeDisabled()
     // reload 后草稿以 server 新真值为基线（滑杆现值 = 30）
     expect(screen.getByTestId('lp-sld-runs-val')).toHaveTextContent('30 次')
+  })
+
+  it('自定义 radio 组支持方向键、Home/End 与单一 tab stop', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const skip = screen.getByTestId('lp-exceed-skip')
+    const pause = screen.getByTestId('lp-exceed-pause')
+    expect(skip).toHaveAttribute('tabindex', '0')
+    expect(pause).toHaveAttribute('tabindex', '-1')
+    skip.focus()
+    fireEvent.keyDown(skip, { key: 'ArrowRight' })
+    expect(pause).toHaveAttribute('aria-checked', 'true')
+    expect(pause).toHaveAttribute('tabindex', '0')
+    expect(pause).toHaveFocus()
+    fireEvent.keyDown(pause, { key: 'Home' })
+    expect(skip).toHaveAttribute('aria-checked', 'true')
+
+    const level = screen.getByTestId('lp-lv-L1')
+    level.focus()
+    fireEvent.keyDown(level, { key: 'End' })
+    expect(await screen.findByTestId('lp-promote-confirm')).toHaveTextContent('L3')
+  })
+
+  it.each([
+    ['halt', '停止本轮（兼容值）'],
+    ['skip-run', '跳过本次运行'],
+    ['pause-loop', '暂停定时任务'],
+    ['halt-round', '停止本轮后续任务'],
+  ])('合法超限策略 %s 保留精确值并提供唯一 tab stop', async (policy, label) => {
+    rows = [makeRow({ budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: policy, max_tokens_per_day: 100000 } })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const selected = screen.getByTestId(`lp-exceed-${policy}`)
+    expect(selected).toHaveAttribute('aria-checked', 'true')
+    expect(selected).toHaveAttribute('tabindex', '0')
+    expect(selected).toHaveTextContent(label)
+    expect(screen.getAllByRole('radio', { checked: true }).filter((radio) => radio.closest('[aria-label="超限策略"]'))).toHaveLength(1)
+  })
+
+  it('未知但合法的非空超限策略以自定义真值显示，不伪装成未选中', async () => {
+    rows = [makeRow({ budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'future-policy', max_tokens_per_day: 100000 } })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const selected = screen.getByTestId('lp-exceed-future-policy')
+    expect(selected).toHaveAttribute('aria-checked', 'true')
+    expect(selected).toHaveAttribute('tabindex', '0')
+    expect(selected).toHaveTextContent('自定义：future-policy')
   })
 
   it('token 预算滑杆 step=10 对齐受控粒度：连续单步（键盘方向键语义）不再原地踏步（真机 E2E bug 回归）', async () => {
@@ -393,6 +517,314 @@ describe('LoopCard runner 软校验警告（观察项②）', () => {
 })
 
 describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒绝原文）', () => {
+  const graduation = {
+    id: 'restyle-loop',
+    current: 'L1',
+    recommended: 'L2',
+    enforcement: 'hard',
+    canGraduate: true,
+    blockers: [],
+    demotionReason: null,
+    demotionSignals: [],
+    readinessScore: 62,
+    readinessBand: 'L2-ready',
+    driftCount: 0,
+    breaker: 'ok',
+    failStreak: 0,
+    runs: 5,
+  }
+  const decisionFactChanges: Array<[
+    string,
+    (row: Record<string, unknown>) => Record<string, unknown>,
+  ]> = [
+    ['current autonomy', (row) => ({ ...row, autonomy_level: 'L2' })],
+    ['readiness band', (row) => ({ ...row, readiness: { score: 48, band: 'not-ready' } })],
+    ['budget eligibility', (row) => ({
+      ...row,
+      budget: { ...(row.budget as Record<string, unknown>), hasBudget: false, remaining: 0 },
+    })],
+    ['graduation blocker and eligibility', (row) => ({
+      ...row,
+      graduation: {
+        ...(row.graduation as Record<string, unknown>),
+        canGraduate: false,
+        blockers: ['readiness below threshold'],
+      },
+    })],
+  ]
+
+  function renderReloadCard(): void {
+    render(<I18nProvider><ReloadHarness /></I18nProvider>)
+  }
+
+  it('逻辑等价快照刷新保持升档确认与原目标', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    fireEvent.click(screen.getByTestId('lp-lv-L2'))
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+
+    rows = rows.map((row) => ({
+      ...row,
+      goal: 'equivalent refreshed goal',
+      readiness: { ...(row.readiness as Record<string, unknown>) },
+      budget: { ...(row.budget as Record<string, unknown>) },
+      graduation: {
+        ...(row.graduation as Record<string, unknown>),
+        blockers: [...((row.graduation as { blockers: string[] }).blockers)],
+      },
+    }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('equivalent refreshed goal'))
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+    expect(screen.getByTestId('lp-promote-confirm')).toHaveTextContent('L2')
+    expect(lastPostBody('/api/loops/level')).toBeNull()
+  })
+
+  it('同一 loop 的后台快照刷新不得覆盖未保存草稿', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '本地尚未保存的目标' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+
+    rows = rows.map((row) => ({ ...row, goal: '后台刷新后的目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+    expect(screen.getByTestId('lp-goal')).toHaveValue('本地尚未保存的目标')
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+  })
+
+  it('后台只更新未触碰字段时三方重基准，后续保存不得把旧值写回', async () => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '本地目标草稿' } })
+
+    rows = rows.map((row) => ({ ...row, cadence: '6h' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+
+    openAdv()
+    expect(screen.getByTestId('lp-sld-cadence-val')).toHaveTextContent('6h')
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: '本地目标草稿' },
+    })
+  })
+
+  it('字段改回基线后清除 touched，后续刷新接受服务端新值且不会伪 dirty', async () => {
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '临时本地值' } })
+    fireEvent.change(goal, { target: { value: '把旧版工单卡样式逐个迁移到 SaaS 卡片风' } })
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+
+    rows = rows.map((row) => ({ ...row, goal: '服务端的新目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('服务端的新目标'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+    expect(screen.getByTestId('lp-save')).toBeDisabled()
+  })
+
+  it('本地值与服务端收敛后清除 touched，下一次刷新不会复活旧草稿', async () => {
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '共同值' } })
+
+    rows = rows.map((row) => ({ ...row, goal: '共同值' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.queryByTestId('lp-dirty')).toBeNull())
+
+    rows = rows.map((row) => ({ ...row, goal: '服务端第三版' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('服务端第三版'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+  })
+
+  it('保存完成到 reload 返回之间的新输入保持为下一版草稿并可再次精确保存', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '第一版目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: '保存期间继续编辑的第二版' } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('保存期间继续编辑的第二版'))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: '保存期间继续编辑的第二版' },
+    }))
+  })
+
+  it('保存期间改回旧基线仍保留为新草稿，reload 后可精确保存第二版', async () => {
+    const originalGoal = '把旧版工单卡样式逐个迁移到 SaaS 卡片风'
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保存中的第一版' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: originalGoal } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue(originalGoal))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: originalGoal },
+    }))
+  })
+
+  it('保存期间改回旧基线后，中途旧快照不得清除下一版草稿', async () => {
+    const originalGoal = '把旧版工单卡样式逐个迁移到 SaaS 卡片风'
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保存中的第一版' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: originalGoal } })
+
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === '/api/loops/snapshot'),
+    ).toHaveLength(2))
+
+    rows = rows.map((row) => row.id === 'restyle-loop' ? { ...row, goal: '保存中的第一版' } : row)
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue(originalGoal))
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(lastPostBody('/api/loops/update')).toEqual({
+      root: ROOT,
+      id: 'restyle-loop',
+      patch: { goal: originalGoal },
+    }))
+  })
+
+  it('保存期间未参与请求的字段改后还原不会阻挡并发服务端刷新', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      const body = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+      rows = rows.map((row) => row.id === body.id ? { ...row, ...body.patch } : row)
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '保存目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(screen.getByTestId('lp-risk'), { target: { value: 'high' } })
+    fireEvent.change(screen.getByTestId('lp-risk'), { target: { value: 'low' } })
+    rows = rows.map((row) => ({ ...row, risk: 'high' }))
+    resolveFirst?.(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+
+    await waitFor(() => expect(screen.getByTestId('lp-risk')).toHaveValue('high'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+  })
+
+  it('保存失败后清除已回到基线的 revision，后续刷新接受服务端新值', async () => {
+    const baseFetch = global.fetch
+    let firstUpdate = true
+    let resolveFirst: ((response: Response) => void) | undefined
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== '/api/loops/update' || init?.method !== 'POST' || !firstUpdate) {
+        return baseFetch(input, init)
+      }
+      firstUpdate = false
+      return new Promise<Response>((resolve) => { resolveFirst = resolve })
+    }) as typeof fetch
+
+    renderReloadCard()
+    const goal = await screen.findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '会失败的目标' } })
+    fireEvent.click(screen.getByTestId('lp-save'))
+    fireEvent.change(goal, { target: { value: '把旧版工单卡样式逐个迁移到 SaaS 卡片风' } })
+    resolveFirst?.(new Response(JSON.stringify({ ok: false, error: '写入失败' }), { status: 400 }))
+    await waitFor(() => expect(screen.getByTestId('lp-save-errors')).toBeInTheDocument())
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+
+    rows = rows.map((row) => ({ ...row, goal: '失败后的服务端新目标' }))
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+    await waitFor(() => expect(screen.getByTestId('lp-goal')).toHaveValue('失败后的服务端新目标'))
+    expect(screen.queryByTestId('lp-dirty')).toBeNull()
+  })
+
+  it.each(decisionFactChanges)('%s 变化会撤销旧确认、恢复入口焦点且不能提交', async (_label, changeFacts) => {
+    rows = [makeRow({ graduation })]
+    renderReloadCard()
+    await screen.findByTestId('lp-goal')
+    openAdv()
+    const trigger = screen.getByTestId('lp-lv-L2')
+    trigger.focus()
+    fireEvent.click(trigger)
+    expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
+
+    rows = rows.map(changeFacts)
+    fireEvent.click(screen.getByTestId('test-reload-loops'))
+
+    await waitFor(() => expect(screen.queryByTestId('lp-promote-confirm')).toBeNull())
+    expect(trigger).toHaveFocus()
+    expect(lastPostBody('/api/loops/level')).toBeNull()
+  })
+
   it('升档 L1→L2：先确认 Dialog（取消不发请求），确认后 POST /api/loops/level 并回显新档', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
@@ -749,6 +1181,19 @@ describe('LoopCard 草稿审阅（loop-init L5：徽章 + 批准/驳回动作行
     expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { goal: '调整后的目标文案' } })
     // 只改字段不含 status → 草稿标记不被清，徽章仍在（编辑不等于批准）
     expect(screen.getByTestId('lp-draft-badge')).toBeInTheDocument()
+  })
+
+  it('未保存字段草稿存在时，审阅与升档动作保持禁用，避免用旧 server 真值覆盖草稿', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    fireEvent.change(await screen.findByTestId('lp-goal'), { target: { value: '先保存再审阅' } })
+    expect(screen.getByTestId('lp-draft-approve')).toBeDisabled()
+    expect(screen.getByTestId('lp-draft-reject')).toBeDisabled()
+    expect(screen.getByTestId('lp-draft-approve')).toHaveAttribute('title', '请先保存或放弃当前 Loop 草稿')
+    openAdv()
+    expect(screen.getByTestId('lp-lv-L2')).toBeDisabled()
+    expect(lastPostBody('/api/loops/update')).toBeNull()
+    expect(lastPostBody('/api/loops/level')).toBeNull()
   })
 
   it('⑦busy 期间双钮 disabled（防双发，对齐既有 levelBusy 先例）', async () => {

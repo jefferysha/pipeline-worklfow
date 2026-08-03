@@ -13,18 +13,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The compatibility gate extracts the exact CLI bytes from the pinned N-1 release commit.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Block high and critical dependency advisories
+        run: npm run check:dependencies
+
+      - name: Release workflow anti-bypass contract
+        run: npm run check:release-workflows
+
+      - name: OpenSpec strict governance validation
+        run: npm run check:openspec
 
       # 纯静态扫描（bash + grep，零构建依赖、~1s）——放在 build/test 之前 fail-fast：
       # 一条假待做注释不值得等 60 分钟的构建+docker/real-Codex 集成测试跑完才报。
@@ -87,15 +96,16 @@ jobs:
       - name: Build CLI bundle for required real-Codex
         run: npm run bundle
 
-      # H14 real-Codex acceptance 在仓库配置 OPENAI_API_KEY 时是 canonical verify 的强门。
-      # 公开仓库或新 fork 没有该 secret 时必须显式 honest-skip，不能用空 secret 让所有 PR 永久红，
-      # 也不能把 deterministic fallback 冒充真实 Codex。
+      # H14 real-Codex acceptance 仅在 main 的 push 且仓库配置 OPENAI_API_KEY 时是强门。
+      # pull_request 必须始终显式 honest-skip，不能把 secret 交给 PR 分支控制的测试代码；
+      # main 没有该 secret 时也必须显式 honest-skip，不能把 deterministic fallback 冒充真实 Codex。
       # tools/sandcastle/build.sh local 会用上方显式生成并完成 freshness 对账的 bundle 构建镜像，
       # 同时写入镜像 attestation；定向用例再逐字节核对该 attestation。
       - name: Build and attest sandcastle:local
         run: bash tools/sandcastle/build.sh local
 
       - name: Detect real-Codex credential
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: real-codex-credential
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -107,18 +117,22 @@ jobs:
           fi
 
       - name: Required real-Codex H14 acceptance
-        if: steps.real-codex-credential.outputs.available == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.real-codex-credential.outputs.available == 'true'
         env:
           TENON_REQUIRE_REAL_CODEX: '1'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npx vitest run packages/cli/src/loop-run.real.integration.test.ts
 
-      - name: Honest skip real-Codex H14 when repository secret is unavailable
-        if: steps.real-codex-credential.outputs.available != 'true'
+      - name: Honest skip real-Codex H14 for untrusted event
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        run: echo "[HONEST SKIP] 非 main push；真实 Codex H14 未接收仓库 secret，未执行且未声明通过。"
+
+      - name: Honest skip real-Codex H14 when main secret is unavailable
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.real-codex-credential.outputs.available != 'true'
         run: echo "[HONEST SKIP] OPENAI_API_KEY 未配置；真实 Codex H14 未执行，未声明通过。"
 
       # 普通 npm test 里的 real-Codex 文件仍允许 honest-skip；配置 secret 的 canonical verify
-      # 已在上方以 TENON_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
+      # 已在 main push 上方以 TENON_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 

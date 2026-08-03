@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { WbAdvanced } from './LoopCard'
 
@@ -35,42 +36,21 @@ const ROW_CLS = 'flex items-center gap-[9px] py-[9px] text-[12.5px] text-text-2'
 /** 原 .side-card__row-value（警示变体 text-red-d 由调用点条件叠加）。 */
 const ROW_VALUE_CLS = 'flex-none font-mono text-sm font-[750] text-accent-d'
 
-interface ErrorBody {
-  error?: string
-}
-
-/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 SkillChain.readErrorDetail 的既有模式）。 */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody
-    if (typeof body?.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
-
 export function SkillHealthPanel(): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
-  const [regError, setRegError] = useState<string | null>(null)
+  const [regError, setRegError] = useState<unknown | null>(null)
 
   // 挂载拉一次（机器级技能库，与 root/workflow 无关；G22 纪律：不轮询）。失败 fail-soft。
   useEffect(() => {
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setRegError(
-            t('workbench.skh_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }),
-          )
+          setRegError(err)
         }
       })
     return () => {
@@ -104,9 +84,11 @@ export function SkillHealthPanel(): JSX.Element {
       </div>
       <div className="side-card__body pt-0.5 pb-1">
         {/* fail-soft：fetch 失败——行内错误，不谎报全绿。 */}
-        {regError && (
+        {regError !== null && (
           <p className="p-5 text-[13px] text-red" data-testid="skh-error" role="alert">
-            {regError}
+            {t('workbench.skh_error', {
+              msg: formatApiError(regError, t, { exposeServerDetail: lang === 'zh' }),
+            })}
           </p>
         )}
 

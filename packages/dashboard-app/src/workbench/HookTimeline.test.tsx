@@ -252,6 +252,31 @@ describe('纵向阶段编辑器 Hook 写回', () => {
 })
 
 describe('UserPromptSubmit 单轮旁路词', () => {
+  it('旁路词草稿上报统一 dirty；改回服务端值或保存成功后清除', async () => {
+    const onDirtyChange = vi.fn()
+    postPromptBypassResponse = () => new Response(JSON.stringify({
+      ok: true,
+      prompt_skip_keyword: 'saved-tenon',
+    }), { status: 200 })
+    renderView({ onDirtyChange })
+    const zone = await selectStage('draft')
+    const editor = await within(zone).findByTestId('wb-prompt-routing-bypass')
+    const input = within(editor).getByRole('textbox', { name: '单轮旁路词' })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(input, { target: { value: 'draft-tenon' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.change(input, { target: { value: 'no-tenon' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(input, { target: { value: 'saved-tenon' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    fireEvent.click(within(editor).getByRole('button', { name: '保存旁路词' }))
+    expect(await within(editor).findByRole('status')).toHaveTextContent('saved-tenon')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('英文 locale 的加载状态不泄漏中文', async () => {
     localStorage.setItem('tenon-dashboard-lang', 'en')
     hooksGetResponse = () => new Promise<Response>(() => {})
@@ -408,7 +433,10 @@ describe('UserPromptSubmit 单轮旁路词', () => {
     fireEvent.change(within(editor).getByRole('textbox', { name: 'One-turn bypass keyword' }), {
       target: { value: 'skip-tenon' },
     })
-    fireEvent.click(within(editor).getByRole('button', { name: 'Save bypass keyword' }))
+    const save = within(editor).getByRole('button', { name: 'Save bypass keyword' })
+    expect(save).toHaveClass('bg-btn-bg', 'text-btn-fg')
+    expect(save).not.toHaveClass('text-white')
+    fireEvent.click(save)
     expect(await within(editor).findByRole('alert')).toHaveTextContent('Bypass keyword was not saved. Try again.')
     expect(within(editor).queryByText(/磁盘|网络/)).toBeNull()
   })

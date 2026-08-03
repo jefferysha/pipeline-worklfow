@@ -3,10 +3,9 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Check } from 'lucide-react'
 import { useT } from '../i18n'
-import type { Snapshot } from '../types'
-import type { WorkflowRules } from '../model/workflowModel'
 import type { PlannedTransition } from '../model/events'
 import { fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
+import { formatApiError, throwApiError } from '../api/transport'
 import { gateEvidence, type EvidenceChip } from '../model/evidence'
 import {
   WorkflowCanvas,
@@ -20,13 +19,15 @@ import { buildCanvasGroups } from './progressCanvasModel'
 import { ProgressToolbar } from './ProgressToolbar'
 import { ProgressDrawer } from './ProgressDrawer'
 import { ProgressActions } from './ProgressActions'
+import type { ProgressViewProps } from './progressViewTypes'
+import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
+import { SnapshotInlineError } from './SnapshotInlineError'
 import {
   BADGE_TONE_CLS,
   deckMatch,
   fieldStr,
   patchLanded,
   patchMovedFromBase,
-  readErrorDetail,
   rowKeyOf,
   rowSemantics,
   stepLabel,
@@ -40,14 +41,8 @@ import {
 gsap.registerPlugin(useGSAP)
 
 /**
- * ProgressView（v10c 单项目 · 画布即操作面）—— 2026-07-14 拆单项目重做（spec：
- * design-demos/v10c-per-project-spec.md）。进度页永远单项目（App 保证 currentRoot 非空；
- * 聚合与「全部项目」总览钻取归 ProjectsView）；画布卡片即操作面，下方按项目分组的重复在制
- * 列表整段退役——change 只挂在画布相位卡里，点开 = 右滑抽屉（TaskDetail + 全部动作）。
- * 数据层/动作逻辑沿现状：selectProgress、FlatRow 投影、rowSemantics、乐观 patch、
- * killAction/transitionAction、v9-J 会话链接批量预取、抽屉焦点陷阱/Esc/scrim/滚动锁、
- * RunLogPane 轮询。
- *
+ * 单项目画布操作面：App 保证 currentRoot 非空，跨项目钻取归 ProjectsView；change 只挂在
+ * 相位卡并通过右侧抽屉操作。数据、乐观更新、会话链接和抽屉行为沿用既有模型。
  *   · 吸顶工具条即页头：状态页签（全部/等你动手/运行中/等待中 + 计数，墨线 GSAP）——页签筛选
  *     作用于画布（未命中的 change 小卡淡出，不移除）。旧「调度」芯片已下线（#6：升级为独立 AFK
  *     视图，schedulerHealth/并发上限的展示归那处；本视图不再消费）。
@@ -68,28 +63,25 @@ gsap.registerPlugin(useGSAP)
  * 呼吸环/脉冲/流动虚线走纯 CSS（progress.css，reduced 停帧），组件内零 JS 循环。
  */
 
-export interface ProgressViewProps {
-  snapshot: Snapshot | null
-  loading: boolean
-  error: string | null
-  /** 单项目进度页：App 保证 view='progress' 时 currentRoot 恒为真实项目 root（非空）——
-   *  聚合与「全部项目」总览钻取归 ProjectsView，本视图不再处理空串聚合分支。 */
-  currentRoot: string
-  /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（useWorkflowRulesMulti 契约）。 */
-  rulesByKey: ReadonlyMap<string, WorkflowRules>
-  /** 动作结果 toast（成功/失败都走这里；App 注入 showFlash）。 */
-  onToast?: (msg: string) => void
-  /** 动作成功后 resync（App 注入 useSnapshot().refresh）。 */
-  onRefresh?: () => void | Promise<void>
-  /** URL 深链路选中的 change；undefined = 宿主不控制，null = 关闭。 */
-  selectedChange?: string | null
-  /** 抽屉开合回传给宿主，用于同步可复制 URL。 */
-  onSelectedChange?: (name: string | null) => void
-}
-
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
-  const { t } = useT()
+export function ProgressView({
+  snapshot,
+  loading,
+  error,
+  currentRoot,
+  rulesByKey,
+  onToast,
+  onRefresh,
+  selectedChange,
+  onSelectedChange,
+  readOnly = false,
+}: ProgressViewProps): JSX.Element {
+  const { t, lang } = useT()
   const rootRef = useRef<HTMLElement>(null)
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+  const mounted = useRef(true)
+  const rootIdentity = useRef(currentRoot)
+  rootIdentity.current = currentRoot
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
   // 状态页签（默认全部）。
@@ -97,6 +89,16 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   // 工作流筛选保持为单一 select，避免工作流增多后横向堆满筛选栏。
   const [wfFilter, setWfFilter] = useState<string>('all')
   const [createOpen, setCreateOpen] = useState(false)
+
+  useEffect(() => {
+    setCreateOpen(false)
+  }, [currentRoot])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   // Bug4：新 snapshot 到达即按 change **逐条**清乐观 patch——只清「已落地（真值达目标）或已离开
   // 施加基线（server 已推进）」的那条，保留其余项目仍在途、尚未反映的 patch。
@@ -130,7 +132,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         changes: p.changes.map((c) => {
           const patch = patches.get(rowKeyOf(p.root, c.name))
           if (!patch) return c
-          return { ...c, phase: patch.phase ?? c.phase, fields: { ...c.fields, ...patch.fields } }
+          const phaseChanged = patch.phase !== undefined && patch.phase !== c.phase
+          return {
+            ...c,
+            phase: patch.phase ?? c.phase,
+            fields: { ...c.fields, ...patch.fields },
+            reviewHandshake: phaseChanged && c.reviewHandshake !== undefined
+              ? { status: 'not-requested' as const }
+              : c.reviewHandshake,
+          }
         }),
       })),
     }
@@ -240,19 +250,26 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const key = rowKeyOf(root, name)
     if (busyRows.has(key)) return
     setBusy(key, true)
-    const label = t('progress.act_kill')
+    const labelKey = 'progress.act_kill'
     try {
       const res = await postAfkCommand(name, root, 'cancel')
       if (!res.ok) {
-        throw new Error((await readErrorDetail(res)) || t('progress.act_fail_http', { status: res.status }))
+        await throwApiError(res, localeIdentity.current.t('progress.act_fail_http', { status: res.status }))
       }
-      onToast?.(t('progress.act_ok', { name, label }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_ok', { name, label: current.t(labelKey) }))
       pulseRow(name)
       await onRefresh?.()
     } catch (err) {
-      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_fail', {
+        label: current.t(labelKey),
+        msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+      }))
     } finally {
-      setBusy(key, false)
+      if (mounted.current && rootIdentity.current === root) setBusy(key, false)
     }
   }
 
@@ -261,18 +278,25 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const key = rowKeyOf(root, name)
     if (busyRows.has(key)) return
     setBusy(key, true)
-    const label = planned.backward ? t('progress.act_reject') : t('progress.act_pass')
+    const labelKey = planned.backward ? 'progress.act_reject' : 'progress.act_pass'
     setPatch(key, { base: baseOf(root, name), phase: planned.to })
     try {
       await postTransition(name, root, planned.event)
-      onToast?.(t('progress.act_ok', { name, label }))
+      if (!mounted.current || rootIdentity.current !== root) return
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_ok', { name, label: current.t(labelKey) }))
       pulseRow(name)
       await onRefresh?.()
     } catch (err) {
+      if (!mounted.current || rootIdentity.current !== root) return
       setPatch(key, null)
-      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+      const current = localeIdentity.current
+      onToast?.(current.t('progress.act_fail', {
+        label: current.t(labelKey),
+        msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+      }))
     } finally {
-      setBusy(key, false)
+      if (mounted.current && rootIdentity.current === root) setBusy(key, false)
     }
   }
 
@@ -464,6 +488,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   function drawerActionsFor(row: FlatRow): JSX.Element {
+    if (readOnly) return <></>
     return (
       <ProgressActions
         row={row}
@@ -496,6 +521,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       phaseLabelOf(row),
     ).text,
   }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
+  const compatibilityProject = snapshot?.projects.find((project) => project.root === currentRoot)
+  const compatibilityIssues = compatibilityProject?.compatibilityIssues ?? []
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" data-page-frame="standard" ref={rootRef}>
@@ -509,23 +536,30 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         workflow={effectiveWf}
         onDeckTab={setDeckTab}
         onWorkflow={setWfFilter}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={readOnly ? undefined : () => setCreateOpen(true)}
       />
 
-      {error && <p className="py-2 text-[13px] text-red-d" role="alert" data-testid="prg-error">{error}</p>}
+      <CanonicalStateVersionNotice
+        issues={compatibilityIssues}
+        truncated={compatibilityProject?.compatibilityIssuesTruncated}
+        loading={loading}
+        onRefresh={onRefresh}
+      />
+
+      {error && <SnapshotInlineError error={error} loading={loading} onRefresh={onRefresh} />}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
       )}
 
-      {snapshot && flatRows.length === 0 && (
+      {snapshot && flatRows.length === 0 && compatibilityIssues.length === 0 && (
         <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="prg-empty">
           {t('progress.empty')}
         </div>
       )}
 
-      {createOpen && (
+      {!readOnly && createOpen && (
         <CreateChangeDialog
           root={currentRoot}
           onClose={() => setCreateOpen(false)}

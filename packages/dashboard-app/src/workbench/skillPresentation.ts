@@ -105,7 +105,7 @@ export function resolvedSkillId(token: string, registry: readonly WbSkillEntry[]
   return alternatives.find((id) => registry?.some((entry) => entry.name === id && entry.installed)) ?? alternatives[0] ?? token
 }
 
-export function skillPresentation(token: string, registry?: readonly WbSkillEntry[] | null): {
+export function skillPresentation(token: string, registry?: readonly WbSkillEntry[] | null, lang: 'zh' | 'en' = 'zh'): {
   id: string
   name: string
   description: string
@@ -115,14 +115,20 @@ export function skillPresentation(token: string, registry?: readonly WbSkillEntr
   const known = PURPOSES[id]
   const registryDescription = registry?.find((entry) => entry.name === id)?.description?.trim()
   const hasChinese = registryDescription ? /[\u3400-\u9fff]/.test(registryDescription) : false
-  const description = known?.description
-    ?? (hasChinese ? registryDescription : undefined)
-    ?? `用于执行“${humanize(id)}”相关工作；具体规则来自已安装 Skill。`
+  const description = lang === 'en'
+    ? (!hasChinese && registryDescription
+        ? registryDescription
+        : `Runs the installed ${humanize(id)} Skill for this stage; its installed definition remains authoritative.`)
+    : known?.description
+      ?? (hasChinese ? registryDescription : undefined)
+      ?? `用于执行“${humanize(id)}”相关工作；具体规则来自已安装 Skill。`
   return {
     id,
     // Skill 名称是运行时契约的一部分，不能为了“人话”而改名。中文用途只作为说明。
     name: id,
     description,
-    technicalTitle: `${known?.name ?? humanize(id)}：${description}${registryDescription && registryDescription !== description ? ` 原始说明：${registryDescription}` : ''}${token.includes('|') ? ` 系统已从兼容候选 ${token} 中采用 ${id}。` : ''}`,
+    technicalTitle: lang === 'en'
+      ? `${humanize(id)}: ${description}${registryDescription && registryDescription !== description && !hasChinese ? ` Original description: ${registryDescription}` : ''}${token.includes('|') ? ` Resolved ${id} from compatible candidates ${token}.` : ''}`
+      : `${known?.name ?? humanize(id)}：${description}${registryDescription && registryDescription !== description ? ` 原始说明：${registryDescription}` : ''}${token.includes('|') ? ` 系统已从兼容候选 ${token} 中采用 ${id}。` : ''}`,
   }
 }

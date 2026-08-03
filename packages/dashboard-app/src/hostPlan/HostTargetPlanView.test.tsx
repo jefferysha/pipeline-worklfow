@@ -164,17 +164,17 @@ describe('HostTargetPlanView', () => {
       .toBeInTheDocument()
     expect(within(screen.getByTestId('host-selected-context')).getByText('内置 Skills'))
       .toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
+    expect(screen.getByRole('status')).toHaveTextContent('选择“安装”或“更新”')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
-    expect(screen.getByRole('status')).toHaveTextContent('正在加载 Codex 的 Setup 计划')
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载 Codex 的 安装 计划')
     expect(loadPlan).toHaveBeenCalledWith('codex', 'setup', expect.any(AbortSignal))
 
     resolvePlan?.(setupPlan)
     const preview = await screen.findByTestId('host-plan-preview')
     expect(preview).toHaveTextContent('tenon setup --codex')
     expect(screen.getByTestId('host-plan-ready-announcement')).toHaveTextContent(
-      'Codex 的 Setup 计划已就绪',
+      'Codex 的 安装 计划已就绪',
     )
     expect(preview).toHaveTextContent('登记宿主 marketplace')
     expect(preview).toHaveTextContent('安装 Tenon 插件')
@@ -186,7 +186,7 @@ describe('HostTargetPlanView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '选择 Cursor' }))
     expect(screen.queryByText('tenon setup --codex')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
+    expect(screen.getByRole('status')).toHaveTextContent('选择“安装”或“更新”')
   })
 
   it('keeps a stable master-detail layout instead of expanding and reflowing the selected card', async () => {
@@ -257,10 +257,10 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('宿主计划服务暂时不可用')
 
-    fireEvent.click(screen.getByRole('button', { name: '重试 Setup 计划' }))
+    fireEvent.click(screen.getByRole('button', { name: '重试“安装”计划' }))
     expect(await screen.findByTestId('host-plan-preview')).toHaveTextContent('tenon setup --codex')
     expect(loadPlan).toHaveBeenNthCalledWith(2, 'codex', 'setup', expect.any(AbortSignal))
   })
@@ -274,7 +274,7 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
     expect(await screen.findByText('命令已复制。')).toHaveAttribute('role', 'status')
@@ -290,7 +290,7 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
     expect(await screen.findByText('复制失败，请手动选择命令。')).toHaveAttribute('role', 'status')
@@ -308,7 +308,7 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     fireEvent.click(await screen.findByRole('button', { name: '复制命令' }))
 
     expect(await screen.findByText('复制失败，请手动选择命令。')).toHaveAttribute('role', 'status')
@@ -324,13 +324,13 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     fireEvent.click(screen.getByRole('button', { name: '选择 Cursor' }))
     resolvePlan?.(setupPlan)
 
     await waitFor(() => {
       expect(screen.queryByTestId('host-plan-preview')).toBeNull()
-      expect(screen.getByRole('status')).toHaveTextContent('选择 Setup 或 Update')
+      expect(screen.getByRole('status')).toHaveTextContent('选择“安装”或“更新”')
     })
   })
 
@@ -349,7 +349,7 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
     fireEvent.click(screen.getByRole('button', { name: '选择 Cursor' }))
 
     expect(planSignal).toBeInstanceOf(AbortSignal)
@@ -448,7 +448,7 @@ describe('HostTargetPlanView', () => {
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '选择 Codex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Setup' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
 
     expect(await screen.findByText('host-plan.step.future-step')).toBeInTheDocument()
     expect(screen.getByText('host-plan.notice.future-notice')).toBeInTheDocument()

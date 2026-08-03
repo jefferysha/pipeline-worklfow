@@ -17,6 +17,7 @@ import type {
 } from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
+import type { WorkflowDefinitionStatusResponse } from './workflowDefinitionStatus.js'
 
 /** Tenon 产品自有路径。宿主资产发现由 DashboardServerOptions.hostHome 独立表达。 */
 export interface ServerPaths extends ProductPaths {
@@ -39,10 +40,17 @@ export interface ChangeSnapshot {
   fields: Record<FieldName, string | string[]>
   /** Exact immutable workflow plan used by this Change. */
   workflowPlanFingerprint: string
+  /**
+   * Frozen/current workflow diagnostic derived from the same canonical state read as this snapshot.
+   * Present on the exact-Change reader; optional on the bulk snapshot for rolling compatibility.
+   */
+  workflowDefinition?: WorkflowDefinitionStatusResponse
   /** Rules projected from the same immutable plan, never from the current workflow name. */
   workflowRules: WorkflowRulesSnapshot
   /** Change/Track-effective guard projection; intentionally not part of immutable plan identity. */
   workflowExecution: WorkflowExecutionSnapshot
+  /** Current canonical exact-event review receipt, projected without authority or host details. */
+  reviewHandshake: ReviewHandshakeSnapshot
   /** OpenSpec tasks.md projected onto the workflow stages; omitted only for an older server response. */
   todo?: PipelineTodoProjection
   /** Governed OpenSpec artifact/reader evidence, calculated from the immutable document ledger. */
@@ -53,6 +61,16 @@ export interface ChangeSnapshot {
    */
   terminalActivity?: TerminalActivitySnapshot
 }
+
+export type ReviewHandshakeSnapshot =
+  | { status: 'not-requested' }
+  | { status: 'pending'; event: string; requestedAt: string }
+  | {
+      status: 'approved'
+      event: string
+      requestedAt: string
+      acknowledgedAt: string
+    }
 
 export interface TerminalActivitySnapshot {
   sessionId: string
@@ -95,11 +113,23 @@ export interface WorkflowExecutionSnapshot {
   readinessByTransition: ReadinessByTransition
 }
 
+export interface CanonicalStateCompatibilityIssueSnapshot {
+  kind: 'unsupported-canonical-version'
+  change: string
+  foundVersion: number
+  supportedVersion: number
+  action: 'upgrade-runtime'
+}
+
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  /** Canonical Changes that this runtime intentionally refuses to decode. */
+  compatibilityIssues?: CanonicalStateCompatibilityIssueSnapshot[]
+  /** Literal marker: more compatibility issues exist beyond the bounded 100-item response. */
+  compatibilityIssuesTruncated?: true
   /** Remove only after the declared rolling compatibility window ends. */
   workflowRules: Record<string, LegacyWorkflowRulesSnapshot>
   error?: string

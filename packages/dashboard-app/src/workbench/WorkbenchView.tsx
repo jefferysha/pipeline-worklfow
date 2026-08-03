@@ -2,28 +2,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { deleteWorkflowDef, fetchWorkflow, fetchWorkflowNames, postWorkflowDef } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
-import { isPhase } from '../types'
+import { PHASES } from '../types'
 import { revealDialog, revealList } from '../shared/motion'
 import { PageHeader } from '../shared/PageHeader'
 import './workbench.css'
-import { LOCKED_IDS, useHooksConfig } from './HookTimeline'
+import { useHooksConfig } from './HookTimeline'
 import { useLoops } from './LoopCard'
 import { LaneMandatorySkills, TrackSelector, useMandatorySkills } from './mandatorySkills'
-import { type BoardLane, type LanePatch } from './OrchestrationBoard'
 import { ExecutionTimelineComposer } from './ExecutionTimelineComposer'
 import { SkillOrchestrationDialog } from './SkillOrchestrationDialog'
-import { readErrorDetail, readSaveErrors, STAGE_ID_RE } from './workbenchApiDecoders'
+import { readSaveErrors, readWorkflowDeleteResponse } from './workbenchApiDecoders'
 import { useRecentWorkflowHistory } from './useRecentWorkflowHistory'
 import { WorkbenchDialogs } from './WorkbenchDialogs'
 import { WorkbenchHeader } from './WorkbenchHeader'
 import { WorkbenchGovernanceDialog } from './WorkbenchGovernanceDialog'
+import { readWorkflowWriteSuccess } from './workbenchWriteResponse'
 import type { WorkbenchViewProps } from './workbenchViewTypes'
+import { useWorkbenchBoard } from './useWorkbenchBoard'
+import { useStageDraftEditor } from './useStageDraftEditor'
+import { useWorkbenchDirtyState } from './useWorkbenchDirtyState'
 import {
-  DEFAULT_DEF,
   addSkillToDef,
-  governedWorkflow,
+  buildDefaultDef,
+  editLaneInDef,
   moveSkillInDef,
   removeSkillFromDef,
   removeStageFromDef,
@@ -31,6 +35,7 @@ import {
   setLaneGuardInDef,
   setSkillDepInDef,
   stageCounts,
+  workflowForCreate,
   type WbStepDef,
   type WbWorkflowDef,
 } from './workbenchDefinition'
@@ -59,64 +64,116 @@ export type {
   WbWorkflowDef,
 } from './workbenchDefinition'
 gsap.registerPlugin(useGSAP)
-export function WorkbenchView({ root, onToggleError, snapshot = null }: WorkbenchViewProps): JSX.Element {
-  const { t } = useT()
+export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyChange }: WorkbenchViewProps): JSX.Element {
+  const { t, lang } = useT()
+  const defaultLabels = useMemo(
+    () => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])),
+    [lang, t],
+  )
+  const localizedDefaultDef = useMemo(() => buildDefaultDef(defaultLabels), [defaultLabels])
   const [names, setNames] = useState<string[] | null>(null)
-  const [namesError, setNamesError] = useState<string | null>(null)
+  const [namesError, setNamesError] = useState<unknown | null>(null)
   const [wfName, setWfName] = useState<string | null>(null)
   const [def, setDef] = useState<WbWorkflowDef | null>(null)
-  const [defError, setDefError] = useState<string | null>(null)
+  const [defError, setDefError] = useState<unknown | null>(null)
   const [menuOpen, setMenuOpen] = useState(false); const [stageId, setStageId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' } | { kind: 'error'; errors: string[] }>({ kind: 'idle' })
   const [saving, setSaving] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
-  const [addStageOpen, setAddStageOpen] = useState(false)
-  const [stageDraftName, setStageDraftName] = useState('')
-  const [stageDraftId, setStageDraftId] = useState('')
-  const [stageIdTouched, setStageIdTouched] = useState(false)
-  const addStageNameRef = useRef<HTMLInputElement>(null)
   const [workflowCreateMode, setWorkflowCreateMode] = useState<'new' | 'copy' | null>(null)
   const [workflowDraftName, setWorkflowDraftName] = useState('')
+  const workflowDraftBaseline = useRef('')
   const [workflowOpBusy, setWorkflowOpBusy] = useState(false)
   const [workflowOpErrors, setWorkflowOpErrors] = useState<string[]>([])
-  const [workflowDeleteOpen, setWorkflowDeleteOpen] = useState(false)
+  const [workflowDeleteTarget, setWorkflowDeleteTarget] = useState<{ root: string; name: string } | null>(null)
   const [workflowDeleteBusy, setWorkflowDeleteBusy] = useState(false)
   const [workflowDeleteError, setWorkflowDeleteError] = useState<{
-    message: string
+    summary: string
     references: Array<{ kind?: string; source?: string }>
     blockers: Array<{ source?: string; detail?: string }>
   } | null>(null)
   const workflowNameRef = useRef<HTMLInputElement>(null); const rootRef = useRef<HTMLElement>(null)
+  const rootIdentity = useRef(root)
+  const workflowIdentity = useRef<string | null>(null)
+  const saveGeneration = useRef(0)
+  const createGeneration = useRef(0)
+  const deleteGeneration = useRef(0)
+  const namesGeneration = useRef(0)
+  const localeIdentity = useRef({ t, lang })
+  rootIdentity.current = root
+  workflowIdentity.current = wfName
+  localeIdentity.current = { t, lang }
   const [advancedOpen, setAdvancedOpen] = useState(false); const [skillEditorOpen, setSkillEditorOpen] = useState(false)
+  const [promptSkipDirty, setPromptSkipDirty] = useState(false)
   const defSnapshotRef = useRef<string | null>(null)
-  const hooksConfig = useHooksConfig(root, onToggleError)
+  const {
+    addStageOpen, setAddStageOpen, stageDraftName, setStageDraftName, stageDraftId, setStageDraftId,
+    stageIdTouched, setStageIdTouched, addStageNameRef, stageIdError, canSubmitStage,
+    closeAddStage, confirmAddStage, draftDirty: addStageDraftDirty,
+  } = useStageDraftEditor({ def, stageId, setDef, setStageId })
+  const hooksConfig = useHooksConfig(root, onToggleError, setPromptSkipDirty)
   const mandatory = useMandatorySkills(root)
   const { recent, recentSilent } = useRecentWorkflowHistory(snapshot, root, wfName)
   const loops = useLoops(root)
   useEffect(() => {
+    setSaveStatus((current) => current.kind === 'error' ? { kind: 'idle' } : current)
+    setWorkflowOpErrors([])
+    setWorkflowDeleteError(null)
+  }, [lang])
+  useEffect(() => {
+    const targetRoot = root
+    const generation = ++namesGeneration.current
+    ++saveGeneration.current
+    ++createGeneration.current
+    ++deleteGeneration.current
+    setNames(null)
+    setNamesError(null)
+    setWfName(null)
+    setDef(null)
+    setDefError(null)
+    setMenuOpen(false)
+    setSaving(false)
+    setPendingSwitch(null)
+    setAddStageOpen(false)
+    setWorkflowCreateMode(null)
+    setWorkflowDraftName('')
+    workflowDraftBaseline.current = ''
+    setWorkflowOpBusy(false)
+    setWorkflowOpErrors([])
+    setWorkflowDeleteTarget(null)
+    setWorkflowDeleteBusy(false)
+    setWorkflowDeleteError(null)
+    setAdvancedOpen(false)
+    setSkillEditorOpen(false)
+    setPromptSkipDirty(false)
+    defSnapshotRef.current = null
     let cancelled = false
-    fetchWorkflowNames(root)
+    fetchWorkflowNames(targetRoot)
       .then((names) => {
-        if (cancelled) return
+        if (cancelled || generation !== namesGeneration.current || rootIdentity.current !== targetRoot) return
         setNames(names)
         setNamesError(null)
-        setWfName((cur) => cur ?? names[0] ?? 'default')
+        setWfName(names[0] ?? 'default')
       })
       .catch((err: unknown) => {
-        if (cancelled) return
+        if (cancelled || generation !== namesGeneration.current || rootIdentity.current !== targetRoot) return
         setNames([])
-        setNamesError(t('workbench.names_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
-        setWfName((cur) => cur ?? 'default')
+        setNamesError(err)
+        setWfName('default')
       })
     return () => {
       cancelled = true
+      ++namesGeneration.current
+      ++saveGeneration.current
+      ++createGeneration.current
+      ++deleteGeneration.current
     }
-  }, [root, t])
+  }, [root])
   useEffect(() => {
     if (!wfName) return
     setSaveStatus({ kind: 'idle' }) // 上一个 workflow 的保存态不跨名残留
     if (wfName === 'default') {
-      setDef(DEFAULT_DEF)
+      setDef(localizedDefaultDef)
       setDefError(null)
       defSnapshotRef.current = null // default 只读态：永不参与 dirty 判定
       return
@@ -126,10 +183,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     setDefError(null)
     defSnapshotRef.current = null
     fetchWorkflow(wfName, root)
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<WbWorkflowDef>
-      })
       .then((body) => {
         if (cancelled) return
         setDef(body)
@@ -138,36 +191,33 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setDefError(t('workbench.def_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        setDefError(err)
       })
     return () => {
       cancelled = true
     }
-  }, [root, wfName, t])
+  }, [root, wfName])
+  useEffect(() => {
+    if (wfName === 'default') setDef(localizedDefaultDef)
+  }, [localizedDefaultDef, wfName])
   useEffect(() => {
     if (!def) return
     setStageId((cur) => (cur && def.steps.some((s) => s.id === cur) ? cur : def.steps[0]?.id ?? null))
   }, [def])
   const readonlyWf = wfName === 'default'
+  const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
+  const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
-  function editLane(laneId: string, patch: LanePatch): void {
-    setDef((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        steps: prev.steps.map((s) => {
-          if (s.id !== laneId) return s
-          const next: WbStepDef = { ...s }
-          if (patch.label !== undefined) next.label = patch.label
-          if (patch.gate !== undefined) next.gate = patch.gate
-          if (patch.outputs !== undefined) {
-            const byField = new Map(s.outputs.map((o) => [o.field, o]))
-            next.outputs = patch.outputs.map((f) => byField.get(f) ?? { field: f, type: 'string' as const })
-          }
-          return next
-        }),
-      }
-    })
+  const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
+  const { setSourceDirty } = useWorkbenchDirtyState({
+    localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
+    onDirtyChange,
+  })
+  const reportTrackDirty = useCallback((value: boolean) => {
+    setSourceDirty('track', value)
+  }, [setSourceDirty])
+  function editLane(laneId: string, patch: Parameters<typeof editLaneInDef>[2]): void {
+    setDef((prev) => (prev ? editLaneInDef(prev, laneId, patch) : prev))
   }
   function replaceStep(updated: WbStepDef): void {
     setDef((prev) => prev === null
@@ -182,83 +232,53 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       return rest[0]?.id ?? null
     })
   }
-  const stageIdTrimmed = stageDraftId.trim()
-  const stageIdInvalid = stageIdTrimmed.length > 0 && !STAGE_ID_RE.test(stageIdTrimmed)
-  const stageIdDup = stageIdTrimmed.length > 0 && !stageIdInvalid && (def?.steps.some((s) => s.id === stageIdTrimmed) ?? false)
-  const stageIdError = stageIdInvalid
-    ? t('workbench.add_stage_id_invalid')
-    : stageIdDup
-      ? t('workbench.add_stage_id_dup')
-      : null
-  const canSubmitStage = stageIdTrimmed.length > 0 && !stageIdInvalid && !stageIdDup
-  function closeAddStage(): void {
-    setAddStageOpen(false)
-    setStageDraftName('')
-    setStageDraftId('')
-    setStageIdTouched(false)
-  }
-  function confirmAddStage(): void {
-    if (!canSubmitStage || !def) return
-    const id = stageIdTrimmed
-    const label = stageDraftName.trim()
-    setDef((prev) => {
-      if (!prev) return prev
-      const steps = prev.steps
-      const selIdx = stageId ? steps.findIndex((s) => s.id === stageId) : -1
-      const insertIndex = selIdx >= 0 ? selIdx + 1 : steps.length
-      const prevStep = insertIndex > 0 ? steps[insertIndex - 1] : undefined
-      const nextStep = steps[insertIndex] // 插入前的「原下一个 step」，末尾插入时为 undefined
-      let newTransitions: WbStepDef['transitions'] = []
-      let steppedSteps = steps
-      if (prevStep && nextStep) {
-        const fwdIdx = prevStep.transitions.findIndex((tr) => tr.to === nextStep.id)
-        if (fwdIdx >= 0) {
-          newTransitions = [{ event: `${id}-complete`, to: nextStep.id }]
-          steppedSteps = steps.map((s, i) =>
-            i === insertIndex - 1
-              ? { ...s, transitions: s.transitions.map((tr, ti) => (ti === fwdIdx ? { ...tr, to: id } : tr)) }
-              : s,
-          )
-        }
-      } else if (prevStep && !nextStep) {
-        steppedSteps = steps.map((s, i) =>
-          i === insertIndex - 1
-            ? { ...s, transitions: [...s.transitions, { event: `${s.id}-complete`, to: id }] }
-            : s,
-        )
-      }
-      const newStep: WbStepDef = {
-        id, label, gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: newTransitions,
-      }
-      const finalSteps = [...steppedSteps]
-      finalSteps.splice(insertIndex, 0, newStep)
-      return { ...prev, steps: finalSteps }
-    })
-    setStageId(id)
-    closeAddStage()
-  }
   async function save(): Promise<void> {
     if (!def || !wfName || readonlyWf || !dirty || saving) return
+    const targetRoot = root
+    const targetWorkflow = wfName
+    const generation = ++saveGeneration.current
     setSaving(true)
     setSaveStatus({ kind: 'idle' })
     try {
-      const res = await postWorkflowDef(wfName, { ...def, root })
+      const res = await postWorkflowDef(targetWorkflow, { ...def, root: targetRoot })
       if (!res.ok) {
-        setSaveStatus({ kind: 'error', errors: await readSaveErrors(res) })
+        const locale = localeIdentity.current
+        const errors = await readSaveErrors(
+          res,
+          locale.t('workbench.save_unauthorized'),
+          locale.t('common.request_http_error', { status: res.status }),
+          locale.lang === 'zh',
+        )
+        if (generation !== saveGeneration.current || rootIdentity.current !== targetRoot || workflowIdentity.current !== targetWorkflow) return
+        setSaveStatus({
+          kind: 'error',
+          errors,
+        })
         return
       }
-      invalidateWorkflowRules(root, wfName)
+      const validSuccess = await readWorkflowWriteSuccess(res)
+      if (generation !== saveGeneration.current || rootIdentity.current !== targetRoot || workflowIdentity.current !== targetWorkflow) return
+      if (!validSuccess) { setSaveStatus({ kind: 'error', errors: [localeIdentity.current.t('common.invalid_response')] }); return }
+      invalidateWorkflowRules(targetRoot, targetWorkflow)
       defSnapshotRef.current = JSON.stringify(def)
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
-      setSaveStatus({ kind: 'error', errors: [err instanceof Error ? err.message : t('workbench.network_error')] })
+      if (generation === saveGeneration.current && rootIdentity.current === targetRoot && workflowIdentity.current === targetWorkflow) {
+        setSaveStatus({ kind: 'error', errors: [formatApiError(err, localeIdentity.current.t)] })
+      }
     } finally {
-      setSaving(false)
+      if (generation === saveGeneration.current && rootIdentity.current === targetRoot && workflowIdentity.current === targetWorkflow) {
+        setSaving(false)
+      }
     }
   }
   function switchTo(name: string): void {
+    ++saveGeneration.current
+    workflowIdentity.current = name
+    setSaving(false)
+    setSaveStatus({ kind: 'idle' })
     setWfName(name)
-    setDef(name === 'default' ? DEFAULT_DEF : null)
+    setDef(name === 'default' ? localizedDefaultDef : null)
     setDefError(null)
   }
   function requestSwitch(name: string): void {
@@ -279,99 +299,120 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const workflowNameDuplicate = workflowName.length > 0 && (workflowName === 'default' || (names ?? []).includes(workflowName))
   const canSubmitWorkflow = workflowName.length > 0 && !workflowNameInvalid && !workflowNameDuplicate && !workflowOpBusy
   function openWorkflowCreate(mode: 'new' | 'copy'): void {
+    if (saving) return
     setMenuOpen(false)
+    const initialName = mode === 'copy' ? `${wfName ?? 'workflow'}-copy` : ''
+    workflowDraftBaseline.current = initialName
     setWorkflowCreateMode(mode)
-    setWorkflowDraftName(mode === 'copy' ? `${wfName ?? 'workflow'}-copy` : '')
+    setWorkflowDraftName(initialName)
     setWorkflowOpErrors([])
   }
   function closeWorkflowCreate(): void {
     if (workflowOpBusy) return
     setWorkflowCreateMode(null)
     setWorkflowDraftName('')
+    workflowDraftBaseline.current = ''
     setWorkflowOpErrors([])
   }
   async function confirmWorkflowCreate(): Promise<void> {
     if (!canSubmitWorkflow || !workflowCreateMode) return
     if (workflowCreateMode === 'copy' && !def) return
-    const nextDef = workflowCreateMode === 'copy'
-      ? wfName === 'default'
-        ? governedWorkflow(workflowName)
-        : { ...def, name: workflowName, steps: (def?.steps ?? []).map((step) => ({
-          ...step,
-          skills: step.skills.map((skill) => ({ ...skill, depends_on: skill.depends_on ? [...skill.depends_on] : undefined })),
-          inputs: step.inputs.map((field) => ({ ...field })),
-          outputs: step.outputs.map((field) => ({ ...field })),
-          guards: step.guards.map((guard) => ({ ...guard })),
-          transitions: step.transitions.map((transition) => ({ ...transition })),
-        })) }
-      : governedWorkflow(workflowName)
+    const targetRoot = root
+    const generation = ++createGeneration.current
+    const nextDef = workflowForCreate(workflowCreateMode, readonlyWf, def, workflowName, defaultLabels)
+    if (nextDef === null) return
     setWorkflowOpBusy(true)
     setWorkflowOpErrors([])
     try {
-      const res = await postWorkflowDef(workflowName, { root, ...nextDef })
+      const res = await postWorkflowDef(workflowName, { root: targetRoot, ...nextDef })
       if (!res.ok) {
-        setWorkflowOpErrors(await readSaveErrors(res))
+        const locale = localeIdentity.current
+        const errors = await readSaveErrors(
+          res,
+          locale.t('workbench.save_unauthorized'),
+          locale.t('common.request_http_error', { status: res.status }),
+          locale.lang === 'zh',
+        )
+        if (generation !== createGeneration.current || rootIdentity.current !== targetRoot) return
+        setWorkflowOpErrors(errors)
         return
       }
-      invalidateWorkflowRules(root, workflowName)
+      const validSuccess = await readWorkflowWriteSuccess(res)
+      if (generation !== createGeneration.current || rootIdentity.current !== targetRoot) return
+      if (!validSuccess) { setWorkflowOpErrors([localeIdentity.current.t('common.invalid_response')]); return }
+      invalidateWorkflowRules(targetRoot, workflowName)
       setNames((prev) => [...new Set([...(prev ?? []), workflowName])].sort())
       setWorkflowCreateMode(null)
       setWorkflowDraftName('')
+      workflowDraftBaseline.current = ''
       switchTo(workflowName)
     } catch (err) {
-      setWorkflowOpErrors([err instanceof Error ? err.message : t('workbench.network_error')])
+      if (generation === createGeneration.current && rootIdentity.current === targetRoot) {
+        setWorkflowOpErrors([formatApiError(err, localeIdentity.current.t)])
+      }
     } finally {
-      setWorkflowOpBusy(false)
+      if (generation === createGeneration.current && rootIdentity.current === targetRoot) {
+        setWorkflowOpBusy(false)
+      }
     }
   }
   function openWorkflowDelete(): void {
-    if (!wfName || wfName === 'default') return
+    if (saving || !wfName || wfName === 'default') return
     setWorkflowDeleteError(null)
-    setWorkflowDeleteOpen(true)
+    setWorkflowDeleteTarget({ root, name: wfName })
   }
   function closeWorkflowDelete(): void {
     if (workflowDeleteBusy) return
-    setWorkflowDeleteOpen(false)
+    setWorkflowDeleteTarget(null)
     setWorkflowDeleteError(null)
   }
   async function confirmWorkflowDelete(): Promise<void> {
-    if (!wfName || wfName === 'default' || workflowDeleteBusy) return
-    const deleting = wfName
+    const target = workflowDeleteTarget
+    if (!target || target.root !== root || target.name !== wfName || workflowDeleteBusy) {
+      setWorkflowDeleteTarget(null)
+      return
+    }
+    const deleting = target.name
+    const targetRoot = target.root
+    const generation = ++deleteGeneration.current
     setWorkflowDeleteBusy(true)
     setWorkflowDeleteError(null)
     try {
-      const res = await deleteWorkflowDef(deleting, root)
-      if (!res.ok) {
-        let body: {
-          error?: string
-          code?: string
-          references?: Array<{ kind?: string; source?: string }>
-          blockers?: Array<{ source?: string; detail?: string }>
-        } = {}
-        try { body = await res.json() as typeof body } catch {  }
+      const res = await deleteWorkflowDef(deleting, targetRoot)
+      const outcome = await readWorkflowDeleteResponse(res)
+      if (generation !== deleteGeneration.current || rootIdentity.current !== targetRoot) return
+      if (outcome.kind !== 'success') {
+        const locale = localeIdentity.current
+        const body = outcome.kind === 'error' ? outcome.body : null
         setWorkflowDeleteError({
-          message: body.error ?? (body.code === 'WORKFLOW_REFERENCED'
-            ? t('workbench.workflow_delete_referenced')
-            : t('workbench.workflow_delete_failed', { status: res.status })),
-          references: Array.isArray(body.references) ? body.references : [],
-          blockers: Array.isArray(body.blockers) ? body.blockers : [],
+          summary: outcome.kind === 'invalid'
+            ? locale.t('common.invalid_response')
+            : (locale.lang === 'zh' ? body?.error : undefined) ?? (body?.code === 'WORKFLOW_REFERENCED'
+              ? locale.t('workbench.workflow_delete_referenced')
+              : locale.t('workbench.workflow_delete_failed', { status: res.status })),
+          references: locale.lang === 'zh' ? body?.references ?? [] : [],
+          blockers: locale.lang === 'zh' ? body?.blockers ?? [] : [],
         })
         return
       }
-      invalidateWorkflowRules(root, deleting)
+      invalidateWorkflowRules(targetRoot, deleting)
       const remaining = (names ?? []).filter((name) => name !== deleting)
       setNames(remaining)
-      setWorkflowDeleteOpen(false)
+      setWorkflowDeleteTarget(null)
       setWorkflowDeleteError(null)
       switchTo(remaining[0] ?? 'default')
     } catch (err) {
-      setWorkflowDeleteError({
-        message: err instanceof Error ? err.message : t('workbench.network_error'),
-        references: [],
-        blockers: [],
-      })
+      if (generation === deleteGeneration.current && rootIdentity.current === targetRoot) {
+        setWorkflowDeleteError({
+          summary: formatApiError(err, localeIdentity.current.t),
+          references: [],
+          blockers: [],
+        })
+      }
     } finally {
-      setWorkflowDeleteBusy(false)
+      if (generation === deleteGeneration.current && rootIdentity.current === targetRoot) {
+        setWorkflowDeleteBusy(false)
+      }
     }
   }
   useGSAP(() => {
@@ -391,68 +432,18 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       if (backdrop && content) revealDialog(backdrop, content)
     }
   }, { scope: rootRef, dependencies: [pendingSwitch] })
-  const stepName = useCallback(
-    (s: WbStepDef): string => s.label || (isPhase(s.id) ? t(`phases.${s.id}`) : s.id),
-    [t],
-  )
   const { hooks: hookMetas, matrix: hookMatrix } = hooksConfig
-  const hookCountOf = useCallback(
-    (stageId: string): number | undefined =>
-      hookMetas === null ? undefined : hookMetas.filter((h) => !(`${h.id}.${stageId}` in hookMatrix)).length,
-    [hookMetas, hookMatrix],
-  )
-  const ambientByStage = useMemo(
-    () => (wfName ? stageCounts(snapshot, root, wfName) : {}),
-    [snapshot, root, wfName],
-  )
-  const hookLockedOf = useCallback(
-    (): number | undefined =>
-      hookMetas === null ? undefined : hookMetas.filter((h) => !h.configurable && LOCKED_IDS.has(h.id)).length,
-    [hookMetas],
-  )
-  const boardLanes: BoardLane[] = useMemo(() => {
-    if (!def) return []
-    return def.steps.map((s, i) => {
-      const next = def.steps[i + 1]
-      const fwd = next ? s.transitions.find((tr) => tr.to === next.id) : undefined
-      const amb = ambientByStage[s.id]
-      return {
-        id: s.id,
-        name: stepName(s),
-        gate: s.gate,
-        skills: readonlyWf ? undefined : [...new Set(s.skills.map((sk) => sk.id))],
-        skillDeps: readonlyWf
-          ? undefined
-          : Object.fromEntries(
-              s.skills.map((sk) => {
-                const inLane = new Set(s.skills.map((k) => k.id))
-                return [sk.id, (sk.depends_on ?? []).filter((d) => inLane.has(d))]
-              }),
-            ),
-        outputs: s.outputs.map((o) => o.field),
-        nonemptyGuard: readonlyWf ? undefined : s.guards.some((g) => g.type === 'nonempty-output'),
-        hooksCount: hookCountOf(s.id),
-        hooksLocked: hookLockedOf(),
-        linkEvent: fwd?.event ?? null,
-        count: amb?.count ?? 0,
-        running: amb?.running ?? false,
-      }
-    })
-  }, [def, stepName, hookCountOf, hookLockedOf, ambientByStage, readonlyWf])
+  const { boardLanes, summary } = useWorkbenchBoard({
+    def,
+    defaultWorkflow: readonlyWf,
+    root,
+    snapshot,
+    readonlyWorkflow: readonlyWf,
+    hookMetas,
+    hookMatrix,
+    t,
+  })
   const selectedStep = def?.steps.find((step) => step.id === stageId) ?? null
-  const summary = useMemo(() => {
-    if (!def) return null
-    const skillIds = new Set<string>()
-    for (const s of def.steps) for (const sk of s.skills) skillIds.add(sk.id)
-    return {
-      stages: def.steps.length,
-      gates: def.steps.filter((s) => s.gate !== null).length,
-      skills: skillIds.size,
-      hooks: hookMetas === null
-        ? null
-        : hookMetas.filter((h) => def.steps.every((s) => !(`${h.id}.${s.id}` in hookMatrix))).length,
-    }
-  }, [def, hookMetas, hookMatrix])
   const { rules: rulesByKey } = useWorkflowRulesMulti(names && names.length > 0 ? [{ root, names }] : [])
   const menuNames = useMemo(() => [...(names ?? []), 'default'], [names])
   const stagesCountOf = (name: string): number | null =>
@@ -473,8 +464,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         dirty={dirty}
         saving={saving}
         saveStatus={saveStatus}
-        namesError={namesError}
-        defError={defError}
+        namesError={namesErrorText}
+        defError={defErrorText}
         onMenuOpen={setMenuOpen}
         onSwitch={requestSwitch}
         onCreate={openWorkflowCreate}
@@ -485,7 +476,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
       {def && (
         <>
           <div className="mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm" data-testid="wb-track-context">
-            <TrackSelector state={mandatory} />
+            <TrackSelector state={mandatory} onDirtyChange={reportTrackDirty} />
           </div>
           <ExecutionTimelineComposer
             workflowName={def.name}
@@ -517,7 +508,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         </>
       )}
       {!def && !defError && <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
-      {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} />}
+      {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} onDirtyChange={setSourceDirty} />}
       {skillEditorOpen && selectedLane && (
         <SkillOrchestrationDialog
           lane={selectedLane}
@@ -545,7 +536,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         canSubmitWorkflow={canSubmitWorkflow}
         onCloseWorkflowCreate={closeWorkflowCreate}
         onConfirmWorkflowCreate={() => void confirmWorkflowCreate()}
-        deleteOpen={workflowDeleteOpen}
+        deleteOpen={workflowDeleteTarget !== null}
         deleteBusy={workflowDeleteBusy}
         deleteError={workflowDeleteError}
         dirty={dirty}

@@ -68,17 +68,18 @@ separate usage-based billing. Keep keys out of argv, logs, and support reports.
 Authentication guidance does not block a non-interactive or CI install.
 
 This Marketplace bootstrap is the currently available one-command install.
-The repository also builds a thin npx package, but documentation will publish
-the final `npx --yes @<publisher>/tenon setup --codex` command only after an
-owned npm scope is configured and the package is publicly released. It is not
-a second runtime or installer transaction.
+The repository can also build a thin npx package as a digest-verified GitHub
+Release asset. Release automation never publishes it to npm. Documentation
+will publish the final `npx --yes @<publisher>/tenon setup --codex` command only
+after a separately authorized npm publication from an owned scope. It is not a
+second runtime or installer transaction.
 
 Setup validates the complete package, publishes an immutable managed release,
 creates stable `tenon` and `tenon-hook` launchers, starts the packaged
 Dashboard, and opens it after its health check succeeds.
 
 The published commands are tested at two levels. CI installs a pinned real Codex CLI and
-registers the current checkout as a clean local Marketplace. The release workflow derives the
+registers the current checkout as a clean local Marketplace. The read-only release-candidate workflow derives the
 exact checked-out commit, downloads that commit's `install.sh`, and passes the same immutable
 `--ref <commit>` to the Marketplace bootstrap in a separate temporary `HOME`, `CODEX_HOME`,
 `TENON_RUNTIME_HOME`, and Dashboard port. Both paths verify the stable launcher, doctor, managed

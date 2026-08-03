@@ -1,5 +1,10 @@
 # Skill Content Resolution
 
+## Purpose
+
+Define trust-tiered Skill content selection so the chosen release bundle remains authoritative,
+fallback happens only on not-found, and damaged or ambiguous content fails closed.
+
 ## Requirements
 
 ### Requirement: Selected release bundle SHALL be authoritative
@@ -18,8 +23,8 @@ machine-global candidates in the same ambiguity set.
 
 ### Requirement: Tier descent SHALL occur only on not-found
 
-Production resolution MAY consult runner-native or compatible external roots
-only when every higher trust tier reports `SkillContentNotFoundError`.
+Production resolution SHALL descend to runner-native or compatible external
+roots only when every higher trust tier reports `SkillContentNotFoundError`.
 
 #### Scenario: Bundled candidate is damaged
 
@@ -31,3 +36,10 @@ only when every higher trust tier reports `SkillContentNotFoundError`.
 
 Candidates within the same external trust tier SHALL retain canonical content
 hash comparison. Divergent candidates SHALL raise a source-ambiguity error.
+
+#### Scenario: External tier contains divergent candidates
+
+- **GIVEN** two candidates in the same external trust tier have different canonical content hashes
+- **WHEN** production resolution evaluates that tier
+- **THEN** it raises a source-ambiguity error
+- **AND** neither candidate is selected.

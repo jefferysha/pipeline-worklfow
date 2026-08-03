@@ -5,7 +5,7 @@ import { BTN_DANGER, BTN_GHOST, BTN_SOLID, FIELD_INPUT } from './workbenchStyles
 import { slugifyStageName } from './workbenchApiDecoders'
 
 interface DeleteError {
-  message: string
+  summary: string
   references: Array<{ kind?: string; source?: string }>
   blockers: Array<{ source?: string; detail?: string }>
 }
@@ -67,7 +67,7 @@ export function WorkbenchDialogs(props: {
       <Dialog title={t('workbench.workflow_delete_title', { name: props.workflowName })} onClose={props.onCloseDelete} testid="wb-workflow-delete-dialog" actions={<><button className={BTN_GHOST} onClick={props.onCloseDelete}>{t('workbench.workflow_cancel')}</button><button className={BTN_DANGER} data-testid="wb-workflow-delete-confirm" onClick={props.onConfirmDelete} disabled={props.deleteBusy}>{props.deleteBusy ? t('workbench.workflow_working') : t('workbench.workflow_delete_confirm')}</button></>}>
         <p className="mb-3 text-[12.5px] leading-[1.6] text-text-2">{t('workbench.workflow_delete_body', { name: props.workflowName })}</p>
         {props.dirty && <p className="mb-3 rounded-md bg-amber-t p-2.5 text-xs text-amber-d">{t('workbench.workflow_delete_dirty')}</p>}
-        {props.deleteError && <div className="rounded-md border border-red-b bg-red-t p-3" role="alert" data-testid="wb-workflow-delete-error"><p className="text-xs font-bold text-red-d">{props.deleteError.message}</p>{(props.deleteError.references.length > 0 || props.deleteError.blockers.length > 0) && <ul className="mt-2 list-disc space-y-1 pl-4 font-mono text-[11.5px] text-red-d">{props.deleteError.references.map((reference, index) => <li key={`reference-${index}`}>{reference.kind ?? 'reference'} · {reference.source ?? '?'}</li>)}{props.deleteError.blockers.map((blocker, index) => <li key={`blocker-${index}`}>{blocker.source ?? 'scan'} · {blocker.detail ?? '?'}</li>)}</ul>}</div>}
+        {props.deleteError && <div className="rounded-md border border-red-b bg-red-t p-3" role="alert" data-testid="wb-workflow-delete-error"><p className="text-xs font-bold text-red-d">{props.deleteError.summary}</p>{(props.deleteError.references.length > 0 || props.deleteError.blockers.length > 0) && <ul className="mt-2 list-disc space-y-1 pl-4 font-mono text-[11.5px] text-red-d">{props.deleteError.references.map((reference, index) => <li key={`reference-${index}`}>{reference.kind ?? 'reference'} · {reference.source ?? '?'}</li>)}{props.deleteError.blockers.map((blocker, index) => <li key={`blocker-${index}`}>{blocker.source ?? 'scan'} · {blocker.detail ?? '?'}</li>)}</ul>}</div>}
       </Dialog>
     )}
     {props.addStageOpen && (

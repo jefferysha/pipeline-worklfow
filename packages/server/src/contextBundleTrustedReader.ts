@@ -64,7 +64,7 @@ export function readBounded(fd: number, maxBytes: number): Buffer {
   return Buffer.concat(chunks, total)
 }
 
-class ContextBundleTrustedFileError extends Error {
+export class ContextBundleTrustedFileError extends Error {
   constructor(cause?: unknown) {
     super(
       'Context Bundle trusted file integrity check failed',
@@ -74,7 +74,7 @@ class ContextBundleTrustedFileError extends Error {
   }
 }
 
-function readTrustedFile(
+export function readTrustedFile(
   root: WorkflowRootAnchor,
   relativePath: string,
   maxBytes: number,
@@ -165,6 +165,7 @@ function readTrustedFile(
       }
     }, expectedChange)
   } catch (error) {
+    if (isInvalidUtf8(error)) throw error
     if (error instanceof LedgerContextBundleError || error instanceof ContextBundleTrustedFileError) {
       throw error
     }

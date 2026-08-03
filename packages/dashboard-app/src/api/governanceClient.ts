@@ -3,6 +3,7 @@ import type {
   CreatedChange,
   WbHooksConfig,
   WbRouterPreview,
+  WbSkillEntry,
   WbTrackDefinition,
 } from './governanceTypes'
 import {
@@ -14,6 +15,8 @@ import {
   decodeRouterPreview,
   isPromptSkipKeyword,
 } from './governanceDecoders'
+import { decodeSkillsRegistry, decodeWorkflowDefinition } from './governanceSchema'
+import type { WbWorkflowDef } from './governanceTypes'
 import { ApiError, getToken, readJson, throwApiError, wrapNetwork } from './transport'
 
 async function readOrThrow<T>(
@@ -21,7 +24,13 @@ async function readOrThrow<T>(
   decode: (value: unknown) => T | null,
   invalidMessage: string,
 ): Promise<T> {
-  const decoded = decode(await readJson(response))
+  let body: unknown
+  try {
+    body = await readJson(response)
+  } catch {
+    throw new ApiError(invalidMessage, response.status)
+  }
+  const decoded = decode(body)
   if (!decoded) throw new ApiError(invalidMessage, response.status)
   return decoded
 }
@@ -176,14 +185,30 @@ export async function postCreateChange(input: {
   return readOrThrow(response, decodeCreatedChange, 'Change 创建响应形状无效')
 }
 
-export function fetchSkillsRegistry(): Promise<Response> {
-  return fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+export async function fetchSkillsRegistry(): Promise<WbSkillEntry[]> {
+  let response: Response
+  try {
+    response = await fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '技能库获取失败')
+  return readOrThrow(response, decodeSkillsRegistry, '技能库响应形状无效')
 }
 
-export function fetchWorkflow(name: string, root: string): Promise<Response> {
-  return fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
-    headers: { Accept: 'application/json' },
-  })
+export async function fetchWorkflow(name: string, root: string): Promise<WbWorkflowDef> {
+  let response: Response
+  try {
+    response = await fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'workflow 获取失败')
+  const body = await readOrThrow(response, decodeWorkflowDefinition, 'workflow 响应形状无效')
+  if (body.name !== name) throw new ApiError('workflow 响应身份无效', response.status)
+  return body
 }
 
 export function fetchConfig(root: string): Promise<Response> {

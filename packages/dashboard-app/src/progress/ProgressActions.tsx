@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { ArrowRight, Copy, Square, Undo2 } from 'lucide-react'
 import type { PlannedTransition } from '../model/events'
 import { plannedTransition } from '../model/events'
@@ -32,6 +33,8 @@ export function ProgressActions({
   onKill,
   onToast,
 }: ProgressActionsProps): JSX.Element | null {
+  const tRef = useRef(t)
+  tRef.current = t
   const name = row.row.change.name
   const testId = (action: string): string => `prg9-dw-${action}-${name}`
   if (row.row.state === 'gate') {
@@ -95,7 +98,7 @@ export function ProgressActions({
         aria-label={`${chip.label}：${chip.command}`}
         onClick={() => {
           void navigator.clipboard?.writeText(chip.command).then(() => {
-            onToast?.(t('detail.copied', { value: chip.command }))
+            onToast?.(tRef.current('detail.copied', { value: chip.command }))
           })
         }}
       >

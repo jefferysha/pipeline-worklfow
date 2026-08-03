@@ -25,7 +25,7 @@ import { buildLoopsSnapshot } from './loops.js'
 import { buildRunDetail } from './runDetail.js'
 import { buildSecretsResponse } from './secrets.js'
 import { listAllSkillsDetailed } from './skillsRegistry.js'
-import { buildSnapshot, dedupeRoots, type SnapshotDeps } from './snapshot.js'
+import { dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { readChangeHistory } from './transition.js'
 import type { DashboardServerOptions, ServerPaths } from './types.js'
 import {
@@ -40,6 +40,7 @@ import { handleGetActivityRoutes } from './serverGetActivityRoutes.js'
 import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
+import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -105,6 +106,10 @@ export async function handleGet(
   if (handleGetTraceRoutes(req, res, path, { clock, sendJson, traceStore })) return
   const hostPlan = await resolveHostTargetPlanRoute(req.url ?? '/', path, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime })
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body)
+  const orchestration = await resolveOrchestrationRoutes(req.url ?? '/', path, {
+    workflowRootForRequest, snapshotDeps, store,
+  })
+  if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
       try {

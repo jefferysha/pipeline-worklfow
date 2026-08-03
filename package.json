@@ -21,6 +21,10 @@
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/tenon.mjs && chmod +x packages/cli/dist/tenon.mjs",
     "check:comments": "bash tools/check-comment-honesty.sh",
     "check:architecture": "node tools/check-architecture.mjs",
+    "check:dependency-tree": "npm ls --all",
+    "check:dependencies": "npm audit --audit-level=high && npm run check:dependency-tree",
+    "check:openspec": "node --test tools/check-openspec.node-test.mjs && node tools/check-openspec.mjs",
+    "check:release-workflows": "node --test tools/check-release-workflows.node-test.mjs",
     "check:repository-hygiene": "node --test tools/check-repository-hygiene.node-test.mjs && node tools/check-repository-hygiene.mjs",
     "build:npx-package": "node tools/build-npx-package.mjs",
     "check:npx-package": "node --test tools/build-npx-package.node-test.mjs tools/install-bootstrap.node-test.mjs tools/clean-codex-install-acceptance.node-test.mjs",
@@ -46,11 +50,18 @@
     "check:default-workflow-freshness": "npm run generate:default-workflow && git diff --exit-code -- packages/kernel/src/workflow/default-workflow.generated.ts"
   },
   "devDependencies": {
+    "@fission-ai/openspec": "1.6.0",
     "@types/node": "^22.10.0",
-    "ajv": "^8.17.1",
+    "ajv": "^8.20.0",
     "esbuild": "^0.28.1",
     "playwright": "^1.61.1",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "vitepress": {
+      "vite": "6.4.3"
+    }
   }
 }

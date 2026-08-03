@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { SecretsCard } from './SecretsCard'
 
 let keys: Record<string, { set: boolean; masked?: string }>
@@ -13,10 +13,15 @@ let postCalls: Array<Record<string, unknown>>
 let deleteUrls: string[]
 let getCalls: number
 
-function renderCard(onChanged?: () => void) {
+function renderCard(onChanged?: () => void, onDirtyChange?: (dirty: boolean) => void) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+  }
   render(
     <I18nProvider>
-      <SecretsCard onChanged={onChanged} />
+      <LanguageToggle />
+      <SecretsCard onChanged={onChanged} onDirtyChange={onDirtyChange} />
     </I18nProvider>,
   )
 }
@@ -52,6 +57,24 @@ afterEach(() => {
 })
 
 describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
+  it('打开空 write-only 输入不算 dirty，真实输入才上报，清空或取消后清除', async () => {
+    const onDirtyChange = vi.fn()
+    renderCard(undefined, onDirtyChange)
+    fireEvent.click(await screen.findByTestId('sc-edit-OPENAI_API_KEY'))
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    const input = screen.getByTestId('sc-input-OPENAI_API_KEY')
+    fireEvent.change(input, { target: { value: 'not-saved' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.change(input, { target: { value: '' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    fireEvent.change(input, { target: { value: 'not-saved-again' } })
+    fireEvent.click(screen.getByTestId('sc-cancel-OPENAI_API_KEY'))
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('①已配键显掩码不显明文;未配键显「未配置」;点「更新」输入框为空(绝不回填)', async () => {
     renderCard()
     expect((await screen.findByTestId('sc-masked-CLAUDE_CODE_OAUTH_TOKEN')).textContent).toBe('tok…7f3a')
@@ -109,6 +132,32 @@ describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
     fireEvent.click(screen.getByTestId('sc-save-OPENAI_API_KEY'))
     expect((await screen.findByTestId('sc-op-error')).textContent).toContain('值超长')
     expect(screen.getByTestId('sc-input-OPENAI_API_KEY')).toBeInTheDocument()
+  })
+
+  it('切换语言时不重拉凭证、不清空 write-only 草稿，既有错误按当前语言重算', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/secrets' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false, error: '值超长(>4KB)' }), { status: 400 })
+      }
+      if (url === '/api/secrets') {
+        getCalls += 1
+        return new Response(JSON.stringify({ ok: true, keys }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderCard()
+    fireEvent.click(await screen.findByTestId('sc-edit-OPENAI_API_KEY'))
+    fireEvent.change(screen.getByTestId('sc-input-OPENAI_API_KEY'), { target: { value: 'keep-me' } })
+    fireEvent.click(screen.getByTestId('sc-save-OPENAI_API_KEY'))
+    expect(await screen.findByTestId('sc-op-error')).toHaveTextContent('值超长')
+    expect(getCalls).toBe(1)
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    expect(screen.getByTestId('sc-input-OPENAI_API_KEY')).toHaveValue('keep-me')
+    expect(screen.getByTestId('sc-op-error')).toHaveTextContent('Request failed (HTTP 400).')
+    expect(screen.getByTestId('sc-op-error')).not.toHaveTextContent('值超长')
+    expect(getCalls).toBe(1)
   })
 })
 

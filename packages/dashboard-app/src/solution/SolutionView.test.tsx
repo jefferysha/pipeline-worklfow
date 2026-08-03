@@ -129,7 +129,7 @@ describe('SolutionView 开源产品概览', () => {
     renderSolution()
 
     expect(within(screen.getByTestId('solution-modules')).getAllByRole('article')).toHaveLength(6)
-    for (const module of ['CLI 与路由', '状态与 Workflow', 'Dashboard', 'Adapters 与 Hooks', 'AFK 与 Loops', '高级诊断']) {
+    for (const module of ['CLI 与路由', '状态与 Workflow', '仪表盘', 'Adapters 与 Hooks', 'AFK 与 Loops', '高级诊断']) {
       expect(screen.getByRole('heading', { name: module })).toBeInTheDocument()
     }
 

@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
+import { UnsavedDraftDialog, useDiscardGuard } from '../shared/UnsavedDraftDialog'
 import { AutomationCard } from './AutomationCard'
 import { GovernanceRail } from './GovernanceRail'
 import { LoopCard, WB_TW, type LoopsState } from './LoopCard'
@@ -82,14 +83,49 @@ export interface WorkbenchSideRailProps {
   rdNonce?: number
   /** 摘要卡等既有右栏内容（宿主传入，避免本组件反向依赖 WorkbenchView）。 */
   children?: ReactNode
+  /** Reports only unsaved form drafts; immediate server mutations never enter this channel. */
+  onDirtyChange?: (source: 'loop' | 'automation' | 'secrets', dirty: boolean) => void
+  /** Keeps enclosing overlays mounted until an in-flight child mutation settles. */
+  onBusyChange?: (source: 'loop' | 'automation' | 'secrets', busy: boolean) => void
 }
 
-export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, children }: WorkbenchSideRailProps): JSX.Element {
+export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, children, onDirtyChange, onBusyChange }: WorkbenchSideRailProps): JSX.Element {
   const { t } = useT()
   /** 「完整治理设置」Dialog 开合。 */
   const [loopOpen, setLoopOpen] = useState(false)
   /** 「机器配置」折叠区开合——**同时**是内容的挂载开关（见文件头②）。 */
   const [machineOpen, setMachineOpen] = useState(false)
+  const [drafts, setDrafts] = useState({ loop: false, automation: false, secrets: false })
+  const [mutations, setMutations] = useState({ loop: false, automation: false, secrets: false })
+  const discardGuard = useDiscardGuard()
+  const reportDirty = useCallback((source: 'loop' | 'automation' | 'secrets', dirty: boolean) => {
+    setDrafts((current) => current[source] === dirty ? current : { ...current, [source]: dirty })
+    onDirtyChange?.(source, dirty)
+  }, [onDirtyChange])
+  const reportLoopDirty = useCallback((dirty: boolean) => reportDirty('loop', dirty), [reportDirty])
+  const reportAutomationDirty = useCallback((dirty: boolean) => reportDirty('automation', dirty), [reportDirty])
+  const reportSecretsDirty = useCallback((dirty: boolean) => reportDirty('secrets', dirty), [reportDirty])
+  const reportBusy = useCallback((source: 'loop' | 'automation' | 'secrets', busy: boolean) => {
+    setMutations((current) => current[source] === busy ? current : { ...current, [source]: busy })
+    onBusyChange?.(source, busy)
+  }, [onBusyChange])
+  const reportLoopBusy = useCallback((busy: boolean) => reportBusy('loop', busy), [reportBusy])
+  const reportAutomationBusy = useCallback((busy: boolean) => reportBusy('automation', busy), [reportBusy])
+  const reportSecretsBusy = useCallback((busy: boolean) => reportBusy('secrets', busy), [reportBusy])
+
+  function closeLoop(): void {
+    if (mutations.loop) return
+    discardGuard.request(drafts.loop, () => setLoopOpen(false))
+  }
+
+  function toggleMachine(): void {
+    if (!machineOpen) {
+      setMachineOpen(true)
+      return
+    }
+    if (mutations.automation || mutations.secrets) return
+    discardGuard.request(drafts.automation || drafts.secrets, () => setMachineOpen(false))
+  }
 
   return (
     <div className={RAIL_TW} data-testid="wb-side-rail">
@@ -105,6 +141,7 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
           variant="ghost"
           className={ENTRY_BTN_TW}
           data-testid="wb-rail-loop-full"
+          disabled={mutations.loop}
           onClick={() => setLoopOpen(true)}
         >
           {t('workbench.rail_loop_full')}
@@ -119,9 +156,10 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
           className={SUMMARY_TW}
           data-testid="wb-rail-machine-summary"
           data-open={machineOpen}
+          aria-disabled={machineOpen && (mutations.automation || mutations.secrets)}
           onClick={(e) => {
             e.preventDefault() // 掐掉原生 activation：open 的唯一真相源是下面这个 state
-            setMachineOpen((v) => !v)
+            toggleMachine()
           }}
         >
           <ChevronRight
@@ -139,10 +177,10 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
             </p>
             {/* 三件原件（各自渲染自己的卡头）；卡本身「无皮」，由这里补卡壳与内边距。 */}
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
-              <AutomationCard root={root} refreshToken={rdNonce} />
+              <AutomationCard root={root} refreshToken={rdNonce} onDirtyChange={reportAutomationDirty} onBusyChange={reportAutomationBusy} />
             </div>
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
-              <SecretsCard onChanged={onSecretsChanged} />
+              <SecretsCard onChanged={onSecretsChanged} onDirtyChange={reportSecretsDirty} onBusyChange={reportSecretsBusy} />
             </div>
             <div className={cn(GCARD_TW, CARD_PAD_TW)}>
               <SkillHealthPanel />
@@ -161,7 +199,7 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
       {loopOpen && (
         <Dialog
           title={t('workbench.rail_loop_full')}
-          onClose={() => setLoopOpen(false)}
+          onClose={closeLoop}
           testid="wb-rail-loop-dialog"
           actions={
             <Button
@@ -169,7 +207,8 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
               size="sm"
               className={WB_TW.btnGhost}
               data-testid="wb-rail-loop-close"
-              onClick={() => setLoopOpen(false)}
+              disabled={mutations.loop}
+              onClick={closeLoop}
             >
               {t('workbench.lp_rel_dialog_close')}
             </Button>
@@ -177,10 +216,16 @@ export function WorkbenchSideRail({ root, loops, onSecretsChanged, rdNonce = 0, 
         >
           {/* 滚动壳（见文件头①）：长表单不撑出视口，保存钮恒可达。 */}
           <div className="-mr-1.5 max-h-[62vh] overflow-y-auto pr-1.5">
-            <LoopCard root={root} loops={loops} />
+            <LoopCard root={root} loops={loops} onDirtyChange={reportLoopDirty} onBusyChange={reportLoopBusy} />
           </div>
         </Dialog>
       )}
+      <UnsavedDraftDialog
+        open={discardGuard.confirmOpen}
+        testid="wb-rail-unsaved-draft"
+        onStay={discardGuard.stay}
+        onDiscard={discardGuard.discard}
+      />
     </div>
   )
 }

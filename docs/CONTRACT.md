@@ -36,6 +36,19 @@
   修复可证明的前滚态，并把损坏/未知 drift 暴露为项目错误。
 - **Hooks**：纯 Bash hooks 共用 `hooks/canonical-state.sh` 读取 compact current 的 `hookState`；canonical
   无效时 fail-open 跳过该 change，但不反向读 YAML。只有从未迁移的 change 才走 legacy grep。
+- **未来 canonical schema 兼容面**：kernel 解码器遇到 `current.json.schemaVersion` 高于本 runtime
+  支持值时抛出结构化 `UnsupportedRunStateVersionError(foundVersion, supportedVersion)`，不得把它
+  降级为普通 corruption 或尝试 YAML fallback。`GET /api/snapshot` 在项目级返回至多 100 条
+  `compatibilityIssues[]`（`kind=unsupported-canonical-version`、Change 名、found/supported 版本和
+  `action=upgrade-runtime`），对应 Change 不进入 `changes[]`，项目 `ok=false`；超过上限时仅返回
+  排序后的前 100 条，并设置 optional 字面量 `compatibilityIssuesTruncated: true`，不得把 overflow
+  写入普通 `error`。前端只在恰有 100 条 issue 时接受该信号，并以当前语言说明仍有 Change 未列出。
+  普通 corruption 可与该数组同时存在，`error` 优先决定项目不可达，不能被升级提示掩盖。仅有未来
+  版本问题时 Dashboard 可只读展示已成功解码的 sibling Changes 与升级提示；Machine 继续扫描这些
+  sibling 的真实风险，不把 compatibility-only 项目误报为损坏。唯一允许的动作是刷新 snapshot；
+  snapshot 请求错误按当前 locale 与 HTTP status 展示，并通过同一 refresh 通道提供通用重试；
+  创建、transition/cancel、AFK 和 Workbench 写入口全部继续要求 `project.ok=true`。旧 server 省略
+  `compatibilityIssues` 与 `compatibilityIssuesTruncated` 时前端保持兼容。
 
 ### 1.1 `.pipeline.yaml` 格式契约（与老内核字节级兼容）
 

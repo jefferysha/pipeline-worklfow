@@ -62,7 +62,7 @@ export function AdvancedPanel({ snapshot }: AdvancedPanelProps): JSX.Element {
                       data-state={wired ? 'ready' : 'pending'}
                       data-testid={`advanced-status-${tool.key}`}
                     >
-                      {wired ? 'ready' : t('advanced.placeholder')}
+                      {wired ? t('advanced.ready') : t('advanced.placeholder')}
                     </span>
                     {!wired && <span className="text-xs text-text-3">{t(`advanced.${tool.when}`)}</span>}
                   </>

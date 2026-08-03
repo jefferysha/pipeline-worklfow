@@ -1,5 +1,5 @@
 /** OpenSpec document evidence sidecar; callers hold the Change lock while mutating it. */
-import { lstat, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   DOCUMENT_CONTRACT_PHASES,
@@ -25,19 +25,21 @@ import {
   documentSlot,
   DocumentLedgerError,
   isSafeProjectRelativePath,
+  readBoundedFileHandle,
+  readOptionalBoundedRegularTextFile,
   resolveDocument,
+  type BoundedFileHandleReader,
 } from './document-path.js'
 import { HISTORY_FILE } from './history.js'
 import {
-  currentSpecVisitEnteredViaRequirementsChanged,
+  currentSpecVisitEnteredViaRequirementsChanged, requiresRequirementsChangedForSpecAdr,
   skillsEquivalent,
-  requiresRequirementsChangedForSpecAdr,
 } from './document-record-policy.js'
 import { readCurrentRunRevision } from './run-revision-store.js'
-
 export { DocumentLedgerError } from './document-path.js'
-
 export const DOCUMENT_LEDGER_FILE = '.pipeline-documents.json'
+export const MAX_DOCUMENT_LEDGER_BYTES = 1024 * 1024
+export const MAX_DOCUMENT_LEDGER_RECORDS = 256
 export interface DocumentReadReceipt {
   readonly phase: string
   readonly sha256: string
@@ -154,6 +156,7 @@ export function parseDocumentLedger(raw: string): DocumentLedger {
   const createdAt = string(item.createdAt)
   if (!createdAt) throw new DocumentLedgerError('document ledger createdAt 必须是非空字符串')
   if (!Array.isArray(item.records)) throw new DocumentLedgerError('document ledger records 必须是数组')
+  if (item.records.length > MAX_DOCUMENT_LEDGER_RECORDS) throw new DocumentLedgerError(`document ledger records 超过 ${MAX_DOCUMENT_LEDGER_RECORDS} 条上限`)
   const records = item.records.map((record, index) => parseRecord(record, index))
   const unique = new Set<string>()
   for (const record of records) {
@@ -164,22 +167,16 @@ export function parseDocumentLedger(raw: string): DocumentLedger {
   return { version: 1, contract: 'openspec-v1', createdAt, records }
 }
 
-async function ledgerText(changeDir: string): Promise<string | undefined> {
-  const path = join(changeDir, DOCUMENT_LEDGER_FILE)
-  try {
-    const info = await lstat(path)
-    if (!info.isFile() || info.isSymbolicLink()) {
-      throw new DocumentLedgerError(`document ledger 必须是非 symlink 普通文件: ${path}`)
-    }
-    return await readFile(path, 'utf8')
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') return undefined
-    throw error
-  }
-}
-
-export async function readDocumentLedger(changeDir: string): Promise<DocumentLedger | undefined> {
-  const raw = await ledgerText(changeDir)
+export async function readDocumentLedger(
+  changeDir: string,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<DocumentLedger | undefined> {
+  const raw = await readOptionalBoundedRegularTextFile(
+    join(changeDir, DOCUMENT_LEDGER_FILE),
+    MAX_DOCUMENT_LEDGER_BYTES,
+    'document ledger',
+    readSource,
+  )
   return raw === undefined ? undefined : parseDocumentLedger(raw)
 }
 

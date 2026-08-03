@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAfkReadiness, fetchAutomationSettings, fetchDockerImages, postAutomationSettings, type WbAfkReadiness, type WbAutomationSettings, type WbDockerImages } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 import { LpSlider, WbAdvanced, WB_TW } from './LoopCard'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -56,16 +57,19 @@ export interface AutomationCardProps {
   root: string
   /** v6 T9/T8：就绪三灯重拉信号——SecretsCard 保存/删除成功后由宿主 +1(显式动作触发,不轮询,G22 纪律)。 */
   refreshToken?: number
+  /** 宿主离开守卫只消费真实草稿差异；加载态与仅打开面板不算 dirty。 */
+  onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
-export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps): JSX.Element {
-  const { t } = useT()
+export function AutomationCard({ root, refreshToken = 0, onDirtyChange, onBusyChange }: AutomationCardProps): JSX.Element {
+  const { t, lang } = useT()
   // settings = server 已保存真值（GET/保存后回读）；draft = 编辑草稿。
   const [settings, setSettings] = useState<WbAutomationSettings | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [draft, setDraft] = useState<WbAutomationSettings | null>(null)
   const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<unknown | null>(null)
   const [saveOk, setSaveOk] = useState(false)
   // v6 T9：镜像下拉候选(机器级,一次拉取;不可用/失败 → null=降级纯文本框,零行为差异)。
   const [images, setImages] = useState<WbDockerImages | null>(null)
@@ -116,12 +120,12 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setLoadError(t('workbench.afk_load_error', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+        setLoadError(err)
       })
     return () => {
       cancelled = true
     }
-  }, [root, t])
+  }, [root])
 
   // settings 对象换新（首载/保存后回读）→ 草稿以 server 真值重置（LoopCard 同款托管）。
   useEffect(() => {
@@ -129,6 +133,18 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
   }, [settings])
 
   const dirty = draft !== null && settings !== null && !same(draft, settings)
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
+  useEffect(() => {
+    onBusyChange?.(saving)
+  }, [saving, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
 
   function edit(part: Partial<WbAutomationSettings>): void {
     setDraft((prev) => (prev ? { ...prev, ...part } : prev))
@@ -147,8 +163,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
       setSettings(fresh)
       setSaveOk(true)
     } catch (err) {
-      // server 的值域拒绝原文展示（不翻译不吞并——LoopCard saveErrors 同款）
-      setSaveError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+      setSaveError(err)
     } finally {
       setSaving(false)
     }
@@ -158,7 +173,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
     return (
       <section className={WB_TW.card} data-testid="wb-afk-card">
         <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.afk_title')}</b></div>
-        <p className={WB_TW.loadError} data-tone="error" data-testid="afk-load-error" role="alert">{loadError}</p>
+        <p className={WB_TW.loadError} data-tone="error" data-testid="afk-load-error" role="alert">{t('workbench.afk_load_error', { msg: formatApiError(loadError, t, { exposeServerDetail: lang === 'zh' }) })}</p>
       </section>
     )
   }
@@ -184,9 +199,9 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
         <span className={WB_TW.headSub}>{t('workbench.afk_head_sub')}</span>
       </div>
 
-      {saveError && (
+      {saveError !== null && (
         <ul className={WB_TW.saveErrors} data-testid="afk-save-error" role="alert">
-          <li className={WB_TW.saveErrorsLi}>{saveError}</li>
+          <li className={WB_TW.saveErrorsLi}>{formatApiError(saveError, t, { exposeServerDetail: lang === 'zh' })}</li>
         </ul>
       )}
 

@@ -1,5 +1,10 @@
 # Workspace Verification Integrity
 
+## Purpose
+
+Define which implementation content belongs in a frozen verification baseline and which owned
+control or verifier paths are excluded, preserving drift detection without invalidating valid receipts.
+
 ## Requirements
 
 ### Requirement: In-place baselines SHALL exclude workflow control state

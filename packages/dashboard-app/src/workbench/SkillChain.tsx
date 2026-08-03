@@ -5,6 +5,7 @@ import { useGSAP } from '@gsap/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { DefaultSkillChain } from './DefaultSkillChain'
 import type { WbSkillRef, WbStepDef } from './WorkbenchView'
@@ -42,7 +43,7 @@ gsap.registerPlugin(useGSAP)
  * 依赖链语义、添加面板、default 轨道 tab 全部不动，纯展示升级；reduced-motion 直显。
  */
 
-import { ACTIONS_CLS, ADDCHIP_CLS, CHIP_BADGE_CLS, CHIP_CLS, CHAIN_CLS, CHAIN_K_CLS, EMPTY_CLS, ERR_CLS, HINT_CLS, NOTE_CLS, SEC_H_CLS, SKILL_ID_RE, buildChains, readErrorDetail, skConn } from './skillChainModel'
+import { ACTIONS_CLS, ADDCHIP_CLS, CHIP_BADGE_CLS, CHIP_CLS, CHAIN_CLS, CHAIN_K_CLS, EMPTY_CLS, ERR_CLS, HINT_CLS, NOTE_CLS, SEC_H_CLS, SKILL_ID_RE, buildChains, skConn } from './skillChainModel'
 export { invalidateMandatoryConfig } from './mandatorySkills'
 
 export interface SkillChainProps {
@@ -57,13 +58,13 @@ export interface SkillChainProps {
 }
 
 export function SkillChain({ step, root, mode = 'step-dag', readonly = false, onChange }: SkillChainProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const isDefault = mode === 'manifest-matrix'
 
   // ── 自定义模式：添加面板态 ──
   const [panelOpen, setPanelOpen] = useState(false)
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
-  const [regError, setRegError] = useState<string | null>(null)
+  const [regError, setRegError] = useState<unknown | null>(null)
   const [candidate, setCandidate] = useState<string | null>(null)
   const [dep, setDep] = useState('')
 
@@ -108,20 +109,17 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
     if (registry !== null || regError !== null) return
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setRegError(t('workbench.sk_registry_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        if (!cancelled) {
+          setRegError(err)
+        }
       })
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只拉一次;t 变化不重拉
   }, [registry, regError])
 
   function togglePanel(): void {
@@ -286,7 +284,7 @@ export function SkillChain({ step, root, mode = 'step-dag', readonly = false, on
             <span className={cn(HINT_CLS, 'ml-1.5')}>{t('workbench.sk_panel_hint')}</span>
           </div>
           <div className="mb-[11px] flex flex-wrap gap-1.5">
-            {regError && <span className={ERR_CLS} role="alert">{regError}</span>}
+            {regError !== null && <span className={ERR_CLS} role="alert">{t('workbench.sk_registry_error', { msg: formatApiError(regError, t, { exposeServerDetail: lang === 'zh' }) })}</span>}
             {!regError && registry === null && <span className={EMPTY_CLS} role="status" aria-live="polite">{t('common.loading')}</span>}
             {!regError && registry !== null && candidates.length === 0 && (
               <span className={EMPTY_CLS} role="status" aria-live="polite">{t('workbench.sk_panel_empty')}</span>

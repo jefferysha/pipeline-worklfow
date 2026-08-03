@@ -17,12 +17,18 @@ import {
   trustedCodexSkillPath,
   type CodexSkillTrustRoots,
 } from './codexSkillTrust.js'
-import { transcriptExecInvocations, type TranscriptExecInvocation } from './codexToolProgram.js'
+import { transcriptExecInvocations } from './codexToolProgram.js'
 import {
   explicitSiblingWorktreeTarget,
   isSameOrdinaryPhysicalDirectory,
 } from './codexProjectIdentity.js'
-import { successfulCustomOutput, successfulFunctionOutput } from './codexTranscriptCompletion.js'
+import {
+  commandTrustedSkillPaths,
+  functionExecInvocation,
+  outputMatchesTrustedSkillReads,
+  transcriptInputTrustedSkillInvocation,
+  type OutputAbi,
+} from './codexTrustedSkillRead.js'
 import {
   exactHostTranscript,
   hostTranscriptUnchanged,
@@ -77,25 +83,6 @@ async function settleBoundedStream(stream: ReadStream | undefined): Promise<void
   await finished(stream).catch(() => undefined)
 }
 
-interface FunctionExecInvocation {
-  readonly command: string
-  readonly workdir?: string
-}
-type OutputAbi = 'custom' | 'function'
-
-function functionExecInvocation(payload: Record<string, unknown>): FunctionExecInvocation | undefined {
-  if (payload.type !== 'function_call' || asString(payload.name) !== 'exec_command') return undefined
-  const argumentsText = asString(payload.arguments)
-  if (!argumentsText) return undefined
-  try {
-    const args = JSON.parse(argumentsText) as unknown
-    if (!isRecord(args)) return undefined
-    const command = asString(args.cmd) ?? asString(args.command)
-    return command === undefined ? undefined : { command, workdir: asString(args.workdir) }
-  } catch {
-    return undefined
-  }
-}
 /** Verify an exact PreToolUse receipt against its completed host call. */
 export async function transcriptConfirmsReceipt(
   receipt: CodexSkillReceipt,
@@ -139,7 +126,7 @@ export async function transcriptConfirmsReceipt(
       try {
         event = JSON.parse(line) as unknown
       } catch {
-        continue
+        return false
       }
       if (!isRecord(event)) continue
       if (event.type === 'session_meta') {
@@ -164,15 +151,16 @@ export async function transcriptConfirmsReceipt(
       const functionInvocation = functionExecInvocation(payload)
       if (functionInvocation !== undefined) {
         const callId = asString(payload.call_id)
+        const readPaths = commandTrustedSkillPaths(functionInvocation.command, receipt.skillPath)
         if (
           callId === receipt.toolUseId
           && (
             matchesProject
             || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)
           )
-          && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)
+          && readPaths !== undefined
         ) {
-          confirmed = await matchingSuccessfulOutput(lines, receipt, 'function')
+          confirmed = await matchingSuccessfulOutput(lines, receipt, 'function', readPaths)
           break
         }
         continue
@@ -194,7 +182,12 @@ export async function transcriptConfirmsReceipt(
             || await explicitSiblingWorktreeTarget(sessionRoot, invocation.workdir, repoRoot)
           )
         ) {
-          confirmed = await matchingSuccessfulOutput(lines, receipt, 'custom')
+          confirmed = await matchingSuccessfulOutput(
+            lines,
+            receipt,
+            'custom',
+            commandTrustedSkillPaths(invocation.command, receipt.skillPath) ?? [],
+          )
           break
         }
         continue
@@ -214,83 +207,35 @@ async function matchingSuccessfulOutput(
   lines: AsyncIterable<string>,
   receipt: CodexSkillReceipt,
   outputAbi: OutputAbi,
+  readPaths: readonly string[],
 ): Promise<boolean> {
+  if (readPaths.length === 0) return false
   const expectedOutputType = outputAbi === 'custom'
     ? 'custom_tool_call_output'
     : 'function_call_output'
+  let matchingOutput: boolean | undefined
   for await (const line of lines) {
     let event: unknown
     try {
       event = JSON.parse(line) as unknown
     } catch {
-      continue
+      return false
     }
     if (!isRecord(event) || event.type !== 'response_item') continue
     const payload = event.payload
     if (
       !isRecord(payload)
       || receiptTurnId(payload) !== receipt.turnId
-      || payload.type !== expectedOutputType
       || asString(payload.call_id) !== receipt.toolUseId
     ) continue
-    return outputAbi === 'custom'
-      ? successfulCustomOutput(payload.output)
-      : successfulFunctionOutput(payload.output)
+    if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
+    // A call id has one host-owned completion. Keep scanning the bounded snapshot after the
+    // match so damaged trailing JSON cannot be hidden behind an otherwise valid output.
+    if (matchingOutput !== undefined) return false
+    if (payload.type !== expectedOutputType) return false
+    matchingOutput = await outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths)
   }
-  return false
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function unwrapReadCommand(segment: string): string | undefined {
-  const command = segment.trim()
-  if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(command)) return command
-  for (const prefix of ['/bin/zsh -lc "', '/bin/zsh -c "', 'zsh -lc "', 'zsh -c "']) {
-    if (!command.startsWith(prefix) || !command.endsWith('"')) continue
-    return command.slice(prefix.length, -1)
-  }
-  return undefined
-}
-
-function finalReadPath(command: string): string | undefined {
-  const quoted = /(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/.exec(command)
-  return quoted?.[1] ?? quoted?.[2] ?? quoted?.[3]
-}
-
-/** The decoded command must structurally be a supported read of this exact host-cache asset. */
-function commandReadsTrustedSkill(command: string, skillPath: string): boolean {
-  if (command.includes('||')) return false
-  const trustedPath = new RegExp(`^${escapeRegex(skillPath)}$`)
-  const unwrapped = unwrapReadCommand(command) ?? command
-  const hasAnd = unwrapped.includes('&&')
-  const hasSequence = /;|\r?\n/.test(unwrapped)
-  if (hasAnd && hasSequence) return false
-  const segments = unwrapped.split(hasAnd ? /&&/ : /;|\r?\n/).filter((segment) => segment.trim() !== '')
-  const skillsRoot = resolve(skillPath, '..', '..')
-  let observedRead = false
-  for (const segment of segments) {
-    const commandSegment = unwrapReadCommand(segment) ?? segment.trim()
-    const path = commandSegment ? finalReadPath(commandSegment) : undefined
-    if (path === undefined) return false
-    const sibling = relative(skillsRoot, resolve(path)).split(sep)
-    if (sibling.length !== 2 || sibling[0] === '' || sibling[1] !== 'SKILL.md') return false
-    if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
-      if (trustedPath.test(path)) observedRead = true
-      continue
-    }
-    if (/^wc\s+-(?:l|c|w)(?:\s|$)/.test(commandSegment)) continue
-    return false
-  }
-  return observedRead
-}
-
-/** The transcript stores tool-program source, so inspect only its decoded, executed command values. */
-function transcriptInputTrustedSkillInvocation(input: string, skillPath: string): TranscriptExecInvocation | undefined {
-  const invocations = transcriptExecInvocations(input)
-  const invocation = invocations.length === 1 ? invocations[0] : undefined
-  return invocation && commandReadsTrustedSkill(invocation.command, skillPath) ? invocation : undefined
+  return matchingOutput === true
 }
 
 function skillAliases(id: string): readonly string[] {
@@ -345,7 +290,9 @@ export async function discoverCompletedCodexSkillReads(
     const readsByCall = new Map<string, {
       readonly skillIds: readonly string[]
       readonly outputAbi: OutputAbi
+      readonly readPaths: readonly string[]
     }>()
+    const completedReadCalls = new Set<string>()
     const confirmedInLatestTurn = new Set<string>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
@@ -395,6 +342,7 @@ export async function discoverCompletedCodexSkillReads(
           if (turnId === latestTurnId) continue
           latestTurnId = turnId
           readsByCall.clear()
+          completedReadCalls.clear()
           confirmedInLatestTurn.clear()
           continue
         }
@@ -419,11 +367,17 @@ export async function discoverCompletedCodexSkillReads(
           const readIds = aliases.filter(
             (id) => {
               const path = selectedSkillPaths.get(id)
-              return path !== undefined && commandReadsTrustedSkill(functionInvocation.command, path)
+              return path !== undefined && commandTrustedSkillPaths(functionInvocation.command, path)
             },
           )
           if (readIds.length > 0) {
-            readsByCall.set(callId, { skillIds: readIds, outputAbi: 'function' })
+            const firstPath = selectedSkillPaths.get(readIds[0] ?? '')
+            const readPaths = firstPath === undefined
+              ? undefined
+              : commandTrustedSkillPaths(functionInvocation.command, firstPath)
+            if (readPaths !== undefined) {
+              readsByCall.set(callId, { skillIds: readIds, outputAbi: 'function', readPaths })
+            }
           }
           continue
         }
@@ -444,23 +398,44 @@ export async function discoverCompletedCodexSkillReads(
           ) continue
           const readIds = aliases.filter((id) => {
             const path = selectedSkillPaths.get(id)
-            return path !== undefined && commandReadsTrustedSkill(invocation.command, path)
+            return path !== undefined && commandTrustedSkillPaths(invocation.command, path)
           })
           if (readIds.length > 0) {
-            readsByCall.set(callId, { skillIds: readIds, outputAbi: 'custom' })
+            const firstPath = selectedSkillPaths.get(readIds[0] ?? '')
+            const readPaths = firstPath === undefined
+              ? undefined
+              : commandTrustedSkillPaths(invocation.command, firstPath)
+            if (readPaths !== undefined) {
+              readsByCall.set(callId, { skillIds: readIds, outputAbi: 'custom', readPaths })
+            }
           }
           continue
         }
         if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
         const callId = asString(payload.call_id)
-        const pendingRead = callId === undefined ? undefined : readsByCall.get(callId)
+        if (callId === undefined) continue
+        if (completedReadCalls.has(callId)) {
+          malformedTranscript = true
+          confirmedInLatestTurn.clear()
+          break
+        }
+        const pendingRead = readsByCall.get(callId)
         const outputAbi: OutputAbi = payload.type === 'custom_tool_call_output'
           ? 'custom'
           : 'function'
-        if (pendingRead === undefined || pendingRead.outputAbi !== outputAbi) continue
-        const successful = outputAbi === 'custom'
-          ? successfulCustomOutput(payload.output)
-          : successfulFunctionOutput(payload.output)
+        if (pendingRead === undefined) continue
+        readsByCall.delete(callId)
+        completedReadCalls.add(callId)
+        if (pendingRead.outputAbi !== outputAbi) {
+          malformedTranscript = true
+          confirmedInLatestTurn.clear()
+          break
+        }
+        const successful = await outputMatchesTrustedSkillReads(
+          payload.output,
+          outputAbi,
+          pendingRead.readPaths,
+        )
         if (successful) {
           for (const id of pendingRead.skillIds) confirmedInLatestTurn.add(id)
         }
