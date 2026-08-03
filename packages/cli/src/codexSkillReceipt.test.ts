@@ -286,6 +286,29 @@ function eventLines(
   return `${events.map((event) => JSON.stringify(event)).join('\n')}\n`
 }
 
+function insertMalformedTranscriptLine(
+  source: string,
+  position: 'between-invocation-and-output' | 'after-output',
+): string {
+  const lines = source.trimEnd().split('\n')
+  const insertionIndex = position === 'after-output' ? lines.length : lines.length - 1
+  lines.splice(insertionIndex, 0, '{not-json')
+  return `${lines.join('\n')}\n`
+}
+
+function appendDuplicateCompletion(
+  source: string,
+  outputType: 'custom_tool_call_output' | 'function_call_output',
+): string {
+  const lines = source.trimEnd().split('\n')
+  const completion = JSON.parse(lines.at(-1) ?? '') as {
+    payload: { type: 'custom_tool_call_output' | 'function_call_output' }
+  }
+  completion.payload.type = outputType
+  lines.push(JSON.stringify(completion))
+  return `${lines.join('\n')}\n`
+}
+
 function sessionScopedEventLines(
   sessionCwd: string,
   output: unknown = customResultOutput(),
@@ -735,6 +758,79 @@ describe('Codex transcript skill receipt', () => {
     })
     expect(confirmed.confirmedSkillIds).toEqual(['openspec-propose'])
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it.each([
+    'between-invocation-and-output',
+    'after-output',
+  ] as const)('rejects an exact custom receipt when malformed JSON appears %s', async (position) => {
+    await writeFile(
+      transcript,
+      insertMalformedTranscriptLine(eventLines(customResultOutput()), position),
+      'utf8',
+    )
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it.each([
+    'between-invocation-and-output',
+    'after-output',
+  ] as const)('rejects an exact function receipt when malformed JSON appears %s', async (position) => {
+    await writeFile(
+      transcript,
+      insertMalformedTranscriptLine(functionCallSessionScopedEventLines(root), position),
+      'utf8',
+    )
+    await recordPendingReceipt('call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it.each([
+    ['custom', 'custom_tool_call_output'],
+    ['custom', 'function_call_output'],
+    ['function', 'function_call_output'],
+    ['function', 'custom_tool_call_output'],
+  ] as const)('rejects an exact %s receipt with a duplicate %s completion', async (invocationAbi, duplicateAbi) => {
+    const source = invocationAbi === 'custom'
+      ? eventLines(customResultOutput())
+      : functionCallSessionScopedEventLines(root)
+    await writeFile(transcript, appendDuplicateCompletion(source, duplicateAbi), 'utf8')
+    await recordPendingReceipt(invocationAbi === 'custom' ? toolUseId : 'call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('accepts the current Codex content-array ABI when text(result) forwards the complete Skill', async () => {
@@ -2346,6 +2442,31 @@ describe('Codex transcript skill receipt', () => {
       ),
       'utf8',
     )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it.each([
+    ['custom', 'custom_tool_call_output'],
+    ['custom', 'function_call_output'],
+    ['function', 'function_call_output'],
+    ['function', 'custom_tool_call_output'],
+  ] as const)('rejects a fallback %s read with a duplicate %s completion', async (invocationAbi, duplicateAbi) => {
+    const source = invocationAbi === 'custom'
+      ? eventLines(customResultOutput())
+      : functionCallSessionScopedEventLines(root)
+    await writeFile(transcript, appendDuplicateCompletion(source, duplicateAbi), 'utf8')
     await bindHostSession()
 
     const result = await reconcileCodexSkillEvidence({

@@ -35714,7 +35714,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       try {
         event = JSON.parse(line);
       } catch {
-        continue;
+        return false;
       }
       if (!isRecord12(event)) continue;
       if (event.type === "session_meta") {
@@ -35771,19 +35771,23 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
 async function matchingSuccessfulOutput(lines, receipt, outputAbi, readPaths) {
   if (readPaths.length === 0) return false;
   const expectedOutputType = outputAbi === "custom" ? "custom_tool_call_output" : "function_call_output";
+  let matchingOutput;
   for await (const line of lines) {
     let event;
     try {
       event = JSON.parse(line);
     } catch {
-      continue;
+      return false;
     }
     if (!isRecord12(event) || event.type !== "response_item") continue;
     const payload = event.payload;
-    if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId || payload.type !== expectedOutputType || asString3(payload.call_id) !== receipt.toolUseId) continue;
-    return outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths);
+    if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId || asString3(payload.call_id) !== receipt.toolUseId) continue;
+    if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
+    if (matchingOutput !== void 0) return false;
+    if (payload.type !== expectedOutputType) return false;
+    matchingOutput = await outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths);
   }
-  return false;
+  return matchingOutput === true;
 }
 function skillAliases(id) {
   const aliases = /* @__PURE__ */ new Set([id]);
@@ -35817,6 +35821,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
   for (const transcript of transcripts) {
     if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break;
     const readsByCall = /* @__PURE__ */ new Map();
+    const completedReadCalls = /* @__PURE__ */ new Set();
     const confirmedInLatestTurn = /* @__PURE__ */ new Set();
     let matchesRepo = false;
     let matchesHostSession = hostSessionId === void 0;
@@ -35866,6 +35871,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           if (turnId === latestTurnId) continue;
           latestTurnId = turnId;
           readsByCall.clear();
+          completedReadCalls.clear();
           confirmedInLatestTurn.clear();
           continue;
         }
@@ -35918,9 +35924,22 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         }
         if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
         const callId = asString3(payload.call_id);
-        const pendingRead = callId === void 0 ? void 0 : readsByCall.get(callId);
+        if (callId === void 0) continue;
+        if (completedReadCalls.has(callId)) {
+          malformedTranscript = true;
+          confirmedInLatestTurn.clear();
+          break;
+        }
+        const pendingRead = readsByCall.get(callId);
         const outputAbi = payload.type === "custom_tool_call_output" ? "custom" : "function";
-        if (pendingRead === void 0 || pendingRead.outputAbi !== outputAbi) continue;
+        if (pendingRead === void 0) continue;
+        readsByCall.delete(callId);
+        completedReadCalls.add(callId);
+        if (pendingRead.outputAbi !== outputAbi) {
+          malformedTranscript = true;
+          confirmedInLatestTurn.clear();
+          break;
+        }
         const successful = await outputMatchesTrustedSkillReads(
           payload.output,
           outputAbi,

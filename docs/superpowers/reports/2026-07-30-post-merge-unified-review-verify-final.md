@@ -1,4 +1,101 @@
-# 最终主干统一审查 — Verify 失败报告（2026-08-03，`ca41261a`）
+# 最终主干统一审查 — 最新 Verify 失败报告（2026-08-03，`d7f4a2e9`）
+
+## 最新冻结身份与结论
+
+- 产品 Git HEAD / Tenon `build_sha`：`d7f4a2e902d22509f6e04bc08a22379171c5faa0`
+- Git tree：`fd515f596ca40c810a4820e1956ab72c02724151`
+- Git 基线 / merge-base：`a86dabb481a8d20e0c50ce8c1b421fac45f886f9`
+- 完整范围：748 files，23,990 additions，3,777 deletions
+- Dashboard production entry：`index-C0HsuyWL.js`
+- Verify 前后真实工作树 binary status SHA-256：
+  `a46e96e3bfff22980f01c7156e01736f5e93a3413de55b5e6035be1586f2f400`
+- Verify 前后真实工作树 binary diff SHA-256：
+  `525ad16d0ed91823bfded929abd09b6c0030ffcbd735c2be31782ca37df35989`
+- 真实 OpenSpec digest：
+  `fe389a8629d1eba5206eec62dca60c8d92c30d4e08b9fcb5a4479afdd76b46cd`
+
+Verify：**FAIL — C0 / H1 / M0 / L0**。
+
+`ca41261a` 的三个 finding 已全部修复并由自动化、浏览器和独立审查重新验证；但是，新冻结提交的
+独立完整审查发现一个新的可信收据完整性 High。PR #20 不得合并。必须通过官方 `verify-fail`
+回到 Build，建立确定性 RED、修复、冻结新提交，并从零重跑全部 Verify 轨和 exact-head CI。
+
+### High — exact receipt 跳过 current turn 内损坏 JSON 后仍可确认 Skill read
+
+`packages/cli/src/codexTranscriptEvidence.ts:124-130,216-231` 的 exact-receipt 两层扫描都在
+`JSON.parse` 失败时 `continue`，而成功匹配输出后又会提前返回。攻击者可在合法 trusted invocation
+与 matching output 之间插入损坏 JSON；verifier 仍确认 receipt 并铸造 `CodexSkillRead`。这违反
+`codex-skill-receipt-current-turn` capability 对完整、可解析 current turn 以及损坏 JSON fail-closed
+的要求。
+
+隔离 RED 已稳定复现：
+
+`npx vitest run packages/cli/src/codexSkillReceipt.test.ts -t 'RED: exact receipt rejects malformed JSON between its invocation and matching output'`
+
+预期 `confirmedSkillIds=[]`，实际得到 `["openspec-propose"]`。修复必须完整扫描有界 transcript
+snapshot，current turn 的任一损坏行都使 exact receipt 无效，并覆盖 invocation-output 之间和
+matching output 之后两种损坏位置。
+
+## 最新四轨与远端证据
+
+| 轨道 | 结论 | 新鲜证据 |
+| --- | --- | --- |
+| 独立完整 reviewer | FAIL，C0/H1/M0/L0 | `/tmp/pr20-verify-d7f-track1-tDzEeG/REVIEW.md`；748 paths 全覆盖；隔离 RED 稳定复现 |
+| E2E/API/OpenSpec | PASS，C0/H0/M0/L0 | `/tmp/pr20-verify-d7f-track2-qMosWS/track2-summary.md`；root 5885、Dashboard 1579、receipt 122、API security 32 |
+| 生产浏览器/视觉 | PASS，C0/H0/M0/L0 | `/tmp/pr20-verify-d7f-visual-6B8MhW/REPORT.md`；172/172、36 组矩阵、46 screenshots、无非预期错误 |
+| Codex CLI exact diff | PASS，C0/H0/M0/L0 | `/tmp/pr20-codex-d7f.vETm82/final.md`；未发现可执行 correctness regression |
+
+GitHub exact-head CI run `30777513313` 在 `d7f4a2e902d22509f6e04bc08a22379171c5faa0`
+上为 success；Documentation Pages build 为 success、deploy 按 PR 规则 skipped。远端绿灯不能覆盖
+可信证据链的 High finding。
+
+## 已通过但不能覆盖最新失败结论的验证
+
+- Root Vitest：330 files，5,885 passed，26 honest skips；Dashboard：85 files，1,579 passed。
+- Trusted receipt 122/122；Navigation 85/85；API security 32/32。
+- Hooks 512/512；adapters 272/272；migration CAS 13/13；静态/治理门 12/12。
+- 完整生产构建、tracked runtime freshness、typecheck、dependency audit 0、clean install 全部通过。
+- OpenSpec change strict 1/1；隔离官方 archive 合并 6 个 delta，archive 后 37/37 strict。
+- 浏览器 1024/1440/1920、zh/en、light/dark/system、normal/reduce 36/36；关键交互 172/172。
+- Navigation API 和禁用 Navigation API 的 Back/Forward、取消、确认、first-request-wins 均通过。
+- 四轨前后真实产品工作树的 HEAD、tree、binary status、binary diff 与 specs digest 完全一致。
+
+26 个 honest skips 为 Docker-dependent 16 项、macOS 上 Linux-only 9 项、PR 环境 real-Codex H14
+1 项；本次 High 与这些 skip 无关。浏览器隔离服务、专用 profile 和验证端口已清理。
+
+## 最新后续动作
+
+1. 通过官方 `verify-fail` 回 Build，保持最终四轨 Verify 任务未勾选。
+2. 为 exact receipt 的 invocation-output 之间及 output 后损坏 JSON 建立 RED。
+3. 改为完整扫描有界 transcript snapshot，任何相关 current-turn 损坏 JSON 均 fail closed。
+4. 重跑定向、全量、构建、静态门和独立 pre-Verify，冻结新 SHA。
+5. 在新 SHA 上重新执行全部 Verify 轨与 exact-head CI；不得复用本轮 PASS 证据。
+
+## Build 回退修复收敛（待新 SHA 冻结）
+
+High 已通过 custom/function 各两种 malformed JSON RED 修复：exact receipt
+现在完整消费有界 snapshot，invocation-output 之间或 matching output 之后任一损坏行都会失败关闭。
+第一次 Build 候选又由独立审查发现 duplicate completion Medium，并明确拒绝；该候选没有冻结。
+
+最终候选增加 8 个永久回归，覆盖 exact/fallback × custom/function × 同 ABI/混合 ABI 的重复完成。
+exact 路径先按绑定的 `{turnId, callId}` 识别任意 completion，再验证 ABI；fallback 路径一次性消费
+pending read，并用 turn-scoped completed-call set 拒绝重复或混合 ABI completion。正式 receipt
+134/134 通过；独立 reviewer 另以 4 个隔离用例覆盖同 callId 重复 invocation 后再次 completion，
+总聚焦矩阵 17/17 通过。
+
+新鲜完整 pre-Verify Standards + Spec 审查返回 **PASS — C0/H0/M0/L0**，绑定 fingerprint
+`workspace:sha256:845402a3a72ead1ccea0606c03cc6d09bc4ee7f0be34f483b40f804668bbde49`。
+root 330 files / 5,897 product tests（reviewer-only 后 5,901）与 26 honest skips、Dashboard 1,579、
+完整 build、OpenSpec 38/38、release 24/24、bundle 31/31、hooks 512/512、adapters 272/272、
+migration CAS 13/13、npm audit 0、静态门和 Oracle 双跑全部通过。报告：
+`/tmp/pr20-preverify-r2-lFoqTu/STANDARDS-SPEC-REVIEW.md`，SHA-256
+`47bd2b9e192b597417f0d06d73affed205fbba685e268efd149e425d8ab53195`。审查前后真实树
+HEAD、tree 与 fingerprint 完全一致，允许一次提交并由官方 `build-complete` 冻结；之后必须在
+新精确 SHA 上从零重跑四轨 Verify 和 GitHub CI。
+
+---
+
+## 历史：`ca41261a` Verify 失败与 `d7f4a2e9` Build 修复
 
 ## 冻结身份
 

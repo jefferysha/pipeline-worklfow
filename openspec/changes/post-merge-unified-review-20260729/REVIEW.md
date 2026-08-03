@@ -1174,3 +1174,36 @@ branch is covered by the production bundle with real AbortSignals plus the
 exact automated suite, so this is an evidence limitation rather than a finding.
 The browser evidence is at
 `/tmp/pr20-browser-byl-final.mUllGH/evidence/README.md`.
+
+## Post-`d7f4a2e9` exact-receipt fail-closed convergence
+
+The exact-head Verify for `d7f4a2e9` was rejected at **C0/H1/M0/L0** because
+the exact receipt parser skipped malformed JSON and could return immediately
+after a matching completion. Build added deterministic custom/function REDs for
+malformed JSON between invocation and output and after output, then changed the
+parser to consume the complete bounded snapshot and fail closed on any malformed
+line.
+
+The first Build candidate was also rejected by independent pre-Verify review at
+**C0/H0/M1/L0**: a second completion with the opposite ABI remained acceptable
+on the exact path, while the fallback path did not consume a completed call.
+Eight permanent regressions now cover exact/fallback, custom/function, and
+same-ABI/mixed-ABI duplicate completions. Exact verification recognizes any
+completion for the bound `{turnId, callId}` before checking its ABI. Fallback
+consumes each pending read once and keeps a turn-scoped completed-call set, so a
+duplicate or mixed-ABI completion invalidates the candidate.
+
+The fresh replacement workspace is frozen by the independent review fingerprint
+`workspace:sha256:845402a3a72ead1ccea0606c03cc6d09bc4ee7f0be34f483b40f804668bbde49`.
+The review returned **PASS — C0/H0/M0/L0** across the complete 748-path
+base-to-workspace surface. Permanent receipt tests pass 134/134; four isolated
+reviewer cases covering a repeated invocation and completion with the same call
+id also pass, and the combined malformed/duplicate/ABI/TOCTOU/fallback matrix
+passes 17/17. Root passes 330 files / 5,897 product tests with 26 declared skips;
+the reviewer snapshot passes 5,901 including its four isolated cases. Dashboard
+passes 1,579/1,579. Build, OpenSpec 38/38, release 24/24, bundle 31/31, hooks
+512/512, adapters 272/272, migration CAS 13/13, npm audit, static gates and two
+Oracle runs all pass. The review report is
+`/tmp/pr20-preverify-r2-lFoqTu/STANDARDS-SPEC-REVIEW.md` with SHA-256
+`47bd2b9e192b597417f0d06d73affed205fbba685e268efd149e425d8ab53195`;
+its final repo-zero fingerprint exactly matches its starting fingerprint.

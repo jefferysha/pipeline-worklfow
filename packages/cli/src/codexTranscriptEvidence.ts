@@ -126,7 +126,7 @@ export async function transcriptConfirmsReceipt(
       try {
         event = JSON.parse(line) as unknown
       } catch {
-        continue
+        return false
       }
       if (!isRecord(event)) continue
       if (event.type === 'session_meta') {
@@ -213,24 +213,29 @@ async function matchingSuccessfulOutput(
   const expectedOutputType = outputAbi === 'custom'
     ? 'custom_tool_call_output'
     : 'function_call_output'
+  let matchingOutput: boolean | undefined
   for await (const line of lines) {
     let event: unknown
     try {
       event = JSON.parse(line) as unknown
     } catch {
-      continue
+      return false
     }
     if (!isRecord(event) || event.type !== 'response_item') continue
     const payload = event.payload
     if (
       !isRecord(payload)
       || receiptTurnId(payload) !== receipt.turnId
-      || payload.type !== expectedOutputType
       || asString(payload.call_id) !== receipt.toolUseId
     ) continue
-    return outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths)
+    if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
+    // A call id has one host-owned completion. Keep scanning the bounded snapshot after the
+    // match so damaged trailing JSON cannot be hidden behind an otherwise valid output.
+    if (matchingOutput !== undefined) return false
+    if (payload.type !== expectedOutputType) return false
+    matchingOutput = await outputMatchesTrustedSkillReads(payload.output, outputAbi, readPaths)
   }
-  return false
+  return matchingOutput === true
 }
 
 function skillAliases(id: string): readonly string[] {
@@ -287,6 +292,7 @@ export async function discoverCompletedCodexSkillReads(
       readonly outputAbi: OutputAbi
       readonly readPaths: readonly string[]
     }>()
+    const completedReadCalls = new Set<string>()
     const confirmedInLatestTurn = new Set<string>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
@@ -336,6 +342,7 @@ export async function discoverCompletedCodexSkillReads(
           if (turnId === latestTurnId) continue
           latestTurnId = turnId
           readsByCall.clear()
+          completedReadCalls.clear()
           confirmedInLatestTurn.clear()
           continue
         }
@@ -406,11 +413,24 @@ export async function discoverCompletedCodexSkillReads(
         }
         if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
         const callId = asString(payload.call_id)
-        const pendingRead = callId === undefined ? undefined : readsByCall.get(callId)
+        if (callId === undefined) continue
+        if (completedReadCalls.has(callId)) {
+          malformedTranscript = true
+          confirmedInLatestTurn.clear()
+          break
+        }
+        const pendingRead = readsByCall.get(callId)
         const outputAbi: OutputAbi = payload.type === 'custom_tool_call_output'
           ? 'custom'
           : 'function'
-        if (pendingRead === undefined || pendingRead.outputAbi !== outputAbi) continue
+        if (pendingRead === undefined) continue
+        readsByCall.delete(callId)
+        completedReadCalls.add(callId)
+        if (pendingRead.outputAbi !== outputAbi) {
+          malformedTranscript = true
+          confirmedInLatestTurn.clear()
+          break
+        }
         const successful = await outputMatchesTrustedSkillReads(
           payload.output,
           outputAbi,

@@ -185,6 +185,12 @@
 - [x] 无 Navigation API 且 history entry 未标记时使用方向安全降级，覆盖 Forward/Back 且不得卡死。 (build)
 - [x] 在完整待冻结 diff 上重跑全量测试、生成物、静态门、production 浏览器与 Standards + Spec pre-Verify 审查；新 SHA 由 `build-complete` 官方 transition 冻结。 (build)
 
+## 2026-08-03 第十一次 Verify 回退修复
+
+- [x] 为 exact Codex Skill receipt 的 invocation-output 之间及 matching output 后损坏 JSON 建立 fail-closed RED。 (build)
+- [x] 完整扫描有界 transcript snapshot，current turn 任一损坏 JSON 均拒绝 receipt，禁止匹配后提前返回。 (build)
+- [x] 重跑 receipt 定向、CLI/root 全量、生成物、静态门和独立 pre-Verify，冻结新 SHA 后从零重跑四轨 Verify。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
