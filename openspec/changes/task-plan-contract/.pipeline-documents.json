@@ -135,6 +135,12 @@
           "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -228,6 +234,12 @@
           "sha256": "1d14ceb427780890a1811f281c0cf3971caa808e83ee2452273c266d3d913eae",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1d14ceb427780890a1811f281c0cf3971caa808e83ee2452273c266d3d913eae",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -321,6 +333,12 @@
           "sha256": "3cace94af4498e38138596f691749ceaaf4ecbbe0175810a2581d0f6d845fe81",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3cace94af4498e38138596f691749ceaaf4ecbbe0175810a2581d0f6d845fe81",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -408,6 +426,12 @@
           "sha256": "8bcaddc78445b512ad557e88ca252625b83c099885aeb4acdfa5321effebcfba",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "8bcaddc78445b512ad557e88ca252625b83c099885aeb4acdfa5321effebcfba",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -501,6 +525,12 @@
           "sha256": "64915cbf4c78726c369de073d8eab4c11a8665ec70ce63f80c25da3308b1b810",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "64915cbf4c78726c369de073d8eab4c11a8665ec70ce63f80c25da3308b1b810",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -588,6 +618,12 @@
           "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -675,6 +711,12 @@
           "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
     },
@@ -768,16 +810,14 @@
           "sha256": "5534133d010d5e30e6181adda23a4d8c71c48b9996a42c73db7c60ba85192f5b",
           "readAt": "2026-08-03T16:00:39Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5534133d010d5e30e6181adda23a4d8c71c48b9996a42c73db7c60ba85192f5b",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-08-03-task-plan-contract-verify.md",
-      "sha256": "5ec050695e4af03f4b067e55e56a58f4bd2788a5becd462d5e009494149c1a9c",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-08-03T15:59:40Z",
-      "reads": []
     },
     {
       "kind": "tasks",
@@ -791,8 +831,22 @@
           "sha256": "c2416ca573708994fdb72eee171dbb6d0aaeac23e78f597fa30f5500be232faf",
           "readAt": "2026-08-03T16:07:40Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c2416ca573708994fdb72eee171dbb6d0aaeac23e78f597fa30f5500be232faf",
+          "readAt": "2026-08-03T16:37:03Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",24]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-03-task-plan-contract-verify.md",
+      "sha256": "5d405f382c72a1b149e728582a7e0190ef6dd518ab355e91c031a4d412c54bca",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-03T16:37:03Z",
+      "reads": []
     }
   ]
 }

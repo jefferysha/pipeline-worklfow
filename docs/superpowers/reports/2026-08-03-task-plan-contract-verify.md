@@ -476,3 +476,49 @@ PR1 首次官方登记对本回合精确 Skill 读取产生 false negative，确
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复所有同 plan immutable ID 保留与 caller-owned fallback，再重建正式生成物、完成独立 pre-Verify review，并从零执行第 9 轮三轨。
+
+---
+
+# 第 9 轮 Verify（冻结基线 `00e30d66f8428b3ca072b949af1817bfdfc77fa3`）
+
+## 结论
+
+FAIL。第 8 轮的同 plan immutable ID 全历史保留与 caller-owned codec-invalid fallback 已闭环，receipt bridge 的合法完成态与 fail-closed 对照也全部通过；但原生 Codex CLI 发现、Reviewer 独立动态复现确认 1 个 P2/MEDIUM：TaskPlan GET 在 Change capture/read 前后没有重新断言持久 registered-root inode anchor，并发 root replacement 可使端点读取替换目录。未接受偏差，必须回到 Build 修复并从零重跑三轨。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`00e30d66f8428b3ca072b949af1817bfdfc77fa3` / `8bc15f2df5a17e6c6fd808f5798330100a8b2fb6`。
+- E2E 轨真实工作树 start/after-suites/final 全内容指纹均为 `7425307c053fb1bedfaf22856742f13dc5d279a3`；HEAD/tree、NUL file list、status 与 mode/symlink 保持逐字节一致。Reviewer 与 Codex 的写命令均在仓外隔离 clone 执行。
+
+## 三轨结果
+
+- Reviewer：FAIL，C0/H0/M1。先完成 231 路径映射、fresh build、6 个相关套件 256/256 与全仓 337 files / 6057 passed / 26 honest skipped；收到独立线索后在隔离 fixture 复现：持久 anchor 捕获后 rename 旧 root 并在相同 pathname 放置 replacement，`assertWorkflowRootAnchor(anchor)` 正确拒绝，但现有 TaskPlan capture/read 链仍接受 replacement、读出其中内容，随后 `assertChangePathAnchor` 也通过。
+- E2E：PASS。TaskPlan/legacy/store 88/88、route 5/5、receipt 163/163、stable-hook 3/3、目标 hostile input 20/20、store ID reservation 6/6、真实 HTTP 10/10；隔离 OpenSpec show/strict/archive/all-strict 全通过，归档后 37/37。无 UI diff，browser N/A。
+- Codex CLI：FAIL，P2/MEDIUM=1。detached read-only clone `/tmp/tenon-pr1-codex-r9.HfrmvR/repo` 针对 exact frozen SHA/base 完成完整 diff/spec/read-path 审查，聚焦套件 256/256；最终指出 `serverGetRoutes.ts` 的 TaskPlan `readPlan` 只断言 Change anchor，未在 capture/read 周围复核 registered root。启动期 malformed logs DB/models cache 警告未阻止最终输出。
+
+## 确认 finding
+
+### MEDIUM — TaskPlan GET 可在并发 root replacement 后绕过持久 inode anchor
+
+`workflowRootForRequest()` 返回前会验证已注册 root 的持久 anchor，但 TaskPlan `readPlan` 随后直接执行 `captureChangePathAnchor(anchor, change)`、`readTaskPlanForChange(changeAnchor.changeDir)` 与 `assertChangePathAnchor(changeAnchor)`。若同一进程权限下的并发方在首次验证后 rename 原 root、于相同 pathname 放置 replacement，Change capture 会从 replacement pathname 建立一套自洽的子目录 anchor；末尾只验证这些 replacement children，未重新验证原 registered-root fd/inode，因而可返回非注册 root 中的 plan。
+
+修复要求：像其他 trusted readers 一样，在 Change capture 前、读取前后及返回前对同一个 `WorkflowRootAnchor` 执行 `assertWorkflowRootAnchor(anchor)`，同时保留 `assertChangePathAnchor`；以 TDD 增加 capture 前 root swap 与读取中 root swap 的受控拒绝、正常 canonical route 不回归，并确保异常不泄漏替换目录内容。
+
+## 已闭环边界与 receipt bridge 结论
+
+- 任一可信同 plan immutable 的 revision ID 均在写前保留；future orphan 复用被拒、different-plan namespace 保持允许、exact-current 遇重复历史失败关闭，current/projection/immutable target 零写入回归通过。
+- validator 只从 decoder 的安全 candidate 生成 duplicate 诊断；read-model 仅投影完整成功解码的闭集 clone。Proxy `get` 次数为 0，nested unknown `private_payload` 不进入 DTO 或错误文本。
+- PR1 首次官方登记确属 receipt bridge false-negative bug。metadata transcript 数量预算已从错误的 128 hard cap 对齐既有 4096 entry budget，仍只全文读取 latest 32、总量 512 MiB，并保持 exact session/turn/worktree/ABI/inode fences；inline `max_output_tokens` 仅接受正安全整数字面量。129+、真实当前宿主登记与 invalid/dynamic/zero/negative/fraction/unsafe/pragma/truncated/output-only/伪造对照全部通过。
+
+## LOW、环境限制与未完成通过门
+
+- L1：非法 UTF-8 文档 source 使用 replacement decode。
+- L2：malformed catalog 前项压缩后，后续 duplicate diagnostic path 相对 raw index 左移。
+- L3：transcript mtime/ctime 完全相同时使用默认 locale 的 `localeCompare`，33+ tied Unicode candidates 可能跨宿主 false-negative，不会 false-positive。
+- L4：TaskPlan path-based publication 在同用户 parent swap 下仍有极窄 TOCTOU；本轮 MEDIUM 是公开 GET trust anchor 的确定可复现绕过，风险不同。
+- 因确认的 MEDIUM，Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，且不复用第 9 轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 在 TaskPlan route 的 capture/read 全生命周期复核持久 root anchor，重建/验证相关 bundle，完成独立 pre-Verify review，再从零执行第 10 轮三轨。
