@@ -319,7 +319,7 @@ describe('task plan store', () => {
     expect(await readTaskPlanForChange(dir)).toMatchObject({ revision_id: 'revision-2', revision_number: 2 })
   })
 
-  it('accepts a fresh revision id despite unrelated same-id orphan and different-plan boundaries', async () => {
+  it('accepts a fresh revision id despite an unrelated same-plan orphan and a different-plan same-id orphan', async () => {
     const dir = await changeDir()
     await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
     await publishTaskPlanRevision(dir, plan({ revision_id: 'revision-2', revision_number: 2 }), {
@@ -327,8 +327,8 @@ describe('task plan store', () => {
     })
     const revisionsDir = join(dir, TASK_PLAN_STATE_DIR, 'revisions')
     await writeFile(
-      join(revisionsDir, '000099-revision-3.json'),
-      `${JSON.stringify(plan({ revision_id: 'revision-3', revision_number: 99 }))}\n`,
+      join(revisionsDir, '000099-unrelated-orphan-id.json'),
+      `${JSON.stringify(plan({ revision_id: 'unrelated-orphan-id', revision_number: 99 }))}\n`,
       'utf8',
     )
     await writeFile(
@@ -583,6 +583,26 @@ describe('task plan store', () => {
       .resolves.toMatchObject({ revision_id: 'revision-2', projection: { state: 'current' } })
   })
 
+  it('fails closed when an exact-current republish finds its id reused by another same-plan immutable', async () => {
+    const dir = await changeDir()
+    const current = plan()
+    await publishTaskPlanRevision(dir, current, { expected_current_revision_id: null })
+    const revisionsDir = join(dir, TASK_PLAN_STATE_DIR, 'revisions')
+    await writeFile(
+      join(revisionsDir, '000009-revision-1.json'),
+      revisionRaw(plan({ revision_id: 'revision-1', revision_number: 9 })),
+      'utf8',
+    )
+    const currentPath = join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE)
+    const currentBefore = await readFile(currentPath, 'utf8')
+    await writeFile(join(dir, 'tasks.md'), 'projection sentinel\n', 'utf8')
+
+    await expect(publishTaskPlanRevision(dir, current, { expected_current_revision_id: 'revision-1' }))
+      .rejects.toBeInstanceOf(TaskPlanStateCorruptError)
+    expect(await readFile(currentPath, 'utf8')).toBe(currentBefore)
+    expect(await readFile(join(dir, 'tasks.md'), 'utf8')).toBe('projection sentinel\n')
+  })
+
   it('counts an identical pre-existing target only once across entry, read, and byte admission budgets', async () => {
     const dir = await changeDir()
     await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
@@ -626,7 +646,7 @@ describe('task plan store', () => {
     expect(await readFile(orphanPath, 'utf8')).toBe(orphanRaw)
   })
 
-  it('allows a proposed revision id present only at a different same-plan future number', async () => {
+  it('rejects a proposed revision id reserved by a different same-plan future immutable', async () => {
     const dir = await changeDir()
     await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
     const revisionsDir = join(dir, TASK_PLAN_STATE_DIR, 'revisions')
@@ -637,13 +657,14 @@ describe('task plan store', () => {
     await writeFile(orphanPath, orphanRaw, 'utf8')
     const targetPath = join(revisionsDir, '000002-reserved-revision-id.json')
 
+    const currentBefore = await readFile(currentPath, 'utf8')
     await expect(publishTaskPlanRevision(
       dir,
       plan({ revision_id: 'reserved-revision-id', revision_number: 2 }),
       { expected_current_revision_id: 'revision-1' },
-    )).resolves.toMatchObject({ revision_id: 'reserved-revision-id', revision_number: 2 })
-    expect(await readFile(currentPath, 'utf8')).toContain('reserved-revision-id')
-    expect(await readFile(targetPath, 'utf8')).toContain('reserved-revision-id')
+    )).rejects.toBeInstanceOf(TaskPlanRevisionConflictError)
+    expect(await readFile(currentPath, 'utf8')).toBe(currentBefore)
+    await expect(readFile(targetPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(orphanPath, 'utf8')).toBe(orphanRaw)
   })
 

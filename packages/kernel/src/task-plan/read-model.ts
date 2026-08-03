@@ -4,20 +4,9 @@ import { validateTaskPlanRevisionV1 } from './validation.js'
 import {
   TASK_PLAN_READ_SCHEMA_VERSION,
   type CanonicalTaskPlanReadModelV1,
-  type TaskPlanCodecErrorCode,
   type TaskPlanProjectionStatus,
   type TaskPlanRevisionV1,
 } from './types.js'
-
-const UNPROJECTABLE_CODEC_ERRORS = new Set<TaskPlanCodecErrorCode>([
-  'array_invalid',
-  'array_too_large',
-  'document_too_large',
-  'field_required',
-  'field_type',
-  'json_invalid',
-  'object_invalid',
-])
 
 export function toTaskPlanReadModelV1(
   revision: TaskPlanRevisionV1,
@@ -25,16 +14,14 @@ export function toTaskPlanReadModelV1(
 ): CanonicalTaskPlanReadModelV1 {
   const decoded = decodeTaskPlanRevisionV1(revision)
   if (!decoded.ok) {
-    const structuralError = decoded.errors.find((entry) => UNPROJECTABLE_CODEC_ERRORS.has(entry.code))
-    if (decoded.overflow || structuralError !== undefined) {
-      throw new TypeError(
-        `TaskPlan revision cannot be projected at ${structuralError?.path ?? '$'}${
-          structuralError === undefined ? '' : `: ${structuralError.code}`
-        }`,
-      )
-    }
+    const firstError = decoded.errors[0]
+    throw new TypeError(
+      `TaskPlan revision cannot be projected at ${firstError?.path ?? '$'}${
+        firstError === undefined ? '' : `: ${firstError.code}`
+      }`,
+    )
   }
-  const projectedRevision = decoded.ok ? decoded.value : revision
+  const projectedRevision = decoded.value
   const validation = validateTaskPlanRevisionV1(projectedRevision)
   const requirements = projectedRevision.requirements.map((entry) => ({ ...entry }))
   const acceptanceCriteria = projectedRevision.acceptance_criteria.map((entry) => ({ ...entry }))

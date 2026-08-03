@@ -1,4 +1,4 @@
-import { decodeTaskPlanRevisionV1 } from './codec.js'
+import { decodeTaskPlanRevisionAttemptV1 } from './codec.js'
 import { deepFreeze, exactResourceKey, taskPlanEntityIdEntries } from './internal.js'
 import { TASK_PLAN_LIMITS } from './types.js'
 import type {
@@ -185,8 +185,9 @@ function resourceDiagnostics(
 }
 
 export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPlanValidationResult {
-  const decoded = decodeTaskPlanRevisionV1(revision)
-  if (!decoded.ok && decoded.errors.some((entry) => entry.code !== 'duplicate_id')) {
+  const decoded = decodeTaskPlanRevisionAttemptV1(revision)
+  const hasNonDuplicateCodecError = decoded.errors.some((entry) => entry.code !== 'duplicate_id')
+  if (decoded.value === undefined || decoded.overflow || hasNonDuplicateCodecError) {
     const issues: TaskPlanValidationIssue[] = decoded.errors
       .slice(0, TASK_PLAN_LIMITS.maxValidationIssues - 1)
       .map((entry) => ({
@@ -226,7 +227,7 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
       resources: { conflicts: [], serialized: [] },
     })
   }
-  const validatedRevision = decoded.ok ? decoded.value : revision
+  const validatedRevision = decoded.value
   const collector: IssueCollector = { items: [], truncated: false }
   const entityIds = new Set<string>()
   for (const { id, path } of taskPlanEntityIdEntries(validatedRevision)) {

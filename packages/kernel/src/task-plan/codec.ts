@@ -34,6 +34,12 @@ interface Collector {
   budgetExceeded: boolean
 }
 
+export interface TaskPlanDecodeAttemptV1 {
+  readonly value?: TaskPlanRevisionV1
+  readonly errors: readonly TaskPlanCodecError[]
+  readonly overflow: boolean
+}
+
 function error(collector: Collector, code: TaskPlanCodecErrorCode, path: string): void {
   if (collector.errors.length < TASK_PLAN_LIMITS.maxErrors) collector.errors.push({ code, path })
   else collector.overflow = true
@@ -380,17 +386,17 @@ function decodeUnknown(input: unknown, collector: Collector): TaskPlanRevisionV1
   return result
 }
 
-export function decodeTaskPlanRevisionV1(input: string | unknown): TaskPlanDecodeResult {
+export function decodeTaskPlanRevisionAttemptV1(input: string | unknown): TaskPlanDecodeAttemptV1 {
   const collector: Collector = {
     errors: [], overflow: false, decodeNodes: 0, textBytes: 0, budgetExceeded: false,
   }
   let candidate = input
   if (typeof input === 'string') {
     if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
-      return { ok: false, errors: [{ code: 'document_too_large', path: '$' }], overflow: false }
+      return deepFreeze({ errors: [{ code: 'document_too_large', path: '$' }], overflow: false })
     }
     try { candidate = JSON.parse(input) as unknown } catch {
-      return { ok: false, errors: [{ code: 'json_invalid', path: '$' }], overflow: false }
+      return deepFreeze({ errors: [{ code: 'json_invalid', path: '$' }], overflow: false })
     }
   }
   const value = decodeUnknown(candidate, collector)
@@ -398,10 +404,19 @@ export function decodeTaskPlanRevisionV1(input: string | unknown): TaskPlanDecod
     && byteLength(JSON.stringify(value)) > TASK_PLAN_LIMITS.maxDocumentBytes) {
     error(collector, 'document_too_large', '$')
   }
-  if (value === undefined || collector.errors.length > 0 || collector.overflow) {
-    return deepFreeze({ ok: false, errors: collector.errors, overflow: collector.overflow })
+  return deepFreeze({
+    ...(value === undefined ? {} : { value }),
+    errors: collector.errors,
+    overflow: collector.overflow,
+  })
+}
+
+export function decodeTaskPlanRevisionV1(input: string | unknown): TaskPlanDecodeResult {
+  const attempt = decodeTaskPlanRevisionAttemptV1(input)
+  if (attempt.value === undefined || attempt.errors.length > 0 || attempt.overflow) {
+    return deepFreeze({ ok: false, errors: attempt.errors, overflow: attempt.overflow })
   }
-  return deepFreeze({ ok: true, value })
+  return deepFreeze({ ok: true, value: attempt.value })
 }
 
 export function encodeTaskPlanRevisionV1(value: TaskPlanRevisionV1): string {

@@ -112,7 +112,9 @@ async function assertCommittedLineageAndAdmission(
   const targetName = revisionFileName(proposed)
   const revisionIds = new Set<string>()
   const revisionNumbers = new Set<number>()
+  const immutableRevisionIds = new Set<string>()
   let targetExists = false
+  let proposedIdOccupied = false
   let proposedNumberOccupied = false
   let entries = 0
   let reads = 0
@@ -148,6 +150,15 @@ async function assertCommittedLineageAndAdmission(
         throw new TaskPlanStateCorruptError('TaskPlan target revision already exists with different content')
       }
       targetExists = true
+    }
+    if (historical.plan_id === proposed.plan_id) {
+      if (immutableRevisionIds.has(historical.revision_id)) {
+        throw new TaskPlanStateCorruptError('TaskPlan immutable history contains a duplicate revision id')
+      }
+      immutableRevisionIds.add(historical.revision_id)
+      if (historical.revision_id === proposed.revision_id && entry.name !== targetName) {
+        proposedIdOccupied = true
+      }
     }
     if (
       historical.plan_id === proposed.plan_id
@@ -185,6 +196,9 @@ async function assertCommittedLineageAndAdmission(
     if (!exactCurrent && revisionIds.has(proposed.revision_id)) {
       throw new TaskPlanRevisionConflictError('TaskPlan revision id already exists in the current lineage')
     }
+  }
+  if (!exactCurrent && proposedIdOccupied) {
+    throw new TaskPlanRevisionConflictError('TaskPlan revision id already exists in immutable history')
   }
   if (!exactCurrent && proposedNumberOccupied) {
     throw new TaskPlanRevisionConflictError('TaskPlan proposed revision number is already occupied')

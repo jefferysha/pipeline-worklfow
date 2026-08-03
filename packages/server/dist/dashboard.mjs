@@ -1086,7 +1086,7 @@ function decodeUnknown(input, collector) {
     duplicateIds(result, collector);
   return result;
 }
-function decodeTaskPlanRevisionV1(input) {
+function decodeTaskPlanRevisionAttemptV1(input) {
   const collector = {
     errors: [],
     overflow: false,
@@ -1097,22 +1097,30 @@ function decodeTaskPlanRevisionV1(input) {
   let candidate = input;
   if (typeof input === "string") {
     if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
-      return { ok: false, errors: [{ code: "document_too_large", path: "$" }], overflow: false };
+      return deepFreeze({ errors: [{ code: "document_too_large", path: "$" }], overflow: false });
     }
     try {
       candidate = JSON.parse(input);
     } catch {
-      return { ok: false, errors: [{ code: "json_invalid", path: "$" }], overflow: false };
+      return deepFreeze({ errors: [{ code: "json_invalid", path: "$" }], overflow: false });
     }
   }
   const value = decodeUnknown(candidate, collector);
   if (!collector.budgetExceeded && value !== void 0 && byteLength(JSON.stringify(value)) > TASK_PLAN_LIMITS.maxDocumentBytes) {
     error(collector, "document_too_large", "$");
   }
-  if (value === void 0 || collector.errors.length > 0 || collector.overflow) {
-    return deepFreeze({ ok: false, errors: collector.errors, overflow: collector.overflow });
+  return deepFreeze({
+    ...value === void 0 ? {} : { value },
+    errors: collector.errors,
+    overflow: collector.overflow
+  });
+}
+function decodeTaskPlanRevisionV1(input) {
+  const attempt = decodeTaskPlanRevisionAttemptV1(input);
+  if (attempt.value === void 0 || attempt.errors.length > 0 || attempt.overflow) {
+    return deepFreeze({ ok: false, errors: attempt.errors, overflow: attempt.overflow });
   }
-  return deepFreeze({ ok: true, value });
+  return deepFreeze({ ok: true, value: attempt.value });
 }
 
 // packages/kernel/dist/task-plan/legacy.js
@@ -1333,8 +1341,9 @@ function resourceDiagnostics(revision, dependents, collector) {
   return { conflicts, serialized };
 }
 function validateTaskPlanRevisionV1(revision) {
-  const decoded = decodeTaskPlanRevisionV1(revision);
-  if (!decoded.ok && decoded.errors.some((entry) => entry.code !== "duplicate_id")) {
+  const decoded = decodeTaskPlanRevisionAttemptV1(revision);
+  const hasNonDuplicateCodecError = decoded.errors.some((entry) => entry.code !== "duplicate_id");
+  if (decoded.value === void 0 || decoded.overflow || hasNonDuplicateCodecError) {
     const issues2 = decoded.errors.slice(0, TASK_PLAN_LIMITS.maxValidationIssues - 1).map((entry) => ({
       severity: "error",
       code: "task-plan-contract-invalid",
@@ -1367,7 +1376,7 @@ function validateTaskPlanRevisionV1(revision) {
       resources: { conflicts: [], serialized: [] }
     });
   }
-  const validatedRevision = decoded.ok ? decoded.value : revision;
+  const validatedRevision = decoded.value;
   const collector = { items: [], truncated: false };
   const entityIds = /* @__PURE__ */ new Set();
   for (const { id, path: path7 } of taskPlanEntityIdEntries(validatedRevision)) {
@@ -1510,24 +1519,13 @@ function validateTaskPlanRevisionV1(revision) {
 }
 
 // packages/kernel/dist/task-plan/read-model.js
-var UNPROJECTABLE_CODEC_ERRORS = /* @__PURE__ */ new Set([
-  "array_invalid",
-  "array_too_large",
-  "document_too_large",
-  "field_required",
-  "field_type",
-  "json_invalid",
-  "object_invalid"
-]);
 function toTaskPlanReadModelV1(revision, projection) {
   const decoded = decodeTaskPlanRevisionV1(revision);
   if (!decoded.ok) {
-    const structuralError = decoded.errors.find((entry) => UNPROJECTABLE_CODEC_ERRORS.has(entry.code));
-    if (decoded.overflow || structuralError !== void 0) {
-      throw new TypeError(`TaskPlan revision cannot be projected at ${structuralError?.path ?? "$"}${structuralError === void 0 ? "" : `: ${structuralError.code}`}`);
-    }
+    const firstError = decoded.errors[0];
+    throw new TypeError(`TaskPlan revision cannot be projected at ${firstError?.path ?? "$"}${firstError === void 0 ? "" : `: ${firstError.code}`}`);
   }
-  const projectedRevision = decoded.ok ? decoded.value : revision;
+  const projectedRevision = decoded.value;
   const validation = validateTaskPlanRevisionV1(projectedRevision);
   const requirements = projectedRevision.requirements.map((entry) => ({ ...entry }));
   const acceptanceCriteria = projectedRevision.acceptance_criteria.map((entry) => ({ ...entry }));

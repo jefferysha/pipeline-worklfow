@@ -414,3 +414,65 @@ FAIL。第 6 轮的顶层 `plan_id` / `revision_id` 全局唯一性缺陷已修�
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 统一公共 validator/read-model 与 codec 的失败关闭边界，重建生成物、完成独立 pre-Verify review，再从零执行第 8 轮三轨。
+
+---
+
+# 第 8 轮 Verify（冻结基线 `ece2c1a373ef5c4dd6dda68491cb222a339199ba`）
+
+## 结论
+
+FAIL。第 7 轮的公共 validator/read-model codec 边界已经覆盖 future/unknown/lexical/closed-set/budget/resource/structural hostile input，但原生 Codex CLI 独立确认 1 个 HIGH 与 1 个 MEDIUM：未来同 plan immutable orphan 的 revision ID 仍可被较低 revision 复用；duplicate-only/shape-safe codec 失败又回退到 caller-owned object，导致 Proxy trap 执行与未知字段泄漏。Reviewer 和 E2E 轨通过不能覆盖真实阻断项，未接受偏差。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`ece2c1a373ef5c4dd6dda68491cb222a339199ba` / `985f0889a5c6e978f08fc3dbdd167454b5873663`。
+- exact diff：213 files，`+8154/-1392`；Reviewer full-index binary diff SHA-256 `1660b7e159c279aec177f6111b50a71ee2b3572f66a8624beee218de34558d03`，name-status digest `6a1ac88e84800b74597d9d3e673c1758291876ae6e618ac779d32013245ce065`。
+- Reviewer 对真实 worktree 的 HEAD/index/status/untracked/cached/worktree diff 前后 fingerprint 完全一致；E2E 真实 repo fingerprint 起止均为 `95f775e...`。所有会写入的验证均在 `/tmp` 隔离副本执行，进入 Verify 后既有 `.pipeline-documents.json` read receipt 修改保持不变。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L4。213/213 capability mapping；focused 253/253、全仓 337/337 files（6054 passed / 26 honest skipped）、build/static/OpenSpec/integrity、hermetic bundle 27/27、生成物 freshness、merge-tree/fsck 与隔离 archive 均通过。其本机 managed previous-runtime 可选探测为 30/31，失败来自缓存 runtime 已创建 companion、使“缺 companion 应 pending”的环境前提不成立；N-1 reader compatibility 本身通过，未把可选环境断言伪报为硬门通过。
+- E2E：PASS。85 个 TaskPlan/store、5 个 route、163 个 receipt、3 个 stable-hook 用例通过；public matrix、store recovery/trust、真实 HTTP/store、OpenSpec show/strict/archive/all-strict 均通过。无 UI diff，browser N/A。
+- Codex CLI：FAIL，HIGH=1 / MEDIUM=1 / LOW=2。在 detached read-only clone `/tmp/tenon-pr1-codex-r8.SS8cAM/repo` 完成完整 diff/spec/聚焦测试与 hostile-input 动态复现，exit 0。聚焦 253/253、architecture、OpenSpec 37/37、repository hygiene、JSON/JSONL 与 fsck 通过；全仓 Vitest 因 read-only sandbox 禁止 Vite 写 `node_modules/.vite-temp` 未运行，不替代前两轨的 fresh 全仓证据。
+
+## 确认 findings
+
+### HIGH — 任一同 plan immutable revision ID 未被全局保留
+
+history admission 在枚举 immutable revision 后，先跳过 `revision_number > current.revision_number` 的同 plan orphan，再把 ID 加入 occupied set。于是 `000009-reserved-revision-id.json` 已存在时，revision 2 仍可使用相同 `revision_id` 并成为 current。现有测试甚至显式期待该错误成功路径。
+
+这直接违反冻结 delta 的“新 revision ID 与同一 plan lineage 的 current 或任一历史 immutable revision 相同则拒绝发布”以及 design 的“current 与 immutable history 共同构成唯一性边界”。修复必须在任何写入前保留所有可信同 plan immutable ID，同时继续区分 committed lineage 连续性、不同 plan orphan、同名幂等 target 与 proposed number 冲突；补成功路径改 RED→GREEN、current/target 零写入与不同 plan 对照。
+
+### MEDIUM — codec 失败回退执行 hostile Proxy 并泄漏未知字段
+
+public validator 只在 non-duplicate codec error 时提前失败；duplicate-only 时继续遍历原始 caller revision。read-model 对所有 shape-safe codec error 也以原始 revision 作为 projection source，再用 array `map` 与 object spread 构造 DTO。
+
+独立动态复现：
+
+- descriptor-safe 但对 `map`/iterator 的 `get` trap 抛错的 Proxy 数组，在 duplicate-only 路径被 validator/read-model 再次访问，观察到 `gets=2`，原始 `Error: hostile-get` 泄漏而非受控拒绝；
+- WorkItem 带 `private_payload: "leaked"` 时 codec 正确产生 `unknown_field`，但 read-model 仍返回 `schedulable=false` DTO，且 `items[0].private_payload === "leaked"`。
+
+修复要求：validator 的 duplicate 精确诊断只能遍历 decoder 生成的安全 canonical candidate；read-model 只能投影完整成功解码的闭集 clone，任何 codec-invalid 输入必须受控失败关闭，不得读取 caller Proxy、传播原始异常或把未知字段复制进稳定 DTO。新增 Proxy getter-zero、duplicate-only、unknown-field leak 与合法输入不回归测试。
+
+## Receipt bridge 问题的判定与闭环
+
+PR1 首次官方登记对本回合精确 Skill 读取产生 false negative，确认是 bridge bug，而不是门禁应放宽的情况。已完成两处同源修复并由官方 fail-closed 重试证明：
+
+- transcript metadata discovery 数量预算从错误的 128 hard cap 对齐既有 4096 entry 上限，仍只全文读取 latest 32、总量 512 MiB，并保留 exact session/turn/worktree、ABI、inode/mtime/ctime fences；129+ current bound transcript 回归通过；
+- 当前 host inline wrapper 的 `max_output_tokens` 仅接受正安全整数字面量；dynamic/zero/negative/fraction/unsafe/pragma/truncated/output-only/重序列化 wrapper 继续拒绝。只有 literal awaited `tools.exec_command` 且同一 result 由 `text(result)` 完整转发时登记成功。
+
+官方重试先以不满足同一 result 完整转发的 wrapper 得到正确拒绝，再以精确完成态 wrapper 读取当前 phase Skill，随后 document registration 与 phase transition 成功。这证明修复消除了合法证据 false negative，没有制造 false positive。
+
+## LOW、环境限制与未完成通过门
+
+- L1：非法 UTF-8 文档 source 使用 replacement decode。
+- L2：malformed catalog 前项压缩后，后续 duplicate diagnostic path 相对 raw index 左移。
+- L3：transcript mtime/ctime 完全相同时使用默认 locale 的 `localeCompare`，33+ tied Unicode candidates 可跨宿主 false-negative，不会 false-positive。
+- L4：TaskPlan path-based publication 在同用户 parent swap 下仍有极窄 TOCTOU。
+- L5：server TaskPlan route 的依赖/成功 body 类型仍为 `unknown`，测试允许不完整 DTO；生产 wiring 当前使用 kernel read model，故列 LOW，但后续应把 API boundary 收紧为稳定 read DTO。
+- 因 HIGH/MEDIUM 未清零，Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，也不复用第 8 轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复所有同 plan immutable ID 保留与 caller-owned fallback，再重建正式生成物、完成独立 pre-Verify review，并从零执行第 9 轮三轨。

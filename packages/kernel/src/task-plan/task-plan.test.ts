@@ -457,8 +457,42 @@ describe('TaskPlan v1 validation and read projection', () => {
       })
       expect(validation.valid, label).toBe(false)
       expect(validation.freezable, label).toBe(false)
-      expect(toTaskPlanReadModelV1(input, { state: 'current' }).schedulable, label).toBe(false)
+      expect(() => toTaskPlanReadModelV1(input, { state: 'current' }), label)
+        .toThrow('TaskPlan revision cannot be projected')
     }
+  })
+
+  it('reports duplicate IDs from a safe decoded candidate without executing caller Proxy traps', () => {
+    const input = revision()
+    const duplicateRequirements = [
+      input.requirements[0]!,
+      { ...input.requirements[0]!, title: 'Duplicate requirement' },
+    ]
+    let getterCalls = 0
+    const requirements = new Proxy(duplicateRequirements, {
+      get() {
+        getterCalls += 1
+        throw new Error('hostile-get')
+      },
+    })
+    const hostile = revision({ requirements })
+
+    const decoded = decodeTaskPlanRevisionV1(hostile)
+    expect(decoded).toMatchObject({
+      ok: false,
+      errors: [{ code: 'duplicate_id', path: '$.requirements[1].id' }],
+    })
+    const validation = validateTaskPlanRevisionV1(hostile)
+    expect(validation.issues).toContainEqual({
+      severity: 'error',
+      code: 'entity-id-duplicate',
+      path: '$.requirements[1].id',
+      related_ids: ['req-1'],
+    })
+    expect(validation.valid).toBe(false)
+    expect(() => toTaskPlanReadModelV1(hostile, { state: 'current' }))
+      .toThrow('TaskPlan revision cannot be projected at $.requirements[1].id')
+    expect(getterCalls).toBe(0)
   })
 
   it.each([
@@ -509,7 +543,27 @@ describe('TaskPlan v1 validation and read projection', () => {
     })
     expect(validation.valid).toBe(false)
     expect(validation.freezable).toBe(false)
-    expect(toTaskPlanReadModelV1(input, { state: 'current' }).schedulable).toBe(false)
+    expect(() => toTaskPlanReadModelV1(input, { state: 'current' }))
+      .toThrow(`TaskPlan revision cannot be projected at ${path}`)
+  })
+
+  it('rejects nested unknown fields without copying them into the stable read DTO', () => {
+    const input = revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, private_payload: 'leaked' }
+        : item) as unknown as TaskPlanRevisionV1['work_items'],
+    })
+
+    const validation = validateTaskPlanRevisionV1(input)
+    expect(validation).toMatchObject({ valid: false, freezable: false })
+    expect(validation.issues).toContainEqual({
+      severity: 'error',
+      code: 'task-plan-contract-invalid',
+      path: '$.work_items[0].private_payload',
+      related_ids: ['unknown_field'],
+    })
+    expect(() => toTaskPlanReadModelV1(input, { state: 'current' }))
+      .toThrow('TaskPlan revision cannot be projected at $.work_items[0].private_payload')
   })
 
   it.each([
