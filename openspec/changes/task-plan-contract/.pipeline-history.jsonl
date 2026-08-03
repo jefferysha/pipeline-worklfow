@@ -174,3 +174,4 @@
 {"ts":"2026-08-03T17:43:56Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:53:58Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
 {"ts":"2026-08-03T17:44:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-08-03T17:44:07Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"305d41dc-cfb6-400c-ab1e-5ef33c61c1c9"}
+{"ts":"2026-08-03T17:44:43Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
