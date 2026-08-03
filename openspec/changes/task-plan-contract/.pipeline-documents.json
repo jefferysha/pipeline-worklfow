@@ -886,7 +886,7 @@
       "path": "openspec/changes/task-plan-contract/tasks.md",
       "sha256": "3a4f71dc0dbc04dd1ecab58cf7524903bf98eb114b98a793e6ee9f6195fa27cc",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-03T23:47:19Z",
+      "recordedAt": "2026-08-03T23:48:11Z",
       "reads": [
         {
           "phase": "build",
