@@ -359,3 +359,58 @@ FAIL。第 5 轮的公开 validator/read-model duplicate ID 缺陷已对 catalog
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 把 `plan_id`/`revision_id` 纳入共享全局 entity-ID 枚举，重建正式生成物并提交新 frozen SHA，再从零执行第 7 轮三轨 Verify。
+
+---
+
+# 第 7 轮 Verify（冻结基线 `d404e77ababa24b63b61c8234362dbb6a5da5029`）
+
+## 结论
+
+FAIL。第 6 轮的顶层 `plan_id` / `revision_id` 全局唯一性缺陷已修复，13 类顶层碰撞矩阵全部失败关闭；Reviewer 与 E2E 轨通过，但原生 Codex CLI 发现公共 validator/read-model 仍可绕过其余 codec 不变量。冻结构建上的独立动态复现确认非法 revision ID 与未规范化 path claim 会被标为 valid/freezable/schedulable，必须再次回 Build。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`d404e77ababa24b63b61c8234362dbb6a5da5029` / `f329fbb54f0d9333d77e429a31b495d27b3545c4`。
+- Reviewer 枚举 195 个 committed paths，叠加进入 Verify 后 7 个 changed/untracked governance paths，共 198 个唯一路径；198/198 capability mapping 完成，digest `84207f7077213911c7fcc67d61d36924aa22bf04542b21fd593fa0372672780f`。
+- E2E 真实仓全树指纹在 start/after-full/final 均为 `bc7c4a94ebc384b66285079d3b91a294def2ac29`；Reviewer 的 index/status/untracked/worktree/cached 与 committed diff 指纹也前后一致。所有会写命令均在 `/tmp` 隔离副本运行。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L4。fresh build、6 files 237/237、全仓 6038 passed / 26 honest skipped、全部 static/docs/OpenSpec、hermetic bundle 27/27、生成物 freshness、merge-tree/fsck 与隔离 archive 均通过。
+- E2E：PASS。TaskPlan/legacy/store 69/69、route 5/5、receipt 17 项、official registration 1/1、指定边界 13/13、真实 HTTP 10/10；碰撞发布在 immutable/current/tasks 任何写入前拒绝。证据根：`/tmp/tenon-pr1-verify7.w8v6mV/`。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached read-only clone `/tmp/tenon-pr1-codex-r7.4DbOzF/repo` 运行 `codex exec review --ephemeral --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。其自发 focused Vitest 因 clone 无 `node_modules`、npx 参数版本不匹配且网络代理被 sandbox 拒绝而 exit 1；该环境失败不替代 Reviewer/E2E 的 fresh 测试，也不影响静态 finding。
+
+## 确认 finding
+
+### MEDIUM — 公共 validator/read-model 未覆盖 codec lexical 与资源规范化不变量
+
+`validateTaskPlanRevisionV1` 只检查关系、覆盖、冲突与重复 ID；`toTaskPlanReadModelV1` 直接以 `revision.status === 'frozen' && validation.valid` 决定 schedulable。合法 TypeScript 形状的内部调用方无需 codec round-trip 即可传入 `revision_id='../escape'` 或 `path` claim `key='../outside'`。validator 对非法资源还以 raw fallback key 继续分析，最终不产生 issue，read model 错误标记可调度。
+
+冻结构建独立动态复现：
+
+```json
+{"valid":true,"freezable":true,"issues":[],"schedulable":true,"revisionId":"../escape","resource":{"conflicts":[],"serialized":[]}}
+```
+
+这与第 5/6 轮 duplicate ID 绕 codec 属同一公共 trust-boundary 类缺陷。修复要求：公共 validator/read-model 必须独立失败关闭所有 task-plan/v1 codec 不变量，至少覆盖非法/非 NFC ID、control/unknown/oversized 字段、未规范化 path/logical/external resource 与非法 output ref；不得只依赖持久 store 先 decode。测试同时断言 structured issue、`valid/freezable/schedulable=false` 与合法 typed baseline 不漂移，并确保 store/API 继承该行为。
+
+## 已闭环 finding、receipt 与逐文件回读
+
+- `plan_id↔revision_id` 及二者分别与 requirement/acceptance/group/work-item/output/validator 的 13 类矩阵全部得到精确 `duplicate_id` / `entity-id-duplicate` path，`valid/freezable/schedulable=false`；非碰撞 baseline 仍可调度。
+- store 对顶层碰撞的发布在写前拒绝，current、immutable 列表与 tasks 投影逐字节不变；最大 persisted bytes、NFC、lineage/admission、projection budget 与 legacy ceiling 回归通过。
+- receipt bridge 的 129+、safe-positive inline `max_output_tokens`、current custom/function ABI、完整 same-result `text(result)` 与 invalid/truncated/output-only/伪造对照均保持 fail-closed；official current Skill registration 通过。
+- 163 个 changed governance JSON 全部解析；69 revisions 与 companions 一一配对，20 transitions 连续，10 个文档 digest 与 Verify 9/9 必需 read receipt 匹配。隔离 archive 应用 `+7/~2`，归档后 OpenSpec 37/37；真实 main specs digest始终为 `513bae7ec8b18dc850f358bac40ce6668b9d53cc3a2aaa6cc3a8f60029b89e25`。
+
+## LOW、环境限制与未完成通过门
+
+- L1：非法 UTF-8 文档 source 使用 replacement decode；结构 ID/状态仍会被 codec 拒绝，但损坏 title 可静默保留。
+- L2：malformed catalog 前项被压缩后，后续 duplicate diagnostic path 相对 raw index 左移；输入仍整体拒绝。
+- L3：transcript mtime/ctime 完全相同时用 `localeCompare` 排 path，33+ tied Unicode candidates 可跨宿主 false-negative，不会 false-positive。
+- L4：TaskPlan path-based publication 在同用户 parent swap 下仍有极窄 TOCTOU。
+- optional 本机 previous release 探测仍为 30 pass / 1 个环境假设失败；hermetic hard gate 27/27。无 UI 源码 diff，因此不运行 browser/视觉轨；Docker 与 real-Codex 条件项保持 honest skip。
+- 因确认的 MEDIUM，Verify tasks 未标完成，未设置 branch handled，未请求 `verify-pass`，也不复用本轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 统一公共 validator/read-model 与 codec 的失败关闭边界，重建生成物、完成独立 pre-Verify review，再从零执行第 8 轮三轨。

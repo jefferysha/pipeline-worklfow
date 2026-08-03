@@ -461,6 +461,57 @@ describe('TaskPlan v1 validation and read projection', () => {
     }
   })
 
+  it.each([
+    ['future schema', { ...revision(), schema_version: 'task-plan/v2' } as TaskPlanRevisionV1, '$.schema_version', 'enum_invalid'],
+    ['unknown field', { ...revision(), unexpected: true } as TaskPlanRevisionV1, '$.unexpected', 'unknown_field'],
+    ['invalid identifier', revision({ revision_id: '../escape' }), '$.revision_id', 'identifier_invalid'],
+    ['non-NFC identifier', revision({ revision_id: 'revision-a\u0308' }), '$.revision_id', 'identifier_invalid'],
+    ['invalid status', revision({ status: 'future' as TaskPlanRevisionV1['status'] }), '$.status', 'enum_invalid'],
+    ['invalid timestamp', revision({ created_at: 'not-a-timestamp' }), '$.created_at', 'timestamp_invalid'],
+    ['invalid revision number', revision({ revision_number: 0 }), '$.revision_number', 'integer_invalid'],
+    ['control character', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, title: 'unsafe\nheading' }
+        : item),
+    }), '$.work_items[0].title', 'control_character'],
+    ['oversized text', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, title: 'x'.repeat(TASK_PLAN_LIMITS.maxTextBytes + 1) }
+        : item),
+    }), '$.work_items[0].title', 'field_too_large'],
+    ['unnormalized path claim', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, resource_claims: [{ kind: 'path', access: 'write', key: '../outside' }] }
+        : item),
+    }), '$.work_items[0].resource_claims[0].key', 'resource_not_normalized'],
+    ['unnormalized file output', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, expected_outputs: [{ ...item.expected_outputs[0]!, ref: '../outside' }] }
+        : item),
+    }), '$.work_items[0].expected_outputs[0].ref', 'resource_not_normalized'],
+  ])('rejects codec-invalid typed %s through the public validator and read model', (
+    _label,
+    input,
+    path,
+    codecError,
+  ) => {
+    const decoded = decodeTaskPlanRevisionV1(input)
+    expect(decoded.ok).toBe(false)
+    if (decoded.ok) throw new Error('expected codec-invalid fixture')
+    expect(decoded.errors).toContainEqual({ code: codecError, path })
+
+    const validation = validateTaskPlanRevisionV1(input)
+    expect(validation.issues).toContainEqual({
+      severity: 'error',
+      code: 'task-plan-contract-invalid',
+      path,
+      related_ids: [codecError],
+    })
+    expect(validation.valid).toBe(false)
+    expect(validation.freezable).toBe(false)
+    expect(toTaskPlanReadModelV1(input, { state: 'current' }).schedulable).toBe(false)
+  })
+
   it('returns stable sorted issues for ownership, refs, cycles, and uncovered catalogs', () => {
     const input = revision({
       groups: [

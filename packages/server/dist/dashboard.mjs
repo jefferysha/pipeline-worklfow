@@ -1333,21 +1333,56 @@ function resourceDiagnostics(revision, dependents, collector) {
   return { conflicts, serialized };
 }
 function validateTaskPlanRevisionV1(revision) {
+  const decoded = decodeTaskPlanRevisionV1(revision);
+  if (!decoded.ok && decoded.errors.some((entry) => entry.code !== "duplicate_id")) {
+    const issues2 = decoded.errors.slice(0, TASK_PLAN_LIMITS.maxValidationIssues - 1).map((entry) => ({
+      severity: "error",
+      code: "task-plan-contract-invalid",
+      path: entry.path,
+      related_ids: [entry.code]
+    }));
+    const truncated = decoded.overflow || decoded.errors.length >= TASK_PLAN_LIMITS.maxValidationIssues;
+    if (truncated) {
+      issues2.push({
+        severity: "error",
+        code: "diagnostic-budget-exceeded",
+        path: "$",
+        related_ids: []
+      });
+    }
+    issues2.sort((left, right) => ordinalCompare(`${left.code}\0${left.path}\0${left.related_ids.join("\0")}`, `${right.code}\0${right.path}\0${right.related_ids.join("\0")}`));
+    return deepFreeze({
+      valid: false,
+      freezable: false,
+      truncated,
+      issues: issues2,
+      coverage: {
+        complete: false,
+        requirements: [],
+        acceptance_criteria: [],
+        uncovered_requirement_ids: [],
+        uncovered_acceptance_ids: []
+      },
+      dependencies: { edges: [], cyclic_work_item_ids: [] },
+      resources: { conflicts: [], serialized: [] }
+    });
+  }
+  const validatedRevision = decoded.ok ? decoded.value : revision;
   const collector = { items: [], truncated: false };
   const entityIds = /* @__PURE__ */ new Set();
-  for (const { id, path: path7 } of taskPlanEntityIdEntries(revision)) {
+  for (const { id, path: path7 } of taskPlanEntityIdEntries(validatedRevision)) {
     if (entityIds.has(id))
       issue(collector, "entity-id-duplicate", path7, [id]);
     else
       entityIds.add(id);
   }
-  const groupIds = new Set(revision.groups.map((group) => group.id));
-  const itemIds = new Set(revision.work_items.map((item2) => item2.id));
-  const requirementIds = new Set(revision.requirements.map((entry) => entry.id));
-  const acceptanceIds = new Set(revision.acceptance_criteria.map((entry) => entry.id));
+  const groupIds = new Set(validatedRevision.groups.map((group) => group.id));
+  const itemIds = new Set(validatedRevision.work_items.map((item2) => item2.id));
+  const requirementIds = new Set(validatedRevision.requirements.map((entry) => entry.id));
+  const acceptanceIds = new Set(validatedRevision.acceptance_criteria.map((entry) => entry.id));
   const memberships = /* @__PURE__ */ new Map();
   const groupGraph = /* @__PURE__ */ new Map();
-  for (const [groupIndex, group] of revision.groups.entries()) {
+  for (const [groupIndex, group] of validatedRevision.groups.entries()) {
     groupGraph.set(group.id, group.parent_id === null ? [] : [group.parent_id]);
     if (group.parent_id !== null && !groupIds.has(group.parent_id)) {
       issue(collector, "group-parent-unknown", `$.groups[${groupIndex}].parent_id`, [group.id, group.parent_id]);
@@ -1367,7 +1402,7 @@ function validateTaskPlanRevisionV1(revision) {
   const dependencyGraph = /* @__PURE__ */ new Map();
   const dependents = /* @__PURE__ */ new Map();
   const edges = [];
-  for (const [itemIndex, item2] of revision.work_items.entries()) {
+  for (const [itemIndex, item2] of validatedRevision.work_items.entries()) {
     const owners = memberships.get(item2.id) ?? [];
     if (owners.length === 0)
       issue(collector, "work-item-unowned", `$.work_items[${itemIndex}].group_id`, [item2.id]);
@@ -1431,8 +1466,8 @@ function validateTaskPlanRevisionV1(revision) {
   if (dependencyCycle.length > 0)
     issue(collector, "dependency-cycle", "$.work_items", dependencyCycle);
   edges.sort((left, right) => ordinalCompare(`${left.from_work_item_id}\0${left.to_work_item_id}`, `${right.from_work_item_id}\0${right.to_work_item_id}`));
-  const requirementCoverage = coverageEntries([...requirementIds], revision.work_items, (item2) => item2.requirement_refs, collector);
-  const acceptanceCoverage = coverageEntries([...acceptanceIds], revision.work_items, (item2) => item2.acceptance_refs, collector);
+  const requirementCoverage = coverageEntries([...requirementIds], validatedRevision.work_items, (item2) => item2.requirement_refs, collector);
+  const acceptanceCoverage = coverageEntries([...acceptanceIds], validatedRevision.work_items, (item2) => item2.acceptance_refs, collector);
   const uncoveredRequirementIds = requirementCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id);
   const uncoveredAcceptanceIds = acceptanceCoverage.filter((entry) => entry.work_item_ids.length === 0).map((entry) => entry.id);
   for (const id of uncoveredRequirementIds)
@@ -1443,7 +1478,7 @@ function validateTaskPlanRevisionV1(revision) {
     edges,
     cyclic_work_item_ids: dependencyCycle
   };
-  const resources = resourceDiagnostics(revision, dependents, collector);
+  const resources = resourceDiagnostics(validatedRevision, dependents, collector);
   const issues = collector.items;
   if (collector.truncated) {
     if (issues.length >= TASK_PLAN_LIMITS.maxValidationIssues)

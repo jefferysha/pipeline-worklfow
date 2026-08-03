@@ -34,6 +34,7 @@
 - [x] 分离 legacy 与 canonical projection 字节预算，使超过旧 256 KiB 的合法 canonical tasks.md 在 publish/read 间保持 current。 (build)
 - [x] 让公开 validator 与 codec 共用全局 entity ID 唯一性枚举，拒绝未经 codec round-trip 的重复 ID 并阻止错误 schedulable。 (build)
 - [x] 将 `plan_id` 与 `revision_id` 纳入全局 entity ID 唯一性枚举，拒绝顶层相互冲突及顶层与嵌套实体冲突。 (build)
+- [x] 让公共 validator/read-model 在无需 codec round-trip 时也拒绝所有 TaskPlan v1 闭集、词法、预算与资源规范化违规。 (build)
 
 ## 验证
 

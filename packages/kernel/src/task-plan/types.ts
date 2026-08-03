@@ -129,6 +129,7 @@ export type TaskPlanValidationIssueCode =
   | 'requirement-uncovered'
   | 'resource-claim-duplicate'
   | 'resource-write-conflict'
+  | 'task-plan-contract-invalid'
   | 'validator-output-unknown'
   | 'work-item-group-mismatch'
   | 'work-item-multiple-groups'
