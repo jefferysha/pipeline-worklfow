@@ -38,14 +38,15 @@
 30. Anchor/Git 探测增加耗时后，20ms SSE poll 可能重叠并由较早请求回写旧 fingerprint；现用单飞锁串行化 poll，状态转换后稳定推送新的 Snapshot。
 31. `readdir(changesRoot)` 后的 root 稳定性断言曾落在“合法空项目”catch 内，换位错误会被误报为 `ok=true`；现仅将 `ENOENT` 解释为尚无 Changes 的合法空项目，其他 I/O 错误失败关闭，且在降级前复核 anchor、读取成功后于 catch 外复核。换位与 `EACCES` 回归都不会发布健康空项目。
 32. 首轮冻结 Verify 发现 SSE fingerprint 会把 `readdir(openspec/changes)` 的非 `ENOENT` 错误也折叠为空目录，导致合法空目录与 `EACCES`/`EIO`/`EMFILE` 状态之间可能不刷新已连接页面；现与 Snapshot 统一为仅 `ENOENT` 表示合法空目录，其他读取错误生成稳定的 `unreadable:<root>` 指纹，并把同一个目录读取依赖贯穿初始 stream 与轮询路径。新增空目录 → `EACCES` → 恢复及 `ENOENT` 等价性的回归测试。
+33. 第二轮冻结 Verify 发现未选择项目时已成功返回的全局 Docker 探测仍被项目级 readiness 的空值覆盖成“未知”；现 Docker 卡片只消费全局 `/api/docker/images` 权威事实，项目级镜像配置仍保持独立未知。新增无项目选择且 daemon 不可用的红绿回归，状态明确为 AFK `optional-unavailable`，不会进入核心 blocker。
 
 ## Re-review
 
-首轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。冻结前 Reviewer 对相对 `origin/main` 的 149 个变更文件完成 Standards + Spec 全量终审，结论 C/H/M/L=`0/0/0/0`；Codex CLI 独立复核 SSE 错误与恢复语义、测试及生成 server bundle，未发现新 finding。最终浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
+两轮 Verify 的实现、归档兼容与后续统一复审 finding 已全部修复。第二轮 Codex CLI 找到的无项目 Docker 状态问题已按 TDD 修复；最终 Reviewer、Codex、浏览器与规格轨仍针对下一次冻结 SHA 独立复验。
 
 ## Verification evidence
 
-- Web 全量：87 files / 1631 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
+- Web 全量：87 files / 1632 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示，以及 Machine 在无项目选择时消费全局 Docker 探测的回归均纳入最终全量结果。
 - Repository 全量：332 files / 5948 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
 - 统一 Reviewer 定向：Server 4 files / 161 tests、Web 9 files / 256 tests，均通过。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。

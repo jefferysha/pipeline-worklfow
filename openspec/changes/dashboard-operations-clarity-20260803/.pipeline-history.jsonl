@@ -89,3 +89,19 @@
 {"ts":"2026-08-03T11:08:10Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"8fe54810-a302-4e33-b9cd-36bf697538d3"}
 {"ts":"2026-08-03T11:17:26Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
 {"ts":"2026-08-03T11:17:39Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T11:18:21Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T11:18:21Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-03T11:18:21Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-03T11:18:21Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-03T11:18:21Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-08-03T11:18:22Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"3811f24d-9316-4d92-bb6a-512584a9e567"}
+{"ts":"2026-08-03T11:29:06Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T11:29:13Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:51:26Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-03T11:29:18Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-03T11:29:20Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"03f86921-bfb9-4c45-802d-e443bdf2e6e8"}

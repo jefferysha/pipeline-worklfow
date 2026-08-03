@@ -293,6 +293,22 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(fetchSpy.mock.calls.some(([input]) => String(input).startsWith('/api/afk/readiness'))).toBe(false)
   })
 
+  it('未选择项目时仍使用全局 Docker 探测显示 AFK 可选能力不可用', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ ok: true, available: false, images: [] }), { status: 200 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([], { capabilities: { operations: true } })} currentRoot="" onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'optional-unavailable'))
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('Docker daemon 不可用')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('Docker daemon 不可用')
+  })
+
   it('没有任何可达项目时明确保留项目级事实未知，不宣告机器完全无阻断', async () => {
     const baseFetch = global.fetch
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {

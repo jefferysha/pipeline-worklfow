@@ -228,7 +228,7 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   const dockerImagesError = errors.find(({ source }) => source === 'docker images')?.cause
   const dockerState: ReadinessState = dockerImagesError !== undefined
     ? 'optional-unavailable'
-    : readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'optional-unavailable'
+    : images === null ? 'unknown' : images.available ? 'ready' : 'optional-unavailable'
   const imageState: ReadinessState = dockerImagesError !== undefined
     ? 'optional-unavailable'
     : readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'optional-unavailable'
