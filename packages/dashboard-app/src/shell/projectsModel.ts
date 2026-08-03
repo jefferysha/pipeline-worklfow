@@ -151,6 +151,22 @@ export function compareRepositoryGroups(left: RepositoryGroup, right: Repository
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
 }
 
+export function summarizeRepositoryGroup(
+  group: Pick<RepositoryGroup, 'id' | 'label'>,
+  rows: readonly ProjectRow[],
+): RepositoryGroup {
+  const workspaces = [...rows]
+  return {
+    id: group.id,
+    label: group.label,
+    workspaceCount: workspaces.length,
+    wip: workspaces.reduce((total, workspace) => total + workspace.wip, 0),
+    need: workspaces.reduce((total, workspace) => total + workspace.need, 0),
+    running: workspaces.reduce((total, workspace) => total + workspace.running, 0),
+    workspaces,
+  }
+}
+
 export function buildRepositoryGroups(rows: readonly ProjectRow[]): RepositoryGroup[] {
   const grouped = new Map<string, { label: string; workspaces: ProjectRow[] }>()
   for (const row of rows) {
@@ -165,16 +181,10 @@ export function buildRepositoryGroups(rows: readonly ProjectRow[]): RepositoryGr
     group.workspaces.push(row)
     grouped.set(id, group)
   }
-  return [...grouped].map(([id, group]) => {
-    const workspaces = [...group.workspaces].sort(compareWorkspaces)
-    return {
-      id,
-      label: group.label,
-      workspaceCount: workspaces.length,
-      wip: workspaces.reduce((total, workspace) => total + workspace.wip, 0),
-      need: workspaces.reduce((total, workspace) => total + workspace.need, 0),
-      running: workspaces.reduce((total, workspace) => total + workspace.running, 0),
-      workspaces,
-    }
-  }).sort(compareRepositoryGroups)
+  return [...grouped]
+    .map(([id, group]) => summarizeRepositoryGroup(
+      { id, label: group.label },
+      [...group.workspaces].sort(compareWorkspaces),
+    ))
+    .sort(compareRepositoryGroups)
 }

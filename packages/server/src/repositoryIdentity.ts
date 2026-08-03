@@ -10,6 +10,7 @@ const REPOSITORY_IDENTITY_ARGS = [
   '--path-format=absolute',
   '--git-common-dir',
   '--show-toplevel',
+  '--git-dir',
 ] as const
 
 function runGitRepositoryIdentity(
@@ -64,18 +65,21 @@ export async function probeRepositoryIdentity(
     return undefined
   }
   const lines = output.trim().split(/\r?\n/)
-  if (lines.length !== 2) return undefined
-  const [commonDirectoryRaw, topLevelRaw] = lines
-  if (!commonDirectoryRaw || !topLevelRaw
-    || !isAbsolute(commonDirectoryRaw) || !isAbsolute(topLevelRaw)) return undefined
+  if (lines.length !== 3) return undefined
+  const [commonDirectoryRaw, topLevelRaw, gitDirectoryRaw] = lines
+  if (!commonDirectoryRaw || !topLevelRaw || !gitDirectoryRaw
+    || !isAbsolute(commonDirectoryRaw) || !isAbsolute(topLevelRaw)
+    || !isAbsolute(gitDirectoryRaw)) return undefined
   const commonDirectory = normalize(resolve(commonDirectoryRaw))
   const topLevel = normalize(resolve(topLevelRaw))
-  const repositoryRoot = dirname(commonDirectory)
-  const label = basename(repositoryRoot)
+  const gitDirectory = normalize(resolve(gitDirectoryRaw))
+  const label = basename(commonDirectory) === '.git'
+    ? basename(dirname(commonDirectory))
+    : basename(topLevel)
   if (!label) return undefined
   return {
     id: createHash('sha256').update(commonDirectory).digest('hex'),
     label,
-    workspace_kind: repositoryRoot === topLevel ? 'primary' : 'worktree',
+    workspace_kind: gitDirectory === commonDirectory ? 'primary' : 'worktree',
   }
 }

@@ -228,6 +228,23 @@ function deps(
   }
 }
 
+async function installCodexPlugin(hostHome: string): Promise<void> {
+  const pluginRoot = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+  await mkdir(pluginRoot, { recursive: true })
+  await writeFile(join(pluginRoot, 'plugin.json'), '{}')
+  await writeFile(join(hostHome, '.codex', 'config.toml'), '[plugins."tenon@tenon"]\nenabled = true\n')
+}
+
+async function installClaudePlugin(hostHome: string): Promise<void> {
+  const pluginRoot = join(hostHome, '.claude', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.claude-plugin')
+  await mkdir(pluginRoot, { recursive: true })
+  await writeFile(join(pluginRoot, 'plugin.json'), '{}')
+  await writeFile(join(hostHome, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({
+    version: 2,
+    plugins: { 'tenon@tenon': [{ installPath: join(hostHome, '.claude', 'plugins', 'cache', 'tenon') }] },
+  }))
+}
+
 const openServers: DashboardServer[] = []
 afterEach(async () => {
   while (openServers.length > 0) await openServers.pop()?.close()
@@ -250,11 +267,7 @@ async function start(runner: PipelineCliRunner): Promise<{ port: number }> {
 describe('Host Target Plan route resolver', () => {
   it('detects an installed Codex Tenon plugin without running commands or returning host paths', async () => {
     const hostHome = await makeTempHome()
-    const pluginRoot = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
-    await mkdir(pluginRoot, {
-      recursive: true,
-    })
-    await writeFile(join(pluginRoot, 'plugin.json'), '{}')
+    await installCodexPlugin(hostHome)
     const runner = vi.fn<PipelineCliRunner>()
 
     const result = await resolveHostTargetPlanRoute(
@@ -319,12 +332,29 @@ describe('Host Target Plan route resolver', () => {
     })
   })
 
+  it('treats a stale cache marker without an active host inventory entry as uninstalled', async () => {
+    const hostHome = await makeTempHome()
+    const marker = join(hostHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
+    await mkdir(marker, { recursive: true })
+    await writeFile(join(marker, 'plugin.json'), '{}')
+
+    await expect(resolveHostTargetPlanRoute(
+      '/api/host-target-detection',
+      '/api/host-target-detection',
+      { ...deps(vi.fn<PipelineCliRunner>()), hostHome },
+    )).resolves.toMatchObject({
+      body: {
+        recommended_host: 'codex',
+        recommended_operation: 'setup',
+        reason: 'host-detected',
+      },
+    })
+  })
+
   it('returns all detected native hosts, prioritizes an installed plugin, and uses catalog order within a tier', async () => {
     const claudePluginHome = await makeTempHome()
     await mkdir(join(claudePluginHome, '.codex'), { recursive: true })
-    const claudeMarker = join(claudePluginHome, '.claude', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.claude-plugin')
-    await mkdir(claudeMarker, { recursive: true })
-    await writeFile(join(claudeMarker, 'plugin.json'), '{}')
+    await installClaudePlugin(claudePluginHome)
     const runner = vi.fn<PipelineCliRunner>()
 
     await expect(resolveHostTargetPlanRoute(
@@ -341,9 +371,7 @@ describe('Host Target Plan route resolver', () => {
       },
     })
 
-    const codexMarker = join(claudePluginHome, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.1', '.codex-plugin')
-    await mkdir(codexMarker, { recursive: true })
-    await writeFile(join(codexMarker, 'plugin.json'), '{}')
+    await installCodexPlugin(claudePluginHome)
     await expect(resolveHostTargetPlanRoute(
       '/api/host-target-detection',
       '/api/host-target-detection',

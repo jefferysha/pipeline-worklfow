@@ -325,6 +325,32 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     expect(screen.getByTestId(`project-row-pipeline-worklfow-${encodeURIComponent(secondRoot)}`)).toBeInTheDocument()
   })
 
+  it('搜索命中单个健康 workspace 时重新计算分组计数与状态', () => {
+    const healthyRoot = '/code/tenon'
+    const gatedRoot = '/worktrees/gated/tenon-review'
+    const repository = { id: 'f'.repeat(64), label: 'tenon', workspace_kind: 'primary' as const }
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(healthyRoot, [makeChange('healthy', 'open')], { repository }),
+        makeProject(gatedRoot, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+          repository: { ...repository, workspace_kind: 'worktree' },
+        }),
+      ]),
+      rulesByKey: rulesFor(healthyRoot, gatedRoot),
+    })
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), {
+      target: { value: healthyRoot },
+    })
+
+    const group = screen.getByTestId(`repository-group-repository:${repository.id}`)
+    expect(group).toHaveTextContent('1 个 workspace')
+    expect(within(screen.getByTestId('section-rest')).getByTestId(
+      `repository-group-repository:${repository.id}`,
+    )).toBe(group)
+    expect(screen.queryByTitle(gatedRoot)).toBeNull()
+  })
+
   it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
     const snapshot = makeSnapshot([
       makeProject('/code/repo-a', [

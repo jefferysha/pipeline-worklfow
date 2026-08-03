@@ -102,6 +102,23 @@ afterEach(() => {
 })
 
 describe('HostTargetPlanView', () => {
+  it('makes additional desktop hosts discoverable with a persistent scroll hint', async () => {
+    const adapter = catalog.targets[1]
+    if (adapter === undefined) throw new Error('missing adapter fixture')
+    const manyTargets: HostTargetCatalog = {
+      ...catalog,
+      targets: [
+        ...catalog.targets,
+        { ...adapter, id: 'gemini', cli_flag: '--gemini' },
+        { ...adapter, id: 'pi', cli_flag: '--pi' },
+        { ...adapter, id: 'devin', cli_flag: '--devin' },
+      ],
+    }
+    renderView({ loadTargets: vi.fn().mockResolvedValue(manyTargets) })
+
+    expect(await screen.findByTestId('host-target-scroll-hint')).toHaveTextContent('滚动列表或按 Tab 查看更多宿主')
+  })
+
   it('loads catalog and detection in parallel, then opens the recommended read-only update plan', async () => {
     let resolveCatalog: ((value: HostTargetCatalog) => void) | undefined
     let resolveDetection: ((value: HostTargetDetection) => void) | undefined

@@ -55,10 +55,19 @@ describe('probeRepositoryIdentity', () => {
           '--path-format=absolute',
           '--git-common-dir',
           '--show-toplevel',
+          '--git-dir',
         ])
         expect(timeoutMs).toBe(1_500)
-        return '/registered/repository/.git\n/registered/repository\n'
+        return '/registered/repository/.git\n/registered/repository\n/registered/repository/.git\n'
       },
+    })
+
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+  })
+
+  it('classifies separate Git directories by Git identity instead of their filesystem parent', async () => {
+    const identity = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/external/repository.git\n/code/repository\n/external/repository.git\n',
     })
 
     expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
@@ -72,7 +81,7 @@ describe('probeRepositoryIdentity', () => {
       runGit: async () => { throw new Error('timed out') },
     })).resolves.toBeUndefined()
     await expect(probeRepositoryIdentity('/registered/repository', {
-      runGit: async () => 'relative/.git\n/registered/repository\nextra\n',
+      runGit: async () => 'relative/.git\n/registered/repository\n/registered/repository/.git\n',
     })).resolves.toBeUndefined()
   })
 })

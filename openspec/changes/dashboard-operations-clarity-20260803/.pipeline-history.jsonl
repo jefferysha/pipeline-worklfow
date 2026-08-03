@@ -22,3 +22,35 @@
 {"ts":"2026-08-03T07:45:31Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
 {"ts":"2026-08-03T07:45:32Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-08-03T08:23:47Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T08:30:25Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: subagent-driven-development"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: react-patterns"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: react-best-practices"}
+{"ts":"2026-08-03T08:33:01Z","kind":"tool","raw":"CodexSkillRead: tailwind-css-patterns"}
+{"ts":"2026-08-03T08:33:02Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"d1674f40-9987-439d-90f5-86c3dd885d84"}
+{"ts":"2026-08-03T08:45:14Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-03-dashboard-operations-clarity-verify-fail.md"}
+{"ts":"2026-08-03T08:45:14Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T08:45:14Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-03T08:45:15Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T08:45:15Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T07:21:58Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T08:45:15Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-03T08:45:15Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-03T08:45:15Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-08-03T08:45:47Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-03T08:45:47Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-03T08:45:47Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"ea5fda78-e42d-4723-a5ff-5e4d420ef6f3"}
+{"ts":"2026-08-03T09:09:56Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T09:09:56Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-03T09:09:56Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-03T09:09:56Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-03T09:09:58Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"0e68a6c7-f083-430a-aa67-c44e4e0489f1"}
+{"ts":"2026-08-03T09:11:36Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-03T09:11:36Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-03T09:11:52Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-03T09:11:52Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-03T07:21:58Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T09:11:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T09:11:52Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"8f9e930e-be0d-48d8-b8b8-afa1325fb5a5"}

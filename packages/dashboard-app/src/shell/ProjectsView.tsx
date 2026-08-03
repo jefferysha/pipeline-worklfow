@@ -9,7 +9,7 @@ import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { ProjectsFocusToolbar } from './ProjectsFocusToolbar'
 import { selectFocusedProjects, type ProjectFocus, type ProjectFocusCounts } from './projectsFocusModel'
-import { buildProjectRows, buildRepositoryGroups, compareProjectRows, type ProjectRow, type RepositoryGroup } from './projectsModel'
+import { buildProjectRows, buildRepositoryGroups, compareProjectRows, summarizeRepositoryGroup, type ProjectRow, type RepositoryGroup } from './projectsModel'
 import { ProjectsRepositoryGroup } from './ProjectsRepositoryGroup'
 import { ProjectsUnreachableSection } from './ProjectsUnreachableSection'
 
@@ -134,7 +134,7 @@ export function ProjectsView({
     const groups = repositoryGroups.flatMap((group) => {
       const workspaces = group.workspaces.filter((workspace) => searchedRoots.has(workspace.root))
       if (workspaces.length === 0) return []
-      return [{ ...group, workspaces }]
+      return [summarizeRepositoryGroup(group, workspaces)]
     })
     const focusedGroups = groups.filter((group) => focus === 'all'
       || (focus === 'attention' && group.need > 0)

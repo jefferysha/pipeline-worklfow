@@ -132,6 +132,24 @@ describe('MachineView 统一就绪与跨项目风险', () => {
     expect(screen.getByTestId('machine-docker')).not.toHaveTextContent('Docker available')
   })
 
+  it('Docker 镜像探测失败时结束加载态并只在 AFK 卡片显示明确错误', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/docker/images') {
+        return new Response(JSON.stringify({ error: 'docker probe unavailable' }), { status: 503 })
+      }
+      return baseFetch(input)
+    }) as unknown as typeof fetch
+
+    render(<I18nProvider><MachineView snapshot={makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('machine-docker')).toHaveAttribute('data-state', 'optional-unavailable'))
+    expect(screen.getByTestId('machine-image')).toHaveAttribute('data-state', 'optional-unavailable')
+    expect(screen.getByTestId('machine-docker')).toHaveTextContent('docker probe unavailable')
+    expect(screen.getByTestId('machine-image')).toHaveTextContent('docker probe unavailable')
+    expect(screen.getByTestId('machine-blockers')).not.toHaveTextContent('docker probe unavailable')
+  })
+
   it('就绪卡保持非 live 语义并只用一个聚合状态播报，宽屏不会挤成五个重叠窄列', async () => {
     const snapshot = makeSnapshot([makeProject(ROOT, [])], { capabilities: { operations: true } })
     render(<I18nProvider><MachineView snapshot={snapshot} currentRoot={ROOT} onOpenProject={vi.fn()} /></I18nProvider>)

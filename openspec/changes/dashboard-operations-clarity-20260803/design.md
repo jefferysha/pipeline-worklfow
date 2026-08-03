@@ -21,7 +21,7 @@
 
 - 当前 Snapshot 没有仓库身份，需要 additive `repository` 字段；旧响应安全降级。
 - 失效清理采用显式批量注销，避免暂时不可达挂载被自动移除。
-- catalog 只声明目标，不能证明本机宿主；增加只读检测端点，只检测 native host/plugin 存在性。
+- catalog 只声明目标，不能证明本机宿主；增加只读检测端点，以受限大小读取 native host 的活动插件清单/配置，并与非 symlink 缓存标记交叉验证，避免卸载残留误报。
 
 完整状态、失败、安全与验收设计见
 `docs/superpowers/specs/2026-08-03-dashboard-operations-clarity-design.md`，决策记录见

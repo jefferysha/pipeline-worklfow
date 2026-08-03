@@ -224,8 +224,13 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     return () => { live = false }
   }, [currentRoot, reloadKey])
 
-  const dockerState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'optional-unavailable'
-  const imageState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'optional-unavailable'
+  const dockerImagesError = errors.find(({ source }) => source === 'docker images')?.cause
+  const dockerState: ReadinessState = dockerImagesError !== undefined
+    ? 'optional-unavailable'
+    : readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'optional-unavailable'
+  const imageState: ReadinessState = dockerImagesError !== undefined
+    ? 'optional-unavailable'
+    : readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'optional-unavailable'
   const codexState: ReadinessState = readiness === null || secrets === null ? 'unknown' : readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set || secrets.OPENAI_API_KEY.set ? 'ready' : 'unknown'
   const skillState: ReadinessState = skills === null
     ? 'unknown'
@@ -261,16 +266,21 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
   )
 
   const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
-  const configuredImage = readiness?.image.configured ?? t('machine.loading_signal')
+  const dockerProbeError = dockerImagesError === undefined
+    ? null
+    : `${t('machine.source_images')}: ${formatApiError(dockerImagesError, t, { exposeServerDetail: lang === 'zh' })}`
+  const configuredImage = dockerProbeError
+    ?? readiness?.image.configured
+    ?? t('machine.loading_signal')
   const installedSkills = skills?.filter((skill) => skill.installed).length ?? 0
   const secretSource = readiness?.credentials.codex.OPENAI_API_KEY.source
     ?? readiness?.credentials.codex.CODEX_HOME.source
     ?? (secrets?.OPENAI_API_KEY.set ? 'secrets' : 'not detected')
-  const dockerDetail = images === null
+  const dockerDetail = dockerProbeError ?? (images === null
     ? t('machine.loading_signal')
     : images.available === false || readiness?.docker.available === false
       ? t('machine.docker_unavailable_detail')
-      : t('machine.docker_detail', { count: images.images.length })
+      : t('machine.docker_detail', { count: images.images.length }))
 
   return (
     <section className="mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="machine-view" data-page-frame="standard">

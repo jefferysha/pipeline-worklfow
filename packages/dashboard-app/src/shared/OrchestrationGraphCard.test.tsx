@@ -50,6 +50,19 @@ beforeEach(() => {
 })
 
 describe('OrchestrationGraphCard', () => {
+  it('Enter selects and focuses the only search result', async () => {
+    fetchMock.mockResolvedValue(graph)
+    renderCard()
+
+    const search = await screen.findByRole('searchbox', { name: '搜索节点' })
+    fireEvent.change(search, { target: { value: 'demo' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
+
+    const node = screen.getByRole('button', { name: /demo/ })
+    expect(node).toHaveFocus()
+    expect(screen.getByTestId('orchestration-selection')).toHaveTextContent('demo')
+  })
+
   it('renders canonical phases as the only horizontal trunk and moves fallback and scope edges into relationships', async () => {
     const phaseIds = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const
     const phaseNodes = phaseIds.map((phase, index) => ({

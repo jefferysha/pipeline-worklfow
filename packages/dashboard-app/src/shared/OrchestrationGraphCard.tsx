@@ -254,6 +254,14 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || visibleNodes.length !== 1) return
+                  event.preventDefault()
+                  const node = visibleNodes[0]
+                  if (node === undefined) return
+                  setSelectedId(node.id)
+                  nodeRefs.current.get(node.id)?.focus()
+                }}
                 placeholder={t('detail.orchestration_graph.search_placeholder')}
                 className="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs text-text outline-none placeholder:text-text-3"
               />

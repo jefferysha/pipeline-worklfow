@@ -277,10 +277,11 @@ export function HostTargetPlanView({
             className="mt-5 grid items-start gap-5 min-[900px]:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]"
             data-testid="host-plan-workspace"
           >
-          <div
-            className="grid min-w-0 gap-3 min-[520px]:grid-cols-2 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:grid-cols-1 min-[900px]:overflow-y-auto min-[900px]:pr-2 min-[900px]:[scrollbar-gutter:stable]"
-            data-testid="host-target-grid"
-          >
+          <div className="min-w-0">
+            <div
+              className="grid min-w-0 gap-3 min-[520px]:grid-cols-2 min-[900px]:max-h-[calc(100vh-11rem)] min-[900px]:grid-cols-1 min-[900px]:overflow-y-auto min-[900px]:pr-2 min-[900px]:[scrollbar-gutter:stable]"
+              data-testid="host-target-grid"
+            >
             {catalogState.catalog.targets.map((target) => {
               const name = hostName(target)
               const selected = selectedHost === target.id
@@ -330,6 +331,12 @@ export function HostTargetPlanView({
                 </article>
               )
             })}
+            </div>
+            {catalogState.catalog.targets.length > 4 ? (
+              <p className="mt-2 hidden text-[11px] text-text-3 min-[900px]:block" data-testid="host-target-scroll-hint">
+                {t('hostPlan.scroll_hint')}
+              </p>
+            ) : null}
           </div>
           <div
             ref={detailRef}

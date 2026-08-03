@@ -21073,7 +21073,8 @@ var REPOSITORY_IDENTITY_ARGS = [
   "rev-parse",
   "--path-format=absolute",
   "--git-common-dir",
-  "--show-toplevel"
+  "--show-toplevel",
+  "--git-dir"
 ];
 function runGitRepositoryIdentity(root, args, timeoutMs) {
   return new Promise((resolveOutput, reject) => {
@@ -21111,18 +21112,18 @@ async function probeRepositoryIdentity(root, deps = {}) {
     return void 0;
   }
   const lines = output.trim().split(/\r?\n/);
-  if (lines.length !== 2) return void 0;
-  const [commonDirectoryRaw, topLevelRaw] = lines;
-  if (!commonDirectoryRaw || !topLevelRaw || !isAbsolute9(commonDirectoryRaw) || !isAbsolute9(topLevelRaw)) return void 0;
+  if (lines.length !== 3) return void 0;
+  const [commonDirectoryRaw, topLevelRaw, gitDirectoryRaw] = lines;
+  if (!commonDirectoryRaw || !topLevelRaw || !gitDirectoryRaw || !isAbsolute9(commonDirectoryRaw) || !isAbsolute9(topLevelRaw) || !isAbsolute9(gitDirectoryRaw)) return void 0;
   const commonDirectory = normalize(resolve13(commonDirectoryRaw));
   const topLevel = normalize(resolve13(topLevelRaw));
-  const repositoryRoot = dirname12(commonDirectory);
-  const label = basename5(repositoryRoot);
+  const gitDirectory = normalize(resolve13(gitDirectoryRaw));
+  const label = basename5(commonDirectory) === ".git" ? basename5(dirname12(commonDirectory)) : basename5(topLevel);
   if (!label) return void 0;
   return {
     id: createHash16("sha256").update(commonDirectory).digest("hex"),
     label,
-    workspace_kind: repositoryRoot === topLevel ? "primary" : "worktree"
+    workspace_kind: gitDirectory === commonDirectory ? "primary" : "worktree"
   };
 }
 
@@ -22574,7 +22575,7 @@ function handleGetTraceRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverGetHostTargetPlanRoutes.ts
-import { lstatSync as lstatSync9, readdirSync as readdirSync9 } from "node:fs";
+import { lstatSync as lstatSync9, readFileSync as readFileSync20, readdirSync as readdirSync9 } from "node:fs";
 import { join as join46 } from "node:path";
 
 // packages/server/src/hostTargetPlanProtocol.ts
@@ -22777,6 +22778,7 @@ function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
 var MAX_HOST_PLAN_KEYS = 25;
 var DEFAULT_MAX_CONCURRENT_HOST_PLAN_LOADS = 4;
 var DEFAULT_HOST_PLAN_TIMEOUT_MS = 1e4;
+var MAX_HOST_INVENTORY_BYTES = 256 * 1024;
 var PLAN_UNAVAILABLE = {
   status: 503,
   body: { ok: false, code: "HOST_TARGET_PLAN_UNAVAILABLE", error: "\u5BBF\u4E3B\u8BA1\u5212\u529F\u80FD\u5F53\u524D\u4E0D\u53EF\u7528" }
@@ -22922,27 +22924,64 @@ function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments) {
     }
   });
 }
+function readBoundedHostFile(hostHome, segments) {
+  if (segments.length === 0 || !isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return null;
+  const path7 = join46(hostHome, ...segments);
+  try {
+    const metadata = lstatSync9(path7);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null;
+    return readFileSync20(path7, "utf8");
+  } catch {
+    return null;
+  }
+}
+function codexPluginEnabled(hostHome) {
+  const config = readBoundedHostFile(hostHome, [".codex", "config.toml"]);
+  if (config === null) return false;
+  const table = /^\s*\[plugins\.(?:"tenon@tenon"|'tenon@tenon'|tenon@tenon)\]\s*$/m.exec(config);
+  if (table === null || table.index === void 0) return false;
+  const bodyStart = table.index + table[0].length;
+  const nextTable = config.slice(bodyStart).search(/^\s*\[/m);
+  const body = nextTable < 0 ? config.slice(bodyStart) : config.slice(bodyStart, bodyStart + nextTable);
+  return /^\s*enabled\s*=\s*true\s*(?:#.*)?$/m.test(body);
+}
+function claudePluginEnabled(hostHome) {
+  const inventory = readBoundedHostFile(hostHome, [".claude", "plugins", "installed_plugins.json"]);
+  if (inventory === null) return false;
+  try {
+    const parsed = JSON.parse(inventory);
+    const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
+    if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return false;
+    const installed = Reflect.get(plugins, "tenon@tenon");
+    if (!Array.isArray(installed) || installed.length === 0) return false;
+    const settingsText = readBoundedHostFile(hostHome, [".claude", "settings.json"]);
+    if (settingsText === null) return true;
+    const settings = JSON.parse(settingsText);
+    const enabledPlugins = typeof settings === "object" && settings !== null ? Reflect.get(settings, "enabledPlugins") : void 0;
+    return !(typeof enabledPlugins === "object" && enabledPlugins !== null && !Array.isArray(enabledPlugins) && Reflect.get(enabledPlugins, "tenon@tenon") === false);
+  } catch {
+    return false;
+  }
+}
 function detectNativeHostTargets(hostHome) {
   const hosts = [
     {
       id: "codex",
       configSegments: [".codex"],
       pluginSegments: [".codex", "plugins", "cache", "tenon", "tenon"],
-      markerSegments: [".codex-plugin", "plugin.json"]
+      markerSegments: [".codex-plugin", "plugin.json"],
+      active: codexPluginEnabled
     },
     {
       id: "claude",
       configSegments: [".claude"],
       pluginSegments: [".claude", "plugins", "cache", "tenon", "tenon"],
-      markerSegments: [".claude-plugin", "plugin.json"]
+      markerSegments: [".claude-plugin", "plugin.json"],
+      active: claudePluginEnabled
     }
   ];
   const detectedHosts = hosts.filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments)).map((host) => host.id);
-  const pluginHost = hosts.find((host) => hasInstalledPlugin(
-    hostHome,
-    host.pluginSegments,
-    host.markerSegments
-  ));
+  const pluginHost = hosts.find((host) => host.active(hostHome) && hasInstalledPlugin(hostHome, host.pluginSegments, host.markerSegments));
   const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null;
   return {
     status: 200,
@@ -24836,7 +24875,7 @@ import {
   constants as constants14,
   fstatSync as fstatSync11,
   openSync as openSync12,
-  readFileSync as readFileSync20
+  readFileSync as readFileSync21
 } from "node:fs";
 import { posix as posix5 } from "node:path";
 var REQUEST_KEYS = /* @__PURE__ */ new Set(["root", "loop_id", "paths"]);
@@ -24861,7 +24900,7 @@ function registryReadError(error) {
   const detail = error instanceof Error ? error.message : String(error);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync20(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile20 = (fd) => readFileSync21(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -25522,21 +25561,21 @@ async function handlePostRoute(req, res, path7, deps) {
 }
 
 // packages/server/src/serverSupport.ts
-import { readFileSync as readFileSync21 } from "node:fs";
+import { readFileSync as readFileSync22 } from "node:fs";
 import { dirname as dirname14, join as join54 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync21(join54(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync22(join54(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync21(join54(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync22(join54(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -25590,7 +25629,7 @@ function indexHtml(token) {
 }
 
 // packages/server/src/serverTransport.ts
-import { readFileSync as readFileSync22 } from "node:fs";
+import { readFileSync as readFileSync23 } from "node:fs";
 import { join as join55 } from "node:path";
 import { gzipSync } from "node:zlib";
 var MAX_POST_BODY = 64 * 1024;
@@ -25757,7 +25796,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync22(join55(webRoot, "index.html"), "utf8");
+      let html = readFileSync23(join55(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -25774,7 +25813,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     const abs = join55(webRoot, rel);
     if (!abs.startsWith(join55(webRoot, "assets"))) return false;
     try {
-      const source = readFileSync22(abs);
+      const source = readFileSync23(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
       const compressible = GZIP_TYPES.has(ext) && source.length >= GZIP_MIN_BYTES;
       const gzip = compressible && acceptsGzip(req.headers["accept-encoding"]);
@@ -26030,7 +26069,7 @@ function createRelatedSessionSearchExecutor(runner) {
 }
 
 // packages/server/src/version.ts
-import { readFileSync as readFileSync23 } from "node:fs";
+import { readFileSync as readFileSync24 } from "node:fs";
 import { basename as basename6, dirname as dirname15, join as join57 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
@@ -26040,7 +26079,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative9 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync23(join57(pluginRoot2, relative9), "utf8"));
+      const parsed = JSON.parse(readFileSync24(join57(pluginRoot2, relative9), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -26376,7 +26415,7 @@ function resolveServerPaths(opts = {}) {
 // packages/server/src/preempt.ts
 import { execFile as execFile5 } from "node:child_process";
 import { get as httpGet } from "node:http";
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync25 } from "node:fs";
 import { createConnection } from "node:net";
 function compareVersions(a, b) {
   const pa = a.split(".").map((x) => parseInt(x, 10));
@@ -26413,7 +26452,7 @@ function decodeHealthInfo(value) {
 }
 function readPidfile(pidfilePath) {
   try {
-    const raw = JSON.parse(readFileSync24(pidfilePath, "utf8"));
+    const raw = JSON.parse(readFileSync25(pidfilePath, "utf8"));
     if (raw && typeof raw === "object") {
       const o = raw;
       if (typeof o.pid === "number" && typeof o.port === "number" && typeof o.version === "string") {

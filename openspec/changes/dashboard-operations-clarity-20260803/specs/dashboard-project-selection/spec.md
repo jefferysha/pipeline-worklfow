@@ -67,10 +67,27 @@ SHALL 保留失败 root、报告结果并允许重试；服务端 MUST NOT 因�
 
 ## MODIFIED Requirements
 
-### Requirement: Dashboard 项目上下文 SHALL 只来自显式 workspace 选择
+### Requirement: Dashboard 项目上下文 SHALL 只来自显式选择
 
-项目组展开/折叠与筛选 MUST NOT 隐式选择 root。只有用户打开某个 workspace，或 URL 中存在有效、
-已登记的 exact root，才能产生 `selected(root)`；选择项目组本身只改变展示状态。
+Dashboard SHALL 将机器注册的项目集合与当前选择建模为不同状态。当前选择 SHALL 表示为
+`none | selected(root)`；只有 URL 中有效且已登记的 `root`，或用户打开某个已登记且可达的 workspace，
+可以产生 `selected(root)`。注册顺序、首个可达项目、历史 localStorage 偏好、“默认项目”以及项目组的
+展开/折叠与筛选 MUST NOT 产生隐式选择；选择项目组本身只改变展示状态。
+
+#### Scenario: 打开不含 root 的 Dashboard URL
+
+- **GIVEN** 机器注册表包含一个或多个项目
+- **WHEN** 用户打开不含 `root` 参数的 Dashboard URL
+- **THEN** 当前项目上下文为 `none`
+- **AND** URL 继续不含 `root`
+- **AND** Dashboard 不调用任何要求项目 root 的 API。
+
+#### Scenario: 用户显式选择项目
+
+- **WHEN** 用户从项目总览打开一个已登记且可达的 workspace
+- **THEN** 当前项目上下文变为 `selected(root)`
+- **AND** URL 写入该精确规范化 root
+- **AND** 受项目约束的视图和 API 只消费该 root。
 
 #### Scenario: 展开项目组
 
