@@ -293,7 +293,7 @@ describe('TaskPlan v1 validation and read projection', () => {
 
   it('rejects duplicate entity IDs in the public validator without requiring a codec round-trip', () => {
     const base = revision()
-    const cases: ReadonlyArray<{
+    const cases: Array<{
       label: string
       input: TaskPlanRevisionV1
       duplicatePath: string
@@ -304,28 +304,6 @@ describe('TaskPlan v1 validation and read projection', () => {
         input: revision({ revision_id: base.plan_id }),
         duplicatePath: '$.revision_id',
         duplicateId: base.plan_id,
-      },
-      {
-        label: 'plan/nested entity',
-        input: revision({
-          requirements: [
-            base.requirements[0]!,
-            { ...base.requirements[0]!, id: base.plan_id, title: 'Plan ID collision' },
-          ],
-        }),
-        duplicatePath: '$.requirements[1].id',
-        duplicateId: base.plan_id,
-      },
-      {
-        label: 'revision/nested entity',
-        input: revision({
-          acceptance_criteria: [
-            base.acceptance_criteria[0]!,
-            { ...base.acceptance_criteria[0]!, id: base.revision_id, title: 'Revision ID collision' },
-          ],
-        }),
-        duplicatePath: '$.acceptance_criteria[1].id',
-        duplicateId: base.revision_id,
       },
       {
         label: 'catalog',
@@ -382,6 +360,87 @@ describe('TaskPlan v1 validation and read projection', () => {
         duplicateId: 'validator-a',
       },
     ]
+
+    const nestedCollisionCases: ReadonlyArray<{
+      label: string
+      duplicatePath: string
+      input: (duplicateId: string) => TaskPlanRevisionV1
+    }> = [
+      {
+        label: 'requirement',
+        duplicatePath: '$.requirements[1].id',
+        input: (duplicateId) => revision({
+          requirements: [
+            base.requirements[0]!,
+            { ...base.requirements[0]!, id: duplicateId, title: 'Top-level ID collision' },
+          ],
+        }),
+      },
+      {
+        label: 'acceptance criterion',
+        duplicatePath: '$.acceptance_criteria[1].id',
+        input: (duplicateId) => revision({
+          acceptance_criteria: [
+            base.acceptance_criteria[0]!,
+            { ...base.acceptance_criteria[0]!, id: duplicateId, title: 'Top-level ID collision' },
+          ],
+        }),
+      },
+      {
+        label: 'group',
+        duplicatePath: '$.groups[0].id',
+        input: (duplicateId) => revision({
+          groups: [{ ...base.groups[0]!, id: duplicateId }],
+          work_items: base.work_items.map((item) => ({ ...item, group_id: duplicateId })),
+        }),
+      },
+      {
+        label: 'work item',
+        duplicatePath: '$.work_items[0].id',
+        input: (duplicateId) => revision({
+          groups: [{ ...base.groups[0]!, work_item_ids: [duplicateId, 'wi-b'] }],
+          work_items: base.work_items.map((item, index) => index === 0
+            ? { ...item, id: duplicateId }
+            : { ...item, depends_on: [duplicateId] }),
+        }),
+      },
+      {
+        label: 'output',
+        duplicatePath: '$.work_items[0].expected_outputs[0].id',
+        input: (duplicateId) => revision({
+          work_items: base.work_items.map((item, index) => index === 0
+            ? {
+                ...item,
+                expected_outputs: [{ ...item.expected_outputs[0]!, id: duplicateId }],
+                validators: [{ ...item.validators[0]!, output_ids: [duplicateId] }],
+              }
+            : item),
+        }),
+      },
+      {
+        label: 'validator',
+        duplicatePath: '$.work_items[0].validators[0].id',
+        input: (duplicateId) => revision({
+          work_items: base.work_items.map((item, index) => index === 0
+            ? { ...item, validators: [{ ...item.validators[0]!, id: duplicateId }] }
+            : item),
+        }),
+      },
+    ]
+
+    for (const topLevel of [
+      { label: 'plan', id: base.plan_id },
+      { label: 'revision', id: base.revision_id },
+    ] as const) {
+      for (const nested of nestedCollisionCases) {
+        cases.push({
+          label: `${topLevel.label}/${nested.label}`,
+          input: nested.input(topLevel.id),
+          duplicatePath: nested.duplicatePath,
+          duplicateId: topLevel.id,
+        })
+      }
+    }
 
     for (const { label, input, duplicatePath, duplicateId } of cases) {
       const decoded = decodeTaskPlanRevisionV1(input)
