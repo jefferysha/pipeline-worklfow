@@ -26,9 +26,11 @@ describe('CanonicalStateVersionNotice', () => {
     )
 
     expect(screen.getByRole('alert')).toHaveTextContent('需要升级 Tenon')
-    expect(screen.getByRole('alert')).toHaveTextContent('future-change')
-    expect(screen.getByRole('alert')).toHaveTextContent('3')
-    expect(screen.getByRole('alert')).toHaveTextContent('1')
+    expect(screen.getByRole('alert')).toHaveTextContent('1 个')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('future-change')
+    expect(screen.getByTestId('canonical-state-version-notice')).toHaveTextContent('future-change')
+    expect(screen.getByTestId('canonical-state-version-notice')).toHaveTextContent('3')
+    expect(screen.getByTestId('canonical-state-version-notice')).toHaveTextContent('1')
     expect(screen.getByText('tenon update --codex')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '升级后刷新' }))
     expect(onRefresh).toHaveBeenCalledTimes(1)
@@ -81,7 +83,28 @@ describe('CanonicalStateVersionNotice', () => {
       </I18nProvider>,
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent('More affected Changes were omitted')
+    expect(screen.getByTestId('canonical-state-version-notice')).toHaveTextContent('More affected Changes were omitted')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('More affected Changes were omitted')
     expect(screen.getByRole('alert')).not.toHaveTextContent('101')
+  })
+
+  it('大量兼容问题只展开前五项，完整列表保留在可访问 disclosure 中', () => {
+    const manyIssues = Array.from({ length: 100 }, (_, index) => ({
+      ...issues[0],
+      change: `future-change-${String(index + 1).padStart(3, '0')}`,
+    }))
+    render(
+      <I18nProvider>
+        <CanonicalStateVersionNotice issues={manyIssues} loading={false} onRefresh={() => undefined} />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('100 个')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('future-change-001')
+    expect(screen.getByRole('button', { name: '升级后刷新' })).toBeVisible()
+    expect(screen.getByTestId('canonical-state-version-primary-list').children).toHaveLength(5)
+    expect(screen.queryByText('future-change-006')).not.toBeVisible()
+    fireEvent.click(screen.getByText('显示其余 95 个 Change'))
+    expect(screen.getByText('future-change-100')).toBeVisible()
   })
 })

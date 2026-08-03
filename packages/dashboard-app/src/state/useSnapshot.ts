@@ -5,8 +5,7 @@ import type { Snapshot } from '../types'
 export interface SnapshotState {
   snapshot: Snapshot | null
   loading: boolean
-  error: string | null
-  errorStatus: number | null
+  error: ApiError | null
   /** SSE 是否在线（在线 = 实时推送；离线时依赖手动 refresh）。 */
   connected: boolean
   refresh: () => void
@@ -25,8 +24,7 @@ export interface SnapshotState {
 export function useSnapshot(): SnapshotState {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [errorStatus, setErrorStatus] = useState<number | null>(null)
+  const [error, setError] = useState<ApiError | null>(null)
   const [connected, setConnected] = useState(false)
   const [nonce, setNonce] = useState(0)
   // 订阅世代计数器，独立于 nonce：只有它变化才关旧连接、开新连接。refresh() 平时被高频调用
@@ -51,12 +49,10 @@ export function useSnapshot(): SnapshotState {
         if (cancelled) return
         setSnapshot(s)
         setError(null)
-        setErrorStatus(null)
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setError(err instanceof ApiError ? err.message : String(err))
-        setErrorStatus(err instanceof ApiError && typeof err.status === 'number' ? err.status : null)
+        setError(err instanceof ApiError ? err : new ApiError('snapshot request failed'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -71,7 +67,6 @@ export function useSnapshot(): SnapshotState {
       (s) => {
         setSnapshot(s)
         setError(null)
-        setErrorStatus(null)
         setConnected(true)
       },
       () => setConnected(false),
@@ -83,5 +78,5 @@ export function useSnapshot(): SnapshotState {
     }
   }, [streamGen])
 
-  return { snapshot, loading, error, errorStatus, connected, refresh, reconnect }
+  return { snapshot, loading, error, connected, refresh, reconnect }
 }

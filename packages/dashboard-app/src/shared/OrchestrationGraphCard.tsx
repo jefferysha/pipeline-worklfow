@@ -34,6 +34,9 @@ type LoadState =
   | { readonly kind: 'unavailable' }
   | { readonly kind: 'error' }
 
+const MAX_CANVAS_NODES = 21
+const CORE_NODE_KINDS = new Set<OrchestrationNodeKind>(['workflow', 'change', 'phase'])
+
 export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardProps): JSX.Element {
   const { t } = useT()
   const requestId = useRef(0)
@@ -84,18 +87,29 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
       visibleIds.has(edge.source) && visibleIds.has(edge.target)),
     [graph, visibleIds],
   )
-  const transitionLaneById = useMemo(() => transitionLanes(visibleEdges), [visibleEdges])
+  const canvasNodes = useMemo(() => {
+    if (visibleNodes.length <= MAX_CANVAS_NODES) return visibleNodes
+    const core = visibleNodes.filter((node) => CORE_NODE_KINDS.has(node.kind)).slice(0, MAX_CANVAS_NODES)
+    const resources = visibleNodes.filter((node) => !CORE_NODE_KINDS.has(node.kind))
+    return [...core, ...resources.slice(0, MAX_CANVAS_NODES - core.length)]
+  }, [visibleNodes])
+  const canvasIds = useMemo(() => new Set(canvasNodes.map((node) => node.id)), [canvasNodes])
+  const canvasEdges = useMemo(
+    () => visibleEdges.filter((edge) => canvasIds.has(edge.source) && canvasIds.has(edge.target)),
+    [canvasIds, visibleEdges],
+  )
+  const transitionLaneById = useMemo(() => transitionLanes(canvasEdges), [canvasEdges])
   const selected = visibleIds.has(selectedId ?? '')
     ? graph?.nodes.find((node) => node.id === selectedId) ?? null
     : null
   const selectedEdges = selected === null ? [] : (graph?.edges ?? [])
     .filter((edge) => edge.source === selected.id || edge.target === selected.id)
-  const layout = useMemo(() => graphLayout(visibleNodes), [visibleNodes])
+  const layout = useMemo(() => graphLayout(canvasNodes), [canvasNodes])
   const nodeById = useMemo(
     () => new Map((graph?.nodes ?? []).map((node) => [node.id, node])),
     [graph],
   )
-  const edgeKinds = [...new Set(visibleEdges.map((edge) => edge.kind))]
+  const edgeKinds = [...new Set(canvasEdges.map((edge) => edge.kind))]
   const displayMetadataValue = (key: string, value: string): string => {
     if (key === 'phase' || key === 'phase_id') {
       const phase = nodeById.get(`phase:${value}`)
@@ -118,15 +132,15 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
       setSelectedId(node.id)
       return
     }
-    const current = visibleNodes.findIndex((item) => item.id === node.id)
+    const current = canvasNodes.findIndex((item) => item.id === node.id)
     let target = current
-    if (event.key === 'ArrowRight') target = Math.min(visibleNodes.length - 1, current + 1)
+    if (event.key === 'ArrowRight') target = Math.min(canvasNodes.length - 1, current + 1)
     else if (event.key === 'ArrowLeft') target = Math.max(0, current - 1)
     else if (event.key === 'Home') target = 0
-    else if (event.key === 'End') target = visibleNodes.length - 1
+    else if (event.key === 'End') target = canvasNodes.length - 1
     else return
     event.preventDefault()
-    nodeRefs.current.get(visibleNodes[target]?.id ?? '')?.focus()
+    nodeRefs.current.get(canvasNodes[target]?.id ?? '')?.focus()
   }
 
   return (
@@ -232,7 +246,12 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                   <span key={kind}><span aria-hidden="true">—›</span> {t(`detail.orchestration_graph.edge_${kind}`)}</span>
                 ))}
               </div>
-              <div className="max-h-[520px] overflow-auto rounded-xl border border-border bg-fill/30" aria-label={t('detail.orchestration_graph.canvas')}>
+              {canvasNodes.length < visibleNodes.length && (
+                <p className="mb-2 rounded-lg border border-blue-b bg-blue-t px-3 py-2 text-[11px] leading-relaxed text-blue-d" data-testid="orchestration-canvas-limited">
+                  {t('detail.orchestration_graph.canvas_limited', { shown: canvasNodes.length, total: visibleNodes.length })}
+                </p>
+              )}
+              <div className="max-h-[520px] overflow-auto rounded-xl border border-border bg-fill/30" aria-label={t('detail.orchestration_graph.canvas')} data-testid="orchestration-canvas">
               <div className="relative" style={{ height: layout.height, minWidth: layout.width }}>
                 <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
                   <defs>
@@ -240,7 +259,7 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                       <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-3)" />
                     </marker>
                   </defs>
-                  {visibleEdges.map((edge) => {
+                  {canvasEdges.map((edge) => {
                     const source = layout.positions.get(edge.source)
                     const target = layout.positions.get(edge.target)
                     if (source === undefined || target === undefined) return null
@@ -258,7 +277,7 @@ export function OrchestrationGraphCard({ root, change }: OrchestrationGraphCardP
                     )
                   })}
                 </svg>
-                {visibleNodes.map((node) => {
+                {canvasNodes.map((node) => {
                   const position = layout.positions.get(node.id)
                   if (position === undefined) return null
                   const label = renderNodeLabel(node)

@@ -78,6 +78,8 @@ export function TaskDetail({
   onToast,
 }: TaskDetailProps): JSX.Element {
   const { t } = useT()
+  const tRef = useRef(t)
+  tRef.current = t
   const scopeRef = useRef<HTMLElement>(null)
   const [entries, setEntries] = useState<ChangeHistoryEntry[] | null>(null)
   useEffect(() => {
@@ -103,7 +105,7 @@ export function TaskDetail({
   )
   function copy(value: string): void {
     void navigator.clipboard?.writeText(value).then(() => {
-      onToast?.(t('detail.copied', { value }))
+      onToast?.(tRef.current('detail.copied', { value }))
     })
   }
   const state: ProgressState = changeProgressState(change, rules)
@@ -213,11 +215,11 @@ export function TaskDetail({
             >
               {attempts !== '' && (
                 <span>
-                  attempts <b>{attempts}</b>
+                  {t('detail.attempts')} <b>{attempts}</b>
                 </span>
               )}
               <span>
-                cause <b>{diag.cause}</b>
+                {t('detail.cause')} <b>{diag.cause}</b>
               </span>
             </div>
           </div>
@@ -371,7 +373,7 @@ export function TaskDetail({
       <RelatedSessionsSection key={`${root}\u0000${change.name}`} root={root} name={change.name} />
       {collapseTechnical ? (
         <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
-          <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>
+          <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">{t('runAudit.title')}</summary>
           <RunAuditPanel root={root} change={change.name} refreshKey={`${change.phase}:${automation}`} />
           {historySection}
         </details>

@@ -242,6 +242,17 @@ Dashboard 绑定 loopback、校验本地 Host header、为 mutation 使用随机
 
 这是本地单用户工作站模型，不是远程多租户控制面，也不声称防御同一 OS 用户下所有恶意进程。Tap interception 默认关闭。
 
+CI 与 pre-tag release candidate 都运行 `npm run check:dependencies`。该单一门禁同时执行
+High/Critical advisory audit 和 `npm ls --all` 完整解析树校验。正式发布必须先
+对精确、仍为最新 `main` 的 40 位 SHA 手动运行 **Release candidate (pre-tag)**，并传入新 tag；
+若恢复已中断发布，也可传入已精确指向同一 SHA 的现有 tag。只读验证 job
+不会持有远端写凭据，并要求该 SHA 的 canonical push CI 已成功；全部构建、测试和打包也在这里完成，
+输出由规范化后的 GitHub artifact digest 与逐资产 SHA-256 清单绑定的 payload。默认分支拥有的
+`workflow_run` writer 会重新验证仓库、workflow、run、artifact 与 SHA；它不 checkout、不执行
+仓库代码、不运行 npm lifecycle，只用最小写权限创建或恢复 tag，并校验或补齐 GitHub Release
+资产。已存在 tag 仅在 peeled commit 与获批 SHA 精确一致时可幂等继续。发布自动化不执行
+`npm publish`；可选 npx 包只作为 GitHub Release 资产。
+
 [安全模型 →](docs/usage/zh-CN/security-model.md) ·
 [私密报告漏洞 →](SECURITY.md)
 

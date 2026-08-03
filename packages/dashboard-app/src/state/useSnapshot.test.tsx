@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { useSnapshot } from './useSnapshot'
 import { lastEventSource, resetEventSources } from '../test-setup'
-import { makeSnapshot } from '../testkit'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
 
 function stubFetch(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(async (url: string) => {
@@ -108,5 +108,40 @@ describe('useSnapshot().reconnect —— 重连下沉本体（评审修复：担
 
     // reconnect() 顺带 refresh() 触发的那次 GET 是异步的；等它落地再收尾（同上一条用例）。
     await waitFor(() => expect(result.current.loading).toBe(false))
+  })
+
+  it('畸形 reviewHandshake 帧不覆盖旧快照，并把 connected 标为 false，避免把陈旧审批状态伪装成实时', async () => {
+    stubFetch()
+    const { result } = renderHook(() => useSnapshot())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const change = makeChange('review-change', 'explore', {
+      reviewHandshake: {
+        status: 'pending',
+        event: 'explore-complete',
+        requestedAt: '2026-07-30T02:00:00Z',
+      },
+    })
+    const valid = makeSnapshot([makeProject('/repo', [change])])
+    const es = lastEventSource()!
+    act(() => {
+      es.emit('snapshot', JSON.stringify(valid))
+    })
+    expect(result.current.connected).toBe(true)
+    expect(result.current.snapshot?.projects[0]?.changes[0]?.reviewHandshake).toEqual(
+      change.reviewHandshake,
+    )
+
+    const malformed = structuredClone(valid)
+    ;(malformed.projects[0]!.changes[0] as unknown as {
+      reviewHandshake: { requestedAt: unknown }
+    }).reviewHandshake.requestedAt = 42
+    act(() => {
+      es.emit('snapshot', JSON.stringify(malformed))
+    })
+
+    expect(result.current.connected).toBe(false)
+    expect(result.current.snapshot?.projects[0]?.changes[0]?.reviewHandshake).toEqual(
+      change.reviewHandshake,
+    )
   })
 })

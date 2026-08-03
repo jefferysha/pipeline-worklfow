@@ -1,98 +1,247 @@
-import { useEffect, useState } from 'react'
-import { ArrowRight, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
-import { Dialog } from '../shared/Dialog'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 export { LOOP_RUNNERS, WB_TW, WbAdvanced } from './loopCardModel'
 export { LpSlider } from './LoopControls'
 export { useLoops, type LoopsState } from './useLoops'
-import { BADGE_TW, CHIP_TW, LOOP_RUNNERS, ProvBadge, WB_TW, computePatch, draftOf, type LoopDraft } from './loopCardModel'
+import { BADGE_TW, ProvBadge, WB_TW, computePatch, draftOf, loopDraftValueEqual, rebaseLoopDraft, type LoopDraft } from './loopCardModel'
 import { RECO_TOKENS_K, clamp } from './LoopControls'
 import type { LoopsState } from './useLoops'
 import { LoopAdvancedFields } from './LoopAdvancedFields'
 import { LoopCardActions } from './LoopCardActions'
+import { LoopGoalFields } from './LoopGoalFields'
+import { LoopRelationship } from './LoopRelationship'
+import { promotionDecisionKey } from './governanceModel'
 const LEVELS = ['L1', 'L2', 'L3'] as const
 export interface LoopCardProps {
   root: string
   loops: LoopsState
+  onDirtyChange?: (dirty: boolean) => void
+  onBusyChange?: (busy: boolean) => void
 }
-export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
-  const { t } = useT()
+export function LoopCard({ root, loops, onDirtyChange, onBusyChange }: LoopCardProps): JSX.Element {
+  const { t, lang } = useT()
   const row = loops.selected
   const [draft, setDraft] = useState<LoopDraft | null>(null)
+  const draftRef = useRef<LoopDraft | null>(null)
+  draftRef.current = draft
   const [saving, setSaving] = useState(false)
   const [saveErrors, setSaveErrors] = useState<string[] | null>(null)
   const [saveOk, setSaveOk] = useState(false)
   const [levelError, setLevelError] = useState<string | null>(null)
   const [levelBusy, setLevelBusy] = useState(false)
   const [confirmLevel, setConfirmLevel] = useState<(typeof LEVELS)[number] | null>(null)
+  const [confirmDecisionKey, setConfirmDecisionKey] = useState<string | null>(null)
   const [reviewBusy, setReviewBusy] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
-  const [promptCopied, setPromptCopied] = useState(false)
-  const [showMatches, setShowMatches] = useState(false)
+  const saveGeneration = useRef(0)
+  const levelGeneration = useRef(0)
+  const reviewGeneration = useRef(0)
+  const pendingSaveFields = useRef(new Set<keyof LoopDraft>())
+  const draftIdentity = useRef('')
+  const draftBase = useRef<LoopDraft | null>(null)
+  const editRevision = useRef(0)
+  const fieldRevisions = useRef(new Map<keyof LoopDraft, number>())
+  const [, setBaseRevision] = useState(0)
+  const identity = useRef({ root, rowId: row?.id ?? null })
+  identity.current = { root, rowId: row?.id ?? null }
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
   useEffect(() => {
-    setDraft(row ? draftOf(row) : null)
+    ++saveGeneration.current
+    ++levelGeneration.current
+    ++reviewGeneration.current
+    setSaving(false)
+    pendingSaveFields.current.clear()
+    setLevelBusy(false)
+    setReviewBusy(false)
+    setConfirmLevel(null)
+    setConfirmDecisionKey(null)
+  }, [root, row?.id])
+  useEffect(() => {
     setSaveErrors(null)
     setLevelError(null)
     setReviewError(null)
-  }, [row])
-  const base = row ? draftOf(row) : null
+  }, [lang])
+  const [promptCopied, setPromptCopied] = useState(false)
+  const [showMatches, setShowMatches] = useState(false)
+  useEffect(() => {
+    const nextIdentity = JSON.stringify([root, row?.id ?? null])
+    const nextBase = row ? draftOf(row) : null
+    setDraft((current) => {
+      const sameIdentity = draftIdentity.current === nextIdentity
+      if (sameIdentity && current !== null && nextBase !== null) {
+        for (const key of fieldRevisions.current.keys()) {
+          if (
+            !pendingSaveFields.current.has(key)
+            && loopDraftValueEqual(current[key], nextBase[key])
+          ) fieldRevisions.current.delete(key)
+        }
+      }
+      const rebased = sameIdentity && current !== null && nextBase !== null
+        ? rebaseLoopDraft(current, nextBase, fieldRevisions.current)
+        : nextBase
+      if (!sameIdentity) fieldRevisions.current.clear()
+      draftIdentity.current = nextIdentity
+      draftBase.current = nextBase
+      draftRef.current = rebased
+      return rebased
+    })
+    setBaseRevision((value) => value + 1)
+    setSaveErrors(null)
+    setLevelError(null)
+    setReviewError(null)
+  }, [root, row])
+  const base = draftBase.current
   const patch = draft && base ? computePatch(draft, base) : {}
   const dirty = Object.keys(patch).length > 0
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  useEffect(() => () => {
+    onDirtyChange?.(false)
+  }, [onDirtyChange])
+  const mutationBusy = saving || levelBusy || reviewBusy
+  useEffect(() => {
+    onBusyChange?.(mutationBusy)
+  }, [mutationBusy, onBusyChange])
+  useEffect(() => () => {
+    onBusyChange?.(false)
+  }, [onBusyChange])
+  const promotionFacts = promotionDecisionKey(root, row)
+  const activeConfirmLevel = confirmDecisionKey === promotionFacts ? confirmLevel : null
+  useEffect(() => {
+    if (confirmDecisionKey !== null && confirmDecisionKey !== promotionFacts) {
+      setConfirmLevel(null)
+      setConfirmDecisionKey(null)
+    }
+  }, [confirmDecisionKey, promotionFacts])
+  const closePromotion = (): void => { setConfirmLevel(null); setConfirmDecisionKey(null) }
   function edit(part: Partial<LoopDraft>): void {
-    setDraft((prev) => (prev ? { ...prev, ...part } : prev))
+    setDraft((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...part }
+      for (const key of Object.keys(part) as Array<keyof LoopDraft>) {
+        const equalsBase = loopDraftValueEqual(next[key], draftBase.current?.[key])
+        if (equalsBase && !pendingSaveFields.current.has(key)) fieldRevisions.current.delete(key)
+        else fieldRevisions.current.set(key, ++editRevision.current)
+      }
+      draftRef.current = next
+      return next
+    })
     setSaveOk(false)
   }
   async function save(): Promise<void> {
-    if (!row || !dirty || saving) return
+    if (!row || !draft || !dirty || saving) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++saveGeneration.current
+    const targetPatch = patch
+    const targetDraft = draft
+    const targetKeys = Object.keys(targetPatch) as Array<keyof LoopDraft>
+    const targetRevisions = new Map(
+      targetKeys
+        .map((key) => [key, fieldRevisions.current.get(key)] as const),
+    )
+    pendingSaveFields.current = new Set(targetKeys)
     setSaving(true)
     setSaveErrors(null)
     setSaveOk(false)
     try {
-      await postLoopUpdate({ root, id: row.id, patch })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: targetPatch })
+      if (generation !== saveGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
+      if (draftBase.current !== null) {
+        const acceptedBase = { ...draftBase.current }
+        for (const key of Object.keys(targetPatch) as Array<keyof LoopDraft>) {
+          Object.assign(acceptedBase, { [key]: targetDraft[key] })
+        }
+        draftBase.current = acceptedBase
+        setBaseRevision((value) => value + 1)
+      }
+      for (const [key, revision] of targetRevisions) {
+        if (fieldRevisions.current.get(key) === revision) fieldRevisions.current.delete(key)
+      }
       setSaveOk(true)
-      loops.reload() // 新行到达后草稿以 server 真值重置（见上方 effect）
+      loops.reload()
     } catch (err) {
-      setSaveErrors([(err instanceof Error ? err.message : t('workbench.lp_network_error'))])
+      if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setSaveErrors([formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' })])
+      }
     } finally {
-      setSaving(false)
+      if (generation === saveGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        pendingSaveFields.current.clear()
+        const currentDraft = draftRef.current
+        const currentBase = draftBase.current
+        if (currentDraft !== null && currentBase !== null) {
+          for (const key of fieldRevisions.current.keys()) {
+            if (loopDraftValueEqual(currentDraft[key], currentBase[key])) fieldRevisions.current.delete(key)
+          }
+        }
+        setSaving(false)
+      }
     }
   }
   function requestLevel(target: (typeof LEVELS)[number]): void {
-    if (!row || levelBusy || target === row.autonomy_level) return
+    if (!row || dirty || levelBusy || target === row.autonomy_level) return
     if (LEVELS.indexOf(target) > LEVELS.indexOf(row.autonomy_level)) {
       setConfirmLevel(target)
+      setConfirmDecisionKey(promotionFacts)
     } else {
       void applyLevel(target)
     }
   }
   async function applyLevel(target: string): Promise<void> {
-    if (!row) return
+    if (!row || dirty) {
+      closePromotion()
+      return
+    }
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++levelGeneration.current
     setLevelBusy(true)
     setLevelError(null)
     try {
-      await postLoopLevel({ root, id: row.id, target })
+      await postLoopLevel({ root: targetRoot, id: targetId, target })
+      if (generation !== levelGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
-      setLevelError(t('workbench.lp_level_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setLevelError(current.t('workbench.lp_level_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     } finally {
-      setLevelBusy(false)
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setLevelBusy(false)
+      }
     }
   }
   async function reviewAction(status: 'active' | 'paused'): Promise<void> {
-    if (!row || reviewBusy) return
+    if (!row || dirty || reviewBusy) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++reviewGeneration.current
     setReviewBusy(true)
     setReviewError(null)
     try {
-      await postLoopUpdate({ root, id: row.id, patch: { status } })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: { status } })
+      if (generation !== reviewGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload() // 显式重拉：draft 标记已被 server 清，新快照到达即徽章消失
     } catch (err) {
-      setReviewError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+      if (generation === reviewGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setReviewError(formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }))
+      }
     } finally {
-      setReviewBusy(false)
+      if (generation === reviewGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setReviewBusy(false)
+      }
     }
   }
   if (loops.loadError) {
@@ -141,6 +290,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     )
   }
   const active = draft.status === 'active'
+  const retired = draft.status === 'retired'
   const isPendingReview = row.draft === true
   const tokensK = draft.max_tokens_per_day === null ? RECO_TOKENS_K : clamp(Math.round(draft.max_tokens_per_day / 10000) * 10, 10, 500)
   return (
@@ -150,16 +300,19 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         <Switch
           className={WB_TW.switch}
           checked={active}
+          disabled={retired}
           aria-label={t('workbench.lp_enable')}
           data-testid="lp-enable"
-          onCheckedChange={() => edit({ status: active ? 'paused' : 'active' })}
+          onCheckedChange={() => {
+            if (!retired) edit({ status: active ? 'paused' : 'active' })
+          }}
         />
         <span
-          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green-d' : 'bg-fill text-text-3')}
-          data-state={active ? 'run' : 'paused'}
+          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green-d' : retired ? 'bg-red-t text-red-d' : 'bg-fill text-text-3')}
+          data-state={active ? 'run' : retired ? 'retired' : 'paused'}
           data-testid="lp-pill"
         >
-          {t(active ? 'workbench.lp_running' : 'workbench.lp_paused')}
+          {t(active ? 'workbench.lp_running' : retired ? 'workbench.lp_retired' : 'workbench.lp_paused')}
         </span>
         <ProvBadge field="status" />
         {/* loop-init L5：草稿待审阅徽章——蓝底 color-mix 从 --accent 派生（决议 #9）；testid 走
@@ -202,179 +355,14 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           ))}
         </ul>
       )}
-      {/* ── T7（A2 决策）：三方关系条——loop 是 root 级配置，不属于任何单个 workflow；
-          change_prefix → 实际匹配的 changes（弹层，读 row 真值，不随草稿输入重算——保存前
-          修改草稿不影响本条显示，保存并 reload 后才随新真值刷新）；phases → 阶段 chips 纯
-          展示无点击语义。决议 #3 裁减口径：这是「数据关系澄清」，不是健康度评分——不画环、
-          不给成功率角标。布局沿旧 .lp-policy 的 flex-wrap 分组纪律。 ── */}
-      <div className={WB_TW.sec} data-sec="">
-        <div className={WB_TW.secH}>
-          {t('workbench.lp_rel_sec')}
-          <span className={WB_TW.hint}>{t('workbench.lp_rel_sec_hint')}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5" data-testid="lp-rel">
-          <span
-            className="max-w-[280px] overflow-hidden rounded-[7px] bg-fill-2 px-[9px] py-1 font-mono text-xs font-bold text-ellipsis whitespace-nowrap"
-            data-testid="lp-rel-root"
-            title={row.root}
-          >
-            {row.root}
-          </span>
-          <span className="text-[11.5px] text-text-3">{t('workbench.lp_rel_root_note')}</span>
-          <ArrowRight className="size-3.5 flex-none text-text-3" strokeWidth={1.75} aria-hidden="true" />
-          <button
-            type="button"
-            className="h-[26px] cursor-pointer rounded-full border border-border bg-fill px-2.5 font-mono text-xs text-text-2 transition-colors duration-[120ms] hover:border-(--accent) hover:bg-accent-t hover:text-accent-d"
-            data-testid="lp-rel-prefix-btn"
-            onClick={() => setShowMatches(true)}
-          >
-            {t('workbench.lp_rel_match_btn', {
-              prefix: row.change_prefix ?? t('workbench.lp_rel_prefix_unset'),
-              n: row.matched_changes.length,
-            })}
-          </button>
-          <span className="text-border-2" aria-hidden="true">·</span>
-          <span className="text-xs font-semibold text-text-3">{t('workbench.lp_rel_phases_label')}</span>
-          {row.phases.length === 0 ? (
-            <span className={WB_TW.note} role="status" aria-live="polite">{t('workbench.lp_rel_phases_empty')}</span>
-          ) : (
-            row.phases.map((p) => (
-              <span key={p} className={CHIP_TW} data-testid="lp-rel-phase-chip">{p}</span>
-            ))
-          )}
-          <p className={cn(WB_TW.note, 'mt-1 basis-full')}>{t('workbench.lp_rel_note')}</p>
-        </div>
-      </div>
-      {showMatches && (
-        <Dialog
-          title={t('workbench.lp_rel_dialog_title', { prefix: row.change_prefix ?? t('workbench.lp_rel_prefix_unset') })}
-          onClose={() => setShowMatches(false)}
-          testid="lp-rel-dialog"
-          actions={
-            <Button variant="ghost" size="sm" className={WB_TW.btnGhost} onClick={() => setShowMatches(false)}>
-              {t('workbench.lp_rel_dialog_close')}
-            </Button>
-          }
-        >
-          {row.matched_changes.length === 0 ? (
-            <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2" role="status" aria-live="polite">{t('workbench.lp_rel_dialog_empty')}</p>
-          ) : (
-            <ul className="flex max-h-80 list-none flex-col gap-1.5 overflow-y-auto p-0 text-[12.5px]" data-testid="lp-rel-dialog-list">
-              {row.matched_changes.map((c) => (
-                <li key={c} className="font-mono">{c}</li>
-              ))}
-            </ul>
-          )}
-        </Dialog>
-      )}
-      {/* ── 目标 ── */}
-      <div className={WB_TW.sec} data-sec="">
-        <div className={WB_TW.secH}>
-          {t('workbench.lp_sec_goal')}
-          <span className={WB_TW.hint}>{t('workbench.lp_sec_goal_hint')}</span>
-        </div>
-        <div className="mb-[5px] flex items-center gap-2">
-          <label className={WB_TW.flabel} htmlFor="lp-goal">{t('workbench.lp_goal')}</label>
-          <ProvBadge field="goal" />
-        </div>
-        <input
-          className={WB_TW.input}
-          id="lp-goal"
-          data-testid="lp-goal"
-          value={draft.goal}
-          onChange={(e) => edit({ goal: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮
-          }}
-        />
-        <div className="mt-3 grid grid-cols-3 gap-3.5 mobile:grid-cols-1">
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-doc">{t('workbench.lp_doc')}</label>
-              <ProvBadge field="design_doc" />
-            </div>
-            <input
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-doc"
-              data-testid="lp-doc"
-              value={draft.design_doc}
-              onChange={(e) => edit({ design_doc: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.preventDefault()
-              }}
-            />
-          </div>
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-prefix">{t('workbench.lp_prefix')}</label>
-              <ProvBadge field="change_prefix" />
-            </div>
-            <input
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-prefix"
-              data-testid="lp-prefix"
-              value={draft.change_prefix}
-              onChange={(e) => edit({ change_prefix: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.preventDefault()
-              }}
-            />
-            <p className="mt-[5px] text-[11.5px] text-text-3">
-              {t('workbench.lp_prefix_eg')}
-              <b className="font-mono font-semibold text-text-2" data-testid="lp-prefix-eg">{`${draft.change_prefix}0142-migrate-card`}</b>
-            </p>
-          </div>
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-risk">{t('workbench.lp_risk')}</label>
-              <ProvBadge field="risk" />
-            </div>
-            <select className={WB_TW.input} id="lp-risk" data-testid="lp-risk" value={draft.risk} onChange={(e) => edit({ risk: e.target.value })}>
-              <option value="low">{t('workbench.lp_risk_low')}</option>
-              <option value="medium">{t('workbench.lp_risk_medium')}</option>
-              <option value="high">{t('workbench.lp_risk_high')}</option>
-            </select>
-          </div>
-          {/* T17 决议#14：runner 下拉（LOOP_RUNNERS 双选项）——数据面 T20 已交付
-              （PATCHABLE_SCALAR_FIELDS 含 runner），写回走同一 dirty→保存钮 patch 链路。
-              runner id 是代码标识符（mono 呈现，不翻译）；历史自由字符串真值补渲染为第三选项。 */}
-          <div>
-            <div className="mb-[5px] flex items-center gap-2">
-              <label className={WB_TW.flabel} htmlFor="lp-runner">{t('workbench.lp_runner')}</label>
-              <ProvBadge field="runner" />
-            </div>
-            <select
-              className={cn(WB_TW.input, 'font-mono')}
-              id="lp-runner"
-              data-testid="lp-runner"
-              value={draft.runner}
-              onChange={(e) => edit({ runner: e.target.value })}
-            >
-              {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-                <option value={draft.runner}>{draft.runner}</option>
-              )}
-              {LOOP_RUNNERS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-            {/* 观察项②（决议#14① backlog）：非标准 runner 值软校验警告——纯提示，不拦截保存/
-                不改值/不清第三选项。文案按 runnerFor.ts 真实归属语义（仅 'codex' 起 codex exec，
-                其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。警示色
-                color-mix 从既有 --red/--text-2 派生（决议#9，禁新原色）。 */}
-            {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-              <p className="mt-[5px] flex items-start gap-1.5 text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
-                <TriangleAlert className="mt-0.5 size-3.5 flex-none" aria-hidden="true" />
-                {t('workbench.lp_runner_warn', { runner: draft.runner })}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      <LoopRelationship row={row} open={showMatches} onOpen={setShowMatches} t={t} />
+      <LoopGoalFields draft={draft} onEdit={edit} />
       <LoopAdvancedFields
         row={row}
         draft={draft}
         tokensK={tokensK}
         levelBusy={levelBusy}
+        actionDisabled={dirty}
         levelError={levelError}
         onEdit={edit}
         onLevel={requestLevel}
@@ -383,12 +371,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         row={row}
         pendingReview={isPendingReview}
         reviewBusy={reviewBusy}
+        actionDisabled={dirty}
         reviewError={reviewError}
-        confirmLevel={confirmLevel}
+        confirmLevel={activeConfirmLevel}
         onReview={(status) => void reviewAction(status)}
-        onClosePromotion={() => setConfirmLevel(null)}
+        onClosePromotion={closePromotion}
         onConfirmPromotion={(target) => {
-          setConfirmLevel(null)
+          if (confirmDecisionKey !== promotionFacts || confirmLevel !== target) {
+            closePromotion()
+            return
+          }
+          closePromotion()
           void applyLevel(target)
         }}
       />

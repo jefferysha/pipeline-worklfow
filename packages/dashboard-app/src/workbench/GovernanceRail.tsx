@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { postLoopLevel, postLoopUpdate } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
-import { LpSlider, WB_TW, type LoopsState } from './LoopCard'
+import { handleRadioKey } from '../shared/radioKeyboard'
+import { LpSlider, type LoopsState } from './LoopCard'
 import { cn } from '@/lib/utils'
 import { ChartNoAxesColumn, CircleAlert, Pencil } from 'lucide-react'
 import { GovernancePromoteDialog } from './GovernancePromoteDialog'
 import { GovernanceRailHead } from './GovernanceRailHead'
+import { GovernanceGraduation } from './GovernanceGraduation'
+import { GovernanceRailStatus } from './GovernanceRailStatus'
 import {
   BAND_KEY, BAND_TW, BAR_TW, BUDGET_COMMIT_MS, BUDGET_WARN_RATIO, GCARD_TW,
   GH_B_TW, GH_TW, GNOTE_ERR_TW, GNOTE_HINT_TW, GNOTE_TW, LAMP_TW, LEVELS,
   LEVEL_MIN_SCORE, LEVEL_SHORT_KEY, MINIBADGE_TW, MIN_L2_RUNS_FOR_L3, RAIL_TW,
   READY_STRONG, READY_THRESHOLD, RECO_TOKENS_K, TAG_DERIVED_TW, TAG_RW_TW,
-  TOKENS_K_MAX, TOKENS_K_MIN, TOKENS_K_STEP, clamp, finiteOrNull, fmtK, tokensKOf,
+  TOKENS_K_MAX, TOKENS_K_MIN, TOKENS_K_STEP, clamp, finiteOrNull, fmtK, promotionDecisionKey, tokensKOf,
   type GovernanceLevel,
 } from './governanceModel'
 export { BUDGET_WARN_RATIO, MIN_L2_RUNS_FOR_L3, READY_STRONG, READY_THRESHOLD } from './governanceModel'
@@ -22,9 +26,8 @@ export interface GovernanceRailProps {
 }
 
 export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const row = loops.selected
-
   const [levelBusy, setLevelBusy] = useState(false)
   const [levelError, setLevelError] = useState<string | null>(null)
   /** 待确认的升档目标（null = 无弹窗）——只有升档会落到这里，降档直发。 */
@@ -32,24 +35,44 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   /** token 上限草稿（k 单位）；null = 未拖动，跟随 server 真值。 */
   const [tokK, setTokK] = useState<number | null>(null)
   const [budgetError, setBudgetError] = useState<string | null>(null)
+  const levelGeneration = useRef(0)
+  const budgetGeneration = useRef(0)
+  const identity = useRef({ root, rowId: row?.id ?? null })
+  identity.current = { root, rowId: row?.id ?? null }
+  const localeIdentity = useRef({ t, lang })
+  localeIdentity.current = { t, lang }
+  useEffect(() => {
+    ++levelGeneration.current
+    ++budgetGeneration.current
+    setLevelBusy(false)
+    setConfirmLevel(null)
+  }, [root, row?.id])
+  useEffect(() => {
+    setLevelError(null)
+    setBudgetError(null)
+  }, [lang])
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const authoritativeMaxTokens = row?.budget_decl?.max_tokens_per_day ?? null
+  // 轮询对象换代不撤确认；只有确认文案与裁决前提中的事实变化才撤。
+  const promotionFacts = promotionDecisionKey(root, row)
 
-  // row 换新（首载/切 loop/写回后 reload）→ 丢弃草稿与上一轮错误，以 server 真值为准。
-  // 待确认的升档也一并撤掉：那个弹窗是针对**旧行**问的话（「就绪分带 X、预算 Y，确认升 L3？」），
-  // 换行后它的前提已经不成立，留着就会拿旧事实骗用户点确认。
   useEffect(() => {
     setTokK(null)
     setLevelError(null)
     setBudgetError(null)
-    setConfirmLevel(null)
   }, [row])
 
-  // 卸载/换行时清掉在飞的去抖计时器（否则 unmount 后仍会发一发 POST）。
+  useEffect(() => {
+    setConfirmLevel(null)
+  }, [promotionFacts])
+
+  // 卸载、换行或权威预算变化时取消旧 timer，禁止其 POST 旧草稿覆盖新快照。
   useEffect(
     () => () => {
       if (commitTimer.current !== null) clearTimeout(commitTimer.current)
+      commitTimer.current = null
     },
-    [row],
+    [root, row?.id, authoritativeMaxTokens],
   )
 
   /**
@@ -67,75 +90,64 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
 
   async function applyLevel(target: GovernanceLevel): Promise<void> {
     if (!row || levelBusy || target === row.autonomy_level) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++levelGeneration.current
     setLevelBusy(true)
     setLevelError(null)
     try {
-      await postLoopLevel({ root, id: row.id, target })
+      await postLoopLevel({ root: targetRoot, id: targetId, target })
+      if (generation !== levelGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
-      // server 的 plan.reason / blockers 原文——不翻译、不改写、不吞并（诚实门③：它才是权威）。
-      setLevelError(t('workbench.lp_level_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setLevelError(current.t('workbench.lp_level_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     } finally {
-      setLevelBusy(false)
+      if (generation === levelGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        setLevelBusy(false)
+      }
     }
   }
 
   async function commitTokens(k: number): Promise<void> {
     if (!row) return
+    const targetRoot = root
+    const targetId = row.id
+    const generation = ++budgetGeneration.current
     const next = k * 1000
     // 与 server 真值相同 → 不发（LoopCard computePatch「不夹带未改字段」的同一条纪律）。
     if (next === (row.budget_decl?.max_tokens_per_day ?? null)) return
     setBudgetError(null)
     try {
-      await postLoopUpdate({ root, id: row.id, patch: { max_tokens_per_day: next } })
+      await postLoopUpdate({ root: targetRoot, id: targetId, patch: { max_tokens_per_day: next } })
+      if (generation !== budgetGeneration.current || identity.current.root !== targetRoot || identity.current.rowId !== targetId) return
       loops.reload()
     } catch (err) {
       // 写回失败必须现形：否则用户以为阈值改了、其实没落盘（静默吞错 = 谎报已保存）。
-      setBudgetError(t('workbench.gov_budget_fail', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+      if (generation === budgetGeneration.current && identity.current.root === targetRoot && identity.current.rowId === targetId) {
+        const current = localeIdentity.current
+        setBudgetError(current.t('workbench.gov_budget_fail', {
+          msg: formatApiError(err, current.t, { exposeServerDetail: current.lang === 'zh' }),
+        }))
+      }
     }
   }
 
   function onTokens(v: number): void {
     setTokK(v) // 即时回显
     if (commitTimer.current !== null) clearTimeout(commitTimer.current)
-    commitTimer.current = setTimeout(() => void commitTokens(v), BUDGET_COMMIT_MS) // 停手落盘
+    commitTimer.current = setTimeout(() => {
+      commitTimer.current = null
+      void commitTokens(v)
+    }, BUDGET_COMMIT_MS) // 停手落盘
   }
 
-  // ── 加载 / 错误 / 空态三分支（轨头恒在）──
-  if (loops.loadError) {
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW}>
-          <p className={WB_TW.loadError} data-tone="error" data-testid="wb-gov-load-error" role="alert">
-            {loops.loadError}
-          </p>
-        </div>
-      </aside>
-    )
-  }
-  if (loops.rows === null) {
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW}>
-          <p className={WB_TW.loading} role="status" aria-live="polite">{t('common.loading')}</p>
-        </div>
-      </aside>
-    )
-  }
-  if (!row) {
-    // 空态照 LoopCard 既有 lp-empty 的「去终端生成」口径（复用其 i18n 键，不自造文案）：
-    // 配置的生产者是 agent/系统，不是人从空白手填——不渲染任何编辑控件，不谎报可配。
-    return (
-      <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <GovernanceRailHead />
-        <div className={GCARD_TW} data-testid="wb-gov-empty" role="status" aria-live="polite">
-          <p className="mb-1 text-[14px] font-bold text-text">{t('workbench.lp_empty_title')}</p>
-          <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
-        </div>
-      </aside>
-    )
+  if (loops.loadError || loops.rows === null || !row) {
+    return <GovernanceRailStatus loops={loops} t={t} />
   }
 
   const curIdx = LEVELS.indexOf(row.autonomy_level)
@@ -178,7 +190,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
           <span className={cn(MINIBADGE_TW, TAG_RW_TW, 'inline-flex items-center gap-1')}><Pencil className="size-3" aria-hidden="true" />{t('workbench.gov_tag_rw')}</span>
         </div>
         <div className="flex gap-[7px]" role="radiogroup" aria-label={t('workbench.lp_level')}>
-          {LEVELS.map((lv) => {
+          {LEVELS.map((lv, index) => {
             const on = row.autonomy_level === lv
             return (
               <button
@@ -190,10 +202,15 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
                 )}
                 role="radio"
                 aria-checked={on}
+                tabIndex={on ? 0 : -1}
                 data-testid={`wb-gov-lv-${lv}`}
                 // 恒不因「预判会被拒」而 disable——那是 server 的判决权（诚实门③）。只在写回在途时禁双发。
                 disabled={levelBusy}
                 onClick={() => requestLevel(lv)}
+                onKeyDown={(event) => handleRadioKey(event, index, LEVELS.length, (next) => {
+                  const candidate = LEVELS[next]
+                  if (candidate) requestLevel(candidate)
+                })}
               >
                 <b className={cn('block font-mono text-base font-extrabold', on ? 'text-accent-d' : 'text-text-2')}>{lv}</b>
                 <small className="mt-0.5 block text-[11.5px] whitespace-nowrap text-text-3">{t(LEVEL_SHORT_KEY[lv])}</small>
@@ -204,25 +221,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
         <p className={GNOTE_TW} data-testid="wb-gov-grad-note">
           {t('workbench.gov_grad_note', { t1: READY_THRESHOLD, t2: READY_STRONG, runs: MIN_L2_RUNS_FOR_L3 })}
         </p>
-        {graduation !== null && (
-          <div
-            className={cn('mt-2.5 rounded-[10px] border px-3 py-2.5 text-xs', graduation.canGraduate ? 'border-green-b bg-green-t' : 'border-amb-b bg-amb-t')}
-            data-can-graduate={String(graduation.canGraduate)}
-            data-testid="wb-gov-graduation"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <b className="text-text">{graduation.canGraduate ? t('workbench.gov_preflight_ready') : t('workbench.gov_preflight_blocked')}</b>
-              <span className="font-mono text-text-2">{graduation.current} → {graduation.recommended}</span>
-            </div>
-            <p className="mt-1 font-mono text-[11px] text-text-2">runs {graduation.runs} · drift {graduation.driftCount} · fail_streak {graduation.failStreak} · breaker {graduation.breaker}</p>
-            {graduation.blockers.length > 0 && (
-              <ul className="mt-2 space-y-1 pl-4 text-text-2">
-                {graduation.blockers.map((blocker) => <li key={blocker} className="list-disc">{blocker}</li>)}
-              </ul>
-            )}
-            {graduation.demotionSignals.length > 0 && <p className="mt-2 text-red-d">{t('workbench.gov_preflight_demote')}: {graduation.demotionSignals.join('；')}</p>}
-          </div>
-        )}
+        {graduation !== null && <GovernanceGraduation graduation={graduation} lang={lang} t={t} />}
         {graduation === null && predictBlocked && nextLv !== null && score !== null && (
           <p className={GNOTE_HINT_TW} data-tone="hint" data-testid="wb-gov-level-hint">
             {t('workbench.gov_level_hint', { score, need: nextNeed, target: nextLv })}

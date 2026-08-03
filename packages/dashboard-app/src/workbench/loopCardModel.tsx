@@ -105,6 +105,12 @@ export interface LoopDraft {
   denylist: string[]
 }
 
+export function loopDraftValueEqual(left: unknown, right: unknown): boolean {
+  return Array.isArray(left) && Array.isArray(right)
+    ? JSON.stringify(left) === JSON.stringify(right)
+    : left === right
+}
+
 export function draftOf(row: WbLoopRow): LoopDraft {
   return {
     status: row.status,
@@ -122,6 +128,34 @@ export function draftOf(row: WbLoopRow): LoopDraft {
     kill_criteria: [...row.kill_criteria],
     allowlist: [...row.allowlist],
     denylist: [...row.denylist],
+  }
+}
+
+/** 接受新的 server 基线，同时保留本地已触碰字段。字段显式列出，避免草稿契约被无检查断言掩盖。 */
+export function rebaseLoopDraft(
+  current: LoopDraft,
+  next: LoopDraft,
+  touched: ReadonlyMap<keyof LoopDraft, unknown>,
+): LoopDraft {
+  const keep = <K extends keyof LoopDraft>(key: K): LoopDraft[K] => (
+    touched.has(key) ? current[key] : next[key]
+  )
+  return {
+    status: keep('status'),
+    goal: keep('goal'),
+    design_doc: keep('design_doc'),
+    change_prefix: keep('change_prefix'),
+    risk: keep('risk'),
+    runner: keep('runner'),
+    cadence: keep('cadence'),
+    max_runs_per_day: keep('max_runs_per_day'),
+    max_in_flight: keep('max_in_flight'),
+    max_tokens_per_day: keep('max_tokens_per_day'),
+    on_exceed: keep('on_exceed'),
+    human_gates: keep('human_gates'),
+    kill_criteria: keep('kill_criteria'),
+    allowlist: keep('allowlist'),
+    denylist: keep('denylist'),
   }
 }
 

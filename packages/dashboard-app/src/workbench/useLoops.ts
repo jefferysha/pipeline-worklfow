@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchLoopsSnapshot, type WbLoopRow } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 
 export interface LoopsState {
   /** 当前 root 的 loop 行；null = 加载中/加载失败（loadError 区分）。 */
@@ -12,17 +13,19 @@ export interface LoopsState {
 }
 
 export function useLoops(root: string): LoopsState {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [rows, setRows] = useState<WbLoopRow[] | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadErrorCause, setLoadErrorCause] = useState<unknown | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [loadedRoot, setLoadedRoot] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
   // 换 root：立刻清行——上一项目的 loop 不能在新项目语境下多渲染一拍。
   useEffect(() => {
     setRows(null)
     setSelectedId(null)
-    setLoadError(null)
+    setLoadErrorCause(null)
+    setLoadedRoot(null)
   }, [root])
 
   useEffect(() => {
@@ -32,23 +35,31 @@ export function useLoops(root: string): LoopsState {
         if (cancelled) return
         const mine = snap.rows.filter((r) => r.root === root)
         setRows(mine)
-        setLoadError(null)
+        setLoadedRoot(root)
+        setLoadErrorCause(null)
         setSelectedId((cur) => (cur !== null && mine.some((r) => r.id === cur) ? cur : mine[0]?.id ?? null))
       })
       .catch((err: unknown) => {
         if (cancelled) return
         // 加载失败不挡工作台其余区块：卡内行内报错、摘要行回落 '—'。
-        setLoadError(t('workbench.lp_load_error', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
+        setLoadedRoot(root)
+        setLoadErrorCause(err)
       })
     return () => {
       cancelled = true
     }
-  }, [root, tick, t])
+  }, [root, tick])
 
+  const currentRows = loadedRoot === root ? rows : null
+  const currentLoadError = loadedRoot === root ? loadErrorCause : null
   return {
-    rows,
-    loadError,
-    selected: rows?.find((r) => r.id === selectedId) ?? null,
+    rows: currentRows,
+    loadError: currentLoadError === null
+      ? null
+      : t('workbench.lp_load_error', {
+          msg: formatApiError(currentLoadError, t, { exposeServerDetail: lang === 'zh' }),
+        }),
+    selected: currentRows?.find((r) => r.id === selectedId) ?? null,
     select: setSelectedId,
     reload: () => setTick((n) => n + 1),
   }

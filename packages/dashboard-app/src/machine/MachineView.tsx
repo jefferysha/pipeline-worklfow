@@ -16,6 +16,7 @@ import { useT } from '../i18n'
 import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { AdvancedPanel } from '../advanced/AdvancedPanel'
+import { formatApiError, formatServerProse } from '../api/transport'
 
 type ReadinessState = 'ready' | 'blocked' | 'unknown'
 
@@ -37,10 +38,10 @@ function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCa
   const { t } = useT()
   const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amb-d bg-amb-t border-amb-b'
   return (
-    <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId} role="status" aria-live="polite">
+    <article className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
       <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
       <div className="min-w-0 flex-1">
-        <h3 className="font-bold text-text">{label}</h3>
+        <h3 className="break-words font-bold leading-tight text-text [overflow-wrap:anywhere]">{label}</h3>
         <p className="truncate text-[11px] text-text-3" title={detail}>{detail}</p>
       </div>
       <span className={`flex-none rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>{t(`machine.${state}`)}</span>
@@ -52,12 +53,71 @@ interface ProjectRisk {
   key: string
   root: string
   title: string
+  rootHint: string
   details: string[]
   testId: string
 }
 
 function rootName(root: string): string {
-  return root.split('/').filter(Boolean).pop() ?? root
+  const name = boundedRootTail(root).split(/[\\/]+/).filter(Boolean).pop() ?? 'unknown'
+  return shortenRootSegment(name, 48)
+}
+
+function shortenRootSegment(segment: string, limit = 20): string {
+  const points = Array.from(segment)
+  if (points.length <= limit) return segment
+  const headLength = Math.floor((limit - 1) / 2)
+  return `${points.slice(0, headLength).join('')}…${points.slice(-(limit - headLength - 1)).join('')}`
+}
+
+function boundedRootTail(root: string): string {
+  const tail = root.slice(-256)
+  const first = tail.charCodeAt(0)
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail
+}
+
+function boundedRootHint(root: string): string {
+  const segments = boundedRootTail(root).split(/[\\/]+/).filter(Boolean)
+  const suffix = segments.slice(-2).map((segment) => shortenRootSegment(segment)).join('/')
+  return `…/${suffix || 'unknown'}`
+}
+
+function stableRootId(root: string): string {
+  const sample = `${root.length}:${root.slice(0, 96)}:${root.slice(-96)}`
+  let first = 0x811c9dc5
+  let second = 0x9e3779b9
+  for (let index = 0; index < sample.length; index += 1) {
+    const code = sample.charCodeAt(index)
+    first = Math.imul(first ^ code, 0x01000193)
+    second = Math.imul(second ^ code, 0x85ebca6b)
+  }
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`.slice(0, 12)
+}
+
+function disambiguateRootHints(rows: readonly ProjectRisk[]): ProjectRisk[] {
+  const rootsByHint = new Map<string, Set<string>>()
+  for (const row of rows) {
+    const roots = rootsByHint.get(row.rootHint) ?? new Set<string>()
+    roots.add(row.root)
+    rootsByHint.set(row.rootHint, roots)
+  }
+  const idsByRoot = new Map<string, string>()
+  for (const roots of rootsByHint.values()) {
+    if (roots.size < 2) continue
+    const usedIds = new Map<string, number>()
+    for (const root of roots) {
+      const baseId = stableRootId(root)
+      const occurrence = (usedIds.get(baseId) ?? 0) + 1
+      usedIds.set(baseId, occurrence)
+      idsByRoot.set(root, occurrence === 1 ? baseId : `${baseId}-${occurrence}`)
+    }
+  }
+  return rows.map((row) => {
+    const stableId = idsByRoot.get(row.root)
+    return stableId !== undefined
+      ? { ...row, rootHint: `${row.rootHint} · #${stableId}` }
+      : row
+  })
 }
 
 /** Unknown legacy tier stays conservative; explicit conditional/optional entries are informational. */
@@ -78,17 +138,29 @@ function credentialSourceLabel(source: string, t: Translate): string {
   return labels[source] ?? source
 }
 
-function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate): ProjectRisk[] {
+function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate, exposeServerDetail: boolean): ProjectRisk[] {
   const rows: ProjectRisk[] = []
   for (const project of snapshot?.projects ?? []) {
     if (project.error !== undefined) {
-      rows.push({ key: `project:${project.root}`, root: project.root, title: rootName(project.root), details: [t('machine.risk_project_unreadable', { error: project.error })], testId: `machine-risk-open-project-${rootName(project.root)}` })
+      rows.push({
+        key: `project:${project.root}`,
+        root: project.root,
+        title: rootName(project.root),
+        rootHint: boundedRootHint(project.root),
+        details: [t('machine.risk_project_unreadable', {
+          error: formatServerProse(project.error, t, {
+            exposeServerDetail,
+            fallback: t('machine.risk_unknown_error'),
+          }),
+        })],
+        testId: `machine-risk-open-project-${rootName(project.root)}`,
+      })
       continue
     }
     for (const change of project.changes) {
       const automation = typeof change.fields.automation === 'string' ? change.fields.automation : ''
       if (change.archived !== 'true' && (automation === 'failed' || automation === 'conflict')) {
-        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
+        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, rootHint: boundedRootHint(project.root), details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
       }
     }
   }
@@ -101,9 +173,9 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
     if (loop.readiness.band === 'not-ready') details.push(t('machine.risk_readiness_not_ready'))
     if (loop.readiness.band === 'mostly-ready') details.push(t('machine.risk_readiness_mostly_ready'))
     if (loop.status === 'active' && loop.skill_bundle_id === null) details.push(t('machine.risk_skill_bundle_missing'))
-    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, details, testId: `machine-risk-open-${loop.id}` })
+    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, rootHint: boundedRootHint(loop.root), details, testId: `machine-risk-open-${loop.id}` })
   }
-  return rows
+  return disambiguateRootHints(rows)
 }
 
 /**
@@ -111,14 +183,14 @@ function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t:
  * 所有状态都来自真实端点；请求失败保持 unknown，并进入 blocker 清单，绝不把“没读到”画成 ready。
  */
 export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineViewProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [reloadKey, setReloadKey] = useState(0)
   const [readiness, setReadiness] = useState<WbAfkReadiness | null>(null)
   const [images, setImages] = useState<WbDockerImages | null>(null)
   const [secrets, setSecrets] = useState<WbSecretsKeys | null>(null)
   const [skills, setSkills] = useState<WbSkillEntry[] | null>(null)
   const [loops, setLoops] = useState<WbLoopRow[] | null>(null)
-  const [errors, setErrors] = useState<string[]>([])
+  const [errors, setErrors] = useState<Array<{ source: string; cause: unknown }>>([])
 
   const load = useCallback(() => setReloadKey((value) => value + 1), [])
 
@@ -133,20 +205,16 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
 
     const report = (source: string, error: unknown): void => {
       if (!live) return
-      setErrors((current) => [...current, `${source}: ${error instanceof Error ? error.message : String(error)}`])
+      setErrors((current) => [...current, { source, cause: error }])
     }
 
     if (currentRoot !== '') void fetchAfkReadiness(currentRoot).then((value) => { if (live) setReadiness(value) }, (error) => report('readiness', error))
-    else report('readiness', new Error('no registered project selected'))
 
     void fetchDockerImages().then((value) => { if (live) setImages(value) }, (error) => report('docker images', error))
     void fetchSecrets().then((value) => { if (live) setSecrets(value) }, (error) => report('secrets', error))
-    void fetchSkillsRegistry().then(async (response) => {
-      if (!response.ok) throw new Error(`(${response.status})`)
-      const body = (await response.json()) as { skills?: unknown }
-      if (!Array.isArray(body.skills)) throw new Error('malformed skills payload')
-      if (live) setSkills(body.skills as WbSkillEntry[])
-    }, (error) => report('skills', error)).catch((error) => report('skills', error))
+    void fetchSkillsRegistry().then((body) => {
+      if (live) setSkills(body)
+    }, (error) => report('skills', error))
     void fetchLoopsSnapshot().then((value) => { if (live) setLoops(value.rows) }, (error) => report('loops', error))
 
     return () => { live = false }
@@ -159,22 +227,49 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     ? 'unknown'
     : skills.length > 0 && skills.filter(blocksMachine).every((skill) => skill.installed) ? 'ready' : 'blocked'
   const operationsState: ReadinessState = snapshot === null ? 'unknown' : snapshot.capabilities.operations === true ? 'ready' : 'blocked'
+  const readinessStates = [dockerState, imageState, codexState, skillState, operationsState]
+  const readinessCounts = {
+    ready: readinessStates.filter((state) => state === 'ready').length,
+    blocked: readinessStates.filter((state) => state === 'blocked').length,
+    unknown: readinessStates.filter((state) => state === 'unknown').length,
+  }
 
   const blockers = useMemo(() => {
-    const values = [...errors]
+    const sourceLabels: Record<string, string> = {
+      readiness: t('machine.source_readiness'),
+      'docker images': t('machine.source_images'),
+      secrets: t('machine.source_secrets'),
+      skills: t('machine.source_skills'),
+      loops: t('machine.source_loops'),
+    }
+    const values = errors.map(({ source, cause }) => `${sourceLabels[source] ?? source}: ${formatApiError(cause, t, { exposeServerDetail: lang === 'zh' })}`)
+    if (currentRoot === '') values.push(t('machine.no_project'))
     if (readiness && !readiness.docker.available) values.push(t('machine.blocker_docker'))
     if (readiness && !readiness.image.present && !(images?.images.includes(readiness.image.configured) ?? false)) values.push(t('machine.blocker_image', { image: readiness.image.configured, command: readiness.image.build_hint }))
     for (const skill of skills ?? []) if (blocksMachine(skill) && !skill.installed) values.push(t('machine.blocker_skill', { skill: skill.name, command: skill.installCmd ?? t('machine.no_install_command') }))
     if (snapshot && snapshot.capabilities.operations !== true) values.push(t('machine.blocker_operations'))
     return values
-  }, [errors, images, readiness, skills, snapshot, t])
+  }, [currentRoot, errors, images, lang, readiness, skills, snapshot, t])
+  const blockersPending = blockers.length === 0 && (
+    readiness === null
+    || images === null
+    || secrets === null
+    || skills === null
+    || loops === null
+    || snapshot === null
+  )
 
-  const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t), [loops, snapshot, t])
+  const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
   const configuredImage = readiness?.image.configured ?? t('machine.loading_signal')
   const installedSkills = skills?.filter((skill) => skill.installed).length ?? 0
   const secretSource = readiness?.credentials.codex.OPENAI_API_KEY.source
     ?? readiness?.credentials.codex.CODEX_HOME.source
     ?? (secrets?.OPENAI_API_KEY.set ? 'secrets' : 'not detected')
+  const dockerDetail = images === null
+    ? t('machine.loading_signal')
+    : images.available === false || readiness?.docker.available === false
+      ? t('machine.docker_unavailable_detail')
+      : t('machine.docker_detail', { count: images.images.length })
 
   return (
     <section className="mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="machine-view" data-page-frame="standard">
@@ -191,8 +286,11 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
 
       <section data-testid="machine-readiness">
         <h2 className="mb-3 text-sm font-black text-text">{t('machine.readiness')}</h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={images ? t('machine.docker_detail', { count: images.images.length }) : t('machine.loading_signal')} testId="machine-docker" />
+        <p className="sr-only" role="status" aria-live="polite" data-testid="machine-readiness-summary">
+          {t('machine.readiness_summary', readinessCounts)}
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="machine-readiness-grid">
+          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={dockerDetail} testId="machine-docker" />
           <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
           <ReadinessCard icon={KeyRound} label={t('machine.codex')} state={codexState} detail={t('machine.codex_detail', { source: credentialSourceLabel(secretSource, t) })} testId="machine-codex" />
           <ReadinessCard icon={BrainCircuit} label={t('machine.skills')} state={skillState} detail={skills ? t('machine.skills_detail', { installed: installedSkills, total: skills.length }) : t('machine.loading_signal')} testId="machine-skills" />
@@ -200,10 +298,10 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]">
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]" data-testid="machine-risk-layout">
         <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
           <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
-          {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
+          {blockersPending ? <p className="mt-3 text-xs text-text-3" role="status" aria-live="polite" data-testid="machine-blockers-loading">{t('machine.loading_signal')}</p> : blockers.length === 0 ? <p className="mt-3 text-xs text-green-d" role="status" aria-live="polite">{t('machine.blockers_empty')}</p> : (
             <ul className="mt-3 space-y-2 p-0">
               {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
             </ul>
@@ -221,9 +319,18 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
                   <span className="h-8 w-1 flex-none rounded-full bg-red" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <div className="break-words font-bold text-text [overflow-wrap:anywhere]">{risk.title}</div>
+                    <div className="break-words font-mono text-[10.5px] text-text-3 [overflow-wrap:anywhere]" data-testid="machine-risk-root-hint">{risk.rootHint}</div>
                     <div className="mt-0.5 break-words text-xs text-text-3 [overflow-wrap:anywhere]">{risk.details.join(' · ')}</div>
                   </div>
-                  <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
+                  <button
+                    type="button"
+                    data-testid={risk.testId}
+                    className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill max-[480px]:w-full"
+                    aria-label={t('machine.open_project_target', { title: risk.title, root: risk.rootHint })}
+                    onClick={() => onOpenProject(risk.root)}
+                  >
+                    {t('machine.open_project')}
+                  </button>
                 </li>
               ))}
             </ul>

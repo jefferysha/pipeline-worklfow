@@ -27,7 +27,7 @@ function basenameOf(root: string): string {
 }
 
 function phaseLabel(t: (key: string) => string, rules: WorkflowRules, phase: string): string {
-  const custom = rules.labelByStep?.[phase]
+  const custom = rules.executionModel === 'phase-manifest' ? undefined : rules.labelByStep?.[phase]
   if (custom) return custom
   const resolved = t(`phases.${phase}`)
   return resolved === `phases.${phase}` ? phase : resolved

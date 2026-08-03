@@ -1,45 +1,50 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { selectInbox } from './inbox/inbox'
 import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
-import { ProgressView } from './progress/ProgressView'
-import { AfkView } from './afk/AfkView'
-import { Nav, PRIMARY_VIEWS, type ThemePreference, type View } from './shell/Nav'
+import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
-import { WorkbenchView } from './workbench/WorkbenchView'
-import { toastIn } from './shared/motion'
-import { MachineView } from './machine/MachineView'
 import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
-import { SolutionView } from './solution/SolutionView'
 import { useProjectSelection } from './state/useProjectSelection'
 import { isProjectWritable } from './state/projectSelectionModel'
-import { HostTargetPlanView } from './hostPlan/HostTargetPlanView'
+import { formatApiError } from './api/transport'
+import { UnsavedDraftDialog } from './shared/UnsavedDraftDialog'
+import { DialogInteractionBoundary } from './shared/Dialog'
+import type { DashboardNavigationTarget } from './state/useProjectSelection'
+import { useFlash } from './shared/useFlash'
+import { useDashboardTheme } from './shell/useDashboardTheme'
 import { SnapshotInlineError } from './progress/SnapshotInlineError'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
-const THEME_KEY = 'tenon-dashboard-theme'
+const ProgressView = lazy(async () => ({
+  default: (await import('./progress/ProgressView')).ProgressView,
+}))
+const AfkView = lazy(async () => ({ default: (await import('./afk/AfkView')).AfkView }))
+const WorkbenchView = lazy(async () => ({
+  default: (await import('./workbench/WorkbenchView')).WorkbenchView,
+}))
+const MachineView = lazy(async () => ({
+  default: (await import('./machine/MachineView')).MachineView,
+}))
+const SolutionView = lazy(async () => ({
+  default: (await import('./solution/SolutionView')).SolutionView,
+}))
+const HostTargetPlanView = lazy(async () => ({
+  default: (await import('./hostPlan/HostTargetPlanView')).HostTargetPlanView,
+}))
+
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'tenon-dashboard-view'
 // 可路由的全部视图 = rail 六项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器/宿主计划）。「项目」是 rail
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
-
-function initialTheme(): ThemePreference {
-  try {
-    const stored = localStorage.getItem(THEME_KEY)
-    if (stored === 'system' || stored === 'light' || stored === 'dark') return stored
-  } catch {
-    /* ignore */
-  }
-  return 'system'
-}
 
 function initialView(): View {
   try {
@@ -57,9 +62,9 @@ function initialView(): View {
   return 'progress'
 }
 
-interface Flash {
-  kind: 'toast' | 'error'
-  msg: string
+interface PendingNavigation {
+  readonly kind: 'view' | 'pop'
+  readonly target: DashboardNavigationTarget
 }
 
 function AppShell(): JSX.Element {
@@ -68,12 +73,18 @@ function AppShell(): JSX.Element {
   const [selectedChange, setSelectedChange] = useState<string | null>(() => {
     try { return parseDashboardLocation(window.location.search).change ?? null } catch { return null }
   })
-  const [theme, setThemeState] = useState<ThemePreference>(initialTheme)
-  const [flash, setFlash] = useState<Flash | null>(null)
-  const flashRef = useRef<HTMLDivElement>(null)
-  const flashTimerRef = useRef<number | null>(null)
+  const { theme, setTheme } = useDashboardTheme()
+  const { flash, flashRef, showFlash } = useFlash(lang)
+  const [workbenchDirty, setWorkbenchDirty] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null)
+  const pendingNavigationRef = useRef<PendingNavigation | null>(null)
+  const viewRef = useRef(view)
+  const dirtyRef = useRef(workbenchDirty)
+  const currentRootRef = useRef('')
+  const retainedWorkbenchRootRef = useRef('')
+  viewRef.current = view
 
-  const setView = useCallback((v: View) => {
+  const commitView = useCallback((v: View) => {
     setViewState(v)
     if (v !== 'progress') setSelectedChange(null)
     try {
@@ -85,62 +96,137 @@ function AppShell(): JSX.Element {
     }
   }, [])
 
-  useEffect(() => {
-    if (!flash || !flashRef.current) return
-    const tween = toastIn(flashRef.current)
-    return () => {
-      tween.kill()
-    }
-  }, [flash])
-  useEffect(() => () => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
+  const capturePendingNavigation = useCallback((candidate: PendingNavigation): void => {
+    if (pendingNavigationRef.current !== null) return
+    pendingNavigationRef.current = candidate
+    setPendingNavigation((current) => current ?? candidate)
   }, [])
-  const { snapshot, loading, error, errorStatus, connected, refresh, reconnect } = useSnapshot()
-  const snapshotError = error === null
-    ? null
-    : errorStatus === null
-      ? t('common.snapshot_request_failed_unknown')
-      : t('common.snapshot_request_failed', { status: errorStatus })
-  const { currentRoot, selectProject } = useProjectSelection({
+
+  const clearPendingNavigation = useCallback((): void => {
+    pendingNavigationRef.current = null
+    setPendingNavigation(null)
+  }, [])
+
+  const onUninterceptablePopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
+    if (pendingNavigationRef.current !== null) return false
+    const leavesDirtyWorkbench = target.view !== 'workbench'
+      || target.root !== currentRootRef.current
+    if (viewRef.current !== 'workbench' || !dirtyRef.current || !leavesDirtyWorkbench) return true
+    const discard = window.confirm(`${t('common.unsaved_navigation_title')}\n\n${t('common.unsaved_navigation_body')}`)
+    if (!discard) return false
+    clearPendingNavigation()
+    dirtyRef.current = false
+    setWorkbenchDirty(false)
+    return true
+  }, [clearPendingNavigation, t])
+
+  const onPopAttempt = useCallback((target: DashboardNavigationTarget): boolean => {
+    const leavesDirtyWorkbench = target.view !== 'workbench'
+      || target.root !== currentRootRef.current
+    if (viewRef.current === 'workbench' && dirtyRef.current && leavesDirtyWorkbench) {
+      capturePendingNavigation({ kind: 'pop', target })
+      return false
+    }
+    return true
+  }, [capturePendingNavigation])
+  const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
+  const preserveUnavailableWorkbenchRoot = view === 'workbench'
+    && workbenchDirty
+    && retainedWorkbenchRootRef.current !== ''
+    && !isProjectWritable(snapshot?.projects.find(
+      (project) => project.root === retainedWorkbenchRootRef.current,
+    ))
+  const snapshotError = error === null ? null : formatApiError(error, t)
+  const staleSnapshotError =
+    error === null
+      ? null
+      : typeof error.status === 'number'
+        ? t('common.snapshot_request_failed', { status: error.status })
+        : t('common.snapshot_request_failed_unknown')
+  const {
+    currentRoot,
+    selectProject,
+    confirmPopNavigation,
+    cancelPopNavigation,
+    supportsNavigationInterception,
+  } = useProjectSelection({
     snapshot,
     view,
     selectedChange,
-    onPopView: setViewState,
+    onPopView: commitView,
     onSelectedChange: setSelectedChange,
+    onPopAttempt,
+    shouldCancelPopBeforeCommit: () => pendingNavigationRef.current?.kind === 'view',
+    onUninterceptablePopAttempt,
+    preserveUnavailableRoot: preserveUnavailableWorkbenchRoot,
   })
+  currentRootRef.current = currentRoot
+
+  const setView = useCallback((nextView: View): void => {
+    if (viewRef.current === 'workbench' && dirtyRef.current && nextView !== 'workbench') {
+      if (!supportsNavigationInterception && pendingNavigationRef.current === null) {
+        const discard = window.confirm(`${t('common.unsaved_navigation_title')}\n\n${t('common.unsaved_navigation_body')}`)
+        if (!discard) return
+        dirtyRef.current = false
+        setWorkbenchDirty(false)
+        commitView(nextView)
+        return
+      }
+      capturePendingNavigation({
+        kind: 'view',
+        target: {
+          view: nextView,
+          root: currentRootRef.current || null,
+          change: nextView === 'progress' ? selectedChange : null,
+        },
+      })
+      return
+    }
+    commitView(nextView)
+  }, [capturePendingNavigation, commitView, selectedChange, supportsNavigationInterception, t])
+
+  const closePendingNavigation = useCallback(() => {
+    cancelPopNavigation(clearPendingNavigation)
+  }, [cancelPopNavigation, clearPendingNavigation])
+
+  const discardAndNavigate = useCallback(() => {
+    if (!pendingNavigation) return
+    const pending = pendingNavigation
+    if (pending.kind === 'pop') {
+      clearPendingNavigation()
+      dirtyRef.current = false
+      setWorkbenchDirty(false)
+      confirmPopNavigation()
+      return
+    }
+    cancelPopNavigation(() => {
+      clearPendingNavigation()
+      dirtyRef.current = false
+      setWorkbenchDirty(false)
+      commitView(pending.target.view)
+    })
+  }, [cancelPopNavigation, clearPendingNavigation, commitView, confirmPopNavigation, pendingNavigation])
+
+  const onWorkbenchDirtyChange = useCallback((dirty: boolean): void => {
+    dirtyRef.current = dirty
+    setWorkbenchDirty(dirty)
+  }, [])
+
+  useEffect(() => {
+    const protectDraft = (event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', protectDraft)
+    return () => window.removeEventListener('beforeunload', protectDraft)
+  }, [])
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
   const currentProjectWritable = isProjectWritable(currentProject)
 
   // 跨项目 snapshot 已携带每个 change 冻结绑定的 workflow 摘要。项目总览与单项目视图消费同一
   // 聚合事实，无选择时不需要、也不允许发起任何 per-root workflow 请求。
   const rulesByKey = useMemo(() => workflowRulesFromSnapshot(snapshot), [snapshot])
-
-  useEffect(() => {
-    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-color-scheme: dark)')
-      : undefined
-    const applyTheme = (): void => {
-      try {
-        document.documentElement.dataset.themePreference = theme
-        document.documentElement.dataset.theme = theme === 'system' ? (media?.matches ? 'dark' : 'light') : theme
-      } catch {
-        /* ignore */
-      }
-    }
-    applyTheme()
-    if (theme !== 'system' || !media) return
-    media.addEventListener?.('change', applyTheme)
-    return () => media.removeEventListener?.('change', applyTheme)
-  }, [theme])
-
-  const setTheme = useCallback((next: ThemePreference) => {
-    setThemeState(next)
-    try {
-      localStorage.setItem(THEME_KEY, next)
-    } catch {
-      /* ignore */
-    }
-  }, [])
 
   // 待拍板计数（Nav「进度」项红徽标）：口径沿 selectInbox 不变——收件箱视图退役后，
   // 选择器保留为「现在就能拍板」的唯一判定源（F1 的进度行高亮同源消费）。
@@ -163,22 +249,42 @@ function AppShell(): JSX.Element {
     if (currentRoot !== '' && okRoots.includes(currentRoot)) return currentRoot
     return ''
   }, [snapshot, currentRoot])
+  if (workbenchRoot !== '') retainedWorkbenchRootRef.current = workbenchRoot
+  const retainedWorkbenchRoot = workbenchRoot !== ''
+    ? workbenchRoot
+    : view === 'workbench' && workbenchDirty
+      ? retainedWorkbenchRootRef.current
+      : ''
+  const retainedWorkbenchProject = snapshot?.projects.find((project) => project.root === retainedWorkbenchRoot)
+  const workbenchAuthorityLost = retainedWorkbenchRoot !== '' && !isProjectWritable(retainedWorkbenchProject)
+  const retainedWorkbenchHostRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const host = retainedWorkbenchHostRef.current
+    if (!host) return
+    if (workbenchAuthorityLost) host.setAttribute('inert', '')
+    else host.removeAttribute('inert')
+  }, [workbenchAuthorityLost])
 
   // Progress 可在仅含 future-version issue 时只读打开；AFK/Workbench 含写入口，仍要求
   // project.ok=true。普通 corruption 与兼容 issue 并存时 selection model 会让 root 失效。
   useEffect(() => {
-    if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot || snapshot.project_count === 0) return
+    if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot) return
+    if (view === 'workbench' && workbenchDirty && retainedWorkbenchRoot !== '') {
+      if (workbenchAuthorityLost) setView('projects')
+      return
+    }
+    if (snapshot.project_count === 0) return
     if (currentRoot === '' || (view !== 'progress' && !currentProjectWritable)) setView('projects')
-  }, [view, snapshot, currentRoot, currentProjectWritable, setView])
-
-  const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current)
-    setFlash({ kind, msg })
-    flashTimerRef.current = window.setTimeout(() => {
-      flashTimerRef.current = null
-      setFlash(null)
-    }, 4000)
-  }, [])
+  }, [
+    view,
+    snapshot,
+    currentRoot,
+    currentProjectWritable,
+    retainedWorkbenchRoot,
+    workbenchAuthorityLost,
+    workbenchDirty,
+    setView,
+  ])
 
   // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
   // 动作接线（继续/打回/重试/终止）由 ProgressView 侧按需重建（postTransition 仍在 api/client）。
@@ -249,8 +355,15 @@ function AppShell(): JSX.Element {
         className="w-full flex-1 px-6 pb-6 pt-3 mobile:px-4 mobile:pb-[calc(88px+env(safe-area-inset-bottom))] mobile:pt-2"
         data-testid="app-main"
       >
-        {snapshot !== null && snapshotError && view !== 'progress' && view !== 'hostPlan' && (
-          <SnapshotInlineError error={snapshotError} loading={loading} onRefresh={refresh} />
+        <Suspense
+          fallback={(
+            <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite" data-testid="route-loading">
+              {t('common.loading')}
+            </p>
+          )}
+        >
+        {snapshot !== null && staleSnapshotError && view !== 'progress' && view !== 'hostPlan' && (
+          <SnapshotInlineError error={staleSnapshotError} loading={loading} onRefresh={refresh} />
         )}
         {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
@@ -275,7 +388,11 @@ function AppShell(): JSX.Element {
           </section>
         ) : view === 'overview' ? (
           <SolutionView />
-        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' && view !== 'hostPlan' ? (
+        ) : snapshot
+          && snapshot.project_count === 0
+          && view !== 'machine'
+          && view !== 'hostPlan'
+          && !(view === 'workbench' && workbenchDirty && retainedWorkbenchRoot !== '') ? (
           <Onboarding kind="no-project" />
         ) : snapshot
           && currentProject
@@ -283,6 +400,7 @@ function AppShell(): JSX.Element {
           && (currentProject.compatibilityIssues?.length ?? 0) === 0
           && view === 'progress' ? (
           <Onboarding
+            key={currentRoot}
             kind="no-change"
             root={currentRoot}
             onCreated={refresh}
@@ -307,9 +425,10 @@ function AppShell(): JSX.Element {
           // 落到「项目」总览页。
           currentRoot !== '' ? (
             <ProgressView
+              key={currentRoot}
               snapshot={snapshot}
               loading={loading}
-              error={snapshotError}
+              error={staleSnapshotError}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
               onToast={(m) => showFlash('toast', m)}
@@ -327,6 +446,7 @@ function AppShell(): JSX.Element {
           // 将失效 URL/导航清理回项目页，不能作为安全边界。
           currentRoot !== '' && currentProjectWritable ? (
             <AfkView
+              key={currentRoot}
               snapshot={snapshot}
               currentRoot={currentRoot}
               rulesByKey={rulesByKey}
@@ -342,11 +462,29 @@ function AppShell(): JSX.Element {
           )
         )}
         {view === 'workbench' && (
-          workbenchRoot !== '' ? (
+          retainedWorkbenchRoot !== '' ? (
             // v6 计划 T11：流程带真实计数/running 脉冲吃同一份已加载的 snapshot（App 是唯一
             // useSnapshot() 调用点，不在 WorkbenchView 内独立开第二条 SSE 订阅——见
             // WorkbenchViewProps.snapshot 头注释）。
-            <WorkbenchView root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} snapshot={snapshot} />
+            <>
+              {workbenchAuthorityLost && (
+                <p className="p-5 text-[13px] text-red-d" role="alert">{t('workbench.no_reachable_root')}</p>
+              )}
+              <div
+                data-testid="workbench-retained-host"
+                ref={retainedWorkbenchHostRef}
+              >
+                <DialogInteractionBoundary disabled={workbenchAuthorityLost}>
+                  <WorkbenchView
+                    key={retainedWorkbenchRoot}
+                    root={retainedWorkbenchRoot}
+                    onToggleError={(m) => showFlash('error', m)}
+                    snapshot={snapshot}
+                    onDirtyChange={onWorkbenchDirtyChange}
+                  />
+                </DialogInteractionBoundary>
+              </div>
+            </>
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。
@@ -368,9 +506,16 @@ function AppShell(): JSX.Element {
         {view === 'hostPlan' && <HostTargetPlanView />}
           </>
         )}
+        </Suspense>
       </main>
 
       </div>
+      <UnsavedDraftDialog
+          open={pendingNavigation !== null}
+          testid="app-unsaved-navigation"
+          onStay={closePendingNavigation}
+          onDiscard={discardAndNavigate}
+        />
     </div>
   )
 }

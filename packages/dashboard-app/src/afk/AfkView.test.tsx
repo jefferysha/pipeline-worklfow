@@ -62,8 +62,10 @@ beforeEach(() => {
       return new Response(JSON.stringify({ ok: true, settings: automationSettings }), { status: 200 })
     }
     if (url === '/api/automation' && init?.method === 'POST') {
-      settingsPosts.push(JSON.parse(String(init.body)) as Record<string, unknown>)
-      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>
+      settingsPosts.push(body)
+      const { root: _root, ...saved } = body
+      return new Response(JSON.stringify({ ok: true, settings: { enabled: false, ...saved } }), { status: 200 })
     }
     if (/\/api\/afk\/[^/]+\/(enqueue|retry)$/.test(url) && init?.method === 'POST') {
       afkPosts.push({ url, init })
@@ -104,6 +106,43 @@ async function renderAfk(over: Partial<Parameters<typeof AfkView>[0]> = {}) {
 }
 
 describe('AfkView 两栏自动运行工作区', () => {
+  it('English empty state and automation tools contain no hard-coded Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const empty = makeSnapshot([makeProject(ROOT, [makeChange('manual', 'build', {})])])
+    empty.capabilities = { ...empty.capabilities, operations: true }
+    await renderAfk({ snapshot: empty })
+    expect(screen.getByTestId('afk-empty')).toHaveTextContent('No automatic runs right now')
+    expect(screen.getByTestId('afk-view').textContent).not.toMatch(/[\u3400-\u9fff]/u)
+    expect(screen.getByTestId('afk-tool-enqueue')).toHaveTextContent('Start automatic run')
+    expect(screen.getByTestId('afk-tool-starter')).toHaveTextContent('New schedule')
+    expect(screen.getByTestId('afk-tool-run')).toHaveTextContent('Validate schedule')
+  })
+
+  it('English populated queue, facts, progress, activity, and retry preview contain no Chinese product copy', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const snapshot = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('failed-en', 'verify', {
+          fields: {
+            automation: 'failed',
+            automation_worktree: '/wt/failed-en',
+            automation_error: 'Coverage is below threshold',
+            workflow: 'default',
+            autonomy_level: 'L2',
+            skill_bundle_id: 'verification@v1',
+            automation_container: 'node:22',
+          },
+        }),
+        makeChange('queued-en', 'spec', { fields: { automation: 'queued' } }),
+      ]),
+    ])
+    await renderAfk({ snapshot })
+    const view = screen.getByTestId('afk-view')
+    expect(view.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+    fireEvent.click(screen.getByTestId('afk-retry-preview-failed-en'))
+    expect(screen.getByTestId('afk-retry-sheet').textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('打开页面即以待处理任务为主视图，任务事实与动作合并进详情，不再重复展示下一步侧栏', async () => {
     await renderAfk()
     expect(screen.getByTestId('afk-view')).toHaveAttribute('data-page-frame', 'standard')
@@ -169,6 +208,70 @@ describe('AfkView 两栏自动运行工作区', () => {
     await waitFor(() => expect(settingsPosts).toEqual([{ root: ROOT, max_parallel: 6, max_retries: 1, default_opt_in: false, image: '' }]))
   })
 
+  it('HTTP 200 的畸形 AFK 写回不保留 settings 乐观值或显示成功 toast', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/automation' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false }), { status: 200 })
+      }
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+    await waitFor(() => expect(screen.getByTestId('afk-limit-input')).toHaveValue('4'))
+
+    fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
+
+    await waitFor(() => expect(screen.getByTestId('afk-settings-error')).toHaveTextContent('Invalid server response.'))
+    expect(screen.getByTestId('afk-limit-input')).toHaveValue('4')
+    expect(props.onToast).not.toHaveBeenCalled()
+  })
+
+  it('HTTP 200 的畸形 enqueue body 保持对话框打开，显示本地化 invalid-response 且不 toast', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/afk/gate-d/enqueue' && init?.method === 'POST') {
+        return new Response('not-json', { status: 200 })
+      }
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+
+    fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
+    fireEvent.click(screen.getByTestId('afk-enqueue-gate-d'))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Invalid server response.'))
+    expect(screen.getByTestId('afk-tool-sheet')).toBeInTheDocument()
+    expect(props.onToast).not.toHaveBeenCalled()
+  })
+
+  it('AFK 入队与设置保存各自拥有独立 generation，不会互相清 busy 或吞掉结果', async () => {
+    const baseFetch = global.fetch
+    let resolveAction!: (response: Response) => void
+    const delayedAction = new Promise<Response>((resolve) => { resolveAction = resolve })
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/afk/gate-d/enqueue' && init?.method === 'POST') return delayedAction
+      return baseFetch(input, init)
+    }) as unknown as typeof fetch
+    const props = await renderAfk()
+    fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
+    const enqueue = screen.getByTestId('afk-enqueue-gate-d')
+    fireEvent.click(enqueue)
+    fireEvent.change(screen.getByTestId('afk-limit-input'), { target: { value: '6' } })
+    await waitFor(() => expect(settingsPosts).toHaveLength(1))
+    expect(enqueue).toBeDisabled()
+
+    await act(async () => {
+      resolveAction(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      await delayedAction
+    })
+    await waitFor(() => expect(screen.queryByTestId('afk-enqueue-panel')).toBeNull())
+    expect(props.onToast).toHaveBeenCalledWith(expect.stringContaining('gate-d'))
+    expect(props.onToast).toHaveBeenCalledWith(expect.stringContaining('6'))
+  })
+
   it('调度汇总灯：三态齐（有 failed）→ data-status=attention', async () => {
     await renderAfk()
     expect(screen.getByTestId('afk-health')).toHaveAttribute('data-status', 'attention')
@@ -181,7 +284,7 @@ describe('AfkView 两栏自动运行工作区', () => {
     expect(screen.queryByTestId('afk-tool-sync')).toBeNull()
     expect(screen.queryByTestId('afk-enqueue-panel')).toBeNull()
     fireEvent.click(screen.getByTestId('afk-tool-enqueue'))
-    expect(screen.getByTestId('afk-tool-sheet')).toHaveAttribute('role', 'dialog')
+    expect(within(screen.getByTestId('afk-tool-sheet')).getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('开启自动运行')
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('不创建新任务，也不改变它的工作流')
     expect(screen.getByTestId('afk-enqueue-gate-d')).toBeInTheDocument()
@@ -190,6 +293,31 @@ describe('AfkView 两栏自动运行工作区', () => {
     await waitFor(() => expect(screen.getByTestId('ops-starter-daily-triage')).toBeInTheDocument())
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('选择定时任务类型')
     expect(screen.getByTestId('afk-tool-sheet')).toHaveTextContent('模板决定如何发现或生成任务')
+  })
+
+  it('工具 Dialog 进入首个控件、困住 Tab，Escape 关闭并把焦点还给打开按钮', async () => {
+    await renderAfk({ snapshot: fixtureWithOperations() })
+    const trigger = screen.getByTestId('afk-tool-enqueue')
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '自动运行工具' })
+    const close = screen.getByTestId('afk-tool-close')
+    const last = within(dialog).getAllByRole('button').at(-1)
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(dialog).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('390px 动作区使用完整可见的换行布局，不以隐藏横向滚动承载 English 长标签', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    await renderAfk({ snapshot: fixtureWithOperations() })
+    const nav = screen.getByTestId('afk-tool-nav')
+    expect(nav.className).toContain('flex-wrap')
+    expect(nav.className).not.toContain('overflow-x-auto')
+    expect(within(nav).getAllByRole('button')).toHaveLength(3)
   })
 
   it('生产操作能力未接通时仍可开启现有任务的自动运行，但新建与验证定时任务明确禁用', async () => {
@@ -257,6 +385,23 @@ describe('AfkView 行动作（真实入队 / 重试 + 人工接管）', () => {
     expect(screen.getByTestId('afk-cmd-fail-c')).toHaveAttribute('title', 'cd /wt/fail-c')
   })
 
+  it('重试 Dialog 进入取消动作、困住 Shift+Tab，Escape 关闭并恢复触发器焦点', async () => {
+    await renderAfk()
+    const trigger = screen.getByTestId('afk-retry-preview-fail-c')
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '重试预览' })
+    const cancel = screen.getByRole('button', { name: '取消' })
+    const confirm = screen.getByTestId('afk-retry-confirm-fail-c')
+    expect(cancel).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(confirm).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(dialog).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(afkPosts).toHaveLength(0)
+  })
+
   it('失败行无 worktree 现场 → 只给真实 retry，不再展示会被后端拒绝的 enqueue 命令', async () => {
     const snap = makeSnapshot([
       makeProject(ROOT, [makeChange('fail-x', 'build', { fields: { automation: 'failed' } })]),
@@ -320,12 +465,20 @@ describe('AfkView 迷你流水线轨（MiniTrack：change 在整条流水线的�
 })
 
 describe('AfkView 空态', () => {
-  it('无沙箱任务 → afk-empty，三栏都不渲染', async () => {
+  it('无沙箱任务 → afk-empty，三栏不渲染且只保留工具栏一处创建入口', async () => {
     const snap = makeSnapshot([makeProject(ROOT, [makeChange('gate-only', 'build', {})])])
     await renderAfk({ snapshot: snap })
     expect(screen.getByTestId('afk-empty').textContent).toContain('当前没有自动运行任务')
     expect(screen.queryByTestId('afk-sec-running')).toBeNull()
     expect(screen.queryByTestId('afk-sec-queued')).toBeNull()
     expect(screen.queryByTestId('afk-sec-failed')).toBeNull()
+    expect(screen.queryByTestId('afk-new-run')).toBeNull()
+    expect(screen.getByTestId('afk-tool-nav')).toBeInTheDocument()
+  })
+
+  it('搜索输入声明稳定 name 并关闭浏览器自动填充', async () => {
+    await renderAfk()
+    expect(screen.getByRole('textbox', { name: '搜索自动运行' })).toHaveAttribute('name', 'afk-search')
+    expect(screen.getByRole('textbox', { name: '搜索自动运行' })).toHaveAttribute('autocomplete', 'off')
   })
 })

@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
 import { invalidateMandatoryConfig } from './mandatorySkills'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { decodeWorkflowDeleteError, decodeWorkflowDeleteSuccess } from './workbenchApiDecoders'
 import {
   moveSkillInDef,
   removeStageFromDef,
@@ -15,6 +16,29 @@ import {
 } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
+
+describe('decodeWorkflowDeleteError', () => {
+  it.each([
+    {},
+    { ok: false },
+    { ok: false, code: 'WORKFLOW_REFERENCED', workflow: 'release-train', references: [{}] },
+    { ok: false, code: 'WORKFLOW_REFERENCED', workflow: 'release-train', references: [{ kind: 'future-kind', source: 'x' }] },
+  ])('rejects malformed or open-ended envelopes %#', (value) => {
+    expect(decodeWorkflowDeleteError(value)).toBeNull()
+  })
+
+  it.each([
+    {},
+    { ok: false },
+    { ok: true, deleted: 'release-train' },
+  ])('requires the exact workflow delete success envelope %#', (value) => {
+    expect(decodeWorkflowDeleteSuccess(value)).toBe(false)
+  })
+
+  it('accepts the exact workflow delete success envelope', () => {
+    expect(decodeWorkflowDeleteSuccess({ ok: true })).toBe(true)
+  })
+})
 
 // T12 fixture：对照 design-demos/v5-progress-workbench.html 的 release-train 三阶段示例，
 // 但形状是真实 server 契约（GET /api/workflows/:name 的 { name, steps: StepDef[] }，同
@@ -224,8 +248,13 @@ describe('setSkillDepInDef 依赖增删改（v11 P2）', () => {
 })
 
 function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}, _openEditor = true) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="test-language-en" onClick={() => setLang('en')}>en</button>
+  }
   render(
     <I18nProvider>
+      <LanguageToggle />
       <WorkbenchView root={ROOT} {...props} />
     </I18nProvider>,
   )
@@ -388,7 +417,16 @@ beforeEach(() => {
     //    SecretsCard 则会直接深访问 keys[key].set。
     if (url.startsWith('/api/automation')) {
       return new Response(
-        JSON.stringify({ ok: true, engine: 'claude-code', max_parallel: 1, dry_run: false, image: 'pipeline-afk:latest' }),
+        JSON.stringify({
+          ok: true,
+          settings: {
+            enabled: false,
+            max_parallel: 1,
+            max_retries: 1,
+            default_opt_in: false,
+            image: 'pipeline-afk:latest',
+          },
+        }),
         { status: 200 },
       )
     }
@@ -420,11 +458,86 @@ beforeEach(() => {
 })
 afterEach(() => {
   delete window.__TENON_DASHBOARD_TOKEN__
+  window.localStorage.removeItem('tenon-dashboard-lang')
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe('WorkbenchView stepper（验收①）', () => {
+  it('切换语言不重拉 Workflow、不覆盖未保存草稿，并保留已打开的治理对话框', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+      if (/^\/api\/workflows\/release-train$/.test(url) && options?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false, errors: ['阶段配置无效'] }), { status: 400 })
+      }
+      return baseFetch(url, options)
+    }) as unknown as typeof fetch
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByRole('button', { name: '执行指令' }))
+    const prompt = screen.getByLabelText('Codex 阶段指令')
+    fireEvent.change(prompt, { target: { value: 'Keep this unsaved prompt.' } })
+    fireEvent.click(screen.getByTestId('wb-save'))
+    expect(await screen.findByTestId('wb-save-errors')).toHaveTextContent('阶段配置无效')
+    fireEvent.click(screen.getByTestId('wb-governance-open'))
+    expect(await screen.findByRole('dialog', { name: '运行治理' })).toBeInTheDocument()
+
+    const workflowUrl = `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`
+    const workflowGetsBefore = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url, options]) => url === workflowUrl && (!(options as RequestInit | undefined)?.method || (options as RequestInit).method === 'GET')).length
+
+    fireEvent.click(screen.getByTestId('test-language-en'))
+
+    expect(screen.getByLabelText('Codex step instructions')).toHaveValue('Keep this unsaved prompt.')
+    expect(screen.getByRole('dialog', { name: 'Runtime governance' })).toBeInTheDocument()
+    expect(screen.queryByText('阶段配置无效')).toBeNull()
+    expect(screen.queryByTestId('wb-save-errors')).toBeNull()
+    const workflowGetsAfter = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([url, options]) => url === workflowUrl && (!(options as RequestInit | undefined)?.method || (options as RequestInit).method === 'GET')).length
+    expect(workflowGetsAfter).toBe(workflowGetsBefore)
+  })
+
+  it('English locale covers the Dashboard Workbench header, track controls, and canonical phases', async () => {
+    window.localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('Current workflow')
+    expect(screen.getByText('Run track')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-track-pm')).toHaveTextContent('Product')
+    expect(screen.getByTestId('wb-track-frontend')).toHaveTextContent('Frontend')
+    expect(screen.getByTestId('wb-track-backend')).toHaveTextContent('Backend')
+    expect(screen.queryByText('当前工作流')).toBeNull()
+    expect(screen.queryByText('运行轨道')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    const open = await screen.findByTestId('wb-step-open')
+    expect(open).toHaveTextContent('Open')
+    expect(open).not.toHaveTextContent('立项')
+    expect(screen.getByTestId('wb-workflow-copy')).toHaveTextContent('Create editable copy')
+
+    const settingsToggle = screen.getByTestId('wb-track-settings-toggle')
+    settingsToggle.focus()
+    fireEvent.click(settingsToggle)
+    const trackSettings = screen.getByTestId('wb-track-settings-panel')
+    expect(trackSettings).toHaveTextContent('Work tracks')
+    expect(trackSettings).toHaveTextContent('Automatic routing')
+    expect(trackSettings).not.toHaveTextContent('工作轨道')
+    expect(trackSettings).not.toHaveTextContent('自动分配')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('wb-track-settings-panel')).toBeNull()
+    expect(settingsToggle).toHaveFocus()
+
+    const governanceTrigger = screen.getByTestId('wb-governance-open')
+    governanceTrigger.focus()
+    fireEvent.click(governanceTrigger)
+    expect(screen.getByRole('dialog', { name: 'Runtime governance' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(governanceTrigger).toHaveFocus()
+  })
+
   it('主视图就是工作流编辑器；不再经过“查看与编辑”二层浮层，阶段内添加 Skill 才打开编排浮层', async () => {
     renderView({}, false)
     await screen.findByTestId('wb-step-draft')
@@ -534,6 +647,35 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(body.steps.find((step) => step.id === 'verify')?.skills.map((skill) => skill.id)).toContain('verification-before-completion')
   })
 
+  it('英文界面新建默认七阶段 Workflow 时，写入当前语言标签而不是中文默认值', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    fireEvent.change(within(dialog).getByLabelText('Workflow name'), { target: { value: 'english-flow' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    await screen.findByTestId('wb-step-open')
+    const post = vi.mocked(fetch).mock.calls.find(([url, opts]) => url === '/api/workflows/english-flow' && opts?.method === 'POST')
+    const body = JSON.parse(String(post?.[1]?.body)) as WbWorkflowDef
+    expect(body.steps.map((step) => step.label)).toEqual(['Open', 'Explore', 'Spec', 'Build', 'Verify', 'Ship', 'Archive'])
+    expect(body.steps.map((step) => step.label).join('')).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('结构合法但 name 错配的 Workflow 响应按无效响应拒绝，不加载到请求名下', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && (!opts?.method || opts.method === 'GET')) {
+        return new Response(JSON.stringify({ ...RELEASE_TRAIN, name: 'another-workflow' }), { status: 200 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+    renderView()
+    expect(await screen.findByRole('alert')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.queryByTestId('wb-step-draft')).toBeNull()
+  })
+
   it('新建：Workflow 名称支持中文并按真实名称写入 URL 与定义', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
@@ -570,6 +712,31 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(body.steps).toEqual(RELEASE_TRAIN.steps)
   })
 
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('新建收到畸形 2xx %s：保留对话框和原 workflow，并显示当前语言无效响应', async (_label, response) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/malformed-flow' && opts?.method === 'POST') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    fireEvent.change(within(dialog).getByLabelText('Workflow 名称'), { target: { value: 'malformed-flow' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
+    expect(workflowDefs).not.toHaveProperty('malformed-flow')
+    expect(within(dialog).getByLabelText('Workflow 名称')).toHaveValue('malformed-flow')
+  })
+
   it('删除：确认后走带 token 的 DELETE，成功后从列表移除并切回 default', async () => {
     window.__TENON_DASHBOARD_TOKEN__ = 'studio-token'
     renderView()
@@ -584,6 +751,31 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     const remove = vi.mocked(fetch).mock.calls.find(([url, opts]) =>
       url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE')
     expect(remove?.[1]?.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer studio-token' }))
+  })
+
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('删除：HTTP 200 %s 仍视为无效响应并保留当前 workflow', async (_label, makeResponse) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return makeResponse()
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    expect(await within(dialog).findByTestId('wb-workflow-delete-error')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
+    expect(workflowDefs['release-train']).toBeDefined()
   })
 
   it('删除被引用 workflow：409 引用来源逐条展示，定义与当前选择保持不变', async () => {
@@ -615,6 +807,58 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
   })
 
+  it('English workflow delete failure masks server-authored Chinese message and reference details', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          ok: false,
+          code: 'WORKFLOW_REFERENCED',
+          workflow: 'release-train',
+          error: '该流程仍被生产轨道引用',
+          references: [{ kind: 'track-default', source: '前端默认流程' }],
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    const alert = await within(dialog).findByTestId('wb-workflow-delete-error')
+    expect(alert).toHaveTextContent('This workflow is still referenced and was not deleted.')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('删除错误信封字段类型畸形时显示无效响应，不把对象或伪引用交给 React 渲染', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: {},
+          references: [{ kind: 42, source: {} }],
+          blockers: 'not-an-array',
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    const alert = await within(dialog).findByTestId('wb-workflow-delete-error')
+    expect(alert).toHaveTextContent('服务端响应格式无效')
+    expect(alert).not.toHaveTextContent('[object Object]')
+  })
+
   it('default 只读：复制入口并入顶部操作区，不再插入突兀说明横幅', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
@@ -639,6 +883,19 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
     await screen.findByTestId('wb-step-open')
     expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
     expect(screen.getByTestId('wb-track-settings-toggle')).toBeEnabled()
+  })
+
+  it('Track 草稿 dirty 上报不会因父组件重渲染形成 effect 循环', async () => {
+    const onDirtyChange = vi.fn()
+    renderView({ onDirtyChange })
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
+    fireEvent.click(screen.getByTestId('wb-track-edit-pm'))
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'Product draft' } })
+
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    expect(onDirtyChange.mock.calls.filter(([dirty]) => dirty === true)).toHaveLength(1)
   })
 })
 
@@ -668,6 +925,26 @@ describe('WorkbenchView 选中态（验收②）', () => {
 })
 
 describe('WorkbenchView workflow 下拉（验收①/②）', () => {
+  it('遵循 ARIA menu 键盘模式：打开聚焦当前项、方向/Home/End 漫游、Escape 回触发器', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const trigger = screen.getByTestId('wb-wf-btn')
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(await screen.findByRole('menu')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('wb-wf-item-release-train')).toHaveFocus())
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })
+    expect(screen.getByTestId('wb-wf-item-default')).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Home' })
+    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' })
+    expect(screen.getAllByRole('menuitem').at(-1)).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
   it('按钮显示当前 workflow 与阶段数；切到 default 渲染 7 个完整阶段名且总览不叠加复核徽标', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
@@ -777,6 +1054,29 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-save')).toBeDisabled()
   })
 
+  it.each([
+    ['empty object', () => new Response(JSON.stringify({}), { status: 200 })],
+    ['negative envelope', () => new Response(JSON.stringify({ ok: false }), { status: 200 })],
+    ['non-JSON body', () => new Response('not-json', { status: 200 })],
+  ])('保存收到畸形 2xx %s：保持 dirty 和草稿，并显示当前语言无效响应', async (_label, response) => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') return response()
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'Uncommitted draft')
+    fireEvent.click(screen.getByTestId('wb-save'))
+
+    expect(await screen.findByTestId('wb-save-errors')).toHaveTextContent('服务端响应格式无效')
+    expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Uncommitted draft')
+    expect(screen.queryByTestId('wb-save-ok')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeEnabled()
+  })
+
   it('运行时产出只读：不提供人工增删，保存其他字段仍保留原始类型', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
@@ -845,6 +1145,96 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('初稿')
     expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
   })
+
+  it('英文界面保存凭证失效（401）→ 显示英文恢复指引且不泄漏中文产品文案', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      }
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
+      }
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'Draft')
+    fireEvent.click(screen.getByTestId('wb-save'))
+
+    const errors = await screen.findByTestId('wb-save-errors')
+    expect(errors).toHaveTextContent('Your save credentials have expired. Refresh the page and try again.')
+    expect(errors.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('保存 A 在途时切到 B：迟到响应不能覆盖 B 的快照、dirty 或保存状态', async () => {
+    workflowDefs['z-next'] = {
+      ...structuredClone(RELEASE_TRAIN),
+      name: 'z-next',
+      steps: RELEASE_TRAIN.steps.map((step, index) => index === 0 ? { ...step, label: 'Z draft' } : { ...step }),
+    }
+    const baseFetch = global.fetch
+    let releaseSave!: (response: Response) => void
+    const pendingSave = new Promise<Response>((resolve) => { releaseSave = resolve })
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') return pendingSave
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'A changed')
+    fireEvent.click(screen.getByTestId('wb-save'))
+    expect(screen.getByTestId('wb-workflow-new')).toBeDisabled()
+    expect(screen.getByTestId('wb-workflow-copy')).toBeDisabled()
+    expect(screen.getByTestId('wb-workflow-delete')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-z-next'))
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并切换' }))
+    await waitFor(() => expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('z-next'))
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Z draft')
+
+    releaseSave(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await pendingSave
+    await waitFor(() => expect(screen.getByTestId('wb-workflow-new')).toBeEnabled())
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(screen.queryByTestId('wb-save-ok')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeDisabled()
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Z draft')
+  })
+
+  it('English workflow save validation failure masks endpoint-authored Chinese prose', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      }
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
+      }
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({
+          ok: false,
+          errors: ["step 'draft': 循环依赖", '技能 ID 含非法字符'],
+        }), { status: 400 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', 'Draft')
+    fireEvent.click(screen.getByTestId('wb-save'))
+
+    const errors = await screen.findByTestId('wb-save-errors')
+    expect(errors).toHaveTextContent('Request failed (HTTP 400).')
+    expect(errors.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
 })
 
 // 验收②后半：保存成功 → (root,name) 规则缓存失效（同 旧画布编辑器测试（T18 已退役） 评审 P0-4 的
@@ -895,6 +1285,20 @@ describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
 })
 
 describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③）', () => {
+  it('把 workflow 草稿 dirty 精确上报给 App，保存成功后清除', async () => {
+    const onDirtyChange = vi.fn()
+    renderView({ onDirtyChange })
+    await screen.findByTestId('wb-step-draft')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+
+    editLaneName('draft', '待保存草稿')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await screen.findByTestId('wb-save-ok')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+  })
+
   it('body portal 中的切换确认框仍能被 GSAP 定位且不产生空目标警告', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     renderView()
@@ -1199,6 +1603,26 @@ describe('WorkbenchView T16 Loop 卡（右栏「完整治理设置」Dialog）�
     expect(within(card).queryByTestId('lp-loop-select')).toBeNull()
   })
 
+  it('Loop 草稿阻止关闭子 Dialog 与整个治理面板，确认丢弃后才卸载', async () => {
+    loopRows = [LOOP_ROW]
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    await openGovernance()
+    const dialog = await openLoopDialog()
+    const goal = await within(dialog).findByTestId('lp-goal')
+    fireEvent.change(goal, { target: { value: '保留这份未保存治理草稿' } })
+
+    fireEvent.click(within(dialog).getByTestId('wb-rail-loop-close'))
+    expect(screen.getByTestId('wb-rail-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    expect(screen.getByTestId('lp-goal')).toHaveValue('保留这份未保存治理草稿')
+
+    fireEvent.click(screen.getByTestId('wb-governance-close-action'))
+    expect(screen.getByTestId('wb-governance-unsaved-draft')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(screen.queryByTestId('wb-advanced-orchestration')).toBeNull())
+  })
+
   it('暂停中的 loop：摘要行「停 · 今日 …」', async () => {
     loopRows = [{ ...LOOP_ROW, status: 'paused' }]
     renderView()
@@ -1217,7 +1641,50 @@ describe('WorkbenchView 加载失败', () => {
       return new Response(JSON.stringify({ error: 'workflow 未找到' }), { status: 404 })
     }) as unknown as typeof fetch
     renderView()
-    await waitFor(() => expect(screen.getByText(/加载 workflow 失败：workflow 未找到/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('加载 workflow 失败：请求失败（HTTP 404）。')).toBeInTheDocument())
+  })
+
+  it('English workflow list network failure uses localized recovery copy without transport Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) throw new Error('offline')
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderView()
+    const alert = await screen.findByText('Failed to fetch workflow list: Network error')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English workflow list non-JSON HTTP failure uses localized status without endpoint fallback Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response('upstream unavailable', { status: 503 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderView()
+    const alert = await screen.findByText('Failed to fetch workflow list: Request failed (HTTP 503).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('English workflow definition HTTP failure does not expose server Chinese', async () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      }
+      if (url.startsWith('/api/workflows/release-train?root=')) {
+        return new Response(JSON.stringify({ error: 'workflow 未找到' }), { status: 404 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderView()
+    const alert = await screen.findByText('Failed to load workflow: Request failed (HTTP 404).')
+    expect(alert.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 })
 
@@ -1525,6 +1992,58 @@ describe('WorkbenchView v11 P4：右栏重组（治理轨 + 机器配置折叠�
     expect(within(side).getByTestId('wb-secrets-card')).toBeInTheDocument() // SecretsCard
     // 区头说明：讲清「这些是 per-root 机器级配置，与当前 workflow 无关」
     expect(within(side).getByTestId('wb-rail-machine-note')).toBeInTheDocument()
+  })
+
+  it('机器配置内有未保存草稿时，折叠动作必须先确认丢弃', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
+    const summary = within(side).getByTestId('wb-rail-machine-summary')
+    fireEvent.click(summary)
+    const enabled = await within(side).findByTestId('afk-enabled')
+    fireEvent.click(enabled)
+    expect(within(side).getByTestId('afk-dirty')).toBeInTheDocument()
+
+    fireEvent.click(summary)
+    expect(screen.getByTestId('wb-rail-unsaved-draft')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-rail-machine')).toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并离开' }))
+    await waitFor(() => expect(within(side).getByTestId('wb-rail-machine')).not.toHaveAttribute('open'))
+  })
+
+  it('机器配置保存请求进行中时不得折叠或关闭治理面板', async () => {
+    const baseFetch = global.fetch
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    global.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === '/api/automation' && options?.method === 'POST') {
+        await gate
+        const { root: _root, ...settings } = JSON.parse(String(options.body)) as Record<string, unknown>
+        return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+      }
+      return baseFetch(url, options)
+    }) as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
+    const summary = within(side).getByTestId('wb-rail-machine-summary')
+    fireEvent.click(summary)
+    fireEvent.click(await within(side).findByTestId('afk-enabled'))
+    fireEvent.click(within(side).getByTestId('afk-save'))
+    await waitFor(() => expect(within(side).getByTestId('afk-save')).toBeDisabled())
+
+    expect(screen.getByTestId('wb-governance-close-action')).toBeDisabled()
+    fireEvent.click(summary)
+    expect(within(side).getByTestId('wb-rail-machine')).toHaveAttribute('open')
+    fireEvent.click(screen.getByTestId('wb-governance-close-icon'))
+    expect(screen.getByTestId('wb-advanced-orchestration')).toBeInTheDocument()
+
+    release()
+    await waitFor(() => expect(within(side).getByTestId('afk-save-ok')).toBeInTheDocument())
+    expect(screen.getByTestId('wb-governance-close-action')).toBeEnabled()
   })
 })
 

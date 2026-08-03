@@ -19,7 +19,7 @@ interface DependencyPopoverState {
 
 export function OrchestrationSkillZone({
   lane, skills, readonly, canDragSkill, canDep, canRemoveSkill, canAddSkill,
-  regReady, intoDrop, drag, drop, depPop, skPop, dupWarn, skillRegistry,
+  regReady, intoDrop, drag, drop, depPop, skPop, dupWarn, skillRegistry, moveTargets,
   onBeginDrag, onEndDrag, onDropHint, onSkillMove, onDependencyPopover,
   onSkillPopover, onSkillRemove, onOpenSkillEditor, renderDependencyPopover,
   renderSkillPopover, renderUninstalledBadge,
@@ -39,6 +39,7 @@ export function OrchestrationSkillZone({
   skPop: string | null
   dupWarn: string | null
   skillRegistry?: WbSkillEntry[] | null
+  moveTargets: BoardLane[]
   onBeginDrag: (payload: DragPayload) => void
   onEndDrag: () => void
   onDropHint: (hint: DropHint | null) => void
@@ -178,6 +179,20 @@ export function OrchestrationSkillZone({
                                           {base}
                                         </span>
                                         {uninstBadge(skillId, `wb-lane-sk-uninst-${lane.id}-${skillId}`)}
+                                        {canDragSkill && moveTargets.length > 1 && (
+                                          <select
+                                            className="ml-auto h-8 max-w-36 rounded-lg border border-border bg-bg px-2 text-xs text-text-2"
+                                            aria-label={t('workbench.move_skill_to_stage', { name: skillId })}
+                                            value={lane.id}
+                                            onClick={(event) => event.stopPropagation()}
+                                            onChange={(event) => {
+                                              const target = moveTargets.find((candidate) => candidate.id === event.target.value)
+                                              if (target) commitSkillMove({ stage: lane.id, skill: skillId }, target, null, true)
+                                            }}
+                                          >
+                                            {moveTargets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}
+                                          </select>
+                                        )}
                                         {canRemoveSkill && (
                                           <>
                                             <span className="min-w-2 flex-1" />
@@ -223,8 +238,8 @@ export function OrchestrationSkillZone({
                                                     {dn.ns !== '' && <span className="font-normal text-text-3">{dn.ns}</span>}
                                                     {dn.base}
                                                   </span>
-                                                </button> : <span className={DEP_CHIP} title={`等待 ${dep} 完成后执行`}>
-                                                  <span className="flex-none whitespace-nowrap">等待</span>
+                                                </button> : <span className={DEP_CHIP} title={t('workbench.board_dep_wait_hint', { id: dep })}>
+                                                  <span className="flex-none whitespace-nowrap">{t('workbench.board_dep_wait')}</span>
                                                   <span className="flex-none whitespace-nowrap">
                                                     {dn.ns !== '' && <span className="font-normal text-text-3">{dn.ns}</span>}
                                                     {dn.base}
@@ -276,7 +291,7 @@ export function OrchestrationSkillZone({
                                   data-testid={`wb-lane-sk-add-${lane.id}`}
                                   aria-expanded={onOpenSkillEditor ? undefined : skPop === lane.id}
                                   aria-label={`${t('workbench.board_sk_add')} · ${lane.name}`}
-                                  title={regReady ? '打开 Skill 编排器，配置顺序、并行与依赖' : t('workbench.board_sk_noreg')}
+                                  title={regReady ? t('workbench.board_skill_orchestrator_open') : t('workbench.board_sk_noreg')}
                                   disabled={!regReady}
                                   onClick={(e) => {
                                     e.stopPropagation()

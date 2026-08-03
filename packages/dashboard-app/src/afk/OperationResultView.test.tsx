@@ -105,4 +105,34 @@ describe('OperationResultView 结构化生产结果', () => {
     fireEvent.click(screen.getByTestId('ops-open-change-release-api'))
     expect(onOpenChange).toHaveBeenCalledWith('release-api')
   })
+
+  it('中文结构化结果不泄漏 checkpoint/has more/plan/ops/unsupported/CAS 产品标签', () => {
+    renderResult({
+      command: 'triage', pagesProcessed: 1, observationsProcessed: 1,
+      checkpoint: { sourceId: 'head', commit: 'committed', hasMore: true },
+    })
+    const triage = screen.getByTestId('ops-result-triage')
+    expect(triage).toHaveTextContent('检查点')
+    expect(triage).toHaveTextContent('仍有后续')
+    expect(triage.textContent).not.toMatch(/\b(checkpoint|has more)\b/i)
+  })
+
+  it('英文结构化 Sync 标签使用同一当前语言且不混入中文', () => {
+    localStorage.setItem('tenon-dashboard-lang', 'en')
+    renderResult({
+      command: 'loop-sync', mode: 'dry-run', status: 'planned', summary: { operations: 1, unsupported: 1 },
+      plan: {
+        plan_id: 'plan-8',
+        preconditions: { registry_epoch: { kind: 'sha256', value: 'abc' }, loop_doc_epoch: { kind: 'absent' } },
+        operations: [],
+        blockers: [],
+      },
+    }, ['tenon', 'loops', 'sync'])
+    const card = screen.getByTestId('ops-result-sync')
+    expect(card).toHaveTextContent('plan')
+    expect(card).toHaveTextContent('Operations')
+    expect(card).toHaveTextContent('Unsupported')
+    expect(card.textContent).not.toMatch(/[\u3400-\u9fff]/u)
+    localStorage.clear()
+  })
 })

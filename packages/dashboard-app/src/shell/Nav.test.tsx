@@ -39,11 +39,14 @@ describe('Nav 一级导航（rail 六视图：项目 / 进度 / AFK / 工作台 
     expect(shell.className).toContain('mobile:w-full')
 
     const primary = screen.getByTestId('primary-nav')
+    expect(primary).toHaveAccessibleName('主导航')
     expect(primary.className).toContain('mobile:flex-row')
     expect(primary.className).toContain('mobile:overflow-x-auto')
     for (const operational of PRIMARY_VIEWS) {
       const label = screen.getByTestId(`nav-label-${operational}`)
       expect(label.className).not.toContain('mobile:hidden')
+      expect(label.className).not.toContain('truncate')
+      expect(label.className).toContain('mobile:whitespace-normal')
       expect(screen.getByTestId(`nav-${operational}`).className).toContain('mobile:min-w-11')
     }
   })
@@ -206,6 +209,7 @@ describe('Nav 交互 + 徽标', () => {
     renderNav({ decisionCount: 4 })
     const badge = screen.getByTestId('progress-badge')
     expect(badge.textContent).toBe('4')
+    expect(badge).toHaveAttribute('aria-label', '4 个待决策项')
     expect(within(screen.getByTestId('nav-progress')).getByTestId('progress-badge')).toBe(badge)
     // 旧收件箱徽标 testid 随视图退役，不再渲染
     expect(screen.queryByTestId('inbox-badge')).toBeNull()
@@ -220,6 +224,7 @@ describe('Nav 交互 + 徽标', () => {
     renderNav({ afkCount: 3 })
     const badge = screen.getByTestId('afk-badge')
     expect(badge.textContent).toBe('3')
+    expect(badge).toHaveAttribute('aria-label', '3 个待处理自动运行')
     expect(within(screen.getByTestId('nav-afk')).getByTestId('afk-badge')).toBe(badge)
   })
 

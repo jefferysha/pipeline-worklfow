@@ -4,7 +4,6 @@ import {
   fstatSync,
   lstatSync,
   openSync,
-  readSync,
   realpathSync,
 } from 'node:fs'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
@@ -47,8 +46,16 @@ import {
 } from './workflows.js'
 import {
   ContextBundleTrustedFileError,
+  readBounded,
   readTrustedFile,
 } from './contextBundleTrustedReader.js'
+import { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
+import {
+  captureStableFileVersion,
+  matchesStableFileVersion,
+} from './stableFileMetadata.js'
+
+export { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
 
 export interface AnchoredChangeState {
   readonly changeDir: string
@@ -67,22 +74,14 @@ function isInside(base: string, candidate: string): boolean {
 }
 
 
-export const MAX_TASKS_MARKDOWN_BYTES = 256 * 1024
-
 type TasksFdReader = (fd: number, maxBytes: number) => string
 
 function readBoundedTasksSource(fd: number, maxBytes: number): string {
-  const bytes = Buffer.allocUnsafe(maxBytes + 1)
-  let total = 0
-  while (total <= maxBytes) {
-    const count = readSync(fd, bytes, total, maxBytes + 1 - total, null)
-    if (count === 0) break
-    total += count
-  }
-  if (total > maxBytes) {
+  const bytes = readBounded(fd, maxBytes)
+  if (bytes.byteLength > maxBytes) {
     throw new Error(`Change tasks 超过 ${maxBytes} bytes 上限`)
   }
-  return bytes.subarray(0, total).toString('utf8')
+  return bytes.toString('utf8')
 }
 
 /** @internal Exported only so the race regression can prove no bytes are read before anchor checks. */
@@ -106,12 +105,13 @@ export function readAnchoredTasksMarkdown(
     if (!opened.isFile()) {
       throw new ContextBundlePathError(403, 'Change tasks 必须是普通文件')
     }
+    const openedVersion = captureStableFileVersion(fstatSync(fd, { bigint: true }))
     const assertOpenedTargetStillAnchored = (): void => {
       let current
       let realPath: string
       try {
         assertChangePathAnchor(changeAnchor)
-        current = lstatSync(target)
+        current = lstatSync(target, { bigint: true })
         realPath = realpathSync(target)
       } catch (error) {
         if (error instanceof ContextBundlePathError) throw error
@@ -120,21 +120,26 @@ export function readAnchoredTasksMarkdown(
       if (
         current.isSymbolicLink()
         || !current.isFile()
-        || current.dev !== opened.dev
-        || current.ino !== opened.ino
-        || current.size !== opened.size
+        || !matchesStableFileVersion(current, openedVersion)
         || !isInside(changeAnchor.realPath, realPath)
       ) {
+        throw new ContextBundlePathError(403, 'Change tasks 路径在读取期间变化')
+      }
+    }
+    const assertOpenedFdStillStable = (): void => {
+      if (!matchesStableFileVersion(fstatSync(fd, { bigint: true }), openedVersion)) {
         throw new ContextBundlePathError(403, 'Change tasks 路径在读取期间变化')
       }
     }
     // open(2) follows parent components even with O_NOFOLLOW. Validate that the opened inode is
     // still reached through the captured Change before reading any project-controlled bytes.
     assertOpenedTargetStillAnchored()
+    assertOpenedFdStillStable()
     if (opened.size > MAX_TASKS_MARKDOWN_BYTES) {
       throw new Error(`Change tasks 超过 ${MAX_TASKS_MARKDOWN_BYTES} bytes 上限`)
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES)
+    assertOpenedFdStillStable()
     assertOpenedTargetStillAnchored()
     return source
   } finally {

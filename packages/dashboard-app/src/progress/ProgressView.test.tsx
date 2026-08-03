@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import gsap from 'gsap'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
 import {
   DEFAULT_RULES,
@@ -168,10 +168,15 @@ function makeRules(): Map<string, WorkflowRules> {
 }
 
 function renderView(over: Partial<Parameters<typeof ProgressView>[0]> = {}) {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="progress-language-en" onClick={() => setLang('en')}>en</button>
+  }
   const onToast = vi.fn()
   const onRefresh = vi.fn()
   render(
     <I18nProvider>
+      <LanguageToggle />
       <ProgressView
         snapshot={makeFixture()}
         loading={false}
@@ -281,8 +286,11 @@ describe('ProgressView 单项目 · 下方在制列表退役（负向钉死不�
 
   it('七阶段 workflow 使用独立横向阅读区，任务卡同时给出名称与人话状态', async () => {
     renderView()
-    expect(screen.getByTestId('prg-cv-scroll-proj-a-default')).toBeInTheDocument()
-    expect(screen.getByTestId('prg-cv-scroll-hint-proj-a-default')).toHaveTextContent('横向滚动查看后续阶段')
+    const viewport = screen.getByTestId('prg-cv-scroll-proj-a-default')
+    expect(viewport).toBeInTheDocument()
+    expect(viewport).toHaveAttribute('tabindex', '0')
+    expect(viewport).toHaveAccessibleName('横向滚动查看后续阶段')
+    expect(screen.queryByTestId('prg-cv-scroll-hint-proj-a-default')).toBeNull()
     expect(screen.getByTestId('prg-cv-chg-hotfix-login')).toHaveTextContent('失败')
     expect(screen.getByTestId('prg-cv-chg-afk-demo')).toHaveTextContent('运行中')
     await act(async () => {})
@@ -829,6 +837,20 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
       expect(onToast).toHaveBeenCalledWith(expect.stringContaining('tenon afk enqueue hotfix-login'))
     })
     expect(fetchLog.some((l) => l.includes('/api/afk/hotfix-login/'))).toBe(false)
+  })
+
+  it('命令复制晚到且期间切为英文时，toast 使用当前语言', async () => {
+    let releaseCopy!: () => void
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { releaseCopy = resolve }))
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    const { onToast } = renderView()
+    await openDrawer('hotfix-login')
+
+    fireEvent.click(screen.getByTestId('prg9-dw-cmd-hotfix-login'))
+    fireEvent.click(screen.getByTestId('progress-language-en'))
+    releaseCopy()
+
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Copied: tenon afk enqueue hotfix-login'))
   })
 
   it('失败行（有 worktree 现场）抽屉 chip=「在终端接管」，拷贝值走 shellQuote（含空格单引号安全转义）', async () => {

@@ -35,7 +35,7 @@ export function OrchestrationHookBody({ lane, open, hooks }: {
           return (
             <div key={event} className={HK_GROUP} data-testid={`wb-lane-hk-group-${lane.id}-${event}`}>
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className={HK_TNAME} title={`技术事件：${event}`}>{t(`workbench.hk_ev_${event}`)}</span>
+                <span className={HK_TNAME} title={t('workbench.board_hk_technical_event', { event })}>{t(`workbench.hk_ev_${event}`)}</span>
                 {event === 'UserPromptSubmit' && <span className={HK_LOOP}>{t('workbench.board_hk_loop')}</span>}
               </div>
               <div className="flex flex-col gap-2">
@@ -54,7 +54,7 @@ export function OrchestrationHookBody({ lane, open, hooks }: {
                       <div className="flex items-center gap-2">
                         <span className={`${HK_MK} ${hook.configurable ? HK_MK_RW : HK_MK_RO}`} aria-hidden="true"><Icon name={locked ? 'gate' : pending ? 'clock' : 'gauge'} size={12} /></span>
                         <span className={HK_NAME}>{display}</span>
-                        <span className={`${MINI_BASE} ${MINI_RO}`}>内置 Hook</span>
+                        <span className={`${MINI_BASE} ${MINI_RO}`}>{t('workbench.board_hk_builtin')}</span>
                         <span className="min-w-2 flex-1" />
                         {(locked || pending) && <span className={`${MINI_BASE} ${MINI_RO}`} data-testid={`wb-lane-hk-badge-${lane.id}-${hook.id}`}>{locked ? t('workbench.hk_locked') : t('workbench.hk_pending')}</span>}
                         {hook.configurable && <button type="button" className={SWITCH} role="switch" aria-checked={enabled} aria-label={`${display} · ${lane.name}`} disabled={hooks.busyKeys.has(key)} data-testid={`wb-lane-hk-sw-${lane.id}-${hook.id}`} onClick={(click) => { click.stopPropagation(); hooks.toggle(hook.id, lane.id, !enabled) }} />}

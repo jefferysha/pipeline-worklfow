@@ -10,7 +10,7 @@
 | --- | --- |
 | 语言 | TypeScript；组件使用 TSX |
 | 运行时 | Node.js 22 开发/构建；浏览器中运行客户端 SPA |
-| 框架 | React 18 客户端渲染 SPA；Vite 5 构建 |
+| 框架 | React 18 客户端渲染 SPA；Vite 6 构建 |
 | 包管理工具 | 根目录 npm workspace 与 `package-lock.json`；不得混用其他包管理器 |
 | UI/样式 | Radix UI、Tailwind CSS 4、CVA、Lucide；GSAP 负责动效；遵循 Tenon 现有主题 token、布局契约与共享组件 |
 | 状态管理 | 优先使用现有 React 本地状态、Context 和自定义 hooks；不得仅为单一功能新增全局状态库 |
