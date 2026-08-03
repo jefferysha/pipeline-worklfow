@@ -211,7 +211,7 @@
 ## 交付
 
 - [x] 应用确认的 capability delta，并创建统一审查修复 PR。 (ship)
-- [ ] 确认非草稿 PR 的精确 head CI 通过。 (ship)
+- [x] 确认非草稿 PR 的精确 head CI 通过。 (ship)
 
 ## 归档
 
