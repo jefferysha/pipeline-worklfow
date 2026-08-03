@@ -106,7 +106,6 @@
 - [x] 将 `origin/main@ef728bf6` 合入统一分支并从合并后源码重建 Dashboard 生成物。 (spec)
 - [x] 复核 #21 的 Codex Skill receipt ABI、current-turn、session/turn、worktree 与 fail-closed 安全边界。 (build)
 - [x] 复核 #23 的 canonical review handshake、snapshot/SSE、严格 decoder 与 Progress 状态卡。 (build)
-- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
 - [x] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
 - [x] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
 
@@ -207,10 +206,11 @@
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
-- [ ] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
+- [x] 冻结精确 head，取得 C0/H0/M0 的四轨验证结论；GitHub CI 在 Ship 的非 draft PR 精确 head 上完成。 (verify)
 
 ## 交付
 
+- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
 - [ ] 应用确认的 capability delta，创建并合并统一审查修复 PR。 (ship)
 - [ ] 确认精确合并 SHA 的主干 CI 通过，再启动独立 release Change。 (ship)
 
