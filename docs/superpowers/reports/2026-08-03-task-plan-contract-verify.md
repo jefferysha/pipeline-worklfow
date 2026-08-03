@@ -939,3 +939,71 @@ authorization window 通过完整 root ABA 借另一 Change 的 canonical state 
 - receipt bridge 的 129+ discovery、safe-positive literal `max_output_tokens`、exact
   session/turn/worktree/ABI、完整 awaited same-result `text(result)` 与截断/动态/pragma/spoofing
   反例继续保持通过；PR1 首次官方登记仍确认是 bridge false-negative bug，而非缺少真实 Skill 读取。
+
+---
+
+# 第 19 轮 Verify（冻结基线 `98c5188ff18da6dbfb333b5ab197ae2ef03ebf4b`）
+
+## 聚合结论
+
+FAIL。独立 Reviewer 与独立 E2E 均为 PASS（C0/H0/M0/L0），原生 Codex CLI 为 FAIL
+（P0=0、P1=1、P2=4）；按三轨 findings 严格并集，任何 P0-P2 都阻断 `verify-pass`。冻结实现树为
+`05bac11f`，exact base/merge-base 为 `dc53843e61f812938f13c684a41ffe1d935e48bf`；三轨均未改写
+真实工作树的实现、配置或生成物。
+
+## 已通过证据
+
+- Reviewer：focused 388/388；全仓 338 files / 6119 passed / 26 honest skipped；Web 1633/1633；
+  hooks 512/512；build、静态门禁、OpenSpec strict/archive rehearsal、bundle freshness 与
+  `origin/main@315f334c9e7f7fa4e6b56389425476e97a789593` merge compatibility 全通过。证据：
+  `/tmp/tenon-pr1-r19-verify-reviewer.ddkfSC/review-report.md`。
+- E2E：focused 391/391；TaskPlan security boundaries 224/224；receipt/tool ABI 164/164；全仓
+  338 files / 6119 passed / 26 honest skipped；Web 87 files / 1633 passed；hooks 512、migration CAS
+  13、build/static/bundle freshness 全通过；OpenSpec archive rehearsal `+7/~2` 且前后 37/37。
+  323379-byte canonical、64 items 的 store → server → HTTP → snapshot 链路通过，root/marker
+  零泄漏，真实工作树前后指纹一致。证据：
+  `/tmp/tenon-pr1-r19-verify-e2e.IcbLVW/SUMMARY.md`。
+- 原生 Codex 复核确认 receipt bridge 的 129+ transcript、safe literal `max_output_tokens`、完整
+  awaited same-result `text(result)`、session/turn/worktree/ABI、registered-root/change/ancestor ABA、
+  missing-path ABA、大型 projection authorization 与同尺寸 mutation fence 均通过。证据：
+  `/tmp/tenon-pr1-r19-codex.sxFxyw`。
+
+## 阻断 findings
+
+### P1 — canonical TaskGroup 标题可绕过真实 phase exit guard
+
+canonical renderer 允许 caller-controlled TaskGroup 标题；例如 `Verify` 会产出带 `task-group` marker
+的 Verify heading。展示/snapshot 链路会把 canonical state 的信任位传给 Todo parser，但真实
+`tasks-through-phase` guard 只传 `tasksMarkdown`，没有传 `trustedCanonicalProjection`。因此 Build
+阶段会把该未完成项错误路由到未来 Verify，返回零个到期未完成项并允许 Build 离开。现有单测只直接
+调用 helper 且手工传 `trustedCanonicalProjection: true`，没有覆盖 renderer → filesystem → guard
+真实调用链；`tasks.md` 第 49 项的完成声明因此不成立。
+
+### P2 — persistence record 与 TaskPlan domain model 未分离
+
+snake_case `TaskPlanRevisionV1` 同时充当持久化 schema、validator 输入和公开 publish API 输入，缺少
+独立 aggregate/value-object model 与显式 persistence conversion，违反 BACKEND.md 的 DTO、持久化
+record 与领域对象分离约束。
+
+### P2 — 缺少 TaskPlan 专属跨进程 publication/crash-recovery 验收
+
+TaskPlan store 组合文件锁、CAS、immutable publication 与 atomic current replacement，但测试没有
+独立进程/worker contender，也未覆盖进程在 immutable/current 两步之间退出后的恢复语义，不能证明
+跨进程并发与崩溃边界。
+
+### P2 — TaskPlan HTTP 错误缺少稳定 machine code
+
+新端点只返回本地化 `error` 文案；未注册 root 与 TaskPlan 不存在同为 404，不可信 root 与不可信
+canonical path 同为 403，机器调用方无法用稳定 `code` 区分失败语义，违反项目 REST 契约。
+
+### P2 — Verify 报告 ledger digest 在本轮写入前已 stale
+
+冻结副本内 `.pipeline-documents.json` 的 verification-report digest 指向上一版报告，而 tracked 报告已
+变化。该项是治理登记缺口，不是实现安全缺陷；本轮报告写完后必须用官方 `tenon document record`
+重新登记，不能手改 ledger。
+
+## 处理决定
+
+两项 Verify task 保持未勾选，`branch_status` 不设 handled，不请求 `verify-pass`。先用官方 CLI 登记
+本报告与三轨结果，再请求精确 `verify-fail`、delegated acknowledge 并回到 Build；下一轮以 TDD
+修复 P1 与三个实现/验证 P2，并用官方登记消除 ledger stale 后重新冻结和执行三轨。
