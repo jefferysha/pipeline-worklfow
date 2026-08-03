@@ -49282,8 +49282,9 @@ function createManagedHostStepRunner(context) {
     assertManagedHostObservation(step.desired, `host step '${id}' desired`);
     let journal = context.journal();
     const existing = journal.hostSteps?.find((item2) => item2.id === id);
+    const desiredMatches = (persistedDesired) => persistedDesired === step.desired || step.isEquivalentDesired?.(persistedDesired) === true;
     if (existing?.state === "completed") {
-      if (existing.desired !== step.desired || existing.replayPolicy !== HOST_REPLAY_POLICY || existing.observedAfter === void 0 || !step.isDesired(existing.observedAfter)) {
+      if (existing.desired === void 0 || !desiredMatches(existing.desired) || existing.replayPolicy !== HOST_REPLAY_POLICY || existing.observedAfter === void 0 || !step.isDesired(existing.observedAfter)) {
         throw new ManagedRuntimeIndeterminateError(
           `host step '${id}' completed checkpoint \u7F3A\u5C11\u6216\u4E0D\u5339\u914D desired-state proof`
         );
@@ -49320,7 +49321,7 @@ function createManagedHostStepRunner(context) {
           `host step '${id}' \u662F\u7F3A\u5C11 before/desired/replayPolicy \u7684\u65E7 pending WAL\uFF1B\u62D2\u7EDD\u81EA\u52A8\u91CD\u653E`
         );
       }
-      if (existing.desired !== step.desired) {
+      if (!desiredMatches(existing.desired)) {
         throw new ManagedRuntimeIndeterminateError(
           `host step '${id}' \u5F53\u524D desired \u4E0E WAL \u4E0D\u4E00\u81F4\uFF1B\u62D2\u7EDD\u91CD\u89E3\u91CA pending mutation`
         );
@@ -50113,6 +50114,97 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
 
 // packages/cli/src/commands/managed-host-observation.ts
 import { isAbsolute as isAbsolute26, join as join80, normalize as normalize3 } from "node:path";
+
+// packages/cli/src/commands/managed-host-desired-identity.ts
+function isRecord18(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasExactKeys(value, keys) {
+  return Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+}
+var GIT_OID = /^[0-9a-f]{40}$/;
+function isGitOid(value) {
+  return typeof value === "string" && GIT_OID.test(value);
+}
+function decodeMarketplaceIdentity(value) {
+  if (!isRecord18(value) || !hasExactKeys(value, ["head", "root", "source", "sourceType"])) {
+    return null;
+  }
+  if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && !isGitOid(value.head)) {
+    return null;
+  }
+  return {
+    root: value.root,
+    source: value.source,
+    sourceType: value.sourceType,
+    head: value.head
+  };
+}
+function decodeDesiredIdentity(text3) {
+  let value;
+  try {
+    value = JSON.parse(text3);
+  } catch {
+    return null;
+  }
+  if (!isRecord18(value) || value.version !== 1 || typeof value.kind !== "string") return null;
+  if (value.kind === "marketplace-present") {
+    if (!hasExactKeys(value, ["head", "kind", "root", "source", "sourceType", "version"]) || typeof value.source !== "string" || value.root !== null && typeof value.root !== "string" || typeof value.sourceType !== "string" || typeof value.head !== "string") {
+      return null;
+    }
+    return {
+      version: 1,
+      kind: value.kind,
+      source: value.source,
+      root: value.root,
+      sourceType: value.sourceType,
+      head: value.head
+    };
+  }
+  if (value.kind === "marketplace-head") {
+    if (!hasExactKeys(value, ["head", "kind", "marketplace", "version"]) || typeof value.head !== "string") {
+      return null;
+    }
+    const marketplace = decodeMarketplaceIdentity(value.marketplace);
+    return marketplace === null ? null : {
+      version: 1,
+      kind: value.kind,
+      marketplace,
+      head: value.head
+    };
+  }
+  if (value.kind === "plugin-version") {
+    if (!hasExactKeys(value, ["kind", "marketplace", "pluginRoot", "pluginVersion", "version"]) || value.pluginRoot !== null && typeof value.pluginRoot !== "string" || typeof value.pluginVersion !== "string") {
+      return null;
+    }
+    const marketplace = decodeMarketplaceIdentity(value.marketplace);
+    return marketplace === null ? null : {
+      version: 1,
+      kind: value.kind,
+      marketplace,
+      pluginRoot: value.pluginRoot,
+      pluginVersion: value.pluginVersion
+    };
+  }
+  return null;
+}
+function sameMarketplaceIdentity(left, right) {
+  return left.root === right.root && left.source === right.source && left.sourceType === right.sourceType;
+}
+function equivalentNativeHostDesired(persistedSerialized, currentSerialized) {
+  const persisted = decodeDesiredIdentity(persistedSerialized);
+  const current = decodeDesiredIdentity(currentSerialized);
+  if (persisted === null || current === null || persisted.kind !== current.kind) return false;
+  if (current.kind === "marketplace-present") {
+    return persisted.kind === current.kind && persisted.source === current.source && persisted.root === current.root && persisted.sourceType === current.sourceType && persisted.head === current.head;
+  }
+  if (current.kind === "marketplace-head") {
+    return persisted.kind === current.kind && sameMarketplaceIdentity(persisted.marketplace, current.marketplace) && persisted.head === current.head;
+  }
+  return persisted.kind === current.kind && sameMarketplaceIdentity(persisted.marketplace, current.marketplace) && persisted.pluginRoot === current.pluginRoot && persisted.pluginVersion === current.pluginVersion;
+}
+
+// packages/cli/src/commands/managed-host-observation.ts
 function parseJson3(text3, label) {
   try {
     return JSON.parse(text3);
@@ -50288,8 +50380,12 @@ function desiredNativeHostPostcondition(env, host, stepId) {
       pluginVersion: pluginVersionAtMarketplace(env, before.marketplace)
     };
   }
+  const serialized = JSON.stringify(desired);
   return {
-    serialized: JSON.stringify(desired),
+    serialized,
+    isEquivalentDesired(persistedDesired) {
+      return equivalentNativeHostDesired(persistedDesired, serialized);
+    },
     isDesired(observation) {
       const current = decodeObservation(observation);
       if (desired.kind === "marketplace-present") {
@@ -50334,9 +50430,14 @@ async function runManagedHostCommand(transaction, stepId, env, command2) {
   }
   const host = command2.cmd;
   const injected = env.managedHostReconciliation?.(host, stepId, command2);
-  const desired = injected === void 0 ? desiredNativeHostPostcondition(env, host, stepId) : { serialized: injected.desired, isDesired: injected.isDesired };
+  const desired = injected === void 0 ? desiredNativeHostPostcondition(env, host, stepId) : {
+    serialized: injected.desired,
+    isDesired: injected.isDesired,
+    isEquivalentDesired: injected.isEquivalentDesired
+  };
   const raw = await transaction.runStep(stepId, {
     desired: desired.serialized,
+    isEquivalentDesired: desired.isEquivalentDesired,
     observe: injected?.observe ?? (() => observeNativeHost(env, host)),
     isDesired: desired.isDesired,
     execute: () => JSON.stringify(env.runCommand(command2.cmd, [...command2.args]))

@@ -7,6 +7,7 @@ import {
   type NativePipelineHost,
 } from './plugin-host.js'
 import type { SetupEnv } from './setupEnvironment.js'
+import { equivalentNativeHostDesired } from './managed-host-desired-identity.js'
 
 interface TenonMarketplaceState {
   readonly root: string
@@ -252,6 +253,7 @@ export function desiredNativeHostPostcondition(
   stepId: string,
 ): {
   readonly serialized: string
+  isEquivalentDesired(persistedDesired: string): boolean
   isDesired(observation: string): boolean
 } {
   const before = decodeObservation(observeNativeHost(env, host))
@@ -296,8 +298,12 @@ export function desiredNativeHostPostcondition(
       pluginVersion: pluginVersionAtMarketplace(env, before.marketplace),
     }
   }
+  const serialized = JSON.stringify(desired)
   return {
-    serialized: JSON.stringify(desired),
+    serialized,
+    isEquivalentDesired(persistedDesired) {
+      return equivalentNativeHostDesired(persistedDesired, serialized)
+    },
     isDesired(observation) {
       const current = decodeObservation(observation)
       if (desired.kind === 'marketplace-present') {

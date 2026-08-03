@@ -18,6 +18,8 @@ export type ManagedHostRecoveryDecision = 'checkpoint' | 'execute'
 
 export interface ManagedHostStepExecution {
   readonly desired: string
+  /** Optional domain-owned identity comparison. Generic callers remain byte-exact by default. */
+  isEquivalentDesired?(persistedDesired: string): boolean
   observe(): string | Promise<string>
   isDesired(observation: string): boolean
   execute(): string | Promise<string>
@@ -49,8 +51,12 @@ export function createManagedHostStepRunner(context: {
     assertManagedHostObservation(step.desired, `host step '${id}' desired`)
     let journal = context.journal()
     const existing = journal.hostSteps?.find((item) => item.id === id)
+    const desiredMatches = (persistedDesired: string): boolean =>
+      persistedDesired === step.desired
+      || step.isEquivalentDesired?.(persistedDesired) === true
     if (existing?.state === 'completed') {
-      if (existing.desired !== step.desired
+      if (existing.desired === undefined
+        || !desiredMatches(existing.desired)
         || existing.replayPolicy !== HOST_REPLAY_POLICY
         || existing.observedAfter === undefined
         || !step.isDesired(existing.observedAfter)) {
@@ -93,7 +99,7 @@ export function createManagedHostStepRunner(context: {
           `host step '${id}' 是缺少 before/desired/replayPolicy 的旧 pending WAL；拒绝自动重放`,
         )
       }
-      if (existing.desired !== step.desired) {
+      if (!desiredMatches(existing.desired)) {
         throw new ManagedRuntimeIndeterminateError(
           `host step '${id}' 当前 desired 与 WAL 不一致；拒绝重解释 pending mutation`,
         )
