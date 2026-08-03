@@ -1510,15 +1510,32 @@ function validateTaskPlanRevisionV1(revision) {
 }
 
 // packages/kernel/dist/task-plan/read-model.js
+var UNPROJECTABLE_CODEC_ERRORS = /* @__PURE__ */ new Set([
+  "array_invalid",
+  "array_too_large",
+  "document_too_large",
+  "field_required",
+  "field_type",
+  "json_invalid",
+  "object_invalid"
+]);
 function toTaskPlanReadModelV1(revision, projection) {
-  const validation = validateTaskPlanRevisionV1(revision);
-  const requirements = revision.requirements.map((entry) => ({ ...entry }));
-  const acceptanceCriteria = revision.acceptance_criteria.map((entry) => ({ ...entry }));
-  const groups2 = revision.groups.map((group) => ({
+  const decoded = decodeTaskPlanRevisionV1(revision);
+  if (!decoded.ok) {
+    const structuralError = decoded.errors.find((entry) => UNPROJECTABLE_CODEC_ERRORS.has(entry.code));
+    if (decoded.overflow || structuralError !== void 0) {
+      throw new TypeError(`TaskPlan revision cannot be projected at ${structuralError?.path ?? "$"}${structuralError === void 0 ? "" : `: ${structuralError.code}`}`);
+    }
+  }
+  const projectedRevision = decoded.ok ? decoded.value : revision;
+  const validation = validateTaskPlanRevisionV1(projectedRevision);
+  const requirements = projectedRevision.requirements.map((entry) => ({ ...entry }));
+  const acceptanceCriteria = projectedRevision.acceptance_criteria.map((entry) => ({ ...entry }));
+  const groups2 = projectedRevision.groups.map((group) => ({
     ...group,
     work_item_ids: [...group.work_item_ids]
   }));
-  const items = revision.work_items.map((item2) => ({
+  const items = projectedRevision.work_items.map((item2) => ({
     ...item2,
     requirement_refs: [...item2.requirement_refs],
     acceptance_refs: [...item2.acceptance_refs],
@@ -1534,11 +1551,11 @@ function toTaskPlanReadModelV1(revision, projection) {
   return deepFreeze({
     schema_version: TASK_PLAN_READ_SCHEMA_VERSION,
     source: "canonical",
-    schedulable: revision.status === "frozen" && validation.valid,
-    plan_id: revision.plan_id,
-    revision_id: revision.revision_id,
-    revision_number: revision.revision_number,
-    revision_status: revision.status,
+    schedulable: projectedRevision.status === "frozen" && validation.valid,
+    plan_id: projectedRevision.plan_id,
+    revision_id: projectedRevision.revision_id,
+    revision_number: projectedRevision.revision_number,
+    revision_status: projectedRevision.status,
     validation,
     completeness: { state: validation.coverage.complete ? "complete" : "incomplete" },
     requirements,

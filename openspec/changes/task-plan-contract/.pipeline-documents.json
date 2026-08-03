@@ -686,14 +686,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/task-plan-contract/tasks.md",
-      "sha256": "b46b443f5e6caaf3575e47ad133a48b6a19d67b0a1cf96cdc951d617ac805a41",
+      "sha256": "c360ff597d86c875bdecc913ef13714fea3769ca5d0f4a9b6cbe1c24c278d2d3",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-03T15:24:11Z",
+      "recordedAt": "2026-08-03T15:32:22Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "b46b443f5e6caaf3575e47ad133a48b6a19d67b0a1cf96cdc951d617ac805a41",
-          "readAt": "2026-08-03T15:24:15Z",
+          "sha256": "c360ff597d86c875bdecc913ef13714fea3769ca5d0f4a9b6cbe1c24c278d2d3",
+          "readAt": "2026-08-03T15:32:26Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",21]"
         }
       ]

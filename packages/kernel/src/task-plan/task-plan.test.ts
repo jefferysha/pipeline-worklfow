@@ -512,6 +512,47 @@ describe('TaskPlan v1 validation and read projection', () => {
     expect(toTaskPlanReadModelV1(input, { state: 'current' }).schedulable).toBe(false)
   })
 
+  it.each([
+    ['missing requirements', { ...revision(), requirements: undefined } as unknown as TaskPlanRevisionV1, '$.requirements'],
+    ['null acceptance catalog', { ...revision(), acceptance_criteria: null } as unknown as TaskPlanRevisionV1, '$.acceptance_criteria'],
+    ['null group', { ...revision(), groups: [null] } as unknown as TaskPlanRevisionV1, '$.groups[0]'],
+    ['null dependency list', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, depends_on: null as unknown as readonly string[] }
+        : item),
+    }), '$.work_items[0].depends_on'],
+  ])('rejects structurally invalid typed %s before read-model traversal', (_label, input, path) => {
+    const validation = validateTaskPlanRevisionV1(input)
+    expect(validation.valid).toBe(false)
+    expect(validation.issues).toContainEqual({
+      severity: 'error',
+      code: 'task-plan-contract-invalid',
+      path,
+      related_ids: [expect.stringMatching(/^(array|field|object)_/)],
+    })
+    expect(() => toTaskPlanReadModelV1(input, { state: 'current' }))
+      .toThrow(`TaskPlan revision cannot be projected at ${path}`)
+  })
+
+  it('rejects an accessor-backed typed array without executing its getter in the read model', () => {
+    const input = revision()
+    let getterCalls = 0
+    const workItems = [...input.work_items]
+    Object.defineProperty(workItems, '0', {
+      enumerable: true,
+      configurable: true,
+      get: () => {
+        getterCalls += 1
+        return input.work_items[0]
+      },
+    })
+    const hostile = { ...input, work_items: workItems }
+
+    expect(() => toTaskPlanReadModelV1(hostile, { state: 'current' }))
+      .toThrow('TaskPlan revision cannot be projected at $.work_items')
+    expect(getterCalls).toBe(0)
+  })
+
   it('returns stable sorted issues for ownership, refs, cycles, and uncovered catalogs', () => {
     const input = revision({
       groups: [
