@@ -102,6 +102,14 @@ describe('managed native-host observation', () => {
       ...original,
       marketplace: { ...marketplace, sourceType: 'local' },
     }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, head: 'not-a-git-head' },
+    }))).toBe(false)
+    expect(current.isEquivalentDesired(changed({
+      ...original,
+      marketplace: { ...marketplace, head: 'A'.repeat(40) },
+    }))).toBe(false)
     expect(current.isEquivalentDesired(changed({ ...original, unexpected: true }))).toBe(false)
     expect(current.isEquivalentDesired('{not-json')).toBe(false)
   })
@@ -228,6 +236,26 @@ describe('managed native-host observation', () => {
     expect(pluginDesired.isDesired(observeNativeHost(env, 'codex'))).toBe(true)
     state.pluginRoot = '/plugins/tenon/other-root'
     expect(pluginDesired.isDesired(observeNativeHost(env, 'codex'))).toBe(false)
+  })
+
+  test('local marketplace without a readable Git HEAD keeps its explicit target sentinel', () => {
+    const state = {
+      head: 'unavailable',
+      remoteHead: 'b'.repeat(40),
+      pluginVersion: '1.0.0',
+      marketplaceSourceType: 'local',
+      marketplaceSource: '/source/tenon',
+      pluginRoot: '/plugins/tenon/1.0.0',
+    }
+    const env = observationEnv(state)
+    const desired = desiredNativeHostPostcondition(env, 'codex', 'marketplace-refresh')
+
+    expect(JSON.parse(desired.serialized)).toMatchObject({
+      head: 'local-marketplace',
+      marketplace: { head: null },
+    })
+    expect(desired.isDesired(observeNativeHost(env, 'codex'))).toBe(true)
+    expect(desired.isEquivalentDesired(desired.serialized)).toBe(true)
   })
 
   test('malformed host inventory fails closed before any mutation can be checkpointed', () => {

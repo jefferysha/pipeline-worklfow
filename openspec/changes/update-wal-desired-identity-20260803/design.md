@@ -7,6 +7,7 @@
 ## 风险
 
 - 过宽等价可能错误接纳并发宿主变更；必须对 schema、键集合、目标 HEAD 和插件版本逐项严格比较。
+- 虽然嵌套 observation HEAD 不参与等价比较，decoder 仍必须把它限制为生产者可生成的 `null` 或 40 位小写 Git OID，拒绝非 canonical 证据。
 - 旧 WAL 可能结构非法；必须继续 fail closed。
 
 ## 待验证问题
@@ -19,3 +20,4 @@
 - comparator 必须由 native host 层显式注入，通用 reconciliation 不理解宿主 JSON。
 - pending 与 completed checkpoint 都使用同一等价判断。
 - 非法、未知或目标字段变化全部拒绝，且不执行 mutation。
+- 回归必须穿过 native desired 生产、command 注入、durable journal reload 与通用 runner，不能用手写 comparator 替代生产接线。

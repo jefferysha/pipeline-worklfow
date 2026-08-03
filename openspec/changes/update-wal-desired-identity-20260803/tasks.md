@@ -14,7 +14,7 @@
 
 ## 实现
 
-- [x] 先写失败测试，再实现受约束的 desired 等价恢复并重建 CLI bundle。 (build)
+- [x] 收敛 Verify findings：canonical HEAD、真实 native/durable 接线回归、可归档完整规格，并重建 CLI bundle。 (build)
 
 ## 验证
 

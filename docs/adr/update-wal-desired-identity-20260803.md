@@ -6,7 +6,7 @@ native marketplace 的当前 HEAD 是 observation，不是 marketplace 稳定身
 
 ## 决策
 
-保留 WAL 原文不变，在 managed host step 上增加调用方限定的 desired 等价判断。native comparator 只忽略嵌套 marketplace observation HEAD，所有真正身份与目标字段必须精确一致。
+保留 WAL 原文不变，在 managed host step 上增加调用方限定的 desired 等价判断。native comparator 只忽略已通过 canonical decoder 的嵌套 marketplace observation HEAD；该值必须是 `null` 或 40 位小写 Git OID，所有真正身份与目标字段必须精确一致。
 
 ## 备选方案
 
@@ -14,4 +14,4 @@ native marketplace 的当前 HEAD 是 observation，不是 marketplace 稳定身
 
 ## 后果
 
-旧格式 pending WAL 可安全恢复，新事务仍保留完整原始 desired。非 native 调用方和未知 schema 继续字节级 fail closed；实现需要覆盖 pending 与 completed 两条恢复路径以及负向字段变化测试。
+旧格式 pending WAL 可安全恢复，新事务仍保留完整原始 desired。非 native 调用方和未知 schema 继续字节级 fail closed；实现需要覆盖 pending 与 completed 两条恢复路径、非 canonical HEAD、负向字段变化，以及 native producer 到 durable runner 的真实接线恢复测试。

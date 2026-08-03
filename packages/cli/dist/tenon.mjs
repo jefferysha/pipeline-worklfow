@@ -48927,11 +48927,15 @@ function isRecord18(value) {
 function hasExactKeys(value, keys) {
   return Object.keys(value).sort().join(",") === [...keys].sort().join(",");
 }
+var GIT_OID = /^[0-9a-f]{40}$/;
+function isGitOid(value) {
+  return typeof value === "string" && GIT_OID.test(value);
+}
 function decodeMarketplaceIdentity(value) {
   if (!isRecord18(value) || !hasExactKeys(value, ["head", "root", "source", "sourceType"])) {
     return null;
   }
-  if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && typeof value.head !== "string") {
+  if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && !isGitOid(value.head)) {
     return null;
   }
   return {

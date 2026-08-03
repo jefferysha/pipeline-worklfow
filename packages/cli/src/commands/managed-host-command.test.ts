@@ -4,6 +4,10 @@ import { createManagedHostStepRunner } from '../runtime/managed-host-reconciliat
 import type { ManagedHostPreparationContext } from './release-coordinator.js'
 import type { SetupEnv } from './setupEnvironment.js'
 import { runManagedHostCommand } from './managed-host-command.js'
+import {
+  desiredNativeHostPostcondition,
+  observeNativeHost,
+} from './managed-host-observation.js'
 
 function harness(initial?: ManagedReleaseJournalRecord): {
   readonly transaction: ManagedHostPreparationContext
@@ -109,6 +113,127 @@ describe('managed host command result is diagnostic after desired-state proof', 
 })
 
 describe('managed host desired identity recovery', () => {
+  test.each(['started', 'completed'] as const)(
+    '%s durable WAL reload uses the real native desired wiring without replaying mutation',
+    async (state) => {
+      const marketplaceRoot = '/host/tenon-marketplace'
+      const host = {
+        head: 'a'.repeat(40),
+        remoteHead: 'b'.repeat(40),
+        mutationExecutions: 0,
+      }
+      const env = {
+        readText: (path: string) => path === `${marketplaceRoot}/.codex-plugin/plugin.json`
+          ? JSON.stringify({ version: '1.0.1' })
+          : undefined,
+        runCommand: (cmd: string, args: string[]) => {
+          const command = `${cmd} ${args.join(' ')}`
+          if (command === 'codex plugin marketplace list --json') {
+            return {
+              code: 0,
+              stdout: JSON.stringify({
+                marketplaces: [{
+                  name: 'tenon',
+                  root: marketplaceRoot,
+                  marketplaceSource: {
+                    sourceType: 'git',
+                    source: 'https://github.com/jefferysha/tenon.git',
+                  },
+                }],
+              }),
+              stderr: '',
+            }
+          }
+          if (command === 'codex plugin list --json') {
+            return {
+              code: 0,
+              stdout: JSON.stringify({
+                installed: [{
+                  pluginId: 'tenon@tenon',
+                  version: '1.0.1',
+                  source: { path: marketplaceRoot },
+                }],
+              }),
+              stderr: '',
+            }
+          }
+          if (command === `git -C ${marketplaceRoot} rev-parse HEAD`) {
+            return { code: 0, stdout: `${host.head}\n`, stderr: '' }
+          }
+          if (command === `git -C ${marketplaceRoot} remote get-url origin`) {
+            return {
+              code: 0,
+              stdout: 'https://github.com/jefferysha/tenon.git\n',
+              stderr: '',
+            }
+          }
+          if (command === 'git ls-remote https://github.com/jefferysha/tenon.git refs/heads/main') {
+            return {
+              code: 0,
+              stdout: `${host.remoteHead}\trefs/heads/main\n`,
+              stderr: '',
+            }
+          }
+          if (command === 'codex plugin marketplace upgrade tenon --json') {
+            host.mutationExecutions += 1
+            host.head = host.remoteHead
+            return { code: 0, stdout: 'unexpected replay', stderr: '' }
+          }
+          return { code: 1, stdout: '', stderr: `unexpected command: ${command}` }
+        },
+      } as SetupEnv
+
+      const persistedDesired = desiredNativeHostPostcondition(
+        env,
+        'codex',
+        'marketplace-refresh',
+      ).serialized
+      const before = observeNativeHost(env, 'codex')
+      host.head = host.remoteHead
+      const observedAfter = observeNativeHost(env, 'codex')
+      const persisted: ManagedReleaseJournalRecord = {
+        version: 1,
+        transactionId: `real-native-wiring-${state}`,
+        operation: 'update',
+        source: 'codex',
+        phase: 'preparing-host',
+        startedAt: '2026-08-03T00:00:00Z',
+        updatedAt: '2026-08-03T00:00:00Z',
+        hostSteps: [{
+          id: 'marketplace-refresh',
+          state,
+          before,
+          desired: persistedDesired,
+          replayPolicy: 'observe-before-replay-v1',
+          ...(state === 'completed'
+            ? {
+                observedAfter,
+                result: JSON.stringify({ code: 0, stdout: 'historic', stderr: '' }),
+              }
+            : {}),
+        }],
+      }
+
+      // JSON round-trip models a process restart and durable journal reload.
+      let reloaded = JSON.parse(JSON.stringify(persisted)) as ManagedReleaseJournalRecord
+      const runStep = createManagedHostStepRunner({
+        journal: () => reloaded,
+        commit: async (record) => { reloaded = record },
+        now: () => '2026-08-03T00:00:01Z',
+      })
+      const result = await runManagedHostCommand(
+        { transactionId: reloaded.transactionId, runStep },
+        'marketplace-refresh',
+        env,
+        { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', 'tenon', '--json'] },
+      )
+
+      expect(host.mutationExecutions).toBe(0)
+      expect(reloaded.hostSteps?.[0]?.state).toBe('completed')
+      expect(result.stdout).toBe(state === 'completed' ? 'historic' : '')
+    },
+  )
+
   test.each(['started', 'completed'] as const)(
     '%s WAL checkpoints an equivalent domain identity without replaying mutation',
     async (state) => {

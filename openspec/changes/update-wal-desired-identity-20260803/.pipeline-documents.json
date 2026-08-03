@@ -4,174 +4,6 @@
   "createdAt": "2026-08-03T12:59:11Z",
   "records": [
     {
-      "kind": "openspec-design",
-      "path": "openspec/changes/update-wal-desired-identity-20260803/design.md",
-      "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-      "producer": "tenon-explore",
-      "recordedAt": "2026-08-03T13:11:47Z",
-      "reads": [
-        {
-          "phase": "explore",
-          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-          "readAt": "2026-08-03T13:11:48Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",1]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-          "readAt": "2026-08-03T13:13:28Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-          "readAt": "2026-08-03T13:33:47Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-design",
-      "path": "docs/superpowers/specs/update-wal-desired-identity-20260803-design.md",
-      "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
-      "producer": "brainstorming",
-      "recordedAt": "2026-08-03T13:11:48Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
-          "readAt": "2026-08-03T13:13:28Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
-          "readAt": "2026-08-03T13:33:47Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
-        },
-        {
-          "phase": "build",
-          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "adr",
-      "path": "docs/adr/update-wal-desired-identity-20260803.md",
-      "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
-      "producer": "brainstorming",
-      "recordedAt": "2026-08-03T13:11:48Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
-          "readAt": "2026-08-03T13:13:28Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
-          "readAt": "2026-08-03T13:33:47Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
-        },
-        {
-          "phase": "build",
-          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/update-wal-desired-identity-20260803/specs/plugin-runtime/spec.md",
-      "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-08-03T13:13:27Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "build",
-          "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-plan",
-      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
-      "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-      "producer": "writing-plans",
-      "recordedAt": "2026-08-03T13:13:27Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "build",
-          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "plan",
-      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
-      "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-      "producer": "writing-plans",
-      "recordedAt": "2026-08-03T13:13:28Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-          "readAt": "2026-08-03T13:13:54Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
-        },
-        {
-          "phase": "build",
-          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
-        }
-      ]
-    },
-    {
       "kind": "proposal",
       "path": "openspec/changes/update-wal-desired-identity-20260803/proposal.md",
       "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
@@ -189,27 +21,161 @@
           "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
           "readAt": "2026-08-03T13:34:26Z",
           "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T13:44:50Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T13:47:08Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T13:53:13Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-03-update-wal-desired-identity-20260803-verify.md",
+      "sha256": "8855845128b585f71b3416343aa19682175ac1865892e5a8a4da383457d7df71",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-03T13:44:50Z",
+      "reads": []
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/specs/plugin-runtime/spec.md",
+      "sha256": "93c60da2c6201fab3fe5f21d03706bcba139241533fe5213463e827973b39551",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-03T13:53:12Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "93c60da2c6201fab3fe5f21d03706bcba139241533fe5213463e827973b39551",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
+      "sha256": "43144b7d9eda88f1407c4c7eb938368a1c5466b3f2a5cb20e1ac51a98b77e707",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T13:53:12Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "43144b7d9eda88f1407c4c7eb938368a1c5466b3f2a5cb20e1ac51a98b77e707",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
+      "sha256": "43144b7d9eda88f1407c4c7eb938368a1c5466b3f2a5cb20e1ac51a98b77e707",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T13:53:12Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "43144b7d9eda88f1407c4c7eb938368a1c5466b3f2a5cb20e1ac51a98b77e707",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/design.md",
+      "sha256": "6b1e3df02b0987de7d1425cfd97535afc3615780f8f981ab3fbd958137c449af",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T13:53:13Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "6b1e3df02b0987de7d1425cfd97535afc3615780f8f981ab3fbd958137c449af",
+          "readAt": "2026-08-03T13:53:13Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6b1e3df02b0987de7d1425cfd97535afc3615780f8f981ab3fbd958137c449af",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/update-wal-desired-identity-20260803-design.md",
+      "sha256": "bec3d5c6fab9b8fb15a37dd16e31d14158e48eca8ed8febabab61ee14afac719",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T13:53:13Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "bec3d5c6fab9b8fb15a37dd16e31d14158e48eca8ed8febabab61ee14afac719",
+          "readAt": "2026-08-03T13:53:13Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bec3d5c6fab9b8fb15a37dd16e31d14158e48eca8ed8febabab61ee14afac719",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/update-wal-desired-identity-20260803.md",
+      "sha256": "35ab842854bbcc0aec447cbe210b1260890543182ef3b5b25ef0a1bee0af7410",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T13:53:13Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "35ab842854bbcc0aec447cbe210b1260890543182ef3b5b25ef0a1bee0af7410",
+          "readAt": "2026-08-03T13:53:13Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "35ab842854bbcc0aec447cbe210b1260890543182ef3b5b25ef0a1bee0af7410",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/update-wal-desired-identity-20260803/tasks.md",
-      "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
+      "sha256": "ff3e3f983f8ffb6fb444849319469e3149f898115ed2a0d3990da4f8f7ec02ea",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-03T13:34:26Z",
+      "recordedAt": "2026-08-03T14:06:43Z",
       "reads": [
         {
-          "phase": "spec",
-          "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
-          "readAt": "2026-08-03T13:33:47Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
-        },
-        {
           "phase": "build",
-          "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
-          "readAt": "2026-08-03T13:34:26Z",
-          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+          "sha256": "ff3e3f983f8ffb6fb444849319469e3149f898115ed2a0d3990da4f8f7ec02ea",
+          "readAt": "2026-08-03T14:06:49Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",9]"
         }
       ]
     }
