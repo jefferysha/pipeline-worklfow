@@ -88,6 +88,10 @@ export function ProjectsView({
       const retained = new Set([...current].filter((root) => unreadableRoots.has(root)))
       return retained.size === current.size ? current : retained
     })
+    setCleanupFailures((current) => {
+      const retained = current.filter((root) => unreadableRoots.has(root))
+      return retained.length === current.length ? current : retained
+    })
   }, [rows])
   const duplicateBasenames = useMemo(() => {
     const counts = new Map<string, number>()
@@ -156,6 +160,10 @@ export function ProjectsView({
     }
   }, [repositoryGroups, rows])
   const shownGroups = needGroups.length + restGroups.length + unreachable.length
+  const cleanupFailureCount = useMemo(() => {
+    const visibleUnreachable = new Set(unreachable.map((row) => row.root))
+    return cleanupFailures.filter((root) => visibleUnreachable.has(root)).length
+  }, [cleanupFailures, unreachable])
 
   function groupExpanded(group: RepositoryGroup): boolean {
     if (query.trim().length > 0 || focus !== 'all') return true
@@ -325,7 +333,7 @@ export function ProjectsView({
               t={t}
               onExpanded={setUnreachableOpen}
               cleanupBusy={cleanupBusy}
-              cleanupFailureCount={cleanupFailures.length}
+              cleanupFailureCount={cleanupFailureCount}
               onBatchUnregister={() => { void unregisterUnreachable() }}
             />
           )}

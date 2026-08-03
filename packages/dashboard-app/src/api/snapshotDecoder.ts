@@ -364,7 +364,7 @@ function decodeRepositoryIdentity(value: unknown): ProjectRepositoryIdentity | n
     || typeof value.label !== 'string'
     || value.label.length === 0
     || value.label.length > 255
-    || /[\\/]/.test(value.label)
+    || value.label.includes('/')
     || (value.workspace_kind !== 'primary' && value.workspace_kind !== 'worktree')) return null
   return {
     id: value.id,

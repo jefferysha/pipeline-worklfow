@@ -21154,21 +21154,29 @@ async function probeRepositoryIdentity(root, deps = {}) {
 // packages/server/src/repositoryFingerprint.ts
 import { lstat as lstat13 } from "node:fs/promises";
 import { join as join41 } from "node:path";
-async function metadataPart(path7) {
+async function metadataPart(path7, mode = "volatile") {
   try {
     const metadata = await lstat13(path7, { bigint: true });
     const kind = metadata.isDirectory() ? "directory" : metadata.isFile() ? "file" : "other";
-    return `${path7}:${kind}:${metadata.size}:${metadata.mtimeNs}`;
+    const stableIdentity = mode === "stable" || mode === "stable-directory" && metadata.isDirectory();
+    return {
+      value: stableIdentity ? `${path7}:${kind}:${metadata.dev}:${metadata.ino}` : `${path7}:${kind}:${metadata.size}:${metadata.mtimeNs}`,
+      directory: metadata.isDirectory()
+    };
   } catch {
     return null;
   }
 }
 async function repositoryTopologyFingerprint(root) {
+  const rootEntry = await metadataPart(root, "stable");
+  if (rootEntry === null) return [];
+  if (!rootEntry.directory) return [rootEntry.value];
   const dotGit = join41(root, ".git");
-  const entry = await metadataPart(dotGit);
-  if (entry === null) return [];
+  const entry = await metadataPart(dotGit, "stable-directory");
+  if (entry === null) return [rootEntry.value];
+  if (!entry.directory) return [rootEntry.value, entry.value];
   const worktrees = await metadataPart(join41(dotGit, "worktrees"));
-  return worktrees === null ? [entry] : [entry, worktrees];
+  return worktrees === null ? [rootEntry.value, entry.value] : [rootEntry.value, entry.value, worktrees.value];
 }
 
 // packages/server/src/snapshot.ts

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
 import { appendFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -1356,6 +1356,47 @@ describe('computeFingerprint —— 变更检测', () => {
   it('registry 增加空的非 Git 项目也改变指纹', async () => {
     const root = await makeProject()
     expect(await computeFingerprint([root])).not.toBe(await computeFingerprint([]))
+  })
+
+  it('已登记的空项目 root 被删除时改变指纹', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+
+    await rm(root, { recursive: true, force: true })
+
+    expect(await computeFingerprint([root])).not.toBe(before)
+  })
+
+  it('已登记 root 变成 symlink 时不穿透目标的 Git metadata', async () => {
+    const target = await makeProject()
+    await execFileAsync('git', ['init'], { cwd: target })
+    const root = `${target}-link`
+    await symlink(target, root)
+
+    const fingerprint = await computeFingerprint([root])
+
+    expect(fingerprint).toContain(`registry:${root}`)
+    expect(fingerprint).not.toContain(`${root}/.git`)
+  })
+
+  it('项目顶层无关文件变化不触发 fingerprint', async () => {
+    const root = await makeProject()
+    const before = await computeFingerprint([root])
+
+    await writeFile(join(root, 'irrelevant.txt'), 'not snapshot input', 'utf8')
+
+    expect(await computeFingerprint([root])).toBe(before)
+  })
+
+  it('普通 Git index 更新不触发 repository topology fingerprint', async () => {
+    const root = await makeProject()
+    await execFileAsync('git', ['init'], { cwd: root })
+    const before = await computeFingerprint([root])
+
+    await writeFile(join(root, 'ordinary.txt'), 'ordinary workspace content', 'utf8')
+    await execFileAsync('git', ['add', 'ordinary.txt'], { cwd: root })
+
+    expect(await computeFingerprint([root])).toBe(before)
   })
 
   it('已登记 root 初始化为 Git 时改变指纹并触发 repository 分组刷新', async () => {

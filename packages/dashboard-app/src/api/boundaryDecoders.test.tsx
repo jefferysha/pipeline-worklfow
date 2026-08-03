@@ -186,6 +186,20 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(legacy)?.projects[0]?.repository).toBeUndefined()
   })
 
+  it('accepts a POSIX repository label containing a backslash', () => {
+    const snapshot = validSnapshot()
+    const project = snapshot.projects[0] as typeof snapshot.projects[number] & {
+      repository?: { id: string; label: string; workspace_kind: 'primary' | 'worktree' }
+    }
+    project.repository = {
+      id: 'c'.repeat(64),
+      label: 'repo\\name',
+      workspace_kind: 'primary',
+    }
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.repository?.label).toBe('repo\\name')
+  })
+
   it('preserves governed loop telemetry after validating every rendered field', () => {
     const decoded = decodeLoopsSnapshot({
       generated_at: 'now',

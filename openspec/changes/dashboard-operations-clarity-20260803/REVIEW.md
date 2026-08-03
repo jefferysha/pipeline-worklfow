@@ -29,6 +29,10 @@
 21. 已手动折叠的 repository group 会遮住后续搜索命中的 workspace；查询或 focus 过滤现在强制展开匹配组。
 22. 未显式选择项目时 Machine 可能在项目级事实未知时宣告无阻断；现只呈现全局信号，不借用注册表首项，并明确标记项目级 AFK 与未知核心事实。
 23. Git identity 与 registry 成员变化未完整进入 SSE fingerprint；现纳入每个已登记 root identity 和 `.git` topology metadata，空/非 Git/失效项目增删、初始化或 worktree metadata 变化都会触发实时快照。
+24. 已登记空 root 被删除时 fingerprint 不变；现纳入 root 的稳定类型与 inode 身份，并在 root 为 symlink/非目录时停止向下探测，既感知删除/替换又不穿透边界。
+25. POSIX 合法的反斜杠仓库名被前端 decoder 误拒；现只拒绝真正的路径分隔符 `/`，保留合法 repository label。
+26. 批量注销的失败计数会在 root 恢复、消失或被筛选后残留；现随权威不可达 roots 收敛，并只统计当前可见的不可达项。
+27. root 与 `.git` 目录 mtime 会让普通顶层文件或 `git add` 触发无关快照；现目录只记录稳定身份，`.git` 指针文件和 `worktrees` topology 仍保留真实变更信号。
 
 ## Re-review
 
@@ -36,10 +40,10 @@
 
 ## Verification evidence
 
-- Web 全量：87 files / 1626 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
-- Repository 全量：331 files / 5930 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
+- Web 全量：87 files / 1631 tests；新增 Projects 搜索重汇总/重排序、Graph Enter、Host 滚动提示与 Machine 可选能力错误回归均纳入最终全量结果。
+- Repository 全量：331 files / 5940 passed / 26 honest skips；Docker daemon 缺失的容器集成按既有规则诚实跳过。
 - TypeScript、production build、architecture、comment honesty、OpenSpec 与 `git diff --check` 通过。
-- OpenSpec 严格归档预演在隔离副本通过：8 个 requirement 新增、约 3 个 requirement 修改，36 个严格规格检查全部通过。
+- OpenSpec 严格归档预演在隔离副本通过：8 个 requirement 新增、约 3 个 requirement 修改，归档后的 32 个 specs 严格检查全部通过。
 - 1024px、1440px 与 1920px 真实桌面浏览器确认 Projects 分组、Machine core/AFK 分层、Host 自动检测与 Workbench 统一 40px 控件均无 root 横向溢出。
 - 编排图的阶段主干为七个等宽节点；键盘从“实现”按 Home/End 分别停在“立项”/“归档”，未越界到 workflow、change 或 resource。
 - 稳定服务的新浏览器页控制台为 0 error / 0 warning。

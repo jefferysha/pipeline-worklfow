@@ -643,6 +643,45 @@ describe('ProjectsView 读不到（ok=false）可折叠区', () => {
     expect(screen.getByTestId('project-row-second')).toBeInTheDocument()
   })
 
+  it('clears cleanup failure status when the failed root recovers', async () => {
+    const failedRoot = '/missing/failed'
+    const otherRoot = '/missing/other'
+    const unregisterRoot = vi.fn(async (root: string) => {
+      if (root === failedRoot) throw new Error('registry busy')
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { rerender } = render(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([makeProject(failedRoot, [], { ok: false })])}
+          rulesByKey={rulesFor(failedRoot)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('unreachable-batch-unregister'))
+    expect(await screen.findByTestId('unreachable-cleanup-error')).toHaveTextContent('1')
+
+    rerender(
+      <I18nProvider>
+        <ProjectsView
+          snapshot={makeSnapshot([
+            makeProject(failedRoot, [makeChange('recovered', 'open')]),
+            makeProject(otherRoot, [], { ok: false }),
+          ])}
+          rulesByKey={rulesFor(failedRoot, otherRoot)}
+          onOpenProject={vi.fn()}
+          unregisterRoot={unregisterRoot}
+        />
+      </I18nProvider>,
+    )
+
+    expect(await screen.findByTestId('project-row-failed')).toBeInTheDocument()
+    expect(screen.queryByTestId('unreachable-cleanup-error')).toBeNull()
+  })
+
   it('含兼容问题的混合项目保留可读 Change 摘要与可点击 Progress 入口', () => {
     const onOpenProject = vi.fn()
     const root = '/code/mixed'
