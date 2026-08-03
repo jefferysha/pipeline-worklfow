@@ -1,5 +1,5 @@
 import { lstat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 type MetadataPart = {
   readonly value: string
@@ -8,9 +8,13 @@ type MetadataPart = {
 
 type MetadataMode = 'volatile' | 'stable' | 'stable-directory'
 
-async function metadataPart(path: string, mode: MetadataMode = 'volatile'): Promise<MetadataPart | null> {
+async function metadataPart(
+  path: string,
+  mode: MetadataMode = 'volatile',
+  lookupPath = path,
+): Promise<MetadataPart | null> {
   try {
-    const metadata = await lstat(path, { bigint: true })
+    const metadata = await lstat(lookupPath, { bigint: true })
     const kind = metadata.isDirectory() ? 'directory' : metadata.isFile() ? 'file' : 'other'
     const stableIdentity = mode === 'stable' || (mode === 'stable-directory' && metadata.isDirectory())
     return {
@@ -25,7 +29,11 @@ async function metadataPart(path: string, mode: MetadataMode = 'volatile'): Prom
 }
 
 export async function repositoryTopologyFingerprint(root: string): Promise<readonly string[]> {
-  const rootEntry = await metadataPart(root, 'stable')
+  // On Linux an anchored project root is exposed as `/proc/self/fd/<n>`, whose leaf is a symlink.
+  // Traversing `/.` keeps the lookup bound to the opened directory while retaining the stable root
+  // label in the fingerprint. Without this, Linux classified the fd path as `other` and returned
+  // before observing a newly created `.git` directory, so the Dashboard missed repository regrouping.
+  const rootEntry = await metadataPart(root, 'stable', `${root}${sep}.`)
   if (rootEntry === null) return []
   if (!rootEntry.directory) return [rootEntry.value]
 

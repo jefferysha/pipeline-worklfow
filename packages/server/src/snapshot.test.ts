@@ -1567,12 +1567,35 @@ describe('computeFingerprint —— 变更检测', () => {
   it('已登记 root 初始化为 Git 时改变指纹并触发 repository 分组刷新', async () => {
     const root = await makeProject()
     const before = await computeFingerprint([root])
+    expect(before).toContain(':directory:')
 
     await execFileAsync('git', ['init'], { cwd: root })
 
     const after = await computeFingerprint([root])
     expect(after).not.toBe(before)
     expect(after).toContain('.git')
+  })
+
+  it('fd 风格的目录 symlink 根会被遍历而非按 other 提前返回', async () => {
+    const root = await makeProject()
+    const fdPath = `${root}-fd`
+    await symlink(root, fdPath, 'dir')
+    const anchor = captureWorkflowRootAnchor(root)
+    const anchored = { ...anchor, fdPath }
+
+    try {
+      const before = await computeFingerprint([root], 1, () => anchored)
+      expect(before).toContain(':directory:')
+
+      await execFileAsync('git', ['init'], { cwd: root })
+
+      const after = await computeFingerprint([root], 1, () => anchored)
+      expect(after).not.toBe(before)
+      expect(after).toContain(`${fdPath}/.git`)
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await unlink(fdPath)
+    }
   })
 
   it('dangling canonical current 仍进入 fingerprint，不能因 stat 跟随失败而消失', async () => {

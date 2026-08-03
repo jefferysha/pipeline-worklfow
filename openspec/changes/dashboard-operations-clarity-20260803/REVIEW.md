@@ -41,6 +41,10 @@
 33. 第二轮冻结 Verify 发现未选择项目时已成功返回的全局 Docker 探测仍被项目级 readiness 的空值覆盖成“未知”；现 Docker 卡片只消费全局 `/api/docker/images` 权威事实，项目级镜像配置仍保持独立未知。新增无项目选择且 daemon 不可用的红绿回归，状态明确为 AFK `optional-unavailable`，不会进入核心 blocker。
 34. 第二轮隔离 Codex 全量复核发现宿主插件 cache 的版本枚举在校验目录链后仍可能遇到并发 symlink 换位；现对 hostHome 到 namespace、版本和 marker 父目录的每一级使用 `O_NOFOLLOW` 目录描述符锚定，逐次用 `fstat` 与词法 `lstat` 复核设备号/inode。marker 本身也以 `O_NOFOLLOW` 打开，并在打开前后要求 leaf 的 `lstat` 与描述符 `fstat` 身份完全一致；任一父目录或 leaf 漂移即失败关闭为 `setup`。新增枚举瞬间替换 namespace，以及 marker 打开窗口换位后恢复的两条确定性对抗测试。
 35. 同轮复核发现 Docker 状态已切到全局探测后，说明文案仍混入项目 readiness，极短竞态下可能出现“就绪”徽标配“不可以使用”说明；现状态与说明共同只消费 `/api/docker/images`，并用全局成功、项目级旧失败的分歧回归锁定一致性。
+36. PR CI 在 Linux 暴露 repository topology fingerprint 将 `/proc/self/fd/<n>` 叶节点按 symlink
+    `lstat` 为 `other` 后提前返回，导致已登记目录新建 `.git` 时不触发 Projects 重分组。现保留
+    fd 锚的稳定显示路径，但通过 `/<fd>/.` 遍历已打开目录后读取身份；新增确定性 fd 风格目录
+    symlink 回归，并通过 snapshot 63 项、连续 5 轮定向回归与整仓 332 files / 5,951 tests。
 
 ## Re-review
 

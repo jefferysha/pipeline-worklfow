@@ -16240,7 +16240,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep12) {
+function splitTopLevel(s, sep13) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -16252,7 +16252,7 @@ function splitTopLevel(s, sep12) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep12) {
+    } else if (ch === sep13) {
       out.push(cur);
       cur = "";
     } else {
@@ -19472,10 +19472,10 @@ import { join as join36 } from "node:path";
 
 // packages/server/src/repositoryFingerprint.ts
 import { lstat as lstat13 } from "node:fs/promises";
-import { join as join35 } from "node:path";
-async function metadataPart(path7, mode = "volatile") {
+import { join as join35, sep as sep10 } from "node:path";
+async function metadataPart(path7, mode = "volatile", lookupPath = path7) {
   try {
-    const metadata = await lstat13(path7, { bigint: true });
+    const metadata = await lstat13(lookupPath, { bigint: true });
     const kind = metadata.isDirectory() ? "directory" : metadata.isFile() ? "file" : "other";
     const stableIdentity = mode === "stable" || mode === "stable-directory" && metadata.isDirectory();
     return {
@@ -19487,7 +19487,7 @@ async function metadataPart(path7, mode = "volatile") {
   }
 }
 async function repositoryTopologyFingerprint(root) {
-  const rootEntry = await metadataPart(root, "stable");
+  const rootEntry = await metadataPart(root, "stable", `${root}${sep10}.`);
   if (rootEntry === null) return [];
   if (!rootEntry.directory) return [rootEntry.value];
   const dotGit = join35(root, ".git");
@@ -21698,7 +21698,7 @@ async function readAfkRunLog(changeDir) {
 
 // packages/server/src/contextBundlePreviewSupport.ts
 import { lstatSync as lstatSync8, realpathSync as realpathSync6 } from "node:fs";
-import { isAbsolute as isAbsolute10, join as join45, relative as relative7, sep as sep10 } from "node:path";
+import { isAbsolute as isAbsolute10, join as join45, relative as relative7, sep as sep11 } from "node:path";
 var SCHEMA_VERSION = "context-bundle-preview/v1";
 var SIDE_EFFECTS = "none";
 var ContextBundlePathError = class extends Error {
@@ -21714,7 +21714,7 @@ function missingCode(error) {
 }
 function inside2(base, candidate) {
   const fromBase = relative7(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep10}`) && !isAbsolute10(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute10(fromBase);
 }
 function captureChangePathAnchor(root, change) {
   const chainPaths = [
@@ -23261,7 +23261,7 @@ import {
   openSync as openSync12,
   realpathSync as realpathSync7
 } from "node:fs";
-import { isAbsolute as isAbsolute11, join as join50, posix as posix4, relative as relative8, sep as sep11 } from "node:path";
+import { isAbsolute as isAbsolute11, join as join50, posix as posix4, relative as relative8, sep as sep12 } from "node:path";
 
 // packages/server/src/workflowDefinitionStatus.ts
 function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
@@ -23323,7 +23323,7 @@ function missing3(error) {
 }
 function isInside2(base, candidate) {
   const fromBase = relative8(base, candidate);
-  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute11(fromBase);
+  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep12}`) && !isAbsolute11(fromBase);
 }
 function readBoundedTasksSource2(fd, maxBytes) {
   const bytes = readBounded(fd, maxBytes);
@@ -23401,7 +23401,7 @@ async function readAnchoredChangeState(root, changeName) {
     try {
       return readTrustedFile(
         root,
-        posix4.join(prefix, relativePath.replaceAll(sep11, "/")),
+        posix4.join(prefix, relativePath.replaceAll(sep12, "/")),
         2 * 1024 * 1024,
         void 0,
         changeIdentity
