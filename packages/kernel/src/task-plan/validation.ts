@@ -145,8 +145,12 @@ function resourceDiagnostics(
           truncate(collector)
           break resourceLoop
         }
-        const left = ids[leftIndex]!
-        const right = ids[rightIndex]!
+        const left = ids[leftIndex]
+        const right = ids[rightIndex]
+        if (left === undefined || right === undefined) {
+          truncate(collector)
+          break resourceLoop
+        }
         const leftBefore = isReachable(left, right, dependents, traversalBudget)
         const rightBefore = isReachable(right, left, dependents, traversalBudget)
         if (leftBefore === undefined || rightBefore === undefined) {
@@ -203,8 +207,9 @@ export function validateTaskPlanRevisionV1(revision: TaskPlanRevisionV1): TaskPl
     const owners = memberships.get(item.id) ?? []
     if (owners.length === 0) issue(collector, 'work-item-unowned', `$.work_items[${itemIndex}].group_id`, [item.id])
     if (owners.length > 1) issue(collector, 'work-item-multiple-groups', `$.work_items[${itemIndex}].group_id`, [item.id, ...owners])
-    if (owners.length === 1 && owners[0] !== item.group_id) {
-      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.group_id, owners[0]!])
+    const soleOwner = owners.length === 1 ? owners[0] : undefined
+    if (soleOwner !== undefined && soleOwner !== item.group_id) {
+      issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.group_id, soleOwner])
     }
     if (!groupIds.has(item.group_id)) {
       issue(collector, 'work-item-group-mismatch', `$.work_items[${itemIndex}].group_id`, [item.id, item.group_id])

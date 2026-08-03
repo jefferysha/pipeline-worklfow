@@ -26,3 +26,14 @@
 {"ts":"2026-08-03T10:05:59Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-08-03T10:38:06Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-03T10:38:16Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T10:41:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T10:41:52Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T10:41:52Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"ac2edb69-e5db-40a7-a30f-1d3d9961784f"}
+{"ts":"2026-08-03T10:53:30Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-03-task-plan-contract-verify.md"}
+{"ts":"2026-08-03T10:53:58Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T10:58:02Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T10:58:09Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T10:58:09Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T10:53:58Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T10:58:09Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"022777e6-c91a-4bd9-8df2-d16dcc809ca5"}
+{"ts":"2026-08-03T11:02:51Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T11:14:05Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

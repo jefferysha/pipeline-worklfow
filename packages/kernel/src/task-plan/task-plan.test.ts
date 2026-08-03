@@ -112,6 +112,28 @@ describe('TaskPlan v1 codec', () => {
     expect(result).toMatchObject({ ok: false, errors: [{ code: 'array_too_large', path: '$.groups' }] })
   })
 
+  it('rejects an accessor-backed array without invoking its index getter', () => {
+    const entry = revision().requirements[0]!
+    const hostile = [entry]
+    let hits = 0
+    Object.defineProperty(hostile, '0', {
+      get() {
+        hits += 1
+        return entry
+      },
+      enumerable: true,
+      configurable: true,
+    })
+
+    const decoded = decodeTaskPlanRevisionV1({ ...revision(), requirements: hostile })
+
+    expect(hits).toBe(0)
+    expect(decoded).toMatchObject({
+      ok: false,
+      errors: [{ code: 'array_invalid', path: '$.requirements' }],
+    })
+  })
+
   it('stops object decoding when nested relations exceed the global traversal budget', () => {
     const template = revision().work_items[0]!
     const workItems = Array.from({ length: 500 }, (_, index) => ({

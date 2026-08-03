@@ -35124,6 +35124,7 @@ var COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS = /* @__PURE__ */ new Set([
   "command",
   "justification",
   "login",
+  "max_output_tokens",
   "prefix_rule",
   "sandbox_permissions",
   "tty",
@@ -35131,11 +35132,19 @@ var COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS = /* @__PURE__ */ new Set([
   "yield_time_ms"
 ]);
 function isCompleteOutputSafeExecArguments(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).every((key) => COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key));
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).every((key) => COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key)) && (!Object.hasOwn(value, "max_output_tokens") || Number.isSafeInteger(value.max_output_tokens) && Number(value.max_output_tokens) > 0);
 }
 function safePrimitiveEnd(source, start) {
   const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/.exec(source.slice(start));
   return match ? start + match[0].length : void 0;
+}
+function isSafePositiveIntegerLiteral(source, start, end) {
+  try {
+    const value = JSON.parse(source.slice(start, end));
+    return Number.isSafeInteger(value) && Number(value) > 0;
+  } catch {
+    return false;
+  }
 }
 function invocationFromSafeObjectLiteral(source) {
   let cursor = 1;
@@ -35169,6 +35178,7 @@ function invocationFromSafeObjectLiteral(source) {
     }
     const valueEnd = stringValue3?.end ?? safePrimitiveEnd(source, cursor);
     if (valueEnd === void 0) return void 0;
+    if (key === "max_output_tokens" && (stringValue3 !== void 0 || !isSafePositiveIntegerLiteral(source, cursor, valueEnd))) return void 0;
     cursor = valueEnd;
     while (/\s/.test(source[cursor] ?? "")) cursor += 1;
     if (cursor >= source.length - 1) break;
@@ -35200,7 +35210,7 @@ function transcriptExecInvocations(input) {
   if (pragma?.[1] !== void 0) {
     try {
       const parsed = JSON.parse(pragma[1].trim());
-      if (!isCompleteOutputSafeExecArguments(parsed)) return [];
+      if (!isCompleteOutputSafeExecArguments(parsed) || Object.hasOwn(parsed, "max_output_tokens")) return [];
     } catch {
       return [];
     }

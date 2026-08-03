@@ -627,7 +627,7 @@ describe('Codex transcript skill receipt', () => {
     )).toEqual([{ command: "sed -n '1,20p' /trusted/SKILL.md", workdir: '/repo' }])
     expect(transcriptExecInvocations(
       `const r = await tools.exec_command({cmd:"cat /trusted/SKILL.md",max_output_tokens:1}); text(r);`,
-    )).toEqual([])
+    )).toEqual([{ command: 'cat /trusted/SKILL.md' }])
     expect(transcriptExecInvocations(
       `// @exec: {"max_output_tokens":1}\nconst r = await tools.exec_command({cmd:"cat /trusted/SKILL.md"}); text(r);`,
     )).toEqual([])
@@ -927,8 +927,18 @@ describe('Codex transcript skill receipt', () => {
     },
   )
 
-  it('accepts the current Codex content-array ABI when text(result) forwards the complete Skill', async () => {
-    await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
+  it('accepts safe max_output_tokens on the content-array ABI when text(result) forwards the complete Skill', async () => {
+    await writeFile(
+      transcript,
+      eventLines(
+        customResultOutput(),
+        turnId,
+        [skillPath],
+        '2026-07-24T00:02:00Z',
+        { execArgs: { max_output_tokens: 20_000 } },
+      ),
+      'utf8',
+    )
     await recordPendingReceipt()
 
     const result = await reconcileCodexSkillEvidence({
@@ -985,7 +995,33 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
-  it('rejects max_output_tokens on the function-call exec ABI', async () => {
+  it('accepts safe max_output_tokens on the function-call ABI when stdout is complete', async () => {
+    await writeFile(
+      transcript,
+      functionCallSessionScopedEventLines(
+        root,
+        undefined,
+        'function_call_output',
+        undefined,
+        { max_output_tokens: 20_000 },
+      ),
+      'utf8',
+    )
+    await recordPendingReceipt('call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects truncated function-call stdout even when max_output_tokens is a valid exec argument', async () => {
     await writeFile(
       transcript,
       functionCallSessionScopedEventLines(

@@ -19,6 +19,9 @@
 - [x] 完成 identity、coverage、group/dependency、resource、output 与 validator 不变量。 (build)
 - [x] 完成 legacy 非推断 adapter、tasks.md 投影与 pending/drift 恢复。 (build)
 - [x] 修复 transcript discovery 数量预算并补完整 reconcile 回归。 (build)
+- [x] 修复合法 `max_output_tokens` receipt ABI 漂移并补完成态回归。 (build)
+- [x] 修复数组 accessor descriptor 边界且确保 getter 零执行。 (build)
+- [x] 清理 validator 非空断言并按职责拆分超限 HTTP handler。 (build)
 
 ## 验证
 

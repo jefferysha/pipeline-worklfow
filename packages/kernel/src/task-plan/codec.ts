@@ -91,17 +91,42 @@ function array(value: unknown, path: string, limit: number, collector: Collector
       error(collector, 'array_invalid', path)
       return undefined
     }
-    if (value.length > limit) {
-      error(collector, 'array_too_large', path)
-      return undefined
-    }
-    if (!consumeBudget(collector, value.length + 1, 0, path)) return undefined
-    const keys = Reflect.ownKeys(value)
-    if (keys.length !== value.length + 1 || keys.some((key) => typeof key !== 'string')) {
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length')
+    if (
+      lengthDescriptor === undefined
+      || !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value')
+      || typeof lengthDescriptor.value !== 'number'
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+    ) {
       error(collector, 'array_invalid', path)
       return undefined
     }
-    return [...value]
+    const length = lengthDescriptor.value
+    if (length > limit) {
+      error(collector, 'array_too_large', path)
+      return undefined
+    }
+    if (!consumeBudget(collector, length + 1, 0, path)) return undefined
+    const keys = Reflect.ownKeys(value)
+    if (keys.length !== length + 1 || keys.some((key) => typeof key !== 'string')) {
+      error(collector, 'array_invalid', path)
+      return undefined
+    }
+    const result: unknown[] = []
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+      if (
+        descriptor === undefined
+        || !descriptor.enumerable
+        || !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      ) {
+        error(collector, 'array_invalid', path)
+        return undefined
+      }
+      result.push(descriptor.value)
+    }
+    return result
   } catch {
     error(collector, 'array_invalid', path)
     return undefined
