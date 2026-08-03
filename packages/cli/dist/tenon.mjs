@@ -9535,7 +9535,8 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir2, changeName) {
 }
 
 // packages/kernel/dist/state/task-plan-store.js
-var MAX_TASKS_MD_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
+var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 
 // packages/kernel/dist/state/markers.js
 var REVIEW_MARKER_PROTOCOL = "pipeline-review-v2";

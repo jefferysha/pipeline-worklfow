@@ -369,6 +369,39 @@ describe('task plan store', () => {
     )).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
   })
 
+  it.each([
+    ['draft', () => plan({ status: 'draft' })],
+    ['incomplete coverage', () => plan({
+      requirements: [...plan().requirements, { id: 'req-uncovered', title: 'Must be covered' }],
+    })],
+    ['dependency cycle', () => plan({
+      groups: [{ id: 'group-1', title: 'Build', parent_id: null, work_item_ids: ['wi-1', 'wi-2'] }],
+      work_items: [
+        { ...plan().work_items[0]!, depends_on: ['wi-2'] },
+        {
+          ...plan().work_items[0]!, id: 'wi-2', title: 'Second',
+          requirement_refs: [], acceptance_refs: [], depends_on: ['wi-1'],
+        },
+      ],
+    })],
+  ])('fails closed before extending semantically invalid committed %s history', async (_case, fixture) => {
+    const dir = await changeDir()
+    const invalid = fixture()
+    const revisionsDir = await seedCanonicalHistory(dir, [invalid], invalid)
+    const currentPath = join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE)
+    const currentBefore = await readFile(currentPath, 'utf8')
+    const targetPath = join(revisionsDir, '000002-revision-2.json')
+
+    await expect(readTaskPlanForChange(dir)).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
+    await expect(publishTaskPlanRevision(
+      dir,
+      plan({ revision_id: 'revision-2', revision_number: 2 }),
+      { expected_current_revision_id: invalid.revision_id },
+    )).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
+    expect(await readFile(currentPath, 'utf8')).toBe(currentBefore)
+    await expect(readFile(targetPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('fails closed when the committed lineage has a missing revision number', async () => {
     const dir = await changeDir()
     const first = plan()
@@ -628,5 +661,37 @@ describe('task plan store', () => {
     await rm(join(dir, 'tasks.md'), { recursive: true })
     await expect(publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null }))
       .resolves.toMatchObject({ projection: { state: 'current' } })
+  })
+
+  it('keeps a valid projection above the legacy 256 KiB ceiling readable and current', async () => {
+    const dir = await changeDir()
+    const itemIds = Array.from({ length: 40 }, (_, index) => `wi-${index}`)
+    const largeProjection = plan({
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [{ id: 'group-1', title: 'Build', parent_id: null, work_item_ids: itemIds }],
+      work_items: itemIds.map((id, index) => ({
+        id,
+        title: `${index}-` + 'x'.repeat(8_100),
+        group_id: 'group-1',
+        requirement_refs: [],
+        acceptance_refs: [],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      })),
+    })
+
+    const published = await publishTaskPlanRevision(
+      dir,
+      largeProjection,
+      { expected_current_revision_id: null },
+    )
+    expect(Buffer.byteLength(await readFile(join(dir, 'tasks.md')))).toBeGreaterThan(256 * 1024)
+    expect(published).toMatchObject({ projection: { state: 'current' } })
+    await expect(readTaskPlanForChange(dir)).resolves.toMatchObject({
+      revision_id: 'revision-1', projection: { state: 'current' },
+    })
   })
 })

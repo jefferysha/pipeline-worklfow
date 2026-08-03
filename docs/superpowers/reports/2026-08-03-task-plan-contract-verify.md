@@ -171,3 +171,76 @@ $.work_items[0].id=identifier_invalid
 ## 下一步
 
 请求确切 `verify-fail` 复核事件并按授权 delegated acknowledge，退回 Build；用 TDD 修复 persisted-byte 对称性和 Unicode opaque ID，重建 CLI/server 生成物、提交新的 build SHA，再从零执行第 4 轮 Verify。
+
+---
+
+# 第 4 轮 Verify（冻结基线 `5e25a41af13b7d88106984a5966e5472bcbe59c8`）
+
+## 结论
+
+FAIL。第 3 轮的 persisted-byte 对称性和 NFC Unicode opaque ID 缺陷均已修复，receipt bridge 也已通过真实官方门禁重试；但原生 Codex CLI 完整审查发现 2 个新的 P2/MEDIUM store/projection 一致性缺陷，均已在隔离构建上独立复现。未接受偏差，必须回到 Build 修复。
+
+## 冻结身份与零输出 barrier
+
+- exact base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`5e25a41af13b7d88106984a5966e5472bcbe59c8` / `1713195ae8baecf0af2eb81ace35bb16a5754186`。
+- exact binary diff：139 files，`+6880/-1392`，SHA-256 `7ac2eb63c4517a3f4552bef5d1f2a4cc0e0e96b2aba4cd26fad88d0f4c440a3f`。
+- Reviewer 轨复核真实工作区 4 modified + 5 untracked 治理基线的内容、mode、size、inode 前后完全一致；E2E 全树指纹在起始、archive 后、测试后、最终四次均为 `19f56ade2606675fad6f4f9ffb4d7e118e8e76c7`。所有可能写入的命令均在仓库外隔离副本执行。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L3。完整覆盖 139-file frozen diff 与全部受影响 capability；隔离 build、核心 255/255、合并兼容 164/164、全仓 6033 passed / 26 honest skipped、三包 TypeScript、OpenSpec 37/37、architecture/comments/docs/hygiene、bundle smoke 27/27 全通过。
+- E2E：PASS。TaskPlan canonical/legacy/store 64/64、route 5/5、receipt/current wrapper/129+ 17 项、stable hook→document registration 1/1、最大 newline revision 与 NFC Unicode 3/3；真实 HTTP canonical/legacy 与 400/403/404/409 边界符合预期。日志：`/tmp/tenon-pr1-verify2.1i22AQ/`。
+- Codex CLI：FAIL，P2/MEDIUM=2。在 detached clone `/tmp/tenon-pr1-codex.2Y96lL/repo` 运行 `codex exec review --ephemeral --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。启动期 malformed logs DB/models cache 警告未阻止最终输出。其自发的一次 Vitest 因 clone 缺 native optional binding 而 exit 1，诚实记为环境失败，不替代前两轨已通过的隔离测试。
+
+## 确认 findings
+
+### MEDIUM — committed history 未验证 frozen/freezable 语义
+
+历史扫描仅做 decoder 与 identity/continuity 检查。codec-valid、但 `freezable=false` 的旧 immutable revision（例如未覆盖 requirement、dependency cycle 或 draft）仍被当作健康 committed lineage，后续合法 revision 可以越过它发布并成为 current。
+
+隔离复现：旧 revision `invalidFreezable=false`；发布 revision 2 后返回 `revision_id=revision-2`、`projection=current`，即 `publishAdvanced=true`。
+
+修复要求：对 current 与 committed lineage 的每个已提交 revision 执行与 proposed revision 同等的 frozen/freezable 验证；既有语义无效历史必须 typed corrupt、零写入失败关闭，并补 draft、coverage、cycle 与 valid history 回归。
+
+### MEDIUM — 合法投影可超过自身 reader 上限
+
+`publishProjection` 无界写入 rendered Markdown 并立即报告 `current`，而 reader 对 `tasks.md` 使用 256 KiB 上限。合法 canonical JSON 可在 1 MiB 内生成更大的 Markdown，导致发布后下一次读取立即 drift。
+
+隔离复现：40 个接近单项 title 上限的合法 WorkItem 得到 `validFreezable=true`、`markdownBytes=325524`；publish 返回 `projection.state=current`，随后 read 返回 `projection.state=drift`，reason=`tasks.md projection is not a readable bounded regular file`。
+
+修复要求：冻结 projection 公开字节预算并保证 producer/reader 对称；超出预算不得声称 current。保持 canonical current 已提交后的可恢复语义，并补 exact-boundary、over-boundary、publish→read 与重试恢复测试。
+
+## Receipt bridge bug 闭环
+
+- discovery 元数据预算已与既有 4096 entry 上限对齐，同时保留最新 32 个全文读取、512 MiB、session/turn/worktree、ABI 与 inode/version fences；129+ 完整 reconcile 回归通过。
+- inline `max_output_tokens` 仅接受正安全整数字面量；pragma、动态/零/负/小数/超安全整数、截断 Skill、output-only 与重序列化 wrapper 继续失败关闭。
+- 本回合先以不满足 literal same-result `text(result)` 的读取触发官方拒绝，再以精确 `const result = await tools.exec_command({...}); text(result)` 读取当前 phase Skills；官方 tasks 登记和 Build→Verify transition 随后成功。这证明修复消除 false negative，但没有放宽完成态证据。
+
+## OpenSpec 隔离应用硬门
+
+- 真实主规格前后 digest 均为 `513bae7ec8b18dc850f358bac40ce6668b9d53cc3a2aaa6cc3a8f60029b89e25`。
+- 冻结 clone 中 `openspec show`、Change strict validate、`openspec archive --yes --json`、全量 strict validate 均 exit 0；applied 7 added + 2 modified requirements，37 passed / 0 failed。真实 `openspec/specs` 零写入。
+
+## Step 1.5 逐文件 capability 回读
+
+`git diff --name-only dc53843e61f812938f13c684a41ffe1d935e48bf..5e25a41af13b7d88106984a5966e5472bcbe59c8` 的 139/139 个路径均已逐行枚举；name-status manifest SHA-256 为 `3514d7c6e3840fe772d6d34124c8d2087698da83e75a690dc4be8012e78943af`。映射如下，组内每个文件均由 Reviewer 单独回读并对照 diff：
+
+| frozen 文件集合 | capability spec | 结果 |
+| --- | --- | --- |
+| 111 个 `.pipeline-*`、43 revisions、43 pre-Verify receipts、13 transitions、proposal/design/tasks | 两项 delta + governance contract | 111/111 ✅ |
+| 5 个 ADR/research/design/plan/Verify 文档 | 两项 delta + Change contract | 5/5 ✅ |
+| `packages/cli/src/codex*` 与 `packages/cli/dist/tenon.mjs` | `codex-skill-receipt-current-turn` | 5/5 ✅ |
+| `packages/kernel/src/task-plan/*`、state store/exports | `task-plan-contract` | 13/13 ✅ |
+| TaskPlan server routes/tests/GET wiring 与 server bundle | `task-plan-contract` | 5/5 ✅ |
+
+## 保留 LOW 与未运行项
+
+- L1：bounded text reader 对非法 UTF-8 使用 replacement decode，未显式 fail closed。
+- L2：path-based atomic tmp/link/rename 存在同用户父目录替换的极窄 TOCTOU 窗口，尚未使用 dirfd/openat。
+- L3：transcript discovery 在 mtime/ctime 完全相同时用默认 locale 的 `localeCompare` 排路径；超过 32 个同时间候选时可能跨宿主 false-negative，但不会放宽证据接受。
+- Docker daemon 与真实 Codex 凭证相关套件按既有条件诚实跳过；本 Change 无精确前端源码 diff，因此未运行浏览器视觉验收，生产 Web build已通过。
+
+## 下一步
+
+登记本报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复 committed history 语义验证与 projection 预算对称性，重建正式生成物、提交新冻结 SHA，再从零执行第 5 轮完整三轨。

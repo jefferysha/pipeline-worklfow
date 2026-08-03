@@ -7456,7 +7456,8 @@ import { isAbsolute as isAbsolute4, join as join15, relative as relative4, sep a
 var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
 var TASK_PLAN_CURRENT_FILE = "current.json";
 var TASK_PLAN_REVISIONS_DIR = "revisions";
-var MAX_TASKS_MD_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
+var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 var TaskPlanStateCorruptError = class extends Error {
   name = "TaskPlanStateCorruptError";
 };
@@ -7497,17 +7498,24 @@ async function readRegular(path7, maxBytes) {
     throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
   }
 }
+function assertCommittedRevisionSemantics(revision) {
+  const validation = validateTaskPlanRevisionV1(revision);
+  if (revision.status !== "frozen" || !validation.freezable) {
+    throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
+  }
+}
 async function readTaskPlanForChange(changeDir) {
   const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
   const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
   const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
   if (currentRaw === void 0) {
-    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_TASKS_MD_BYTES);
+    const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
     return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
   }
   const decoded = decodeTaskPlanRevisionV1(currentRaw);
   if (!decoded.ok)
     throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
+  assertCommittedRevisionSemantics(decoded.value);
   await assertOwnedDirectory(changeDir, stateDir);
   await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
   const immutablePath = join15(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName3(decoded.value));
@@ -7518,7 +7526,7 @@ async function readTaskPlanForChange(changeDir) {
   let tasks;
   let projectionReadFailed = false;
   try {
-    tasks = await readRegular(join15(changeDir, "tasks.md"), MAX_TASKS_MD_BYTES);
+    tasks = await readRegular(join15(changeDir, "tasks.md"), MAX_CANONICAL_TASKS_MD_BYTES);
   } catch {
     projectionReadFailed = true;
   }

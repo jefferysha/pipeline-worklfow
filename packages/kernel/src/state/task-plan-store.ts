@@ -19,7 +19,8 @@ import { withLock } from './lock.js'
 export const TASK_PLAN_STATE_DIR = '.pipeline-task-plan'
 export const TASK_PLAN_CURRENT_FILE = 'current.json'
 export const TASK_PLAN_REVISIONS_DIR = 'revisions'
-const MAX_TASKS_MD_BYTES = 256 * 1024
+const MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024
+const MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes
 
 export class TaskPlanStateCorruptError extends Error {
   override readonly name = 'TaskPlanStateCorruptError'
@@ -93,6 +94,13 @@ interface TaskPlanRevisionAdmission {
   readonly targetExists: boolean
 }
 
+function assertCommittedRevisionSemantics(revision: TaskPlanRevisionV1): void {
+  const validation = validateTaskPlanRevisionV1(revision)
+  if (revision.status !== 'frozen' || !validation.freezable) {
+    throw new TaskPlanStateCorruptError('TaskPlan committed lineage contains non-freezable state')
+  }
+}
+
 async function assertCommittedLineageAndAdmission(
   revisionsDir: string,
   proposed: TaskPlanRevisionV1,
@@ -153,6 +161,7 @@ async function assertCommittedLineageAndAdmission(
       || historical.plan_id !== current.plan_id
       || historical.revision_number > current.revision_number
     ) continue
+    assertCommittedRevisionSemantics(historical)
     if (entry.name !== revisionFileName(historical)) {
       throw new TaskPlanStateCorruptError('TaskPlan committed lineage filename disagrees with its content')
     }
@@ -213,6 +222,12 @@ async function publishProjection(
     completed_work_item_ids: completedWorkItemIds,
     digest: digest(raw),
   })
+  if (Buffer.byteLength(markdown) > MAX_CANONICAL_TASKS_MD_BYTES) {
+    return toTaskPlanReadModelV1(revision, {
+      state: 'pending',
+      reason: 'tasks.md projection exceeds the canonical byte budget',
+    })
+  }
   try {
     await atomicReplaceFile(join(changeDir, 'tasks.md'), markdown)
     return toTaskPlanReadModelV1(revision, { state: 'current' })
@@ -301,11 +316,12 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
   const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
   if (currentRaw === undefined) {
-    const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_TASKS_MD_BYTES)
+    const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_LEGACY_TASKS_MD_BYTES)
     return legacy === undefined ? null : adaptLegacyTasksMd(legacy)
   }
   const decoded = decodeTaskPlanRevisionV1(currentRaw)
   if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
+  assertCommittedRevisionSemantics(decoded.value)
   await assertOwnedDirectory(changeDir, stateDir)
   await assertOwnedDirectory(changeDir, join(stateDir, TASK_PLAN_REVISIONS_DIR))
   const immutablePath = join(stateDir, TASK_PLAN_REVISIONS_DIR, revisionFileName(decoded.value))
@@ -317,7 +333,7 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   let tasks: string | undefined
   let projectionReadFailed = false
   try {
-    tasks = await readRegular(join(changeDir, 'tasks.md'), MAX_TASKS_MD_BYTES)
+    tasks = await readRegular(join(changeDir, 'tasks.md'), MAX_CANONICAL_TASKS_MD_BYTES)
   } catch {
     projectionReadFailed = true
   }

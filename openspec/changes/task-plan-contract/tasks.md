@@ -30,6 +30,8 @@
 - [x] 在任何写入前把 proposed target 计入 revision 历史预算，并让逐字节幂等重试先验证完整 lineage；补 exact-cap、byte-cap、零写入和损坏历史红绿回归。 (build)
 - [x] 使 1,048,577-byte newline-terminated revision 在 publish、read 与后续 lineage 扫描中保持对称，并补精确边界红绿回归。 (build)
 - [x] 使 NFC Unicode opaque ID 通过 codec/store/ordinal validation，并保留 NFD、分隔符、空白与控制字符拒绝。 (build)
+- [x] 对 current 与 committed lineage 执行 frozen/freezable 语义校验，以 typed corrupt 和零写入拒绝 draft、coverage 缺口与 dependency cycle 历史。 (build)
+- [x] 分离 legacy 与 canonical projection 字节预算，使超过旧 256 KiB 的合法 canonical tasks.md 在 publish/read 间保持 current。 (build)
 
 ## 验证
 
