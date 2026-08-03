@@ -1,5 +1,5 @@
 import {
-  byteLength,
+  byteLengthWithin,
   deepFreeze,
   exactResourceKey,
   hasInvalidSurrogate,
@@ -81,7 +81,13 @@ function record(value: unknown, path: string, collector: Collector): Record<stri
       }
       // Object input bypasses JSON parsing, so its field names must consume the same document
       // budget before we copy descriptor values or echo a hostile key into a diagnostic path.
-      if (!consumeBudget(collector, 0, byteLength(key), path)) return undefined
+      const remainingBytes = TASK_PLAN_LIMITS.maxDocumentBytes - collector.textBytes
+      const keyBytes = byteLengthWithin(key, remainingBytes)
+      if (keyBytes === undefined) {
+        consumeBudget(collector, 0, remainingBytes + 1, path)
+        return undefined
+      }
+      if (!consumeBudget(collector, 0, keyBytes, path)) return undefined
       const descriptor = Object.getOwnPropertyDescriptor(value, key)
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
         error(collector, 'object_invalid', path)
@@ -100,14 +106,16 @@ function closed(raw: Record<string, unknown>, allowed: readonly string[], path: 
   const keys = new Set(allowed)
   for (const key of Object.keys(raw).sort()) {
     if (keys.has(key)) continue
+    const fallbackPath = `${path}.[unknown-field-too-large]`
+    const maximumKeyUnits = TASK_PLAN_LIMITS.maxTextBytes - path.length - 1
+    if (key.length > maximumKeyUnits) {
+      error(collector, 'unknown_field', fallbackPath)
+      continue
+    }
     const candidatePath = `${path}.${key}`
-    error(
-      collector,
-      'unknown_field',
-      byteLength(candidatePath) <= TASK_PLAN_LIMITS.maxTextBytes
-        ? candidatePath
-        : `${path}.[unknown-field-too-large]`,
-    )
+    error(collector, 'unknown_field', byteLengthWithin(candidatePath, TASK_PLAN_LIMITS.maxTextBytes) === undefined
+      ? fallbackPath
+      : candidatePath)
   }
 }
 
@@ -173,6 +181,16 @@ function text(
     error(collector, 'field_type', path)
     return undefined
   }
+  if (value.length > maxBytes) {
+    error(collector, 'field_too_large', path)
+    return undefined
+  }
+  const bytes = byteLengthWithin(value, maxBytes)
+  if (bytes === undefined) {
+    error(collector, 'field_too_large', path)
+    return undefined
+  }
+  if (!consumeBudget(collector, 0, bytes, path)) return undefined
   if (hasInvalidSurrogate(value)) {
     error(collector, 'unicode_invalid', path)
     return undefined
@@ -185,11 +203,6 @@ function text(
     error(collector, 'field_required', path)
     return undefined
   }
-  if (byteLength(value) > maxBytes) {
-    error(collector, 'field_too_large', path)
-    return undefined
-  }
-  if (!consumeBudget(collector, 0, byteLength(value), path)) return undefined
   return value
 }
 
@@ -405,7 +418,7 @@ export function decodeTaskPlanRevisionAttemptV1(input: string | unknown): TaskPl
   }
   let candidate = input
   if (typeof input === 'string') {
-    if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
+    if (byteLengthWithin(input, TASK_PLAN_LIMITS.maxRevisionBytes) === undefined) {
       return deepFreeze({ errors: [{ code: 'document_too_large', path: '$' }], overflow: false })
     }
     try { candidate = JSON.parse(input) as unknown } catch {
@@ -414,7 +427,7 @@ export function decodeTaskPlanRevisionAttemptV1(input: string | unknown): TaskPl
   }
   const value = decodeUnknown(candidate, collector)
   if (!collector.budgetExceeded && value !== undefined
-    && byteLength(JSON.stringify(value)) > TASK_PLAN_LIMITS.maxDocumentBytes) {
+    && byteLengthWithin(JSON.stringify(value), TASK_PLAN_LIMITS.maxDocumentBytes) === undefined) {
     error(collector, 'document_too_large', '$')
   }
   return deepFreeze({

@@ -41,6 +41,7 @@
 - [x] 将 immutable revision addressing 纳入 plan namespace，兼容读取旧 flat history，并补 different-plan 同号同 ID 的红绿回归。 (build)
 - [x] 对 canonical TaskPlan state 使用 fatal UTF-8 与原始 bytes identity，拒绝 replacement decode 后伪相等的 current/immutable。 (build)
 - [x] 将 object field-name UTF-8 bytes 纳入 decoder 总预算，并使 unknown-field diagnostic path 保持有界。 (build)
+- [x] 在任何 Unicode/trim 扫描前以有界 UTF-8 counter 拒绝超限 object key/text，确保 hostile object CPU 工作受契约预算约束。 (build)
 
 ## 验证
 

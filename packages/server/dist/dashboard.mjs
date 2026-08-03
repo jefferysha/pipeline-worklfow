@@ -668,7 +668,9 @@ function taskPlanEntityIdEntries(value) {
     ])
   ];
 }
-function byteLength(value) {
+function byteLengthWithin(value, limit) {
+  if (!Number.isSafeInteger(limit) || limit < 0 || value.length > limit)
+    return void 0;
   let bytes = 0;
   for (let index = 0; index < value.length; index += 1) {
     const current = value.charCodeAt(index);
@@ -687,6 +689,8 @@ function byteLength(value) {
     } else {
       bytes += 3;
     }
+    if (bytes > limit)
+      return void 0;
   }
   return bytes;
 }
@@ -794,7 +798,13 @@ function record(value, path7, collector) {
         error(collector, "object_invalid", path7);
         return void 0;
       }
-      if (!consumeBudget(collector, 0, byteLength(key), path7))
+      const remainingBytes = TASK_PLAN_LIMITS.maxDocumentBytes - collector.textBytes;
+      const keyBytes = byteLengthWithin(key, remainingBytes);
+      if (keyBytes === void 0) {
+        consumeBudget(collector, 0, remainingBytes + 1, path7);
+        return void 0;
+      }
+      if (!consumeBudget(collector, 0, keyBytes, path7))
         return void 0;
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
@@ -814,8 +824,14 @@ function closed(raw, allowed, path7, collector) {
   for (const key of Object.keys(raw).sort()) {
     if (keys.has(key))
       continue;
+    const fallbackPath = `${path7}.[unknown-field-too-large]`;
+    const maximumKeyUnits = TASK_PLAN_LIMITS.maxTextBytes - path7.length - 1;
+    if (key.length > maximumKeyUnits) {
+      error(collector, "unknown_field", fallbackPath);
+      continue;
+    }
     const candidatePath = `${path7}.${key}`;
-    error(collector, "unknown_field", byteLength(candidatePath) <= TASK_PLAN_LIMITS.maxTextBytes ? candidatePath : `${path7}.[unknown-field-too-large]`);
+    error(collector, "unknown_field", byteLengthWithin(candidatePath, TASK_PLAN_LIMITS.maxTextBytes) === void 0 ? fallbackPath : candidatePath);
   }
 }
 function array(value, path7, limit, collector) {
@@ -865,6 +881,17 @@ function text(value, path7, collector, maxBytes = TASK_PLAN_LIMITS.maxTextBytes)
     error(collector, "field_type", path7);
     return void 0;
   }
+  if (value.length > maxBytes) {
+    error(collector, "field_too_large", path7);
+    return void 0;
+  }
+  const bytes = byteLengthWithin(value, maxBytes);
+  if (bytes === void 0) {
+    error(collector, "field_too_large", path7);
+    return void 0;
+  }
+  if (!consumeBudget(collector, 0, bytes, path7))
+    return void 0;
   if (hasInvalidSurrogate(value)) {
     error(collector, "unicode_invalid", path7);
     return void 0;
@@ -877,12 +904,6 @@ function text(value, path7, collector, maxBytes = TASK_PLAN_LIMITS.maxTextBytes)
     error(collector, "field_required", path7);
     return void 0;
   }
-  if (byteLength(value) > maxBytes) {
-    error(collector, "field_too_large", path7);
-    return void 0;
-  }
-  if (!consumeBudget(collector, 0, byteLength(value), path7))
-    return void 0;
   return value;
 }
 function identifier(value, path7, collector) {
@@ -1119,7 +1140,7 @@ function decodeTaskPlanRevisionAttemptV1(input) {
   };
   let candidate = input;
   if (typeof input === "string") {
-    if (byteLength(input) > TASK_PLAN_LIMITS.maxRevisionBytes) {
+    if (byteLengthWithin(input, TASK_PLAN_LIMITS.maxRevisionBytes) === void 0) {
       return deepFreeze({ errors: [{ code: "document_too_large", path: "$" }], overflow: false });
     }
     try {
@@ -1129,7 +1150,7 @@ function decodeTaskPlanRevisionAttemptV1(input) {
     }
   }
   const value = decodeUnknown(candidate, collector);
-  if (!collector.budgetExceeded && value !== void 0 && byteLength(JSON.stringify(value)) > TASK_PLAN_LIMITS.maxDocumentBytes) {
+  if (!collector.budgetExceeded && value !== void 0 && byteLengthWithin(JSON.stringify(value), TASK_PLAN_LIMITS.maxDocumentBytes) === void 0) {
     error(collector, "document_too_large", "$");
   }
   return deepFreeze({

@@ -640,3 +640,35 @@ FAIL。第 10 轮的 cross-plan immutable pathname collision 已以与 legacy fi
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 引入 fatal canonical UTF-8/read-byte identity 与 bounded property-name diagnostics，重建正式生成物、完成独立 pre-Verify review，再从零执行第 12 轮三轨。
+
+---
+
+# 第 12 轮 Verify（冻结基线 `b1fe2edb23b01833593c6257beb4112eb0e0e7bd`）
+
+## 结论
+
+FAIL。第 11 轮确认的 canonical 非法 UTF-8 与未知字段名预算/诊断路径缺陷均已闭环，Reviewer 与 E2E 通过；但原生 Codex CLI 在完整冻结审查中发现 1 个新的 P2/MEDIUM：公开 object decoder 虽最终会拒绝超预算字符串，`byteLength()` 与其之前的文本检查仍会先完整扫描任意长度字符串，hostile caller 可令 CPU 工作量突破冻结的 bounded-input 契约。不得以本轮两个通过轨抵消该 finding，必须回 Build 修复并从零重跑三轨。
+
+## 冻结身份与三轨结果
+
+- exact base：`dc53843e61f812938f13c684a41ffe1d935e48bf`；frozen SHA/tree：`b1fe2edb23b01833593c6257beb4112eb0e0e7bd` / `883dbb29a8abb836317c9fabca98b68da58c6bd2`。
+- Reviewer：PASS，C0/H0/M0/L1。focused 277/277、全仓 337 files / 6078 passed / 26 honest skipped、Dashboard 87 files / 1633 passed、hermetic bundle 27/27、OpenSpec strict 37/37；fatal UTF-8、raw Buffer identity、合法 U+FFFD、manual byte counter exhaustive equality 与 hostile harness 全通过。证据根 `/tmp/tenon-pr1-r12v-track1.BUc4YC/`。
+- E2E：PASS，C0/H0/M0/L0。TaskPlan 104/104、route 10/10、receipt 163/163、stable-hook 3/3；真实 FS/HTTP 证明 invalid UTF-8 typed corrupt 且零写、合法 U+FFFD、EEXIST、root-anchor replacement、legacy 与 129+ receipt 均通过。证据根 `/tmp/tenon-pr1-verify12.NmpT3Z/`。
+- Codex CLI：FAIL，P2/MEDIUM=1。在 detached read-only clone `/tmp/tenon-pr1-codex-r12.Gvzl8K/repo` 对 exact frozen SHA/base 执行完整 review，exit 0；启动期 logs DB/models cache 警告未阻止最终输出。
+
+## 确认 finding
+
+### MEDIUM — decoder 在预算拒绝前仍完整扫描任意长度字符串
+
+`packages/kernel/src/task-plan/internal.ts` 的 `byteLength()` 为了无分配计算 UTF-8 字节数，会遍历整个 JS 字符串。`record()` 对字段名调用它后才将结果交给 1 MiB aggregate budget；`text()` 还会先执行 surrogate、control、trim 等完整扫描，再检查字段上限。因此一个远超任何契约上限的 object-form property name 或 text value 虽最终失败关闭，仍可让 decoder 执行与攻击者提供的任意长度成正比的 CPU 工作，违反 hostile object bounded-input 契约。
+
+修复要求：为字段名和文本引入 remaining-budget/max-field-aware 的有界 UTF-8 计数，或在进入 Unicode 扫描前以安全的 code-unit 长度上界做 O(1) 拒绝；所有 surrogate/control/trim 与 path 构造也必须只在已证明有界后执行。补巨大 known/unknown key、巨大 text、ASCII/BMP/astral 与边界值回归，证明 getter/accessor 零执行、错误 path 有界，且正常 Unicode 语义不变。
+
+## LOW 与未完成通过门
+
+- L1：transcript mtimeNs/ctimeNs 完全相同时仍以 locale-sensitive `localeCompare(path)` 选择 newest-32，跨 ICU locale 可能诚实漏检，但不能产生 false-positive evidence。
+- 本轮 Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，且不复用本轮 Reviewer/E2E 通过证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail`；按持续授权 delegated acknowledge 后回 Build。以 TDD 先证明 oversized hostile strings 在常数/预算上界内拒绝，再实现 bounded counter/前置拒绝、重建正式生成物、完成独立 pre-Verify review，并从零执行第 13 轮三轨。

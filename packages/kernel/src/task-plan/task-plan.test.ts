@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   decodeTaskPlanRevisionV1,
   encodeTaskPlanRevisionV1,
@@ -7,7 +7,7 @@ import {
   validateTaskPlanRevisionV1,
   type TaskPlanRevisionV1,
 } from './index.js'
-import { byteLength } from './internal.js'
+import { byteLength, byteLengthWithin } from './internal.js'
 
 function revision(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {
   return {
@@ -58,6 +58,29 @@ describe('TaskPlan v1 codec', () => {
     'a\udc00b',
   ])('counts UTF-8 bytes without allocating an encoded copy for %j', (value) => {
     expect(byteLength(value)).toBe(new TextEncoder().encode(value).byteLength)
+  })
+
+  it.each([
+    ['ASCII exact', 'abcd', 4, 4],
+    ['ASCII overflow', 'abcd', 3, undefined],
+    ['BMP exact', '计划', 6, 6],
+    ['BMP overflow', '计划', 5, undefined],
+    ['astral exact', '😀', 4, 4],
+    ['astral overflow', '😀', 3, undefined],
+    ['unpaired surrogate replacement', '\ud800', 3, 3],
+  ])('counts UTF-8 only within a caller budget: %s', (_label, value, limit, expected) => {
+    expect(byteLengthWithin(value, limit)).toBe(expected)
+  })
+
+  it('rejects a many-times-over-budget string through the bounded byte counter', () => {
+    const hostile = 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes * 4)
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt')
+    try {
+      expect(byteLengthWithin(hostile, TASK_PLAN_LIMITS.maxDocumentBytes)).toBeUndefined()
+      expect(charCodeAt).not.toHaveBeenCalled()
+    } finally {
+      charCodeAt.mockRestore()
+    }
   })
 
   it('rejects line-breaking control characters before they can escape a Markdown projection', () => {
@@ -183,6 +206,14 @@ describe('TaskPlan v1 codec', () => {
     })
   })
 
+  it('rejects a many-times-over-budget encoded document through the bounded counter', () => {
+    expect(decodeTaskPlanRevisionV1(' '.repeat(TASK_PLAN_LIMITS.maxRevisionBytes * 4))).toEqual({
+      ok: false,
+      errors: [{ code: 'document_too_large', path: '$' }],
+      overflow: false,
+    })
+  })
+
   it('rejects an accessor-backed array without invoking its index getter', () => {
     const entry = revision().requirements[0]!
     const hostile = [entry]
@@ -234,6 +265,34 @@ describe('TaskPlan v1 codec', () => {
       errors: [{ code: 'document_too_large', path: '$' }],
       overflow: false,
     })
+  })
+
+  it('rejects a many-times-over-budget text value before Unicode and whitespace validation', () => {
+    const oversizedTitle = 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes * 4)
+    const originalCharCodeAt = String.prototype.charCodeAt
+    let oversizedScans = 0
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt').mockImplementation(function (index) {
+      if (String(this) === oversizedTitle) oversizedScans += 1
+      return originalCharCodeAt.call(this, index)
+    })
+    let decoded: ReturnType<typeof decodeTaskPlanRevisionV1>
+    try {
+      decoded = decodeTaskPlanRevisionV1(revision({
+        work_items: revision().work_items.map((item, index) => index === 0
+          ? { ...item, title: oversizedTitle }
+          : item),
+      }))
+    } finally {
+      charCodeAt.mockRestore()
+    }
+
+    expect(decoded.ok).toBe(false)
+    if (decoded.ok) return
+    expect(decoded.errors).toContainEqual({
+      code: 'field_too_large',
+      path: '$.work_items[0].title',
+    })
+    expect(oversizedScans).toBe(0)
   })
 
   it.each([

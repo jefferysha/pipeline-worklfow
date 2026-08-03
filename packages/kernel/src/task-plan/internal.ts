@@ -26,7 +26,10 @@ export function taskPlanEntityIdEntries(value: TaskPlanRevisionV1): readonly Tas
   ]
 }
 
-export function byteLength(value: string): number {
+export function byteLengthWithin(value: string, limit: number): number | undefined {
+  // Every UTF-16 code unit contributes at least one UTF-8 byte. This constant-time lower-bound
+  // check prevents an arbitrarily large hostile string from forcing a full scan before rejection.
+  if (!Number.isSafeInteger(limit) || limit < 0 || value.length > limit) return undefined
   let bytes = 0
   for (let index = 0; index < value.length; index += 1) {
     const current = value.charCodeAt(index)
@@ -45,8 +48,13 @@ export function byteLength(value: string): number {
       // BMP scalars and unpaired low surrogates both encode to three bytes (the latter as U+FFFD).
       bytes += 3
     }
+    if (bytes > limit) return undefined
   }
   return bytes
+}
+
+export function byteLength(value: string): number {
+  return byteLengthWithin(value, Number.MAX_SAFE_INTEGER) ?? Number.MAX_SAFE_INTEGER
 }
 
 export function hasInvalidSurrogate(value: string): boolean {
