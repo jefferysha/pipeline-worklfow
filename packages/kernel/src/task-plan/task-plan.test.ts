@@ -207,6 +207,80 @@ describe('TaskPlan v1 codec', () => {
     if (decoded.ok) throw new Error('expected decode failure')
     expect(decoded.errors.map((entry) => entry.code)).toContain('document_too_large')
   })
+
+  it('counts hostile object field-name bytes before copying values or building diagnostics', () => {
+    const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
+    const oversizedKey = 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes + 1)
+    Object.defineProperty(input, oversizedKey, {
+      enumerable: true,
+      configurable: true,
+      value: true,
+    })
+
+    expect(decodeTaskPlanRevisionV1(input)).toEqual({
+      ok: false,
+      errors: [{ code: 'document_too_large', path: '$' }],
+      overflow: false,
+    })
+  })
+
+  it.each([
+    ['cumulative ASCII keys', ['x'.repeat(600_000), 'y'.repeat(600_000)]],
+    ['one multibyte key', ['界'.repeat(Math.floor(TASK_PLAN_LIMITS.maxDocumentBytes / 3) + 1)]],
+  ])('counts %s by UTF-8 bytes against the aggregate document budget', (_label, keys) => {
+    const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
+    for (const key of keys) {
+      Object.defineProperty(input, key, {
+        enumerable: true,
+        configurable: true,
+        value: true,
+      })
+    }
+
+    expect(decodeTaskPlanRevisionV1(input)).toEqual({
+      ok: false,
+      errors: [{ code: 'document_too_large', path: '$' }],
+      overflow: false,
+    })
+  })
+
+  it('does not invoke an accessor after an oversized property name exhausts the budget', () => {
+    const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
+    let getterCalls = 0
+    Object.defineProperty(input, 'x'.repeat(TASK_PLAN_LIMITS.maxDocumentBytes + 1), {
+      enumerable: true,
+      configurable: true,
+      get() {
+        getterCalls += 1
+        return true
+      },
+    })
+
+    expect(decodeTaskPlanRevisionV1(input)).toMatchObject({
+      ok: false,
+      errors: [{ code: 'document_too_large', path: '$' }],
+    })
+    expect(getterCalls).toBe(0)
+  })
+
+  it('bounds unknown-field paths whose keys fit inside the aggregate document budget', () => {
+    const input = revision() as TaskPlanRevisionV1 & Record<string, unknown>
+    const longUnknownKey = '界'.repeat(TASK_PLAN_LIMITS.maxTextBytes)
+    Object.defineProperty(input, longUnknownKey, {
+      enumerable: true,
+      configurable: true,
+      value: true,
+    })
+
+    const decoded = decodeTaskPlanRevisionV1(input)
+    expect(decoded.ok).toBe(false)
+    if (decoded.ok) return
+    expect(decoded.errors).toContainEqual({
+      code: 'unknown_field',
+      path: '$.[unknown-field-too-large]',
+    })
+    expect(decoded.errors.every((entry) => Buffer.byteLength(entry.path) <= TASK_PLAN_LIMITS.maxTextBytes)).toBe(true)
+  })
 })
 
 describe('TaskPlan v1 validation and read projection', () => {

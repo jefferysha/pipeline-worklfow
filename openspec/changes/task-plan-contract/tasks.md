@@ -39,6 +39,8 @@
 - [x] 消除公共 validator/read-model 对 caller-owned codec-invalid 对象的回退，使用安全 decoded candidate 保留 duplicate 诊断，并让 Proxy trap 与未知字段稳定失败关闭。 (build)
 - [x] 在 TaskPlan GET 的 Change capture/read 全生命周期复核持久 registered-root inode anchor，并以 capture 前与读取中 root replacement 回归证明失败关闭。 (build)
 - [x] 将 immutable revision addressing 纳入 plan namespace，兼容读取旧 flat history，并补 different-plan 同号同 ID 的红绿回归。 (build)
+- [x] 对 canonical TaskPlan state 使用 fatal UTF-8 与原始 bytes identity，拒绝 replacement decode 后伪相等的 current/immutable。 (build)
+- [x] 将 object field-name UTF-8 bytes 纳入 decoder 总预算，并使 unknown-field diagnostic path 保持有界。 (build)
 
 ## 验证
 

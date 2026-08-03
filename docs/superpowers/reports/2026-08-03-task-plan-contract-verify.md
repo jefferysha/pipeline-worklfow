@@ -575,3 +575,68 @@ FAIL。第 9 轮 registered-root inode anchor 缺陷已经修复，Reviewer 与 
 ## 下一步
 
 登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 修复 immutable storage 的 plan namespace 与兼容读取，重建正式生成物、完成独立 pre-Verify review，再从零执行第 11 轮三轨。
+
+---
+
+# 第 11 轮 Verify（冻结基线 `6be63609e18ccdf5f4471a31351d0a04e2dbf1ce`）
+
+## 结论
+
+FAIL。第 10 轮的 cross-plan immutable pathname collision 已以与 legacy filename language 不相交的 `<number>--<plan-hash>--<revision-id>.json` 形式闭环，Reviewer 与 E2E 均通过；但原生 Codex CLI 完整审查发现并由主轨在冻结隔离构建上动态复现 2 个新的 P2/MEDIUM：canonical history 的非法 UTF-8 会被 replacement decode 后按字符串接受，以及公开 object decoder 的未知字段名未计入 hostile-input budget、可生成无界诊断路径。未接受偏差，必须回到 Build 修复并从零重跑三轨。
+
+## 冻结身份与 repo-zero barrier
+
+- exact base/merge-base：`dc53843e61f812938f13c684a41ffe1d935e48bf`。
+- frozen SHA/tree：`6be63609e18ccdf5f4471a31351d0a04e2dbf1ce` / `dd7412ae80d5fb44ec6f584f1277c20f935fd094`。
+- Reviewer 映射 281 paths、`+9249/-1392`；106 个 pre-Verify receipts、106 个 revisions、29 个 transitions、12 个 Change docs/state、5 个 design docs、5 个 CLI、13 个 kernel、5 个 server 路径全部逐项回读。
+- Reviewer 与 E2E 对真实 worktree 的 HEAD/tree、tracked/untracked NUL manifest、mode/symlink、status 与内容指纹前后检查均一致。E2E 真实 worktree full fingerprint 始终为 `c8edebdaa9bf064bfed55286c200cbe67f5ad3e9`；所有 build、测试、HTTP、hostile fixture 与 archive rehearsal 均在仓外隔离副本执行。
+
+## 三轨结果
+
+- Reviewer：PASS，C0/H0/M0/L5。fresh `npm ci && npm run build` 后 generated diff=0；focused 6 files / 264 passed；Dashboard 87 files / 1633 passed；TypeScript、architecture、comments、OpenSpec strict、hermetic bundle 27/27、archive 后 37/37 全通过。全仓每个测试文件均输出绿色且只有既有 Docker/real-agent honest skips，但 Vitest 3.2.7 最后遗留空闲 worker、无摘要，等待后人工中止，诚实记录为 teardown 环境限制。
+- E2E：PASS。TaskPlan/legacy/store 91/91、route 10/10、receipt 163/163、stable-hook 3/3；Store 兼容/预算专项 20/20。真实 filesystem 证明 legacy single-hyphen foreign orphan 与新 `--hash--` target 可共存、旧 flat current 可读并可幂等 republish 且不隐式迁移、same-plan future flat orphan 继续保留 ID；真实 HTTP 6/6，root replacement 均 403 且无 secret；OpenSpec archive `+7/~2` 后 37/37。无前端源码 diff，browser N/A。证据根 `/tmp/tenon-pr1-verify11.grD1AQ`。
+- Codex CLI：FAIL，P2/MEDIUM=2。在 detached read-only clone `/tmp/tenon-pr1-codex-r11.jwzbbE/repo` 运行 `codex exec --sandbox read-only --ephemeral review --base dc53843e61f812938f13c684a41ffe1d935e48bf`，exit 0。启动期 malformed logs DB/models cache 警告未阻止最终输出；其自发 Vitest 命令因隔离 clone 未安装项目固定版本而由临时 npx 解析到不兼容 CLI option，诚实记为审查环境失败，不替代前两轨的 fresh 正式测试。
+
+## 确认 findings
+
+### MEDIUM — 非法 UTF-8 canonical bytes 经 replacement decode 后可被接受为相同 history
+
+`readOptionalBoundedRegularTextFile` 的文本读取使用 Node 默认非 fatal UTF-8 decode。`current.json` 与 immutable twin 即使原始字节不同，只要不同非法 byte sequence 都被替换为 U+FFFD，`task-plan-store.ts` 后续的 string equality 与 codec 就可能同时通过，把 byte-corrupt canonical state 当作合法 committed history。这违反 immutable/current 逐字节相同与 corrupt-state fail-closed 契约。
+
+主轨在冻结 Track2 构建中构造一份合法 revision，在同一 JSON string 位置分别把 U+FFFD 的 UTF-8 bytes 替换为单字节 `ff` 与 `fe`，将前者写入 current、后者写入 canonical immutable。动态结果：
+
+```json
+{"rawEqual":false,"decodedEqual":true,"currentHex":"ff","immutableHex":"fe","accepted":true,"source":"canonical","revision":"revision-1"}
+```
+
+修复要求：canonical TaskPlan state 必须在解析或 identity comparison 前使用 fatal UTF-8 decode，或保留并逐字节比较原始 Buffer；current、immutable、history scan 与 legacy fallback 的边界要明确分离。补非法单字节、多字节截断、current/immutable 不同损坏但 replacement string 相同、合法 U+FFFD、零写入发布/幂等重试回归。
+
+### MEDIUM — 超长未知字段名绕过 object-input budget 并生成无界 error path
+
+公开 `decodeTaskPlanRevisionV1(object)` 的 `record()` 只把 own-key 数量计入 node budget，不把 property-name bytes 计入 text/document budget；`closed()` 随后直接用 `` `${path}.${key}` `` 构造诊断。攻击者无需 accessor 或 JSON parse，即可通过一个巨大的 enumerable data-property name 让 decoder 分配同量级错误 path，突破已冻结的 bounded hostile-input diagnostics。
+
+主轨在冻结 Track2 构建中向 otherwise-valid object 增加一个 2,097,152-byte unknown own data key；公开 decoder 在 `maxDocumentBytes=1,048,576` 时仍返回：
+
+```json
+{"ok":false,"errorCount":1,"unknownPathBytes":2097154,"overflow":false}
+```
+
+修复要求：在复制、排序和拼接前按 UTF-8 bytes 对所有 object field names 计入全局 document/text budget，并以固定有界 path 或安全截断诊断失败关闭；不得读取 accessor。补 unknown/known 巨型 key、多个 keys 累计、Unicode byte/character 差异、Proxy/getter-zero、错误数组/path 上界与普通 unknown-field 精确路径回归。
+
+## Namespace 与 receipt bridge 已闭环
+
+- canonical filename 使用双连字符边界，而 TaskPlan ID 明确拒绝 `--`；因此新 `<number>--<hash>--<id>` 与 legacy `<number>-<id>` 的合法语言不相交。different-plan same number/ID、旧 single-hyphen shape collision、旧 flat current、same-plan future orphan、exact-current 与 entry/read/byte budgets 均已由 fresh suites 和真实 filesystem runtime 证明。
+- PR1 首次官方登记确属 receipt bridge false-negative bug。transcript metadata discovery 已从错误的 128 hard cap 对齐既有 4096 entry budget，仍只全文读取 latest 32、总量 512 MiB，并保留 exact session/turn/worktree/ABI/inode fences；inline `max_output_tokens` 仅接受正安全整数字面量。129+、真实 current-host 完成态、partial/pragma/dynamic/zero/negative/fraction/unsafe/truncated/output-only/伪造对照全部通过。
+
+## LOW、环境限制与未完成通过门
+
+- L1：malformed catalog 前项压缩后，后续 duplicate diagnostic path 相对 raw index 左移。
+- L2：transcript mtimeNs/ctimeNs 完全相同时仍以默认 locale 的 `localeCompare` 排 path，33+ tied Unicode candidates 可能跨宿主 false-negative，不会 false-positive。
+- L3：TaskPlan path-based publication 在同用户 parent swap 下仍有极窄 TOCTOU。
+- L4：server TaskPlan route 的依赖/成功 body 类型仍为 `unknown`，生产 wiring 使用 kernel stable read model，但测试边界可进一步收紧。
+- 非法 UTF-8 不再列 LOW：本轮已证明它可让 raw-different current/immutable 通过 identity check，故提升为确认 MEDIUM。
+- 因 2 个确认 MEDIUM，Verify tasks 保持未完成，不设置 branch handled，不请求 `verify-pass`，且不复用第 11 轮任何通过轨作为修复后的放行证据。
+
+## 下一步
+
+登记本轮失败报告并请求精确 `verify-fail` 复核事件；按持续授权 delegated acknowledge 后回 Build。以 TDD 引入 fatal canonical UTF-8/read-byte identity 与 bounded property-name diagnostics，重建正式生成物、完成独立 pre-Verify review，再从零执行第 12 轮三轨。

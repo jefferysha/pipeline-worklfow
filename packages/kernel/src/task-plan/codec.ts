@@ -79,6 +79,9 @@ function record(value: unknown, path: string, collector: Collector): Record<stri
         error(collector, 'object_invalid', path)
         return undefined
       }
+      // Object input bypasses JSON parsing, so its field names must consume the same document
+      // budget before we copy descriptor values or echo a hostile key into a diagnostic path.
+      if (!consumeBudget(collector, 0, byteLength(key), path)) return undefined
       const descriptor = Object.getOwnPropertyDescriptor(value, key)
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
         error(collector, 'object_invalid', path)
@@ -95,7 +98,17 @@ function record(value: unknown, path: string, collector: Collector): Record<stri
 
 function closed(raw: Record<string, unknown>, allowed: readonly string[], path: string, collector: Collector): void {
   const keys = new Set(allowed)
-  for (const key of Object.keys(raw).sort()) if (!keys.has(key)) error(collector, 'unknown_field', `${path}.${key}`)
+  for (const key of Object.keys(raw).sort()) {
+    if (keys.has(key)) continue
+    const candidatePath = `${path}.${key}`
+    error(
+      collector,
+      'unknown_field',
+      byteLength(candidatePath) <= TASK_PLAN_LIMITS.maxTextBytes
+        ? candidatePath
+        : `${path}.[unknown-field-too-large]`,
+    )
+  }
 }
 
 function array(value: unknown, path: string, limit: number, collector: Collector): readonly unknown[] | undefined {

@@ -776,6 +776,8 @@ function record(value, path7, collector) {
         error(collector, "object_invalid", path7);
         return void 0;
       }
+      if (!consumeBudget(collector, 0, byteLength(key), path7))
+        return void 0;
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
         error(collector, "object_invalid", path7);
@@ -791,9 +793,12 @@ function record(value, path7, collector) {
 }
 function closed(raw, allowed, path7, collector) {
   const keys = new Set(allowed);
-  for (const key of Object.keys(raw).sort())
-    if (!keys.has(key))
-      error(collector, "unknown_field", `${path7}.${key}`);
+  for (const key of Object.keys(raw).sort()) {
+    if (keys.has(key))
+      continue;
+    const candidatePath = `${path7}.${key}`;
+    error(collector, "unknown_field", byteLength(candidatePath) <= TASK_PLAN_LIMITS.maxTextBytes ? candidatePath : `${path7}.[unknown-field-too-large]`);
+  }
 }
 function array(value, path7, limit, collector) {
   try {
@@ -7574,6 +7579,26 @@ async function readRegular(path7, maxBytes) {
     throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
   }
 }
+async function readStateFile(path7, maxBytes) {
+  let bytes;
+  try {
+    bytes = await readBoundedRegularFile(path7, maxBytes, "TaskPlan state file");
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
+      return void 0;
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
+  }
+  try {
+    return {
+      bytes,
+      text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+    };
+  } catch {
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not valid UTF-8");
+  }
+}
 function assertCommittedRevisionSemantics(revision) {
   const validation = validateTaskPlanRevisionV1(revision);
   if (revision.status !== "frozen" || !validation.freezable) {
@@ -7581,19 +7606,19 @@ function assertCommittedRevisionSemantics(revision) {
   }
 }
 async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
-  const canonical = await readRegular(join15(revisionsDir, revisionFileName3(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  const canonical = await readStateFile(join15(revisionsDir, revisionFileName3(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
   if (canonical !== void 0) {
-    if (canonical !== expectedRaw) {
+    if (!canonical.bytes.equals(expectedRaw)) {
       throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
     }
     return canonical;
   }
-  const legacy = await readRegular(join15(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  const legacy = await readStateFile(join15(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
   if (legacy === void 0)
     return void 0;
-  if (legacy === expectedRaw)
+  if (legacy.bytes.equals(expectedRaw))
     return legacy;
-  const decoded = decodeTaskPlanRevisionV1(legacy);
+  const decoded = decodeTaskPlanRevisionV1(legacy.text);
   if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
     return void 0;
   throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
@@ -7601,19 +7626,19 @@ async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
 async function readTaskPlanForChange(changeDir) {
   const stateDir = join15(changeDir, TASK_PLAN_STATE_DIR);
   const currentPath = join15(stateDir, TASK_PLAN_CURRENT_FILE);
-  const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
+  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
   if (currentRaw === void 0) {
     const legacy = await readRegular(join15(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
     return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
   }
-  const decoded = decodeTaskPlanRevisionV1(currentRaw);
+  const decoded = decodeTaskPlanRevisionV1(currentRaw.text);
   if (!decoded.ok)
     throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
   assertCommittedRevisionSemantics(decoded.value);
   await assertOwnedDirectory(changeDir, stateDir);
   await assertOwnedDirectory(changeDir, join15(stateDir, TASK_PLAN_REVISIONS_DIR));
-  const immutableRaw = await readImmutableTwin(join15(stateDir, TASK_PLAN_REVISIONS_DIR), decoded.value, currentRaw);
-  if (immutableRaw === void 0 || immutableRaw !== currentRaw) {
+  const immutableRaw = await readImmutableTwin(join15(stateDir, TASK_PLAN_REVISIONS_DIR), decoded.value, currentRaw.bytes);
+  if (immutableRaw === void 0) {
     throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
   }
   let tasks;
@@ -7623,7 +7648,7 @@ async function readTaskPlanForChange(changeDir) {
   } catch {
     projectionReadFailed = true;
   }
-  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest2(currentRaw) });
+  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest2(currentRaw.bytes) });
   const projection = projectionReadFailed ? { state: "drift", reason: "tasks.md projection is not a readable bounded regular file" } : tasks === void 0 ? { state: "pending", reason: "tasks.md projection missing" } : normalizeProjectionCompletion(tasks) === expected ? { state: "current" } : { state: "drift", reason: "tasks.md projection content mismatch" };
   return toTaskPlanReadModelV1(decoded.value, projection);
 }

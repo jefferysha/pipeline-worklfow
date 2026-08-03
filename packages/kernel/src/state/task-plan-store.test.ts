@@ -220,6 +220,53 @@ describe('task plan store', () => {
     })
   })
 
+  it('rejects byte-different invalid UTF-8 current and immutable twins before replacement decoding', async () => {
+    const dir = await changeDir()
+    const replacement = plan({
+      requirements: [{ id: 'req-1', title: 'Contains a legal � scalar' }],
+    })
+    await publishTaskPlanRevision(dir, replacement, { expected_current_revision_id: null })
+    const stateDir = join(dir, TASK_PLAN_STATE_DIR)
+    const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
+    const immutablePath = join(stateDir, 'revisions', canonicalRevisionFileName(replacement))
+    const validRaw = await readFile(currentPath)
+    const marker = Buffer.from('�', 'utf8')
+    const markerOffset = validRaw.indexOf(marker)
+    expect(markerOffset).toBeGreaterThanOrEqual(0)
+    const corrupt = (byte: number): Buffer => Buffer.concat([
+      validRaw.subarray(0, markerOffset),
+      Buffer.from([byte]),
+      validRaw.subarray(markerOffset + marker.byteLength),
+    ])
+    const currentCorrupt = corrupt(0x80)
+    const immutableCorrupt = corrupt(0xff)
+    expect(currentCorrupt.equals(immutableCorrupt)).toBe(false)
+    expect(currentCorrupt.toString('utf8')).toBe(immutableCorrupt.toString('utf8'))
+    await writeFile(currentPath, currentCorrupt)
+    await writeFile(immutablePath, immutableCorrupt)
+
+    await expect(readTaskPlanForChange(dir)).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
+    await expect(publishTaskPlanRevision(
+      dir,
+      replacement,
+      { expected_current_revision_id: replacement.revision_id },
+    )).rejects.toBeInstanceOf(TaskPlanStateCorruptError)
+    expect(await readFile(currentPath)).toEqual(currentCorrupt)
+    expect(await readFile(immutablePath)).toEqual(immutableCorrupt)
+  })
+
+  it('preserves a legal U+FFFD scalar in byte-identical canonical state', async () => {
+    const dir = await changeDir()
+    const replacement = plan({
+      requirements: [{ id: 'req-1', title: 'Legal � scalar' }],
+    })
+
+    await expect(publishTaskPlanRevision(dir, replacement, { expected_current_revision_id: null }))
+      .resolves.toMatchObject({ requirements: [{ title: 'Legal � scalar' }] })
+    await expect(readTaskPlanForChange(dir))
+      .resolves.toMatchObject({ requirements: [{ title: 'Legal � scalar' }] })
+  })
+
   it('does not expose an immutable orphan without a committed current pointer', async () => {
     const dir = await changeDir()
     await mkdir(join(dir, TASK_PLAN_STATE_DIR, 'revisions'), { recursive: true })

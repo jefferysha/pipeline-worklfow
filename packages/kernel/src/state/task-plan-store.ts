@@ -13,7 +13,7 @@ import {
   type TaskPlanRevisionV1,
 } from '../task-plan/index.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
-import { readOptionalBoundedRegularTextFile } from './document-path.js'
+import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from './document-path.js'
 import { withLock } from './lock.js'
 
 export const TASK_PLAN_STATE_DIR = '.pipeline-task-plan'
@@ -56,7 +56,7 @@ function isRevisionFileNameFor(name: string, revision: TaskPlanRevisionV1): bool
   return name === revisionFileName(revision) || name === legacyRevisionFileName(revision)
 }
 
-function digest(raw: string): string {
+function digest(raw: string | Uint8Array): string {
   return `sha256:${createHash('sha256').update(raw).digest('hex')}`
 }
 
@@ -107,6 +107,34 @@ async function readRegular(path: string, maxBytes: number): Promise<string | und
   }
 }
 
+interface StrictTaskPlanStateFile {
+  readonly bytes: Buffer
+  readonly text: string
+}
+
+async function readStateFile(path: string, maxBytes: number): Promise<StrictTaskPlanStateFile | undefined> {
+  let bytes: Buffer
+  try {
+    bytes = await readBoundedRegularFile(path, maxBytes, 'TaskPlan state file')
+  } catch (error) {
+    if (
+      typeof error === 'object'
+      && error !== null
+      && Reflect.get(error, 'code') === 'ENOENT'
+    ) return undefined
+    if (error instanceof TaskPlanStateCorruptError) throw error
+    throw new TaskPlanStateCorruptError('TaskPlan state file is not a stable bounded regular file')
+  }
+  try {
+    return {
+      bytes,
+      text: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+    }
+  } catch {
+    throw new TaskPlanStateCorruptError('TaskPlan state file is not valid UTF-8')
+  }
+}
+
 interface TaskPlanRevisionAdmission {
   readonly targetExists: boolean
 }
@@ -125,7 +153,8 @@ async function assertCommittedLineageAndAdmission(
   current: TaskPlanRevisionV1 | undefined,
   exactCurrent: boolean,
 ): Promise<TaskPlanRevisionAdmission> {
-  const proposedBytes = Buffer.byteLength(proposedRaw)
+  const proposedBuffer = Buffer.from(proposedRaw, 'utf8')
+  const proposedBytes = proposedBuffer.byteLength
   const revisionIds = new Set<string>()
   const revisionNumbers = new Set<number>()
   const immutableRevisionIds = new Set<string>()
@@ -152,13 +181,13 @@ async function assertCommittedLineageAndAdmission(
     if (info.isFile() && info.size > remainingBytes) {
       throw new TaskPlanStateCorruptError('TaskPlan revision history byte budget exceeded')
     }
-    const raw = await readRegular(path, Math.min(TASK_PLAN_LIMITS.maxRevisionBytes, remainingBytes))
+    const raw = await readStateFile(path, Math.min(TASK_PLAN_LIMITS.maxRevisionBytes, remainingBytes))
     if (raw === undefined) continue
-    bytesRead += Buffer.byteLength(raw)
+    bytesRead += raw.bytes.byteLength
     if (bytesRead > TASK_PLAN_LIMITS.maxRevisionHistoryBytes) {
       throw new TaskPlanStateCorruptError('TaskPlan revision history byte budget exceeded')
     }
-    const decoded = decodeTaskPlanRevisionV1(raw)
+    const decoded = decodeTaskPlanRevisionV1(raw.text)
     if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan revision history contains malformed state')
     const historical = decoded.value
     const isProposedIdentity = historical.plan_id === proposed.plan_id
@@ -168,7 +197,7 @@ async function assertCommittedLineageAndAdmission(
       throw new TaskPlanStateCorruptError('TaskPlan revision history filename disagrees with its content')
     }
     if (isProposedIdentity) {
-      if (raw !== proposedRaw) {
+      if (!raw.bytes.equals(proposedBuffer)) {
         throw new TaskPlanStateCorruptError('TaskPlan target revision already exists with different content')
       }
       targetExists = true
@@ -238,25 +267,25 @@ async function assertCommittedLineageAndAdmission(
 async function readImmutableTwin(
   revisionsDir: string,
   revision: TaskPlanRevisionV1,
-  expectedRaw: string,
-): Promise<string | undefined> {
-  const canonical = await readRegular(
+  expectedRaw: Buffer,
+): Promise<StrictTaskPlanStateFile | undefined> {
+  const canonical = await readStateFile(
     join(revisionsDir, revisionFileName(revision)),
     TASK_PLAN_LIMITS.maxRevisionBytes,
   )
   if (canonical !== undefined) {
-    if (canonical !== expectedRaw) {
+    if (!canonical.bytes.equals(expectedRaw)) {
       throw new TaskPlanStateCorruptError('TaskPlan current immutable revision disagrees with its content')
     }
     return canonical
   }
-  const legacy = await readRegular(
+  const legacy = await readStateFile(
     join(revisionsDir, legacyRevisionFileName(revision)),
     TASK_PLAN_LIMITS.maxRevisionBytes,
   )
   if (legacy === undefined) return undefined
-  if (legacy === expectedRaw) return legacy
-  const decoded = decodeTaskPlanRevisionV1(legacy)
+  if (legacy.bytes.equals(expectedRaw)) return legacy
+  const decoded = decodeTaskPlanRevisionV1(legacy.text)
   if (
     decoded.ok
     && decoded.value.plan_id !== revision.plan_id
@@ -271,8 +300,10 @@ async function publishImmutable(path: string, dir: string, raw: string): Promise
     await atomicLinkPublish(dir, '.revision.tmp', path, raw)
   } catch (error) {
     if (typeof error !== 'object' || error === null || Reflect.get(error, 'code') !== 'EEXIST') throw error
-    const existing = await readRegular(path, TASK_PLAN_LIMITS.maxRevisionBytes)
-    if (existing !== raw) throw new TaskPlanStateCorruptError('TaskPlan revision id already exists with different content')
+    const existing = await readStateFile(path, TASK_PLAN_LIMITS.maxRevisionBytes)
+    if (existing === undefined || !existing.bytes.equals(Buffer.from(raw, 'utf8'))) {
+      throw new TaskPlanStateCorruptError('TaskPlan revision id already exists with different content')
+    }
   }
 }
 
@@ -335,18 +366,19 @@ export async function publishTaskPlanRevision(
     await ensureOwnedDirectory(changeDir, stateDir)
     await ensureOwnedDirectory(changeDir, revisionsDir)
     const raw = `${encodeTaskPlanRevisionV1(accepted)}\n`
-    const currentRaw = await readRegular(join(stateDir, TASK_PLAN_CURRENT_FILE), TASK_PLAN_LIMITS.maxRevisionBytes)
+    const rawBytes = Buffer.from(raw, 'utf8')
+    const currentRaw = await readStateFile(join(stateDir, TASK_PLAN_CURRENT_FILE), TASK_PLAN_LIMITS.maxRevisionBytes)
     let current: TaskPlanRevisionV1 | undefined
     let exactCurrent = false
     if (currentRaw !== undefined) {
-      const currentDecoded = decodeTaskPlanRevisionV1(currentRaw)
+      const currentDecoded = decodeTaskPlanRevisionV1(currentRaw.text)
       if (!currentDecoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
       current = currentDecoded.value
-      const immutable = await readImmutableTwin(revisionsDir, current, currentRaw)
-      if (immutable !== currentRaw) {
+      const immutable = await readImmutableTwin(revisionsDir, current, currentRaw.bytes)
+      if (immutable === undefined) {
         throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
       }
-      exactCurrent = currentRaw === raw
+      exactCurrent = currentRaw.bytes.equals(rawBytes)
     }
     if (!exactCurrent) {
       const actualCurrentId = current?.revision_id ?? null
@@ -378,12 +410,12 @@ export async function publishTaskPlanRevision(
 export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlanReadModelV1 | null> {
   const stateDir = join(changeDir, TASK_PLAN_STATE_DIR)
   const currentPath = join(stateDir, TASK_PLAN_CURRENT_FILE)
-  const currentRaw = await readRegular(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
+  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes)
   if (currentRaw === undefined) {
     const legacy = await readRegular(join(changeDir, 'tasks.md'), MAX_LEGACY_TASKS_MD_BYTES)
     return legacy === undefined ? null : adaptLegacyTasksMd(legacy)
   }
-  const decoded = decodeTaskPlanRevisionV1(currentRaw)
+  const decoded = decodeTaskPlanRevisionV1(currentRaw.text)
   if (!decoded.ok) throw new TaskPlanStateCorruptError('TaskPlan current is malformed')
   assertCommittedRevisionSemantics(decoded.value)
   await assertOwnedDirectory(changeDir, stateDir)
@@ -391,9 +423,9 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   const immutableRaw = await readImmutableTwin(
     join(stateDir, TASK_PLAN_REVISIONS_DIR),
     decoded.value,
-    currentRaw,
+    currentRaw.bytes,
   )
-  if (immutableRaw === undefined || immutableRaw !== currentRaw) {
+  if (immutableRaw === undefined) {
     throw new TaskPlanStateCorruptError('TaskPlan current lacks an identical immutable revision')
   }
 
@@ -404,7 +436,7 @@ export async function readTaskPlanForChange(changeDir: string): Promise<TaskPlan
   } catch {
     projectionReadFailed = true
   }
-  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest(currentRaw) })
+  const expected = renderTaskPlanTasksMd(decoded.value, { digest: digest(currentRaw.bytes) })
   const projection = projectionReadFailed
     ? { state: 'drift', reason: 'tasks.md projection is not a readable bounded regular file' } as const
     : tasks === undefined
