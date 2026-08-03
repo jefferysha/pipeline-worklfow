@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path'
-import type { ProjectRepositoryIdentity } from './types.js'
+import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path'
+import type { ProjectRepositoryIdentity, ProjectSnapshot } from './types.js'
 
 const REPOSITORY_IDENTITY_TIMEOUT_MS = 1_500
 const REPOSITORY_IDENTITY_MAX_OUTPUT_BYTES = 4_096
@@ -50,6 +50,34 @@ export async function readRepositoryIdentity(
   }
 }
 
+export function normalizeRepositoryLabels(projects: readonly ProjectSnapshot[]): ProjectSnapshot[] {
+  const labels = new Map<string, { label: string; primary: boolean; root: string }>()
+  for (const project of projects) {
+    const repository = project.repository
+    if (repository === undefined) continue
+    const candidate = {
+      label: repository.label,
+      primary: repository.workspace_kind === 'primary',
+      root: project.root,
+    }
+    const current = labels.get(repository.id)
+    if (current === undefined
+      || (candidate.primary && !current.primary)
+      || (candidate.primary === current.primary
+        && `${candidate.label}\0${candidate.root}` < `${current.label}\0${current.root}`)) {
+      labels.set(repository.id, candidate)
+    }
+  }
+  return projects.map((project): ProjectSnapshot => {
+    const repository = project.repository
+    if (repository === undefined) return project
+    const label = labels.get(repository.id)?.label ?? repository.label
+    return label === repository.label
+      ? project
+      : { ...project, repository: { ...repository, label } }
+  })
+}
+
 export async function probeRepositoryIdentity(
   root: string,
   deps: RepositoryIdentityProbeDeps = {},
@@ -73,11 +101,15 @@ export async function probeRepositoryIdentity(
   const commonDirectory = normalize(resolve(commonDirectoryRaw))
   const topLevel = normalize(resolve(topLevelRaw))
   const gitDirectory = normalize(resolve(gitDirectoryRaw))
-  // The common directory is the only path shared by every linked worktree. For any `.git`
-  // directory, including an external one, its parent therefore supplies the stable group label.
-  const label = basename(commonDirectory) === '.git'
+  const commonName = basename(commonDirectory)
+  const conventionalDotGit = commonName === '.git'
+    && (commonDirectory === normalize(resolve(join(topLevel, '.git')))
+      || gitDirectory !== commonDirectory)
+  const label = conventionalDotGit
     ? basename(dirname(commonDirectory))
-    : basename(topLevel)
+    : commonName.endsWith('.git') && commonName.length > '.git'.length
+      ? commonName.slice(0, -'.git'.length)
+      : basename(topLevel)
   if (!label) return undefined
   return {
     id: createHash('sha256').update(commonDirectory).digest('hex'),

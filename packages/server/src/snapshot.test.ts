@@ -70,6 +70,28 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     })
   })
 
+  it('projects the primary repository directory label onto every linked workspace independent of registry order', async () => {
+    const linked = await makeProject()
+    const primary = await makeProject()
+    const id = 'b'.repeat(64)
+    const snapshot = await buildSnapshot({
+      registry: () => [linked, primary],
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async (root) => ({
+        id,
+        label: root === primary ? 'repository' : 'metadata',
+        workspace_kind: root === primary ? 'primary' : 'worktree',
+      }),
+    })
+
+    expect(snapshot.projects.map((project) => project.repository)).toEqual([
+      { id, label: 'repository', workspace_kind: 'worktree' },
+      { id, label: 'repository', workspace_kind: 'primary' },
+    ])
+  })
+
   it('bounds concurrent project scans so repository probes cannot create an unbounded Git process fan-out', async () => {
     const roots = await Promise.all(Array.from({ length: 9 }, () => makeProject()))
     let active = 0

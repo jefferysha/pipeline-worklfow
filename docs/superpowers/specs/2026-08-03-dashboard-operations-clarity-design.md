@@ -61,7 +61,10 @@ interface ProjectRepositoryIdentity {
 
 生产探测使用固定 argv、无 shell 的
 `git rev-parse --path-format=absolute --git-common-dir --show-toplevel`，绑定已登记且已验证为目录的
-root，并设置短超时。`common-dir` 规范化后只用于 hash 和 label；原始路径不进入新增字段。无法探测、
+root，并设置短超时。`common-dir` 规范化后用于 hash；常规 `.git` / `repository.git` 可直接派生仓库目录名。
+对无法从 linked worktree 单独反推出 primary top-level 的外置 metadata 布局，Snapshot 在同一批已登记
+root 中优先采用 primary 的 top-level basename，并统一投影到相同 id 的 worktree；没有 primary 时采用
+确定性 fallback。原始路径不进入新增字段。无法探测、
 非 Git 项目、超时或异常时省略 `repository`，前端以 root 自成一组，不把失败伪装成共享仓库。
 
 `repository` 是 `tenon-snapshot/v2` 的 additive 可选字段；旧 server/旧 fixture 继续解码。服务端与

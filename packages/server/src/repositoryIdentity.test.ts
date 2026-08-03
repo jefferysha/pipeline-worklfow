@@ -73,12 +73,12 @@ describe('probeRepositoryIdentity', () => {
     expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
   })
 
-  it('uses the shared metadata parent when an external Git directory itself is named .git', async () => {
+  it('uses the primary worktree label when its external Git directory itself is named .git', async () => {
     const identity = await probeRepositoryIdentity('/code/repository', {
       runGit: async () => '/metadata/.git\n/code/repository\n/metadata/.git\n',
     })
 
-    expect(identity).toMatchObject({ label: 'metadata', workspace_kind: 'primary' })
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
   })
 
   it('keeps the primary label for linked worktrees backed by an external .git directory', async () => {
@@ -100,10 +100,26 @@ describe('probeRepositoryIdentity', () => {
     const primaryIdentity = await probeRepositoryIdentity(primary)
     const worktreeIdentity = await probeRepositoryIdentity(worktree)
 
-    expect(primaryIdentity).toMatchObject({ label: 'metadata', workspace_kind: 'primary' })
+    expect(primaryIdentity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
     expect(worktreeIdentity).toEqual({
       id: primaryIdentity?.id,
       label: 'metadata',
+      workspace_kind: 'worktree',
+    })
+  })
+
+  it('derives one stable label from an external repository.git common directory', async () => {
+    const primary = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/metadata/repository.git\n/code/repository\n/metadata/repository.git\n',
+    })
+    const worktree = await probeRepositoryIdentity('/worktrees/feature', {
+      runGit: async () => '/metadata/repository.git\n/worktrees/feature\n/metadata/repository.git/worktrees/feature\n',
+    })
+
+    expect(primary).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+    expect(worktree).toEqual({
+      id: primary?.id,
+      label: 'repository',
       workspace_kind: 'worktree',
     })
   })

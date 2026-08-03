@@ -41,7 +41,7 @@ import { readBounded } from './contextBundleTrustedReader.js'
 import { dedupeRoots } from './projectRoots.js'
 import { readTasksMarkdown } from './snapshotTasks.js'
 import { mapWithConcurrency } from './concurrentMap.js'
-import { readRepositoryIdentity } from './repositoryIdentity.js'
+import { normalizeRepositoryLabels, readRepositoryIdentity } from './repositoryIdentity.js'
 
 export { dedupeRoots } from './projectRoots.js'
 export { readTasksMarkdown } from './snapshotTasks.js'
@@ -323,7 +323,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const roots = dedupeRoots(deps.registry())
   const nowMs = deps.now?.() ?? Date.now()
-  const projects = await mapWithConcurrency(roots, 4, (root) => scanProject(deps, root, nowMs))
+  const projects = normalizeRepositoryLabels(await mapWithConcurrency(roots, 4, (root) => scanProject(deps, root, nowMs)))
   const change_count = projects.reduce((n, p) => n + p.changes.length, 0)
   return {
     snapshot_protocol: 'tenon-snapshot/v2',
