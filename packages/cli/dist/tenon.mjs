@@ -35729,7 +35729,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         }
         continue;
       }
-      if (!matchesSession || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
+      if (!matchesSession || event.type !== "response_item") continue;
       const payload = event.payload;
       if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
       const payloadCallId = asString3(payload.call_id);
@@ -35737,6 +35737,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         if (targetInvocationSeen) return false;
         targetInvocationSeen = true;
       }
+      if (!responseItemAtOrAfter(event, notBefore)) continue;
       const functionInvocation = functionExecInvocation(payload);
       if (functionInvocation !== void 0) {
         const callId = asString3(payload.call_id);
@@ -35884,7 +35885,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           confirmedInLatestTurn.clear();
           continue;
         }
-        if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
+        if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item") continue;
         const payload = event.payload;
         if (!isRecord12(payload)) continue;
         const eventTurnId = receiptTurnId(payload);
@@ -35900,6 +35901,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
             invokedCallIds.add(callId2);
           }
         }
+        if (!responseItemAtOrAfter(event, notBefore)) continue;
         const functionInvocation = functionExecInvocation(payload);
         if (functionInvocation !== void 0) {
           const callId2 = asString3(payload.call_id);

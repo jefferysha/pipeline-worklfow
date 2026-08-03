@@ -400,3 +400,18 @@
 {"ts":"2026-08-03T03:02:28Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
 {"ts":"2026-08-03T03:03:10Z","kind":"set","field":"pre_verify_review_result","to":"pending"}
 {"ts":"2026-08-03T03:35:47Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T03:46:41Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T03:46:41Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T03:46:41Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"4f22a469-d1f5-45ef-9965-d71d0e3dbe93"}
+{"ts":"2026-08-03T03:53:38Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-03-post-merge-unified-review-final-main-verify-fail.md"}
+{"ts":"2026-08-03T03:53:38Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T03:53:38Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-03T03:53:39Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-03T03:53:39Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-03T03:53:46Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T03:53:46Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T03:02:28Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T03:53:46Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"78d7c607-4af2-455a-9769-20082ed33c79"}
+{"ts":"2026-08-03T04:09:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T04:09:36Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T04:09:36Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-03T04:09:36Z","kind":"set","field":"codex_review_result","to":"pass"}

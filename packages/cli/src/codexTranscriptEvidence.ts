@@ -145,7 +145,6 @@ export async function transcriptConfirmsReceipt(
       if (
         !matchesSession
         || event.type !== 'response_item'
-        || !responseItemAtOrAfter(event, notBefore)
       ) continue
       const payload = event.payload
       if (!isRecord(payload) || receiptTurnId(payload) !== receipt.turnId) continue
@@ -157,6 +156,7 @@ export async function transcriptConfirmsReceipt(
         if (targetInvocationSeen) return false
         targetInvocationSeen = true
       }
+      if (!responseItemAtOrAfter(event, notBefore)) continue
       const functionInvocation = functionExecInvocation(payload)
       if (functionInvocation !== undefined) {
         const callId = asString(payload.call_id)
@@ -362,7 +362,6 @@ export async function discoverCompletedCodexSkillReads(
           !matchesHostSession
           || latestTurnId === undefined
           || event.type !== 'response_item'
-          || !responseItemAtOrAfter(event, notBefore)
         ) continue
         const payload = event.payload
         if (!isRecord(payload)) continue
@@ -379,6 +378,7 @@ export async function discoverCompletedCodexSkillReads(
             invokedCallIds.add(callId)
           }
         }
+        if (!responseItemAtOrAfter(event, notBefore)) continue
         const functionInvocation = functionExecInvocation(payload)
         if (functionInvocation !== undefined) {
           const callId = asString(payload.call_id)

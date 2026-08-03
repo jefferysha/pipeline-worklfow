@@ -198,6 +198,12 @@
 - [x] 在最终组合 diff 上完成 Standards、Spec 与 Security 统一审查，并清零全部 Critical/High/Medium finding。 (build)
 - [x] 重跑全量测试、构建、生成物、OpenSpec、依赖、Hook/adapter/skill/bundle 与生产 Dashboard 浏览器矩阵，更新审查证据并冻结新 SHA。 (build)
 
+## 2026-08-03 时间戳新鲜度 Verify 回退修复
+
+- [x] 为 exact/fallback 与 custom/function 四种组合建立 stale、missing、invalid timestamp 的重复 invocation identity RED。 (build)
+- [x] 在 session/turn 匹配后先执行 invocation identity 唯一性检查，再应用 phase freshness 过滤，保持旧事件不能满足 receipt。 (build)
+- [x] 重跑 receipt 150/150、root 5913、完整构建、静态门与两轮独立安全审查，清零全部 actionable finding。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

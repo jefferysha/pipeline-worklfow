@@ -522,3 +522,20 @@ may record PASS.
   Evidence: `/tmp/pr20-main-browser-qa-Z0y9nS/REPORT.md`.
 - This Build pass authorizes committing and freezing one replacement SHA. No
   earlier frozen Verify result or CI result is reused.
+
+### 2026-08-03 timestamp-freshness rollback remediation
+
+- Exact-SHA Verify rejected `f5039322` at C0/H0/M1/L0 because duplicate
+  invocation tracking occurred after event freshness filtering. The failure is
+  preserved in `2026-08-03-post-merge-unified-review-final-main-verify-fail.md`.
+- Eight genuine REDs first reproduced stale/missing timestamp bypasses across
+  exact/fallback and custom/function paths. Invocation identity is now tracked
+  before freshness filtering; a fresh event remains mandatory to satisfy a
+  receipt.
+- The first independent re-review returned one Low test-coverage finding for
+  invalid timestamps. Four additional matrix cases closed it, covering stale,
+  missing and invalid timestamps in all four path/ABI combinations.
+- Receipt tests pass 150/150, root passes 330 files / 5,913 tests with 26
+  declared skips, full production build and static/governance gates pass, and
+  the second exact Codex security review returns PASS. This replacement may now
+  be committed and frozen; no previous Verify or CI result is reused.

@@ -1244,3 +1244,20 @@ expected budget-overrun 422 fixture and five navigation-aborted stream requests
 are separately classified rather than hidden. The isolated server and browser
 profile were removed and the reviewed source tree remained unchanged. Evidence
 is stored at `/tmp/pr20-main-browser-qa-Z0y9nS/REPORT.md`.
+
+### Timestamp-freshness rollback remediation
+
+The first frozen receipt fix was rejected at **C0/H0/M1/L0** because exact and
+fallback readers tracked duplicate invocation identities only after applying
+the current-phase timestamp bound. A stale, missing or invalid-timestamp event
+with the same turn and `call_id` could therefore be ignored before a later
+fresh invocation and one completion.
+
+The corrected readers track matching session/turn invocation identity before
+freshness filtering while still requiring a fresh event to satisfy evidence.
+Twelve permanent matrix cases cover stale, missing and invalid timestamps for
+custom/function calls on exact/fallback paths. Receipt tests pass 150/150; the
+repository passes 330 files / 5,913 tests with 26 declared skips, and the
+tracked CLI bundle was rebuilt. The exact Codex security review returned
+**PASS** after its initial Low coverage-only finding was closed. The earlier
+failed Verify report remains preserved and is not reused.
