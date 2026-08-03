@@ -127,7 +127,7 @@
         {
           "phase": "ship",
           "sha256": "d7da75164977d7ce0cd5b3913d28eaa9f932fcdbdf8a17b396c88f6ea99b7b0a",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -160,7 +160,7 @@
         {
           "phase": "ship",
           "sha256": "5e41d1cb5955f45c35bb77762885958c6aa2cd91db4bd59f0bfec331333a28c9",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -193,7 +193,7 @@
         {
           "phase": "ship",
           "sha256": "483df9cc1cd1cf9b1920f385416ac1873e8df5844f3e7326acd9792d6b2533b5",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -226,7 +226,7 @@
         {
           "phase": "ship",
           "sha256": "cc893fca19e3d77e5f02a589775dfd4229a0ace8624714d2cb813ddab5335c97",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -253,7 +253,7 @@
         {
           "phase": "ship",
           "sha256": "0400f0f99c86c7e78fd1a20215854c4ea1fc844ac363615818875a95843fa128",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -280,7 +280,7 @@
         {
           "phase": "ship",
           "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -307,7 +307,7 @@
         {
           "phase": "ship",
           "sha256": "74918f42870d6bcf9ff675293e0a501d76a214e21590ec32e241e1e37c917858",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -322,28 +322,7 @@
         {
           "phase": "ship",
           "sha256": "175ae0ca7488a5ab836638a451106b603439d1282bba1d81f8d4b5cab1838525",
-          "readAt": "2026-07-29T18:06:39Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/codex-skill-receipt-same-turn/tasks.md",
-      "sha256": "d8e81e0e0e8b198e41a33e237430e2cc05fdb965b3c0f1cef06df62055238b8a",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-07-29T18:04:43Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "d8e81e0e0e8b198e41a33e237430e2cc05fdb965b3c0f1cef06df62055238b8a",
-          "readAt": "2026-07-29T18:04:43Z",
-          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",28]"
-        },
-        {
-          "phase": "ship",
-          "sha256": "d8e81e0e0e8b198e41a33e237430e2cc05fdb965b3c0f1cef06df62055238b8a",
-          "readAt": "2026-07-29T18:06:39Z",
+          "readAt": "2026-08-03T04:58:41Z",
           "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
         }
       ]
@@ -355,6 +334,21 @@
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-29T18:06:39Z",
       "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/codex-skill-receipt-same-turn/tasks.md",
+      "sha256": "55fc12ac67cc8b54dc9f467941283a6386872c96e8c6d4189cb5f2aa83741df4",
+      "producer": "tenon-ship",
+      "recordedAt": "2026-08-03T04:58:41Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "55fc12ac67cc8b54dc9f467941283a6386872c96e8c6d4189cb5f2aa83741df4",
+          "readAt": "2026-08-03T04:58:41Z",
+          "visitId": "[\"ad13c561-fd1c-4912-bd17-f57f1c3c7eaf\",29]"
+        }
+      ]
     }
   ]
 }

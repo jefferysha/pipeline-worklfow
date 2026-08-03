@@ -2,7 +2,7 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: ship
+phase: archive
 phase_status: pending
 design_doc: docs/superpowers/specs/codex-skill-receipt-same-turn-design.md
 plan: docs/superpowers/plans/codex-skill-receipt-same-turn.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/21
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-29T13:18:18Z
-updated_at: 2026-07-29T18:04:58Z
+updated_at: 2026-08-03T04:59:14Z
 verified_at: 2026-07-29T18:04:58Z
 archived_at: null
 archived: false
@@ -39,10 +39,10 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: ad13c561-fd1c-4912-bd17-f57f1c3c7eaf
-pipeline_transition_sequence: 29
-pipeline_transition_head: f1500767-017d-44b9-9e36-3374af565ebd
-pipeline_state_revision: 78
-pipeline_state_revision_id: 1e03f58f-501d-4aa4-b48e-c82badd53707
-pipeline_state_digest: 1414f9ee807a0e6628a3cb1d79059cf8ff8cc08811994e85a7cfffb874b80c26
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6NzgsInJldmlzaW9uSWQiOiIxZTAzZjU4Zi01MDFkLTRhYTQtYjQ4ZS1jODJiYWRkNTM3MDciLCJwYXlsb2FkRGlnZXN0IjoiZmY4YzBiZmRiM2Q4NTg2YzBiYzBjOTFkOWYwMjA2NzhlZmU3ZjA3OWQyYzUxYzBjOGM0YWRmYTgzNWNmNmYzMyJ9
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImFkMTNjNTYxLWZkMWMtNDkxMi1iZDE3LWY1N2YxYzNjN2VhZiIsInNlcXVlbmNlIjoyOSwicmVjb3JkSWQiOiJmMTUwMDc2Ny0wMTdkLTQ0YjktOWUzNi0zMzc0YWY1NjVlYmQiLCJyZWNvcmREaWdlc3QiOiJmOWQ3NzNjMDIxZTVlMmY3NDQyMmIwZjhlOTQzMzNhMDE2YzFhNDliMmRjMmRiYzE5ZGY2NWNmMzNjYTczNWNmIn0
+pipeline_transition_sequence: 30
+pipeline_transition_head: 3b82167b-738c-4a55-b697-dba1fa5f4a42
+pipeline_state_revision: 80
+pipeline_state_revision_id: 294508cd-38f3-4161-9d36-ac8eded87724
+pipeline_state_digest: 7885fed97e0ea339f6c7d5cab238af7a4bb0a63965c3a748fe71687b41e5d363
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6ODAsInJldmlzaW9uSWQiOiIyOTQ1MDhjZC0zOGYzLTQxNjEtOWQzNi1hYzhlZGVkODc3MjQiLCJwYXlsb2FkRGlnZXN0IjoiY2E1NGFjYjVmMWMxNGM0MWVhNWM1YjU1NmI4ZTRlYWUxYTE0MGE3ZmFkNDJhYWI3ZTZmMTU0Njc0MjgzNDBiNCJ9
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImFkMTNjNTYxLWZkMWMtNDkxMi1iZDE3LWY1N2YxYzNjN2VhZiIsInNlcXVlbmNlIjozMCwicmVjb3JkSWQiOiIzYjgyMTY3Yi03MzhjLTRhNTUtYjY5Ny1kYmExZmE1ZjRhNDIiLCJyZWNvcmREaWdlc3QiOiI0OWE2ZWM4NGY1YzU3MDk1NWQ1N2ZmNjA1Y2VkZTA5NDBlYjQ2YjRhYmQ0Y2NlN2NlY2YyNWM3NGU0NWQzMGFlIn0

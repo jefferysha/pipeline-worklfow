@@ -151,3 +151,7 @@
 {"ts":"2026-07-29T18:04:52Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-29T14:51:38Z authority_host_session=019fad97-4fde-7b40-a747-0f75eb2eac00"}
 {"ts":"2026-07-29T18:04:58Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"f1500767-017d-44b9-9e36-3374af565ebd"}
 {"ts":"2026-07-29T18:06:39Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-03T04:58:41Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/21"}
+{"ts":"2026-08-03T04:58:41Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-03T04:59:14Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-08-03T04:59:14Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"3b82167b-738c-4a55-b697-dba1fa5f4a42"}
