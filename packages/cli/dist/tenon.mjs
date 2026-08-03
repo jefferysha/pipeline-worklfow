@@ -3188,9 +3188,6 @@ var QuoteGateError = class extends Error {
   }
 };
 
-// packages/kernel/dist/task-plan/internal.js
-var encoder = new TextEncoder();
-
 // packages/kernel/dist/task-plan/types.js
 var TASK_PLAN_LIMITS = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
@@ -20410,7 +20407,7 @@ function encodeReconciliationPlan(plan) {
 
 // packages/kernel/dist/loops/reconciliation-operations.js
 var LOOP_ID_RE2 = /^[a-z][a-z0-9-]*$/;
-var encoder2 = new TextEncoder();
+var encoder = new TextEncoder();
 var decoder = new TextDecoder();
 var MANAGED_MARKER_RE = /^<!-- PIPELINE:LOOP-MIRROR-V1:(START|END) ([a-z][a-z0-9-]*) -->$/;
 function bytesEqual(left, right) {
@@ -20435,7 +20432,7 @@ function managedLoopSectionMarkers(loopId) {
 }
 function renderManagedLoopSection(loop) {
   const markers = managedLoopSectionMarkers(loop.id);
-  return encoder2.encode([
+  return encoder.encode([
     markers.start,
     `### \`${loop.id}\` \u2014 Pipeline \u7BA1\u7406\u7684 Loop \u955C\u50CF`,
     "",
@@ -20449,7 +20446,7 @@ function appendSection(current, section2) {
     return section2;
   const endsLf = current[current.byteLength - 1] === 10;
   const endsBlankLine = endsLf && current.byteLength >= 2 && current[current.byteLength - 2] === 10;
-  const separator = encoder2.encode(endsBlankLine ? "" : endsLf ? "\n" : "\n\n");
+  const separator = encoder.encode(endsBlankLine ? "" : endsLf ? "\n" : "\n\n");
   return concatBytes(current, separator, section2);
 }
 function scanManagedSections(bytes) {
@@ -21933,7 +21930,7 @@ var VERIFICATION_EVIDENCE_LIMITS = Object.freeze({
   skipReasonBytes: 2e3,
   outputBytes: 32 * 1024
 });
-var encoder3 = new TextEncoder();
+var encoder2 = new TextEncoder();
 
 // packages/kernel/dist/triage/types.js
 var TRIAGE_SCHEMA_VERSION = 1;
