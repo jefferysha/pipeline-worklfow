@@ -59,3 +59,13 @@
 {"ts":"2026-08-03T13:53:14Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"04493aac-50df-459b-a9b0-119d334a16ed"}
 {"ts":"2026-08-03T14:06:42Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-03T14:06:49Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T14:07:49Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T14:07:49Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-03T14:07:49Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-08-03T14:07:56Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"7f914e6b-8906-41d7-92ad-fbd8f6b94572"}
+{"ts":"2026-08-03T14:26:06Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-03T14:26:13Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-03T14:26:14Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-03T13:45:57Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T14:26:14Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"2e2343c9-8982-46c5-8725-fa6f2e704e7d"}
+{"ts":"2026-08-03T14:44:12Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-03T14:44:12Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

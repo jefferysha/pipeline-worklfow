@@ -114,7 +114,7 @@ describe('managed host command result is diagnostic after desired-state proof', 
 
 describe('managed host desired identity recovery', () => {
   test.each(['started', 'completed'] as const)(
-    '%s durable WAL reload uses the real native desired wiring without replaying mutation',
+    '%s in-memory recovery runner uses the real native desired wiring without replaying mutation',
     async (state) => {
       const marketplaceRoot = '/host/tenon-marketplace'
       const host = {
@@ -214,7 +214,8 @@ describe('managed host desired identity recovery', () => {
         }],
       }
 
-      // JSON round-trip models a process restart and durable journal reload.
+      // Keep this unit boundary focused on native desired-state wiring. The real journal writer,
+      // reader, coordinator, and process restart are covered by release-store.integration.test.ts.
       let reloaded = JSON.parse(JSON.stringify(persisted)) as ManagedReleaseJournalRecord
       const runStep = createManagedHostStepRunner({
         journal: () => reloaded,
