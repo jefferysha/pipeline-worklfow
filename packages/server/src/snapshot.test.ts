@@ -1501,6 +1501,23 @@ steps:
 })
 
 describe('computeFingerprint —— 变更检测', () => {
+  it('changes 目录在空、不可读与恢复之间切换时改变指纹，SSE 不保留旧健康状态', async () => {
+    const root = await makeProject()
+    const empty = await computeFingerprint([root], 1, undefined, async () => [])
+    const denied = await computeFingerprint([root], 1, undefined, async () => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    })
+    const recovered = await computeFingerprint([root], 1, undefined, async () => [])
+    const missing = await computeFingerprint([root], 1, undefined, async () => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+    })
+
+    expect(denied).not.toBe(empty)
+    expect(denied).toContain(`unreadable:${root}`)
+    expect(recovered).toBe(empty)
+    expect(missing).toBe(empty)
+  })
+
   it('registry 增加空的非 Git 项目也改变指纹', async () => {
     const root = await makeProject()
     expect(await computeFingerprint([root])).not.toBe(await computeFingerprint([]))

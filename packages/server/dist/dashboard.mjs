@@ -19499,7 +19499,7 @@ async function repositoryTopologyFingerprint(root) {
 }
 
 // packages/server/src/snapshotFingerprint.ts
-async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity2) {
+async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity2, readChangesDirectory) {
   const parts = [];
   for (const root of dedupeRoots(roots)) {
     parts.push(`registry:${root}`);
@@ -19518,7 +19518,15 @@ async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminal
       parts.push(`root:${root}:${anchor.dev}:${anchor.ino}`);
       parts.push(...await repositoryTopologyFingerprint(readRoot));
       const changesRoot = join36(readRoot, "openspec", "changes");
-      const entries = await readdir4(changesRoot, { withFileTypes: true }).catch(() => []);
+      let entries;
+      try {
+        entries = readChangesDirectory === void 0 ? await readdir4(changesRoot, { withFileTypes: true }) : await readChangesDirectory(changesRoot);
+      } catch (error) {
+        assertWorkflowRootAnchor(anchor);
+        if (typeof error !== "object" || error === null || Reflect.get(error, "code") !== "ENOENT") throw error;
+        entries = [];
+      }
+      assertWorkflowRootAnchor(anchor);
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name === "archive") continue;
         const changeDir = join36(changesRoot, entry.name);
@@ -19816,8 +19824,8 @@ async function buildSnapshot(deps) {
     projects
   };
 }
-async function computeFingerprint(roots, nowMs = Date.now(), rootAnchor) {
-  return computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity);
+async function computeFingerprint(roots, nowMs = Date.now(), rootAnchor, readChangesDirectory) {
+  return computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity, readChangesDirectory);
 }
 
 // packages/server/src/token.ts
@@ -25855,7 +25863,7 @@ data: ${data}
     const nowMs = Date.now();
     try {
       const deps = snapshotDeps(nowMs);
-      fp = await computeFingerprint(registry(), nowMs, deps.rootAnchor);
+      fp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory);
       if (fp !== lastFp) {
         lastFp = fp;
         try {
@@ -25944,7 +25952,7 @@ data: ${data}
     try {
       const nowMs = Date.now();
       const deps = snapshotDeps(nowMs);
-      lastFp = await computeFingerprint(registry(), nowMs, deps.rootAnchor);
+      lastFp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory);
       res.write(`event: snapshot
 data: ${JSON.stringify(await buildSnapshot(deps))}
 

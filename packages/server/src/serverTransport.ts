@@ -47,7 +47,7 @@ const pollTick = singleFlight(async (): Promise<void> => {
   const nowMs = Date.now()
   try {
     const deps = snapshotDeps(nowMs)
-    fp = await computeFingerprint(registry(), nowMs, deps.rootAnchor)
+    fp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory)
     if (fp !== lastFp) {
       lastFp = fp
       try {
@@ -126,7 +126,7 @@ async function handleStream(req: IncomingMessage, res: ServerResponse): Promise<
   try {
     const nowMs = Date.now()
     const deps = snapshotDeps(nowMs)
-    lastFp = await computeFingerprint(registry(), nowMs, deps.rootAnchor)
+    lastFp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory)
     res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(deps))}\n\n`)
   } catch {
     /* 初始快照失败不影响后续推送 */

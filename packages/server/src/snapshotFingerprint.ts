@@ -1,4 +1,5 @@
 import { lstat, readdir } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { join } from 'node:path'
 import { stateStorageSourcePathSync, TERMINAL_ACTIVITY_FILE } from '@tenon/kernel'
 import { dedupeRoots } from './projectRoots.js'
@@ -16,12 +17,15 @@ type ActivityReader = (
   nowMs: number,
 ) => Promise<unknown | undefined>
 
+type ChangesDirectoryReader = (changesRoot: string) => Promise<Dirent[]>
+
 /** Build the SSE input fingerprint while retaining the same registered-root anchor as snapshots. */
 export async function computeSnapshotFingerprint(
   roots: string[],
   nowMs: number,
   rootAnchor: ((root: string) => WorkflowRootAnchor | undefined) | undefined,
   readTerminalActivity: ActivityReader,
+  readChangesDirectory?: ChangesDirectoryReader,
 ): Promise<string> {
   const parts: string[] = []
   for (const root of dedupeRoots(roots)) {
@@ -41,7 +45,17 @@ export async function computeSnapshotFingerprint(
       parts.push(`root:${root}:${anchor.dev}:${anchor.ino}`)
       parts.push(...await repositoryTopologyFingerprint(readRoot))
       const changesRoot = join(readRoot, 'openspec', 'changes')
-      const entries = await readdir(changesRoot, { withFileTypes: true }).catch(() => [])
+      let entries: Dirent[]
+      try {
+        entries = readChangesDirectory === undefined
+          ? await readdir(changesRoot, { withFileTypes: true })
+          : await readChangesDirectory(changesRoot)
+      } catch (error) {
+        assertWorkflowRootAnchor(anchor)
+        if (typeof error !== 'object' || error === null || Reflect.get(error, 'code') !== 'ENOENT') throw error
+        entries = []
+      }
+      assertWorkflowRootAnchor(anchor)
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name === 'archive') continue
         const changeDir = join(changesRoot, entry.name)

@@ -392,6 +392,7 @@ export async function computeFingerprint(
   roots: string[],
   nowMs = Date.now(),
   rootAnchor?: (root: string) => WorkflowRootAnchor | undefined,
+  readChangesDirectory?: SnapshotDeps['readChangesDirectory'],
 ): Promise<string> {
-  return computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity)
+  return computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminalActivity, readChangesDirectory)
 }
