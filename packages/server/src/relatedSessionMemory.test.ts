@@ -501,7 +501,9 @@ describe('POST /api/mem/related-sessions/search', () => {
         if (boundedReads === 1) {
           Atomics.store(signal, 0, 1)
           Atomics.notify(signal, 0)
-          expect(Atomics.wait(signal, 1, 0, 30_000)).toBe('ok')
+          // The worker may signal before this thread starts waiting; both outcomes prove that the
+          // queued request was written, while a timeout means the synchronization contract failed.
+          expect(Atomics.wait(signal, 1, 0, 30_000)).not.toBe('timed-out')
         }
         return sourceReadTextBounded?.(path, maxBytes)
       },
