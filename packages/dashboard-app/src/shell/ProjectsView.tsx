@@ -1,14 +1,16 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { ChevronRight, SearchX } from 'lucide-react'
+import { SearchX } from 'lucide-react'
+import { unregisterProject } from '../api/governanceClient'
 import { useT } from '../i18n'
 import type { WorkflowRules } from '../model/workflowModel'
 import { PageHeader } from '../shared/PageHeader'
 import type { Snapshot } from '../types'
 import { ProjectsFocusToolbar } from './ProjectsFocusToolbar'
-import { countProjectFocus, selectFocusedProjects, type ProjectFocus } from './projectsFocusModel'
-import { buildProjectRows, compareProjectRows, type PhaseCell, type ProjectRow } from './projectsModel'
+import { selectFocusedProjects, type ProjectFocus, type ProjectFocusCounts } from './projectsFocusModel'
+import { buildProjectRows, buildRepositoryGroups, compareProjectRows, orderRepositoryGroups, summarizeRepositoryGroup, type ProjectRow, type RepositoryGroup } from './projectsModel'
+import { ProjectsRepositoryGroup } from './ProjectsRepositoryGroup'
 import { ProjectsUnreachableSection } from './ProjectsUnreachableSection'
 
 gsap.registerPlugin(useGSAP)
@@ -42,152 +44,8 @@ export interface ProjectsViewProps {
   rulesByKey: ReadonlyMap<string, WorkflowRules>
   /** 点行钻进单项目进度页（App 侧 = setCurrentRoot(root) + setView('progress')）。 */
   onOpenProject: (root: string) => void
-}
-
-/**
- * 迷你相位轨 —— 自解释版（#3b）：主信息 = 一行「当前 {相位名}」文字（frontier=最靠后的落点相位），
- * 让人不用猜裸点含义；空项目（无落点）显示「未开始」。裸点轨保留但降为宽屏辅助（aria-hidden 纯装饰，
- * 仍带 data-phase/data-state/data-count 供测试与 hover title）。
- */
-function MiniTrack({
-  rowId,
-  cells,
-  t,
-}: {
-  rowId: string
-  cells: PhaseCell[]
-  t: (k: string, vars?: Record<string, string | number>) => string
-}): JSX.Element {
-  // frontier = 最靠后的落点相位（有件 → current）；无落点 = 空项目/未起步 → 「未开始」。
-  let current: PhaseCell | undefined
-  for (const cell of cells) if (cell.count > 0) current = cell
-  const atLabel = current ? t('projects.mini_at', { phase: current.label }) : t('projects.mini_none')
-  return (
-    <span
-      data-testid={`${rowId}-track`}
-      className="col-start-2 col-end-4 row-start-2 flex w-full min-w-0 flex-1 items-center gap-3 overflow-hidden sm:w-auto"
-    >
-      <span
-        data-testid={`${rowId}-at`}
-        data-started={current ? 'true' : 'false'}
-        className="flex-none whitespace-nowrap text-[14px] font-medium text-text-2"
-      >
-        {atLabel}
-      </span>
-      <span aria-hidden="true" className="hidden flex-none items-center gap-0 min-[560px]:flex">
-        {cells.map((cell, i) => {
-          const reached = cell.state !== 'todo'
-          const dotCls =
-            cell.state === 'current'
-              ? 'h-2 w-2 bg-(--accent)'
-              : cell.state === 'done'
-                ? 'h-[7px] w-[7px] bg-border-2'
-                : 'h-[7px] w-[7px] border border-border bg-transparent'
-          return (
-            <span key={cell.phase} className="flex flex-none items-center">
-              {i > 0 && <span className={`h-px w-3 flex-none ${reached ? 'bg-border-2' : 'bg-border'}`} />}
-              <span
-                data-phase={cell.phase}
-                data-state={cell.state}
-                data-count={cell.count}
-                title={cell.count > 0 ? `${cell.label} · ${cell.count}` : cell.label}
-                className={`flex-none rounded-full ${dotCls}`}
-              />
-            </span>
-          )
-        })}
-      </span>
-    </span>
-  )
-}
-
-/** 右侧健康摘要：流程中恒显；动手/运行仅在 >0 时出现（并各自语义色强调）。 */
-function HealthSummary({
-  rowId,
-  wip,
-  need,
-  running,
-  t,
-}: {
-  rowId: string
-  wip: number
-  need: number
-  running: number
-  t: (k: string) => string
-}): JSX.Element {
-  return (
-    <span
-      className="col-start-2 col-end-4 row-start-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[13px] tabular-nums sm:flex-none sm:flex-nowrap"
-      data-testid={`${rowId}-summary`}
-    >
-      <span data-testid={`${rowId}-stat-wip`} data-value={wip} className="text-text-3">
-        {t('projects.stat_wip')} <span className="font-semibold text-text-2">{wip}</span>
-      </span>
-      {need > 0 && (
-        <span data-testid={`${rowId}-stat-need`} data-value={need} className="text-text-3">
-          {t('projects.stat_need')} <span className="font-semibold text-red-d">{need}</span>
-        </span>
-      )}
-      {running > 0 && (
-        <span data-testid={`${rowId}-stat-running`} data-value={running} className="text-text-3">
-          {t('projects.stat_running')} <span className="font-semibold text-green-d">{running}</span>
-        </span>
-      )}
-    </span>
-  )
-}
-
-/** 单个可达项目行（整行 button，可点钻进）。need 分区高亮 = accent 点 + 极轻 tint（无左边框）。 */
-function ProjectRowButton({
-  rowId,
-  row,
-  visibleRoot,
-  need,
-  onOpen,
-  t,
-}: {
-  rowId: string
-  row: ProjectRow
-  visibleRoot: string
-  /** 是否归「需要你动手」分区（决定高亮）。 */
-  need: boolean
-  onOpen: (root: string) => void
-  t: (k: string, vars?: Record<string, string | number>) => string
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      id={`project-row-${encodeURIComponent(row.root)}`}
-      data-anim="pv-item"
-      data-testid={rowId}
-      data-ok="true"
-      data-need={need}
-      aria-label={t('projects.open_aria', { name: row.basename, root: row.root })}
-      onClick={() => onOpen(row.root)}
-      className={`group grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-[border-color,background-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) active:scale-[.995] motion-reduce:transform-none sm:flex sm:flex-nowrap sm:gap-4 sm:px-5 ${
-        need ? 'border-accent-b bg-accent-t hover:border-(--accent)' : 'border-border bg-card hover:border-border-2 hover:bg-fill'
-      }`}
-    >
-      <span
-        aria-hidden="true"
-        className={`col-start-1 row-start-1 h-2 w-2 flex-none rounded-full ${need ? 'bg-(--accent)' : 'border border-border-2 bg-transparent'}`}
-      />
-      <span className="col-start-2 row-start-1 flex min-w-0 flex-col sm:w-[240px] sm:flex-none">
-        <span className="truncate font-mono text-[16px] font-bold tracking-[-0.01em] text-text group-hover:text-(--accent)">
-          {row.basename}
-        </span>
-        <span className="truncate font-mono text-[11px] text-text-3" title={row.root}>
-          {visibleRoot}
-        </span>
-      </span>
-      <MiniTrack rowId={rowId} cells={row.cells} t={t} />
-      <HealthSummary rowId={rowId} wip={row.wip} need={row.need} running={row.running} t={t} />
-      <ChevronRight
-        aria-hidden="true"
-        className="col-start-3 row-start-1 h-4 w-4 flex-none text-text-3 opacity-70 transition-opacity group-hover:opacity-100 sm:opacity-0"
-      />
-    </button>
-  )
+  unregisterRoot?: (root: string) => Promise<void>
+  onRegistryChanged?: () => void
 }
 
 /** 分区头：小标题 + 细分隔线（need 分区标题走 accent 色）。 */
@@ -204,15 +62,37 @@ function SectionHead({ label, tone }: { label: string; tone: 'need' | 'quiet' })
   )
 }
 
-export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsViewProps): JSX.Element {
+export function ProjectsView({
+  snapshot,
+  rulesByKey,
+  onOpenProject,
+  unregisterRoot = unregisterProject,
+  onRegistryChanged,
+}: ProjectsViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [unreachableOpen, setUnreachableOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [focus, setFocus] = useState<ProjectFocus>('all')
+  const [expandedByGroup, setExpandedByGroup] = useState<Record<string, boolean>>({})
+  const [removedUnreachable, setRemovedUnreachable] = useState<ReadonlySet<string>>(new Set())
+  const [cleanupFailures, setCleanupFailures] = useState<string[]>([])
+  const [cleanupBusy, setCleanupBusy] = useState(false)
 
   const rows = useMemo(() => buildProjectRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
+  const repositoryGroups = useMemo(() => buildRepositoryGroups(rows), [rows])
+  useEffect(() => {
+    const unreadableRoots = new Set(rows.filter((row) => !row.ok).map((row) => row.root))
+    setRemovedUnreachable((current) => {
+      const retained = new Set([...current].filter((root) => unreadableRoots.has(root)))
+      return retained.size === current.size ? current : retained
+    })
+    setCleanupFailures((current) => {
+      const retained = current.filter((root) => unreadableRoots.has(root))
+      return retained.length === current.length ? current : retained
+    })
+  }, [rows])
   const duplicateBasenames = useMemo(() => {
     const counts = new Map<string, number>()
     for (const row of rows) counts.set(row.basename, (counts.get(row.basename) ?? 0) + 1)
@@ -243,23 +123,91 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
     duplicateBasenames.has(row.basename)
       ? `project-row-${row.basename}-${encodeURIComponent(row.root)}`
       : `project-row-${row.basename}`
-  const focusCounts = useMemo(() => countProjectFocus(rows), [rows])
   const orderedRows = useMemo(() => {
     const reachable = rows.filter((row) => row.ok).sort(compareProjectRows)
     const unreachable = rows.filter((row) => !row.ok)
     return [...reachable, ...unreachable]
   }, [rows])
-  const focusedRows = useMemo(
-    () => selectFocusedProjects(orderedRows, query, focus),
-    [focus, orderedRows, query],
+  const searchedRows = useMemo(
+    () => selectFocusedProjects(orderedRows, query, 'all')
+      .filter((row) => !removedUnreachable.has(row.root)),
+    [orderedRows, query, removedUnreachable],
   )
-  const { needRows, restRows, unreachable } = useMemo(() => {
-    const reachable = focusedRows.filter((r) => r.ok)
-    const need = reachable.filter((r) => r.need > 0)
-    const rest = reachable.filter((r) => r.need === 0)
-    const unreach = focusedRows.filter((r) => !r.ok)
-    return { needRows: need, restRows: rest, unreachable: unreach }
-  }, [focusedRows])
+  const { needGroups, restGroups, unreachable } = useMemo(() => {
+    const searchedRoots = new Set(searchedRows.filter((row) => row.ok).map((row) => row.root))
+    const groups = orderRepositoryGroups(repositoryGroups.flatMap((group) => {
+      const workspaces = group.workspaces.filter((workspace) => searchedRoots.has(workspace.root))
+      if (workspaces.length === 0) return []
+      return [summarizeRepositoryGroup(group, workspaces)]
+    }))
+    const focusedGroups = groups.filter((group) => focus === 'all'
+      || (focus === 'attention' && group.need > 0)
+      || (focus === 'running' && group.running > 0))
+    const need = focusedGroups.filter((group) => group.need > 0)
+    const rest = focusedGroups.filter((group) => group.need === 0)
+    const unreach = focus === 'all' || focus === 'unreachable'
+      ? searchedRows.filter((row) => !row.ok)
+      : []
+    return { needGroups: need, restGroups: rest, unreachable: unreach }
+  }, [focus, repositoryGroups, searchedRows])
+  const focusCounts = useMemo((): ProjectFocusCounts => {
+    const unreadable = rows.filter((row) => !row.ok).length
+    return {
+      all: repositoryGroups.length + unreadable,
+      attention: repositoryGroups.filter((group) => group.need > 0).length,
+      running: repositoryGroups.filter((group) => group.running > 0).length,
+      unreachable: unreadable,
+    }
+  }, [repositoryGroups, rows])
+  const shownGroups = needGroups.length + restGroups.length + unreachable.length
+  const cleanupFailureCount = useMemo(() => {
+    const visibleUnreachable = new Set(unreachable.map((row) => row.root))
+    return cleanupFailures.filter((root) => visibleUnreachable.has(root)).length
+  }, [cleanupFailures, unreachable])
+
+  function groupExpanded(group: RepositoryGroup): boolean {
+    if (query.trim().length > 0 || focus !== 'all') return true
+    return expandedByGroup[group.id]
+      ?? (group.workspaceCount === 1 || group.need > 0 || group.running > 0)
+  }
+
+  function renderGroup(group: RepositoryGroup): JSX.Element {
+    return (
+      <ProjectsRepositoryGroup
+        key={group.id}
+        group={group}
+        expanded={groupExpanded(group)}
+        visibleRoots={visibleRoots}
+        rowId={rowId}
+        onExpanded={(expanded) => setExpandedByGroup((current) => ({ ...current, [group.id]: expanded }))}
+        onOpen={onOpenProject}
+        t={t}
+      />
+    )
+  }
+
+  async function unregisterUnreachable(): Promise<void> {
+    if (cleanupBusy || unreachable.length === 0) return
+    if (!window.confirm(t('projects.cleanup_confirm', { n: unreachable.length }))) return
+    setCleanupBusy(true)
+    const removed: string[] = []
+    const failed: string[] = []
+    for (const row of unreachable) {
+      try {
+        await unregisterRoot(row.root)
+        removed.push(row.root)
+      } catch {
+        failed.push(row.root)
+      }
+    }
+    if (removed.length > 0) {
+      setRemovedUnreachable((current) => new Set([...current, ...removed]))
+      onRegistryChanged?.()
+    }
+    setCleanupFailures(failed)
+    if (failed.length > 0) setUnreachableOpen(true)
+    setCleanupBusy(false)
+  }
 
   function clearConditions(): void {
     setQuery('')
@@ -302,7 +250,11 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
     <section ref={rootRef} data-testid="projects-view" data-page-frame="standard" aria-label={t('projects.title')} className="mx-auto w-full max-w-[1088px] pt-7 pb-5">
       <PageHeader
         title={t('projects.title')}
-        description={<span data-testid="projects-summary">{t('projects.count_summary', { n: rows.length, need: focusCounts.attention })}</span>}
+        description={<span data-testid="projects-summary">{t('projects.count_summary', {
+          n: repositoryGroups.length,
+          workspaces: rows.filter((row) => row.ok).length,
+          need: repositoryGroups.filter((group) => group.need > 0).length,
+        })}</span>}
       />
 
       {snapshot === null ? (
@@ -325,53 +277,33 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
             query={query}
             focus={focus}
             counts={focusCounts}
-            shown={focusedRows.length}
-            total={rows.length}
+            shown={shownGroups}
+            total={focusCounts.all}
             searchRef={searchRef}
             onQuery={setQuery}
             onFocus={setFocus}
             onClear={clearConditions}
           />
           <div className="flex flex-col gap-7">
-          {needRows.length > 0 && (
+          {needGroups.length > 0 && (
             <div data-testid="section-need">
               <SectionHead label={t('projects.section_need')} tone="need" />
               <div className="flex flex-col gap-2.5">
-                {needRows.map((row) => (
-                  <ProjectRowButton
-                    key={row.root}
-                    rowId={rowId(row)}
-                    row={row}
-                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
-                    need
-                    onOpen={onOpenProject}
-                    t={t}
-                  />
-                ))}
+                {needGroups.map(renderGroup)}
               </div>
             </div>
           )}
 
-          {restRows.length > 0 && (
+          {restGroups.length > 0 && (
             <div data-testid="section-rest">
               <SectionHead label={t('projects.section_rest')} tone="quiet" />
               <div className="flex flex-col gap-2.5">
-                {restRows.map((row) => (
-                  <ProjectRowButton
-                    key={row.root}
-                    rowId={rowId(row)}
-                    row={row}
-                    visibleRoot={visibleRoots.get(row.root) ?? row.root}
-                    need={false}
-                    onOpen={onOpenProject}
-                    t={t}
-                  />
-                ))}
+                {restGroups.map(renderGroup)}
               </div>
             </div>
           )}
 
-          {focusedRows.length === 0 && (
+          {shownGroups === 0 && (
             <div
               className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-fill/50 px-6 py-10 text-center"
               data-testid="projects-filter-empty"
@@ -400,6 +332,9 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
               rowId={rowId}
               t={t}
               onExpanded={setUnreachableOpen}
+              cleanupBusy={cleanupBusy}
+              cleanupFailureCount={cleanupFailureCount}
+              onBatchUnregister={() => { void unregisterUnreachable() }}
             />
           )}
         </div>

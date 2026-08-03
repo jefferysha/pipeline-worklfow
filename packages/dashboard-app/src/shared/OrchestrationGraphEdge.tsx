@@ -1,102 +1,148 @@
-import type { OrchestrationEdge } from '../api/orchestrationGraphClient'
-import { edgeLabel, type Translate } from './orchestrationGraphPresentation'
+import type { KeyboardEvent, RefCallback } from 'react'
+import { X } from 'lucide-react'
+import type { OrchestrationEdge, OrchestrationNode } from '../api/orchestrationGraphClient'
 
-interface OrchestrationGraphEdgeProps {
-  readonly edge: OrchestrationEdge
-  readonly source: { readonly x: number; readonly y: number }
-  readonly target: { readonly x: number; readonly y: number }
-  readonly transitionLane: number
-  readonly showLabel: boolean
-  readonly t: Translate
+interface OrchestrationGraphNodeButtonProps {
+  readonly label: string
+  readonly kindLabel: string
+  readonly statusLabel: string
+  readonly selected: boolean
+  readonly className: string
+  readonly tone: string
+  readonly setRef: RefCallback<HTMLButtonElement>
+  readonly onSelect: () => void
+  readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void
 }
 
-export function transitionLanes(
-  edges: readonly OrchestrationEdge[],
-): ReadonlyMap<string, number> {
-  const groups = new Map<string, OrchestrationEdge[]>()
-  for (const edge of edges) {
-    if (edge.kind !== 'transitions') continue
-    const endpoints = edge.source === edge.target
-      ? [edge.source, edge.target]
-      : [edge.source, edge.target].sort()
-    const key = `${endpoints[0]}\u0000${endpoints[1]}`
-    groups.set(key, [...(groups.get(key) ?? []), edge])
-  }
-  const lanes = new Map<string, number>()
-  for (const group of groups.values()) {
-    const sorted = [...group].sort((a, b) => a.id.localeCompare(b.id))
-    const selfLoop = sorted[0]?.source === sorted[0]?.target
-    sorted.forEach((edge, index) => {
-      lanes.set(edge.id, selfLoop ? index : index - (sorted.length - 1) / 2)
-    })
-  }
-  return lanes
-}
-
-export function OrchestrationGraphEdge({
-  edge,
-  source,
-  target,
-  transitionLane,
-  showLabel,
-  t,
-}: OrchestrationGraphEdgeProps): JSX.Element {
-  const selfTransition = edge.source === edge.target
-  const transition = edge.kind === 'transitions'
-  const sourceX = source.x + 138
-  const sourceY = source.y + 23
-  const targetX = target.x
-  const targetY = target.y + 23
-  const transitionMidX = (sourceX + targetX) / 2 + transitionLane * 36
-  const transitionMidY = (sourceY + targetY) / 2 + transitionLane * 18
-  const selfLoopReach = 28 + transitionLane * 18
-  const selfLoopOffset = transitionLane * 12
+export function OrchestrationGraphNodeButton({
+  label,
+  kindLabel,
+  statusLabel,
+  selected,
+  className,
+  tone,
+  setRef,
+  onSelect,
+  onKeyDown,
+}: OrchestrationGraphNodeButtonProps): JSX.Element {
   return (
-    <g data-edge-id={edge.id}>
-      {selfTransition ? (
-        <path
-          d={`M ${source.x + 138} ${source.y + 13 + selfLoopOffset} C ${source.x + 138 + selfLoopReach} ${source.y + 10 + selfLoopOffset}, ${source.x + 138 + selfLoopReach} ${source.y + 50 + selfLoopOffset}, ${source.x + 138} ${source.y + 40 + selfLoopOffset}`}
-          fill="none"
-          stroke="var(--text-3)"
-          strokeWidth="1.75"
-          markerEnd="url(#orchestration-arrowhead)"
-          data-self-loop="true"
-        />
-      ) : transition ? (
-        <path
-          d={`M ${sourceX} ${sourceY} C ${transitionMidX} ${sourceY}, ${transitionMidX} ${targetY}, ${targetX} ${targetY}`}
-          fill="none"
-          stroke="var(--text-3)"
-          strokeWidth="1.75"
-          markerEnd="url(#orchestration-arrowhead)"
-          data-transition-route="true"
-          data-transition-lane={transitionLane}
-        />
+    <button
+      ref={setRef}
+      type="button"
+      aria-pressed={selected}
+      aria-label={`${label} · ${kindLabel}${statusLabel === '' ? '' : ` · ${statusLabel}`}`}
+      className={`${className} relative rounded-xl border px-3 py-2.5 text-left outline-none transition-[border-color,box-shadow,background-color] hover:shadow-sm focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card aria-pressed:border-(--accent) aria-pressed:ring-2 aria-pressed:ring-(--accent) motion-reduce:transition-none ${tone}`}
+      onClick={onSelect}
+      onKeyDown={onKeyDown}
+    >
+      {selected && <span className="absolute top-1.5 right-1.5 text-accent-d" aria-hidden="true">✓</span>}
+      <span className="block truncate pr-3 text-xs font-semibold text-text">{label}</span>
+      <span className="mt-0.5 block truncate text-[10.5px] text-text-3">
+        {kindLabel}{statusLabel === '' ? '' : ` · ${statusLabel}`}
+      </span>
+    </button>
+  )
+}
+
+interface OrchestrationGraphRelationshipListProps {
+  readonly edges: readonly OrchestrationEdge[]
+  readonly nodes: ReadonlyMap<string, OrchestrationNode>
+  readonly heading: string
+  readonly emptyLabel: string
+  readonly nodeLabel: (node: OrchestrationNode) => string
+  readonly edgeLabel: (edge: OrchestrationEdge) => string
+}
+
+export function OrchestrationGraphRelationshipList({
+  edges,
+  nodes,
+  heading,
+  emptyLabel,
+  nodeLabel,
+  edgeLabel,
+}: OrchestrationGraphRelationshipListProps): JSX.Element {
+  return (
+    <section className="rounded-xl border border-border bg-card px-3 py-2.5" aria-label={heading} data-testid="orchestration-relationships">
+      <h4 className="mb-1.5 text-[11px] font-semibold text-text-3">{heading}</h4>
+      {edges.length === 0 ? (
+        <p className="m-0 text-[11px] text-text-3">{emptyLabel}</p>
       ) : (
-        <line
-          x1={sourceX}
-          y1={sourceY}
-          x2={targetX}
-          y2={targetY}
-          stroke="var(--text-3)"
-          strokeWidth="1.75"
-          markerEnd="url(#orchestration-arrowhead)"
-        />
+        <ul className="m-0 grid max-h-64 gap-1 overflow-y-auto pl-4 text-[11px] leading-5 text-text-2 sm:grid-cols-2">
+          {edges.map((edge) => {
+            const source = nodes.get(edge.source)
+            const target = nodes.get(edge.target)
+            return (
+              <li key={edge.id} data-edge-kind={edge.kind}>
+                {source === undefined ? '?' : nodeLabel(source)} · {edgeLabel(edge)} · {target === undefined ? '?' : nodeLabel(target)}
+              </li>
+            )
+          })}
+        </ul>
       )}
-      {edge.kind === 'transitions' && showLabel && (
-        <text
-          x={selfTransition ? source.x + 138 + selfLoopReach : transitionMidX}
-          y={selfTransition ? source.y + 7 + selfLoopOffset : transitionMidY - 4}
-          fill="var(--text-2)"
-          fontSize="9"
-          paintOrder="stroke"
-          stroke="var(--card)"
-          strokeWidth="3"
-          textAnchor={selfTransition ? 'end' : 'middle'}
-        >
-          {edgeLabel(edge, t)}
-        </text>
+    </section>
+  )
+}
+
+interface OrchestrationGraphSelectionProps {
+  readonly node: OrchestrationNode
+  readonly edges: readonly OrchestrationEdge[]
+  readonly nodes: ReadonlyMap<string, OrchestrationNode>
+  readonly kindLabel: string
+  readonly clearLabel: string
+  readonly incomingLabel: string
+  readonly outgoingLabel: string
+  readonly noEdgesLabel: string
+  readonly nodeLabel: (node: OrchestrationNode) => string
+  readonly statusLabel: (status: string | null) => string
+  readonly metadataLabel: (key: string) => string
+  readonly metadataValue: (key: string, value: string) => string
+  readonly edgeLabel: (edge: OrchestrationEdge) => string
+  readonly onClear: () => void
+}
+
+export function OrchestrationGraphSelection(props: OrchestrationGraphSelectionProps): JSX.Element {
+  return (
+    <div className="mt-2.5 rounded-lg border border-blue-b bg-blue-t px-3 py-2.5" data-testid="orchestration-selection">
+      <div className="flex items-baseline justify-between gap-3">
+        <strong className="text-xs text-text">{props.nodeLabel(props.node)}</strong>
+        <div className="flex items-center gap-2">
+          <span className="text-[10.5px] text-blue-d">{props.kindLabel}</span>
+          <button type="button" className="rounded p-0.5 text-text-3 outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-(--accent)" aria-label={props.clearLabel} onClick={props.onClear}>
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      {props.node.status !== null && <p className="mt-1 mb-0 text-xs text-text-2">{props.statusLabel(props.node.status)}</p>}
+      {props.node.metadata.length > 0 && (
+        <dl className="mt-2 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
+          {props.node.metadata.map((item) => (
+            <div key={item.key} className="contents">
+              <dt className="text-text-3">{props.metadataLabel(item.key)}</dt>
+              <dd className="m-0 truncate text-text-2">{props.metadataValue(item.key, item.value)}</dd>
+            </div>
+          ))}
+        </dl>
       )}
-    </g>
+      {props.edges.length > 0 && (
+        <div className="mt-2 grid gap-2 text-[11px] sm:grid-cols-2">
+          {(['incoming', 'outgoing'] as const).map((direction) => {
+            const edges = props.edges.filter((edge) => direction === 'incoming' ? edge.target === props.node.id : edge.source === props.node.id)
+            return (
+              <div key={direction}>
+                <h4 className="m-0 font-semibold text-text-3">{direction === 'incoming' ? props.incomingLabel : props.outgoingLabel}</h4>
+                {edges.length === 0 ? <p className="mt-1 mb-0 text-text-3">{props.noEdgesLabel}</p> : (
+                  <ul className="mt-1 mb-0 space-y-1 pl-4 text-text-2">
+                    {edges.map((edge) => {
+                      const peer = props.nodes.get(direction === 'incoming' ? edge.source : edge.target)
+                      return <li key={edge.id}>{props.edgeLabel(edge)} · {peer === undefined ? '?' : props.nodeLabel(peer)}</li>
+                    })}
+                  </ul>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchHostTargetDetection,
   fetchHostTargetPlan,
   fetchHostTargets,
   HostTargetPlanClientError,
@@ -130,6 +131,87 @@ afterEach(() => {
 })
 
 describe('host target plan read-only client', () => {
+  it('accepts only the strict native host detection response and uses the read-only GET boundary', async () => {
+    const detection = {
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: ['codex', 'claude'],
+      recommended_host: 'codex',
+      recommended_operation: 'update',
+      reason: 'tenon-plugin-detected',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(detection), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchHostTargetDetection()).resolves.toEqual(detection)
+    expect(fetchMock).toHaveBeenCalledWith('/api/host-target-detection', {
+      headers: { Accept: 'application/json' },
+    })
+  })
+
+  it('accepts an ordered subset containing only Claude and the explicit none state', async () => {
+    const claude = {
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: ['claude'],
+      recommended_host: 'claude',
+      recommended_operation: 'setup',
+      reason: 'host-detected',
+    }
+    const none = {
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: [],
+      recommended_host: null,
+      recommended_operation: null,
+      reason: 'none',
+    }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(claude), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(none), { status: 200 })))
+
+    await expect(fetchHostTargetDetection()).resolves.toEqual(claude)
+    await expect(fetchHostTargetDetection()).resolves.toEqual(none)
+  })
+
+  it('rejects detection shape, ordering, recommendation, and unknown-key drift', async () => {
+    const valid = {
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: ['codex', 'claude'],
+      recommended_host: 'codex',
+      recommended_operation: 'update',
+      reason: 'tenon-plugin-detected',
+    }
+    const values = [
+      { ...valid, schema_version: 'host-target-detection/v2' },
+      { ...valid, detected_hosts: ['claude', 'codex'] },
+      { ...valid, recommended_host: 'cursor' },
+      { ...valid, recommended_operation: 'setup' },
+      { ...valid, home: '/private/home' },
+    ]
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () =>
+      new Response(JSON.stringify(values.shift()), { status: 200 })))
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(fetchHostTargetDetection()).rejects.toMatchObject({
+        kind: 'decoder',
+        code: 'HOST_TARGET_DETECTION_RESPONSE_INVALID',
+        status: 200,
+      })
+    }
+  })
+
+  it('preserves a missing detection endpoint as an HTTP fallback signal', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: false, error: 'not found' }), { status: 404 }),
+    ))
+
+    await expect(fetchHostTargetDetection()).rejects.toMatchObject({
+      kind: 'http',
+      code: 'HOST_TARGET_HTTP_ERROR',
+      status: 404,
+    })
+  })
+
   it('accepts only an empty catalog or the complete ordered unique registered catalog', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...catalog, targets: [] }), { status: 200 }))

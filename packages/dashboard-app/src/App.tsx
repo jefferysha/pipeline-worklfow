@@ -413,6 +413,7 @@ function AppShell(): JSX.Element {
           <ProjectsView
             snapshot={snapshot}
             rulesByKey={rulesByKey}
+            onRegistryChanged={refresh}
             onOpenProject={(root) => {
               selectProject(root, 'progress')
               setView('progress')

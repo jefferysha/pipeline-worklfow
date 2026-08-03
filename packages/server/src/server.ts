@@ -38,7 +38,7 @@ import {
 import { readRegistry } from './registry.js'
 import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret } from './secrets.js'
 import { listAllSkillsDetailed } from './skillsRegistry.js'
-import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
+import { buildSnapshot, computeFingerprint, dedupeRoots, snapshotDepsFactory } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { buildAfkReadiness } from './afkReadiness.js'
 import { listDockerImages } from './dockerImages.js'
@@ -181,23 +181,14 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       })
   const routerPatternScorer = options.scoreRouterPattern ?? scoreRouterPatternWithGrep
   const capabilities: Record<string, boolean> = {
-    afk: true,
-    loops: true,
-    operations: operationsAvailable,
+    afk: true, loops: true, operations: operationsAvailable, config: Boolean(manifestPath),
     traffic: traceStore !== undefined && hasTraceTimelineReader(traceStore),
-    config: Boolean(manifestPath),
-    router_preview: true,
-    cadence: cadenceScheduler !== null,
+    router_preview: true, cadence: cadenceScheduler !== null,
   }
-  const snapshotDeps = (nowMs?: number): SnapshotDeps => ({
-    registry,
-    store,
-    version,
-    clock,
-    capabilities,
-    gitHeadSha,
-    workspaceFingerprint,
-    ...(nowMs === undefined ? {} : { now: () => nowMs }),
+  let snapshotRootAnchor: ((root: string) => WorkflowRootAnchor | undefined) | undefined
+  const snapshotDeps = snapshotDepsFactory({
+    registry, store, version, clock, capabilities, gitHeadSha, workspaceFingerprint,
+    rootAnchor: (root) => snapshotRootAnchor?.(root),
   })
 
   const {
@@ -236,6 +227,10 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
     operationsAvailable,
     operationRunner,
   })
+  snapshotRootAnchor = (root) => {
+    const checked = workflowRootForRequest(root)
+    return checked.ok ? checked.anchor : undefined
+  }
 
   let boundPort = 0
   async function resolveSessionLink(root: string, name: string): Promise<Record<string, unknown>> {

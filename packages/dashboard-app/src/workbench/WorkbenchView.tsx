@@ -472,12 +472,10 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
         onDelete={openWorkflowDelete}
         onGovernance={() => setAdvancedOpen(true)}
         onSave={() => void save()}
+        trackControls={<TrackSelector state={mandatory} onDirtyChange={reportTrackDirty} />}
       />
       {def && (
         <>
-          <div className="mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm" data-testid="wb-track-context">
-            <TrackSelector state={mandatory} onDirtyChange={reportTrackDirty} />
-          </div>
           <ExecutionTimelineComposer
             workflowName={def.name}
             lanes={boardLanes}

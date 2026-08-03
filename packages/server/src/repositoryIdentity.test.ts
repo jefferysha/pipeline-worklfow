@@ -1,0 +1,138 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { promisify } from 'node:util'
+import { probeRepositoryIdentity } from './repositoryIdentity.js'
+
+const execFileAsync = promisify(execFile)
+const tempRoots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
+
+async function git(cwd: string, args: string[]): Promise<void> {
+  await execFileAsync('git', args, { cwd })
+}
+
+describe('probeRepositoryIdentity', () => {
+  it('assigns a primary checkout and its worktree the same opaque repository identity', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'tenon-repository-identity-'))
+    tempRoots.push(parent)
+    const primary = join(parent, 'named-repository')
+    const worktree = join(parent, 'feature-worktree')
+    await git(parent, ['init', primary])
+    await git(primary, [
+      '-c', 'user.name=Tenon Test',
+      '-c', 'user.email=tenon@example.invalid',
+      'commit', '--allow-empty', '-m', 'initial',
+    ])
+    await git(primary, ['worktree', 'add', '-b', 'feature', worktree])
+
+    const primaryIdentity = await probeRepositoryIdentity(primary)
+    const worktreeIdentity = await probeRepositoryIdentity(worktree)
+
+    expect(primaryIdentity).toEqual({
+      id: expect.stringMatching(/^[0-9a-f]{64}$/),
+      label: 'named-repository',
+      workspace_kind: 'primary',
+    })
+    expect(worktreeIdentity).toEqual({
+      id: primaryIdentity?.id,
+      label: 'named-repository',
+      workspace_kind: 'worktree',
+    })
+  })
+
+  it('uses the fixed no-shell Git query with a bounded timeout', async () => {
+    const identity = await probeRepositoryIdentity('/registered/repository', {
+      runGit: async (root, args, timeoutMs) => {
+        expect(root).toBe('/registered/repository')
+        expect(args).toEqual([
+          'rev-parse',
+          '--path-format=absolute',
+          '--git-common-dir',
+          '--show-toplevel',
+          '--git-dir',
+        ])
+        expect(timeoutMs).toBe(1_500)
+        return '/registered/repository/.git\n/registered/repository\n/registered/repository/.git\n'
+      },
+    })
+
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+  })
+
+  it('classifies separate Git directories by Git identity instead of their filesystem parent', async () => {
+    const identity = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/external/repository.git\n/code/repository\n/external/repository.git\n',
+    })
+
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+  })
+
+  it('uses the primary worktree label when its external Git directory itself is named .git', async () => {
+    const identity = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/metadata/.git\n/code/repository\n/metadata/.git\n',
+    })
+
+    expect(identity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+  })
+
+  it('keeps the primary label for linked worktrees backed by an external .git directory', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'tenon-external-repository-identity-'))
+    tempRoots.push(parent)
+    const primary = join(parent, 'code', 'repository')
+    const gitDirectory = join(parent, 'metadata', '.git')
+    const worktree = join(parent, 'feature-worktree')
+    await mkdir(join(parent, 'code'), { recursive: true })
+    await mkdir(join(parent, 'metadata'), { recursive: true })
+    await git(parent, ['init', `--separate-git-dir=${gitDirectory}`, primary])
+    await git(primary, [
+      '-c', 'user.name=Tenon Test',
+      '-c', 'user.email=tenon@example.invalid',
+      'commit', '--allow-empty', '-m', 'initial',
+    ])
+    await git(primary, ['worktree', 'add', '-b', 'feature', worktree])
+
+    const primaryIdentity = await probeRepositoryIdentity(primary)
+    const worktreeIdentity = await probeRepositoryIdentity(worktree)
+
+    expect(primaryIdentity).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+    expect(worktreeIdentity).toEqual({
+      id: primaryIdentity?.id,
+      label: 'metadata',
+      workspace_kind: 'worktree',
+    })
+  })
+
+  it('derives one stable label from an external repository.git common directory', async () => {
+    const primary = await probeRepositoryIdentity('/code/repository', {
+      runGit: async () => '/metadata/repository.git\n/code/repository\n/metadata/repository.git\n',
+    })
+    const worktree = await probeRepositoryIdentity('/worktrees/feature', {
+      runGit: async () => '/metadata/repository.git\n/worktrees/feature\n/metadata/repository.git/worktrees/feature\n',
+    })
+
+    expect(primary).toMatchObject({ label: 'repository', workspace_kind: 'primary' })
+    expect(worktree).toEqual({
+      id: primary?.id,
+      label: 'repository',
+      workspace_kind: 'worktree',
+    })
+  })
+
+  it('omits identity for a non-Git root, a timeout, or malformed output', async () => {
+    const nonGit = await mkdtemp(join(tmpdir(), 'tenon-non-git-'))
+    tempRoots.push(nonGit)
+    await expect(probeRepositoryIdentity(nonGit)).resolves.toBeUndefined()
+    await expect(probeRepositoryIdentity('/registered/repository', {
+      runGit: async () => { throw new Error('timed out') },
+    })).resolves.toBeUndefined()
+    await expect(probeRepositoryIdentity('/registered/repository', {
+      runGit: async () => 'relative/.git\n/registered/repository\n/registered/repository/.git\n',
+    })).resolves.toBeUndefined()
+  })
+})

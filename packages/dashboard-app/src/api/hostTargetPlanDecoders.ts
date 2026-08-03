@@ -1,13 +1,16 @@
 import { isRecord, stringArray } from './transport'
 import {
+  HOST_DETECTION_SCHEMA_VERSION,
   HOST_PLAN_SCHEMA_VERSION,
   type HostCapability,
   type HostId,
   type HostOperation,
+  type NativeHostId,
   type HostPlanCommand,
   type HostPlanStep,
   type HostTarget,
   type HostTargetCatalog,
+  type HostTargetDetection,
   type HostTargetPlan,
 } from './hostTargetPlanTypes'
 
@@ -15,6 +18,7 @@ const HOST_IDS = [
   'codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi',
   'devin', 'zed', 'aider', 'continue', 'cline', 'amp',
 ] as const satisfies readonly HostId[]
+const NATIVE_HOST_IDS = ['codex', 'claude'] as const
 
 const NATIVE_CAPABILITIES = [
   'native-marketplace',
@@ -50,6 +54,54 @@ function arraysEqual(left: readonly string[], right: readonly string[]): boolean
 
 function isHostId(value: unknown): value is HostId {
   return typeof value === 'string' && (HOST_IDS as readonly string[]).includes(value)
+}
+
+function isNativeHostId(value: unknown): value is NativeHostId {
+  return value === 'codex' || value === 'claude'
+}
+
+export function decodeHostTargetDetection(value: unknown): HostTargetDetection | null {
+  if (!isRecord(value)
+    || !hasExactKeys(value, [
+      'schema_version',
+      'detected_hosts',
+      'recommended_host',
+      'recommended_operation',
+      'reason',
+    ])
+    || value.schema_version !== HOST_DETECTION_SCHEMA_VERSION
+    || !Array.isArray(value.detected_hosts)) return null
+  if (value.detected_hosts.length > NATIVE_HOST_IDS.length) return null
+  const detectedHosts: NativeHostId[] = []
+  let previousHostIndex = -1
+  for (const host of value.detected_hosts) {
+    if (!isNativeHostId(host)) return null
+    const hostIndex = (NATIVE_HOST_IDS as readonly NativeHostId[]).indexOf(host)
+    if (hostIndex <= previousHostIndex) return null
+    detectedHosts.push(host)
+    previousHostIndex = hostIndex
+  }
+  const recommendedHost = value.recommended_host
+  if (recommendedHost !== null && !isNativeHostId(recommendedHost)) return null
+  if (recommendedHost !== null && !detectedHosts.includes(recommendedHost)) return null
+  if (value.reason === 'tenon-plugin-detected') {
+    if (recommendedHost === null || value.recommended_operation !== 'update') return null
+  } else if (value.reason === 'host-detected') {
+    if (recommendedHost === null || value.recommended_operation !== 'setup') return null
+  } else if (value.reason === 'none') {
+    if (detectedHosts.length !== 0
+      || recommendedHost !== null
+      || value.recommended_operation !== null) return null
+  } else {
+    return null
+  }
+  return {
+    schema_version: HOST_DETECTION_SCHEMA_VERSION,
+    detected_hosts: [...detectedHosts],
+    recommended_host: recommendedHost,
+    recommended_operation: value.recommended_operation,
+    reason: value.reason,
+  }
 }
 
 function decodeCommand(value: unknown): HostPlanCommand | null {

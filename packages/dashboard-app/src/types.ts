@@ -123,10 +123,17 @@ export interface CanonicalStateCompatibilityIssue {
   action: 'upgrade-runtime'
 }
 
+export interface ProjectRepositoryIdentity {
+  id: string
+  label: string
+  workspace_kind: 'primary' | 'worktree'
+}
+
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  repository?: ProjectRepositoryIdentity
   compatibilityIssues?: CanonicalStateCompatibilityIssue[]
   compatibilityIssuesTruncated?: true
   error?: string

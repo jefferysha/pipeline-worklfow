@@ -30,6 +30,17 @@ function state(table: MandatoryState['table']): MandatoryState {
 }
 
 describe('TrackSelector', () => {
+  it('uses the shared primary-control height and keyboard focus treatment', () => {
+    render(
+      <I18nProvider>
+        <TrackSelector state={state({})} />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByTestId('wb-track-pm')).toHaveClass('min-h-10', 'focus-visible:ring-2')
+    expect(screen.getByTestId('wb-track-control-row')).toHaveClass('[&_[data-testid=wb-track-settings-toggle]]:min-h-10')
+  })
+
   it('keeps Track Settings mounted while an authoritative config reload is pending', async () => {
     const user = userEvent.setup()
     const view = render(

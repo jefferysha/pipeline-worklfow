@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
+import { singleFlight } from './singleFlight.js'
 
 const MAX_POST_BODY = 64 * 1024
 
@@ -37,7 +38,7 @@ function stopPoll(): void {
   }
 }
 
-async function pollTick(): Promise<void> {
+const pollTick = singleFlight(async (): Promise<void> => {
   if (clients.size === 0) {
     stopPoll() // 零客户端不空转
     return
@@ -45,24 +46,25 @@ async function pollTick(): Promise<void> {
   let fp: string
   const nowMs = Date.now()
   try {
-    fp = await computeFingerprint(registry(), nowMs)
+    const deps = snapshotDeps(nowMs)
+    fp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory)
+    if (fp !== lastFp) {
+      lastFp = fp
+      try {
+        broadcast('snapshot', JSON.stringify(await buildSnapshot(deps)))
+      } catch {
+        /* 一次失败下轮再试 */
+      }
+    } else if (Date.now() - lastBeat > heartbeatMs) {
+      lastBeat = Date.now()
+      for (const res of clients) {
+        try { res.write(': ping\n\n') } catch { /* ignore */ }
+      }
+    }
   } catch {
     return
   }
-  if (fp !== lastFp) {
-    lastFp = fp
-    try {
-      broadcast('snapshot', JSON.stringify(await buildSnapshot(snapshotDeps(nowMs))))
-    } catch {
-      /* 一次失败下轮再试 */
-    }
-  } else if (Date.now() - lastBeat > heartbeatMs) {
-    lastBeat = Date.now()
-    for (const res of clients) {
-      try { res.write(': ping\n\n') } catch { /* ignore */ }
-    }
-  }
-}
+})
 
 function startPoll(): void {
   if (pollTimer) return
@@ -123,8 +125,9 @@ async function handleStream(req: IncomingMessage, res: ServerResponse): Promise<
   clients.add(res)
   try {
     const nowMs = Date.now()
-    lastFp = await computeFingerprint(registry(), nowMs)
-    res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}\n\n`)
+    const deps = snapshotDeps(nowMs)
+    lastFp = await computeFingerprint(registry(), nowMs, deps.rootAnchor, deps.readChangesDirectory)
+    res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(deps))}\n\n`)
   } catch {
     /* 初始快照失败不影响后续推送 */
   }

@@ -538,6 +538,23 @@ describe('WorkbenchView stepper（验收①）', () => {
     expect(governanceTrigger).toHaveFocus()
   })
 
+  it('unifies Workflow identity/actions and project Track controls into one ordered two-row surface', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    const controls = screen.getByTestId('wb-controls')
+    const workflowRow = within(controls).getByTestId('wb-workflow-controls')
+    const trackRow = within(controls).getByTestId('wb-track-context')
+    expect(workflowRow.compareDocumentPosition(trackRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(trackRow).not.toHaveClass('rounded-2xl', 'border', 'shadow-sm')
+
+    expect(within(workflowRow).getByTestId('wb-wf-btn')).toHaveClass('min-h-10')
+    expect(within(workflowRow).getByTestId('wb-workflow-new')).toHaveClass('min-h-10')
+    expect(within(workflowRow).getByTestId('wb-governance-open')).toHaveClass('inline-flex', 'items-center', 'whitespace-nowrap')
+    expect(within(trackRow).getByTestId('wb-track-pm')).toHaveClass('min-h-10')
+    expect(within(trackRow).getByTestId('wb-track-control-row')).toHaveClass('[&_[data-testid=wb-track-settings-toggle]]:min-h-10')
+  })
+
   it('主视图就是工作流编辑器；不再经过“查看与编辑”二层浮层，阶段内添加 Skill 才打开编排浮层', async () => {
     renderView({}, false)
     await screen.findByTestId('wb-step-draft')
