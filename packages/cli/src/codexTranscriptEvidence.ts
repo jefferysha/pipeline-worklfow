@@ -112,6 +112,7 @@ export async function transcriptConfirmsReceipt(
   let matchesProject = false
   let sessionRoot: string | undefined
   let confirmed = false
+  let targetInvocationSeen = false
   let input: ReadStream | undefined
   try {
     input = handle.createReadStream({
@@ -148,6 +149,14 @@ export async function transcriptConfirmsReceipt(
       ) continue
       const payload = event.payload
       if (!isRecord(payload) || receiptTurnId(payload) !== receipt.turnId) continue
+      const payloadCallId = asString(payload.call_id)
+      if (
+        payloadCallId === receipt.toolUseId
+        && (payload.type === 'function_call' || payload.type === 'custom_tool_call')
+      ) {
+        if (targetInvocationSeen) return false
+        targetInvocationSeen = true
+      }
       const functionInvocation = functionExecInvocation(payload)
       if (functionInvocation !== undefined) {
         const callId = asString(payload.call_id)
@@ -228,6 +237,7 @@ async function matchingSuccessfulOutput(
       || receiptTurnId(payload) !== receipt.turnId
       || asString(payload.call_id) !== receipt.toolUseId
     ) continue
+    if (payload.type === 'custom_tool_call' || payload.type === 'function_call') return false
     if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
     // A call id has one host-owned completion. Keep scanning the bounded snapshot after the
     // match so damaged trailing JSON cannot be hidden behind an otherwise valid output.
@@ -293,6 +303,7 @@ export async function discoverCompletedCodexSkillReads(
       readonly readPaths: readonly string[]
     }>()
     const completedReadCalls = new Set<string>()
+    const invokedCallIds = new Set<string>()
     const confirmedInLatestTurn = new Set<string>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
@@ -343,6 +354,7 @@ export async function discoverCompletedCodexSkillReads(
           latestTurnId = turnId
           readsByCall.clear()
           completedReadCalls.clear()
+          invokedCallIds.clear()
           confirmedInLatestTurn.clear()
           continue
         }
@@ -356,6 +368,17 @@ export async function discoverCompletedCodexSkillReads(
         if (!isRecord(payload)) continue
         const eventTurnId = receiptTurnId(payload)
         if (eventTurnId !== undefined && eventTurnId !== latestTurnId) continue
+        if (payload.type === 'function_call' || payload.type === 'custom_tool_call') {
+          const callId = asString(payload.call_id)
+          if (callId !== undefined) {
+            if (invokedCallIds.has(callId)) {
+              malformedTranscript = true
+              confirmedInLatestTurn.clear()
+              break
+            }
+            invokedCallIds.add(callId)
+          }
+        }
         const functionInvocation = functionExecInvocation(payload)
         if (functionInvocation !== undefined) {
           const callId = asString(payload.call_id)

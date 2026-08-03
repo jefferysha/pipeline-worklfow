@@ -397,3 +397,6 @@
 {"ts":"2026-08-03T02:01:47Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"02156abb-239d-45ac-af92-5b316543028e"}
 {"ts":"2026-08-03T02:38:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-03T02:38:30Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-03T03:02:28Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T03:03:10Z","kind":"set","field":"pre_verify_review_result","to":"pending"}
+{"ts":"2026-08-03T03:35:47Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

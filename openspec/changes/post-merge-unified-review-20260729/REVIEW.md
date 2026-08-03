@@ -1207,3 +1207,40 @@ Oracle runs all pass. The review report is
 `/tmp/pr20-preverify-r2-lFoqTu/STANDARDS-SPEC-REVIEW.md` with SHA-256
 `47bd2b9e192b597417f0d06d73affed205fbba685e268efd149e425d8ab53195`;
 its final repo-zero fingerprint exactly matches its starting fingerprint.
+
+## Final merged-main unified review (2026-08-03)
+
+PR #20, #22, #24 and #25 are all merged into
+`main@7c1ed69516e042205155e134b25f59f9ed927644`; GitHub reports no remaining
+open PR. The unified range from `a86dabb4` through the final main tree, plus the
+receipt hardening on this branch, received one combined Standards, Spec and
+Security review. The review returned **PASS — C0/H0/M0/L0**.
+
+The combined review found one pre-freeze High defect before its final PASS: the
+Codex transcript readers accepted a repeated invocation identity with the same
+`call_id` before a single completion. Four permanent RED regressions cover
+exact/fallback and custom/function ABIs. The exact path now rejects a second
+target invocation both before and during completion scanning; fallback keeps a
+turn-scoped invocation-identity set and fails closed on any reuse. The complete
+receipt suite passes 138/138 and the tracked CLI bundle was rebuilt from the
+reviewed TypeScript.
+
+Clean installation reports zero vulnerabilities. Dashboard passes 86 files /
+1,603 tests; the repository passes 330 files / 5,901 tests with 26 declared
+environment skips. Build, typecheck, architecture, comments, dependencies,
+OpenSpec 38/38, release 24/24, repository hygiene, workflow freshness, hooks
+512/512, adapters 272/272, skill verification, bundle 31/31, npx packaging,
+interaction-contract, bilingual documentation build/smoke and the five-fixture
+Oracle double-run all pass. Two consecutive production builds have the same
+combined CLI/server/Dashboard digest
+`95d9042ef92bc01266a4b0c778dc4d4d79dd97d7497996f1581f44787a65abfe`.
+
+Production-browser acceptance on the final main tree covers Projects,
+Onboarding and Context Bundle at 1024/1200/1440/1920, zh/en and light/dark,
+including loading, empty, error, success, keyboard, focus and overflow paths.
+All 24 scenarios and 101/101 assertions pass with 17 screenshots. Unexpected
+console errors, page errors, request failures and HTTP errors are all zero. The
+expected budget-overrun 422 fixture and five navigation-aborted stream requests
+are separately classified rather than hidden. The isolated server and browser
+profile were removed and the reviewed source tree remained unchanged. Evidence
+is stored at `/tmp/pr20-main-browser-qa-Z0y9nS/REPORT.md`.

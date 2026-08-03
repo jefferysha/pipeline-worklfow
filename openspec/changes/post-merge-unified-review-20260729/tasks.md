@@ -191,6 +191,13 @@
 - [x] 完整扫描有界 transcript snapshot，current turn 任一损坏 JSON 均拒绝 receipt，禁止匹配后提前返回。 (build)
 - [x] 重跑 receipt 定向、CLI/root 全量、生成物、静态门和独立 pre-Verify，冻结新 SHA 后从零重跑四轨 Verify。 (build)
 
+## 2026-08-03 最终合并主线统一审查
+
+- [x] 将 PR #20、#22、#24、#25 按依赖顺序重定向并合入最终 `main@7c1ed69516e042205155e134b25f59f9ed927644`，逐次从合并后源码重建 Dashboard 产物。 (build)
+- [x] 为 exact 与 fallback 两条 Codex receipt 路径建立重复 invocation identity RED，并拒绝同一 `call_id` 在唯一 completion 前被重复调用。 (build)
+- [x] 在最终组合 diff 上完成 Standards、Spec 与 Security 统一审查，并清零全部 Critical/High/Medium finding。 (build)
+- [x] 重跑全量测试、构建、生成物、OpenSpec、依赖、Hook/adapter/skill/bundle 与生产 Dashboard 浏览器矩阵，更新审查证据并冻结新 SHA。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)

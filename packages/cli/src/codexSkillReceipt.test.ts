@@ -309,6 +309,14 @@ function appendDuplicateCompletion(
   return `${lines.join('\n')}\n`
 }
 
+function insertDuplicateInvocationBeforeCompletion(source: string): string {
+  const lines = source.trimEnd().split('\n')
+  const invocation = lines.at(-2)
+  if (invocation === undefined) throw new Error('fixture is missing its invocation')
+  lines.splice(lines.length - 1, 0, invocation)
+  return `${lines.join('\n')}\n`
+}
+
 function sessionScopedEventLines(
   sessionCwd: string,
   output: unknown = customResultOutput(),
@@ -818,6 +826,29 @@ describe('Codex transcript skill receipt', () => {
       ? eventLines(customResultOutput())
       : functionCallSessionScopedEventLines(root)
     await writeFile(transcript, appendDuplicateCompletion(source, duplicateAbi), 'utf8')
+    await recordPendingReceipt(invocationAbi === 'custom' ? toolUseId : 'call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it.each([
+    'custom',
+    'function',
+  ] as const)('rejects an exact %s receipt with duplicate invocation identity before one completion', async (invocationAbi) => {
+    const source = invocationAbi === 'custom'
+      ? eventLines(customResultOutput())
+      : functionCallSessionScopedEventLines(root)
+    await writeFile(transcript, insertDuplicateInvocationBeforeCompletion(source), 'utf8')
     await recordPendingReceipt(invocationAbi === 'custom' ? toolUseId : 'call-function-skill-read')
 
     const result = await reconcileCodexSkillEvidence({
@@ -2467,6 +2498,29 @@ describe('Codex transcript skill receipt', () => {
       ? eventLines(customResultOutput())
       : functionCallSessionScopedEventLines(root)
     await writeFile(transcript, appendDuplicateCompletion(source, duplicateAbi), 'utf8')
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it.each([
+    'custom',
+    'function',
+  ] as const)('rejects a fallback %s read with duplicate invocation identity before one completion', async (invocationAbi) => {
+    const source = invocationAbi === 'custom'
+      ? eventLines(customResultOutput())
+      : functionCallSessionScopedEventLines(root)
+    await writeFile(transcript, insertDuplicateInvocationBeforeCompletion(source), 'utf8')
     await bindHostSession()
 
     const result = await reconcileCodexSkillEvidence({
