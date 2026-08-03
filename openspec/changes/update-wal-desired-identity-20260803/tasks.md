@@ -22,8 +22,8 @@
 
 ## 交付
 
-- [ ] 统一 review、CI、创建并合并 hotfix PR。 (ship)
+- [x] 统一 review、CI 并创建 hotfix PR。 (ship)
 
 ## 归档
 
-- [ ] 应用规格并通过官方 CLI 归档 Change。 (archive)
+- [ ] 合并 hotfix PR，并通过官方 CLI 归档 Change。 (archive)

@@ -82,3 +82,4 @@
 {"ts":"2026-08-03T14:53:42Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-03T13:45:57Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
 {"ts":"2026-08-03T14:53:42Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"766e1e94-8163-47e8-85e3-2ea1308f4ec8"}
 {"ts":"2026-08-03T14:55:34Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-03T14:56:32Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/32"}
