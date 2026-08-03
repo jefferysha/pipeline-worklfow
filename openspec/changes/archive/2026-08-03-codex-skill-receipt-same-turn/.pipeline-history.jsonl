@@ -155,3 +155,6 @@
 {"ts":"2026-08-03T04:58:41Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
 {"ts":"2026-08-03T04:59:14Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-08-03T04:59:14Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"3b82167b-738c-4a55-b697-dba1fa5f4a42"}
+{"ts":"2026-08-03T05:24:13Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-08-03T05:25:52Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-08-03T05:25:52Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"96c69791-6da5-4ed6-a3cb-f0b2b70f73a1"}

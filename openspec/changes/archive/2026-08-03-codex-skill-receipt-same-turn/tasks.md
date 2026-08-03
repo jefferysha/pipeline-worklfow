@@ -52,4 +52,4 @@
 
 ## 归档
 
-- [ ] 应用 spec、归档 Change 并记录最终状态。 (archive)
+- [x] 应用 spec、归档 Change 并记录最终状态。 (archive)
