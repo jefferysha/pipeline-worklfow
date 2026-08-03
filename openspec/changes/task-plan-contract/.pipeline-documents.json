@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-03T09:19:49Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/task-plan-contract/proposal.md",
+      "sha256": "65c1473db711f708cfa92ebdd912be59bf4edd0a438dfabb0b9cd2d40625b870",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-03T09:42:42Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "65c1473db711f708cfa92ebdd912be59bf4edd0a438dfabb0b9cd2d40625b870",
+          "readAt": "2026-08-03T09:56:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "65c1473db711f708cfa92ebdd912be59bf4edd0a438dfabb0b9cd2d40625b870",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "65c1473db711f708cfa92ebdd912be59bf4edd0a438dfabb0b9cd2d40625b870",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/task-plan-contract/design.md",
+      "sha256": "73b2fee3669f8336d2844bab55b2384ffebc27b29927b41e4c6dfa38edf893c5",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-03T09:56:58Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "73b2fee3669f8336d2844bab55b2384ffebc27b29927b41e4c6dfa38edf893c5",
+          "readAt": "2026-08-03T09:56:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "73b2fee3669f8336d2844bab55b2384ffebc27b29927b41e4c6dfa38edf893c5",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "73b2fee3669f8336d2844bab55b2384ffebc27b29927b41e4c6dfa38edf893c5",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-03-task-plan-contract-explore.md",
+      "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T09:56:59Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/task-plan-contract/specs/task-plan-contract/spec.md",
+      "sha256": "86920059dd59fc9867d564424fe053ae61193864f3b9068b230eeb158ac46834",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-03T10:04:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "86920059dd59fc9867d564424fe053ae61193864f3b9068b230eeb158ac46834",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-plan-contract.md",
+      "sha256": "1c1c23d9376c05a7e14c05dbb2d68f0329c7b35af115f5aac2940e76bdb45638",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T10:04:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "1c1c23d9376c05a7e14c05dbb2d68f0329c7b35af115f5aac2940e76bdb45638",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-plan-contract.md",
+      "sha256": "1c1c23d9376c05a7e14c05dbb2d68f0329c7b35af115f5aac2940e76bdb45638",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T10:04:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "1c1c23d9376c05a7e14c05dbb2d68f0329c7b35af115f5aac2940e76bdb45638",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-03-task-plan-contract-design.md",
+      "sha256": "2d22477326a8b2a417f8d9df248001f39d257b54f267a8d41e586474993ff63c",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T10:04:47Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "2d22477326a8b2a417f8d9df248001f39d257b54f267a8d41e586474993ff63c",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2d22477326a8b2a417f8d9df248001f39d257b54f267a8d41e586474993ff63c",
+          "readAt": "2026-08-03T10:05:59Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/task-plan-contract/tasks.md",
+      "sha256": "8c01c9b2c31ebc4ad90f6a69de8ad399a70f544be84fd606cc26c0d2dc5348c3",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-03T10:38:06Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8c01c9b2c31ebc4ad90f6a69de8ad399a70f544be84fd606cc26c0d2dc5348c3",
+          "readAt": "2026-08-03T10:38:06Z",
+          "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",3]"
+        }
+      ]
+    }
+  ]
+}

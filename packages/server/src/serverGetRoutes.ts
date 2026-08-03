@@ -6,6 +6,7 @@ import {
   builtinWorkflow,
   listAutomationPolicyTemplates,
   loadTrackRegistry,
+  readTaskPlanForChange,
   stateStorageExistsSync,
   validateWorkflowTrackReferences,
   withTrackRegistryLock,
@@ -41,6 +42,12 @@ import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
+import { resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
+import {
+  assertChangePathAnchor,
+  captureChangePathAnchor,
+  ContextBundlePathError,
+} from './contextBundlePreviewSupport.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -110,6 +117,22 @@ export async function handleGet(
     workflowRootForRequest, snapshotDeps, store,
   })
   if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body)
+  const taskPlan = await resolveTaskPlanRoute(req.url ?? '/', path, {
+    workflowRootForRequest,
+    readPlan: async (anchor, change) => {
+      let changeAnchor
+      try {
+        changeAnchor = captureChangePathAnchor(anchor, change)
+      } catch (error) {
+        if (error instanceof ContextBundlePathError && error.status === 400) return null
+        throw error
+      }
+      const result = await readTaskPlanForChange(changeAnchor.changeDir)
+      assertChangePathAnchor(changeAnchor)
+      return result
+    },
+  })
+  if (taskPlan !== null) return sendJson(res, taskPlan.status, taskPlan.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
       try {

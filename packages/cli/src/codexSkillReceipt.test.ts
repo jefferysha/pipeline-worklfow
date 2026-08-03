@@ -1687,6 +1687,41 @@ describe('Codex transcript skill receipt', () => {
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
   })
 
+  it('reconciles the bound completed host session after more than 128 valid transcripts', async () => {
+    const historicalMtime = new Date('2026-07-24T00:01:00Z')
+    for (let index = 0; index < 129; index += 1) {
+      const historical = join(dirname(transcript), `historical-reconcile-${index}.jsonl`)
+      await writeFile(
+        historical,
+        sessionScopedEventLines(root, customResultOutput(), [skillPath], `session-historical-${index}`),
+        'utf8',
+      )
+      await utimes(historical, historicalMtime, historicalMtime)
+    }
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await utimes(
+      transcript,
+      new Date('2026-07-24T00:02:00Z'),
+      new Date('2026-07-24T00:02:00Z'),
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .toContain('CodexSkillRead: openspec-propose')
+  })
+
   it('does not discover a completed read from an unselected old plugin cache version', async () => {
     const oldPluginRoot = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.1.0')
     const oldSkillPath = join(oldPluginRoot, 'skills', 'openspec-propose', 'SKILL.md')
@@ -2352,6 +2387,26 @@ describe('Codex transcript skill receipt', () => {
       maxEntries: 16,
       maxTranscripts: 1,
     })).resolves.toBeUndefined()
+  })
+
+  it('keeps the newest bounded candidates discoverable after more than 128 valid transcripts', async () => {
+    const historicalMtime = new Date('2026-07-24T00:01:00Z')
+    for (let index = 0; index < 129; index += 1) {
+      const historical = join(dirname(transcript), `historical-${index}.jsonl`)
+      await writeFile(historical, sessionScopedEventLines(root), 'utf8')
+      await utimes(historical, historicalMtime, historicalMtime)
+    }
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await utimes(
+      transcript,
+      new Date('2026-07-24T00:02:00Z'),
+      new Date('2026-07-24T00:02:00Z'),
+    )
+
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+
+    expect(candidates).toHaveLength(32)
+    expect(candidates?.[0]?.path).toBe(transcript)
   })
 
   it('rejects a fallback candidate replaced after discovery', async () => {

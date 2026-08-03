@@ -3188,6 +3188,26 @@ var QuoteGateError = class extends Error {
   }
 };
 
+// packages/kernel/dist/task-plan/internal.js
+var encoder = new TextEncoder();
+
+// packages/kernel/dist/task-plan/types.js
+var TASK_PLAN_LIMITS = Object.freeze({
+  maxDocumentBytes: 1024 * 1024,
+  maxErrors: 64,
+  maxGroups: 256,
+  maxWorkItems: 1024,
+  maxCatalogEntries: 2048,
+  maxRelationsPerItem: 128,
+  maxTextBytes: 8 * 1024,
+  maxIdBytes: 160,
+  maxResourceBytes: 1024,
+  maxValidationIssues: 256,
+  maxDiagnosticEntries: 4096,
+  maxValidationSteps: 1e5,
+  maxDecodeNodes: 65536
+});
+
 // packages/kernel/dist/product-identity.generated.js
 var PRODUCT_IDENTITY = {
   schemaVersion: 1,
@@ -3418,11 +3438,11 @@ function stringsAt(value, path9) {
     throw new Error(`${path9}: expected string[]`);
   return [...value];
 }
-function deepFreeze(value) {
+function deepFreeze2(value) {
   if (typeof value !== "object" || value === null || Object.isFrozen(value))
     return value;
   for (const child of Object.values(value))
-    deepFreeze(child);
+    deepFreeze2(child);
   return Object.freeze(value);
 }
 var policyPayload = (loop) => {
@@ -3456,7 +3476,7 @@ var policyPayload = (loop) => {
   };
 };
 function compileConstraintPolicy(loop) {
-  return deepFreeze({
+  return deepFreeze2({
     schema_version: 1,
     admission: { require_active: true },
     write: { allowlist: [...loop.allowlist], denylist: [...loop.denylist] },
@@ -3467,7 +3487,7 @@ function compileConstraintPolicy(loop) {
 function compileAutomationPolicySnapshot(loop, options) {
   const payload = policyPayload(loop);
   const policy_version = sha256Hex(JSON.stringify(payload));
-  return deepFreeze({ ...payload, policy_version, captured_at: options.capturedAt });
+  return deepFreeze2({ ...payload, policy_version, captured_at: options.capturedAt });
 }
 function validateAutomationPolicySnapshot(input) {
   if (!isRecord(input))
@@ -3579,7 +3599,7 @@ function validateAutomationPolicySnapshot(input) {
   const capturedAt = stringAt(input.captured_at, "AutomationPolicy.captured_at");
   if (!Number.isFinite(Date.parse(capturedAt)))
     throw new Error("AutomationPolicy.captured_at: invalid timestamp");
-  return deepFreeze({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
+  return deepFreeze2({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
 }
 function explainConstraintPaths(policy, operation, paths, matches) {
   const { allowlist, denylist } = policy[operation];
@@ -5626,10 +5646,10 @@ function compileDocumentContract(value) {
   });
   return { version: "v1", slots, reads };
 }
-function deepFreeze2(value) {
+function deepFreeze3(value) {
   if (value !== null && typeof value === "object") {
     for (const key of Object.keys(value)) {
-      deepFreeze2(value[key]);
+      deepFreeze3(value[key]);
     }
     Object.freeze(value);
   }
@@ -5648,7 +5668,7 @@ function compileWith(def, allowedPolicies) {
     compileError2("documentContract", "\u4E0D\u5F97\u4E0E openspecContract \u540C\u65F6\u58F0\u660E");
   }
   const steps = asArray2(rec.steps, "steps").map((s, i) => compileStep(s, i, allowedPolicies));
-  return deepFreeze2({
+  return deepFreeze3({
     name: name2,
     ...openspecContract === void 0 ? {} : { openspecContract },
     ...documentContract === void 0 ? {} : { documentContract },
@@ -9509,6 +9529,9 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir2, changeName) {
     };
   }
 }
+
+// packages/kernel/dist/state/task-plan-store.js
+var MAX_TASKS_MD_BYTES = 256 * 1024;
 
 // packages/kernel/dist/state/markers.js
 var REVIEW_MARKER_PROTOCOL = "pipeline-review-v2";
@@ -18799,14 +18822,14 @@ function snapshotVerificationResultFields(input) {
     return input;
   return extractTopLevel(input);
 }
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (value === null || typeof value !== "object")
     return value;
   if (!Object.isFrozen(value)) {
     const asObj = value;
     Object.freeze(asObj);
     for (const key of Object.keys(asObj))
-      deepFreeze3(asObj[key]);
+      deepFreeze4(asObj[key]);
   }
   return value;
 }
@@ -18888,7 +18911,7 @@ function validateVerificationResult(input, path9 = "verification") {
   }
   if (errors.length > 0)
     return { ok: false, errors };
-  return { ok: true, value: deepFreeze3(snapshot) };
+  return { ok: true, value: deepFreeze4(snapshot) };
 }
 function isTrustedPass(result) {
   return result.verdict === "passed" && result.issuer.trusted === true;
@@ -19974,17 +19997,17 @@ function validateRisk(input) {
 function validateRecommendedSkills(input) {
   return snapshotArray(input, "recommendedSkills").map((skill, index) => nonemptyString2(skill, `recommendedSkills[${index}]`));
 }
-function deepFreeze4(value) {
+function deepFreeze5(value) {
   if (value !== null && typeof value === "object") {
     for (const key of Object.keys(value)) {
-      deepFreeze4(value[key]);
+      deepFreeze5(value[key]);
     }
     Object.freeze(value);
   }
   return value;
 }
 function cloneTemplate(template) {
-  return deepFreeze4({
+  return deepFreeze5({
     ...template,
     trigger: template.trigger.map((item2) => ({ ...item2 })),
     recommendedSkills: [...template.recommendedSkills]
@@ -20382,7 +20405,7 @@ function encodeReconciliationPlan(plan) {
 
 // packages/kernel/dist/loops/reconciliation-operations.js
 var LOOP_ID_RE2 = /^[a-z][a-z0-9-]*$/;
-var encoder = new TextEncoder();
+var encoder2 = new TextEncoder();
 var decoder = new TextDecoder();
 var MANAGED_MARKER_RE = /^<!-- PIPELINE:LOOP-MIRROR-V1:(START|END) ([a-z][a-z0-9-]*) -->$/;
 function bytesEqual(left, right) {
@@ -20407,7 +20430,7 @@ function managedLoopSectionMarkers(loopId) {
 }
 function renderManagedLoopSection(loop) {
   const markers = managedLoopSectionMarkers(loop.id);
-  return encoder.encode([
+  return encoder2.encode([
     markers.start,
     `### \`${loop.id}\` \u2014 Pipeline \u7BA1\u7406\u7684 Loop \u955C\u50CF`,
     "",
@@ -20421,7 +20444,7 @@ function appendSection(current, section2) {
     return section2;
   const endsLf = current[current.byteLength - 1] === 10;
   const endsBlankLine = endsLf && current.byteLength >= 2 && current[current.byteLength - 2] === 10;
-  const separator = encoder.encode(endsBlankLine ? "" : endsLf ? "\n" : "\n\n");
+  const separator = encoder2.encode(endsBlankLine ? "" : endsLf ? "\n" : "\n\n");
   return concatBytes(current, separator, section2);
 }
 function scanManagedSections(bytes) {
@@ -21905,7 +21928,7 @@ var VERIFICATION_EVIDENCE_LIMITS = Object.freeze({
   skipReasonBytes: 2e3,
   outputBytes: 32 * 1024
 });
-var encoder2 = new TextEncoder();
+var encoder3 = new TextEncoder();
 
 // packages/kernel/dist/triage/types.js
 var TRIAGE_SCHEMA_VERSION = 1;
@@ -22031,10 +22054,10 @@ function stringValue2(snapshot, key, path9, errors, options = {}) {
   }
   return value;
 }
-function deepFreeze5(value) {
+function deepFreeze6(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     for (const child of Object.values(value))
-      deepFreeze5(child);
+      deepFreeze6(child);
     Object.freeze(value);
   }
   return value;
@@ -22282,7 +22305,7 @@ function guarded(work) {
   const errors = [];
   try {
     const value = work(errors);
-    return value === null || errors.length > 0 ? fail(errors) : pass(deepFreeze5(value));
+    return value === null || errors.length > 0 ? fail(errors) : pass(deepFreeze6(value));
   } catch (error) {
     errors.push(`triage: input read failed: ${safeErrorText2(error)}`);
     return fail(errors);
@@ -22318,8 +22341,8 @@ function canonicalizeTriageResult(providerOutput, context) {
     const classification = parseProviderClassification(providerOutput, page.observations, routes, cap, "providerOutput", errors);
     if (classification === null || errors.length > 0)
       return null;
-    const canonicalPage = deepFreeze5(page);
-    const canonicalRoutes = deepFreeze5(routes);
+    const canonicalPage = deepFreeze6(page);
+    const canonicalRoutes = deepFreeze6(routes);
     const observationsById = new Map(canonicalPage.observations.map((observation) => [observation.observationId, observation]));
     const routesById = new Map(canonicalRoutes.map((route) => [route.routeId, route]));
     const decisions = [];
@@ -22338,7 +22361,7 @@ function canonicalizeTriageResult(providerOutput, context) {
         return null;
       let derived;
       try {
-        derived = deriveCandidate(deepFreeze5({
+        derived = deriveCandidate(deepFreeze6({
           observation,
           route,
           rationale: decision.rationale,
@@ -24660,10 +24683,10 @@ function snapshotOptions(input) {
     throw new TriageOrchestrationError("invalid-options", `triage options could not be snapshotted safely: ${safeErrorText4(error)}`, [], emptyProgress(), { cause: error });
   }
 }
-function deepFreeze6(value) {
+function deepFreeze7(value) {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     for (const child of Object.values(value))
-      deepFreeze6(child);
+      deepFreeze7(child);
     Object.freeze(value);
   }
   return value;
@@ -24693,7 +24716,7 @@ function deriveStableTriageCandidateIdentity(input) {
   });
 }
 function providerRequestFor(page, routes, maxHighCandidates) {
-  return deepFreeze6({
+  return deepFreeze7({
     schemaVersion: 1,
     observations: page.observations.map((observation) => ({
       observationId: observation.observationId,
@@ -24750,7 +24773,7 @@ function materializationUnits(result) {
     if (observation === void 0) {
       throw new TriageOrchestrationError("triage-invalid", `canonical triage decision '${decision.observationId}' has no observation`);
     }
-    return deepFreeze6({
+    return deepFreeze7({
       schemaVersion: 1,
       page: {
         schemaVersion: 1,
@@ -35523,7 +35546,7 @@ var MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 var MAX_TRANSCRIPTS = 32;
 var MAX_DISCOVERY_ENTRIES = 4096;
-var MAX_DISCOVERED_TRANSCRIPTS = 128;
+var MAX_DISCOVERED_TRANSCRIPTS = MAX_DISCOVERY_ENTRIES;
 var DEFAULT_DISCOVERY_LIMITS = {
   maxEntries: MAX_DISCOVERY_ENTRIES,
   maxTranscripts: MAX_DISCOVERED_TRANSCRIPTS
@@ -35602,7 +35625,11 @@ async function recentHostTranscripts(sessionsRoot, limits = DEFAULT_DISCOVERY_LI
   if (emptyModifiedAt.some((modifiedAt) => modifiedAt >= newestReadable)) return void 0;
   let remaining = MAX_TOTAL_BYTES;
   const selected = [];
-  for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
+  for (const transcript of discovered.sort((left, right) => {
+    if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1;
+    if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1;
+    return left.path.localeCompare(right.path);
+  })) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break;
     selected.push(transcript);
     remaining -= transcript.size;

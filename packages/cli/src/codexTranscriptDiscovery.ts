@@ -6,7 +6,10 @@ const MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024
 const MAX_TOTAL_BYTES = 512 * 1024 * 1024
 const MAX_TRANSCRIPTS = 32
 const MAX_DISCOVERY_ENTRIES = 4096
-const MAX_DISCOVERED_TRANSCRIPTS = 128
+// The metadata walk is already bounded independently. Long-lived Codex installations can retain
+// hundreds of ordinary transcripts, so the transcript count must not fail before that existing
+// entry budget or an otherwise valid, explicitly bound current session becomes undiscoverable.
+const MAX_DISCOVERED_TRANSCRIPTS = MAX_DISCOVERY_ENTRIES
 
 export interface HostTranscriptDiscoveryLimits {
   readonly maxEntries: number
@@ -133,7 +136,11 @@ export async function recentHostTranscripts(
 
   let remaining = MAX_TOTAL_BYTES
   const selected: HostTranscriptCandidate[] = []
-  for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
+  for (const transcript of discovered.sort((left, right) => {
+    if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1
+    if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1
+    return left.path.localeCompare(right.path)
+  })) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break
     selected.push(transcript)
     remaining -= transcript.size
