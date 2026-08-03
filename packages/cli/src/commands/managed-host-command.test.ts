@@ -107,3 +107,88 @@ describe('managed host command result is diagnostic after desired-state proof', 
     expect(h.executions()).toBe(0)
   })
 })
+
+describe('managed host desired identity recovery', () => {
+  test.each(['started', 'completed'] as const)(
+    '%s WAL checkpoints an equivalent domain identity without replaying mutation',
+    async (state) => {
+      let executions = 0
+      let journal: ManagedReleaseJournalRecord = {
+        version: 1,
+        transactionId: 'equivalent-native-desired-test',
+        operation: 'update',
+        source: 'codex',
+        phase: 'preparing-host',
+        startedAt: '2026-08-03T00:00:00Z',
+        updatedAt: '2026-08-03T00:00:00Z',
+        hostSteps: [{
+          id: 'marketplace-refresh',
+          state,
+          before: 'before',
+          desired: 'desired-with-previous-observation-head',
+          replayPolicy: 'observe-before-replay-v1',
+          ...(state === 'completed'
+            ? { observedAfter: 'desired-observation', result: 'historic-result' }
+            : {}),
+        }],
+      }
+      const runStep = createManagedHostStepRunner({
+        journal: () => journal,
+        commit: async (record) => { journal = record },
+        now: () => '2026-08-03T00:00:01Z',
+      })
+
+      const result = await runStep('marketplace-refresh', {
+        desired: 'desired-with-current-observation-head',
+        isEquivalentDesired: (persisted) =>
+          persisted === 'desired-with-previous-observation-head',
+        observe: () => 'desired-observation',
+        isDesired: (observed) => observed === 'desired-observation',
+        execute: () => {
+          executions += 1
+          return 'unexpected-replay'
+        },
+      })
+
+      expect(executions).toBe(0)
+      expect(result).toBe(state === 'completed' ? 'historic-result' : '')
+      expect(journal.hostSteps?.[0]?.state).toBe('completed')
+    },
+  )
+
+  test('generic recovery remains byte-exact when no domain comparator is supplied', async () => {
+    const journal: ManagedReleaseJournalRecord = {
+      version: 1,
+      transactionId: 'generic-desired-test',
+      operation: 'update',
+      source: 'codex',
+      phase: 'preparing-host',
+      startedAt: '2026-08-03T00:00:00Z',
+      updatedAt: '2026-08-03T00:00:00Z',
+      hostSteps: [{
+        id: 'marketplace-refresh',
+        state: 'started',
+        before: 'before',
+        desired: 'persisted-desired',
+        replayPolicy: 'observe-before-replay-v1',
+      }],
+    }
+    let executions = 0
+    const runStep = createManagedHostStepRunner({
+      journal: () => journal,
+      commit: async () => undefined,
+      now: () => '2026-08-03T00:00:01Z',
+    })
+
+    await expect(runStep('marketplace-refresh', {
+      desired: 'current-desired',
+      observe: () => 'desired-observation',
+      isDesired: () => true,
+      execute: () => {
+        executions += 1
+        return 'unexpected-replay'
+      },
+    })).rejects.toThrow(/当前 desired 与 WAL 不一致/)
+    expect(executions).toBe(0)
+  })
+})

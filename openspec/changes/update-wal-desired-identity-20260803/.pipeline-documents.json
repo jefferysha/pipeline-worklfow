@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-03T12:59:11Z",
+  "records": [
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/design.md",
+      "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-03T13:11:47Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+          "readAt": "2026-08-03T13:11:48Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+          "readAt": "2026-08-03T13:13:28Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+          "readAt": "2026-08-03T13:33:47Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1b15d9d1a862a14379faf52398e335e79138b1b329dc3b74bcc8179679bf7e7d",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/update-wal-desired-identity-20260803-design.md",
+      "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T13:11:48Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
+          "readAt": "2026-08-03T13:13:28Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
+          "readAt": "2026-08-03T13:33:47Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "ec6b8db9d3c56b5488bdc485d5ed35cc4987a69a39ec90ccb77c78c48bf68b74",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/update-wal-desired-identity-20260803.md",
+      "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T13:11:48Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
+          "readAt": "2026-08-03T13:13:28Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
+          "readAt": "2026-08-03T13:33:47Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3bd672bc0d3b3752a2e1927dba0058f9f0a599b0c66df55141f2fcbd78e662a8",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/specs/plugin-runtime/spec.md",
+      "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-03T13:13:27Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0d1b41dc7731aa8b97f58e3e26688c1c344fb10100300089730f3ca63fd260b5",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
+      "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T13:13:27Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/update-wal-desired-identity-20260803.md",
+      "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-03T13:13:28Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+          "readAt": "2026-08-03T13:13:54Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b5478c08e4f8b0cc5a969c387ed007edb1f453d6cb81d7486803f7d839aa783a",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/proposal.md",
+      "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-03T13:33:46Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T13:33:47Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "83a275f04b03802360cee1084cdc063be58378de80f8835bb4510636581aae8b",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/update-wal-desired-identity-20260803/tasks.md",
+      "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-03T13:34:26Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
+          "readAt": "2026-08-03T13:33:47Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "445af0f3fc9a7ff1a9b260169389de5db9163799c998744b73c8324e43dc26c1",
+          "readAt": "2026-08-03T13:34:26Z",
+          "visitId": "[\"2c5e0db8-7de7-44b6-8e45-2e8f8bb06e9f\",5]"
+        }
+      ]
+    }
+  ]
+}
