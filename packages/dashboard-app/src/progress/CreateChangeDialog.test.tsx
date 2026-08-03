@@ -353,7 +353,9 @@ describe('CreateChangeDialog —— Route Lock 主旅程', () => {
     fireEvent.change(screen.getByTestId('change-name'), { target: { value: 'durable-create' } })
     fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Create exactly once' } })
     await screen.findByTestId('route-winner')
-    fireEvent.click(screen.getByTestId('change-create'))
+    const create = screen.getByTestId('change-create')
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
 
     const cancel = screen.getByTestId('change-create-cancel')
     await waitFor(() => expect(cancel).toBeDisabled())

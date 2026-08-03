@@ -496,3 +496,46 @@ may record PASS.
 - The previous Verify report remains FAIL and is not reused. The repaired tree
   requires a new commit, Build freeze, isolated four-track Verify and exact-head
   GitHub CI before merge.
+
+### 2026-08-03 final merged-main unified review
+
+- PR #20/#22/#24/#25 are merged at
+  `main@7c1ed69516e042205155e134b25f59f9ed927644`; the open PR inventory is empty.
+- Unified Standards, Spec and Security review of `a86dabb4..7c1ed695` plus the
+  final receipt repair returned **PASS — C0/H0/M0/L0**. The repair rejects a
+  duplicate invocation identity before one completion on exact/fallback and
+  custom/function paths; the complete receipt suite passes 138/138.
+- Dashboard passes 86 files / 1,603 tests. Root passes 330 files / 5,901 tests
+  with 26 declared environment skips. OpenSpec 38/38, release 24/24, hooks
+  512/512, adapters 272/272, bundle 31/31, skill verification, npx packaging,
+  interaction-contract, dependency, architecture, comments, hygiene,
+  workflow-freshness, documentation and five-fixture Oracle double-run gates
+  pass. Clean installation reports zero vulnerabilities.
+- Two consecutive builds are byte-identical across CLI/server/Dashboard at
+  digest `95d9042ef92bc01266a4b0c778dc4d4d79dd97d7497996f1581f44787a65abfe`.
+- Final-main production browser acceptance covers Projects, Onboarding and
+  Context Bundle across four desktop widths, zh/en, light/dark and all required
+  loading/empty/error/success, keyboard, focus and overflow states. It passes
+  24/24 scenarios and 101/101 assertions with 17 screenshots and zero
+  unexpected console/page/request/HTTP errors. The expected 422 fixture and
+  five deliberately aborted stream requests are explicitly classified.
+  Evidence: `/tmp/pr20-main-browser-qa-Z0y9nS/REPORT.md`.
+- This Build pass authorizes committing and freezing one replacement SHA. No
+  earlier frozen Verify result or CI result is reused.
+
+### 2026-08-03 timestamp-freshness rollback remediation
+
+- Exact-SHA Verify rejected `f5039322` at C0/H0/M1/L0 because duplicate
+  invocation tracking occurred after event freshness filtering. The failure is
+  preserved in `2026-08-03-post-merge-unified-review-final-main-verify-fail.md`.
+- Eight genuine REDs first reproduced stale/missing timestamp bypasses across
+  exact/fallback and custom/function paths. Invocation identity is now tracked
+  before freshness filtering; a fresh event remains mandatory to satisfy a
+  receipt.
+- The first independent re-review returned one Low test-coverage finding for
+  invalid timestamps. Four additional matrix cases closed it, covering stale,
+  missing and invalid timestamps in all four path/ABI combinations.
+- Receipt tests pass 150/150, root passes 330 files / 5,913 tests with 26
+  declared skips, full production build and static/governance gates pass, and
+  the second exact Codex security review returns PASS. This replacement may now
+  be committed and frozen; no previous Verify or CI result is reused.

@@ -35700,6 +35700,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
   let matchesProject = false;
   let sessionRoot;
   let confirmed = false;
+  let targetInvocationSeen = false;
   let input;
   try {
     input = handle.createReadStream({
@@ -35728,9 +35729,15 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
         }
         continue;
       }
-      if (!matchesSession || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
+      if (!matchesSession || event.type !== "response_item") continue;
       const payload = event.payload;
       if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
+      const payloadCallId = asString3(payload.call_id);
+      if (payloadCallId === receipt.toolUseId && (payload.type === "function_call" || payload.type === "custom_tool_call")) {
+        if (targetInvocationSeen) return false;
+        targetInvocationSeen = true;
+      }
+      if (!responseItemAtOrAfter(event, notBefore)) continue;
       const functionInvocation = functionExecInvocation(payload);
       if (functionInvocation !== void 0) {
         const callId = asString3(payload.call_id);
@@ -35782,6 +35789,7 @@ async function matchingSuccessfulOutput(lines, receipt, outputAbi, readPaths) {
     if (!isRecord12(event) || event.type !== "response_item") continue;
     const payload = event.payload;
     if (!isRecord12(payload) || receiptTurnId(payload) !== receipt.turnId || asString3(payload.call_id) !== receipt.toolUseId) continue;
+    if (payload.type === "custom_tool_call" || payload.type === "function_call") return false;
     if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
     if (matchingOutput !== void 0) return false;
     if (payload.type !== expectedOutputType) return false;
@@ -35822,6 +35830,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
     if (confirmsEveryCandidate(confirmed, candidateSkillIds)) break;
     const readsByCall = /* @__PURE__ */ new Map();
     const completedReadCalls = /* @__PURE__ */ new Set();
+    const invokedCallIds = /* @__PURE__ */ new Set();
     const confirmedInLatestTurn = /* @__PURE__ */ new Set();
     let matchesRepo = false;
     let matchesHostSession = hostSessionId === void 0;
@@ -35872,14 +35881,27 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           latestTurnId = turnId;
           readsByCall.clear();
           completedReadCalls.clear();
+          invokedCallIds.clear();
           confirmedInLatestTurn.clear();
           continue;
         }
-        if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item" || !responseItemAtOrAfter(event, notBefore)) continue;
+        if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item") continue;
         const payload = event.payload;
         if (!isRecord12(payload)) continue;
         const eventTurnId = receiptTurnId(payload);
         if (eventTurnId !== void 0 && eventTurnId !== latestTurnId) continue;
+        if (payload.type === "function_call" || payload.type === "custom_tool_call") {
+          const callId2 = asString3(payload.call_id);
+          if (callId2 !== void 0) {
+            if (invokedCallIds.has(callId2)) {
+              malformedTranscript = true;
+              confirmedInLatestTurn.clear();
+              break;
+            }
+            invokedCallIds.add(callId2);
+          }
+        }
+        if (!responseItemAtOrAfter(event, notBefore)) continue;
         const functionInvocation = functionExecInvocation(payload);
         if (functionInvocation !== void 0) {
           const callId2 = asString3(payload.call_id);

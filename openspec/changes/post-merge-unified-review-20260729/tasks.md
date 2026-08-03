@@ -106,7 +106,6 @@
 - [x] 将 `origin/main@ef728bf6` 合入统一分支并从合并后源码重建 Dashboard 生成物。 (spec)
 - [x] 复核 #21 的 Codex Skill receipt ABI、current-turn、session/turn、worktree 与 fail-closed 安全边界。 (build)
 - [x] 复核 #23 的 canonical review handshake、snapshot/SSE、严格 decoder 与 Progress 状态卡。 (build)
-- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (ship)
 - [x] 重跑全栈、Hook、Dashboard 全量及整个 Dashboard 的 production 浏览器矩阵。 (verify)
 - [x] 更新统一 REVIEW、pre-Verify 报告和精确 SHA，经 C0/H0/M0/L0 独立复审后冻结。 (build)
 
@@ -191,17 +190,32 @@
 - [x] 完整扫描有界 transcript snapshot，current turn 任一损坏 JSON 均拒绝 receipt，禁止匹配后提前返回。 (build)
 - [x] 重跑 receipt 定向、CLI/root 全量、生成物、静态门和独立 pre-Verify，冻结新 SHA 后从零重跑四轨 Verify。 (build)
 
+## 2026-08-03 最终合并主线统一审查
+
+- [x] 将 PR #20、#22、#24、#25 按依赖顺序重定向并合入最终 `main@7c1ed69516e042205155e134b25f59f9ed927644`，逐次从合并后源码重建 Dashboard 产物。 (build)
+- [x] 为 exact 与 fallback 两条 Codex receipt 路径建立重复 invocation identity RED，并拒绝同一 `call_id` 在唯一 completion 前被重复调用。 (build)
+- [x] 在最终组合 diff 上完成 Standards、Spec 与 Security 统一审查，并清零全部 Critical/High/Medium finding。 (build)
+- [x] 重跑全量测试、构建、生成物、OpenSpec、依赖、Hook/adapter/skill/bundle 与生产 Dashboard 浏览器矩阵，更新审查证据并冻结新 SHA。 (build)
+
+## 2026-08-03 时间戳新鲜度 Verify 回退修复
+
+- [x] 为 exact/fallback 与 custom/function 四种组合建立 stale、missing、invalid timestamp 的重复 invocation identity RED。 (build)
+- [x] 在 session/turn 匹配后先执行 invocation identity 唯一性检查，再应用 phase freshness 过滤，保持旧事件不能满足 receipt。 (build)
+- [x] 重跑 receipt 150/150、root 5913、完整构建、静态门与两轮独立安全审查，清零全部 actionable finding。 (build)
+
 - [x] 在干净环境运行安装、构建、类型检查、全量前后端测试、生成物和仓库门禁。 (verify)
 - [x] 运行 OpenSpec 隔离 apply/validate、API 正负路径和安全验证。 (verify)
 - [x] 使用 `tenon:design-taste-frontend` 与 `tenon:browser-qa` 完成真实 Dashboard 全状态矩阵。 (verify)
-- [ ] 冻结精确 head，取得完整 GitHub CI 与 C0/H0/M0 的四轨验证结论。 (verify)
+- [x] 冻结精确 head，取得 C0/H0/M0 的四轨验证结论；GitHub CI 在 Ship 的非 draft PR 精确 head 上完成。 (verify)
 
 ## 交付
 
-- [ ] 应用确认的 capability delta，创建并合并统一审查修复 PR。 (ship)
-- [ ] 确认精确合并 SHA 的主干 CI 通过，再启动独立 release Change。 (ship)
+- [x] 应用确认的 capability delta，并创建统一审查修复 PR。 (ship)
+- [x] 确认非草稿 PR 的精确 head CI 通过。 (ship)
 
 ## 归档
 
+- [ ] 合并统一审查修复 PR，并确认精确 merge SHA 的主干 CI 通过。 (archive)
+- [ ] 完成 #21 Ship pending Change 的官方治理收尾，确保 active Change tree 无合后悬空状态。 (archive)
 - [ ] 在合并可达性、主干 CI、spec apply 和文档证据全部通过后归档 Change。 (archive)
 - [ ] 仅清理已确认无进程、无未推送提交且可安全删除的批次 worktree。 (archive)
