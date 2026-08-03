@@ -187,7 +187,7 @@
         {
           "phase": "build",
           "sha256": "eb218cda676271e04b7307792a4337a692654d9b379549c38c9828ed7751aa8f",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -334,7 +334,7 @@
         {
           "phase": "build",
           "sha256": "1d14ceb427780890a1811f281c0cf3971caa808e83ee2452273c266d3d913eae",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -481,7 +481,7 @@
         {
           "phase": "build",
           "sha256": "3cace94af4498e38138596f691749ceaaf4ecbbe0175810a2581d0f6d845fe81",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -622,7 +622,7 @@
         {
           "phase": "build",
           "sha256": "8bcaddc78445b512ad557e88ca252625b83c099885aeb4acdfa5321effebcfba",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -769,7 +769,7 @@
         {
           "phase": "build",
           "sha256": "64915cbf4c78726c369de073d8eab4c11a8665ec70ce63f80c25da3308b1b810",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -910,7 +910,7 @@
         {
           "phase": "build",
           "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -1051,7 +1051,7 @@
         {
           "phase": "build",
           "sha256": "061ed3779e5e445f023cac61441756963e715b741e758a98e5ec1f128bdc8930",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -1198,7 +1198,7 @@
         {
           "phase": "build",
           "sha256": "5534133d010d5e30e6181adda23a4d8c71c48b9996a42c73db7c60ba85192f5b",
-          "readAt": "2026-08-03T18:52:07Z",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]
@@ -1214,14 +1214,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/task-plan-contract/tasks.md",
-      "sha256": "3c99ab354fb23d3c623740965b2b62c185e24030d60643ad0413cd92d1ce7c52",
+      "sha256": "5a00a42f7bb0972bac9422957718c0c6ff565e83c54f30ea94603b67ef9e2f8d",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-03T18:51:53Z",
+      "recordedAt": "2026-08-03T19:03:36Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "3c99ab354fb23d3c623740965b2b62c185e24030d60643ad0413cd92d1ce7c52",
-          "readAt": "2026-08-03T18:52:07Z",
+          "sha256": "5a00a42f7bb0972bac9422957718c0c6ff565e83c54f30ea94603b67ef9e2f8d",
+          "readAt": "2026-08-03T19:03:36Z",
           "visitId": "[\"b0011d7a-9075-416b-8f89-7d66e61debe2\",33]"
         }
       ]

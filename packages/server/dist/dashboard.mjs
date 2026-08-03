@@ -698,8 +698,10 @@ function hasInvalidSurrogate(value) {
   for (let index = 0; index < value.length; index += 1) {
     const current = value.charCodeAt(index);
     if (current >= 55296 && current <= 56319) {
+      if (index + 1 >= value.length)
+        return true;
       const next = value.charCodeAt(index + 1);
-      if (next < 56320 || next > 57343)
+      if (!(next >= 56320 && next <= 57343))
         return true;
       index += 1;
     } else if (current >= 56320 && current <= 57343)

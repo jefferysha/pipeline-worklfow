@@ -7,7 +7,7 @@ import {
   validateTaskPlanRevisionV1,
   type TaskPlanRevisionV1,
 } from './index.js'
-import { byteLength, byteLengthWithin } from './internal.js'
+import { byteLength, byteLengthWithin, hasInvalidSurrogate } from './internal.js'
 
 function revision(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {
   return {
@@ -83,6 +83,19 @@ describe('TaskPlan v1 codec', () => {
     }
   })
 
+  it.each([
+    ['terminal high', '\ud800'],
+    ['prefixed terminal high', 'safe\ud800'],
+    ['lone low', '\udc00'],
+    ['prefixed lone low', 'safe\udc00'],
+  ])('recognizes an unpaired surrogate: %s', (_label, value) => {
+    expect(hasInvalidSurrogate(value)).toBe(true)
+  })
+
+  it('keeps a valid surrogate pair distinct from unpaired UTF-16', () => {
+    expect(hasInvalidSurrogate('safe😀')).toBe(false)
+  })
+
   it('rejects line-breaking control characters before they can escape a Markdown projection', () => {
     const decoded = decodeTaskPlanRevisionV1(revision({
       work_items: revision().work_items.map((item, index) => index === 0
@@ -92,6 +105,39 @@ describe('TaskPlan v1 codec', () => {
     expect(decoded.ok).toBe(false)
     if (decoded.ok) throw new Error('expected decode failure')
     expect(decoded.errors).toContainEqual({ code: 'control_character', path: '$.work_items[0].title' })
+  })
+
+  it.each([
+    ['object title', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, title: 'unsafe\ud800' }
+        : item),
+    }), '$.work_items[0].title'],
+    ['object resource key', revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, resource_claims: [{ kind: 'path', access: 'write', key: 'safe\ud800' }] }
+        : item),
+    }), '$.work_items[0].resource_claims[0].key'],
+  ])('rejects terminal unpaired UTF-16 in %s', (_label, input, path) => {
+    const decoded = decodeTaskPlanRevisionV1(input)
+    expect(decoded.ok).toBe(false)
+    if (decoded.ok) return
+    expect(decoded.errors).toContainEqual({ code: 'unicode_invalid', path })
+  })
+
+  it('rejects terminal unpaired UTF-16 after JSON escape decoding', () => {
+    const input = revision({
+      work_items: revision().work_items.map((item, index) => index === 0
+        ? { ...item, title: 'unsafe\ud800' }
+        : item),
+    })
+    const decoded = decodeTaskPlanRevisionV1(JSON.stringify(input))
+    expect(decoded.ok).toBe(false)
+    if (decoded.ok) return
+    expect(decoded.errors).toContainEqual({
+      code: 'unicode_invalid',
+      path: '$.work_items[0].title',
+    })
   })
 
   it('rejects path-like persistent identifiers', () => {

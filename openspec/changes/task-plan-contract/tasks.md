@@ -42,6 +42,7 @@
 - [x] 对 canonical TaskPlan state 使用 fatal UTF-8 与原始 bytes identity，拒绝 replacement decode 后伪相等的 current/immutable。 (build)
 - [x] 将 object field-name UTF-8 bytes 纳入 decoder 总预算，并使 unknown-field diagnostic path 保持有界。 (build)
 - [x] 在任何 Unicode/trim 扫描前以有界 UTF-8 counter 拒绝超限 object key/text，确保 hostile object CPU 工作受契约预算约束。 (build)
+- [x] 拒绝字符串末尾 lone high surrogate，保持 object/JSON codec 与 resource normalization 的非法 Unicode 失败关闭。 (build)
 
 ## 验证
 
