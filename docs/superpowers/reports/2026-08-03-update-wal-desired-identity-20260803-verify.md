@@ -2,48 +2,62 @@
 
 ## 结论
 
-第二次冻结候选 `27affa39da71863070d113a05ef0c0ad7076ee1a` 验证失败，必须回到 Build 补齐真实 journal 持久化与重建读取回归后重新冻结。
+第三次冻结候选 `67e3ad96691edf797848ac3b7eb3a84b71a1322c` 验证通过。
 
-严重度聚合：Critical 0 / High 0 / Medium 1 / Low 0。
+严重度聚合：Critical 0 / High 0 / Medium 0 / Low 0。
 
 ## 冻结范围
 
 - 基线：`origin/main` `dc53843e61f812938f13c684a41ffe1d935e48bf`
-- 候选：`27affa39da71863070d113a05ef0c0ad7076ee1a`
+- 候选：`67e3ad96691edf797848ac3b7eb3a84b71a1322c`
 - capability：`plugin-runtime`
-- 完整冻结 diff、native desired producer、command injection、runner、journal codec、coordinator、tracked bundle 与完整 MODIFIED requirement 均已回读。
+- `origin/main...BUILD_SHA` 共 99 个文件；直接实现/测试/发布物 10 个，Change 治理与证据 89 个，未映射 0 个。
+- 完整冻结 diff、native desired producer、command injection、generic runner、真实 journal writer/reader、production coordinator、tracked bundle 与完整 MODIFIED requirement 均已回读。
 
 ## 三轨结果
 
-### Reviewer 轨
+### Reviewer / 安全轨
 
-PASS，Critical/High/Medium/Low 为 0/0/0/0。独立隔离审查确认 canonical nested HEAD、local marketplace sentinel、pending/completed、通用 byte-exact、错误路径、并发次序、完整规格和 bundle 一致性均无 finding。
+PASS，Critical/High/Medium/Low 为 0/0/0/0。独立隔离审查确认：
 
-### 隔离 E2E / 发布物轨
+- pending/started 与 completed 恢复均走相同的受限 domain comparator；generic desired 仍为 byte-exact。
+- 只忽略已通过 canonical decoder 的 nested marketplace observation HEAD；真正目标 HEAD、root/source/sourceType、pluginRoot/pluginVersion 继续严格匹配。
+- nested HEAD 仅接受 `null` 或 40 位小写 Git OID；非法 JSON、未知键、错误类型、目标漂移与第三状态均 fail closed。
+- 跨进程锁、journal 原子写、mutation 前后 commit 次序及 runtime activation 边界未改变。
+- 前后冻结实现指纹一致，真实工作树只有本轮 Verify 的 canonical 治理证据追加。
 
-PASS。`/tmp/tenon-verify-27affa39-track2/repo` detached checkout 冻结 SHA：
+### 规格 / E2E 轨
 
-- 聚焦测试 2 files / 18 tests 全通过。
-- durable desired wiring 定向 2/2；strict fail-closed 定向 6/6。
-- TypeScript CLI 依赖链通过。
-- bundle 重建前后 SHA256 均为 `a4d3eb14ae66be1d5db20acfa81fd96d5edebb9fca5ba69c8d1dea3f5c11a31a`。
-- 发布 CLI `--help` smoke 通过；隔离 clone 与真实工作树前后 fingerprint 不变。
+PASS，Critical/High/Medium/Low 为 0/0/0/0。
 
-### Codex 独立轨
+- 原主规格两个场景逐段精确保留；delta 为 1 个 requirement、6 个场景。
+- 隔离 `openspec show`、strict change validate、archive 均 exit 0；archive 为 0 added / 1 modified / 0 removed / 0 renamed，归档后主规格 32/32 strict。
+- started 与 completed 两条真实跨进程测试均通过：第一 Node 进程分别在 mutation 后和 completed checkpoint 后以 91/92 退出；第二 Node 进程经 `publishManagedRelease`、`REAL_RUNTIME_INSTALLER`、真实 `release-transaction.json`、`runManagedHostCommand` 与 production native observation 恢复。
+- 两条路径的 mutation `executions` 均保持 1，恢复后 journal 均清除；定向测试 2/2，native command/observation 18/18。
+- 冻结 CLI `--help` smoke exit 0；真实主规格 digest 前后均为 `513bae7ec8b18dc850f358bac40ce6668b9d53cc3a2aaa6cc3a8f60029b89e25`。
 
-FAIL，Critical/High/Medium/Low 为 0/0/1/0。
+### 隔离全量 / 发布物轨
 
-Medium：`managed-host-command.test.ts` 中所谓 durable/process-restart 回归只对内存 record 做 JSON stringify/parse，然后直接构造内存 runner；未穿过 `createManagedReleaseJournal` 的真实文件 writer、reader/codec，也未在重建 store 后经 production coordinator/native-command 链恢复。因此测试可能在真实持久化 record 无法 decode/reload 时仍假绿。必须把 started 与 completed 都写入真实 journal，重建并读取 store，再经生产接线恢复且证明 mutation 0 次。
+PASS。所有会写生成物的命令均在 `/tmp` 隔离副本运行：
 
-Codex 轨同时确认：canonical nested HEAD、所有真正身份/目标字段、local sentinel、未知 schema、第三状态和默认 byte-exact 均无其他 finding。只读 sandbox 未修改 bundle；真实 bundle mtime 仍为 Build 冻结前 `2026-08-03T22:02:02+0800`。
+- `npm ci --ignore-scripts`：exit 0，486 packages，0 vulnerabilities。
+- `npm run build`：exit 0；TypeScript project refs、Dashboard typecheck/Vite build、server bundle、CLI bundle 全通过。
+- related focused：4 files / 54 tests 全通过。
+- 后端/CLI 全量：332 files / 5961 passed / 26 conditional skipped。
+- Dashboard 全量：87 files / 1633 passed。
+- bundle 二次重建前后 SHA256 均为 `a4d3eb14ae66be1d5db20acfa81fd96d5edebb9fca5ba69c8d1dea3f5c11a31a`。
+- `git diff --check` 与隔离 clone 构建前后 patch 对比均 exit 0。
 
-## 已通过但不能抵消失败的证据
+本轨运行期间主流程合法追加了 Verify phase/document canonical 治理文件，使真实工作树的全局 status/diff fingerprint 变化；HEAD 始终为冻结 SHA，变化仅限 OpenSpec 治理文件，产品、测试、配置和发布物未漂移。本轨自身未写真实工作树。
 
-- Build 全仓：332 files / 5959 passed / 26 条明确环境 skip。
-- `npm run build`、OpenSpec 37/37、architecture、comments、hygiene、`git diff --check` 均通过。
-- 隔离 archive rehearsal：1 个 requirement modified，归档后主规格 32/32 strict；真实主规格 digest 未变化。
-- 第一轮 High/Medium 与规格缺场景 finding 已全部修复，第二轮未复发。
+## 逐文件规范映射
+
+冻结范围 99 个文件全部映射到 `openspec/specs/plugin-runtime/spec.md`：10 个直接实现/测试/发布物文件承载 managed host desired identity 与恢复行为；其余 89 个为同一 capability 的 proposal、design、ADR、plan、tasks、报告和 canonical pipeline evidence。未映射文件为 0。
+
+## 条件性剩余风险
+
+26 条 skip 来自本机 Docker daemon 不可用和 `TENON_REQUIRE_REAL_CODEX!=1`，对应 Docker 容器及 canonical real-Codex 场景；其余 7594 个 backend + Dashboard 测试全绿。GitHub CI 继续执行具备对应环境的 canonical gate。
 
 ## 决策
 
-按持续自主授权拒绝接受偏差，走 `verify-fail` 回 Build；增加真实文件 journal write/read 与重建 store 的 started/completed production-chain 回归，再重新运行完整 Build convergence 和冻结 Verify 三轨。
+上一轮 Medium 已通过真实 started/completed journal 跨进程 writer/codec/store/coordinator 回归关闭。三轨均 PASS 且 Critical/High/Medium 清零，允许推进 `verify-pass`。
