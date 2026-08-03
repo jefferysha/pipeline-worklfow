@@ -1,3 +1,5 @@
+import { lstatSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { PipelineCliRunner } from './operations.js'
 import {
   decodeHostTargetCatalog,
@@ -170,6 +172,91 @@ const PLAN_INVALID: HostTargetPlanRouteResult = {
   body: { ok: false, code: 'HOST_TARGET_PLAN_INVALID', error: '宿主计划响应无效' },
 }
 
+function isDirectoryBelowHostHome(hostHome: string, segments: readonly string[]): boolean {
+  let candidate = hostHome
+  for (const segment of segments) {
+    candidate = join(candidate, segment)
+    try {
+      const metadata = lstatSync(candidate)
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+function hasInstalledPlugin(
+  hostHome: string,
+  namespaceSegments: readonly string[],
+  markerSegments: readonly string[],
+): boolean {
+  if (!isDirectoryBelowHostHome(hostHome, namespaceSegments)) return false
+  let versions
+  try {
+    versions = readdirSync(join(hostHome, ...namespaceSegments), { withFileTypes: true })
+  } catch {
+    return false
+  }
+  if (versions.length > 128) return false
+  return versions.some((version) => {
+    if (!version.isDirectory() || version.isSymbolicLink()) return false
+    const segments = [...namespaceSegments, version.name, ...markerSegments]
+    const marker = join(hostHome, ...segments)
+    if (!isDirectoryBelowHostHome(hostHome, segments.slice(0, -1))) return false
+    try {
+      const metadata = lstatSync(marker)
+      return metadata.isFile() && !metadata.isSymbolicLink()
+    } catch {
+      return false
+    }
+  })
+}
+
+function detectNativeHostTargets(hostHome: string): HostTargetPlanRouteResult {
+  const hosts = [
+    {
+      id: 'codex' as const,
+      configSegments: ['.codex'],
+      pluginSegments: ['.codex', 'plugins', 'cache', 'tenon', 'tenon'],
+      markerSegments: ['.codex-plugin', 'plugin.json'],
+    },
+    {
+      id: 'claude' as const,
+      configSegments: ['.claude'],
+      pluginSegments: ['.claude', 'plugins', 'cache', 'tenon', 'tenon'],
+      markerSegments: ['.claude-plugin', 'plugin.json'],
+    },
+  ]
+  const detectedHosts = hosts
+    .filter((host) => isDirectoryBelowHostHome(hostHome, host.configSegments))
+    .map((host) => host.id)
+  const pluginHost = hosts.find((host) => hasInstalledPlugin(
+    hostHome,
+    host.pluginSegments,
+    host.markerSegments,
+  ))
+  const recommendedHost = pluginHost?.id ?? detectedHosts[0] ?? null
+  return {
+    status: 200,
+    body: {
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: detectedHosts,
+      recommended_host: recommendedHost,
+      recommended_operation: pluginHost !== undefined
+        ? 'update'
+        : recommendedHost !== null
+          ? 'setup'
+          : null,
+      reason: pluginHost !== undefined
+        ? 'tenon-plugin-detected'
+        : recommendedHost !== null
+          ? 'host-detected'
+          : 'none',
+    },
+  }
+}
+
 function parsePlanQuery(searchParams: URLSearchParams): {
   host: Parameters<typeof decodeHostTargetPlan>[1]
   operation: HostOperation
@@ -208,8 +295,16 @@ export async function resolveHostTargetPlanRoute(
   path: string,
   deps: HostTargetPlanRouteDeps,
 ): Promise<HostTargetPlanRouteResult | null> {
-  if (path !== '/api/host-targets' && path !== '/api/host-target-plan') return null
+  if (
+    path !== '/api/host-targets'
+    && path !== '/api/host-target-plan'
+    && path !== '/api/host-target-detection'
+  ) return null
   const searchParams = new URL(requestUrl, 'http://localhost').searchParams
+  if (path === '/api/host-target-detection') {
+    if ([...searchParams].length !== 0) return QUERY_INVALID
+    return detectNativeHostTargets(deps.hostHome)
+  }
   if (path === '/api/host-targets') {
     if ([...searchParams].length !== 0) return QUERY_INVALID
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE

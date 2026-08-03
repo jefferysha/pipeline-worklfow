@@ -18,7 +18,7 @@ import type { Snapshot } from '../types'
 import { AdvancedPanel } from '../advanced/AdvancedPanel'
 import { formatApiError, formatServerProse } from '../api/transport'
 
-type ReadinessState = 'ready' | 'blocked' | 'unknown'
+type ReadinessState = 'ready' | 'blocked' | 'optional-unavailable' | 'unknown'
 
 interface MachineViewProps {
   snapshot: Snapshot | null
@@ -36,7 +36,11 @@ interface ReadinessCardProps {
 
 function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCardProps): JSX.Element {
   const { t } = useT()
-  const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amb-d bg-amb-t border-amb-b'
+  const tone = state === 'ready'
+    ? 'text-green-d bg-green-t border-green-b'
+    : state === 'blocked'
+      ? 'text-red-d bg-red-t border-red-b'
+      : 'text-amb-d bg-amb-t border-amb-b'
   return (
     <article className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
       <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
@@ -220,14 +224,14 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
     return () => { live = false }
   }, [currentRoot, reloadKey])
 
-  const dockerState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'blocked'
-  const imageState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'blocked'
+  const dockerState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'optional-unavailable'
+  const imageState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'optional-unavailable'
   const codexState: ReadinessState = readiness === null || secrets === null ? 'unknown' : readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set || secrets.OPENAI_API_KEY.set ? 'ready' : 'unknown'
   const skillState: ReadinessState = skills === null
     ? 'unknown'
     : skills.length > 0 && skills.filter(blocksMachine).every((skill) => skill.installed) ? 'ready' : 'blocked'
   const operationsState: ReadinessState = snapshot === null ? 'unknown' : snapshot.capabilities.operations === true ? 'ready' : 'blocked'
-  const readinessStates = [dockerState, imageState, codexState, skillState, operationsState]
+  const readinessStates = [codexState, skillState, operationsState]
   const readinessCounts = {
     ready: readinessStates.filter((state) => state === 'ready').length,
     blocked: readinessStates.filter((state) => state === 'blocked').length,
@@ -242,21 +246,18 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       skills: t('machine.source_skills'),
       loops: t('machine.source_loops'),
     }
-    const values = errors.map(({ source, cause }) => `${sourceLabels[source] ?? source}: ${formatApiError(cause, t, { exposeServerDetail: lang === 'zh' })}`)
-    if (currentRoot === '') values.push(t('machine.no_project'))
-    if (readiness && !readiness.docker.available) values.push(t('machine.blocker_docker'))
-    if (readiness && !readiness.image.present && !(images?.images.includes(readiness.image.configured) ?? false)) values.push(t('machine.blocker_image', { image: readiness.image.configured, command: readiness.image.build_hint }))
+    const values = errors
+      .filter(({ source }) => source !== 'docker images')
+      .map(({ source, cause }) => `${sourceLabels[source] ?? source}: ${formatApiError(cause, t, { exposeServerDetail: lang === 'zh' })}`)
     for (const skill of skills ?? []) if (blocksMachine(skill) && !skill.installed) values.push(t('machine.blocker_skill', { skill: skill.name, command: skill.installCmd ?? t('machine.no_install_command') }))
     if (snapshot && snapshot.capabilities.operations !== true) values.push(t('machine.blocker_operations'))
     return values
-  }, [currentRoot, errors, images, lang, readiness, skills, snapshot, t])
+  }, [errors, lang, skills, snapshot, t])
   const blockersPending = blockers.length === 0 && (
-    readiness === null
-    || images === null
-    || secrets === null
+    secrets === null
     || skills === null
-    || loops === null
     || snapshot === null
+    || (currentRoot !== '' && readiness === null)
   )
 
   const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t, lang === 'zh'), [lang, loops, snapshot, t])
@@ -285,16 +286,23 @@ export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineVie
       />
 
       <section data-testid="machine-readiness">
-        <h2 className="mb-3 text-sm font-black text-text">{t('machine.readiness')}</h2>
+        <h2 className="mb-3 text-sm font-black text-text">{t('machine.core_readiness')}</h2>
         <p className="sr-only" role="status" aria-live="polite" data-testid="machine-readiness-summary">
           {t('machine.readiness_summary', readinessCounts)}
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="machine-readiness-grid">
-          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={dockerDetail} testId="machine-docker" />
-          <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
           <ReadinessCard icon={KeyRound} label={t('machine.codex')} state={codexState} detail={t('machine.codex_detail', { source: credentialSourceLabel(secretSource, t) })} testId="machine-codex" />
           <ReadinessCard icon={BrainCircuit} label={t('machine.skills')} state={skillState} detail={skills ? t('machine.skills_detail', { installed: installedSkills, total: skills.length }) : t('machine.loading_signal')} testId="machine-skills" />
           <ReadinessCard icon={ServerCog} label={t('machine.operations')} state={operationsState} detail={t('machine.operations_detail')} testId="machine-operations" />
+        </div>
+      </section>
+
+      <section className="mt-4" data-testid="machine-afk-readiness">
+        <h2 className="text-sm font-black text-text">{t('machine.afk_readiness')}</h2>
+        <p className="mt-1 mb-3 text-xs text-text-3">{t('machine.afk_optional_note')}</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={dockerDetail} testId="machine-docker" />
+          <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
         </div>
       </section>
 

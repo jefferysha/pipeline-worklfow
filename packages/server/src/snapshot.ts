@@ -24,6 +24,7 @@ import type {
   ChangeSnapshot,
   DocumentEvidenceSnapshot,
   ProjectSnapshot,
+  ProjectRepositoryIdentity,
   Snapshot,
   TerminalActivitySnapshot,
 } from './types.js'
@@ -39,12 +40,13 @@ import {
 import { readBounded } from './contextBundleTrustedReader.js'
 import { dedupeRoots } from './projectRoots.js'
 import { readTasksMarkdown } from './snapshotTasks.js'
+import { mapWithConcurrency } from './concurrentMap.js'
+import { readRepositoryIdentity } from './repositoryIdentity.js'
 
 export { dedupeRoots } from './projectRoots.js'
 export { readTasksMarkdown } from './snapshotTasks.js'
 
 const MAX_CANONICAL_STATE_COMPATIBILITY_ISSUES = 100
-
 export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   registry: () => string[]
   store: StateStore
@@ -57,8 +59,8 @@ export interface SnapshotDeps extends WorkflowSnapshotCapabilityDeps {
   capabilities?: Record<string, boolean>
   /** Epoch source for the short-lived terminal activity lease; injectable so expiry is testable. */
   now?: () => number
+  repositoryIdentity?: (root: string) => Promise<ProjectRepositoryIdentity | undefined>
 }
-
 function str(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v.join(',')
   return v ?? ''
@@ -170,13 +172,15 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
   }
   if (!isDir) return { root, ok: false, changes: [], workflowRules: {}, error: 'root 不存在或不可达' }
 
+  const repository = await readRepositoryIdentity(root, deps.repositoryIdentity)
+
   const changesRoot = join(root, 'openspec', 'changes')
   let entries
   try {
     entries = await readdir(changesRoot, { withFileTypes: true })
   } catch {
     // 已注册但尚无 openspec/changes —— 合法空项目
-    return { root, ok: true, changes: [], workflowRules: {} }
+    return { root, ok: true, changes: [], workflowRules: {}, ...(repository === undefined ? {} : { repository }) }
   }
 
   const changes: ChangeSnapshot[] = []
@@ -308,6 +312,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
     root,
     ok: errors.length === 0 && compatibilityIssues.length === 0,
     changes,
+    ...(repository === undefined ? {} : { repository }),
     ...(compatibilityIssues.length === 0 ? {} : { compatibilityIssues }),
     ...(compatibilityIssueOverflow === 0 ? {} : { compatibilityIssuesTruncated: true as const }),
     workflowRules: legacyWorkflowRules,
@@ -318,7 +323,7 @@ async function scanProject(deps: SnapshotDeps, root: string, nowMs: number): Pro
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const roots = dedupeRoots(deps.registry())
   const nowMs = deps.now?.() ?? Date.now()
-  const projects = await Promise.all(roots.map((r) => scanProject(deps, r, nowMs)))
+  const projects = await mapWithConcurrency(roots, 4, (root) => scanProject(deps, root, nowMs))
   const change_count = projects.reduce((n, p) => n + p.changes.length, 0)
   return {
     snapshot_protocol: 'tenon-snapshot/v2',

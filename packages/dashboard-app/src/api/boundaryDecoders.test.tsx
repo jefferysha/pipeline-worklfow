@@ -166,6 +166,26 @@ describe('API bounded-context response decoders', () => {
     })).toBeNull()
   })
 
+  it('preserves strict repository identity while accepting a legacy project without it', () => {
+    const current = validSnapshot()
+    const currentProject = current.projects[0] as typeof current.projects[number] & {
+      repository?: { id: string; label: string; workspace_kind: 'primary' | 'worktree' }
+    }
+    currentProject.repository = {
+      id: 'b'.repeat(64),
+      label: 'tenon',
+      workspace_kind: 'worktree',
+    }
+    expect(decodeSnapshot(current)?.projects[0]?.repository).toEqual({
+      id: 'b'.repeat(64),
+      label: 'tenon',
+      workspace_kind: 'worktree',
+    })
+
+    const legacy = validSnapshot()
+    expect(decodeSnapshot(legacy)?.projects[0]?.repository).toBeUndefined()
+  })
+
   it('preserves governed loop telemetry after validating every rendered field', () => {
     const decoded = decodeLoopsSnapshot({
       generated_at: 'now',

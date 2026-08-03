@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { HostTargetPlanClientError } from '../api/hostTargetPlanClient'
-import type { HostTargetCatalog, HostTargetPlan } from '../api/hostTargetPlanTypes'
+import type { HostTargetCatalog, HostTargetDetection, HostTargetPlan } from '../api/hostTargetPlanTypes'
 import { HostTargetPlanView } from './HostTargetPlanView'
 
 const catalog: HostTargetCatalog = {
@@ -65,9 +65,28 @@ const setupPlan: HostTargetPlan = {
   ],
 }
 
+const updatePlan: HostTargetPlan = {
+  ...setupPlan,
+  operation: 'update',
+  command: {
+    executable: 'tenon',
+    args: ['update', '--codex'],
+    display: 'tenon update --codex',
+  },
+}
+
+const noDetection: HostTargetDetection = {
+  schema_version: 'host-target-detection/v1',
+  detected_hosts: [],
+  recommended_host: null,
+  recommended_operation: null,
+  reason: 'none',
+}
+
 function renderView(over: Partial<Parameters<typeof HostTargetPlanView>[0]> = {}) {
   const props = {
     loadTargets: vi.fn<() => Promise<HostTargetCatalog>>(),
+    loadDetection: vi.fn<() => Promise<HostTargetDetection>>().mockResolvedValue(noDetection),
     loadPlan: vi.fn<(host: string, operation: 'setup' | 'update') => Promise<HostTargetPlan>>(),
     copyText: vi.fn<(text: string) => Promise<void>>(),
     ...over,
@@ -83,6 +102,85 @@ afterEach(() => {
 })
 
 describe('HostTargetPlanView', () => {
+  it('loads catalog and detection in parallel, then opens the recommended read-only update plan', async () => {
+    let resolveCatalog: ((value: HostTargetCatalog) => void) | undefined
+    let resolveDetection: ((value: HostTargetDetection) => void) | undefined
+    const loadTargets = vi.fn(() => new Promise<HostTargetCatalog>((resolve) => {
+      resolveCatalog = resolve
+    }))
+    const loadDetection = vi.fn(() => new Promise<HostTargetDetection>((resolve) => {
+      resolveDetection = resolve
+    }))
+    const loadPlan = vi.fn().mockResolvedValue(updatePlan)
+    renderView({ loadTargets, loadDetection, loadPlan })
+
+    expect(loadTargets).toHaveBeenCalledTimes(1)
+    expect(loadDetection).toHaveBeenCalledTimes(1)
+    resolveDetection?.({
+      schema_version: 'host-target-detection/v1',
+      detected_hosts: ['codex'],
+      recommended_host: 'codex',
+      recommended_operation: 'update',
+      reason: 'tenon-plugin-detected',
+    })
+    resolveCatalog?.(catalog)
+
+    await waitFor(() => expect(loadPlan).toHaveBeenCalledWith(
+      'codex',
+      'update',
+      expect.any(AbortSignal),
+    ))
+    expect(screen.getByRole('button', { name: 'Codex，已选择' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '更新' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByTestId('host-plan-preview')).toHaveTextContent('tenon update --codex')
+  })
+
+  it('degrades a missing detection endpoint to complete manual selection without blocking catalog', async () => {
+    const loadPlan = vi.fn().mockResolvedValue(setupPlan)
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadDetection: vi.fn().mockRejectedValue(
+        new HostTargetPlanClientError('http', 'HOST_TARGET_HTTP_ERROR', 404),
+      ),
+      loadPlan,
+    })
+
+    expect(await screen.findByRole('button', { name: '选择 Codex' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 Cursor' })).toBeInTheDocument()
+    expect(screen.getByTestId('host-detection-status')).toBeInTheDocument()
+    expect(loadPlan).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '选择 Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    expect(await screen.findByTestId('host-plan-preview')).toHaveTextContent('tenon setup --codex')
+  })
+
+  it('invalidates a late automatically recommended plan after the user selects another host', async () => {
+    let resolvePlan: ((value: HostTargetPlan) => void) | undefined
+    const loadPlan = vi.fn(() => new Promise<HostTargetPlan>((resolve) => {
+      resolvePlan = resolve
+    }))
+    renderView({
+      loadTargets: vi.fn().mockResolvedValue(catalog),
+      loadDetection: vi.fn().mockResolvedValue({
+        schema_version: 'host-target-detection/v1',
+        detected_hosts: ['codex'],
+        recommended_host: 'codex',
+        recommended_operation: 'update',
+        reason: 'tenon-plugin-detected',
+      }),
+      loadPlan,
+    })
+
+    await waitFor(() => expect(loadPlan).toHaveBeenCalledWith('codex', 'update', expect.any(AbortSignal)))
+    fireEvent.click(screen.getByRole('button', { name: '选择 Cursor' }))
+    resolvePlan?.(updatePlan)
+
+    await waitFor(() => {
+      expect(screen.queryByText('tenon update --codex')).toBeNull()
+      expect(screen.getByRole('status')).toHaveTextContent('选择“安装”或“更新”')
+    })
+  })
+
   it('announces catalog loading, then renders an honest empty state', async () => {
     let resolveCatalog: ((value: HostTargetCatalog) => void) | undefined
     const loadTargets = vi.fn()

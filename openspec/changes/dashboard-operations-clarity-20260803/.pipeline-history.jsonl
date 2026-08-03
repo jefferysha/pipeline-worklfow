@@ -1,0 +1,24 @@
+{"ts":"2026-08-03T07:20:48Z","kind":"init"}
+{"ts":"2026-08-03T07:21:00Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T07:21:58Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T07:29:09Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-03T07:29:10Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"fc9365ac-b6db-4256-bee2-0a31c6e19f0c"}
+{"ts":"2026-08-03T07:40:22Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-08-03-dashboard-operations-clarity-design.md"}
+{"ts":"2026-08-03T07:40:22Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-08-03T07:40:23Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-08-03T07:40:35Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-08-03T07:40:36Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-08-03T07:21:58Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T07:40:36Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-08-03T07:40:36Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-08-03T07:40:36Z","kind":"tool","raw":"CodexSkillRead: search-first"}
+{"ts":"2026-08-03T07:40:36Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"e4366d1f-a688-4407-bad1-8c87401d06fa"}
+{"ts":"2026-08-03T07:44:21Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-08-03-dashboard-operations-clarity.md"}
+{"ts":"2026-08-03T07:44:21Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-03T07:44:22Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T07:44:23Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-03T07:44:39Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-03T07:44:39Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-03T07:21:58Z authority_host_session=019fc32c-0857-7a41-82d1-1d15b8bfd240"}
+{"ts":"2026-08-03T07:44:40Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"f23a07f2-4bcc-4a5c-a9ad-be6cb5ef0eba"}
+{"ts":"2026-08-03T07:45:31Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
+{"ts":"2026-08-03T07:45:32Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-03T08:23:47Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

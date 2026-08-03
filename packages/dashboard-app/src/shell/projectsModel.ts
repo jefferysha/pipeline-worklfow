@@ -16,10 +16,23 @@ export interface ProjectRow {
   root: string
   basename: string
   ok: boolean
+  repositoryId?: string
+  repositoryLabel?: string
+  workspaceKind?: 'primary' | 'worktree'
   wip: number
   need: number
   running: number
   cells: PhaseCell[]
+}
+
+export interface RepositoryGroup {
+  id: string
+  label: string
+  workspaceCount: number
+  wip: number
+  need: number
+  running: number
+  workspaces: ProjectRow[]
 }
 
 function basenameOf(root: string): string {
@@ -106,10 +119,62 @@ export function buildProjectRows(
       root: project.root,
       basename: basenameOf(project.root),
       ok: true,
+      ...(project.repository === undefined
+        ? {}
+        : {
+            repositoryId: project.repository.id,
+            repositoryLabel: project.repository.label,
+            workspaceKind: project.repository.workspace_kind,
+          }),
       wip: progress.total,
       need: progress.counts.gate + progress.counts.failed,
       running: progress.counts.running,
       cells: buildCells(project.changes, rules, t),
     }
   })
+}
+
+function compareWorkspaces(left: ProjectRow, right: ProjectRow): number {
+  if (left.workspaceKind !== right.workspaceKind) {
+    if (left.workspaceKind === 'primary') return -1
+    if (right.workspaceKind === 'primary') return 1
+  }
+  if (left.basename !== right.basename) return left.basename < right.basename ? -1 : 1
+  return left.root < right.root ? -1 : left.root > right.root ? 1 : 0
+}
+
+export function compareRepositoryGroups(left: RepositoryGroup, right: RepositoryGroup): number {
+  if (left.need !== right.need) return right.need - left.need
+  if (left.running !== right.running) return right.running - left.running
+  if (left.wip !== right.wip) return right.wip - left.wip
+  if (left.label !== right.label) return left.label < right.label ? -1 : 1
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+}
+
+export function buildRepositoryGroups(rows: readonly ProjectRow[]): RepositoryGroup[] {
+  const grouped = new Map<string, { label: string; workspaces: ProjectRow[] }>()
+  for (const row of rows) {
+    if (!row.ok) continue
+    const id = row.repositoryId === undefined
+      ? `workspace:${row.root}`
+      : `repository:${row.repositoryId}`
+    const group = grouped.get(id) ?? {
+      label: row.repositoryLabel ?? row.basename,
+      workspaces: [],
+    }
+    group.workspaces.push(row)
+    grouped.set(id, group)
+  }
+  return [...grouped].map(([id, group]) => {
+    const workspaces = [...group.workspaces].sort(compareWorkspaces)
+    return {
+      id,
+      label: group.label,
+      workspaceCount: workspaces.length,
+      wip: workspaces.reduce((total, workspace) => total + workspace.wip, 0),
+      need: workspaces.reduce((total, workspace) => total + workspace.need, 0),
+      running: workspaces.reduce((total, workspace) => total + workspace.running, 0),
+      workspaces,
+    }
+  }).sort(compareRepositoryGroups)
 }

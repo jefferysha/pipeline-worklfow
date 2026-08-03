@@ -48,6 +48,49 @@ describe('readRegistry', () => {
 })
 
 describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
+  it('adds repository identity to a reachable empty project snapshot', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async () => ({
+        id: 'a'.repeat(64),
+        label: 'repository',
+        workspace_kind: 'primary' as const,
+      }),
+    })
+
+    expect(snapshot.projects[0]?.repository).toEqual({
+      id: 'a'.repeat(64),
+      label: 'repository',
+      workspace_kind: 'primary',
+    })
+  })
+
+  it('bounds concurrent project scans so repository probes cannot create an unbounded Git process fan-out', async () => {
+    const roots = await Promise.all(Array.from({ length: 9 }, () => makeProject()))
+    let active = 0
+    let maxActive = 0
+    await buildSnapshot({
+      registry: () => roots,
+      store: newStore(),
+      version: '1',
+      clock: () => 'now',
+      repositoryIdentity: async () => {
+        active += 1
+        maxActive = Math.max(maxActive, active)
+        await sleep(5)
+        active -= 1
+        return undefined
+      },
+    })
+
+    expect(maxActive).toBe(4)
+  })
+
   it('聚合快照在 tasks leaf 的 lstat→open 竞态中不跟随替换后的 symlink', async () => {
     const store = newStore()
     const root = await makeProject()

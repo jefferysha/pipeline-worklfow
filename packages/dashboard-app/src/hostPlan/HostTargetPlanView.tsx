@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  fetchHostTargetDetection,
   fetchHostTargetPlan,
   fetchHostTargets,
   HostTargetPlanClientError,
@@ -9,6 +10,7 @@ import type {
   HostOperation,
   HostTarget,
   HostTargetCatalog,
+  HostTargetDetection,
   HostTargetPlan,
 } from '../api/hostTargetPlanTypes'
 import { useT } from '../i18n'
@@ -19,6 +21,7 @@ import {
 
 interface HostTargetPlanViewProps {
   loadTargets?: (signal: AbortSignal) => Promise<HostTargetCatalog>
+  loadDetection?: (signal: AbortSignal) => Promise<HostTargetDetection>
   loadPlan?: (
     host: HostId,
     operation: HostOperation,
@@ -31,6 +34,11 @@ type CatalogState =
   | { status: 'loading' }
   | { status: 'error'; error: unknown }
   | { status: 'ready'; catalog: HostTargetCatalog }
+
+type DetectionState =
+  | { status: 'loading' }
+  | { status: 'unavailable'; error: unknown }
+  | { status: 'ready'; detection: HostTargetDetection }
 
 const HOST_NAMES: Record<string, string> = {
   codex: 'Codex',
@@ -67,6 +75,8 @@ function localizedError(
       return t('hostPlan.errors.upstream_invalid')
     case 'HOST_TARGET_CATALOG_RESPONSE_INVALID':
       return t('hostPlan.errors.catalog_invalid')
+    case 'HOST_TARGET_DETECTION_RESPONSE_INVALID':
+      return t('hostPlan.errors.detection_invalid')
     case 'HOST_TARGET_PLAN_RESPONSE_INVALID':
       return t('hostPlan.errors.plan_invalid')
     case 'HOST_TARGET_PLAN_REQUEST_MISMATCH':
@@ -78,58 +88,79 @@ function localizedError(
 
 export function HostTargetPlanView({
   loadTargets = fetchHostTargets,
+  loadDetection = fetchHostTargetDetection,
   loadPlan = fetchHostTargetPlan,
   copyText = async (text) => navigator.clipboard.writeText(text),
 }: HostTargetPlanViewProps): JSX.Element {
   const { t } = useT()
   const [catalogState, setCatalogState] = useState<CatalogState>({ status: 'loading' })
+  const [detectionState, setDetectionState] = useState<DetectionState>({ status: 'loading' })
   const [selectedHost, setSelectedHost] = useState<HostId | null>(null)
   const [selectedOperation, setSelectedOperation] = useState<HostOperation | null>(null)
   const [planState, setPlanState] = useState<HostPlanRequestState>({ status: 'idle' })
-  const requestSequence = useRef(0)
-  const requestController = useRef<AbortController | null>(null)
+  const bootstrapSequence = useRef(0)
+  const planSequence = useRef(0)
+  const bootstrapController = useRef<AbortController | null>(null)
+  const planController = useRef<AbortController | null>(null)
   const detailRef = useRef<HTMLDivElement>(null)
 
   const refreshCatalog = useCallback(() => {
-    requestController.current?.abort()
+    bootstrapController.current?.abort()
+    planController.current?.abort()
     const controller = new AbortController()
-    requestController.current = controller
-    const sequence = requestSequence.current + 1
-    requestSequence.current = sequence
+    bootstrapController.current = controller
+    const sequence = bootstrapSequence.current + 1
+    bootstrapSequence.current = sequence
+    planSequence.current += 1
     setSelectedHost(null)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
     setCatalogState({ status: 'loading' })
-    void loadTargets(controller.signal).then(
+    setDetectionState({ status: 'loading' })
+    const catalogRequest = loadTargets(controller.signal).then(
       (catalog) => {
-        if (requestSequence.current === sequence) setCatalogState({ status: 'ready', catalog })
+        if (bootstrapSequence.current === sequence) setCatalogState({ status: 'ready', catalog })
       },
       (error: unknown) => {
-        if (requestSequence.current === sequence) {
+        if (bootstrapSequence.current === sequence) {
           setCatalogState({
             status: 'error',
             error,
           })
         }
       },
-    ).finally(() => {
-      if (requestController.current === controller) requestController.current = null
+    )
+    const detectionRequest = loadDetection(controller.signal).then(
+      (detection) => {
+        if (bootstrapSequence.current === sequence) setDetectionState({ status: 'ready', detection })
+      },
+      (error: unknown) => {
+        if (bootstrapSequence.current === sequence) {
+          setDetectionState({ status: 'unavailable', error })
+        }
+      },
+    )
+    void Promise.allSettled([catalogRequest, detectionRequest]).finally(() => {
+      if (bootstrapController.current === controller) bootstrapController.current = null
     })
-  }, [loadTargets])
+  }, [loadDetection, loadTargets])
 
   useEffect(() => {
     refreshCatalog()
     return () => {
-      requestController.current?.abort()
-      requestController.current = null
-      requestSequence.current += 1
+      bootstrapController.current?.abort()
+      bootstrapController.current = null
+      planController.current?.abort()
+      planController.current = null
+      bootstrapSequence.current += 1
+      planSequence.current += 1
     }
   }, [refreshCatalog])
 
   const selectHost = (host: HostId): void => {
-    requestController.current?.abort()
-    requestController.current = null
-    requestSequence.current += 1
+    planController.current?.abort()
+    planController.current = null
+    planSequence.current += 1
     setSelectedHost(host)
     setSelectedOperation(null)
     setPlanState({ status: 'idle' })
@@ -141,20 +172,21 @@ export function HostTargetPlanView({
     }
   }
 
-  const requestPlan = (host: HostId, operation: HostOperation): void => {
-    requestController.current?.abort()
+  const requestPlan = useCallback((host: HostId, operation: HostOperation): void => {
+    planController.current?.abort()
     const controller = new AbortController()
-    requestController.current = controller
-    const sequence = requestSequence.current + 1
-    requestSequence.current = sequence
+    planController.current = controller
+    const sequence = planSequence.current + 1
+    planSequence.current = sequence
+    setSelectedHost(host)
     setSelectedOperation(operation)
     setPlanState({ status: 'loading' })
     void loadPlan(host, operation, controller.signal).then(
       (plan) => {
-        if (requestSequence.current === sequence) setPlanState({ status: 'ready', plan })
+        if (planSequence.current === sequence) setPlanState({ status: 'ready', plan })
       },
       (error: unknown) => {
-        if (requestSequence.current === sequence) {
+        if (planSequence.current === sequence) {
           setPlanState({
             status: 'error',
             error,
@@ -162,9 +194,20 @@ export function HostTargetPlanView({
         }
       },
     ).finally(() => {
-      if (requestController.current === controller) requestController.current = null
+      if (planController.current === controller) planController.current = null
     })
-  }
+  }, [loadPlan])
+
+  useEffect(() => {
+    if (catalogState.status !== 'ready'
+      || detectionState.status !== 'ready'
+      || selectedHost !== null) return
+    const { recommended_host: host, recommended_operation: operation } = detectionState.detection
+    if (host === null || operation === null) return
+    const target = catalogState.catalog.targets.find((candidate) => candidate.id === host)
+    if (target === undefined || !target.supported_operations.includes(operation)) return
+    requestPlan(host, operation)
+  }, [catalogState, detectionState, requestPlan, selectedHost])
   const selectedTarget = catalogState.status === 'ready'
     ? catalogState.catalog.targets.find((target) => target.id === selectedHost) ?? null
     : null
@@ -208,10 +251,32 @@ export function HostTargetPlanView({
           </button>
         </div>
       ) : (
-        <div
-          className="mt-8 grid items-start gap-5 min-[900px]:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]"
-          data-testid="host-plan-workspace"
-        >
+        <>
+          <div
+            className="mt-6 rounded-xl border border-border bg-card px-4 py-3 text-sm text-text-2"
+            data-testid="host-detection-status"
+          >
+            {detectionState.status === 'loading'
+              ? t('hostPlan.detection_loading')
+              : detectionState.status === 'unavailable'
+                ? t('hostPlan.detection_unavailable')
+                : detectionState.detection.recommended_host === null
+                  ? t('hostPlan.detection_none')
+                  : t(
+                    detectionState.detection.reason === 'tenon-plugin-detected'
+                      ? 'hostPlan.detection_recommended_plugin'
+                      : 'hostPlan.detection_recommended_host',
+                    {
+                      host: HOST_NAMES[detectionState.detection.recommended_host]
+                        ?? detectionState.detection.recommended_host,
+                      operation: t(`hostPlan.operation.${detectionState.detection.recommended_operation ?? 'setup'}`),
+                    },
+                  )}
+          </div>
+          <div
+            className="mt-5 grid items-start gap-5 min-[900px]:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]"
+            data-testid="host-plan-workspace"
+          >
           <div
             className="grid min-w-0 gap-3 min-[520px]:grid-cols-2 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:grid-cols-1 min-[900px]:overflow-y-auto min-[900px]:pr-2 min-[900px]:[scrollbar-gutter:stable]"
             data-testid="host-target-grid"
@@ -219,6 +284,10 @@ export function HostTargetPlanView({
             {catalogState.catalog.targets.map((target) => {
               const name = hostName(target)
               const selected = selectedHost === target.id
+              const detected = detectionState.status === 'ready'
+                && detectionState.detection.detected_hosts.some((host) => host === target.id)
+              const recommended = detectionState.status === 'ready'
+                && detectionState.detection.recommended_host === target.id
               return (
                 <article
                   key={target.id}
@@ -226,6 +295,8 @@ export function HostTargetPlanView({
                     selected ? 'border-(--accent) ring-1 ring-(--accent)' : 'border-border'
                   }`}
                   data-kind={target.kind}
+                  data-detected={detected}
+                  data-recommended={recommended}
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
@@ -233,6 +304,11 @@ export function HostTargetPlanView({
                       <p className="shrink-0 font-mono text-[11px] text-text-3">{target.cli_flag}</p>
                     </div>
                     <div className="flex shrink-0 gap-1">
+                      {detected ? (
+                        <span className="rounded-full border border-green-b bg-green-t px-1.5 py-1 text-[11px] font-semibold text-green-d">
+                          {t('hostPlan.detected')}
+                        </span>
+                      ) : null}
                       <span className="rounded-full border border-border bg-fill px-1.5 py-1 text-[11px] font-semibold text-text-2">
                         {t(`hostPlan.kind.${target.kind}`)}
                       </span>
@@ -280,7 +356,8 @@ export function HostTargetPlanView({
               />
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
     </section>
   )

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { ChevronDown, Layers3, ShieldCheck } from 'lucide-react'
 import { useT } from '../i18n'
 import type { WbWorkflowDef } from './workbenchDefinition'
@@ -25,6 +25,7 @@ export function WorkbenchHeader(props: {
   onDelete: () => void
   onGovernance: () => void
   onSave: () => void
+  trackControls: ReactNode
 }): JSX.Element {
   const { t } = useT()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -90,12 +91,13 @@ export function WorkbenchHeader(props: {
   }
 
   return <>
-    <div className="mb-5 flex flex-wrap items-center gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-sm">
+    <div className="mb-4 rounded-2xl border border-border bg-card p-3 shadow-sm" data-testid="wb-controls">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5" data-testid="wb-workflow-controls">
       <div className="relative">
-        <button ref={triggerRef} className="group inline-flex min-h-14 min-w-[280px] cursor-pointer items-center gap-3 rounded-xl border border-accent-b bg-accent-t/45 px-3.5 text-left transition hover:border-(--accent) hover:bg-accent-t" data-testid="wb-wf-btn" aria-haspopup="menu" aria-expanded={props.menuOpen} onKeyDown={onTriggerKeyDown} onClick={() => props.menuOpen ? props.onMenuOpen(false) : openMenu()}>
-          <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-(--accent) text-btn-fg shadow-sm"><Layers3 className="h-4.5 w-4.5" aria-hidden="true" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold tracking-[.08em] text-accent-d uppercase">{t('workbench.current_workflow')}</span><span className="mt-0.5 block truncate text-[17px] font-extrabold tracking-[-0.01em] text-text">{props.workflowName ?? '…'}</span></span>
-          {props.currentStages != null && <span className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-text-2 shadow-sm">{t('workbench.wf_stages', { n: props.currentStages })}</span>}
+        <button ref={triggerRef} className="group inline-flex min-h-10 min-w-[220px] max-w-full cursor-pointer items-center gap-2.5 rounded-xl border border-accent-b bg-accent-t/45 px-3.5 text-left outline-none transition hover:border-(--accent) hover:bg-accent-t focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-card" data-testid="wb-wf-btn" aria-haspopup="menu" aria-expanded={props.menuOpen} onKeyDown={onTriggerKeyDown} onClick={() => props.menuOpen ? props.onMenuOpen(false) : openMenu()}>
+          <span className="grid h-7 w-7 flex-none place-items-center rounded-lg bg-(--accent) text-btn-fg shadow-sm"><Layers3 className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-[9px] font-bold tracking-[.08em] text-accent-d uppercase">{t('workbench.current_workflow')}</span><span className="block truncate text-[14px] font-extrabold tracking-[-0.01em] text-text">{props.workflowName ?? '…'}</span></span>
+          {props.currentStages != null && <span className="rounded-full bg-card px-2 py-1 text-[11px] font-semibold text-text-2 shadow-sm">{t('workbench.wf_stages', { n: props.currentStages })}</span>}
           <ChevronDown className="h-4 w-4 flex-none text-text-3 transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
         </button>
         {props.menuOpen && <div ref={menuRef} className="absolute top-[calc(100%+6px)] left-0 z-40 min-w-[238px] rounded-lg border border-border bg-card p-1.5 shadow-md" role="menu" aria-label={t('workbench.wf_menu_label')} onKeyDown={onMenuKeyDown}>
@@ -123,6 +125,10 @@ export function WorkbenchHeader(props: {
       </>}
       {props.def?.openspecContract === 'required' && <span className={`${PILL} border border-accent-b bg-accent-t text-accent-d`} data-testid="wb-openspec-contract">{t('workbench.openspec_contract')}</span>}
       {props.def?.documentContract !== undefined && <span className={`${PILL} border border-accent-b bg-accent-t text-accent-d`} data-testid="wb-document-contract">{t('workbench.document_contract')}</span>}
+      </div>
+      <div className="mt-3 min-w-0 border-t border-border pt-3" data-testid="wb-track-context">
+        {props.trackControls}
+      </div>
     </div>
     {props.saveStatus.kind === 'error' && <ul className="mb-3.5 list-none rounded-md border border-red-b bg-red-t px-3 py-2.5" role="alert" data-testid="wb-save-errors">{props.saveStatus.errors.map((error) => <li key={error} className="font-mono text-[12.5px] leading-[1.6] text-red-d">{error}</li>)}</ul>}
     {props.namesError && <p className={ERR_NOTE} role="alert">{props.namesError}</p>}

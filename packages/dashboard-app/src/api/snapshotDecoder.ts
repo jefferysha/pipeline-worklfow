@@ -3,6 +3,7 @@ import type {
   DocumentEvidenceSnapshot,
   PipelineTodoProjection,
   PipelineTodoStage,
+  ProjectRepositoryIdentity,
   ProjectSnapshot,
   ReviewHandshakeSnapshot,
   Snapshot,
@@ -355,12 +356,31 @@ function workflowRulesSemanticKey(rules: ChangeSnapshot['workflowRules']): strin
   })
 }
 
+function decodeRepositoryIdentity(value: unknown): ProjectRepositoryIdentity | null {
+  if (!isRecord(value)
+    || !exactKeys(value, ['id', 'label', 'workspace_kind'])
+    || typeof value.id !== 'string'
+    || !/^[0-9a-f]{64}$/.test(value.id)
+    || typeof value.label !== 'string'
+    || value.label.length === 0
+    || value.label.length > 255
+    || /[\\/]/.test(value.label)
+    || (value.workspace_kind !== 'primary' && value.workspace_kind !== 'worktree')) return null
+  return {
+    id: value.id,
+    label: value.label,
+    workspace_kind: value.workspace_kind,
+  }
+}
+
 function decodeProject(value: unknown): ProjectSnapshot | null {
   if (!isRecord(value)
     || typeof value.root !== 'string'
     || typeof value.ok !== 'boolean'
     || !optionalString(value.error)
     || !Array.isArray(value.changes)) return null
+  const repository = value.repository === undefined ? undefined : decodeRepositoryIdentity(value.repository)
+  if (repository === null) return null
   const compatibilityIssues = value.compatibilityIssues === undefined
     ? undefined
     : decodeCompatibilityIssues(value.compatibilityIssues)
@@ -392,6 +412,7 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     root: value.root,
     ok: value.ok,
     changes,
+    ...(repository === undefined ? {} : { repository }),
     ...(compatibilityIssues === undefined ? {} : { compatibilityIssues }),
     ...(compatibilityIssuesTruncated === undefined ? {} : { compatibilityIssuesTruncated }),
     ...(value.error === undefined ? {} : { error: value.error }),
