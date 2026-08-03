@@ -21,7 +21,7 @@ export function OrchestrationOutputZone({ lane, readonly, canEdit, canGuard, out
   onRemove: (lane: BoardLane, field: string) => void
   onGuard?: (stageId: string, nonempty: boolean) => void
 }): JSX.Element {
-  const { t } = useT()
+  const { lang, t } = useT()
   const addingOut = outAdd?.id === lane.id
   const outError = addingOut ? outAdd?.error ?? null : null
   const showGuard = canGuard && lane.nonemptyGuard !== undefined
@@ -43,7 +43,7 @@ export function OrchestrationOutputZone({ lane, readonly, canEdit, canGuard, out
                       </div>
                       <div className="flex flex-col items-start gap-1.5">
                         {lane.outputs.map((o) => {
-                          const presentation = outputPresentation(o)
+                          const presentation = outputPresentation(o, lang)
                           return (
                           <span
                             key={o}

@@ -9,6 +9,7 @@ import {
   type WbHookMeta,
 } from '../api/client'
 import { useT } from '../i18n'
+import { formatApiError } from '../api/transport'
 
 /**
  * HookTimeline（T15，计划 2026-07-11-v5-interaction-rebuild）—— 工作台 Hook 会话时序线：
@@ -54,6 +55,8 @@ export interface HooksConfigState {
   promptSkipKeyword: string | null
   promptSkipBusy: boolean
   promptSkipError: string | null
+  /** Prompt routing editor reports its unsaved effective keyword into Workbench's aggregate guard. */
+  onPromptSkipDirtyChange?: (dirty: boolean) => void
   /** 在途写回的 `<hook>.<阶段>` 键：对应开关禁用，防同键乱序竞态。 */
   busyKeys: ReadonlySet<string>
   toggle: (hook: string, phase: string, enabled: boolean) => void
@@ -69,30 +72,42 @@ export interface HooksConfigState {
  * T17：可选 onError——宿主（App 经 WorkbenchView）传入时，写回失败的提示改走它（接全局
  * showFlash），不再落 toggleError 行内 alert（两处同时报同一件事是重复）；缺省行为与 T15 一致。
  */
-export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
-  const { t } = useT()
+export function useHooksConfig(
+  root: string,
+  onError?: (msg: string) => void,
+  onPromptSkipDirtyChange?: (dirty: boolean) => void,
+): HooksConfigState {
+  const { t, lang } = useT()
   const tRef = useRef(t)
   tRef.current = t
+  const langRef = useRef(lang)
+  langRef.current = lang
   const [hooks, setHooks] = useState<WbHookMeta[] | null>(null)
   const [matrix, setMatrix] = useState<Record<string, false>>({})
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [toggleError, setToggleError] = useState<string | null>(null)
   const [promptSkipKeyword, setPromptSkipKeyword] = useState<string | null>(null)
   const [promptSkipBusy, setPromptSkipBusy] = useState(false)
-  const [promptSkipError, setPromptSkipError] = useState<string | null>(null)
+  const [promptSkipFailed, setPromptSkipFailed] = useState(false)
   const promptSkipGeneration = useRef(0)
+  const toggleSequence = useRef(0)
+  const toggleTokens = useRef(new Map<string, number>())
+  const rootIdentity = useRef(root)
+  rootIdentity.current = root
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
     promptSkipGeneration.current += 1
+    toggleTokens.current.clear()
     setHooks(null)
     setMatrix({})
-    setLoadError(null)
+    setLoadFailed(false)
     setToggleError(null)
     setPromptSkipKeyword(null)
     setPromptSkipBusy(false)
-    setPromptSkipError(null)
+    setPromptSkipFailed(false)
+    setBusyKeys(new Set())
     fetchHooksConfig(root)
       .then((body) => {
         if (cancelled) return
@@ -103,18 +118,27 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       .catch(() => {
         // 加载失败不挡工作台其余区块：计数回落 '—' 占位、时序线区行内报错。
         if (cancelled) return
-        setLoadError(tRef.current('workbench.hk_load_error'))
+        setLoadFailed(true)
       })
     return () => {
       cancelled = true
+      promptSkipGeneration.current += 1
+      toggleTokens.current.clear()
     }
   }, [root])
+
+  useEffect(() => {
+    setToggleError(null)
+  }, [lang])
 
   // 故意不 useCallback：闭包要读最新 busyKeys 守卫（WorkbenchView 脏守卫四件套的同一条
   // React 记忆化纪律——冻结的快照会放行同键并发写）。
   function toggle(hook: string, phase: string, enabled: boolean): void {
     const key = `${hook}.${phase}`
     if (busyKeys.has(key)) return
+    const targetRoot = root
+    const token = ++toggleSequence.current
+    toggleTokens.current.set(key, token)
     setToggleError(null)
     // 乐观更新：矩阵只存禁用项——开=删键、关=写键（与 server writeHookToggle 同语义）。
     setMatrix((prev) => {
@@ -124,8 +148,9 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
       return next
     })
     setBusyKeys((prev) => new Set(prev).add(key))
-    postHookToggle({ root, hook, phase, enabled })
+    postHookToggle({ root: targetRoot, hook, phase, enabled })
       .catch((err: unknown) => {
+        if (rootIdentity.current !== targetRoot || toggleTokens.current.get(key) !== token) return
         // 失败回滚到点击前的值（本键在途期间被 busy 守卫锁住，不会有交叉写覆盖）。
         setMatrix((prev) => {
           const next = { ...prev }
@@ -134,12 +159,14 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
           return next
         })
         const msg = tRef.current('workbench.hk_toggle_error', {
-          msg: err instanceof Error ? err.message : tRef.current('workbench.network_error'),
+          msg: formatApiError(err, tRef.current, { exposeServerDetail: langRef.current === 'zh' }),
         })
         if (onError) onError(msg)
         else setToggleError(msg)
       })
       .finally(() => {
+        if (rootIdentity.current !== targetRoot || toggleTokens.current.get(key) !== token) return
+        toggleTokens.current.delete(key)
         setBusyKeys((prev) => {
           const next = new Set(prev)
           next.delete(key)
@@ -150,20 +177,21 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
 
   async function savePromptSkipKeyword(keyword: string): Promise<boolean> {
     if (promptSkipBusy) return false
-    const generation = promptSkipGeneration.current
+    const targetRoot = root
+    const generation = ++promptSkipGeneration.current
     setPromptSkipBusy(true)
-    setPromptSkipError(null)
+    setPromptSkipFailed(false)
     try {
-      const saved = await postPromptRoutingBypass(root, keyword)
-      if (generation !== promptSkipGeneration.current) return false
+      const saved = await postPromptRoutingBypass(targetRoot, keyword)
+      if (generation !== promptSkipGeneration.current || rootIdentity.current !== targetRoot) return false
       setPromptSkipKeyword(saved)
       return true
     } catch {
-      if (generation !== promptSkipGeneration.current) return false
-      setPromptSkipError(tRef.current('workbench.hk_bypass_save_error'))
+      if (generation !== promptSkipGeneration.current || rootIdentity.current !== targetRoot) return false
+      setPromptSkipFailed(true)
       return false
     } finally {
-      if (generation === promptSkipGeneration.current) setPromptSkipBusy(false)
+      if (generation === promptSkipGeneration.current && rootIdentity.current === targetRoot) setPromptSkipBusy(false)
     }
   }
 
@@ -175,11 +203,12 @@ export function useHooksConfig(root: string, onError?: (msg: string) => void): H
   return {
     hooks,
     matrix,
-    loadError,
+    loadError: loadFailed ? t('workbench.hk_load_error') : null,
     toggleError,
     promptSkipKeyword,
     promptSkipBusy,
-    promptSkipError,
+    promptSkipError: promptSkipFailed ? t('workbench.hk_bypass_save_error') : null,
+    onPromptSkipDirtyChange,
     busyKeys,
     toggle,
     savePromptSkipKeyword,

@@ -5,6 +5,15 @@
  * beside their owning context. Existing consumers keep importing this stable module.
  */
 export { ApiError, getToken } from './transport'
+export {
+  decodeOrchestrationGraph,
+  fetchOrchestrationGraph,
+  type OrchestrationEdge,
+  type OrchestrationEdgeKind,
+  type OrchestrationGraph,
+  type OrchestrationNode,
+  type OrchestrationNodeKind,
+} from './orchestrationGraphClient'
 
 export { fetchSnapshot, postTransition, subscribeSnapshot } from './snapshotClient'
 

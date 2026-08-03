@@ -40,6 +40,20 @@ export function tokensKOf(row: WbLoopRow): number {
     : clamp(Math.round(max / 10000) * 10, TOKENS_K_MIN, TOKENS_K_MAX)
 }
 
+/** Stable identity for the facts presented by the promotion confirmation. */
+export function promotionDecisionKey(root: string, row: WbLoopRow | null): string {
+  if (row === null) return `${root}\u0000none`
+  return JSON.stringify({
+    root,
+    rowRoot: row.root,
+    id: row.id,
+    autonomy: row.autonomy_level,
+    readiness: row.readiness,
+    budget: row.budget,
+    graduation: row.graduation ?? null,
+  })
+}
+
 export const RAIL_TW = 'flex w-full flex-col gap-3.5'
 export const GCARD_TW = 'rounded-[14px] border border-border bg-card px-4 py-[15px] shadow-sm'
 export const GH_TW = 'mb-[11px] flex items-center justify-between gap-2'

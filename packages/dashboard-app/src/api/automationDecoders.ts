@@ -101,6 +101,40 @@ export function decodeAutomationSettings(value: unknown): WbAutomationSettings |
   }
 }
 
+const NORMALIZED_AUTOMATION_SETTING_KEYS = [
+  'enabled',
+  'max_parallel',
+  'max_retries',
+  'default_opt_in',
+  'image',
+] as const
+const AUTOMATION_IMAGE_PATTERN = /^[a-zA-Z0-9._/:@-]+$/
+
+function integerIn(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+}
+
+export function decodeNormalizedAutomationSettings(value: unknown): WbAutomationSettings | null {
+  if (!isRecord(value)
+    || Object.keys(value).length !== NORMALIZED_AUTOMATION_SETTING_KEYS.length
+    || !NORMALIZED_AUTOMATION_SETTING_KEYS.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    || typeof value.enabled !== 'boolean'
+    || !integerIn(value.max_parallel, 1, 8)
+    || !integerIn(value.max_retries, 0, 3)
+    || typeof value.default_opt_in !== 'boolean'
+    || typeof value.image !== 'string'
+    || (value.image !== '' && (value.image.length > 200 || !AUTOMATION_IMAGE_PATTERN.test(value.image)))) {
+    return null
+  }
+  return {
+    enabled: value.enabled,
+    max_parallel: value.max_parallel,
+    max_retries: value.max_retries,
+    default_opt_in: value.default_opt_in,
+    image: value.image,
+  }
+}
+
 export function decodeAutomationSettingsEnvelope(value: unknown): WbAutomationSettings | null {
   return isRecord(value) ? decodeAutomationSettings(value.settings) : null
 }

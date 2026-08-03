@@ -32,7 +32,7 @@ export function OrchestrationBoard({
   hooks,
   toolbarSlot,
 }: OrchestrationBoardProps): JSX.Element {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [hoverGate, setHoverGate] = useState<string | null>(null)
   const [pinnedGate, setPinnedGate] = useState<string | null>(null)
   const [nameEdit, setNameEdit] = useState<{ id: string; draft: string } | null>(null)
@@ -55,6 +55,9 @@ export function OrchestrationBoard({
   const canGuard = onLaneGuard !== undefined && !readonly
   const regReady = skillRegistry !== null && skillRegistry !== undefined
   const removeLane = removeId === null ? undefined : lanes.find((l) => l.id === removeId)
+  useEffect(() => {
+    setOutAdd((current) => current === null ? null : { ...current, error: null })
+  }, [lang])
   useEffect(() => {
     if (pinnedGate === null) return
     function onDocClick(e: MouseEvent): void {
@@ -172,9 +175,9 @@ export function OrchestrationBoard({
               const hookBody = hookZoneBody(lane, hkOpen)
               const hookSummary = (
                 <>
-                  <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`}><Icon name="gauge" size={12} />自动检查</span>
+                  <span className={`${ZONE_TITLE} inline-flex items-center gap-1.5`}><Icon name="gauge" size={12} />{t('workbench.board_auto_checks')}</span>
                   <span className="ml-auto inline-flex flex-none items-center gap-1.5">
-                    <span className={`${MINI_BASE} ${MINI_RO}`}>{(lane.hooksCount ?? 0) + (lane.hooksLocked ?? 0)} 项</span>
+                    <span className={`${MINI_BASE} ${MINI_RO}`}>{t('workbench.board_items', { n: (lane.hooksCount ?? 0) + (lane.hooksLocked ?? 0) })}</span>
                   </span>
                 </>
               )
@@ -255,6 +258,7 @@ export function OrchestrationBoard({
                         skPop={skPop}
                         dupWarn={dupWarn}
                         skillRegistry={skillRegistry}
+                        moveTargets={lanes}
                         onBeginDrag={beginDrag}
                         onEndDrag={endDrag}
                         onDropHint={setDrop}

@@ -125,6 +125,97 @@ test('allows fixed trace-timeline research and governance paths but rejects sour
   }
 })
 
+test('allows review-handshake upstream identities only in its fixed research and design evidence', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const allowed = [
+    'docs/superpowers/specs/2026-07-30-review-handshake-upstream-research.md',
+    'docs/superpowers/specs/2026-07-30-review-handshake-status-design.md',
+  ]
+  const rejected = [
+    'packages/server/src/reviewHandshake.ts',
+    'docs/superpowers/specs/2026-07-30-other-feature.md',
+    'openspec/changes/review-handshake-status-20260730/proposal.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(join(root, path), `Fixed research: ${firstIdentity} and ${secondIdentity}.\n`)
+  }
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    const failures = checkReferenceIdentities(root, rejected)
+    assert.equal(failures.length, rejected.length)
+    assert.ok(failures.every((failure) => /受管理文本/.test(failure)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('allows orchestration graph upstream identities only in fixed research and governed Change evidence', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const allowed = [
+    'docs/superpowers/specs/2026-07-30-chorus-orchestration-graph-research.md',
+    'docs/superpowers/specs/frozen-workflow-definition-status-20260730-design.md',
+    'openspec/changes/frozen-workflow-definition-status-20260730/proposal.md',
+    'openspec/changes/frozen-workflow-definition-status-20260730/tasks.md',
+    'openspec/changes/archive/2026-07-30-frozen-workflow-definition-status-20260730/proposal.md',
+  ]
+  const rejected = [
+    'packages/server/src/orchestrationGraph.ts',
+    'docs/superpowers/specs/other-graph.md',
+    'openspec/changes/frozen-workflow-definition-status-20260730/design.md',
+    'openspec/changes/archive/2026-07-30-other-change/proposal.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(join(root, path), `Fixed research: ${firstIdentity} and ${secondIdentity}.\n`)
+  }
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    const failures = checkReferenceIdentities(root, rejected)
+    assert.equal(failures.length, rejected.length)
+    assert.ok(failures.every((failure) => /受管理文本/.test(failure)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('allows canonical-version upstream identities only in its fixed research evidence', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const unrelatedReference = String.fromCharCode(
+    97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
+  )
+  const allowed = [
+    'docs/superpowers/specs/2026-07-30-canonical-state-version-status-upstream-research.md',
+  ]
+  const rejected = [
+    'packages/kernel/src/state/run-revision-codec.ts',
+    'docs/superpowers/specs/2026-07-30-canonical-state-version-status-design.md',
+  ]
+  for (const path of [...allowed, ...rejected]) {
+    await mkdir(join(root, path, '..'), { recursive: true })
+    await writeFile(join(root, path), `Reference: ${firstIdentity} and ${secondIdentity}.\n`)
+  }
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, allowed), [])
+    await writeFile(
+      join(root, allowed[0]),
+      `Fixed research: ${firstIdentity}, ${secondIdentity}, and ${unrelatedReference}.\n`,
+    )
+    assert.equal(checkReferenceIdentities(root, allowed).length, 1)
+    const failures = checkReferenceIdentities(root, rejected)
+    assert.equal(failures.length, rejected.length)
+    assert.ok(failures.every((failure) => /受管理文本/.test(failure)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('allows fixed host-target-plan research and governance paths but rejects source and unrelated docs', async () => {
   const root = await fixture()
   const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)

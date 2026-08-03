@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchSkillsRegistry, postMandatorySkills, type WbSkillEntry, type WbTrackDefinition } from '../api/client'
+import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import {
   clearMandatoryConfig,
-  isValidMandatorySkillList,
   loadMandatoryConfig,
+  mergeMandatoryConfigCell,
   peekMandatoryConfig,
-  primeMandatoryConfig,
   type MandatoryConfig,
   type MatrixTrack,
 } from './mandatoryConfig'
+import { decodeMandatorySkillWriteSuccess } from './mandatorySkillWriteResponse'
 
-interface MandatorySkillsPostResponse {
-  ok?: boolean
-  error?: string
-  skills?: string[]
+interface MandatorySkillsPostError {
+  readonly error: string | null
+}
+
+function decodeMandatorySkillsPostError(value: unknown): MandatorySkillsPostError | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const body = value as Record<string, unknown>
+  if (body.ok !== false) return null
+  if (body.error === undefined) return { error: null }
+  return typeof body.error === 'string' ? { error: body.error } : null
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -35,9 +42,13 @@ export interface MandatoryState {
   configError: string | null
   track: MatrixTrack | null
   setTrack: (t: MatrixTrack) => void
-  /** 在途写回的 `phase.track` 键（照 SkillChain savingKeyRef 先例）；同键在途时该列控件禁用。 */
+  /** Legacy single-cell projection for hand-written fixtures. Production consumers use savingKeys. */
   savingKey: string | null
+  /** 当前 root 全部在途写回的 `phase.track` 键；不同 cell 可并发且各自保持禁用。 */
+  savingKeys?: readonly string[]
   saveError: string | null
+  /** 当前 root 按 `phase.track` 隔离的 mutation 错误。 */
+  saveErrors?: Readonly<Record<string, string>>
   /**
    * 出错那次写回的 `phase.track` 键（契约 §3-B2 之外的附加项，故为可选）。
    * 理由：saveError 是矩阵级单值，7 列共用一份 state——不标记归属的话，build 列存失败会让
@@ -89,29 +100,64 @@ export function resolveMandatoryCell(
 }
 
 export function useMandatorySkills(root: string): MandatoryState {
-  const { t } = useT()
+  const { t, lang } = useT()
   const [requestedTrack, setRequestedTrack] = useState<MatrixTrack | null>(null)
   const [cfg, setCfg] = useState<MandatoryConfig | null>(() => peekMandatoryConfig(root))
   const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
   const [regFailed, setRegFailed] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null)
-  const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({})
+  const [savingKeys, setSavingKeys] = useState<string[]>([])
+  useEffect(() => {
+    setSaveErrors({})
+  }, [lang])
   // 保存操作同时绑定发起时的 root 与 cell。只记 cell 会让 root A 的晚到响应覆盖已经切到
   // root B 的同名格子；token 则避免旧操作的 finally 清掉较新的在途状态。
   const rootRef = useRef(root)
+  const localeRef = useRef({ t, lang })
+  const reloadRootRef = useRef(root)
+  const reloadRootEpochRef = useRef(0)
+  const reloadRequestRef = useRef(0)
+  const configEffectRootRef = useRef(root)
+  if (reloadRootRef.current !== root) {
+    reloadRootRef.current = root
+    reloadRootEpochRef.current += 1
+    reloadRequestRef.current += 1
+  }
+  const renderRootEpoch = reloadRootEpochRef.current
   rootRef.current = root
-  const savingOpRef = useRef<{ token: symbol; root: string; cellKey: string } | null>(null)
+  localeRef.current = { t, lang }
+  const savingOpsRef = useRef(new Map<string, { token: symbol; root: string; cellKey: string }>())
+
+  function operationKey(operationRoot: string, cellKey: string): string {
+    return JSON.stringify([operationRoot, cellKey])
+  }
+
+  function syncSavingKeys(): void {
+    const currentRoot = rootRef.current
+    setSavingKeys(
+      [...savingOpsRef.current.values()]
+        .filter((operation) => operation.root === currentRoot)
+        .map((operation) => operation.cellKey),
+    )
+  }
 
   // config 探测（cancelled 守卫同 SkillChain：卸载后回来的响应不再 setState）。
   useEffect(() => {
     let cancelled = false
+    // A pending request from an earlier visit to the same root is not authoritative for this root
+    // incarnation. Supersede it before consulting the shared cache/in-flight registry.
+    if (configEffectRootRef.current !== root) {
+      configEffectRootRef.current = root
+      clearMandatoryConfig(root)
+    }
     const cached = peekMandatoryConfig(root)
     setCfg(cached)
-    setSaveError(null)
-    setSaveErrorKey(null)
-    const active = savingOpRef.current
-    setSavingKey(active?.root === root ? active.cellKey : null)
+    setSaveErrors({})
+    setSavingKeys(
+      [...savingOpsRef.current.values()]
+        .filter((operation) => operation.root === root)
+        .map((operation) => operation.cellKey),
+    )
     if (cached !== null) return
     void loadMandatoryConfig(root).then((r) => {
       if (!cancelled) setCfg(r)
@@ -128,12 +174,8 @@ export function useMandatorySkills(root: string): MandatoryState {
     if (registry !== null || regFailed) return
     let cancelled = false
     fetchSkillsRegistry()
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`(${r.status})`)
-        return r.json() as Promise<{ skills: WbSkillEntry[] }>
-      })
-      .then((body) => {
-        if (!cancelled) setRegistry(body.skills)
+      .then((skills) => {
+        if (!cancelled) setRegistry(skills)
       })
       .catch(() => {
         if (!cancelled) setRegFailed(true)
@@ -158,40 +200,78 @@ export function useMandatorySkills(root: string): MandatoryState {
     const requestRoot = root
     const requestCfg = cfg
     const op = { token: Symbol(cellKey), root: requestRoot, cellKey }
-    savingOpRef.current = op
-    setSavingKey(cellKey)
-    setSaveError(null)
-    setSaveErrorKey(null)
+    const opKey = operationKey(requestRoot, cellKey)
+    savingOpsRef.current.set(opKey, op)
+    syncSavingKeys()
+    setSaveErrors((current) => {
+      if (!(cellKey in current)) return current
+      const next = { ...current }
+      delete next[cellKey]
+      return next
+    })
+    const isCurrent = (): boolean =>
+      savingOpsRef.current.get(opKey)?.token === op.token && rootRef.current === requestRoot
     try {
       const res = await postMandatorySkills({ phase, track: selected.id, skills, root: requestRoot })
-      let body: MandatorySkillsPostResponse = {}
+      let body: unknown = null
+      let parsed = false
       try {
-        body = (await res.json()) as MandatorySkillsPostResponse
+        body = await res.json()
+        parsed = true
       } catch {
         /* 无 JSON 体：走下方通用错误文案 */
       }
-      if (!res.ok || body.ok !== true) {
-        throw new Error(body.error || t('workbench.mand_save_failed', { status: res.status }))
+      const locale = localeRef.current
+      const success = parsed
+        ? decodeMandatorySkillWriteSuccess(body, { phase, track: selected.id })
+        : null
+      const serverError = parsed ? decodeMandatorySkillsPostError(body) : null
+      if (!res.ok) {
+        if (parsed && success === null && serverError === null) {
+          if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
+          return
+        }
+        if (isCurrent()) {
+          setSaveErrors((current) => ({
+            ...current,
+            [cellKey]:
+            locale.lang === 'zh' && serverError?.error
+              ? serverError.error
+              : locale.t('workbench.mand_save_failed', { status: res.status }),
+          }))
+        }
+        return
       }
-      if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        throw new Error(t('workbench.mand_save_invalid'))
+      if (serverError !== null) {
+        if (isCurrent()) {
+          setSaveErrors((current) => ({
+            ...current,
+            [cellKey]:
+            locale.lang === 'zh' && serverError.error
+              ? serverError.error
+              : locale.t('workbench.mand_save_failed', { status: res.status }),
+          }))
+        }
+        return
       }
-      const saved = body.skills ?? skills
-      const base = peekMandatoryConfig(requestRoot) ?? requestCfg
-      if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: saved } }
-        primeMandatoryConfig(next, requestRoot)
-        if (rootRef.current === requestRoot) setCfg(next)
+      if (success === null) {
+        if (isCurrent()) setSaveErrors((current) => ({ ...current, [cellKey]: locale.t('common.invalid_response') }))
+        return
       }
+      const next = await mergeMandatoryConfigCell(requestRoot, cellKey, success.skills, requestCfg)
+      if (next !== null && isCurrent()) setCfg(next)
     } catch (e) {
-      if (rootRef.current === requestRoot) {
-        setSaveError(e instanceof Error ? e.message : String(e))
-        setSaveErrorKey(cellKey)
+      if (isCurrent()) {
+        const locale = localeRef.current
+        setSaveErrors((current) => ({
+          ...current,
+          [cellKey]: formatApiError(e, locale.t, { exposeServerDetail: locale.lang === 'zh' }),
+        }))
       }
     } finally {
-      if (savingOpRef.current?.token === op.token) {
-        savingOpRef.current = null
-        if (rootRef.current === requestRoot) setSavingKey(null)
+      if (savingOpsRef.current.get(opKey)?.token === op.token) {
+        savingOpsRef.current.delete(opKey)
+        syncSavingKeys()
       }
     }
   }
@@ -200,17 +280,30 @@ export function useMandatorySkills(root: string): MandatoryState {
     if (cfg === null || selectedTrack === null || phase === 'archive') return
     const cell = resolveMandatoryCell(cfg.table, selectedTrack, phase, cfg.writableProfiles)
     if (!cfg.capable || !cell.editable || cell.source !== 'explicit') return
-    const active = savingOpRef.current
-    if (active?.root === root && active.cellKey === `${phase}.${selectedTrack.id}`) return
+    if (savingOpsRef.current.has(operationKey(root, `${phase}.${selectedTrack.id}`))) return
     void saveMandatory(phase, skills, selectedTrack)
   }
 
   async function reloadConfig(): Promise<void> {
     const requestRoot = root
+    if (
+      rootRef.current !== requestRoot ||
+      reloadRootRef.current !== requestRoot ||
+      reloadRootEpochRef.current !== renderRootEpoch
+    ) return
+    const request = ++reloadRequestRef.current
     clearMandatoryConfig(requestRoot)
-    setCfg(null)
+    // Keep the last authoritative config rendered while the replacement is fetched. Publishing
+    // a transient null here unmounts Track Settings during a successful mutation and discards the
+    // workspace lifecycle before the caller can close only its submitted editor.
     const next = await loadMandatoryConfig(requestRoot)
-    if (rootRef.current === requestRoot) setCfg(next)
+    if (
+      rootRef.current === requestRoot &&
+      reloadRootRef.current === requestRoot &&
+      reloadRootEpochRef.current === renderRootEpoch &&
+      reloadRequestRef.current === request &&
+      peekMandatoryConfig(requestRoot) === next
+    ) setCfg(next)
   }
 
   return {
@@ -227,9 +320,11 @@ export function useMandatorySkills(root: string): MandatoryState {
     setTrack: (next) => {
       if (matrixTracks.some((candidate) => candidate.id === next)) setRequestedTrack(next)
     },
-    savingKey,
-    saveError,
-    saveErrorKey,
+    savingKey: savingKeys[0] ?? null,
+    savingKeys,
+    saveError: Object.values(saveErrors)[0] ?? null,
+    saveErrors,
+    saveErrorKey: Object.keys(saveErrors)[0] ?? null,
     setSkills,
     registry,
     reloadConfig,

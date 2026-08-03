@@ -19,7 +19,7 @@ function errorCode(error: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-function parseBinding(raw: string): WorkflowGovernanceBinding {
+export function parseWorkflowGovernanceBinding(raw: string): WorkflowGovernanceBinding {
   let value: unknown
   try {
     value = JSON.parse(raw)
@@ -75,7 +75,7 @@ export async function readWorkflowGovernanceBinding(
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow governance binding 必须是非 symlink 普通文件: ${target}`)
     }
-    return parseBinding(await readFile(target, 'utf8'))
+    return parseWorkflowGovernanceBinding(await readFile(target, 'utf8'))
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return undefined
     throw error

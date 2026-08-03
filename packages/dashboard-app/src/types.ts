@@ -17,6 +17,8 @@ export interface ChangeSnapshot {
   workflowPlanFingerprint: string
   workflowRules: WorkflowRulesSnapshot
   workflowExecution: WorkflowExecutionSnapshot
+  /** Optional only while a newer Dashboard can still be served by an older runtime. */
+  reviewHandshake?: ReviewHandshakeSnapshot
   /** OpenSpec tasks.md projected by the server onto ordered workflow phases. */
   todo?: PipelineTodoProjection
   /** Server-evaluated OpenSpec document contract evidence. */
@@ -24,6 +26,16 @@ export interface ChangeSnapshot {
   /** Fresh, explicitly bound native terminal heartbeat; never a workflow-state field. */
   terminalActivity?: TerminalActivitySnapshot
 }
+
+export type ReviewHandshakeSnapshot =
+  | { status: 'not-requested' }
+  | { status: 'pending'; event: string; requestedAt: string }
+  | {
+      status: 'approved'
+      event: string
+      requestedAt: string
+      acknowledgedAt: string
+    }
 
 export interface TerminalActivitySnapshot {
   sessionId: string
@@ -103,10 +115,20 @@ export type TransitionReadinessBlockerSnapshot =
     }
 
 /** 单个已注册 Project 的聚合。 */
+export interface CanonicalStateCompatibilityIssue {
+  kind: 'unsupported-canonical-version'
+  change: string
+  foundVersion: number
+  supportedVersion: number
+  action: 'upgrade-runtime'
+}
+
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  compatibilityIssues?: CanonicalStateCompatibilityIssue[]
+  compatibilityIssuesTruncated?: true
   error?: string
 }
 

@@ -1,5 +1,10 @@
 # Automation Loop Initialization
 
+## Purpose
+
+Define how manual and starter-based automation loops preserve explicit bindings and close terminal
+workflow branches without masking unwired or incomplete canonical state.
+
 ## Requirements
 
 ### Requirement: Explicit manual loop bindings SHALL be preserved
@@ -28,6 +33,12 @@ canonical loop registry entry.
 Template id/version SHALL only be present for starter-template loops. Explicit
 workflow/profile bindings SHALL be preserved regardless of whether template
 metadata exists.
+
+#### Scenario: Manual bindings do not imply starter metadata
+
+- **WHEN** manual loop initialization supplies explicit workflow and skill-bundle bindings without a starter template
+- **THEN** both bindings are preserved in the canonical loop entry
+- **AND** starter template id and version remain absent.
 
 ### Requirement: Simple terminal branches SHALL close the canonical run
 

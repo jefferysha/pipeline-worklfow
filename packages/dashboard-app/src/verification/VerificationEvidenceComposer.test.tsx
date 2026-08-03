@@ -1,13 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { VerificationEvidenceComposer } from './VerificationEvidenceComposer'
 import { TaskDocumentsSection } from '../shared/TaskDocumentsSection'
 
 function renderComposer(locale: 'zh' | 'en' = 'zh', onToast = vi.fn()): ReturnType<typeof render> {
+  function LanguageToggle(): JSX.Element {
+    const { setLang } = useT()
+    return <button type="button" data-testid="evidence-language-en" onClick={() => setLang('en')}>en</button>
+  }
   localStorage.setItem('tenon-dashboard-lang', locale)
   return render(
     <I18nProvider>
+      <LanguageToggle />
       <VerificationEvidenceComposer root="/repo" locale={locale === 'zh' ? 'zh-CN' : 'en'} onToast={onToast} />
     </I18nProvider>,
   )
@@ -30,6 +35,38 @@ afterEach(() => {
 })
 
 describe('VerificationEvidenceComposer', () => {
+  it('locale 切换保留草稿并使旧 locale 的在途结果失效', async () => {
+    let resolveRequest!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>((resolve) => {
+      resolveRequest = resolve
+    })))
+    const { rerender } = render(
+      <I18nProvider>
+        <VerificationEvidenceComposer root="/repo" locale="zh-CN" />
+      </I18nProvider>,
+    )
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    expect(screen.getByTestId('evidence-compose')).toBeDisabled()
+
+    rerender(
+      <I18nProvider>
+        <VerificationEvidenceComposer root="/repo" locale="en" />
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('evidence-title-1')).toHaveValue('Unit tests')
+    expect(screen.getByTestId('evidence-compose')).toBeEnabled()
+
+    resolveRequest(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# 旧语言结果',
+      entryCount: 1,
+    }), { status: 200 }))
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    expect(screen.queryByTestId('evidence-output')).not.toBeInTheDocument()
+  })
+
   it('renders through the neutral document-section slot', () => {
     const documents = { governed: true, pass: true, blockers: [], items: [] }
     const { rerender } = render(
@@ -260,6 +297,30 @@ describe('VerificationEvidenceComposer', () => {
     await waitFor(() => expect(screen.getByTestId('evidence-copy-error')).toHaveTextContent('复制失败'))
     fireEvent.click(screen.getByTestId('evidence-copy'))
     await waitFor(() => expect(onToast).toHaveBeenCalledWith('验证证据草稿已复制'))
+  })
+
+  it('clipboard 拒绝晚到且期间切为英文时，错误文案使用当前语言', async () => {
+    let rejectCopy!: (error: Error) => void
+    const writeText = vi.fn(() => new Promise<void>((_resolve, reject) => { rejectCopy = reject }))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      markdown: '# 验证证据草稿',
+      entryCount: 1,
+    }), { status: 200 })))
+    renderComposer('zh')
+    fireEvent.click(screen.getByTestId('evidence-compose-open'))
+    addCommandEntry()
+    fireEvent.click(screen.getByTestId('evidence-compose'))
+    await screen.findByTestId('evidence-output')
+
+    fireEvent.click(screen.getByTestId('evidence-copy'))
+    fireEvent.click(screen.getByTestId('evidence-language-en'))
+    rejectCopy(new Error('denied'))
+
+    const error = await screen.findByTestId('evidence-copy-error')
+    expect(error).toHaveTextContent('Copy failed')
+    expect(error.textContent).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
   it('keeps the readonly Markdown fallback visibly focusable for manual keyboard copy', async () => {

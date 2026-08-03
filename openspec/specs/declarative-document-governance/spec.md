@@ -1,5 +1,10 @@
 # Declarative Document Governance Specification
 
+## Purpose
+
+Define versioned, workflow-shaped document ownership, production, and read obligations independently
+from the default seven-phase graph while preserving the legacy governed contract.
+
 ## Requirements
 
 ### Requirement: A Workflow SHALL select document governance independently of graph length

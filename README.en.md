@@ -252,6 +252,18 @@ This is a local, single-user workstation model. It is not a remote multi-tenant
 control plane and does not claim protection from every malicious process running
 as the same OS user. Tap interception is off by default.
 
+CI, the read-only pre-tag candidate, and release packaging all run
+`npm run check:dependencies`, which combines the High/Critical advisory audit
+with `npm ls --all`. A formal release also requires successful canonical push
+CI for the exact current `main` SHA. The candidate accepts a new tag, or the
+same tag when it already peels to that SHA for interrupted-release recovery,
+and publishes a digest-normalized payload plus bounded approval evidence. A
+default-branch-owned `workflow_run` writer revalidates the repository,
+workflow, run, artifact, and approved SHA; current `main` must still match
+before a new tag is created, while a matching existing tag may continue
+recovery. This minimal writer checks out and executes no repository code.
+Packaging must prove the peeled tag commit equals that approved SHA.
+
 [Security model →](docs/usage/security-model.md) ·
 [Report a vulnerability privately →](SECURITY.md)
 

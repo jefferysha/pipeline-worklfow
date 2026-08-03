@@ -52,14 +52,13 @@ interface NavProps {
 const RAIL_BTN_CLS =
   'group relative flex min-h-11 w-[72px] cursor-pointer flex-col items-center justify-center gap-[3px] rounded-xl border border-transparent px-1 py-1.5 text-text-3 outline-none transition-[background-color,border-color,color,transform] duration-150 motion-reduce:transition-none hover:bg-fill hover:text-text focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) active:scale-[.98] motion-reduce:active:scale-100 mobile:h-14 mobile:min-w-11 mobile:flex-1 mobile:rounded-lg mobile:px-0.5 mobile:py-1'
 /** rail / bottom-nav 按钮短标签；移动端也可见，避免纯图标入口依赖记忆。 */
-const RAIL_LB_CLS = 'max-w-full truncate text-[11px] font-medium leading-[1.2] mobile:text-[10px]'
+const RAIL_LB_CLS = 'max-w-full text-center text-[11px] font-medium leading-[1.2] mobile:whitespace-normal mobile:text-[9px] mobile:leading-[1.05]'
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsTriggerRef = useRef<HTMLButtonElement>(null)
   const settingsPanelRef = useRef<HTMLElement>(null)
-  // 在线/离线 短标签：title 走既有 common.connected/common.offline 键；短标签内联双语。
-  const connLabel = connected ? (lang === 'zh' ? '在线' : 'Live') : lang === 'zh' ? '离线' : 'Offline'
+  const connLabel = t(connected ? 'common.connection_live' : 'common.connection_offline')
   const nextTheme: ThemePreference = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system'
   const themeLabel = theme === 'system' ? t('common.theme_system') : theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')
 
@@ -113,7 +112,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
 
       <div className="my-1.5 w-14 flex-none border-t border-border mobile:hidden" aria-hidden="true" />
 
-      <nav className="flex flex-col gap-1 mobile:min-w-0 mobile:flex-1 mobile:flex-row mobile:justify-around mobile:overflow-x-auto mobile:overscroll-x-contain mobile:[scrollbar-width:none]" aria-label="primary" data-testid="primary-nav">
+      <nav className="flex flex-col gap-1 mobile:min-w-0 mobile:flex-1 mobile:flex-row mobile:justify-around mobile:overflow-x-auto mobile:overscroll-x-contain mobile:[scrollbar-width:none]" aria-label={t('nav.primary_label')} data-testid="primary-nav">
         {PRIMARY_VIEWS.map((v) => {
           const IconCmp = VIEW_ICONS[v]
           return (
@@ -135,6 +134,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 <span
                   className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="progress-badge"
+                  aria-label={t('nav.progress_badge', { count: decisionCount })}
                 >
                   {decisionCount}
                 </span>
@@ -143,6 +143,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 <span
                   className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d mobile:-right-1"
                   data-testid="afk-badge"
+                  aria-label={t('nav.afk_badge', { count: afkCount })}
                 >
                   {afkCount}
                 </span>

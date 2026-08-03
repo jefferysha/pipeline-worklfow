@@ -8,6 +8,7 @@ import {
   type EffectiveWorkflowPlan,
   type PipelineState,
   type PipelineTodoStageDefinition,
+  type WorkflowDef,
   type WorkflowPlanSnapshot,
 } from '@tenon/kernel'
 import type {
@@ -32,9 +33,10 @@ export function resolveSnapshotEffectivePlan(
     readonly workflowPlanFingerprint?: string
     readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
   },
+  loadDefinition: (name: string) => WorkflowDef | null = (name) => loadWorkflow(root, name),
 ): EffectiveWorkflowPlan {
   const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
-    const definition = builtinWorkflow(name) ?? loadWorkflow(root, name)
+    const definition = builtinWorkflow(name) ?? loadDefinition(name)
     return definition === null ? null : compileWorkflow(definition)
   }, undefined, binding.workflowPlanSnapshot)
   if (plan === null) throw new Error(`workflow '${workflowName}' 未找到`)

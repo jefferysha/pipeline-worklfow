@@ -1,5 +1,6 @@
 import { changeWorkflowName, selectProgress } from '../model/progressModel'
 import { DEFAULT_RULES, isBuiltinWorkflowName, type WorkflowRules } from '../model/workflowModel'
+import { isProjectNavigable } from '../state/projectSelectionModel'
 import type { ChangeSnapshot, Snapshot } from '../types'
 
 export type CellState = 'done' | 'current' | 'todo'
@@ -26,7 +27,7 @@ function basenameOf(root: string): string {
 }
 
 function phaseLabel(t: (key: string) => string, rules: WorkflowRules, phase: string): string {
-  const custom = rules.labelByStep?.[phase]
+  const custom = rules.executionModel === 'phase-manifest' ? undefined : rules.labelByStep?.[phase]
   if (custom) return custom
   const resolved = t(`phases.${phase}`)
   return resolved === `phases.${phase}` ? phase : resolved
@@ -96,7 +97,7 @@ export function buildProjectRows(
 ): ProjectRow[] {
   if (!snapshot) return []
   return snapshot.projects.map((project) => {
-    if (!project.ok) {
+    if (!isProjectNavigable(project)) {
       return { root: project.root, basename: basenameOf(project.root), ok: false, wip: 0, need: 0, running: 0, cells: [] }
     }
     const progress = selectProgress(snapshot, project.root, rulesByKey)

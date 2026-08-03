@@ -370,6 +370,170 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
+  it('accepts a strict canonical compatibility issue while preserving older omitted responses', () => {
+    expect(decodeSnapshot(validSnapshot())?.projects[0]?.compatibilityIssues).toBeUndefined()
+    const snapshot = validSnapshot()
+    snapshot.projects[0].ok = false
+    ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = [{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }]
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.compatibilityIssues).toEqual([{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }])
+  })
+
+  it('rejects projects that claim write-safe ok=true while carrying an error or compatibility issue', () => {
+    const futureVersion = validSnapshot()
+    ;(futureVersion.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = [{
+      kind: 'unsupported-canonical-version',
+      change: 'future-change',
+      foundVersion: 3,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }]
+    expect(decodeSnapshot(futureVersion)).toBeNull()
+
+    const corrupt = validSnapshot()
+    ;(corrupt.projects[0] as unknown as Record<string, unknown>).error = 'state is unreadable'
+    expect(decodeSnapshot(corrupt)).toBeNull()
+  })
+
+  it('rejects malformed, over-broad, or duplicate canonical compatibility issues', () => {
+    for (const compatibilityIssues of [
+      [{ kind: 'unknown', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: '', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 1, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2.5, supportedVersion: 1, action: 'upgrade-runtime' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'repair-state' }],
+      [{ kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime', path: '/private/current.json' }],
+      [
+        { kind: 'unsupported-canonical-version', change: 'future', foundVersion: 2, supportedVersion: 1, action: 'upgrade-runtime' },
+        { kind: 'unsupported-canonical-version', change: 'future', foundVersion: 3, supportedVersion: 1, action: 'upgrade-runtime' },
+      ],
+    ]) {
+      const snapshot = validSnapshot()
+      ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = compatibilityIssues
+      expect(decodeSnapshot(snapshot)).toBeNull()
+    }
+  })
+
+  it('rejects compatibility issue arrays above the 100-item server contract', () => {
+    const snapshot = validSnapshot()
+    ;(snapshot.projects[0] as unknown as Record<string, unknown>).compatibilityIssues = Array.from(
+      { length: 101 },
+      (_, index) => ({
+        kind: 'unsupported-canonical-version',
+        change: `future-${index}`,
+        foundVersion: 2,
+        supportedVersion: 1,
+        action: 'upgrade-runtime',
+      }),
+    )
+
+    expect(decodeSnapshot(snapshot)).toBeNull()
+  })
+
+  it('accepts only a literal typed truncation signal paired with exactly 100 compatibility issues', () => {
+    const issues = Array.from({ length: 100 }, (_, index) => ({
+      kind: 'unsupported-canonical-version',
+      change: `future-${String(index).padStart(3, '0')}`,
+      foundVersion: 2,
+      supportedVersion: 1,
+      action: 'upgrade-runtime',
+    }))
+    const valid = validSnapshot()
+    valid.projects[0].ok = false
+    Object.assign(valid.projects[0], {
+      compatibilityIssues: issues,
+      compatibilityIssuesTruncated: true,
+    })
+    expect(decodeSnapshot(valid)?.projects[0]).toMatchObject({
+      compatibilityIssuesTruncated: true,
+    })
+
+    for (const compatibilityIssuesTruncated of [false, 'true', 1]) {
+      const malformed = structuredClone(valid)
+      ;(malformed.projects[0] as unknown as Record<string, unknown>).compatibilityIssuesTruncated
+        = compatibilityIssuesTruncated
+      expect(decodeSnapshot(malformed)).toBeNull()
+    }
+
+    const tooShort = structuredClone(valid)
+    ;((tooShort.projects[0] as unknown as Record<string, unknown>)
+      .compatibilityIssues as unknown[]).pop()
+    expect(decodeSnapshot(tooShort)).toBeNull()
+  })
+
+  it('decodes a strict exact-event Review Handshake while accepting an older missing field', () => {
+    const legacy = decodeSnapshot(validSnapshot())
+    expect(legacy).not.toBeNull()
+    expect((legacy?.projects[0]?.changes[0] as unknown as {
+      reviewHandshake?: unknown
+    }).reviewHandshake).toBeUndefined()
+
+    const snapshot = validSnapshot()
+    ;(snapshot.projects[0].changes[0].workflowRules.gateByStep as Record<
+      string,
+      'review' | 'confirm' | null
+    >).open = 'review'
+    const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+    change.reviewHandshake = {
+      status: 'pending',
+      event: 'finish',
+      requestedAt: '2026-07-30T02:00:00Z',
+    }
+    const decoded = decodeSnapshot(snapshot)
+    expect((decoded?.projects[0]?.changes[0] as unknown as {
+      reviewHandshake?: unknown
+    }).reviewHandshake).toEqual({
+      status: 'pending',
+      event: 'finish',
+      requestedAt: '2026-07-30T02:00:00Z',
+    })
+  })
+
+  it('accepts an explicit not-requested handshake on a non-review step', () => {
+    const snapshot = validSnapshot()
+    const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+    change.reviewHandshake = { status: 'not-requested' }
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.changes[0]?.reviewHandshake).toEqual({
+      status: 'not-requested',
+    })
+  })
+
+  it('rejects malformed, unreachable, or over-broad Review Handshake objects', () => {
+    for (const reviewHandshake of [
+      { status: 'pending', event: 'ghost', requestedAt: '2026-07-30T02:00:00Z' },
+      { status: 'pending', event: 'finish' },
+      {
+        status: 'approved',
+        event: 'finish',
+        requestedAt: '2026-07-30T02:00:00Z',
+      },
+      { status: 'not-requested', event: 'finish' },
+      { status: 'delegated', event: 'finish', hostSession: 'secret' },
+    ]) {
+      const snapshot = validSnapshot()
+      ;(snapshot.projects[0].changes[0].workflowRules.gateByStep as Record<
+        string,
+        'review' | 'confirm' | null
+      >).open = 'review'
+      const change = snapshot.projects[0].changes[0] as unknown as Record<string, unknown>
+      change.reviewHandshake = reviewHandshake
+      expect(decodeSnapshot(snapshot)).toBeNull()
+    }
+  })
+
   it('rejects a Change whose phase is outside its frozen workflow steps', () => {
     const snapshot = validSnapshot()
     snapshot.projects[0].changes[0].phase = 'ghost'

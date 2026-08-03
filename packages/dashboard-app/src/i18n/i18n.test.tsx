@@ -17,11 +17,58 @@ function keyPaths(d: Dict, prefix = ''): string[] {
   return out
 }
 
+function stringLeaves(d: Dict, prefix = '', out: Record<string, string> = {}): Record<string, string> {
+  for (const [key, value] of Object.entries(d)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    if (typeof value === 'string') out[path] = value
+    else stringLeaves(value, path, out)
+  }
+  return out
+}
+
 describe('i18n completeness（zh / en 键结构逐一对齐）', () => {
   it('zh 与 en 键集合完全一致', () => {
     const zhKeys = keyPaths(zh).sort()
     const enKeys = keyPaths(en).sort()
     expect(zhKeys).toEqual(enKeys)
+  })
+
+  it('中英文相同值仅允许品牌、命令、协议 token 与纯占位符，不把英文产品文案漏进中文词典', () => {
+    const allowed = new Set([
+      'solution.setup_cmd',
+      'machine.docker',
+      'common.switch_to_english',
+      'inbox.act_forward',
+      'inbox.act_backward',
+      'detail.related_sessions.platform_claude',
+      'detail.related_sessions.platform_codex',
+      'detail.related_sessions.platform_opencode',
+      'detail.related_sessions.platform_pi',
+      'detail.workflow_definition.workflow',
+      'advanced.traffic_duration_ms',
+      'operations.result_loop_doc_cas',
+      'onboard.register_placeholder',
+      'workbench.lp_scope_placeholder',
+      'workbench.afk_rd_docker',
+      'progress.act_fail_http',
+    ])
+    const zhLeaves = stringLeaves(zh)
+    const enLeaves = stringLeaves(en)
+    const identical = Object.keys(zhLeaves)
+      .filter((key) => zhLeaves[key] !== '' && zhLeaves[key] === enLeaves[key])
+      .sort()
+    expect(identical).toEqual([...allowed].sort())
+  })
+
+  it('编排图标题、核心节点类型和治理元数据提供真正的中文文案', () => {
+    const graph = ((zh.detail as Dict).orchestration_graph as Dict)
+    expect(graph).toMatchObject({
+      heading: '编排图',
+      kind_workflow: '工作流',
+      kind_change: '变更',
+      meta_track: '轨道',
+      meta_preset: '预设',
+    })
   })
 })
 
@@ -74,6 +121,87 @@ describe('i18n 无缺键（源码 t() 字面量键 ⊆ 字典键）', () => {
       }
     }
     expect(missing).toEqual([])
+  })
+})
+
+describe('i18n 生产 TSX 不直写中文产品文案', () => {
+  it('可见文案、ARIA、title 与产品常量必须通过词典；仅允许明确登记的内部诊断', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs')
+    const { join, dirname, relative } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const ts = await import('typescript')
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), '..')
+    const ALLOWED_INTERNAL = new Set([
+      'AppErrorBoundary.tsx:[dashboard] render 抛错，已被顶层 ErrorBoundary 兜底：',
+    ])
+    function walk(dir: string): string[] {
+      return readdirSync(dir).flatMap((name) => {
+        const file = join(dir, name)
+        if (statSync(file).isDirectory()) return name === 'i18n' ? [] : walk(file)
+        return name.endsWith('.tsx') && !name.endsWith('.test.tsx') ? [file] : []
+      })
+    }
+    const leaks: string[] = []
+    for (const file of walk(SRC)) {
+      const source = readFileSync(file, 'utf8')
+      const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      const visit = (node: import('typescript').Node): void => {
+        let text: string | undefined
+        if (ts.isJsxText(node)) text = node.getText(ast).trim().replace(/\s+/g, ' ')
+        else if (
+          ts.isStringLiteral(node)
+          || ts.isNoSubstitutionTemplateLiteral(node)
+          || ts.isTemplateHead(node)
+          || ts.isTemplateMiddle(node)
+          || ts.isTemplateTail(node)
+        ) text = node.text
+        if (text && /[\u3400-\u9fff]/.test(text)) {
+          const key = `${relative(SRC, file)}:${text}`
+          if (!ALLOWED_INTERNAL.has(key)) {
+            const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+            leaks.push(`${relative(SRC, file)}:${line} → ${text}`)
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(ast)
+    }
+    expect(leaks).toEqual([])
+  })
+})
+
+describe('i18n 生产 TSX 不直出 Error.message', () => {
+  it('错误必须在 locale render boundary 格式化；仅允许本地翻译校验对象', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs')
+    const { join, dirname, relative } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const ts = await import('typescript')
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), '..')
+    function walk(dir: string): string[] {
+      return readdirSync(dir).flatMap((name) => {
+        const file = join(dir, name)
+        if (statSync(file).isDirectory()) return name === 'i18n' ? [] : walk(file)
+        return name.endsWith('.tsx') && !name.endsWith('.test.tsx') ? [file] : []
+      })
+    }
+    const leaks: string[] = []
+    for (const file of walk(SRC)) {
+      const source = readFileSync(file, 'utf8')
+      const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      const visit = (node: import('typescript').Node): void => {
+        if (ts.isPropertyAccessExpression(node) && node.name.text === 'message') {
+          const owner = node.expression.getText(ast)
+          // VerificationEvidenceComposer.validate() creates this object from current-locale t() output.
+          if (owner !== 'validation') {
+            const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+            leaks.push(`${relative(SRC, file)}:${line} → ${node.getText(ast)}`)
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(ast)
+    }
+    expect(leaks).toEqual([])
   })
 })
 

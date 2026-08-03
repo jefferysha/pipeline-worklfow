@@ -1,0 +1,517 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-30T01:57:37Z",
+  "records": [
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-30-review-handshake-status-design.md",
+      "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-30T02:15:16Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T02:20:07Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:00:18Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:01:38Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:05:49Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "51cf1ba5b6d8cf56deeafa1f2f31a4af09547d21cf0efd12fadd99f1f2b50d8c",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-30-review-handshake-status-explore.md",
+      "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-30T02:15:19Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T02:20:07Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:00:18Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:01:38Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:05:49Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d2afa7ab5963b0f262a715b7920a5fc9b3a57eb4eb0764dc3af30137f07c7aab",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/review-handshake-status-20260730/proposal.md",
+      "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-30T02:15:24Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T02:15:37Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T02:20:07Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:00:17Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:01:38Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:05:49Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "7c5006d2d86a8b2886d37e69e395b0640747282a10de056667e1b2c27e5ef47e",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/review-handshake-status-20260730/design.md",
+      "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-30T02:15:28Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T02:15:37Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T02:20:07Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:00:17Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:01:38Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:05:49Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "6dc6d42c891f27eab59c1812e893ef47d3c8585bde2caa813e0cfe1672e0671a",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-30-review-handshake-status.md",
+      "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T02:19:45Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:00:18Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-30-review-handshake-status.md",
+      "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-30T02:19:49Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T02:41:24Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T02:54:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:00:19Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",5]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:04:50Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",7]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b7dc381aeca915516e74e552940b56c6c6b0c8893fa4567d3472fdcf82677270",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/review-handshake-status-20260730/specs/review-handshake-status/spec.md",
+      "sha256": "a27a900e236379a2a27f0f4afdfcae147631817f0bc0d10d4d2f815a871ccf2a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-30T03:05:48Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "a27a900e236379a2a27f0f4afdfcae147631817f0bc0d10d4d2f815a871ccf2a",
+          "readAt": "2026-07-30T03:26:20Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a27a900e236379a2a27f0f4afdfcae147631817f0bc0d10d4d2f815a871ccf2a",
+          "readAt": "2026-07-30T03:41:45Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",10]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "a27a900e236379a2a27f0f4afdfcae147631817f0bc0d10d4d2f815a871ccf2a",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "a27a900e236379a2a27f0f4afdfcae147631817f0bc0d10d4d2f815a871ccf2a",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-30-review-handshake-status-20260730-verify.md",
+      "sha256": "1828d723a6185c86e9df68cccb286efec398298c8bcad50f15c101286364b6d8",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-30T03:41:38Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "1828d723a6185c86e9df68cccb286efec398298c8bcad50f15c101286364b6d8",
+          "readAt": "2026-07-30T03:53:35Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1828d723a6185c86e9df68cccb286efec398298c8bcad50f15c101286364b6d8",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/review-handshake-status-20260730/applied-spec.md",
+      "sha256": "61d4d1360ffb00cbdb3f0ba1a2b1fc21670a46cee60805c3670b8bb07e1776c5",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-30T03:43:52Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "61d4d1360ffb00cbdb3f0ba1a2b1fc21670a46cee60805c3670b8bb07e1776c5",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/review-handshake-status-20260730/tasks.md",
+      "sha256": "4f3da2dd92afacec0cc6c76dd4c24e6b6ca14c1bb7b228626e61bb854ce779d6",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-07-30T03:54:55Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "4f3da2dd92afacec0cc6c76dd4c24e6b6ca14c1bb7b228626e61bb854ce779d6",
+          "readAt": "2026-07-30T03:54:56Z",
+          "visitId": "[\"5f1693cf-27b3-4343-83b9-d538594f0a4b\",12]"
+        }
+      ]
+    }
+  ]
+}

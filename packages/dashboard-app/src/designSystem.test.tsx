@@ -25,6 +25,19 @@ describe('Dashboard 电脑端设计系统契约', () => {
     expect(css).toMatch(/scroll-behavior:\s*auto\s*!important/)
   })
 
+  it('交互动效只声明实际变化的属性，不使用会意外动画布局的 transition-all', () => {
+    const sourceFiles = [
+      'components/ui/button.tsx',
+      'components/ui/switch.tsx',
+      'components/ui/tabs.tsx',
+      'workbench/TrackSelector.tsx',
+      'workbench/SkillOrchestrationDialog.tsx',
+    ]
+    for (const relativePath of sourceFiles) {
+      expect(readSource(relativePath), relativePath).not.toContain('transition-all')
+    }
+  })
+
   it.each([
     'components/ui/button.tsx',
     'components/ui/input.tsx',
@@ -40,8 +53,7 @@ describe('Dashboard 电脑端设计系统契约', () => {
   })
 
   it('App 清理 toast tween，并让 error/status 使用不同 live-region 语义', () => {
-    const source = readSource('App.tsx')
-    expect(source).toMatch(/return \(\) => \{\s*tween\.kill\(\)\s*\}/)
-    expect(source).toMatch(/role=\{flash\.kind === 'error' \? 'alert' : 'status'\}/)
+    expect(readSource('shared/useFlash.ts')).toMatch(/return \(\) => tween\.kill\(\)/)
+    expect(readSource('App.tsx')).toMatch(/role=\{flash\.kind === 'error' \? 'alert' : 'status'\}/)
   })
 })
