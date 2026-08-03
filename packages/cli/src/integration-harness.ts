@@ -223,7 +223,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     fileExists: (p) => { try { return statSync(abs(p)).isFile() } catch { return false } },
     fileNonempty: (p) => { try { const s = statSync(abs(p)); return s.isFile() && s.size > 0 } catch { return false } },
     readFile: (p) => { try { return readFileSync(abs(p), 'utf8') } catch { return undefined } },
-    readFileBounded: (p, maxBytes) => readBoundedRegularFileSync(abs(p), maxBytes),
+    readFileBounded: (p, maxBytes) => readBoundedRegularFileSync(abs(p), maxBytes, cwd),
     dirExists: (p) => { try { return statSync(abs(p)).isDirectory() } catch { return false } },
     activeChangeArchived: (dep) => {
       try {

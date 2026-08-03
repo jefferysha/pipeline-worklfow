@@ -11,6 +11,7 @@ import {
   TaskPlanStateCorruptError,
   publishTaskPlanRevision,
   readTaskPlanForChange,
+  taskPlanTasksThroughPhaseForChange,
 } from './task-plan-store.js'
 
 function plan(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {
@@ -329,6 +330,15 @@ describe('task plan store', () => {
         stage: 'Notes <!-- task-group:user-group -->',
         title: 'Preserve this prose <!-- work-item:user-text -->',
       }],
+    })
+  })
+
+  it('rejects invalid UTF-8 legacy tasks before phase-completion parsing', async () => {
+    const dir = await changeDir()
+    await writeFile(join(dir, 'tasks.md'), Buffer.from([0xc3, 0x28]))
+    await expect(taskPlanTasksThroughPhaseForChange(dir, 'build')).resolves.toEqual({
+      pass: false,
+      failure: 'build 出口：tasks.md 不可信或超出预算',
     })
   })
 

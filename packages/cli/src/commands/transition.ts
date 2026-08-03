@@ -81,7 +81,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
     : `${guardContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
   const tasksByteLimit = canonicalStatePath !== undefined && guardContext?.fileExists?.(canonicalStatePath)
     ? TASK_PLAN_LIMITS.maxRevisionBytes
-    : 256 * 1024
+    : TASK_PLAN_LIMITS.maxLegacyProjectionBytes
   // kernel 单源注入面：文件存在性经 guardCtx（缺省降级跳过文件面）；Git HEAD 与 in-place
   // 内容基线均由 production deps 绑定当前 Change。
   const context: TransitionContext = {

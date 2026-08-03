@@ -32,6 +32,7 @@ export type {
   ReadDocumentsInput, RecordDocumentInput,
 } from './document-ledger.js'
 export { evaluateDocumentEvidence } from './document-evidence.js'
+export { decodeUtf8Text } from './document-path.js'
 export type {
   DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
 } from './document-evidence.js'

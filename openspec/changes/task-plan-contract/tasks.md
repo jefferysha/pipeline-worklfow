@@ -59,6 +59,8 @@
 - [x] 为 TaskPlan HTTP 失败语义增加稳定 machine code 并收紧只读 response contract。 (build)
 - [x] 将 tasks-through-phase 门禁绑定到前向完成事件，保持 requirements-changed 与 verify-fail 回退始终可达。 (build)
 - [x] 为 CLI TaskPlan tasks.md 读取增加 regular-file 身份栅栏与 canonical/legacy 预分配字节上限。 (build)
+- [x] 将 TaskPlan 文本解码统一为 fatal UTF-8，并让 CLI、server snapshot 与 store 共用 legacy projection 字节预算。 (build)
+- [x] 锚定 registered root 及其每一级祖先身份、合入最新 origin/main，并通过独立 Build 复核。 (build)
 
 ## 验证
 

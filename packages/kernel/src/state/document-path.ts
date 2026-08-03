@@ -17,6 +17,15 @@ export interface ResolvedDocument {
 }
 
 export const MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024
+
+export function decodeUtf8Text(content: Uint8Array, label: string): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(content)
+  } catch {
+    throw new DocumentLedgerError(`${label} 不是有效 UTF-8 文本`)
+  }
+}
+
 export type BoundedFileHandleReader = (
   handle: FileHandle,
   maxBytes: number,
@@ -112,7 +121,8 @@ export async function readOptionalBoundedRegularTextFile(
   readSource: BoundedFileHandleReader = readBoundedFileHandle,
 ): Promise<string | undefined> {
   try {
-    return (await readBoundedRegularFile(path, maxBytes, label, readSource)).toString('utf8')
+    const content = await readBoundedRegularFile(path, maxBytes, label, readSource)
+    return decodeUtf8Text(content, label)
   } catch (error) {
     if (
       typeof error === 'object'

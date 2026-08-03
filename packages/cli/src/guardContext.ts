@@ -7,11 +7,12 @@ import {
   readSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   type BigIntStats,
 } from 'node:fs'
 import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import {
   readCurrentRunRevisionSync,
   stateStorageExistsSync,
@@ -26,16 +27,65 @@ function sameBoundedFile(left: BigIntStats, right: BigIntStats): boolean {
     && left.ctimeNs === right.ctimeNs
 }
 
+interface BoundedAncestor {
+  readonly path: string
+  readonly info: BigIntStats
+  readonly real: string
+}
+
+function boundedAncestors(root: string, path: string): readonly BoundedAncestor[] | undefined {
+  const fromRoot = relative(root, path)
+  if (
+    fromRoot === ''
+    || fromRoot === '..'
+    || fromRoot.startsWith(`..${sep}`)
+    || isAbsolute(fromRoot)
+  ) return undefined
+  const rootInfo = lstatSync(root, { bigint: true })
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) return undefined
+  const rootReal = realpathSync(root)
+  const parentFromRoot = dirname(fromRoot)
+  const segments = parentFromRoot === '.' ? [] : parentFromRoot.split(sep)
+  const ancestors: BoundedAncestor[] = [{ path: root, info: rootInfo, real: rootReal }]
+  let candidate = root
+  for (const segment of segments) {
+    candidate = join(candidate, segment)
+    const info = lstatSync(candidate, { bigint: true })
+    if (!info.isDirectory() || info.isSymbolicLink()) return undefined
+    ancestors.push({ path: candidate, info, real: realpathSync(candidate) })
+  }
+  const parentReal = realpathSync(dirname(path))
+  const fromRealRoot = relative(rootReal, parentReal)
+  if (
+    fromRealRoot === '..'
+    || fromRealRoot.startsWith(`..${sep}`)
+    || isAbsolute(fromRealRoot)
+  ) return undefined
+  return ancestors
+}
+
+function sameBoundedAncestors(ancestors: readonly BoundedAncestor[]): boolean {
+  return ancestors.every((ancestor) => {
+    const current = lstatSync(ancestor.path, { bigint: true })
+    return current.isDirectory()
+      && !current.isSymbolicLink()
+      && sameBoundedFile(ancestor.info, current)
+      && realpathSync(ancestor.path) === ancestor.real
+  })
+}
+
 /**
  * Synchronous because GuardContext is synchronous, but still opens before reading and fences the
  * regular-file identity before/after materialization. Oversized/symlink/replaced inputs are never
  * returned as text, so TaskPlan byte budgets apply before allocation rather than after it.
  */
-export function readBoundedRegularFileSync(path: string, maxBytes: number): BoundedFileRead {
+export function readBoundedRegularFileSync(path: string, maxBytes: number, root: string): BoundedFileRead {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return { kind: 'invalid' }
   let fd: number | undefined
   let inspected = false
   try {
+    const ancestors = boundedAncestors(root, path)
+    if (ancestors === undefined || !sameBoundedAncestors(ancestors)) return { kind: 'invalid' }
     const lexical = lstatSync(path, { bigint: true })
     inspected = true
     if (!lexical.isFile() || lexical.size > BigInt(maxBytes)) return { kind: 'invalid' }
@@ -54,7 +104,11 @@ export function readBoundedRegularFileSync(path: string, maxBytes: number): Boun
     if (length > maxBytes || BigInt(length) !== opened.size) return { kind: 'invalid' }
     const after = fstatSync(fd, { bigint: true })
     const current = lstatSync(path, { bigint: true })
-    if (!sameBoundedFile(opened, after) || !sameBoundedFile(opened, current)) return { kind: 'invalid' }
+    if (
+      !sameBoundedFile(opened, after)
+      || !sameBoundedFile(opened, current)
+      || !sameBoundedAncestors(ancestors)
+    ) return { kind: 'invalid' }
     return {
       kind: 'ok',
       text: new TextDecoder('utf-8', { fatal: true }).decode(raw.subarray(0, length)),
@@ -138,7 +192,7 @@ export function makeGuardCtx(cwd: string): (name: string) => GuardFileContext {
     readFile: (path) => {
       try { return readFileSync(abs(path), 'utf8') } catch { return undefined }
     },
-    readFileBounded: (path, maxBytes) => readBoundedRegularFileSync(abs(path), maxBytes),
+    readFileBounded: (path, maxBytes) => readBoundedRegularFileSync(abs(path), maxBytes, cwd),
     dirExists: (path) => {
       try { return statSync(abs(path)).isDirectory() } catch { return false }
     },

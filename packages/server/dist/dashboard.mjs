@@ -744,6 +744,7 @@ var TASK_PLAN_READ_SCHEMA_VERSION = "task-plan-read/v1";
 var TASK_PLAN_LIMITS = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
   maxRevisionBytes: 1024 * 1024 + 1,
+  maxLegacyProjectionBytes: 256 * 1024,
   maxRevisionHistoryEntries: 256,
   maxRevisionHistoryReads: 256,
   maxRevisionHistoryBytes: 16 * 1024 * 1024,
@@ -7125,6 +7126,13 @@ var DocumentLedgerError = class extends Error {
   }
 };
 var MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024;
+function decodeUtf8Text(content, label) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    throw new DocumentLedgerError(`${label} \u4E0D\u662F\u6709\u6548 UTF-8 \u6587\u672C`);
+  }
+}
 async function readBoundedFileHandle(handle, maxBytes) {
   const chunks = [];
   let total = 0;
@@ -7180,7 +7188,8 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
 }
 async function readOptionalBoundedRegularTextFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
   try {
-    return (await readBoundedRegularFile(path7, maxBytes, label, readSource)).toString("utf8");
+    const content = await readBoundedRegularFile(path7, maxBytes, label, readSource);
+    return decodeUtf8Text(content, label);
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
       return void 0;
@@ -7815,7 +7824,7 @@ function incompletePipelineTasksForExit(input) {
 var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
 var TASK_PLAN_CURRENT_FILE = "current.json";
 var TASK_PLAN_REVISIONS_DIR = "revisions";
-var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
 var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 var TaskPlanStateCorruptError = class extends Error {
   name = "TaskPlanStateCorruptError";
@@ -20623,7 +20632,7 @@ function matchesStableFileVersion(stat5, expected) {
 }
 
 // packages/server/src/snapshotTasks.ts
-var MAX_LEGACY_TASKS_MARKDOWN_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
 var MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 async function hasCurrentCanonicalTaskPlanProjection(changeDir, source) {
   try {
@@ -20650,7 +20659,7 @@ function readBoundedTasksSource(fd, maxBytes) {
   if (bytes.byteLength > maxBytes) {
     throw new Error("tasks.md exceeds the bounded snapshot budget");
   }
-  return bytes.toString("utf8");
+  return decodeUtf8Text(bytes, "tasks.md snapshot");
 }
 async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
   const lexicalTarget = join34(changeDir, "tasks.md");
@@ -24781,7 +24790,7 @@ function readBoundedTasksSource2(fd, maxBytes) {
   if (bytes.byteLength > maxBytes) {
     throw new Error(`Change tasks \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
   }
-  return bytes.toString("utf8");
+  return decodeUtf8Text(bytes, "Change tasks snapshot");
 }
 async function readAnchoredTasksProjection(changeAnchor, readSource = readBoundedTasksSource2, authorizeCanonicalProjection, rootAnchor) {
   let rootVersion;

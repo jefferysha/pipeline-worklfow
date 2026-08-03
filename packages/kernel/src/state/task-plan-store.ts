@@ -26,7 +26,7 @@ import { withLock } from './lock.js'
 export const TASK_PLAN_STATE_DIR = '.pipeline-task-plan'
 export const TASK_PLAN_CURRENT_FILE = 'current.json'
 export const TASK_PLAN_REVISIONS_DIR = 'revisions'
-const MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024
+const MAX_LEGACY_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes
 const MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes
 
 export class TaskPlanStateCorruptError extends Error {

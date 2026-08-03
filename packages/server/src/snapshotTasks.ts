@@ -8,6 +8,7 @@ import {
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import {
+  decodeUtf8Text,
   isCanonicalTaskPlanTasksMarkdown,
   isCurrentTaskPlanProjectionForChange,
   TASK_PLAN_LIMITS,
@@ -26,7 +27,7 @@ import {
   type WorkflowRootMutationVersion,
 } from './workflowRootAnchor.js'
 
-export const MAX_LEGACY_TASKS_MARKDOWN_BYTES = 256 * 1024
+export const MAX_LEGACY_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes
 export const MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes
 
 interface TasksReadHooks {
@@ -94,7 +95,7 @@ function readBoundedTasksSource(fd: number, maxBytes: number): string {
   if (bytes.byteLength > maxBytes) {
     throw new Error('tasks.md exceeds the bounded snapshot budget')
   }
-  return bytes.toString('utf8')
+  return decodeUtf8Text(bytes, 'tasks.md snapshot')
 }
 
 /**

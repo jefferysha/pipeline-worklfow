@@ -8,6 +8,7 @@ import {
 } from 'node:fs'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import {
+  decodeUtf8Text,
   LedgerContextBundleError,
   isCanonicalTaskPlanTasksMarkdown,
   projectPipelineTodo,
@@ -93,7 +94,7 @@ function readBoundedTasksSource(fd: number, maxBytes: number): string {
   if (bytes.byteLength > maxBytes) {
     throw new Error(`Change tasks 超过 ${maxBytes} bytes 上限`)
   }
-  return bytes.toString('utf8')
+  return decodeUtf8Text(bytes, 'Change tasks snapshot')
 }
 
 /** @internal Exported only so the race regression can prove no bytes are read before anchor checks. */

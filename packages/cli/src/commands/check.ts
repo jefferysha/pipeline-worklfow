@@ -33,8 +33,6 @@ import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
 
-const MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024
-
 export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
@@ -77,7 +75,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
   const tasksByteLimit = canonicalStatePath !== undefined && fileContext?.fileExists?.(canonicalStatePath)
     ? TASK_PLAN_LIMITS.maxRevisionBytes
-    : MAX_LEGACY_TASKS_MD_BYTES
+    : TASK_PLAN_LIMITS.maxLegacyProjectionBytes
   const boundedTasks = tasksPath === undefined
     ? undefined
     : fileContext?.readFileBounded === undefined
@@ -94,7 +92,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
       )
       if (
         canonicalTasksProjectionStatus === 'legacy'
-        && Buffer.byteLength(authenticatedTasksSource) > MAX_LEGACY_TASKS_MD_BYTES
+        && Buffer.byteLength(authenticatedTasksSource) > TASK_PLAN_LIMITS.maxLegacyProjectionBytes
       ) canonicalTasksProjectionStatus = 'invalid'
     } catch {
       // Corrupt or concurrently replaced canonical state is not legacy. It must block the guard.

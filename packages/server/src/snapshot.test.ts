@@ -306,6 +306,15 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(readAttempted).toBe(false)
   })
 
+  it('聚合快照省略非法 UTF-8 tasks.md，不暴露 replacement text', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const changeDir = await initChange(store, root, 'invalid-utf8-tasks')
+    await writeFile(join(changeDir, 'tasks.md'), Buffer.from([0xc3, 0x28]))
+
+    await expect(readTasksMarkdown(changeDir)).resolves.toBeUndefined()
+  })
+
   it('聚合快照读取超过 legacy 256 KiB、仍在 canonical 上限内的 TaskPlan 投影', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -769,6 +778,20 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       'target',
       0,
     )).rejects.toThrow(/tasks|路径|可信/i)
+  })
+
+  it('单 Change 直读拒绝非法 UTF-8 tasks.md，不暴露 replacement text', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const targetDir = await initChange(store, root, 'invalid-utf8')
+    await writeFile(join(targetDir, 'tasks.md'), Buffer.from([0xc3, 0x28]))
+
+    await expect(readChangeSnapshot(
+      { registry: () => [root], store, version: '1', clock: () => 't' },
+      root,
+      'invalid-utf8',
+      0,
+    )).rejects.toThrow(/UTF-8/u)
   })
 
   it('单 Change 目录被换到 root 外时，在读取 tasks 字节前拒绝', async () => {

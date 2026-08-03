@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, truncate, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -76,5 +76,35 @@ describe('guard context dependency archive sources', () => {
     await writeFile(tasks, Buffer.from([0xc3, 0x28]))
     expect(context.readFileBounded?.('openspec/changes/subject/tasks.md', 4))
       .toEqual({ kind: 'invalid' })
+  })
+
+  test('bounded reader rejects a regular leaf reached through an ancestor symlink outside the project root', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'tenon-bounded-reader-outside-'))
+    const outsideChange = join(outside, 'changes', 'subject')
+    await mkdir(outsideChange, { recursive: true })
+    await writeFile(join(outsideChange, 'tasks.md'), '# Tasks\n', 'utf8')
+    await symlink(outside, join(root, 'openspec'))
+    try {
+      const context = makeGuardCtx(root)('subject')
+      expect(context.readFileBounded?.('openspec/changes/subject/tasks.md', 1024))
+        .toEqual({ kind: 'invalid' })
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('bounded reader rejects a symlink passed as the project root anchor', async () => {
+    const alias = `${root}-alias`
+    const tasks = join(root, 'openspec', 'changes', 'subject', 'tasks.md')
+    await mkdir(join(tasks, '..'), { recursive: true })
+    await writeFile(tasks, '# Tasks\n', 'utf8')
+    await symlink(root, alias)
+    try {
+      const context = makeGuardCtx(alias)('subject')
+      expect(context.readFileBounded?.('openspec/changes/subject/tasks.md', 1024))
+        .toEqual({ kind: 'invalid' })
+    } finally {
+      await rm(alias, { force: true })
+    }
   })
 })

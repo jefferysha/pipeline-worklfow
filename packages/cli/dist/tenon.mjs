@@ -3035,7 +3035,7 @@ import { createHash as createHash34 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync11 } from "node:fs";
 import { readFile as readFile39, rm as rm13, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
-import { dirname as dirname26, join as join88 } from "node:path";
+import { dirname as dirname27, join as join88 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -3284,6 +3284,7 @@ var TASK_PLAN_SCHEMA_VERSION = "task-plan/v1";
 var TASK_PLAN_LIMITS = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
   maxRevisionBytes: 1024 * 1024 + 1,
+  maxLegacyProjectionBytes: 256 * 1024,
   maxRevisionHistoryEntries: 256,
   maxRevisionHistoryReads: 256,
   maxRevisionHistoryBytes: 16 * 1024 * 1024,
@@ -5546,9 +5547,9 @@ async function hydratePreVerifyReview(changeDir2, revision) {
   return attach(revision, parseRecord(await readFile4(target, "utf8"), target));
 }
 function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
-  const relative19 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
-  const raw = readText(relative19);
-  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join4(sourceRoot, relative19)));
+  const relative20 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
+  const raw = readText(relative20);
+  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join4(sourceRoot, relative20)));
 }
 
 // packages/kernel/dist/state/run-revision-continuity.js
@@ -9628,6 +9629,13 @@ var DocumentLedgerError = class extends Error {
   }
 };
 var MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024;
+function decodeUtf8Text(content, label) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    throw new DocumentLedgerError(`${label} \u4E0D\u662F\u6709\u6548 UTF-8 \u6587\u672C`);
+  }
+}
 async function readBoundedFileHandle(handle, maxBytes) {
   const chunks = [];
   let total = 0;
@@ -9683,7 +9691,8 @@ async function readBoundedRegularFile(path9, maxBytes, label, readSource = readB
 }
 async function readOptionalBoundedRegularTextFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
   try {
-    return (await readBoundedRegularFile(path9, maxBytes, label, readSource)).toString("utf8");
+    const content = await readBoundedRegularFile(path9, maxBytes, label, readSource);
+    return decodeUtf8Text(content, label);
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
       return void 0;
@@ -10533,7 +10542,7 @@ function incompletePipelineTasksForExit(input) {
 var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
 var TASK_PLAN_CURRENT_FILE = "current.json";
 var TASK_PLAN_REVISIONS_DIR = "revisions";
-var MAX_LEGACY_TASKS_MD_BYTES = 256 * 1024;
+var MAX_LEGACY_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
 var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
 var TaskPlanStateCorruptError = class extends Error {
   name = "TaskPlanStateCorruptError";
@@ -23532,7 +23541,7 @@ function stripComment2(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function splitTopLevel(s, sep19) {
+function splitTopLevel(s, sep20) {
   const out = [];
   let cur = "";
   let quote = "";
@@ -23544,7 +23553,7 @@ function splitTopLevel(s, sep19) {
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       cur += ch;
-    } else if (ch === sep19) {
+    } else if (ch === sep20) {
       out.push(cur);
       cur = "";
     } else {
@@ -34695,7 +34704,6 @@ function effectiveWorkflowForState(deps, state) {
 }
 
 // packages/cli/src/commands/check.ts
-var MAX_LEGACY_TASKS_MD_BYTES2 = 256 * 1024;
 async function cmdCheck(deps, name2) {
   if (!isValidChangeName(name2)) {
     deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
@@ -34728,7 +34736,7 @@ async function cmdCheck(deps, name2) {
   const fileContext = deps.guardCtx?.(name2);
   const tasksPath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/tasks.md`;
   const canonicalStatePath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`;
-  const tasksByteLimit = canonicalStatePath !== void 0 && fileContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : MAX_LEGACY_TASKS_MD_BYTES2;
+  const tasksByteLimit = canonicalStatePath !== void 0 && fileContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
   const boundedTasks = tasksPath === void 0 ? void 0 : fileContext?.readFileBounded === void 0 ? { kind: "invalid" } : fileContext.readFileBounded(tasksPath, tasksByteLimit);
   const authenticatedTasksSource = boundedTasks?.kind === "ok" ? boundedTasks.text : void 0;
   let canonicalTasksProjectionStatus = boundedTasks?.kind === "invalid" ? "invalid" : "legacy";
@@ -34738,7 +34746,7 @@ async function cmdCheck(deps, name2) {
         dir,
         authenticatedTasksSource
       );
-      if (canonicalTasksProjectionStatus === "legacy" && Buffer.byteLength(authenticatedTasksSource) > MAX_LEGACY_TASKS_MD_BYTES2) canonicalTasksProjectionStatus = "invalid";
+      if (canonicalTasksProjectionStatus === "legacy" && Buffer.byteLength(authenticatedTasksSource) > TASK_PLAN_LIMITS.maxLegacyProjectionBytes) canonicalTasksProjectionStatus = "invalid";
     } catch {
       canonicalTasksProjectionStatus = "invalid";
     }
@@ -37975,7 +37983,7 @@ async function cmdTransition(deps, name2, event) {
   const guardContext = deps.guardCtx?.(name2);
   const tasksPath = guardContext?.changeDirRel === void 0 ? void 0 : `${guardContext.changeDirRel}/tasks.md`;
   const canonicalStatePath = guardContext?.changeDirRel === void 0 ? void 0 : `${guardContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`;
-  const tasksByteLimit = canonicalStatePath !== void 0 && guardContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : 256 * 1024;
+  const tasksByteLimit = canonicalStatePath !== void 0 && guardContext?.fileExists?.(canonicalStatePath) ? TASK_PLAN_LIMITS.maxRevisionBytes : TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
   const context = {
     fileExists: guardContext?.fileExists,
     gitHeadSha: deps.gitHeadSha,
@@ -52379,18 +52387,48 @@ import {
   readSync as readSync5,
   readdirSync as readdirSync8,
   readFileSync as readFileSync26,
+  realpathSync as realpathSync6,
   statSync as statSync10
 } from "node:fs";
 import { readdir as readdir13 } from "node:fs/promises";
-import { join as join87 } from "node:path";
+import { dirname as dirname26, isAbsolute as isAbsolute30, join as join87, relative as relative19, sep as sep19 } from "node:path";
 function sameBoundedFile(left, right) {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
-function readBoundedRegularFileSync(path9, maxBytes) {
+function boundedAncestors(root, path9) {
+  const fromRoot = relative19(root, path9);
+  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep19}`) || isAbsolute30(fromRoot)) return void 0;
+  const rootInfo = lstatSync4(root, { bigint: true });
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) return void 0;
+  const rootReal = realpathSync6(root);
+  const parentFromRoot = dirname26(fromRoot);
+  const segments = parentFromRoot === "." ? [] : parentFromRoot.split(sep19);
+  const ancestors = [{ path: root, info: rootInfo, real: rootReal }];
+  let candidate = root;
+  for (const segment of segments) {
+    candidate = join87(candidate, segment);
+    const info = lstatSync4(candidate, { bigint: true });
+    if (!info.isDirectory() || info.isSymbolicLink()) return void 0;
+    ancestors.push({ path: candidate, info, real: realpathSync6(candidate) });
+  }
+  const parentReal = realpathSync6(dirname26(path9));
+  const fromRealRoot = relative19(rootReal, parentReal);
+  if (fromRealRoot === ".." || fromRealRoot.startsWith(`..${sep19}`) || isAbsolute30(fromRealRoot)) return void 0;
+  return ancestors;
+}
+function sameBoundedAncestors(ancestors) {
+  return ancestors.every((ancestor) => {
+    const current = lstatSync4(ancestor.path, { bigint: true });
+    return current.isDirectory() && !current.isSymbolicLink() && sameBoundedFile(ancestor.info, current) && realpathSync6(ancestor.path) === ancestor.real;
+  });
+}
+function readBoundedRegularFileSync(path9, maxBytes, root) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return { kind: "invalid" };
   let fd;
   let inspected = false;
   try {
+    const ancestors = boundedAncestors(root, path9);
+    if (ancestors === void 0 || !sameBoundedAncestors(ancestors)) return { kind: "invalid" };
     const lexical = lstatSync4(path9, { bigint: true });
     inspected = true;
     if (!lexical.isFile() || lexical.size > BigInt(maxBytes)) return { kind: "invalid" };
@@ -52407,7 +52445,7 @@ function readBoundedRegularFileSync(path9, maxBytes) {
     if (length > maxBytes || BigInt(length) !== opened.size) return { kind: "invalid" };
     const after = fstatSync2(fd, { bigint: true });
     const current = lstatSync4(path9, { bigint: true });
-    if (!sameBoundedFile(opened, after) || !sameBoundedFile(opened, current)) return { kind: "invalid" };
+    if (!sameBoundedFile(opened, after) || !sameBoundedFile(opened, current) || !sameBoundedAncestors(ancestors)) return { kind: "invalid" };
     return {
       kind: "ok",
       text: new TextDecoder("utf-8", { fatal: true }).decode(raw.subarray(0, length))
@@ -52483,7 +52521,7 @@ function makeGuardCtx(cwd) {
         return void 0;
       }
     },
-    readFileBounded: (path9, maxBytes) => readBoundedRegularFileSync(abs(path9), maxBytes),
+    readFileBounded: (path9, maxBytes) => readBoundedRegularFileSync(abs(path9), maxBytes, cwd),
     dirExists: (path9) => {
       try {
         return statSync10(abs(path9)).isDirectory();
@@ -52538,7 +52576,7 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function pluginRoot() {
-  return join88(dirname26(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join88(dirname27(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
   return join88(pluginRoot(), "templates", "manifest.yaml");

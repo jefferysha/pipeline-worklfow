@@ -124,4 +124,36 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
     expect(result).toMatchObject({ code: 200, body: { ok: true, from: 'verify', to: 'build' } })
     expect((await store.read(changeDir)).fields.phase).toBe('build')
   })
+
+  test('server 生产 TaskPlan callback 拒绝非法 UTF-8 tasks 且零提交', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const name = 'invalid-utf8'
+    const changeDir = await initChange(store, root, name)
+    await seedGovernedDocumentEvidence(root, changeDir, name)
+    await writeFile(join(changeDir, 'tasks.md'), Buffer.from([0xc3, 0x28]))
+    await store.setMany(changeDir, {
+      phase: 'build',
+      build_mode: 'direct',
+      direct_override: 'true',
+      isolation: 'worktree',
+      pre_verify_review_result: 'pass',
+    })
+    const deps: TransitionDeps = {
+      store,
+      runRepo: createWorkflowRunRepository({
+        store, recordStore: createTransitionRecordStore(), clock: () => '2026-07-16T00:00:00Z',
+      }),
+      flow: testFlow(),
+      clock: () => '2026-07-16T00:00:00Z',
+    }
+
+    const result = await performTransition(deps, root, name, 'build-complete')
+
+    expect(result).toMatchObject({
+      code: 409,
+      body: { ok: false, error: 'build 出口：tasks.md 不可信或超出预算' },
+    })
+    expect((await store.read(changeDir)).fields.phase).toBe('build')
+  })
 })
