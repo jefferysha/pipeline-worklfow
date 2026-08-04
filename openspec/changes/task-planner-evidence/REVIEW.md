@@ -31,6 +31,13 @@ Open Critical/High/Medium findings: **0**.
 ## Build gates
 
 - Focused regression: 7 files, 314 passed, 0 failed.
+- Stable receipt bridge ownership moved from PR3 into PR2 as the minimal two-file patch from
+  `66d3c91a`: `runtime/tenon-bootstrap.mjs` plus its stable-hook integration test. All 56 PR3
+  governance files were excluded. The inherited Codex cache root is accepted only after ordinary
+  directory-chain, manifest identity, version, required-file and no-symlink validation; invalid
+  roots fail closed. The focused stable/runtime/receipt set passes 189 tests after updating one
+  stale assertion to PR2's stricter exact-StepVisit rejection message; production behavior was not
+  weakened.
 - Root suite: 348 files, 6199 passed, 26 honest environment skips, 0 failed.
 - Dashboard suite: 89 files, 1642 passed, 0 failed.
 - TypeScript, production build, OpenSpec 38/38, default-workflow freshness, oracle 0 mismatches,

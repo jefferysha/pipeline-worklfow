@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -151,14 +151,21 @@ describe('stable host-hook ABI', () => {
     const pluginManifest = JSON.parse(
       await readFile(join(candidate, '.codex-plugin', 'plugin.json'), 'utf8'),
     ) as { version: string }
-    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', pluginManifest.version)
+    const hostVersion = `${pluginManifest.version}-host-current`
+    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', hostVersion)
     await cp(candidate, hostCache, { recursive: true, preserveTimestamps: false })
+    await writeFile(
+      join(hostCache, '.codex-plugin', 'plugin.json'),
+      `${JSON.stringify({ ...pluginManifest, version: hostVersion }, null, 2)}\n`,
+      'utf8',
+    )
     const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
     const launchers = await writeStableLaunchers(paths, home)
     // Codex does not promise PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT to a command hook. It does, however,
     // load the active plugin's assets from its standard per-user cache. Keep that cache distinct
-    // from the verified runtime payload and deliberately omit both inherited plugin-root vars.
-    const env = { ...process.env, HOME: home }
+    // from the verified runtime payload, deliberately omit those two generic roots, and pass the
+    // exact host-selected Codex cache root that the stable bootstrap must preserve.
+    const env = { ...process.env, HOME: home, TENON_CODEX_PLUGIN_ROOT: hostCache }
     delete env.PLUGIN_ROOT
     delete env.CLAUDE_PLUGIN_ROOT
     delete env.TENON_HOST_PLUGIN_ROOT
@@ -173,7 +180,7 @@ describe('stable host-hook ABI', () => {
       'bash', [launchers.tenon, 'document', 'record', change, 'proposal', proposal, '--producer', 'openspec-propose'], '', env, project,
     )
     expect(beforeEvidence.code).toBe(1)
-    expect(beforeEvidence.stderr).toContain('Skill 调用证据')
+    expect(beforeEvidence.stderr).toContain('current StepVisit lacks exact Codex confirmation')
 
     const skillPath = join(hostCache, 'skills', 'openspec-propose', 'SKILL.md')
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'receipt.jsonl')
@@ -249,5 +256,100 @@ describe('stable host-hook ABI', () => {
     const status = await run('bash', [launchers.tenon, 'document', 'status', change, '--json'], '', env, project)
     expect(status.code).toBe(0)
     expect(JSON.parse(status.stdout)).toMatchObject({ governed: true, pass: true })
+
+    // Preserve the original no-override compatibility path too: when the host has not selected a
+    // newer cache, the bootstrap may derive the active payload's cache identity, but only after
+    // that cache independently passes the same ordinary-layout and manifest checks.
+    const derivedCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', pluginManifest.version)
+    await cp(candidate, derivedCache, { recursive: true, preserveTimestamps: false })
+    const derivedEnv = { ...env }
+    delete derivedEnv.TENON_CODEX_PLUGIN_ROOT
+    const derivedReceipt = await run(
+      'bash',
+      [
+        launchers.tenon,
+        'internal-codex-skill-receipt',
+        'derived-cache-proof',
+        'openspec-propose',
+        join(derivedCache, 'skills', 'openspec-propose', 'SKILL.md'),
+        join(home, '.codex', 'sessions', 'derived-receipt.jsonl'),
+        'session-derived-proof',
+        'turn-derived-proof',
+        'call-derived-proof',
+      ],
+      '',
+      derivedEnv,
+      project,
+    )
+    expect(derivedReceipt.code).toBe(0)
+    expect(derivedReceipt.stderr).toBe('')
+  }, 30_000)
+
+  it('rejects inherited Codex cache roots with version, manifest identity, or symlink drift', async () => {
+    const root = await freshRoot('cache-rejection')
+    const home = join(root, 'home')
+    const project = join(root, 'project')
+    await mkdir(project, { recursive: true })
+    const paths = resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
+    const candidate = await candidateCopy(root)
+    const pluginManifest = JSON.parse(
+      await readFile(join(candidate, '.codex-plugin', 'plugin.json'), 'utf8'),
+    ) as Record<string, unknown> & { version: string }
+    await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
+    const launchers = await writeStableLaunchers(paths, home)
+    const cacheBase = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon')
+
+    const wrongVersion = join(cacheBase, `${pluginManifest.version}-folder-drift`)
+    await cp(candidate, wrongVersion, { recursive: true, preserveTimestamps: false })
+
+    const identityDrift = join(cacheBase, `${pluginManifest.version}-identity-drift`)
+    await cp(candidate, identityDrift, { recursive: true, preserveTimestamps: false })
+    await writeFile(
+      join(identityDrift, '.codex-plugin', 'plugin.json'),
+      `${JSON.stringify({ ...pluginManifest, version: `${pluginManifest.version}-identity-drift` }, null, 2)}\n`,
+      'utf8',
+    )
+    const driftedMarketplace = JSON.parse(
+      await readFile(join(identityDrift, '.agents', 'plugins', 'marketplace.json'), 'utf8'),
+    ) as Record<string, unknown>
+    await writeFile(
+      join(identityDrift, '.agents', 'plugins', 'marketplace.json'),
+      `${JSON.stringify({ ...driftedMarketplace, name: 'other-marketplace' }, null, 2)}\n`,
+      'utf8',
+    )
+
+    const symlinkVersion = `${pluginManifest.version}-symlink`
+    const symlinkTarget = join(root, 'symlink-cache-target')
+    const symlinkCache = join(cacheBase, symlinkVersion)
+    await cp(candidate, symlinkTarget, { recursive: true, preserveTimestamps: false })
+    await writeFile(
+      join(symlinkTarget, '.codex-plugin', 'plugin.json'),
+      `${JSON.stringify({ ...pluginManifest, version: symlinkVersion }, null, 2)}\n`,
+      'utf8',
+    )
+    await mkdir(dirname(symlinkCache), { recursive: true })
+    await symlink(symlinkTarget, symlinkCache)
+
+    for (const cacheRoot of [wrongVersion, identityDrift, symlinkCache]) {
+      const result = await run(
+        'bash',
+        [
+          launchers.tenon,
+          'internal-codex-skill-receipt',
+          'cache-proof',
+          'openspec-propose',
+          join(cacheRoot, 'skills', 'openspec-propose', 'SKILL.md'),
+          join(home, '.codex', 'sessions', 'receipt.jsonl'),
+          'session-cache-proof',
+          'turn-cache-proof',
+          'call-cache-proof',
+        ],
+        '',
+        { ...process.env, HOME: home, TENON_CODEX_PLUGIN_ROOT: cacheRoot },
+        project,
+      )
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain('收到不可信的 Codex skill receipt')
+    }
   }, 30_000)
 })
