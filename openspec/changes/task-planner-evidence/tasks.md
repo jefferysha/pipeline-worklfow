@@ -28,7 +28,7 @@
 
 ## 交付
 
-- [ ] 同步公共契约并创建 base=PR1 branch 的独立 PR。 (ship)
+- [x] 同步公共契约并创建 base=PR1 branch 的独立 PR。 (ship)
 
 ## 归档
 

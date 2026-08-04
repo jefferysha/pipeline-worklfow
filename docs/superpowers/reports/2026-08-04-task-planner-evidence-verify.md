@@ -71,3 +71,4 @@ Codex CLI 的整段 diff stdin 审查受 1 MiB 输入上限限制，按 degraded
 - 本机缺 Docker，容器专项按测试内 `[HONEST SKIP]` 跳过；CI 应继续执行可用的 Docker/真实 Codex 环境作业。
 - Codex CLI 大 diff 轨为 degraded，上述独立 reviewer 与完整行为门已覆盖冻结提交，但不将其描述为 Codex CLI PASS。
 - macOS ContextBundlePreview 501 仍是既有宿主预览能力限制。
+
