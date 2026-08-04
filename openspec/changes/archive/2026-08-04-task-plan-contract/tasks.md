@@ -76,8 +76,8 @@
 
 ## 交付
 
-- [ ] 同步契约文档、正式生成物并创建 base=main 的独立 PR。 (ship)
+- [x] 同步契约文档、正式生成物并创建 base=main 的独立 PR。 (ship)
 
 ## 归档
 
-- [ ] 归档 Change 并记录迁移边界。 (archive)
+- [x] 归档 Change 并记录迁移边界。 (archive)
