@@ -1,0 +1,41 @@
+{"ts":"2026-08-03T09:19:51Z","kind":"init"}
+{"ts":"2026-08-03T09:34:32Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T09:43:02Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-03T09:43:16Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"f5b09125-0fdd-457f-bc30-44f9f2c1b911"}
+{"ts":"2026-08-03T09:43:16Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T09:56:58Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-08-03T09:56:58Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-08-03T09:56:59Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-08-03-workflow-decomposition-policy-design.md"}
+{"ts":"2026-08-03T09:57:23Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-08-03T09:57:23Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-08-03T09:43:16Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T09:57:24Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-08-03T09:57:24Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-08-03T09:57:24Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-08-03T09:57:24Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"8f851ec3-651a-4b77-a254-5eeaf78e575a"}
+{"ts":"2026-08-03T09:57:24Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T10:04:46Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-08-03-workflow-decomposition-policy.md"}
+{"ts":"2026-08-03T10:04:46Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-03T10:04:46Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-03T10:04:47Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-03T10:05:08Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-03T10:05:08Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-03T09:57:24Z authority_host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-03T10:05:08Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"a0ed9b52-6c4f-4628-9bee-5cf8f4f20158"}
+{"ts":"2026-08-03T10:05:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fc6f8-2f6a-77c2-9e2e-2240e07ee08b"}
+{"ts":"2026-08-04T03:07:50Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcabc-9e5d-74a1-b209-e6e4b9443689"}
+{"ts":"2026-08-04T03:12:07Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcabc-9e5d-74a1-b209-e6e4b9443689"}
+{"ts":"2026-08-04T03:14:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcabc-9e5d-74a1-b209-e6e4b9443689"}
+{"ts":"2026-08-04T03:18:00Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-04T03:18:11Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-04T03:18:11Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"2f44fb49-3827-4cf0-abdd-59eb970c647a"}
+{"ts":"2026-08-04T03:20:51Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-04T03:21:02Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-04T03:28:02Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-04T03:29:46Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-08-03-workflow-decomposition-policy.md"}
+{"ts":"2026-08-04T03:30:09Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-04T03:30:09Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-04T03:14:08Z authority_host_session=019fcabc-9e5d-74a1-b209-e6e4b9443689"}
+{"ts":"2026-08-04T03:30:10Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"39bc2ce1-27b2-4ca1-9d40-b6366563dfd4"}
+{"ts":"2026-08-04T03:31:08Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-04T03:31:08Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-04T03:31:09Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
+{"ts":"2026-08-04T03:31:09Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-04T03:41:31Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

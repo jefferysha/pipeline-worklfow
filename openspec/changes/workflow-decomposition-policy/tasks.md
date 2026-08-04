@@ -1,0 +1,37 @@
+# 任务
+
+## 立项
+
+- [x] 确认拆分策略、互动模式、AFK 兼容与授权边界。
+
+## 调研
+
+- [x] 调研 Workflow codec、冻结 plan、fingerprint 和 API 边界。 (explore)
+
+## 规格
+
+- [x] 冻结 decomposition/interaction schema、权限交集、缺省与兼容语义。 (spec)
+- [x] 按 requirements-changed 纳入 Dashboard 配置闭环与 stable receipt bridge 正式回归。 (spec)
+
+## 实现
+
+- [ ] 以 tracer bullet 打通 Workflow codec、V3 frozen snapshot 与真实 API。 (build)
+- [ ] 实现完整 decomposition/interaction 校验和五层 action 权限求交。 (build)
+- [ ] 将 continuous/queue 早检与 AFK pre-claim authoritative admission 接线。 (build)
+- [ ] 通过安全 definition API 实现 Dashboard 策略编辑、状态展示、zh/en 与 loading/empty/error 闭环。 (build)
+- [x] 修复 stable bootstrap/runtime 的可信 cache 身份透传并覆盖当前 turn Skill receipt 回归。 (build)
+
+## 验证
+
+- [ ] 验证旧 Workflow/V1/V2、非法配置、V3 篡改与 frozen/live drift。 (verify)
+- [ ] 验证权限降级、recommended-default、hard boundary 与 AFK 不扩权。 (verify)
+- [ ] 用真实桌面浏览器验证 Dashboard 读写、非法输入、键盘路径、zh/en 与状态恢复。 (verify)
+- [ ] 用正式 stable launcher/runtime 验证当前任务/turn/phase receipt，禁止以分支 CLI workaround 作为完成证据。 (verify)
+
+## 交付
+
+- [ ] 更新契约与生成默认定义，创建 base=PR2 branch 的独立 PR。 (ship)
+
+## 归档
+
+- [ ] 归档 Change 并记录策略兼容结论。 (archive)

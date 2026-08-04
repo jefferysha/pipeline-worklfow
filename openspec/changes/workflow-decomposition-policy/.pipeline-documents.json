@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-03T09:19:51Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-03-workflow-decomposition-policy-explore.md",
+      "sha256": "73263713262b3862da54057751ca2d6819af1bbf4e640b9033160e9e64807042",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T09:56:59Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "73263713262b3862da54057751ca2d6819af1bbf4e640b9033160e9e64807042",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "73263713262b3862da54057751ca2d6819af1bbf4e640b9033160e9e64807042",
+          "readAt": "2026-08-04T03:08:12Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "73263713262b3862da54057751ca2d6819af1bbf4e640b9033160e9e64807042",
+          "readAt": "2026-08-04T03:30:01Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "73263713262b3862da54057751ca2d6819af1bbf4e640b9033160e9e64807042",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/workflow-decomposition-policy/proposal.md",
+      "sha256": "1f34ef479f12fc3e1c54a140e76040090188819339566d718a41c084eb64bc85",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:28:02Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1f34ef479f12fc3e1c54a140e76040090188819339566d718a41c084eb64bc85",
+          "readAt": "2026-08-04T03:30:01Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1f34ef479f12fc3e1c54a140e76040090188819339566d718a41c084eb64bc85",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/workflow-decomposition-policy/design.md",
+      "sha256": "2b624b383d42bfe5e6e176486b43e0e99541c4500f31fbe8a0896c2c1c57844a",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:29:45Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "2b624b383d42bfe5e6e176486b43e0e99541c4500f31fbe8a0896c2c1c57844a",
+          "readAt": "2026-08-04T03:30:01Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2b624b383d42bfe5e6e176486b43e0e99541c4500f31fbe8a0896c2c1c57844a",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-03-workflow-decomposition-policy-design.md",
+      "sha256": "b10398d4ad6c9baf46c585a61b22b4f1f255ed6d74a972f40d451d1da2561978",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:29:45Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "b10398d4ad6c9baf46c585a61b22b4f1f255ed6d74a972f40d451d1da2561978",
+          "readAt": "2026-08-04T03:30:01Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b10398d4ad6c9baf46c585a61b22b4f1f255ed6d74a972f40d451d1da2561978",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/workflow-decomposition-policy/specs/workflow-decomposition-policy/spec.md",
+      "sha256": "8441826448302fd9025eb178b63cf15408a98b73c4c5596af4936286b8c23f6a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-04T03:29:45Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8441826448302fd9025eb178b63cf15408a98b73c4c5596af4936286b8c23f6a",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/workflow-decomposition-policy/specs/workflow-definition/spec.md",
+      "sha256": "2ea070e80e5bcdd173d92f2877cecdc582174491113dc477f255d3fd1efac94e",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-04T03:29:45Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "2ea070e80e5bcdd173d92f2877cecdc582174491113dc477f255d3fd1efac94e",
+          "readAt": "2026-08-04T03:08:12Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ea070e80e5bcdd173d92f2877cecdc582174491113dc477f255d3fd1efac94e",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/workflow-decomposition-policy/specs/codex-skill-receipt-current-turn/spec.md",
+      "sha256": "2de09cb6e35fea2f71e997077b6b31a272644b1bd9fd2a32cb62d24647d559f8",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-04T03:29:45Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "2de09cb6e35fea2f71e997077b6b31a272644b1bd9fd2a32cb62d24647d559f8",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-03-workflow-decomposition-policy.md",
+      "sha256": "220d37e6ad89a7f7f2754eb5a3625f71b49fdd401fbe927ef7b68c67f9e5f14b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T03:29:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "220d37e6ad89a7f7f2754eb5a3625f71b49fdd401fbe927ef7b68c67f9e5f14b",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-03-workflow-decomposition-policy.md",
+      "sha256": "220d37e6ad89a7f7f2754eb5a3625f71b49fdd401fbe927ef7b68c67f9e5f14b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T03:29:46Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "220d37e6ad89a7f7f2754eb5a3625f71b49fdd401fbe927ef7b68c67f9e5f14b",
+          "readAt": "2026-08-04T03:31:09Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/workflow-decomposition-policy/tasks.md",
+      "sha256": "4888344d9e789c5c48c8756a04c7cb8a448ee31a9723c871fedddab1d11b2fad",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-04T03:41:31Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "4888344d9e789c5c48c8756a04c7cb8a448ee31a9723c871fedddab1d11b2fad",
+          "readAt": "2026-08-04T03:41:31Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",5]"
+        }
+      ]
+    }
+  ]
+}
