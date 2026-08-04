@@ -54,10 +54,6 @@ Workflow definition GET/POST carries the editable policies and continues to vali
 
 The Dashboard edits the complete Workflow definition through the existing GET/POST boundary. Decomposition and interaction controls stay visually and semantically independent, use the same shared enums and limits, and expose zh/en copy plus loading, empty, retryable error, saving, success, and validation-error states. A rejected write leaves the previously published definition untouched. Keyboard users can reach, change, save, cancel, and retry every required control.
 
-## Stable receipt runtime
-
-The installed stable bootstrap derives `TENON_CODEX_PLUGIN_ROOT` from the verified active payload and passes it across the process boundary to the current-turn receipt bridge. The bridge does not trust an arbitrary caller override: cache location, active payload identity, Skill metadata, session, turn, phase, worktree, Git common directory, ABI, and the complete nested command result remain jointly verified. Missing or drifted managed runtime support is reported as unavailable, never repaired by treating a branch-local CLI invocation as production evidence.
-
 ## State and failure model
 
 Policy lifecycle is `draft -> validated -> frozen`. Runtime evaluation yields `allowed | denied | hard-blocked | stale`. `denied` may be changed by an authorized configuration/run grant; `hard-blocked` requires the named confirmation/authority; `stale` requires reloading or a new run and never falls back to allow.
@@ -79,14 +75,14 @@ Policy lifecycle is `draft -> validated -> frozen`. Runtime evaluation yields `a
 - Decision: existing POST can edit policies because it already compiles and atomically publishes the complete definition; no bypass endpoint is added.
 - Decision: legacy snapshots project safe defaults and are never migrated in place.
 - Decision: Dashboard policy writes reuse the complete definition compiler/lock/atomic publication path; no policy-only bypass endpoint is introduced.
-- Decision: the stable receipt fix preserves verified cache provenance across bootstrap/runtime boundaries and fails closed on managed-release drift.
+- Decision: the stable receipt fix is owned by the PR2 base; PR3 consumes that verified runtime and does not duplicate its source, tests, or capability delta.
 
 ## Verification matrix
 
-Tests cover every enum, all defaults, closed-key rejection, limits/conditions, parse/serialize round-trip, deep freeze, fingerprint drift, V1/V2 compatibility, V3 tamper resistance, exact Run/session binding, five-layer permission intersections, all hard boundaries, early/authoritative admission consistency, server write/read DTO separation, Dashboard zh/en and state recovery, real desktop browser edit/save/retry/keyboard paths, and installed stable bootstrap receipt provenance.
+Tests cover every enum, all defaults, closed-key rejection, limits/conditions, parse/serialize round-trip, deep freeze, fingerprint drift, V1/V2 compatibility, V3 tamper resistance, exact Run/session binding, five-layer permission intersections, all hard boundaries, early/authoritative admission consistency, server write/read DTO separation, Dashboard zh/en and state recovery, and real desktop browser edit/save/retry/keyboard paths.
 
 ```coverage
-touches: auth, workflow-governance, automation-admission, api-boundary, dashboard, codex-runtime
+touches: auth, workflow-governance, automation-admission, api-boundary, dashboard
 L1_api:      filled -> #api-contract
 L2_data:     filled -> #selected-schema
 L3_rules:    filled -> #key-rules

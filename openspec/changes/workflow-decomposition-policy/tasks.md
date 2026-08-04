@@ -11,7 +11,8 @@
 ## 规格
 
 - [x] 冻结 decomposition/interaction schema、权限交集、缺省与兼容语义。 (spec)
-- [x] 按 requirements-changed 纳入 Dashboard 配置闭环与 stable receipt bridge 正式回归。 (spec)
+- [x] 按 requirements-changed 纳入 Dashboard 配置闭环。 (spec)
+- [x] 按 ownership change 将 stable receipt bridge 修复移交 PR2 基线并移除 PR3 重复范围。 (spec)
 
 ## 实现
 
@@ -19,14 +20,13 @@
 - [ ] 实现完整 decomposition/interaction 校验和五层 action 权限求交。 (build)
 - [ ] 将 continuous/queue 早检与 AFK pre-claim authoritative admission 接线。 (build)
 - [ ] 通过安全 definition API 实现 Dashboard 策略编辑、状态展示、zh/en 与 loading/empty/error 闭环。 (build)
-- [x] 修复 stable bootstrap/runtime 的可信 cache 身份透传并覆盖当前 turn Skill receipt 回归。 (build)
 
 ## 验证
 
 - [ ] 验证旧 Workflow/V1/V2、非法配置、V3 篡改与 frozen/live drift。 (verify)
 - [ ] 验证权限降级、recommended-default、hard boundary 与 AFK 不扩权。 (verify)
 - [ ] 用真实桌面浏览器验证 Dashboard 读写、非法输入、键盘路径、zh/en 与状态恢复。 (verify)
-- [ ] 用正式 stable launcher/runtime 验证当前任务/turn/phase receipt，禁止以分支 CLI workaround 作为完成证据。 (verify)
+- [ ] 用 PR2 基线提供的正式 stable launcher/runtime 验证当前任务/turn/phase receipt，禁止以分支 CLI workaround 作为完成证据。 (verify)
 
 ## 交付
 

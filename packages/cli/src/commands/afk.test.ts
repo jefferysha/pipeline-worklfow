@@ -33,7 +33,8 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLoopLedgerStore, loadRegistry } from '@tenon/kernel'
-import { makeDeps, mockState } from '../test-support.js'
+import { skillActionAuthorityContract } from '@tenon/automation'
+import { makeDeps, mockAfkState, mockState } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
 import { cmdAfk, probeGitCommitAncestry } from './afk.js'
 
@@ -133,6 +134,12 @@ async function runCli(deps: ReturnType<typeof makeDeps>, args: string[]): Promis
   }
 }
 
+function withEnterAfkSkillAuthority(deps: ReturnType<typeof makeDeps>) {
+  deps.resolveSkillActionAuthority = async (query) =>
+    skillActionAuthorityContract(query, ['enter-afk'])
+  return deps
+}
+
 /**
  * GOAL H · Stage C：run 路径现经 admission 权威闸门——change 必须归属到一个 active loop 才被 admit
  * （无 loop 语境 fail-closed，不再静默跑）。本 loops.yaml 让 change 'w'（change_prefix 'w' 命中）
@@ -192,7 +199,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ automation: 'queued' }) } }))
 
   it('文本模式真实 CLI 分派：ready 非空但 Docker 不可用 → exit 1，诚实文案不能伪装成功', async () => {
     const d = deps()
@@ -244,7 +251,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ automation: 'queued' }) } }))
 
   it('第二段（评审缺口）：无 --image 时 .pipeline/automation.json 的 image 真进 docker run argv', async () => {
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
@@ -311,7 +318,7 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ automation: 'queued' }) } }))
 
   it('secrets 文件有 token 而宿主 env 无(空串) → 文件值补位,docker run 注入 -e', async () => {
     vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
@@ -362,7 +369,7 @@ describe("cmdAfk('run') · registry 真实 I/O 故障 → round failure（非零
   })
   afterEach(async () => { await rm(cwd, { recursive: true, force: true }) })
 
-  const deps = () => makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+  const deps = () => withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ automation: 'queued' }) } }))
 
   it('loops.yaml 是目录（EISDIR）→ exit 1、stderr 报 registry-io 故障、stdout 不含「跑完一轮」', async () => {
     const d = deps()
@@ -421,7 +428,7 @@ loops:
   })
   afterEach(async () => { await rm(cwd, { recursive: true, force: true }) })
 
-  const deps = () => makeDeps({ cwd, states: { v: mockState({ phase: 'build', automation: 'queued' }) } })
+  const deps = () => withEnterAfkSkillAuthority(makeDeps({ cwd, states: { v: mockAfkState({ automation: 'queued' }) } }))
 
   it('具名 profile 已知（isSkillProfileKnown 命中）→ 真 prepare 成功：docker 真跑 + ledger 落 skill-bundle-snapshot 事件', async () => {
     const d = deps()
@@ -432,7 +439,7 @@ loops:
     const { records } = await createLoopLedgerStore().read(cwd)
     const snapshots = records.filter((r) => r.kind === 'skill-bundle-snapshot')
     expect(snapshots.length).toBe(1) // 真 createExecutionPreparation 落的账本事实，test-only fallback 不会产生此事件
-    expect(snapshots[0]).toMatchObject({ skill_bundle_id: 'backend', resolution_source: 'default', slots: [] })
+    expect(snapshots[0]).toMatchObject({ skill_bundle_id: 'backend', resolution_source: 'custom', slots: [] })
   })
 
   it('具名 profile 不存在（isSkillProfileKnown 判 false）→ H11 fresh wiring guard 非零阻断 + 暂停 loop，零 docker、零 prepare', async () => {

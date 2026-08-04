@@ -11,11 +11,25 @@
  * 见该文件 §3 红线自证段的说明）。
  */
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmod, cp, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { freshHarness, REPO_ROOT, rm, type Harness } from './integration-harness.js'
+import {
+  documentGovernanceFingerprint,
+  loadEffectiveWorkflowPlan,
+  type EffectiveWorkflowPlan,
+  type WorkflowPlanSnapshotV2,
+} from '@tenon/kernel'
+import {
+  FIXED_CLOCK,
+  freshHarness,
+  realDeps,
+  REPO_ROOT,
+  rm,
+  type Harness,
+} from './integration-harness.js'
 
 const CHANGE = 'skg'
 
@@ -91,6 +105,31 @@ steps:
     transitions: []
 `
 
+function legacyV2Snapshot(plan: EffectiveWorkflowPlan): WorkflowPlanSnapshotV2 {
+  const { decomposition: _decomposition, interaction: _interaction, ...workflow } = plan.workflow
+  const documentPolicy = structuredClone(plan.documentPolicy ?? null)
+  const fingerprintPayload = {
+    schema: 'effective-workflow-plan-v1',
+    id: plan.id,
+    executionModel: plan.executionModel,
+    workflow,
+    documentPolicy: documentPolicy === null
+      ? null
+      : { id: documentPolicy.id, fingerprint: documentGovernanceFingerprint(documentPolicy) },
+    skillPolicy: plan.executionModel === 'phase-manifest' ? 'manifest-overlay' : 'step-declared',
+    reviewSteps: workflow.steps.filter((step) => step.gate === 'review').map((step) => step.id),
+    projectionSteps: workflow.steps.map((step) => ({ id: step.id, label: step.label })),
+  }
+  return {
+    version: 2,
+    workflowId: plan.id,
+    executionModel: plan.executionModel,
+    workflow,
+    documentPolicy,
+    workflowFingerprint: createHash('sha256').update(JSON.stringify(fingerprintPayload)).digest('hex'),
+  }
+}
+
 describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）', () => {
   let h: Harness
 
@@ -110,18 +149,42 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
    *  首个 step 上（whole-branch review 补的 init --workflow，见
    *  init-workflow.integration.test.ts——此前这里手改 .pipeline.yaml 的 phase 行，因为
    *  `set phase` 被默认 7 相位枚举挡下，现在有了一条不必绕开它的路）。 */
-  async function setupCustomChange(): Promise<void> {
+  async function setupHistoricalCustomChange(workflowName: string, source: string): Promise<void> {
     const wfDir = join(h.cwd, '.pipeline', 'workflows')
     await mkdir(wfDir, { recursive: true })
-    await writeFile(join(wfDir, 'skgwf.yaml'), WF, 'utf8')
-    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full', '--workflow', 'skgwf'])).toBe(0)
+    await writeFile(join(wfDir, `${workflowName}.yaml`), source, 'utf8')
+    const deps = realDeps(h.cwd, [], [])
+    const track = deps.loadRegistry().byId.get('backend')
+    if (track === undefined) throw new Error('backend track fixture missing')
+    const plan = loadEffectiveWorkflowPlan(h.cwd, workflowName, track)
+    const snapshot = legacyV2Snapshot(plan)
+    const { changeDir } = await deps.runRepo.initChange({
+      repoRoot: h.cwd,
+      name: CHANGE,
+      track: track.id,
+      reviewSeed: track.policyProfile.reviewSeed,
+      preset: 'full',
+      clock: deps.clock,
+      initialWorkflow: {
+        workflow: workflowName,
+        phase: plan.workflow.steps[0]?.id ?? 's1',
+        workflowPlanFingerprint: snapshot.workflowFingerprint,
+        workflowPlanSnapshot: snapshot,
+      },
+    })
+    await writeFile(
+      join(changeDir, '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: FIXED_CLOCK, kind: 'init' })}\n`,
+      'utf8',
+    )
+  }
+
+  async function setupCustomChange(): Promise<void> {
+    await setupHistoricalCustomChange('skgwf', WF)
   }
 
   async function setupCodexCustomChange(): Promise<void> {
-    const wfDir = join(h.cwd, '.pipeline', 'workflows')
-    await mkdir(wfDir, { recursive: true })
-    await writeFile(join(wfDir, 'codex-skgwf.yaml'), CODEX_WF, 'utf8')
-    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full', '--workflow', 'codex-skgwf'])).toBe(0)
+    await setupHistoricalCustomChange('codex-skgwf', CODEX_WF)
   }
 
   test('init 落地的 change 缺省 workflow: default（回归锚，防 gate.sh 的 yget 解析假设漂移）', async () => {

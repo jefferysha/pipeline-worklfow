@@ -3553,6 +3553,62 @@ describe('POST /api/workflows/:name —— 新建/覆盖自定义 workflow（GOA
     expect(read.json<{ name: string }>().name).toBe(name)
   })
 
+  it('完整 definition POST/GET 原样往返正交 decomposition/interaction policies', async () => {
+    const h = await start()
+    const policyBody = {
+      ...VALID_BODY,
+      root: h.root,
+      decomposition: {
+        version: 'v1', mode: 'auto-safe', target: 'child-pipelines', strategy: 'breadth-first',
+        max_items: 8, max_depth: 3,
+        auto_when: ['independent-work-items', 'cross-component-boundary'],
+        ask_when: ['hard-boundary', 'missing-authorization'],
+      },
+      interaction: { version: 'v1', mode: 'recommended-defaults' },
+    }
+    const write = await reqPost(h.port, '/api/workflows/onboarding', policyBody, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(write.status, JSON.stringify(write.json())).toBe(200)
+
+    const read = await reqGet(
+      h.port,
+      `/api/workflows/onboarding?root=${encodeURIComponent(h.root)}`,
+    )
+    expect(read.status).toBe(200)
+    expect(read.json<Record<string, unknown>>()).toMatchObject({
+      decomposition: policyBody.decomposition,
+      interaction: policyBody.interaction,
+    })
+  })
+
+  it('非法 policy POST 失败且不会覆盖当前已发布 definition', async () => {
+    const h = await start()
+    const valid = await reqPost(
+      h.port,
+      '/api/workflows/onboarding',
+      { ...VALID_BODY, root: h.root, interaction: { version: 'v1', mode: 'interactive' } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(valid.status).toBe(200)
+    const target = join(h.root, '.pipeline', 'workflows', 'onboarding.yaml')
+    const before = await readFile(target, 'utf8')
+
+    const invalid = await reqPost(
+      h.port,
+      '/api/workflows/onboarding',
+      {
+        ...VALID_BODY,
+        root: h.root,
+        decomposition: { version: 'v1', mode: 'auto-safe', max_items: 99, surprise: true },
+      },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+
+    expect(invalid.status).toBe(400)
+    expect(await readFile(target, 'utf8')).toBe(before)
+  })
+
   it('name === default → 400（即便 body 合法）', async () => {
     const h = await start()
     const r = await reqPost(

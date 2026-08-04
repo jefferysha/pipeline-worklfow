@@ -51,12 +51,10 @@ design-doc: docs/superpowers/specs/2026-08-03-workflow-decomposition-policy-desi
 
 **此处建议 /clear**
 
-## 子阶段 5：stable receipt、堆叠兼容与交付
+## 子阶段 5：堆叠兼容与交付
 
-1. 修复安装后 stable bootstrap/runtime 的可信 plugin cache 身份透传，以当前 session/turn/phase 生成真实 receipt；未知或漂移身份失败关闭。
-2. 为安装后 stable launcher 加回归，证明分支 CLI workaround 不会被计作正式完成证据。
-3. 安全衔接 PR2 head，引用 InteractionPolicy/DecisionEvent 而不复制证据合同。
-4. 运行 kernel/server/cli/automation/web 测试、build、comments/skills/hooks/adapters/bundle freshness与正式 stable receipt 验证。
-5. 提交并推送 base=PR2 branch 的 PR3。
+1. 安全衔接 PR2 最新 head，引用 InteractionPolicy/DecisionEvent 以及由 PR2 提供的 stable receipt 修复，不复制证据合同、bootstrap 源码或回归测试。
+2. 运行 kernel/server/cli/automation/web 测试、build、comments/skills/hooks/adapters/bundle freshness，并用 PR2 基线的正式 stable runtime 取得 PR3 当前 session/turn/phase 证据。
+3. 提交并推送 base=PR2 branch 的 PR3。
 
 回滚：停止创建 V3；既有 V3 继续只读并禁止被 legacy writer 覆盖。

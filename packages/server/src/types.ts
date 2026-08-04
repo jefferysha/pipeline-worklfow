@@ -14,6 +14,10 @@ import type {
   ProductPaths,
   ReadinessByTransition,
   StateStore,
+  WorkflowAction,
+  WorkflowDecompositionPolicyV1,
+  WorkflowInteractionPolicyV1,
+  WorkflowPermissionDenial,
 } from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
@@ -102,10 +106,44 @@ export interface WorkflowRulesSnapshot {
   gateByStep: Record<string, 'review' | 'confirm' | null>
   labelByStep: Record<string, string>
   outputsByStep: Record<string, string[]>
+  policy: {
+    schema: 'workflow-policy/v1'
+    configured: WorkflowConfiguredPolicySnapshot
+    frozen: {
+      workflowFingerprint: string
+      decomposition: WorkflowDecompositionPolicyV1
+      interaction: WorkflowInteractionPolicyV1
+      workflowCeiling: {
+        status: 'valid'
+        grants: readonly WorkflowAction[]
+      }
+    }
+    effective:
+      | { status: 'unavailable'; reason: 'authority-input-unavailable' }
+      | {
+          status: 'available'
+          grants: readonly WorkflowAction[]
+          denials: readonly (WorkflowPermissionDenial & { readonly action: WorkflowAction })[]
+        }
+    drift: {
+      status: 'current' | 'changed' | 'missing' | 'invalid' | 'unavailable'
+      fingerprintChanged: boolean | null
+      policyChanged: boolean | null
+    }
+  }
 }
 
+export type WorkflowConfiguredPolicySnapshot =
+  | {
+      status: 'available'
+      workflowFingerprint: string
+      decomposition: WorkflowDecompositionPolicyV1
+      interaction: WorkflowInteractionPolicyV1
+    }
+  | { status: 'missing' | 'invalid' | 'unavailable' }
+
 /** Rolling-upgrade projection consumed only by an already-open pre-v1.0.1 Dashboard. */
-export interface LegacyWorkflowRulesSnapshot extends Omit<WorkflowRulesSnapshot, 'executionModel'> {
+export interface LegacyWorkflowRulesSnapshot extends Omit<WorkflowRulesSnapshot, 'executionModel' | 'policy'> {
   nonemptyOutputByStep: Record<string, boolean>
 }
 

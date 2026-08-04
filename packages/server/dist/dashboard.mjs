@@ -7570,6 +7570,275 @@ function compileGuards(raw, path7, outputs2) {
   return asArray(raw, path7).flatMap((guard, index) => compileGuard(guard, `${path7}[${index}]`, outputs2));
 }
 
+// packages/kernel/dist/workflow/policy.js
+var WORKFLOW_DECOMPOSITION_MODES = Object.freeze([
+  "off",
+  "suggest",
+  "auto-safe",
+  "require-review"
+]);
+var WORKFLOW_DECOMPOSITION_TARGETS = Object.freeze([
+  "work-items",
+  "child-pipelines"
+]);
+var WORKFLOW_DECOMPOSITION_STRATEGIES = Object.freeze([
+  "balanced",
+  "breadth-first",
+  "depth-first"
+]);
+var WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS = Object.freeze([
+  "independent-work-items",
+  "cross-component-boundary",
+  "context-budget-risk"
+]);
+var WORKFLOW_DECOMPOSITION_ASK_CONDITIONS = Object.freeze([
+  "ambiguous-requirements",
+  "hard-boundary",
+  "missing-authorization",
+  "limit-exceeded"
+]);
+var WORKFLOW_INTERACTION_MODES = Object.freeze([
+  "interactive",
+  "recommended-defaults",
+  "afk"
+]);
+var DEFAULT_WORKFLOW_DECOMPOSITION_POLICY = Object.freeze({
+  version: "v1",
+  mode: "off",
+  target: "work-items",
+  strategy: "balanced",
+  max_items: 16,
+  max_depth: 2,
+  auto_when: Object.freeze([]),
+  ask_when: Object.freeze([])
+});
+var DEFAULT_WORKFLOW_INTERACTION_POLICY = Object.freeze({
+  version: "v1",
+  mode: "interactive"
+});
+function policyError(path7, message) {
+  throw new Error(`compileWorkflow: ${path7}: ${message}`);
+}
+function ownRecord3(value, path7) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    policyError(path7, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+  }
+  return value;
+}
+function rejectUnknownKeys(record4, keys, path7) {
+  const allowed = new Set(keys);
+  for (const key of Object.keys(record4)) {
+    if (!allowed.has(key))
+      policyError(path7, `\u672A\u77E5\u5B57\u6BB5 '${key}'`);
+  }
+}
+function closedValue(value, allowed, path7, fallback) {
+  const resolved = value === void 0 ? fallback : value;
+  if (typeof resolved !== "string" || !allowed.includes(resolved)) {
+    policyError(path7, `\u5FC5\u987B\u5C5E\u4E8E ${allowed.join("|")}\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+  }
+  return resolved;
+}
+function boundedInteger(value, fallback, min, max, path7) {
+  const resolved = value === void 0 ? fallback : value;
+  if (!Number.isInteger(resolved) || typeof resolved !== "number" || resolved < min || resolved > max) {
+    policyError(path7, `\u5FC5\u987B\u662F ${min}..${max} \u7684\u6574\u6570\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+  }
+  return resolved;
+}
+function closedList(value, allowed, path7) {
+  if (value === void 0)
+    return [];
+  if (!Array.isArray(value))
+    policyError(path7, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+  const result = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (let index = 0; index < value.length; index++) {
+    if (!Object.hasOwn(value, index) || value[index] === void 0) {
+      policyError(`${path7}[${index}]`, "\u6761\u4EF6\u4E0D\u5F97\u4E3A\u7A7A\u6216\u7A00\u758F");
+    }
+    const resolved = closedValue(value[index], allowed, `${path7}[${index}]`, allowed[0]);
+    if (seen.has(resolved))
+      policyError(`${path7}[${index}]`, `\u6761\u4EF6 '${resolved}' \u91CD\u590D`);
+    seen.add(resolved);
+    result.push(resolved);
+  }
+  return result;
+}
+function compileWorkflowDecompositionPolicy(value) {
+  if (value === void 0)
+    return structuredClone(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY);
+  const record4 = ownRecord3(value, "decomposition");
+  rejectUnknownKeys(record4, [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ], "decomposition");
+  if (record4.version !== "v1") {
+    policyError("decomposition.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record4.version)}\uFF09`);
+  }
+  return {
+    version: "v1",
+    mode: closedValue(record4.mode, WORKFLOW_DECOMPOSITION_MODES, "decomposition.mode", "off"),
+    target: closedValue(record4.target, WORKFLOW_DECOMPOSITION_TARGETS, "decomposition.target", "work-items"),
+    strategy: closedValue(record4.strategy, WORKFLOW_DECOMPOSITION_STRATEGIES, "decomposition.strategy", "balanced"),
+    max_items: boundedInteger(record4.max_items, 16, 1, 32, "decomposition.max_items"),
+    max_depth: boundedInteger(record4.max_depth, 2, 0, 4, "decomposition.max_depth"),
+    auto_when: closedList(record4.auto_when, WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS, "decomposition.auto_when"),
+    ask_when: closedList(record4.ask_when, WORKFLOW_DECOMPOSITION_ASK_CONDITIONS, "decomposition.ask_when")
+  };
+}
+function compileWorkflowInteractionPolicy(value) {
+  if (value === void 0)
+    return structuredClone(DEFAULT_WORKFLOW_INTERACTION_POLICY);
+  const record4 = ownRecord3(value, "interaction");
+  rejectUnknownKeys(record4, ["version", "mode"], "interaction");
+  if (record4.version !== "v1") {
+    policyError("interaction.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record4.version)}\uFF09`);
+  }
+  return {
+    version: "v1",
+    mode: closedValue(record4.mode, WORKFLOW_INTERACTION_MODES, "interaction.mode", "interactive")
+  };
+}
+var WORKFLOW_ACTIONS = Object.freeze([
+  "suggest-decomposition",
+  "materialize-work-items",
+  "create-child-pipeline",
+  "apply-recommended-default",
+  "enter-afk",
+  "write-filesystem",
+  "create-branch",
+  "create-pull-request",
+  "merge-pull-request",
+  "call-external-api",
+  "publish-external",
+  "operate-production",
+  "incur-cost",
+  "access-credentials",
+  "perform-irreversible-action"
+]);
+var LAYERS = ["platform", "skill", "project", "workflow", "run"];
+var LAYER_REMEDIATION = {
+  platform: "platform-policy-required",
+  skill: "skill-contract-required",
+  project: "project-policy-required",
+  workflow: "workflow-ceiling-required",
+  run: "run-grant-required"
+};
+var HARD_CLASSIFICATIONS = /* @__PURE__ */ new Set([
+  "safety-sensitive",
+  "cost",
+  "production",
+  "external-side-effect",
+  "publication",
+  "credentials",
+  "irreversible",
+  "missing-authorization"
+]);
+function evaluateWorkflowAction(input) {
+  const contributions = [];
+  const denials = [];
+  let hasStale = false;
+  let hasMissing = false;
+  const classificationValid = input.classification === "routine-reversible" || HARD_CLASSIFICATIONS.has(input.classification);
+  if (!classificationValid) {
+    hasMissing = true;
+    denials.push({
+      code: "action-classification-malformed",
+      remediation: "repair-authority-binding"
+    });
+  }
+  const runtimeLayers = input.layers;
+  const layerRecord = typeof runtimeLayers === "object" && runtimeLayers !== null && !Array.isArray(runtimeLayers) ? runtimeLayers : void 0;
+  for (const layer of LAYERS) {
+    const rawFact = layerRecord?.[layer];
+    const fact = typeof rawFact === "object" && rawFact !== null && !Array.isArray(rawFact) ? rawFact : void 0;
+    const rawStatus = fact?.status;
+    const rawGrants = fact?.grants;
+    const grants = Array.isArray(rawGrants) && rawGrants.every((grant) => typeof grant === "string" && WORKFLOW_ACTIONS.includes(grant)) && new Set(rawGrants).size === rawGrants.length ? rawGrants : void 0;
+    const status2 = grants !== void 0 && (rawStatus === "valid" || rawStatus === "missing" || rawStatus === "stale" || rawStatus === "malformed" || rawStatus === "identity-mismatch" || rawStatus === "fingerprint-mismatch") ? rawStatus : "malformed";
+    const granted = status2 === "valid" && grants?.includes(input.action) === true;
+    contributions.push({ layer, status: status2, granted });
+    if (status2 !== "valid") {
+      hasStale ||= status2 === "stale" || status2 === "identity-mismatch" || status2 === "fingerprint-mismatch";
+      hasMissing ||= status2 === "missing" || status2 === "malformed";
+      denials.push({
+        layer,
+        code: `${layer}-${status2}`,
+        remediation: status2 === "stale" ? "refresh-stale-authority" : "repair-authority-binding"
+      });
+    } else if (!granted) {
+      denials.push({ layer, code: `${layer}-denied`, remediation: LAYER_REMEDIATION[layer] });
+    }
+  }
+  if (input.action === "enter-afk" && input.interactionMode !== "afk" || input.action === "apply-recommended-default" && input.interactionMode !== "recommended-defaults") {
+    denials.push({
+      code: "interaction-mode-denied",
+      remediation: "select-compatible-interaction-mode"
+    });
+  }
+  if (input.action === "apply-recommended-default" && !canUseWorkflowRecommendedDefault({ version: "v1", mode: input.interactionMode }, input.recommendedDefaultEvidence?.question ?? {
+    question_id: "",
+    option_ids: [],
+    requiredness: "routine",
+    shown: true
+  }, input.recommendedDefaultEvidence?.decision, input.frozenRecommendedDefaultPolicy)) {
+    denials.push({
+      code: "recommended-default-evidence-required",
+      remediation: "select-compatible-interaction-mode"
+    });
+  }
+  if (classificationValid && HARD_CLASSIFICATIONS.has(input.classification)) {
+    const authority = input.authority;
+    const confirmation = input.hardConfirmation;
+    const bindingValid = confirmation?.status === "confirmed" && nonEmptyString(authority?.authority_id) && nonEmptyString(authority.workflow_run_id) && /^[0-9a-f]{64}$/.test(authority.workflow_fingerprint) && confirmation.authority_id === authority.authority_id && confirmation.action === input.action && confirmation.workflow_run_id === authority.workflow_run_id && confirmation.workflow_fingerprint === authority.workflow_fingerprint;
+    if (!bindingValid) {
+      denials.push({
+        code: confirmation?.status === "confirmed" ? "hard-confirmation-binding-mismatch" : "hard-confirmation-required",
+        remediation: "request-hard-confirmation"
+      });
+    }
+  }
+  if (denials.length === 0) {
+    return { action: input.action, allowed: true, status: "allowed", contributions, denials };
+  }
+  const hardBlocked = hasMissing || denials.some((denial) => denial.code.startsWith("hard-confirmation-"));
+  return {
+    action: input.action,
+    allowed: false,
+    status: hardBlocked ? "hard-blocked" : hasStale ? "stale" : "denied",
+    contributions,
+    denials
+  };
+}
+function workflowPolicyPermissionLayer(policy2) {
+  const grants = [];
+  if (policy2.decomposition.mode !== "off")
+    grants.push("suggest-decomposition");
+  if (policy2.interaction.mode === "recommended-defaults")
+    grants.push("apply-recommended-default");
+  if (policy2.interaction.mode === "afk")
+    grants.push("enter-afk");
+  return { status: "valid", grants };
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function uniqueNonEmptyStrings(value) {
+  return Array.isArray(value) && value.length > 0 && value.every(nonEmptyString) && new Set(value).size === value.length;
+}
+function canUseWorkflowRecommendedDefault(interaction, question, decision, frozenPolicy) {
+  const questionOptions = uniqueNonEmptyStrings(question.option_ids) ? new Set(question.option_ids) : void 0;
+  const selectedOptions = uniqueNonEmptyStrings(decision?.selected_option_ids) ? decision.selected_option_ids : void 0;
+  return interaction.mode === "recommended-defaults" && nonEmptyString(question.question_id) && question.requiredness === "routine" && question.shown === false && decision?.question_id === question.question_id && decision?.mode === "recommended-default" && nonEmptyString(frozenPolicy?.id) && nonEmptyString(frozenPolicy.version) && nonEmptyString(frozenPolicy.rule_id) && decision.policy?.id === frozenPolicy.id && decision.policy.version === frozenPolicy.version && decision.policy.rule_id === frozenPolicy.rule_id && nonEmptyString(decision.rationale_code) && selectedOptions !== void 0 && questionOptions !== void 0 && selectedOptions.every((option) => questionOptions.has(option));
+}
+
 // packages/kernel/dist/workflow/compile.js
 var KNOWN_FIELDS3 = new Set(FIELD_ORDER);
 var FIELD_TYPES = ["string", "file_path", "boolean"];
@@ -7583,7 +7852,14 @@ var ACTION_TYPES = /* @__PURE__ */ new Set([
 var PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills", "effective-phase-skills"]);
 var CUSTOM_PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills"]);
 var DEFAULT_PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills", "effective-phase-skills"]);
-var WORKFLOW_KEYS = /* @__PURE__ */ new Set(["name", "openspecContract", "documentContract", "steps"]);
+var WORKFLOW_KEYS = /* @__PURE__ */ new Set([
+  "name",
+  "decomposition",
+  "interaction",
+  "openspecContract",
+  "documentContract",
+  "steps"
+]);
 var STEP_KEYS = /* @__PURE__ */ new Set([
   "id",
   "label",
@@ -7836,6 +8112,8 @@ function compileWith(def, allowedPolicies) {
   const rec = asRecord2(def, "workflow");
   rejectExtraKeys2(rec, WORKFLOW_KEYS, "workflow");
   const name = nonemptyString(rec.name, "name");
+  const decomposition = compileWorkflowDecompositionPolicy(rec.decomposition);
+  const interaction = compileWorkflowInteractionPolicy(rec.interaction);
   const openspecContract = rec.openspecContract;
   if (openspecContract !== void 0 && openspecContract !== "required") {
     compileError2("openspecContract", `\u5FC5\u987B\u662F 'required'\uFF08\u5B9E\u9645 ${JSON.stringify(openspecContract)}\uFF09`);
@@ -7847,6 +8125,8 @@ function compileWith(def, allowedPolicies) {
   const steps = asArray2(rec.steps, "steps").map((s, i) => compileStep(s, i, allowedPolicies));
   return deepFreeze4({
     name,
+    decomposition,
+    interaction,
     ...openspecContract === void 0 ? {} : { openspecContract },
     ...documentContract === void 0 ? {} : { documentContract },
     steps
@@ -7861,123 +8141,6 @@ function decodeWorkflowDef(value) {
 }
 function compileDefaultWorkflow(def) {
   return compileWith(def, DEFAULT_PRODUCER_POLICIES);
-}
-
-// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
-var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
-var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
-var retiredQualifiedSkill = (id2) => `${RETIRED_SKILL_NAMESPACE}:${id2}`;
-var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
-  id: "openspec-v1",
-  steps: STEPS,
-  outputsByStep: {
-    open: [
-      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
-    ],
-    explore: [
-      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
-      {
-        kind: "adr",
-        producerCandidates: [
-          "pipeline-explore",
-          retiredQualifiedSkill("pipeline-explore"),
-          "brainstorming",
-          "superpowers:brainstorming"
-        ]
-      }
-    ],
-    spec: [
-      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
-      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
-    ],
-    build: [],
-    verify: [{
-      kind: "verification-report",
-      producerCandidates: [
-        "verification-before-completion",
-        "superpowers:verification-before-completion",
-        "pipeline-verify",
-        retiredQualifiedSkill("pipeline-verify")
-      ]
-    }],
-    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
-    archive: []
-  },
-  mutableByStep: {
-    open: [],
-    explore: [
-      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
-      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
-      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
-    ],
-    spec: [
-      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
-    ],
-    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
-    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
-    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
-    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
-  },
-  readsByStep: {
-    open: [],
-    explore: ["proposal", "openspec-design", "tasks"],
-    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
-    build: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan"
-    ],
-    verify: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan"
-    ],
-    ship: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan",
-      "verification-report"
-    ],
-    archive: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan",
-      "verification-report",
-      "applied-spec"
-    ]
-  }
-};
-var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
-function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
-  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
-    return void 0;
-  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
 }
 
 // packages/kernel/dist/workflow/loadWorkflow.js
@@ -8123,6 +8286,76 @@ function parseDocumentContract(cursor, keyIndent) {
   return { version, slots, reads };
 }
 
+// packages/kernel/dist/workflow/parse-policy.js
+function indentOf2(line) {
+  return line.length - line.trimStart().length;
+}
+function inlineList(raw) {
+  const trimmed = raw.trim();
+  if (trimmed === "[]")
+    return [];
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u671F\u671B [a, b] \u5F62\u6001\u7684\u5355\u884C\u5217\u8868\uFF0C\u5B9E\u9645 '${raw}'`);
+  }
+  const items = trimmed.slice(1, -1).split(",").map((item2) => item2.trim());
+  if (items.some((item2) => item2 === "")) {
+    throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u5355\u884C\u5217\u8868\u4E0D\u5F97\u5305\u542B\u7A7A\u9879\uFF0C\u5B9E\u9645 '${raw}'`);
+  }
+  return items;
+}
+function parsePolicyBlock(cur, key, allowedKeys) {
+  const result = {};
+  while (cur.i < cur.lines.length) {
+    const line = cur.lines[cur.i] ?? "";
+    if (line.trim() === "") {
+      cur.i++;
+      continue;
+    }
+    if (indentOf2(line) === 0)
+      break;
+    const match = /^\s{2}([a-z_]+):\s*(.*?)\s*$/.exec(line);
+    if (!match)
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u51FA\u73B0\u672A\u77E5\u5B57\u6BB5\u884C '${line.trim()}'`);
+    const field = match[1] ?? "";
+    const raw = match[2] ?? "";
+    if (!allowedKeys.includes(field))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u672A\u77E5\u5B57\u6BB5 '${field}'`);
+    if (Object.hasOwn(result, field))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u91CD\u590D\u58F0\u660E`);
+    if (raw === "")
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u7F3A\u503C`);
+    if (field === "auto_when" || field === "ask_when")
+      result[field] = inlineList(raw);
+    else if (field === "max_items" || field === "max_depth") {
+      if (!/^-?\d+$/.test(raw))
+        throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u5FC5\u987B\u662F\u6574\u6570`);
+      result[field] = Number(raw);
+    } else
+      result[field] = raw;
+    cur.i++;
+  }
+  return result;
+}
+function parseDecompositionPolicy(cur) {
+  const raw = parsePolicyBlock(cur, "decomposition", [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ]);
+  compileWorkflowDecompositionPolicy(raw);
+  return raw;
+}
+function parseInteractionPolicy(cur) {
+  const raw = parsePolicyBlock(cur, "interaction", ["version", "mode"]);
+  compileWorkflowInteractionPolicy(raw);
+  return raw;
+}
+
 // packages/kernel/dist/workflow/parse.js
 function parseInlineList2(raw) {
   const trimmed = raw.trim();
@@ -8133,7 +8366,7 @@ function parseInlineList2(raw) {
   }
   return trimmed.slice(1, -1).split(",").map((s) => s.trim()).filter((s) => s.length > 0);
 }
-function indentOf2(line) {
+function indentOf3(line) {
   return line.length - line.trimStart().length;
 }
 function parsePromptBlock(cur, keyIndent) {
@@ -8143,7 +8376,7 @@ function parsePromptBlock(cur, keyIndent) {
     const line = cur.lines[cur.i] ?? "";
     if (line.trim() === "" && line.length < contentIndent)
       break;
-    if (indentOf2(line) < contentIndent)
+    if (indentOf3(line) < contentIndent)
       break;
     out.push(line.slice(contentIndent));
     cur.i++;
@@ -8160,7 +8393,7 @@ function parseSkillsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(line);
     if (!idMatch)
@@ -8170,7 +8403,7 @@ function parseSkillsBlock(cur, baseIndent) {
     let depends_on;
     const next = cur.lines[cur.i] ?? "";
     const depMatch = /^\s*depends_on:\s*(\[.*\])\s*$/.exec(next);
-    if (depMatch && indentOf2(next) > baseIndent) {
+    if (depMatch && indentOf3(next) > baseIndent) {
       depends_on = parseInlineList2(depMatch[1] ?? "");
       cur.i++;
     }
@@ -8186,7 +8419,7 @@ function parseFieldRefBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const fieldMatch = /^\s*-\s+field:\s*(\S+)\s*$/.exec(line);
     if (!fieldMatch)
@@ -8205,7 +8438,7 @@ function parseWhenBlock(cur, whenIndent) {
   while (cur.i < cur.lines.length && (cur.lines[cur.i] ?? "").trim() === "")
     cur.i++;
   const line = cur.lines[cur.i] ?? "";
-  if (indentOf2(line) <= whenIndent) {
+  if (indentOf3(line) <= whenIndent) {
     throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Awhen \u5757\u7F3A track_in/track_not_in \u8C13\u8BCD\u884C");
   }
   const m = /^\s*(track_in|track_not_in):\s*(\[.*\])\s*$/.exec(line);
@@ -8222,12 +8455,12 @@ function parseArtifactsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const fieldMatch = /^\s*-\s+field:\s*(\S+)\s*$/.exec(line);
     if (!fieldMatch)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     let type;
     let producerPolicy;
@@ -8238,7 +8471,7 @@ function parseArtifactsBlock(cur, baseIndent) {
         cur.i++;
         continue;
       }
-      if (indentOf2(l) <= itemIndent)
+      if (indentOf3(l) <= itemIndent)
         break;
       let m;
       if (m = /^\s*type:\s*(\S+)\s*$/.exec(l)) {
@@ -8254,7 +8487,7 @@ function parseArtifactsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*required_when:\s*$/.test(l)) {
-        const wi = indentOf2(l);
+        const wi = indentOf3(l);
         cur.i++;
         requiredWhen = parseWhenBlock(cur, wi);
         continue;
@@ -8278,7 +8511,7 @@ function parseGuardEntry(cur, type, itemIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) <= itemIndent)
+    if (indentOf3(line) <= itemIndent)
       break;
     let m;
     if (m = /^\s*n:\s*(\d+)\s*$/.exec(line)) {
@@ -8302,7 +8535,7 @@ function parseGuardEntry(cur, type, itemIndent) {
       continue;
     }
     if (/^\s*when:\s*$/.test(line)) {
-      const wi = indentOf2(line);
+      const wi = indentOf3(line);
       cur.i++;
       f.when = parseWhenBlock(cur, wi);
       continue;
@@ -8369,12 +8602,12 @@ function parseGuardsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const m = /^\s*-\s+type:\s*(\S+)\s*$/.exec(line);
     if (!m)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     guards.push(parseGuardEntry(cur, m[1] ?? "", itemIndent));
   }
@@ -8395,7 +8628,7 @@ function parseActionsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const m = /^\s*-\s+type:\s*(\S+)\s*$/.exec(line);
     if (!m)
@@ -8417,12 +8650,12 @@ function parseTransitionsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const eventMatch = /^\s*-\s+event:\s*(\S+)\s*$/.exec(line);
     if (!eventMatch)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     const toLine = cur.lines[cur.i] ?? "";
     const toMatch = /^\s*to:\s*(\S+)\s*$/.exec(toLine);
@@ -8437,7 +8670,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         cur.i++;
         continue;
       }
-      if (indentOf2(l) <= itemIndent)
+      if (indentOf3(l) <= itemIndent)
         break;
       if (/^\s*guards:\s*\[\]\s*$/.test(l)) {
         guards = [];
@@ -8445,7 +8678,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*guards:\s*$/.test(l)) {
-        const gi = indentOf2(l);
+        const gi = indentOf3(l);
         cur.i++;
         guards = parseGuardsBlock(cur, gi);
         continue;
@@ -8456,7 +8689,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*actions:\s*$/.test(l)) {
-        const ai = indentOf2(l);
+        const ai = indentOf3(l);
         cur.i++;
         actions = parseActionsBlock(cur, ai);
         continue;
@@ -8478,7 +8711,7 @@ function parseStep(cur) {
   if (!idMatch)
     throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u671F\u671B '- id: <name>'\uFF0C\u5B9E\u9645 '${idLine}'`);
   const id2 = idMatch[1] ?? "";
-  const baseIndent = indentOf2(idLine) + 2;
+  const baseIndent = indentOf3(idLine) + 2;
   cur.i++;
   let label = "";
   let gate = null;
@@ -8495,7 +8728,7 @@ function parseStep(cur) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent - 2)
+    if (indentOf3(line) < baseIndent - 2)
       break;
     const labelMatch = /^\s*label:\s*(.+)$/.exec(line);
     if (labelMatch) {
@@ -8511,7 +8744,7 @@ function parseStep(cur) {
       continue;
     }
     if (/^\s*prompt:\s*\|-\s*$/.test(line)) {
-      const keyIndent = indentOf2(line);
+      const keyIndent = indentOf3(line);
       cur.i++;
       prompt = parsePromptBlock(cur, keyIndent);
       continue;
@@ -8598,18 +8831,46 @@ function parseWorkflow(content) {
   let stepLine = 1;
   let openspecContract;
   let documentContract;
-  const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(lines[stepLine] ?? "");
-  if (contractLine) {
-    if (contractLine[1] !== "required") {
-      throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u53EA\u652F\u6301 'required'");
+  let decomposition;
+  let interaction;
+  while ((lines[stepLine] ?? "").trim() !== "steps:") {
+    const line = lines[stepLine] ?? "";
+    const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(line);
+    if (contractLine) {
+      if (openspecContract !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u91CD\u590D\u58F0\u660E");
+      if (contractLine[1] !== "required") {
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u53EA\u652F\u6301 'required'");
+      }
+      openspecContract = "required";
+      stepLine++;
+      continue;
     }
-    openspecContract = "required";
-    stepLine++;
-  }
-  if ((lines[stepLine] ?? "").trim() === "document_contract:") {
-    const cur2 = { lines, i: stepLine + 1 };
-    documentContract = parseDocumentContract(cur2, indentOf2(lines[stepLine] ?? ""));
-    stepLine = cur2.i;
+    if (line.trim() === "document_contract:") {
+      if (documentContract !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Adocument_contract \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      documentContract = parseDocumentContract(cur2, indentOf3(line));
+      stepLine = cur2.i;
+      continue;
+    }
+    if (line.trim() === "decomposition:") {
+      if (decomposition !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Adecomposition \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      decomposition = parseDecompositionPolicy(cur2);
+      stepLine = cur2.i;
+      continue;
+    }
+    if (line.trim() === "interaction:") {
+      if (interaction !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Ainteraction \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      interaction = parseInteractionPolicy(cur2);
+      stepLine = cur2.i;
+      continue;
+    }
+    throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aname \u540E\u5FC5\u987B\u662F 'steps:'\u3001policies\u3001'openspec_contract: required' \u6216 document_contract");
   }
   if (openspecContract && documentContract) {
     throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u4E0E document_contract \u4E0D\u5F97\u540C\u65F6\u58F0\u660E");
@@ -8631,6 +8892,8 @@ function parseWorkflow(content) {
   }
   return {
     name: nameMatch[1] ?? "",
+    ...decomposition ? { decomposition } : {},
+    ...interaction ? { interaction } : {},
     ...openspecContract ? { openspecContract } : {},
     ...documentContract ? { documentContract } : {},
     steps
@@ -8776,6 +9039,197 @@ ${errors.map((e) => `  - ${e}`).join("\n")}`);
   return wf;
 }
 
+// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
+var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
+var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
+var retiredQualifiedSkill = (id2) => `${RETIRED_SKILL_NAMESPACE}:${id2}`;
+var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
+  id: "openspec-v1",
+  steps: STEPS,
+  outputsByStep: {
+    open: [
+      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
+    ],
+    explore: [
+      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
+      {
+        kind: "adr",
+        producerCandidates: [
+          "pipeline-explore",
+          retiredQualifiedSkill("pipeline-explore"),
+          "brainstorming",
+          "superpowers:brainstorming"
+        ]
+      }
+    ],
+    spec: [
+      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
+      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
+    ],
+    build: [],
+    verify: [{
+      kind: "verification-report",
+      producerCandidates: [
+        "verification-before-completion",
+        "superpowers:verification-before-completion",
+        "pipeline-verify",
+        retiredQualifiedSkill("pipeline-verify")
+      ]
+    }],
+    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
+    archive: []
+  },
+  mutableByStep: {
+    open: [],
+    explore: [
+      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
+    ],
+    spec: [
+      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
+    ],
+    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
+    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
+    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
+    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
+  },
+  readsByStep: {
+    open: [],
+    explore: ["proposal", "openspec-design", "tasks"],
+    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
+    build: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    verify: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    ship: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report"
+    ],
+    archive: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report",
+      "applied-spec"
+    ]
+  }
+};
+var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
+function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
+  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
+    return void 0;
+  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
+}
+
+// packages/kernel/dist/workflow/effective-plan-snapshot-compat.js
+function historicalWorkflowFingerprint(workflowId, executionModel, workflow, documentPolicy, documentFingerprint) {
+  const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
+  const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
+  const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
+  return sha256Hex(JSON.stringify({
+    schema: "effective-workflow-plan-v1",
+    id: workflowId,
+    executionModel,
+    workflow,
+    documentPolicy: documentPolicy === void 0 ? null : { id: documentPolicy.id, fingerprint: documentFingerprint(documentPolicy) },
+    skillPolicy,
+    reviewSteps,
+    projectionSteps
+  }));
+}
+function restoreLegacyWorkflowPlan(snapshot, track, documentFingerprint, build, fail) {
+  const legacyWorkflow = structuredClone(snapshot.workflow);
+  if (Object.hasOwn(legacyWorkflow, "decomposition") || Object.hasOwn(legacyWorkflow, "interaction")) {
+    return fail("legacy workflow plan snapshot \u4E0D\u5F97\u643A\u5E26 V3 policy \u5B57\u6BB5");
+  }
+  const workflow = {
+    ...legacyWorkflow,
+    decomposition: compileWorkflowDecompositionPolicy(void 0),
+    interaction: compileWorkflowInteractionPolicy(void 0)
+  };
+  let documentPolicy = snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) ?? void 0 : documentGovernancePolicy(snapshot.workflowId, workflow);
+  let historical = historicalWorkflowFingerprint(snapshot.workflowId, snapshot.executionModel, legacyWorkflow, documentPolicy, documentFingerprint);
+  if (historical !== snapshot.workflowFingerprint && snapshot.version === 1) {
+    const preTenonPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
+    if (preTenonPolicy !== void 0) {
+      documentPolicy = preTenonPolicy;
+      historical = historicalWorkflowFingerprint(snapshot.workflowId, snapshot.executionModel, legacyWorkflow, documentPolicy, documentFingerprint);
+    }
+  }
+  if (historical !== snapshot.workflowFingerprint) {
+    return fail(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, historical=${historical}\uFF09`);
+  }
+  return build(workflow, documentPolicy ?? null, snapshot.workflowFingerprint, track);
+}
+function exactPolicyShape(value, normalized2, keys) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && keys.every((key) => Object.hasOwn(value, key)) && JSON.stringify(normalized2) === JSON.stringify(Object.fromEntries(keys.map((key) => [key, Reflect.get(value, key)])));
+}
+function validateV3WorkflowPolicies(snapshot, fail) {
+  let decomposition;
+  let interaction;
+  let workflowDecomposition;
+  let workflowInteraction;
+  try {
+    decomposition = compileWorkflowDecompositionPolicy(snapshot.decomposition);
+    interaction = compileWorkflowInteractionPolicy(snapshot.interaction);
+    workflowDecomposition = compileWorkflowDecompositionPolicy(snapshot.workflow.decomposition);
+    workflowInteraction = compileWorkflowInteractionPolicy(snapshot.workflow.interaction);
+  } catch (error2) {
+    return fail(`workflow plan snapshot frozen policy \u65E0\u6548\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+  }
+  const decompositionKeys = [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ];
+  if (!exactPolicyShape(snapshot.decomposition, decomposition, decompositionKeys) || !exactPolicyShape(snapshot.interaction, interaction, ["version", "mode"]) || !exactPolicyShape(snapshot.workflow.decomposition, workflowDecomposition, decompositionKeys) || !exactPolicyShape(snapshot.workflow.interaction, workflowInteraction, ["version", "mode"]) || JSON.stringify(decomposition) !== JSON.stringify(workflowDecomposition) || JSON.stringify(interaction) !== JSON.stringify(workflowInteraction)) {
+    fail("workflow plan snapshot frozen policy \u5F62\u72B6\u6216\u7ED1\u5B9A\u975E\u6CD5");
+  }
+}
+
 // packages/kernel/dist/workflow/effective-plan.js
 var DocumentGovernanceBindingError = class extends Error {
   _tag = "DocumentGovernanceBindingError";
@@ -8826,17 +9280,19 @@ function assertValid(definition, origin) {
     throw new Error(`effective workflow \u65E0\u6548\uFF1A
 ${errors.map((error2) => `  - ${error2}`).join("\n")}`);
 }
-function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) {
+function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy, frozenWorkflowFingerprint) {
   const documentPolicy = frozenDocumentPolicy === void 0 ? documentGovernancePolicy(id2, workflow) : frozenDocumentPolicy ?? void 0;
   const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
   const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
   const stepLabelSource = executionModel === "phase-manifest" ? "localized-builtin" : "workflow-defined";
-  const workflowFingerprint = sha256Hex(JSON.stringify({
-    schema: "effective-workflow-plan-v1",
+  const workflowFingerprint = frozenWorkflowFingerprint ?? sha256Hex(JSON.stringify({
+    schema: "effective-workflow-plan-v2",
     id: id2,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     documentPolicy: documentPolicy === void 0 ? null : {
       id: documentPolicy.id,
       fingerprint: documentGovernanceFingerprint(documentPolicy)
@@ -8851,6 +9307,8 @@ function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) 
     id: id2,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     ...documentPolicy === void 0 ? {} : { documentPolicy },
     skillPolicy,
     reviewSteps,
@@ -8895,33 +9353,45 @@ function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) 
   });
 }
 function workflowPlanSnapshot(plan) {
+  const current = planFromIr(plan.id, plan.executionModel, plan.workflow, void 0, plan.documentPolicy ?? null);
+  if (current.workflowFingerprint !== plan.workflowFingerprint) {
+    const { decomposition: _decomposition, interaction: _interaction, ...legacyWorkflow } = plan.workflow;
+    return freeze({
+      version: 2,
+      workflowId: plan.id,
+      executionModel: plan.executionModel,
+      workflow: structuredClone(legacyWorkflow),
+      documentPolicy: structuredClone(plan.documentPolicy ?? null),
+      workflowFingerprint: plan.workflowFingerprint
+    });
+  }
   return freeze({
-    version: 2,
+    version: 3,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
     documentPolicy: structuredClone(plan.documentPolicy ?? null),
+    decomposition: structuredClone(plan.decomposition),
+    interaction: structuredClone(plan.interaction),
     workflowFingerprint: plan.workflowFingerprint
   });
 }
 function effectiveWorkflowPlanFromSnapshot(snapshot, track) {
-  if (snapshot.version !== 1 && snapshot.version !== 2 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
+  if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
     throw new DocumentGovernanceBindingError("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : void 0);
+  if (snapshot.version === 1 || snapshot.version === 2) {
+    return restoreLegacyWorkflowPlan(snapshot, track, documentGovernanceFingerprint, (workflow, policy2, fingerprint, frozenTrack) => planFromIr(snapshot.workflowId, snapshot.executionModel, workflow, frozenTrack, policy2, fingerprint), (message) => {
+      throw new DocumentGovernanceBindingError(message);
+    });
+  }
+  validateV3WorkflowPolicies(snapshot, (message) => {
+    throw new DocumentGovernanceBindingError(message);
+  });
+  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, structuredClone(snapshot.documentPolicy));
   if (plan.workflowFingerprint === snapshot.workflowFingerprint)
     return plan;
-  let legacyFingerprint;
-  if (snapshot.version === 1) {
-    const legacyPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
-    if (legacyPolicy !== void 0) {
-      const legacyPlan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, legacyPolicy);
-      legacyFingerprint = legacyPlan.workflowFingerprint;
-      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint)
-        return legacyPlan;
-    }
-  }
-  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}${legacyFingerprint === void 0 ? "" : `, legacy=${legacyFingerprint}`}\uFF09`);
+  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}\uFF09`);
 }
 function compileEffectiveWorkflowPlan(id2, provided, track) {
   if (id2 === "default") {
@@ -8992,11 +9462,11 @@ function resolveBoundEffectiveWorkflowPlan(id2, binding, loadCompiled, track, sn
   if (effectiveProfile !== boundProfile) {
     throw new DocumentGovernanceBindingError(`workflow '${id2}' document governance profile \u4E0D\u53EF\u53D8\uFF1A\u5DF2\u7ED1\u5B9A '${boundProfile}'\uFF0C\u5F53\u524D '${effectiveProfile}'`);
   }
-  const effectivePolicy = plan.documentPolicy;
-  if (effectivePolicy === void 0) {
+  const effectivePolicy2 = plan.documentPolicy;
+  if (effectivePolicy2 === void 0) {
     throw new DocumentGovernanceBindingError(`workflow '${id2}' \u5DF2\u7ED1\u5B9A document governance profile '${boundProfile}'\uFF0C\u5F53\u524D policy \u7F3A\u5931`);
   }
-  if (boundFingerprint !== void 0 && documentGovernanceFingerprint(effectivePolicy) !== boundFingerprint) {
+  if (boundFingerprint !== void 0 && documentGovernanceFingerprint(effectivePolicy2) !== boundFingerprint) {
     throw new DocumentGovernanceBindingError(`workflow '${id2}' document governance fingerprint \u4E0E\u521D\u59CB\u5316\u7ED1\u5B9A\u4E0D\u4E00\u81F4`);
   }
   if (boundWorkflowFingerprint !== void 0 && plan.workflowFingerprint !== boundWorkflowFingerprint) {
@@ -9201,13 +9671,13 @@ function errorCode3(error2) {
   const value = Reflect.get(error2, "code");
   return typeof value === "string" ? value : void 0;
 }
-function ownRecord3(value) {
+function ownRecord4(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return void 0;
   return Object.fromEntries(Object.entries(value));
 }
 function isWorkflowIr(value) {
-  const record4 = ownRecord3(value);
+  const record4 = ownRecord4(value);
   return record4 !== void 0 && typeof record4.name === "string" && Array.isArray(record4.steps);
 }
 function parseWorkflowPlanSnapshot(raw) {
@@ -9217,12 +9687,21 @@ function parseWorkflowPlanSnapshot(raw) {
   } catch {
     throw new Error("workflow plan snapshot \u4E0D\u662F\u5408\u6CD5 JSON");
   }
-  const envelope = ownRecord3(value);
-  const plan = ownRecord3(envelope?.plan);
+  const envelope = ownRecord4(value);
+  const plan = ownRecord4(envelope?.plan);
   const planVersion = plan?.version;
-  const allowedPlanKeys = planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
+  const allowedPlanKeys = planVersion === 3 ? [
+    "version",
+    "workflowId",
+    "executionModel",
+    "workflow",
+    "documentPolicy",
+    "decomposition",
+    "interaction",
+    "workflowFingerprint"
+  ] : planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
   const documentPolicy = plan?.documentPolicy;
-  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || planVersion === 2 && documentPolicy !== null && ownRecord3(documentPolicy) === void 0 || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
+  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 && planVersion !== 3 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || (planVersion === 2 || planVersion === 3) && documentPolicy !== null && ownRecord4(documentPolicy) === void 0 || planVersion === 3 && (ownRecord4(plan.decomposition) === void 0 || ownRecord4(plan.interaction) === void 0) || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
     throw new Error("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
   const snapshot = planVersion === 1 ? {
@@ -9231,12 +9710,21 @@ function parseWorkflowPlanSnapshot(raw) {
     executionModel: plan.executionModel,
     workflow: plan.workflow,
     workflowFingerprint: plan.workflowFingerprint
-  } : {
+  } : planVersion === 2 ? {
     version: 2,
     workflowId: plan.workflowId,
     executionModel: plan.executionModel,
     workflow: plan.workflow,
     documentPolicy,
+    workflowFingerprint: plan.workflowFingerprint
+  } : {
+    version: 3,
+    workflowId: plan.workflowId,
+    executionModel: plan.executionModel,
+    workflow: plan.workflow,
+    documentPolicy,
+    decomposition: plan.decomposition,
+    interaction: plan.interaction,
     workflowFingerprint: plan.workflowFingerprint
   };
   effectiveWorkflowPlanFromSnapshot(snapshot);
@@ -11975,7 +12463,7 @@ function stripComment(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function indentOf3(line) {
+function indentOf4(line) {
   let n = 0;
   while (n < line.length && line[n] === " ")
     n++;
@@ -12007,6 +12495,42 @@ function parseScalarValue(rest, ctx) {
   }
   const m = s.match(/^(.*?)\s#/);
   return (m ? m[1] : s).trimEnd();
+}
+function parseSkillActionAuthorityBlock(lines, start, path7) {
+  let version;
+  const grants = /* @__PURE__ */ new Map();
+  let i = start;
+  while (i < lines.length) {
+    const line = stripComment(lines[i]);
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+    if (!/^\s/.test(line))
+      break;
+    const entry = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
+    if (!entry)
+      throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u6761\u76EE\u683C\u5F0F\u9519\u8BEF`);
+    const key = entry[1];
+    const raw = entry[2].trim();
+    if (key === "version") {
+      if (version !== void 0 || raw === "")
+        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.version \u91CD\u590D\u6216\u4E3A\u7A7A`);
+      version = parseScalarValue(raw, "skill_action_authority.version");
+    } else {
+      if (grants.has(key))
+        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.${key} \u91CD\u590D`);
+      const list = raw.match(/^\[(.*)\]$/);
+      if (list && list[1].trim() !== "" && list[1].split(",").some((item2) => item2.trim() === "")) {
+        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.${key} \u542B\u7A7A action`);
+      }
+      grants.set(key, parseFlowList(raw, `skill_action_authority.${key}`));
+    }
+    i++;
+  }
+  if (version === void 0)
+    throw new ManifestError(`${path7} skill_action_authority \u7F3A version`);
+  return { value: { version, grants }, next: i };
 }
 function decodeDoubleQuotedYamlKey(token) {
   if (!token.startsWith('"') || !token.endsWith('"'))
@@ -12089,12 +12613,12 @@ function hasDeprecatedRouterKeyAt(lines, index) {
   const current = lines[index];
   if (current.trim() !== "?")
     return false;
-  const parentIndent = indentOf3(current);
+  const parentIndent = indentOf4(current);
   for (let i = index + 1; i < lines.length; i++) {
     const candidate = lines[i];
     if (candidate.trim() === "" || candidate.trimStart().startsWith("#"))
       continue;
-    if (indentOf3(candidate) <= parentIndent)
+    if (indentOf4(candidate) <= parentIndent)
       return false;
     return decodeYamlKey(candidate.trim()) === "router_patterns";
   }
@@ -12132,7 +12656,7 @@ function parseBreadcrumbBlock(lines, start, path7) {
       i++;
       continue;
     }
-    const ind = indentOf3(raw);
+    const ind = indentOf4(raw);
     if (ind === 0)
       break;
     if (raw.trimStart().startsWith("#")) {
@@ -12156,7 +12680,7 @@ function parseBreadcrumbBlock(lines, start, path7) {
           i++;
           continue;
         }
-        if (indentOf3(bl) <= keyIndent)
+        if (indentOf4(bl) <= keyIndent)
           break;
         blk.push(bl);
         i++;
@@ -12164,7 +12688,7 @@ function parseBreadcrumbBlock(lines, start, path7) {
       const firstContent = blk.find((x) => x !== "");
       let value = "";
       if (firstContent !== void 0) {
-        const blockIndent = indentOf3(firstContent);
+        const blockIndent = indentOf4(firstContent);
         value = blk.map((x) => x === "" ? "" : x.slice(blockIndent)).join("\n").replace(/\n+$/, "");
       }
       map.set(key, value);
@@ -12246,6 +12770,14 @@ function scanSections(text3, path7) {
       else
         out.recommended_skills = r.map;
       i = r.next;
+    } else if (key === "skill_action_authority") {
+      if (rest !== "")
+        throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+      if (out.skill_action_authority !== void 0)
+        throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u5C0F\u8282\u91CD\u590D`);
+      const r = parseSkillActionAuthorityBlock(lines, i + 1, path7);
+      out.skill_action_authority = r.value;
+      i = r.next;
     } else if (key === "breadcrumb") {
       if (rest !== "")
         throw new ManifestError(`${path7}:${i + 1} breadcrumb \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
@@ -12292,6 +12824,24 @@ function deriveSkillTable(raw, declared, section2) {
   }
   return table;
 }
+function deriveSkillActionAuthority(raw) {
+  if (!raw)
+    return null;
+  if (raw.version !== "v1")
+    throw new ManifestError(`skill_action_authority.version '${raw.version}' \u4E0D\u53D7\u652F\u6301\uFF08\u5408\u6CD5\uFF1Av1\uFF09`);
+  const actions = new Set(WORKFLOW_ACTIONS);
+  const grants = {};
+  for (const [profile, values] of raw.grants) {
+    if (!SKILL_TRACK_SET.has(profile)) {
+      throw new ManifestError(`skill_action_authority \u542B\u672A\u77E5 profile '${profile}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/free/_all\uFF09`);
+    }
+    if (new Set(values).size !== values.length || values.some((action) => !actions.has(action))) {
+      throw new ManifestError(`skill_action_authority.${profile} \u542B\u672A\u77E5\u6216\u91CD\u590D action`);
+    }
+    grants[profile] = values;
+  }
+  return { version: "v1", grants };
+}
 function loadManifest(path7) {
   const text3 = readFileSync8(path7, "utf8");
   const raw = scanSections(text3, path7);
@@ -12333,6 +12883,7 @@ function loadManifest(path7) {
   });
   const mandatorySkills = deriveSkillTable(raw.mandatory_skills, declared, "mandatory_skills");
   const recommendedSkills = deriveSkillTable(raw.recommended_skills, declared, "recommended_skills");
+  const skillActionAuthority = deriveSkillActionAuthority(raw.skill_action_authority);
   const breadcrumbs = {};
   if (raw.breadcrumb) {
     for (const [phaseName, prose] of raw.breadcrumb) {
@@ -12342,7 +12893,7 @@ function loadManifest(path7) {
       breadcrumbs[ph] = prose;
     }
   }
-  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, breadcrumbs };
+  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, skillActionAuthority, breadcrumbs };
 }
 
 // packages/kernel/dist/flow/engine.js
@@ -16473,7 +17024,7 @@ function assertLoopRunner(value) {
 }
 
 // packages/kernel/dist/loops/yamlBlock.js
-function indentOf4(line) {
+function indentOf5(line) {
   return line.length - line.replace(/^\s*/, "").length;
 }
 function locateLoop(lines, loopId) {
@@ -16489,7 +17040,7 @@ function locateLoop(lines, loopId) {
       const line = required(lines[j]);
       if (line.trim() === "")
         continue;
-      if (indentOf4(line) <= dashIndent) {
+      if (indentOf5(line) <= dashIndent) {
         end = j;
         break;
       }
@@ -16817,7 +17368,7 @@ function patchBudgetScalar(lines, block, field, value) {
     const line = required(lines[i]);
     if (line.trim() === "")
       continue;
-    if (indentOf4(line) <= block.fieldIndent) {
+    if (indentOf5(line) <= block.fieldIndent) {
       subEnd = i;
       break;
     }
@@ -16825,7 +17376,7 @@ function patchBudgetScalar(lines, block, field, value) {
   let childIndent = block.fieldIndent + 2;
   for (let i = budgetAt + 1; i < subEnd; i++) {
     if (required(lines[i]).trim() !== "") {
-      childIndent = indentOf4(required(lines[i]));
+      childIndent = indentOf5(required(lines[i]));
       break;
     }
   }
@@ -16850,7 +17401,7 @@ function patchArray(lines, block, field, values) {
     const line = required(lines[i]);
     if (line.trim() === "")
       continue;
-    if (indentOf4(line) <= block.fieldIndent) {
+    if (indentOf5(line) <= block.fieldIndent) {
       extentEnd = i;
       break;
     }
@@ -18353,6 +18904,26 @@ function serializeSkill(s) {
   }
   return lines;
 }
+function serializeDecomposition(policy2) {
+  return [
+    "decomposition:",
+    `  version: ${policy2.version}`,
+    ...policy2.mode === void 0 ? [] : [`  mode: ${policy2.mode}`],
+    ...policy2.target === void 0 ? [] : [`  target: ${policy2.target}`],
+    ...policy2.strategy === void 0 ? [] : [`  strategy: ${policy2.strategy}`],
+    ...policy2.max_items === void 0 ? [] : [`  max_items: ${policy2.max_items}`],
+    ...policy2.max_depth === void 0 ? [] : [`  max_depth: ${policy2.max_depth}`],
+    ...policy2.auto_when === void 0 ? [] : [`  auto_when: [${policy2.auto_when.join(", ")}]`],
+    ...policy2.ask_when === void 0 ? [] : [`  ask_when: [${policy2.ask_when.join(", ")}]`]
+  ];
+}
+function serializeInteraction(policy2) {
+  return [
+    "interaction:",
+    `  version: ${policy2.version}`,
+    ...policy2.mode === void 0 ? [] : [`  mode: ${policy2.mode}`]
+  ];
+}
 function serializeFieldRef(r) {
   return [`      - field: ${r.field}`, `        type: ${r.type}`];
 }
@@ -18483,6 +19054,8 @@ function serializeWorkflow(wf) {
   }
   const lines = [
     `name: ${wf.name}`,
+    ...wf.decomposition === void 0 ? [] : serializeDecomposition(wf.decomposition),
+    ...wf.interaction === void 0 ? [] : serializeInteraction(wf.interaction),
     ...wf.openspecContract === void 0 ? [] : [`openspec_contract: ${wf.openspecContract}`],
     ...wf.documentContract === void 0 ? [] : serializeDocumentContract(wf.documentContract),
     "steps:",
@@ -19082,6 +19655,16 @@ var DEFAULT_VERIFIER_ISSUER_KIND = DEFAULT_VERIFIER_ISSUER_IDENTITY.kind;
 
 // packages/automation/dist/admission/loop-admission-types.js
 var DEFAULT_TTL_MS = 10 * 60 * 1e3;
+
+// packages/automation/dist/admission/skill-action-authority.js
+var CONTRACT_KEYS = Object.freeze([
+  "version",
+  "skill_bundle_id",
+  "workflow_run_id",
+  "workflow_fingerprint",
+  "grants"
+]);
+var ACTIONS = new Set(WORKFLOW_ACTIONS);
 
 // packages/automation/dist/skills/snapshot-manifest.js
 import { createHash as createHash16 } from "node:crypto";
@@ -20902,6 +21485,69 @@ function projectFileExists(root, repoRelativePath) {
 }
 
 // packages/server/src/workflowSnapshot.ts
+var ACTION_CLASSIFICATION = {
+  "suggest-decomposition": "routine-reversible",
+  "materialize-work-items": "routine-reversible",
+  "create-child-pipeline": "routine-reversible",
+  "apply-recommended-default": "routine-reversible",
+  "enter-afk": "routine-reversible",
+  "write-filesystem": "routine-reversible",
+  "create-branch": "routine-reversible",
+  "create-pull-request": "external-side-effect",
+  "merge-pull-request": "irreversible",
+  "call-external-api": "external-side-effect",
+  "publish-external": "publication",
+  "operate-production": "production",
+  "incur-cost": "cost",
+  "access-credentials": "credentials",
+  "perform-irreversible-action": "irreversible"
+};
+function samePolicy(configured, plan) {
+  const left = configured.decomposition;
+  const right = plan.decomposition;
+  return left.version === right.version && left.mode === right.mode && left.target === right.target && left.strategy === right.strategy && left.max_items === right.max_items && left.max_depth === right.max_depth && left.auto_when.length === right.auto_when.length && left.auto_when.every((condition, index) => right.auto_when[index] === condition) && left.ask_when.length === right.ask_when.length && left.ask_when.every((condition, index) => right.ask_when[index] === condition) && configured.interaction.version === plan.interaction.version && configured.interaction.mode === plan.interaction.mode;
+}
+function effectivePolicy(plan, input) {
+  if (input === void 0) return { status: "unavailable", reason: "authority-input-unavailable" };
+  const workflow = workflowPolicyPermissionLayer(plan);
+  const evaluations = WORKFLOW_ACTIONS.map((action) => evaluateWorkflowAction({
+    action,
+    classification: ACTION_CLASSIFICATION[action],
+    interactionMode: plan.interaction.mode,
+    layers: { ...input.layers, workflow },
+    authority: input.authority,
+    hardConfirmation: input.hardConfirmations?.[action]
+  }));
+  return {
+    status: "available",
+    grants: evaluations.filter((evaluation) => evaluation.allowed).map((evaluation) => evaluation.action),
+    denials: evaluations.flatMap((evaluation) => evaluation.denials.map((denial) => ({
+      ...denial,
+      action: evaluation.action
+    })))
+  };
+}
+function resolveConfiguredWorkflowPolicy(workflowName, loadDefinition) {
+  const plan = resolveEffectiveWorkflowPlan(workflowName, (name) => {
+    const definition = builtinWorkflow(name) ?? loadDefinition(name);
+    return definition === null ? null : compileWorkflow(definition);
+  });
+  if (plan === null) return { status: "missing" };
+  return {
+    status: "available",
+    workflowFingerprint: plan.workflowFingerprint,
+    decomposition: structuredClone(plan.decomposition),
+    interaction: structuredClone(plan.interaction)
+  };
+}
+function resolveConfiguredWorkflowPolicySafely(workflowName, loadDefinition, rethrow) {
+  try {
+    return resolveConfiguredWorkflowPolicy(workflowName, loadDefinition);
+  } catch (error2) {
+    if (rethrow?.(error2) === true) throw error2;
+    return { status: "invalid" };
+  }
+}
 function resolveSnapshotEffectivePlan(root, workflowName, binding, loadDefinition = (name) => loadWorkflow(root, name)) {
   const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
     const definition = builtinWorkflow(name) ?? loadDefinition(name);
@@ -20920,7 +21566,10 @@ function snapshotTodoStages(plan, phase) {
   }
   return phase === "" ? [] : [{ id: phase, label: phase }];
 }
-function snapshotWorkflowRules(plan) {
+function snapshotWorkflowRules(plan, configured = { status: "unavailable" }, authority) {
+  const configuredAvailable = configured.status === "available";
+  const fingerprintChanged = configuredAvailable ? configured.workflowFingerprint !== plan.workflowFingerprint : null;
+  const policyChanged = configuredAvailable ? !samePolicy(configured, plan) : null;
   return {
     executionModel: plan.capabilities.execution.model,
     steps: plan.workflow.steps.map((step) => step.id),
@@ -20935,8 +21584,30 @@ function snapshotWorkflowRules(plan) {
     outputsByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
       step.id,
       step.outputs.map((output) => output.field)
-    ]))
+    ])),
+    policy: {
+      schema: "workflow-policy/v1",
+      configured,
+      frozen: {
+        workflowFingerprint: plan.workflowFingerprint,
+        decomposition: structuredClone(plan.decomposition),
+        interaction: structuredClone(plan.interaction),
+        workflowCeiling: workflowPolicyPermissionLayer(plan)
+      },
+      effective: effectivePolicy(plan, authority),
+      drift: {
+        status: configuredAvailable ? fingerprintChanged || policyChanged ? "changed" : "current" : configured.status,
+        fingerprintChanged,
+        policyChanged
+      }
+    }
   };
+}
+function snapshotWorkflowRulesAtRoot(plan, root, workflowName) {
+  return snapshotWorkflowRules(
+    plan,
+    resolveConfiguredWorkflowPolicySafely(workflowName, (name) => loadWorkflow(root, name))
+  );
 }
 function legacySnapshotWorkflowRules(plan) {
   const current = snapshotWorkflowRules(plan);
@@ -21721,7 +22392,7 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
         updated_at: str(f.updated_at),
         fields: f,
         workflowPlanFingerprint: plan.workflowFingerprint,
-        workflowRules: snapshotWorkflowRules(plan),
+        workflowRules: snapshotWorkflowRulesAtRoot(plan, readRoot, workflowName),
         workflowExecution: await snapshotWorkflowExecution(
           plan,
           state,
@@ -25369,31 +26040,6 @@ function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
   };
 }
 
-// packages/server/src/workflowDefinitionReader.ts
-function assertDefinitionRoot(anchor) {
-  try {
-    assertWorkflowRootAnchor(anchor);
-  } catch (error2) {
-    throw new WorkflowPathError("workflow definition root trust check failed", error2);
-  }
-}
-function readCurrentWorkflowDefinition(anchor, workflow) {
-  try {
-    assertDefinitionRoot(anchor);
-    const plan = resolveEffectiveWorkflowPlan(workflow, (name) => {
-      const definition = builtinWorkflow(name) ?? readWorkflowForApi(anchor, name);
-      return compileWorkflow(definition);
-    });
-    if (plan === null) return { kind: "missing" };
-    assertDefinitionRoot(anchor);
-    return { kind: "current", fingerprint: plan.workflowFingerprint };
-  } catch (error2) {
-    if (error2 instanceof WorkflowNotFoundError) return { kind: "missing" };
-    if (error2 instanceof WorkflowPathError || error2 instanceof WorkflowReadError) throw error2;
-    return { kind: "invalid" };
-  }
-}
-
 // packages/server/src/changeSnapshot.ts
 function missing3(error2) {
   return typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT";
@@ -25562,10 +26208,22 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     const workflowName = stringField3(fields.workflow) || "default";
     const frozenPlan = state.runMetadata?.workflowPlanSnapshot;
     const definitionWorkflow = frozenPlan?.workflowId ?? workflowName;
+    const configuredPolicy = resolveConfiguredWorkflowPolicySafely(
+      definitionWorkflow,
+      (name) => {
+        try {
+          return readWorkflowForApi(anchor, name);
+        } catch (error2) {
+          if (error2 instanceof WorkflowNotFoundError) return null;
+          throw error2;
+        }
+      },
+      (error2) => error2 instanceof WorkflowPathError || error2 instanceof WorkflowReadError
+    );
     const workflowDefinition = projectWorkflowDefinitionStatus(
       definitionWorkflow,
       frozenPlan?.workflowFingerprint ?? null,
-      frozenPlan === void 0 ? { kind: "invalid" } : readCurrentWorkflowDefinition(anchor, definitionWorkflow)
+      configuredPolicy.status === "available" ? { kind: "current", fingerprint: configuredPolicy.workflowFingerprint } : { kind: configuredPolicy.status === "unavailable" ? "invalid" : configuredPolicy.status }
     );
     const plan = resolveSnapshotEffectivePlan(rootPath, workflowName, {
       documentProfile: state.runMetadata?.documentProfile,
@@ -25622,7 +26280,7 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
       fields,
       workflowPlanFingerprint: plan.workflowFingerprint,
       workflowDefinition,
-      workflowRules: snapshotWorkflowRules(plan),
+      workflowRules: snapshotWorkflowRules(plan, configuredPolicy),
       workflowExecution,
       reviewHandshake: projectReviewHandshake(state, plan, phase),
       todo,
@@ -25631,6 +26289,31 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     };
   } finally {
     if (ownedAnchor !== void 0) closeWorkflowRootAnchor(ownedAnchor);
+  }
+}
+
+// packages/server/src/workflowDefinitionReader.ts
+function assertDefinitionRoot(anchor) {
+  try {
+    assertWorkflowRootAnchor(anchor);
+  } catch (error2) {
+    throw new WorkflowPathError("workflow definition root trust check failed", error2);
+  }
+}
+function readCurrentWorkflowDefinition(anchor, workflow) {
+  try {
+    assertDefinitionRoot(anchor);
+    const plan = resolveEffectiveWorkflowPlan(workflow, (name) => {
+      const definition = builtinWorkflow(name) ?? readWorkflowForApi(anchor, name);
+      return compileWorkflow(definition);
+    });
+    if (plan === null) return { kind: "missing" };
+    assertDefinitionRoot(anchor);
+    return { kind: "current", fingerprint: plan.workflowFingerprint };
+  } catch (error2) {
+    if (error2 instanceof WorkflowNotFoundError) return { kind: "missing" };
+    if (error2 instanceof WorkflowPathError || error2 instanceof WorkflowReadError) throw error2;
+    return { kind: "invalid" };
   }
 }
 

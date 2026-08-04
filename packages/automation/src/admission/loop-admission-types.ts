@@ -14,7 +14,17 @@
  * reservation，不可能同时读到旧预算都通过。reservation 的 ledger 写入**严格早于** queued→scheduled
  * CAS（reserve 在 claim 之前）。
  */
-import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@tenon/kernel'
+import type {
+  AutomationPolicySnapshot,
+  EffectiveSkillResolver,
+  LoopEntry,
+  LoopLedgerStore,
+  LoopRegistry,
+  SkillBundleResolutionInput,
+  WorkflowActionEvaluation,
+  WorkflowPermissionLayerInput,
+  WorkflowPlanSnapshot,
+} from '@tenon/kernel'
 import {
   admissionDecision, budgetDayOf, buildAttemptContext, compileAutomationPolicySnapshot, compileConstraintPolicy, evaluateConstraintPolicy,
   indexMergeFactsByAttempt, LedgerDegradedError, loopMaterialUnchanged,
@@ -98,6 +108,8 @@ export interface AdmissionDenial {
   /** loop_id 已解析出时携带（status/额度类拒绝）；binding 失败时可能无。 */
   readonly loopId?: string
   readonly block?: AdmissionBlock
+  /** Exact five-layer result when the frozen Workflow policy blocks execution before claim. */
+  readonly authorization?: WorkflowActionEvaluation
 }
 
 export type ReserveResult = { readonly ok: true; readonly context: ExecutionContext } | AdmissionDenial
@@ -264,6 +276,30 @@ export interface LoopAdmissionDeps {
   ) => Promise<{
     readonly id: string; readonly automationPolicy?: AutomationPolicySnapshot
     readonly loopId?: string; readonly iterationId?: string
+    readonly workflowId?: string
+    readonly workflowPlanFingerprint?: string
+    readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
+  }>
+  /**
+   * Fresh non-Workflow authorization facts. The service derives the Workflow layer only from the
+   * immutable WorkflowRun snapshot, so callers cannot replace the frozen ceiling through this port.
+   */
+  readonly workflowActionAuthority?: (input: {
+    readonly change: string
+    readonly context: ExecutionContext
+    readonly run: {
+      readonly id: string
+      readonly workflowId?: string
+      readonly workflowPlanFingerprint?: string
+      readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
+      readonly loopId?: string
+      readonly iterationId?: string
+    }
+  }) => Promise<{
+    readonly platform: WorkflowPermissionLayerInput
+    readonly skill: WorkflowPermissionLayerInput
+    readonly project: WorkflowPermissionLayerInput
+    readonly run: WorkflowPermissionLayerInput
   }>
 }
 

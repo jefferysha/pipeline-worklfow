@@ -31,6 +31,89 @@ function decodeWithGuard(guard: unknown) {
 }
 
 describe('decodeWorkflowDefinition', () => {
+  it('projects legacy definitions to the safe independent policy defaults', () => {
+    const decoded = decodeWorkflowDefinition({ name: 'legacy', steps: [step] })
+
+    expect(decoded?.decomposition).toEqual({
+      version: 'v1',
+      mode: 'off',
+      target: 'work-items',
+      strategy: 'balanced',
+      max_items: 16,
+      max_depth: 2,
+      auto_when: [],
+      ask_when: [],
+    })
+    expect(decoded?.interaction).toEqual({ version: 'v1', mode: 'interactive' })
+  })
+
+  it('preserves the complete decomposition and interaction policy without coupling them', () => {
+    const decoded = decodeWorkflowDefinition({
+      name: 'policy-contract',
+      decomposition: {
+        version: 'v1',
+        mode: 'off',
+        target: 'child-pipelines',
+        strategy: 'depth-first',
+        max_items: 7,
+        max_depth: 4,
+        auto_when: ['context-budget-risk', 'independent-work-items'],
+        ask_when: ['hard-boundary', 'missing-authorization'],
+      },
+      interaction: { version: 'v1', mode: 'afk' },
+      steps: [step],
+    })
+
+    expect(decoded?.decomposition).toEqual({
+      version: 'v1',
+      mode: 'off',
+      target: 'child-pipelines',
+      strategy: 'depth-first',
+      max_items: 7,
+      max_depth: 4,
+      auto_when: ['context-budget-risk', 'independent-work-items'],
+      ask_when: ['hard-boundary', 'missing-authorization'],
+    })
+    expect(decoded?.interaction).toEqual({ version: 'v1', mode: 'afk' })
+  })
+
+  it('fills omitted v1 policy fields while rejecting unknown keys, duplicate conditions, and invalid limits', () => {
+    expect(decodeWorkflowDefinition({
+      name: 'partial-policy',
+      decomposition: { version: 'v1', mode: 'suggest' },
+      interaction: { version: 'v1', mode: 'recommended-defaults' },
+      steps: [step],
+    })?.decomposition).toMatchObject({
+      version: 'v1',
+      mode: 'suggest',
+      target: 'work-items',
+      max_items: 16,
+      max_depth: 2,
+    })
+
+    for (const decomposition of [
+      { mode: 'off' },
+      { version: 'v1', mode: 'auto-everything' },
+      { version: 'v1', mode: 'off', max_items: 0 },
+      { version: 'v1', mode: 'off', max_depth: 5 },
+      { version: 'v1', mode: 'off', auto_when: ['context-budget-risk', 'context-budget-risk'] },
+      { version: 'v1', mode: 'off', ask_when: ['unknown-boundary'] },
+      { version: 'v1', mode: 'off', privileged: true },
+    ]) {
+      expect(decodeWorkflowDefinition({ name: 'invalid-policy', decomposition, steps: [step] })).toBeNull()
+    }
+    expect(decodeWorkflowDefinition({
+      name: 'invalid-interaction',
+      interaction: { version: 'v1', mode: 'afk', grants: ['production'] },
+      steps: [step],
+    })).toBeNull()
+    expect(decodeWorkflowDefinition({
+      name: 'unversioned-interaction',
+      interaction: { mode: 'interactive' },
+      steps: [step],
+    })).toBeNull()
+  })
+
   it('accepts each supported document contract mode independently', () => {
     expect(decodeWorkflowDefinition({
       name: 'openspec',

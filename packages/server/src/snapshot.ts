@@ -10,6 +10,7 @@ import {
   evaluateDocumentEvidence,
   isDocumentPolicyStep,
   liveTerminalActivity,
+  loadWorkflow,
   parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
@@ -21,8 +22,7 @@ import {
 import type {
   ChangeSnapshot,
   DocumentEvidenceSnapshot,
-  ProjectSnapshot,
-  ProjectRepositoryIdentity,
+  ProjectSnapshot, ProjectRepositoryIdentity,
   Snapshot,
   TerminalActivitySnapshot,
 } from './types.js'
@@ -32,7 +32,7 @@ import {
   resolveSnapshotEffectivePlan,
   snapshotTodoStages,
   snapshotWorkflowExecution,
-  snapshotWorkflowRules,
+  snapshotWorkflowRulesAtRoot,
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
 import { readBounded } from './contextBundleTrustedReader.js'
@@ -293,7 +293,7 @@ async function scanAnchoredProject(
         updated_at: str(f.updated_at),
         fields: f,
         workflowPlanFingerprint: plan.workflowFingerprint,
-        workflowRules: snapshotWorkflowRules(plan),
+        workflowRules: snapshotWorkflowRulesAtRoot(plan, readRoot, workflowName),
         workflowExecution: await snapshotWorkflowExecution(
           plan,
           state,

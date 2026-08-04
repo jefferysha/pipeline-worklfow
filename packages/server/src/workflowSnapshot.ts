@@ -1,18 +1,27 @@
 import {
   builtinWorkflow,
   compileWorkflow,
+  evaluateWorkflowAction,
   evaluateSpecMigrationEvidence,
   loadWorkflow,
   readinessByTransition,
   resolveBoundEffectiveWorkflowPlan,
+  resolveEffectiveWorkflowPlan,
+  WORKFLOW_ACTIONS,
+  workflowPolicyPermissionLayer,
   type EffectiveWorkflowPlan,
   type PipelineState,
   type PipelineTodoStageDefinition,
   type WorkflowDef,
+  type WorkflowAction,
+  type WorkflowAuthorityBinding,
+  type WorkflowHardConfirmation,
+  type WorkflowPermissionLayers,
   type WorkflowPlanSnapshot,
 } from '@tenon/kernel'
 import type {
   LegacyWorkflowRulesSnapshot,
+  WorkflowConfiguredPolicySnapshot,
   WorkflowExecutionSnapshot,
   WorkflowRulesSnapshot,
 } from './types.js'
@@ -22,6 +31,100 @@ export interface WorkflowSnapshotCapabilityDeps {
   readonly fileExists?: (root: string, repoRelativePath: string) => boolean
   readonly gitHeadSha?: (cwd: string) => Promise<string>
   readonly workspaceFingerprint?: (cwd: string, changeName: string) => Promise<string>
+}
+
+export interface WorkflowSnapshotAuthorityInput {
+  readonly layers: Omit<WorkflowPermissionLayers, 'workflow'>
+  readonly authority?: WorkflowAuthorityBinding
+  readonly hardConfirmations?: Partial<Record<WorkflowAction, WorkflowHardConfirmation>>
+}
+
+const ACTION_CLASSIFICATION: Readonly<Record<WorkflowAction, Parameters<typeof evaluateWorkflowAction>[0]['classification']>> = {
+  'suggest-decomposition': 'routine-reversible',
+  'materialize-work-items': 'routine-reversible',
+  'create-child-pipeline': 'routine-reversible',
+  'apply-recommended-default': 'routine-reversible',
+  'enter-afk': 'routine-reversible',
+  'write-filesystem': 'routine-reversible',
+  'create-branch': 'routine-reversible',
+  'create-pull-request': 'external-side-effect',
+  'merge-pull-request': 'irreversible',
+  'call-external-api': 'external-side-effect',
+  'publish-external': 'publication',
+  'operate-production': 'production',
+  'incur-cost': 'cost',
+  'access-credentials': 'credentials',
+  'perform-irreversible-action': 'irreversible',
+}
+
+function samePolicy(
+  configured: Extract<WorkflowConfiguredPolicySnapshot, { status: 'available' }>,
+  plan: EffectiveWorkflowPlan,
+): boolean {
+  const left = configured.decomposition
+  const right = plan.decomposition
+  return left.version === right.version && left.mode === right.mode && left.target === right.target
+    && left.strategy === right.strategy && left.max_items === right.max_items
+    && left.max_depth === right.max_depth
+    && left.auto_when.length === right.auto_when.length
+    && left.auto_when.every((condition, index) => right.auto_when[index] === condition)
+    && left.ask_when.length === right.ask_when.length
+    && left.ask_when.every((condition, index) => right.ask_when[index] === condition)
+    && configured.interaction.version === plan.interaction.version
+    && configured.interaction.mode === plan.interaction.mode
+}
+
+function effectivePolicy(
+  plan: EffectiveWorkflowPlan,
+  input: WorkflowSnapshotAuthorityInput | undefined,
+): WorkflowRulesSnapshot['policy']['effective'] {
+  if (input === undefined) return { status: 'unavailable', reason: 'authority-input-unavailable' }
+  const workflow = workflowPolicyPermissionLayer(plan)
+  const evaluations = WORKFLOW_ACTIONS.map((action) => evaluateWorkflowAction({
+    action,
+    classification: ACTION_CLASSIFICATION[action],
+    interactionMode: plan.interaction.mode,
+    layers: { ...input.layers, workflow },
+    authority: input.authority,
+    hardConfirmation: input.hardConfirmations?.[action],
+  }))
+  return {
+    status: 'available',
+    grants: evaluations.filter((evaluation) => evaluation.allowed).map((evaluation) => evaluation.action),
+    denials: evaluations.flatMap((evaluation) => evaluation.denials.map((denial) => ({
+      ...denial, action: evaluation.action,
+    }))),
+  }
+}
+
+export function resolveConfiguredWorkflowPolicy(
+  workflowName: string,
+  loadDefinition: (name: string) => WorkflowDef | null,
+): WorkflowConfiguredPolicySnapshot {
+  const plan = resolveEffectiveWorkflowPlan(workflowName, (name) => {
+    const definition = builtinWorkflow(name) ?? loadDefinition(name)
+    return definition === null ? null : compileWorkflow(definition)
+  })
+  if (plan === null) return { status: 'missing' }
+  return {
+    status: 'available',
+    workflowFingerprint: plan.workflowFingerprint,
+    decomposition: structuredClone(plan.decomposition),
+    interaction: structuredClone(plan.interaction),
+  }
+}
+
+export function resolveConfiguredWorkflowPolicySafely(
+  workflowName: string,
+  loadDefinition: (name: string) => WorkflowDef | null,
+  rethrow?: (error: unknown) => boolean,
+): WorkflowConfiguredPolicySnapshot {
+  try {
+    return resolveConfiguredWorkflowPolicy(workflowName, loadDefinition)
+  } catch (error) {
+    if (rethrow?.(error) === true) throw error
+    return { status: 'invalid' }
+  }
 }
 
 export function resolveSnapshotEffectivePlan(
@@ -57,7 +160,16 @@ export function snapshotTodoStages(
   return phase === '' ? [] : [{ id: phase, label: phase }]
 }
 
-export function snapshotWorkflowRules(plan: EffectiveWorkflowPlan): WorkflowRulesSnapshot {
+export function snapshotWorkflowRules(
+  plan: EffectiveWorkflowPlan,
+  configured: WorkflowConfiguredPolicySnapshot = { status: 'unavailable' },
+  authority?: WorkflowSnapshotAuthorityInput,
+): WorkflowRulesSnapshot {
+  const configuredAvailable = configured.status === 'available'
+  const fingerprintChanged = configuredAvailable
+    ? configured.workflowFingerprint !== plan.workflowFingerprint
+    : null
+  const policyChanged = configuredAvailable ? !samePolicy(configured, plan) : null
   return {
     executionModel: plan.capabilities.execution.model,
     steps: plan.workflow.steps.map((step) => step.id),
@@ -73,7 +185,36 @@ export function snapshotWorkflowRules(plan: EffectiveWorkflowPlan): WorkflowRule
       step.id,
       step.outputs.map((output) => output.field),
     ])),
+    policy: {
+      schema: 'workflow-policy/v1',
+      configured,
+      frozen: {
+        workflowFingerprint: plan.workflowFingerprint,
+        decomposition: structuredClone(plan.decomposition),
+        interaction: structuredClone(plan.interaction),
+        workflowCeiling: workflowPolicyPermissionLayer(plan),
+      },
+      effective: effectivePolicy(plan, authority),
+      drift: {
+        status: configuredAvailable
+          ? fingerprintChanged || policyChanged ? 'changed' : 'current'
+          : configured.status,
+        fingerprintChanged,
+        policyChanged,
+      },
+    },
   }
+}
+
+export function snapshotWorkflowRulesAtRoot(
+  plan: EffectiveWorkflowPlan,
+  root: string,
+  workflowName: string,
+): WorkflowRulesSnapshot {
+  return snapshotWorkflowRules(
+    plan,
+    resolveConfiguredWorkflowPolicySafely(workflowName, (name) => loadWorkflow(root, name)),
+  )
 }
 
 export function legacySnapshotWorkflowRules(plan: EffectiveWorkflowPlan): LegacyWorkflowRulesSnapshot {

@@ -61,6 +61,25 @@ loops:
 `
 
 const CUSTOM_BUILD_WORKFLOW = `name: h7s3-custom-workflow
+interaction:
+  version: v1
+  mode: afk
+steps:
+  - id: build
+    label: Build
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+const AFK_BUILD_WORKFLOW_ID = 'afk-build-fixture'
+const AFK_BUILD_WORKFLOW = `name: ${AFK_BUILD_WORKFLOW_ID}
+interaction:
+  version: v1
+  mode: afk
 steps:
   - id: build
     label: Build
@@ -75,6 +94,8 @@ steps:
 async function seedLoops(cwd: string): Promise<void> {
   await mkdir(join(cwd, '.pipeline'), { recursive: true })
   await writeFile(join(cwd, '.pipeline', 'loops.yaml'), AFK_LOOPS_YAML)
+  await mkdir(join(cwd, '.pipeline', 'workflows'), { recursive: true })
+  await writeFile(join(cwd, '.pipeline', 'workflows', `${AFK_BUILD_WORKFLOW_ID}.yaml`), AFK_BUILD_WORKFLOW)
 }
 
 const execFileAsync = promisify(execFile)
@@ -155,12 +176,11 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     if (hasImage) await rm(h.cwd, { recursive: true, force: true })
   })
 
-  /** H14 生产装配：default workflow 的命名分支经真实 Git verifier 后，L3 才允许 merge-back。 */
+  /** H14 生产装配：冻结 AFK workflow 的命名分支经真实 Git verifier 后，L3 才允许 merge-back。 */
   it('L3 --image：真实 Git verifier 通过 → automation=merged，host base 与工作树均含产物', async (ctx) => {
     if (!hasImage) { ctx.skip(); return }
-    await h.run(['init', 'x', '--track', 'backend', '--preset', 'full'])
-    await h.run(['set', 'x', 'phase', 'build'])
     await seedLoops(h.cwd)
+    await h.run(['init', 'x', '--track', 'backend', '--preset', 'full', '--workflow', AFK_BUILD_WORKFLOW_ID])
     await git(h.cwd, ['add', '-A'])
     await git(h.cwd, ['commit', '-q', '-m', 'seed'])
 
@@ -231,9 +251,8 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
 
   it('默认 L1 report-only：真容器跑成功但落 paused，不 merge', async (ctx) => {
     if (!hasImage) { ctx.skip(); return }
-    await h.run(['init', 'y', '--track', 'backend', '--preset', 'full'])
-    await h.run(['set', 'y', 'phase', 'build'])
     await seedLoops(h.cwd)
+    await h.run(['init', 'y', '--track', 'backend', '--preset', 'full', '--workflow', AFK_BUILD_WORKFLOW_ID])
     await git(h.cwd, ['add', '-A'])
     await git(h.cwd, ['commit', '-q', '-m', 'seed'])
 
@@ -273,9 +292,8 @@ describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针�
     } catch { /* 真无 docker，继续 */ }
     const h2 = makeHarness(await mkdtemp(join(tmpdir(), 'afk-run-nodocker-')))
     try {
-      await h2.run(['init', 'c1', '--track', 'backend', '--preset', 'full'])
-      await h2.run(['set', 'c1', 'phase', 'build'])
       await seedLoops(h2.cwd)
+      await h2.run(['init', 'c1', '--track', 'backend', '--preset', 'full', '--workflow', AFK_BUILD_WORKFLOW_ID])
       expect(await h2.run(['afk', 'enqueue', 'c1', '--loop', 'afkloop'])).toBe(0)
       expect(await h2.run(['afk', 'run'])).toBe(1)
       expect(h2.err.join('\n')).toMatch(/docker/i)

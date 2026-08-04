@@ -4,6 +4,7 @@
  * 因此可被 tsc 正常编译（不进任何运行时路径）。
  */
 import {
+  compileEffectiveWorkflowPlan,
   createEffectiveSkillResolver,
   FIELD_ORDER,
   IllegalTransitionError,
@@ -11,6 +12,7 @@ import {
   loadTrackRegistry,
   PHASES,
   resolveWorkflowName,
+  workflowPlanSnapshot,
 } from '@tenon/kernel'
 import type {
   CommitResult,
@@ -65,6 +67,31 @@ export function mockState(fields: Partial<Record<FieldName, string | string[]>> 
     all[f] = f === 'workflow' ? 'default' : (LIST_FIELDS as readonly string[]).includes(f) ? [] : ''
   }
   return { fields: { ...all, ...fields }, opaqueTail: '' }
+}
+
+const MOCK_AFK_PLAN = compileEffectiveWorkflowPlan('mock-afk', {
+  name: 'mock-afk',
+  interaction: { version: 'v1', mode: 'afk' },
+  steps: [{
+    id: 'build', label: 'Build', gate: null,
+    skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+  }],
+})
+const MOCK_AFK_PLAN_SNAPSHOT = workflowPlanSnapshot(MOCK_AFK_PLAN)
+
+/** A canonical frozen AFK WorkflowRun fixture; bindAutomationPolicy fills its exact loop iteration. */
+export function mockAfkState(
+  fields: Partial<Record<FieldName, string | string[]>> = {},
+): PipelineState {
+  return {
+    ...mockState({ track: 'backend', workflow: MOCK_AFK_PLAN.id, phase: 'build', ...fields }),
+    runMetadata: {
+      runId: 'mock-run',
+      transitionSequence: 0,
+      workflowPlanFingerprint: MOCK_AFK_PLAN.workflowFingerprint,
+      workflowPlanSnapshot: MOCK_AFK_PLAN_SNAPSHOT,
+    },
+  }
 }
 
 // === StateStore mock：支持单 state 或 name→state 映射（status/list 多 change 场景） ===
@@ -170,7 +197,7 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
       }
     },
     bindAutomationPolicy: async (changeDir, policy, binding): Promise<WorkflowRun> => {
-      await store.read(changeDir)
+      const state = await store.read(changeDir)
       if (automationPolicy !== undefined && automationPolicy.policy_version !== policy.policy_version) {
         throw new Error('WorkflowRun policy is immutable')
       }
@@ -180,10 +207,18 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
         loopId = binding.loopId
         iterationId = binding.iterationId
       }
+      if (state.runMetadata?.workflowPlanSnapshot !== undefined) {
+        state.runMetadata.automationPolicy = policy
+        state.runMetadata.loopId = loopId
+        state.runMetadata.iterationId = iterationId
+      }
       return {
-        id: 'mock-run', workflowId: 'default', currentStep: '', lifecycle: 'active',
+        id: state.runMetadata?.runId ?? 'mock-run',
+        workflowId: resolveWorkflowName(state), currentStep: '', lifecycle: 'active',
         transitionSequence: sequence, transitionHead: undefined, createdAt: '', updatedAt: '', automationPolicy,
         policyId: policy.policy_id, policyVersion: policy.policy_version, loopId, iterationId,
+        workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
+        workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
       }
     },
     transact: async <T,>(changeDir: string, fn: (tx: WorkflowRunTransaction) => Promise<T>): Promise<T> =>

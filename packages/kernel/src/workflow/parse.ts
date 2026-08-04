@@ -13,6 +13,7 @@ import type {
 import type { FieldName } from '../types.js'
 import type { TrackPredicate } from './predicates.js'
 import { parseDocumentContract, type WorkflowParseCursor as Cursor } from './parse-document-contract.js'
+import { parseDecompositionPolicy, parseInteractionPolicy } from './parse-policy.js'
 
 function parseInlineList(raw: string): string[] {
   const trimmed = raw.trim()
@@ -376,18 +377,42 @@ export function parseWorkflow(content: string): WorkflowDef {
   let stepLine = 1
   let openspecContract: 'required' | undefined
   let documentContract: WorkflowDocumentContractV1 | undefined
-  const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(lines[stepLine] ?? '')
-  if (contractLine) {
-    if (contractLine[1] !== 'required') {
-      throw new Error("workflow 解析错误：openspec_contract 只支持 'required'")
+  let decomposition: WorkflowDef['decomposition']
+  let interaction: WorkflowDef['interaction']
+  while ((lines[stepLine] ?? '').trim() !== 'steps:') {
+    const line = lines[stepLine] ?? ''
+    const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(line)
+    if (contractLine) {
+      if (openspecContract !== undefined) throw new Error('workflow 解析错误：openspec_contract 重复声明')
+      if (contractLine[1] !== 'required') {
+        throw new Error("workflow 解析错误：openspec_contract 只支持 'required'")
+      }
+      openspecContract = 'required'
+      stepLine++
+      continue
     }
-    openspecContract = 'required'
-    stepLine++
-  }
-  if ((lines[stepLine] ?? '').trim() === 'document_contract:') {
-    const cur: Cursor = { lines, i: stepLine + 1 }
-    documentContract = parseDocumentContract(cur, indentOf(lines[stepLine] ?? ''))
-    stepLine = cur.i
+    if (line.trim() === 'document_contract:') {
+      if (documentContract !== undefined) throw new Error('workflow 解析错误：document_contract 重复声明')
+      const cur: Cursor = { lines, i: stepLine + 1 }
+      documentContract = parseDocumentContract(cur, indentOf(line))
+      stepLine = cur.i
+      continue
+    }
+    if (line.trim() === 'decomposition:') {
+      if (decomposition !== undefined) throw new Error('workflow 解析错误：decomposition 重复声明')
+      const cur: Cursor = { lines, i: stepLine + 1 }
+      decomposition = parseDecompositionPolicy(cur)
+      stepLine = cur.i
+      continue
+    }
+    if (line.trim() === 'interaction:') {
+      if (interaction !== undefined) throw new Error('workflow 解析错误：interaction 重复声明')
+      const cur: Cursor = { lines, i: stepLine + 1 }
+      interaction = parseInteractionPolicy(cur)
+      stepLine = cur.i
+      continue
+    }
+    throw new Error("workflow 解析错误：name 后必须是 'steps:'、policies、'openspec_contract: required' 或 document_contract")
   }
   if (openspecContract && documentContract) {
     throw new Error('workflow 解析错误：openspec_contract 与 document_contract 不得同时声明')
@@ -407,6 +432,8 @@ export function parseWorkflow(content: string): WorkflowDef {
   }
   return {
     name: nameMatch[1] ?? '',
+    ...(decomposition ? { decomposition } : {}),
+    ...(interaction ? { interaction } : {}),
     ...(openspecContract ? { openspecContract } : {}),
     ...(documentContract ? { documentContract } : {}),
     steps,

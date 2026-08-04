@@ -41,6 +41,7 @@
 import { readFileSync } from 'node:fs'
 import { PHASES } from '../types.js'
 import type { ManifestData, Phase } from '../types.js'
+import { WORKFLOW_ACTIONS, type WorkflowAction } from '../workflow/policy.js'
 
 export class ManifestError extends Error {
   constructor(message: string) {
@@ -58,6 +59,11 @@ const SKILL_TRACK_SET: ReadonlySet<string> = new Set<SkillTrackKey>(['pm', 'fron
 /** phase → track → skill token 列表（a|b 备选逐字保留，消费方自择其一） */
 export type SkillTable = Readonly<Record<Phase, Readonly<Partial<Record<SkillTrackKey, readonly string[]>>>>>
 
+export interface SkillActionAuthorityManifestV1 {
+  readonly version: 'v1'
+  readonly grants: Readonly<Partial<Record<SkillTrackKey, readonly WorkflowAction[]>>>
+}
+
 /**
  * loadManifest 的完整返回面（types.ts::ManifestData 的扩展）。
  * 字段留在本文件、没有并进 types.ts::ManifestData：后者是**引擎面最小契约**
@@ -70,6 +76,8 @@ export interface ExtendedManifestData extends ManifestData {
   mandatorySkills: SkillTable
   /** phase×track 推荐 skill 表。与 mandatorySkills 同链路，仅注入文案措辞不同。 */
   recommendedSkills: SkillTable
+  /** Explicit closed action grants by Skill profile; never inferred from skill slots or prose. */
+  skillActionAuthority: SkillActionAuthorityManifestV1 | null
   /** phase → breadcrumb prose；hooks/router.sh:201 每轮注入。缺相位则键缺省。 */
   breadcrumbs: Readonly<Partial<Record<Phase, string>>>
 }
@@ -185,7 +193,39 @@ interface RawSections {
   review_phases?: string[]
   mandatory_skills?: Map<string, string[]>
   recommended_skills?: Map<string, string[]>
+  skill_action_authority?: { version: string; grants: Map<string, string[]> }
   breadcrumb?: Map<string, string>
+}
+
+function parseSkillActionAuthorityBlock(
+  lines: string[], start: number, path: string,
+): { value: { version: string; grants: Map<string, string[]> }; next: number } {
+  let version: string | undefined
+  const grants = new Map<string, string[]>()
+  let i = start
+  while (i < lines.length) {
+    const line = stripComment(lines[i]!)
+    if (line.trim() === '') { i++; continue }
+    if (!/^\s/.test(line)) break
+    const entry = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/)
+    if (!entry) throw new ManifestError(`${path}:${i + 1} skill_action_authority 条目格式错误`)
+    const key = entry[1]!
+    const raw = entry[2]!.trim()
+    if (key === 'version') {
+      if (version !== undefined || raw === '') throw new ManifestError(`${path}:${i + 1} skill_action_authority.version 重复或为空`)
+      version = parseScalarValue(raw, 'skill_action_authority.version')
+    } else {
+      if (grants.has(key)) throw new ManifestError(`${path}:${i + 1} skill_action_authority.${key} 重复`)
+      const list = raw.match(/^\[(.*)\]$/)
+      if (list && list[1]!.trim() !== '' && list[1]!.split(',').some((item) => item.trim() === '')) {
+        throw new ManifestError(`${path}:${i + 1} skill_action_authority.${key} 含空 action`)
+      }
+      grants.set(key, parseFlowList(raw, `skill_action_authority.${key}`))
+    }
+    i++
+  }
+  if (version === undefined) throw new ManifestError(`${path} skill_action_authority 缺 version`)
+  return { value: { version, grants }, next: i }
 }
 
 function decodeDoubleQuotedYamlKey(token: string): string | undefined {
@@ -387,6 +427,12 @@ function scanSections(text: string, path: string): RawSections {
       if (key === 'mandatory_skills') out.mandatory_skills = r.map
       else out.recommended_skills = r.map
       i = r.next
+    } else if (key === 'skill_action_authority') {
+      if (rest !== '') throw new ManifestError(`${path}:${i + 1} skill_action_authority 必须是块小节`)
+      if (out.skill_action_authority !== undefined) throw new ManifestError(`${path}:${i + 1} skill_action_authority 小节重复`)
+      const r = parseSkillActionAuthorityBlock(lines, i + 1, path)
+      out.skill_action_authority = r.value
+      i = r.next
     } else if (key === 'breadcrumb') {
       if (rest !== '') throw new ManifestError(`${path}:${i + 1} breadcrumb 必须是块小节`)
       const r = parseBreadcrumbBlock(lines, i + 1, path)
@@ -438,6 +484,25 @@ function deriveSkillTable(
   return table
 }
 
+function deriveSkillActionAuthority(
+  raw: RawSections['skill_action_authority'],
+): SkillActionAuthorityManifestV1 | null {
+  if (!raw) return null
+  if (raw.version !== 'v1') throw new ManifestError(`skill_action_authority.version '${raw.version}' 不受支持（合法：v1）`)
+  const actions = new Set<string>(WORKFLOW_ACTIONS)
+  const grants: Partial<Record<SkillTrackKey, readonly WorkflowAction[]>> = {}
+  for (const [profile, values] of raw.grants) {
+    if (!SKILL_TRACK_SET.has(profile)) {
+      throw new ManifestError(`skill_action_authority 含未知 profile '${profile}'（合法：pm/frontend/backend/free/_all）`)
+    }
+    if (new Set(values).size !== values.length || values.some((action) => !actions.has(action))) {
+      throw new ManifestError(`skill_action_authority.${profile} 含未知或重复 action`)
+    }
+    grants[profile as SkillTrackKey] = values as WorkflowAction[]
+  }
+  return { version: 'v1', grants }
+}
+
 export function loadManifest(path: string): ExtendedManifestData {
   const text = readFileSync(path, 'utf8')
   const raw = scanSections(text, path)
@@ -480,6 +545,7 @@ export function loadManifest(path: string): ExtendedManifestData {
   // —— 全派生面（本轮新增，全部从 yaml 数据真派生，缺节安全降级为空，零硬编码）——
   const mandatorySkills = deriveSkillTable(raw.mandatory_skills, declared, 'mandatory_skills')
   const recommendedSkills = deriveSkillTable(raw.recommended_skills, declared, 'recommended_skills')
+  const skillActionAuthority = deriveSkillActionAuthority(raw.skill_action_authority)
 
   const breadcrumbs: Partial<Record<Phase, string>> = {}
   if (raw.breadcrumb) {
@@ -490,5 +556,5 @@ export function loadManifest(path: string): ExtendedManifestData {
     }
   }
 
-  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, breadcrumbs }
+  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, skillActionAuthority, breadcrumbs }
 }

@@ -4,7 +4,7 @@
 
 ### Requirement: stable runtime 保留可信 Codex cache provenance
 
-stable bootstrap MUST 从已验证 active payload 派生当前 Codex plugin cache root，并把该身份显式传给负责解析当前 turn transcript 的 receipt bridge。bridge MUST 继续校验 session、turn、phase、worktree、Git common directory、Skill id、ABI、完整嵌套命令结果与文件元数据；caller 提供的未验证 override 不得扩大可信范围。
+stable bootstrap MUST 从已验证 active payload 派生当前 Codex plugin cache root，并把该身份显式传给负责解析当前 turn transcript 的 receipt bridge。bridge MUST 继续校验 session、turn、phase、worktree、Git common directory、Skill id、ABI、完整嵌套命令结果与文件元数据；caller 提供的未验证 override 不得扩大可信范围。本 Change 的实现与回归测试由 PR2 基线提供，PR3 不重复携带该产品补丁。
 
 #### Scenario: stable launcher 读取当前 cache Skill
 
@@ -19,4 +19,4 @@ stable bootstrap MUST 从已验证 active payload 派生当前 Codex plugin cach
 #### Scenario: stable bootstrap 回归
 
 - **WHEN** 安装后的 stable bootstrap 启动正式 CLI/hook/receipt bridge
-- **THEN** 自动化测试证明可信 cache 身份在完整进程边界保留，且缺失或伪造身份被拒绝
+- **THEN** PR2 基线的自动化测试证明可信 cache 身份在完整进程边界保留，且缺失或伪造身份被拒绝；PR3 的相对 base diff 不再包含该源码与测试

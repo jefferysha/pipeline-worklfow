@@ -25,7 +25,6 @@ import {
   MAX_RESERVE_RETRIES,
   SkillProfileValidatorUnconfiguredError,
   attemptContextFor,
-  errText,
   isPreparedContext,
   snapshotMatchesPrepared,
   terminalToResult,
@@ -41,8 +40,17 @@ import {
   type RunSettlement,
 } from './loop-admission-types.js'
 import { createAdmissionJournal } from './loop-admission-journal.js'
+import {
+  bindAndEvaluateAfkWorkflowRun,
+  closeWorkflowAuthorizationDenial,
+  compensateWorkflowBindingFailure,
+  evaluateMissingAfkWorkflowAdmission,
+} from './workflow-action-admission.js'
 export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
-  const { repoRoot, ledger, loadRegistry, clock, level, image, getAutomation, isSkillProfileKnown, bindAutomationPolicy } = deps
+  const {
+    repoRoot, ledger, loadRegistry, clock, level, image, getAutomation, isSkillProfileKnown,
+    bindAutomationPolicy, workflowActionAuthority,
+  } = deps
   const ttlMs = deps.reservationTtlMs ?? DEFAULT_TTL_MS
   const newId = deps.newId ?? makeIdGen()
   // #5 orphan reconcile 注入面（缺省保守：liveness unknown、CAS no-op → orphan 保持 open 不误关）。
@@ -177,46 +185,40 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
   }): Promise<ReserveResult> => {
     // #5 pre-phase：activated orphan reconcile（ledger 锁之外——change CAS 不得在 ledger 锁内取）。
     await reconcileOrphans()
-    // #3#4 主临界区：外层 governance 锁串行化所有 registry 写/物化预占；内层 ledger 锁做「重读→判定→append」
-    // 原子（锁序 governance→ledger，内层绝不取 change 锁）。epoch 变（人工编辑/未迁移写方）→ 重试 ≤3 次。
+    // 主临界区按 governance→ledger 锁序重读、判定并落 reservation；epoch 变更时最多重试三次。
     for (let attempt = 1; attempt <= MAX_RESERVE_RETRIES; attempt++) {
       const outcome = await withRegistryGovernanceLock(repoRoot, () => reserveOnce(change, opts))
       if ('retry' in outcome) continue
-      if (!outcome.ok || bindAutomationPolicy === undefined) return outcome
+      if (!outcome.ok) return outcome
+      if (bindAutomationPolicy === undefined) {
+        return closeWorkflowAuthorizationDenial({
+          context: outcome.context,
+          authorization: evaluateMissingAfkWorkflowAdmission(),
+          clock, close, closeRecord,
+        })
+      }
       try {
-        const policy = outcome.context.automation_policy
-        if (policy === undefined) throw new Error('loop admission produced no AutomationPolicy snapshot')
-        const iterationId = outcome.context.iteration_id
-        if (iterationId === undefined) throw new Error('loop admission produced no iteration identity')
-        const run = await bindAutomationPolicy(change, policy, { loopId: outcome.context.loop_id, iterationId })
-        if (run.automationPolicy?.policy_version !== policy.policy_version) {
-          throw new Error('WorkflowRun did not persist the admitted AutomationPolicy snapshot')
-        }
-        if (run.loopId !== outcome.context.loop_id || run.iterationId !== iterationId) {
-          throw new Error('WorkflowRun did not persist the admitted loop/iteration identity')
-        }
-        return { ok: true, context: Object.freeze({ ...outcome.context, workflow_run_id: run.id }) }
+        const { context, run, authorization } = await bindAndEvaluateAfkWorkflowRun({
+          change,
+          context: outcome.context,
+          bindAutomationPolicy,
+          workflowActionAuthority,
+        })
+        if (authorization.allowed) return { ok: true, context }
+
+        return closeWorkflowAuthorizationDenial({
+          context, authorization, workflowRunId: run.id,
+          clock, close, closeRecord,
+        })
       } catch (bindingError) {
         // reservation 已在 reserveOnce 的 ledger 临界区 durable 落盘；WorkflowRun 绑定位于锁外，
         // 因此同步失败必须以零扣费 terminal 补偿关闭，不能把 in-flight 额度泄漏到 TTL recovery。
         // 原绑定错误仍原样上抛；若补偿本身也失败，则把两项事实都带给上层，且保留 open reservation
         // 供既有 recovery 处理（绝不谎报已关闭）。
-        try {
-          await close(outcome.context.reservation_id, (reservation) => ({
-            ...closeRecord(reservation, {
-              result: 'failed', reason: 'automation-policy-bind-failed', charge: 'none',
-              now: clock(), runner: outcome.context.runner,
-            }),
-            admitted_at: outcome.context.admitted_at,
-            error: { cause: 'automation-policy-bind-failed', message: errText(bindingError) },
-          }))
-        } catch (settlementError) {
-          throw new Error(
-            `AutomationPolicy binding failed (${errText(bindingError)}) and reservation compensation failed (${errText(settlementError)})`,
-            { cause: bindingError },
-          )
-        }
-        throw bindingError
+        return compensateWorkflowBindingFailure({
+          context: outcome.context, bindingError,
+          clock, close, closeRecord,
+        })
       }
     }
     return { ok: false, action: 'skip-run', reason: 'registry-concurrent-update', detail: `registry 连续 ${MAX_RESERVE_RETRIES} 次在 admission 临界区内变化，放弃本轮（避免活锁）` }
@@ -483,14 +485,11 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
   return { reserve, activate, recordProviderUsage, settleWon, settleLost, recordMergeIntent, recordMergeLanded, isActive }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────────────────────
 // H10 §3/§8任务5：prepareSkillBundle 编排——claim 成功（queued→scheduled）之后、activate
 // （reservation-activated）之前调用（设计定稿精确顺序）。实现「解析 effective slots → 按声明顺序
 // 定位内容 → 物化 CAS 快照 → governance→ledger 锁序复核 → 追加 skill-bundle-snapshot 事件」全部
 // 步骤（设计 §3 步骤2-7）；「资源根目录」「workflow 坐标获取」等物理装配细节经 deps 注入，本函数
 // 不硬编码任何具体 skill 根目录或 workflow 持久化形状（那是 H10 任务7 CLI 生产装配的职责）。
-// ─────────────────────────────────────────────────────────────────────────────────────────────
-
 /**
  * `createExecutionPreparation` 的依赖面。刻意不直接注入 `WorkflowRunRepository`（那会让本模块
  * 理解 change 目录/workflow run 持久化形状，越界进 admission 从未涉足的领域）——只注入更高层的

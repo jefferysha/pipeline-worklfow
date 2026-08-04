@@ -63,6 +63,7 @@ import {
   type RunAfkRoundOptions,
 } from './afk-executor-contract.js'
 import { enforceProductionLoopWiring } from './afk-loop-wiring.js'
+import { resolveAfkWorkflowActionAuthority } from './afk-workflow-authority.js'
 
 export {
   BundledCliDigestUnavailableError,
@@ -73,6 +74,7 @@ export {
   type RunAfkRoundOptions,
 } from './afk-executor-contract.js'
 export { enforceProductionLoopWiring } from './afk-loop-wiring.js'
+export { resolveAfkWorkflowActionAuthority } from './afk-workflow-authority.js'
 
 const DEFAULT_SANDCASTLE_IMAGE = 'sandcastle:local'
 
@@ -187,6 +189,8 @@ export async function runAfkRound(
     isSkillProfileKnown: deps.isSkillProfileKnown,
     bindAutomationPolicy: (change, policy, binding) =>
       deps.runRepo.bindAutomationPolicy(changeDir(deps.cwd, change), policy, binding),
+    workflowActionAuthority: ({ change, context, run }) =>
+      resolveAfkWorkflowActionAuthority(deps, change, context, run),
   })
 
   const preparation: ExecutionPreparationPort = createExecutionPreparation({

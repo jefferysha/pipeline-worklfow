@@ -11,6 +11,7 @@ import type {
   TransitionReadinessBlockerSnapshot,
 } from '../types'
 import { isRecord, optionalString, recordOfBooleans, stringArray } from './transport'
+import { decodeWorkflowPolicyRules } from './workflowPolicySnapshotDecoder'
 
 function decodeTerminalActivity(value: unknown): TerminalActivitySnapshot | undefined {
   if (!isRecord(value)
@@ -238,6 +239,8 @@ function decodeWorkflowRules(value: unknown): ChangeSnapshot['workflowRules'] | 
       || !outputs.every((output) => typeof output === 'string' && output !== '')) return null
     outputsByStep[step] = [...outputs] as string[]
   }
+  const policy = value.policy === undefined ? undefined : decodeWorkflowPolicyRules(value.policy)
+  if (policy === null) return null
   return {
     executionModel: value.executionModel,
     steps,
@@ -245,6 +248,7 @@ function decodeWorkflowRules(value: unknown): ChangeSnapshot['workflowRules'] | 
     gateByStep: value.gateByStep as Record<string, 'review' | 'confirm' | null>,
     labelByStep: value.labelByStep as Record<string, string>,
     outputsByStep,
+    ...(policy === undefined ? {} : { policy }),
   }
 }
 
@@ -353,6 +357,7 @@ function workflowRulesSemanticKey(rules: ChangeSnapshot['workflowRules']): strin
       outputs: rules.outputsByStep[step] ?? [],
     })),
     labels: Object.entries(rules.labelByStep ?? {}).sort(([left], [right]) => left.localeCompare(right)),
+    policy: rules.policy,
   })
 }
 

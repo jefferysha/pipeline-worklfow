@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createExecutionPreparation,
   GIT_REVISION_VERIFIER_ISSUER_IDENTITY,
+  skillActionAuthorityContract,
   type Automation,
   type DockerRunChangeOptions,
   type ExecutionContext,
@@ -22,9 +23,10 @@ import {
   type VerifierPort,
 } from '@tenon/automation'
 import { createLoopLedgerStore } from '@tenon/kernel'
-import { makeDeps } from '../test-support.js'
+import { makeDeps, mockState } from '../test-support.js'
 import {
   BundledCliDigestUnavailableError,
+  resolveAfkWorkflowActionAuthority,
   resolveBundledCliDistSha256,
   runAfkRound,
   type AfkExecutorRuntime,
@@ -36,6 +38,12 @@ const TARGETS = [{
   expectedLoopId: 'loop-a',
   expectedAutonomyLevel: 'L1',
 }] satisfies readonly TargetedRunCandidate[]
+
+function withEnterAfkSkillAuthority(deps: ReturnType<typeof makeDeps>) {
+  deps.resolveSkillActionAuthority = async (query) =>
+    skillActionAuthorityContract(query, ['enter-afk'])
+  return deps
+}
 
 const report = (over: Partial<RoundReport> = {}): RoundReport => ({
   candidates: 1,
@@ -283,6 +291,149 @@ describe('runAfkRound · H14 shared executor', () => {
     } finally {
       await rm(home, { recursive: true, force: true })
     }
+  })
+})
+
+describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', () => {
+  const exactRun = {
+    id: 'run-current',
+    workflowId: 'default',
+    workflowPlanFingerprint: 'frozen-fingerprint',
+    loopId: 'lp',
+    iterationId: 'iteration-current',
+  }
+
+  it('denies a stale Run identity even when the Change is still queued', async () => {
+    const state = {
+      ...mockState({ track: 'backend', automation: 'queued' }),
+      runMetadata: {
+        runId: 'run-replaced',
+        transitionSequence: 0,
+        workflowPlanFingerprint: exactRun.workflowPlanFingerprint,
+        loopId: exactRun.loopId,
+        iterationId: exactRun.iterationId,
+      },
+    }
+
+    const facts = await resolveAfkWorkflowActionAuthority(
+      makeDeps({ cwd: '/repo', state }),
+      'ready-a',
+      { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts.run).toEqual({ status: 'fingerprint-mismatch', grants: [] })
+  })
+
+  it('does not treat a wired bundle as Skill contract authority when no resolver is installed', async () => {
+    const state = {
+      ...mockState({ track: 'backend', automation: 'queued' }),
+      runMetadata: {
+        runId: exactRun.id,
+        transitionSequence: 0,
+        workflowPlanFingerprint: exactRun.workflowPlanFingerprint,
+        loopId: exactRun.loopId,
+        iterationId: exactRun.iterationId,
+      },
+    }
+
+    const facts = await resolveAfkWorkflowActionAuthority(
+      makeDeps({ cwd: '/repo', state }),
+      'ready-a',
+      { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts.skill).toEqual({ status: 'missing', grants: [] })
+  })
+
+  it('grants the AFK entry action only for verified bundle wiring, eligible track, and exact queued Run', async () => {
+    const state = {
+      ...mockState({ track: 'backend', automation: 'queued' }),
+      runMetadata: {
+        runId: exactRun.id,
+        transitionSequence: 0,
+        workflowPlanFingerprint: exactRun.workflowPlanFingerprint,
+        loopId: exactRun.loopId,
+        iterationId: exactRun.iterationId,
+      },
+    }
+    const deps = makeDeps({
+      cwd: '/repo',
+      state,
+    })
+    const resolver = vi.fn(async (query) => skillActionAuthorityContract(query, ['enter-afk']))
+    deps.resolveSkillActionAuthority = resolver
+
+    await expect(resolveAfkWorkflowActionAuthority(deps, 'ready-a', {
+      skill_bundle_id: '_all',
+      loop_id: 'lp',
+      iteration_id: 'iteration-current',
+    }, exactRun)).resolves.toEqual({
+      platform: { status: 'valid', grants: ['enter-afk'] },
+      skill: { status: 'valid', grants: ['enter-afk'] },
+      project: { status: 'valid', grants: ['enter-afk'] },
+      run: { status: 'valid', grants: ['enter-afk'] },
+    })
+    expect(resolver).toHaveBeenCalledOnce()
+    expect(resolver).toHaveBeenCalledWith({
+      change: 'ready-a',
+      skillBundleId: '_all',
+      workflowRunId: exactRun.id,
+      workflowFingerprint: exactRun.workflowPlanFingerprint,
+    })
+  })
+
+  it('denies an archived exact Run even when automation remains queued', async () => {
+    const state = {
+      ...mockState({ track: 'backend', automation: 'queued', archived: 'true' }),
+      runMetadata: {
+        runId: exactRun.id,
+        transitionSequence: 0,
+        workflowPlanFingerprint: exactRun.workflowPlanFingerprint,
+        loopId: exactRun.loopId,
+        iterationId: exactRun.iterationId,
+      },
+    }
+
+    const facts = await resolveAfkWorkflowActionAuthority(
+      withEnterAfkSkillAuthority(makeDeps({ cwd: '/repo', state })),
+      'ready-a',
+      { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts.run).toEqual({ status: 'valid', grants: [] })
+  })
+
+  it.each([
+    ['skill', mockState({ track: 'backend', automation: 'queued' }), null, 'missing'],
+    ['project', mockState({ track: 'free', automation: 'queued' }), '_all', 'valid'],
+    ['run', mockState({ track: 'backend', automation: 'off' }), '_all', 'valid'],
+  ] as const)('keeps %s denial independent instead of expanding it from AFK mode', async (
+    layer,
+    baseState,
+    skillBundleId,
+    status,
+  ) => {
+    const state = {
+      ...baseState,
+      runMetadata: {
+        runId: exactRun.id,
+        transitionSequence: 0,
+        workflowPlanFingerprint: exactRun.workflowPlanFingerprint,
+        loopId: exactRun.loopId,
+        iterationId: exactRun.iterationId,
+      },
+    }
+    const facts = await resolveAfkWorkflowActionAuthority(
+      withEnterAfkSkillAuthority(makeDeps({ cwd: '/repo', state })),
+      'ready-a',
+      { skill_bundle_id: skillBundleId, loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts[layer]).toEqual({ status, grants: [] })
   })
 })
 

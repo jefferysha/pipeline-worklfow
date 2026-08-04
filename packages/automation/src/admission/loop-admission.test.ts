@@ -2,7 +2,8 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  createLoopLedgerStore, loadRegistry, nodeLoopIoStrict, registryContentEpoch,
+  compileEffectiveWorkflowPlan, createLoopLedgerStore, loadRegistry, nodeLoopIoStrict, registryContentEpoch,
+  workflowPlanSnapshot,
   type EffectiveSkillResolver, type LoopEntry, type LoopLedgerStore, type LoopRegistry, type StepIR, type VerificationResult,
 } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -58,6 +59,25 @@ const loop = (over: Partial<LoopEntry> = {}): LoopEntry => ({
 
 const registry = (loops: LoopEntry[]): { data: LoopRegistry | null; errors: string[] } => ({ data: { version: 1, loops }, errors: [] })
 
+const policySnapshot = (mode: 'interactive' | 'afk') => workflowPlanSnapshot(compileEffectiveWorkflowPlan(
+  `automation-${mode}`,
+  {
+    name: `automation-${mode}`,
+    interaction: { version: 'v1', mode },
+    steps: [{
+      id: 'build', label: 'Build', gate: null,
+      skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+    }],
+  },
+))
+const AFK_PLAN = policySnapshot('afk')
+const AUTHORIZED_AFK_LAYERS = {
+  platform: { status: 'valid', grants: ['enter-afk'] },
+  skill: { status: 'valid', grants: ['enter-afk'] },
+  project: { status: 'valid', grants: ['enter-afk'] },
+  run: { status: 'valid', grants: ['enter-afk'] },
+} as const
+
 let dir: string
 let idc = 0
 const admission = (over: Partial<LoopAdmissionDeps> & { loops?: LoopEntry[] } = {}) => {
@@ -70,6 +90,15 @@ const admission = (over: Partial<LoopAdmissionDeps> & { loops?: LoopEntry[] } = 
     level: 'L1',
     getAutomation: over.getAutomation ?? (async () => ''),
     newId: over.newId ?? ((p) => `${p}-${idc++}`),
+    bindAutomationPolicy: over.bindAutomationPolicy ?? (async (_change, policy, binding) => ({
+      id: `workflow-${binding.iterationId.replace(/^iteration-/, '')}`,
+      automationPolicy: policy,
+      ...binding,
+      workflowId: AFK_PLAN.workflowId,
+      workflowPlanFingerprint: AFK_PLAN.workflowFingerprint,
+      workflowPlanSnapshot: AFK_PLAN,
+    })),
+    workflowActionAuthority: over.workflowActionAuthority ?? (async () => AUTHORIZED_AFK_LAYERS),
     ...over,
   })
 }
@@ -145,7 +174,12 @@ describe('reserve · 原子 preflight 放行', () => {
     const adm = admission({
       bindAutomationPolicy: async (change, policy, binding) => {
         bound.push({ change, policyVersion: policy.policy_version })
-        return { id: 'workflow-run-1', automationPolicy: policy, ...binding }
+        return {
+          id: 'workflow-run-1', automationPolicy: policy, ...binding,
+          workflowId: AFK_PLAN.workflowId,
+          workflowPlanFingerprint: AFK_PLAN.workflowFingerprint,
+          workflowPlanSnapshot: AFK_PLAN,
+        }
       },
     })
     const result = await adm.reserve('lp-x')
@@ -190,6 +224,78 @@ describe('reserve · 原子 preflight 放行', () => {
       result: 'failed', reason: 'automation-policy-bind-failed',
       accounting: { charged_tokens: 0, charge_source: 'none' },
     })
+  })
+
+  it('PR3：exact Run grant 缺失时在 claim 前结构化拒绝，并零扣费关闭 reservation', async () => {
+    const adm = admission({
+      workflowActionAuthority: async () => ({
+        ...AUTHORIZED_AFK_LAYERS,
+        run: { status: 'missing', grants: [] },
+      }),
+    })
+
+    const result = await adm.reserve('lp-x')
+
+    expect(result).toMatchObject({
+      ok: false,
+      action: 'skip-run',
+      reason: 'workflow-action-hard-blocked',
+      authorization: { allowed: false, status: 'hard-blocked' },
+    })
+    if (result.ok) return
+    expect(result.authorization?.denials).toContainEqual(expect.objectContaining({
+      layer: 'run', code: 'run-missing', remediation: 'repair-authority-binding',
+    }))
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.openReservations).toHaveLength(0)
+    expect(win.runs).toContainEqual(expect.objectContaining({
+      result: 'skipped', reason: 'admission-denied',
+      accounting: expect.objectContaining({ charged_tokens: 0, charge_source: 'none' }),
+    }))
+  })
+
+  it('PR3：frozen interactive Workflow 不因四层动态 grant 齐全而获得 AFK 权限', async () => {
+    const interactive = policySnapshot('interactive')
+    const adm = admission({
+      bindAutomationPolicy: async (_change, policy, binding) => ({
+        id: 'workflow-interactive', automationPolicy: policy, ...binding,
+        workflowId: interactive.workflowId,
+        workflowPlanFingerprint: interactive.workflowFingerprint,
+        workflowPlanSnapshot: interactive,
+      }),
+    })
+
+    const result = await adm.reserve('lp-x')
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-denied',
+      authorization: { allowed: false, status: 'denied' },
+    })
+    if (!result.ok) {
+      expect(result.authorization?.denials).toContainEqual(expect.objectContaining({
+        layer: 'workflow', code: 'workflow-denied',
+      }))
+    }
+  })
+
+  it('PR3：缺 canonical WorkflowRun bridge 时失败关闭，不允许 SDK compatibility 路径绕过', async () => {
+    const adm = admission({ bindAutomationPolicy: undefined, workflowActionAuthority: undefined })
+
+    const result = await adm.reserve('lp-x')
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-hard-blocked',
+      authorization: { allowed: false, status: 'hard-blocked' },
+    })
+    if (!result.ok) {
+      expect(result.authorization?.denials).toEqual(expect.arrayContaining([
+        expect.objectContaining({ layer: 'workflow', code: 'workflow-missing' }),
+        expect.objectContaining({ layer: 'run', code: 'run-missing' }),
+      ]))
+    }
+    expect((await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })).openReservations).toHaveLength(0)
   })
 })
 
