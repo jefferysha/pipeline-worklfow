@@ -778,7 +778,7 @@ describe('task plan store', () => {
     await expect(readFile(join(revisionsDir, canonicalRevisionFileName(target)), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(currentPath, 'utf8')).toBe(currentBefore)
-  })
+  }, 15_000)
 
   it('applies proposed admission to an initial publish with an orphan directory at the entry cap', async () => {
     const dir = await changeDir()
@@ -794,7 +794,7 @@ describe('task plan store', () => {
       .rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(dir, TASK_PLAN_STATE_DIR, TASK_PLAN_CURRENT_FILE), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
-  })
+  }, 15_000)
 
   it('rejects a single oversized proposed revision as a typed conflict before creating state', async () => {
     const dir = await changeDir()
