@@ -23,11 +23,13 @@ import { scanReadyFromFs } from '../queue/scan.js'
 import {
   createScheduler,
   type ExecutionWiringValidationResult,
+  type RegisterShutdown,
   type RoundReport,
   type RunChange,
   type StateWriter,
 } from '../scheduler/scheduler.js'
 import { type AutomationConfig, DEFAULT_CONFIG } from '../types.js'
+import { createAfkSkillInvocationLifecycle } from '../skillInvocationAfkLifecycle.js'
 
 /**
  * 二次任务（queued 卡死回归修复）：createAutomation 未显式注入 `deps.preparation` 时的缺省
@@ -96,6 +98,28 @@ export interface AutomationDeps {
    * 在此注入替换；测试可注入 fake 断言编排（同 deps.admission 既有惯例）。
    */
   readonly preparation?: ExecutionPreparationPort
+  /** Process/runtime shutdown registration. Production defaults to SIGINT/SIGTERM with async drain. */
+  readonly registerShutdown?: RegisterShutdown
+}
+
+const registerProcessShutdown: RegisterShutdown = (teardown) => {
+  let active = true
+  const handle = (): void => {
+    if (!active) return
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+    void Promise.resolve(teardown()).catch(() => {
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', handle)
+  process.once('SIGTERM', handle)
+  return () => {
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+  }
 }
 
 /**
@@ -183,12 +207,13 @@ export function createAutomation(deps: AutomationDeps): Automation {
   const schedulerFor = (runChange: RunChange) => createScheduler({
     state: storeWriter(store, changeDir),
     runChange,
-    registerShutdown: () => () => {},
+    registerShutdown: deps.registerShutdown ?? registerProcessShutdown,
     config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level },
     admission,
     preparation,
     pauseLoop: deps.pauseLoop,
     validateExecutionWiring: deps.validateExecutionWiring,
+    skillInvocations: createAfkSkillInvocationLifecycle(changeDir),
   })
 
   return {

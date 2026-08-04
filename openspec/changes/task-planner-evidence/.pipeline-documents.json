@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-03T09:19:50Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-03-task-planner-evidence-explore.md",
+      "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T09:56:59Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+          "readAt": "2026-08-04T04:12:51Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+          "readAt": "2026-08-04T04:26:27Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",4]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+          "readAt": "2026-08-04T04:29:18Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3d364462d9da30273b28ef033334a107ea010ad111210b336037dcdcc178d397",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-04-task-planner-evidence-verify-fail-1.md",
+      "sha256": "654d970898de362cdfa579f5fca5f3812132a1079fc7e42ccedeb0dd592a1daa",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-04T04:26:21Z",
+      "reads": []
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/task-planner-evidence/proposal.md",
+      "sha256": "6524fab2a5a504a33c31a263e4cd07d209e22f9ee24eb6888dde767ae12a76bc",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T04:29:10Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "6524fab2a5a504a33c31a263e4cd07d209e22f9ee24eb6888dde767ae12a76bc",
+          "readAt": "2026-08-04T04:29:18Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6524fab2a5a504a33c31a263e4cd07d209e22f9ee24eb6888dde767ae12a76bc",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/task-planner-evidence/design.md",
+      "sha256": "ece1c3b909a108547dd093291cafe157db0cd1d97f2ac9bbfd4bd4e91dc5edeb",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T04:29:10Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ece1c3b909a108547dd093291cafe157db0cd1d97f2ac9bbfd4bd4e91dc5edeb",
+          "readAt": "2026-08-04T04:29:18Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "ece1c3b909a108547dd093291cafe157db0cd1d97f2ac9bbfd4bd4e91dc5edeb",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-03-task-planner-evidence-design.md",
+      "sha256": "64b718fc39f03749bb1b564fad4093defce7df556b9bbc97fd6b25da18ed58f7",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T04:29:10Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "64b718fc39f03749bb1b564fad4093defce7df556b9bbc97fd6b25da18ed58f7",
+          "readAt": "2026-08-04T04:29:18Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "64b718fc39f03749bb1b564fad4093defce7df556b9bbc97fd6b25da18ed58f7",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/task-planner-evidence/specs/skill-invocation-evidence/spec.md",
+      "sha256": "c42b0be51f6bab664e331a8678ea8a3ba754ac4e7e493c3ce554bfd328e5d3b9",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-04T04:29:10Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "c42b0be51f6bab664e331a8678ea8a3ba754ac4e7e493c3ce554bfd328e5d3b9",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-planner-evidence.md",
+      "sha256": "acc5b03e33a43a6149c7304162a31bc4a9200c900ad2cd143caa7c9dd78aaca0",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T04:29:11Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "acc5b03e33a43a6149c7304162a31bc4a9200c900ad2cd143caa7c9dd78aaca0",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-planner-evidence.md",
+      "sha256": "acc5b03e33a43a6149c7304162a31bc4a9200c900ad2cd143caa7c9dd78aaca0",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T04:29:11Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "acc5b03e33a43a6149c7304162a31bc4a9200c900ad2cd143caa7c9dd78aaca0",
+          "readAt": "2026-08-04T04:30:01Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/task-planner-evidence/tasks.md",
+      "sha256": "55ffeaa2dc30fdc3e491bcb27bfe30b4ee2db058d10355d441a6de36236342a6",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-04T06:33:43Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "55ffeaa2dc30fdc3e491bcb27bfe30b4ee2db058d10355d441a6de36236342a6",
+          "readAt": "2026-08-04T06:34:00Z",
+          "visitId": "[\"b8d354ee-3a20-441d-9a20-c7492ffee1b7\",7]"
+        }
+      ]
+    }
+  ]
+}

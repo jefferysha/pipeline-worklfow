@@ -13,6 +13,7 @@
 import { appendFile, lstat, mkdir, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { documentGovernancePolicy, loadWorkflow, recordDocument } from '@tenon/kernel'
 import { freshHarness, rm, type Harness } from './integration-harness.js'
 
 const TWO_STEP_WF = `name: onboarding
@@ -433,12 +434,27 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
       `${JSON.stringify({ ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: 'Skill: writer' })}\n`,
       'utf8',
     )
+    // A bare history row is intentionally insufficient for the production command: document
+    // Invocation evidence requires a real transcript-bound v2 StepVisit confirmation.
     expect(
       await h.run([
         'document', 'record', 'compact-run', 'proposal', 'docs/compact-run-proposal.md',
         '--producer', 'writer',
       ]),
-    ).toBe(0)
+    ).toBe(1)
+    const workflow = loadWorkflow(h.cwd, 'compact-governed')
+    const policy = workflow === null ? undefined : documentGovernancePolicy('compact-governed', workflow)
+    if (policy === undefined) throw new Error('custom document policy fixture missing')
+    await recordDocument({
+      repoRoot: h.cwd,
+      changeDir: join(h.cwd, 'openspec', 'changes', 'compact-run'),
+      phase: 'shape',
+      policy,
+      kind: 'proposal',
+      path: 'docs/compact-run-proposal.md',
+      producer: 'writer',
+      recordedAt: '2026-07-07T00:00:00Z',
+    })
     expect(await h.run(['transition', 'compact-run', 'shape-complete'])).toBe(0)
     expect((await h.read('compact-run'))).toMatch(/^phase: implement$/m)
 
