@@ -4,6 +4,8 @@ export interface TaskRunAdmissionInput {
   readonly plan_status: 'draft' | 'frozen'
   readonly plan_revision_id: string
   readonly expected_plan_revision_id: string
+  readonly plan_fingerprint: string
+  readonly expected_plan_fingerprint: string
   readonly schedule_valid: boolean
   readonly interaction_policy: 'interactive' | 'recommended-defaults' | 'invalid'
   readonly evidence_verified: boolean
@@ -25,6 +27,9 @@ export function evaluateTaskRunAdmission(input: TaskRunAdmissionInput): TaskRunA
   }
   if (input.plan_revision_id !== input.expected_plan_revision_id) {
     blockers.push(blocker('PLAN_IDENTITY_DRIFT', 'TaskPlan revision no longer matches the admitted identity.', 'REFRESH_PLAN_IDENTITY'))
+  }
+  if (input.plan_fingerprint !== input.expected_plan_fingerprint) {
+    blockers.push(blocker('PLAN_FINGERPRINT_DRIFT', 'TaskPlan content no longer matches the admitted fingerprint.', 'REFRESH_PLAN_IDENTITY'))
   }
   if (!input.schedule_valid) {
     blockers.push(blocker('SCHEDULE_INVALID', 'Task schedule compilation failed.', 'FIX_PLAN_GRAPH'))

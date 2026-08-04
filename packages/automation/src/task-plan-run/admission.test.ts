@@ -5,6 +5,8 @@ const base = {
   plan_status: 'frozen' as const,
   plan_revision_id: 'revision',
   expected_plan_revision_id: 'revision',
+  plan_fingerprint: 'sha256:plan',
+  expected_plan_fingerprint: 'sha256:plan',
   schedule_valid: true,
   interaction_policy: 'recommended-defaults' as const,
   evidence_verified: true,
@@ -38,6 +40,7 @@ describe('evaluateTaskRunAdmission', () => {
   it.each([
     ['PLAN_NOT_FROZEN', { plan_status: 'draft' as const }],
     ['PLAN_IDENTITY_DRIFT', { plan_revision_id: 'other' }],
+    ['PLAN_FINGERPRINT_DRIFT', { plan_fingerprint: 'sha256:other' }],
     ['SCHEDULE_INVALID', { schedule_valid: false }],
     ['EVIDENCE_MISSING', { evidence_verified: false }],
     ['EXECUTE_PERMISSION_DENIED', { execute_permission: false }],
