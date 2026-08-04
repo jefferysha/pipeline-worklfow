@@ -673,6 +673,56 @@ describe('scheduler round（admission 闸门 + 真状态机写回 + 分级放权
     expect(report.failures.some((failure) => failure.message.includes('scheduler interrupted'))).toBe(true)
   })
 
+  it('shutdown normalizes an abort-aware runner rejection before durable settlement and invocation finish', async () => {
+    const { state } = makeState({ c: 'queued' })
+    const fa = fakeAdmission()
+    let teardown: (() => void | Promise<void>) | undefined
+    let shutdown: Promise<void> | undefined
+    let finishEntered: (() => void) | undefined
+    let releaseFinish: (() => void) | undefined
+    let shutdownSettled = false
+    let invocationInterrupted = false
+    const finishStarted = new Promise<void>((resolve) => { finishEntered = resolve })
+    const finishGate = new Promise<void>((resolve) => { releaseFinish = resolve })
+    const handle = Object.freeze({})
+    const round = createScheduler(deps({
+      state,
+      admission: fa.admission,
+      registerShutdown: (fn) => { teardown = fn; return () => {} },
+      skillInvocations: {
+        start: async () => [handle] as never,
+        finish: async () => {
+          finishEntered?.()
+          await finishGate
+          invocationInterrupted = fa.calls.settleWon[0]?.s.error?.cause === 'scheduler-interrupted'
+        },
+      },
+      runChange: async (_context, signal) => {
+        shutdown = Promise.resolve(teardown?.())
+        await Promise.resolve()
+        expect(signal.aborted).toBe(true)
+        throw new Error('runner rejected after abort')
+      },
+    })).runRoundOnce(['c'])
+
+    await finishStarted
+    void shutdown?.then(() => { shutdownSettled = true })
+    await Promise.resolve()
+    expect(shutdownSettled).toBe(false)
+    releaseFinish?.()
+
+    const report = await round
+    await shutdown
+    expect(fa.calls.settleWon[0]?.s.error).toEqual(expect.objectContaining({ cause: 'scheduler-interrupted' }))
+    expect(invocationInterrupted).toBe(true)
+    expect(shutdownSettled).toBe(true)
+    expect(report.ok).toBe(false)
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      phase: 'execution',
+      message: expect.stringContaining('scheduler interrupted'),
+    }))
+  })
+
   it('shutdown during invocation start aborts and interrupts newly issued handles before runner execution', async () => {
     const { state } = makeState({ c: 'queued' })
     let teardown: (() => void | Promise<void>) | undefined

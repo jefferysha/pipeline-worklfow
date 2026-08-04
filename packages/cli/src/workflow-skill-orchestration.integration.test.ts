@@ -160,7 +160,7 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
    *   ② 拦住就真模拟一次 AskUserQuestion（PostToolUse confirm-clear.sh + decision-recorder.sh）
    *      解锁，复检真放行
    *   ③ 放行后真触发这次 Skill 调用的 PostToolUse 对（skill-tracker.sh + interactive-skill-gate.sh）
-   * 断言每一步的真实副作用（marker 文件真删/真建、JSONL 真 append 恰一行且内容含 skill 名）。
+   * 断言每一步的真实副作用（marker 文件真删/真建；兼容 prompt 行只记录交互类别，不落原问答）。
    */
   async function invokeSkillThroughGate(
     phase: Phase,
@@ -190,7 +190,8 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
       expect(afterLines.length, 'decision-recorder 应真 append 恰一行').toBe(beforeLen + 1)
       const last = afterLines[afterLines.length - 1]
       expect(last?.kind).toBe('prompt')
-      expect(last?.raw ?? '').toContain(resolved)
+      expect(last?.raw).toBe('HostInteractionRecorded')
+      expect(last?.raw ?? '').not.toContain(resolved)
 
       gate = runHook('gate.sh', { cwd: h.cwd, tool_name: 'Skill' })
       expect(gate.code, `AskUserQuestion 后 gate 应放行（${phase}/${resolved}）`).toBe(0)

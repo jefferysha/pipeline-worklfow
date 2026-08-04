@@ -1486,9 +1486,11 @@ after="$(count_lines "$JL")"
 [ "$after" = "$((before + 1))" ] && ok "decision-recorder: JSONL 真 append 恰一行" || bad "decision-recorder: JSONL 真 append 恰一行" "before=$before after=$after"
 line="$(tail -1 "$JL" 2>/dev/null)"
 assert_contains "decision-recorder: kind=prompt" "$line" '"kind":"prompt"'
-assert_contains "decision-recorder: raw 含问题文本" "$line" "走 Tenon"
-assert_contains "decision-recorder: raw 含答案文本" "$line" "tenon"
-assert_contains "decision-recorder: raw 含 Q/A 结构（对齐 import）" "$line" "Q: "
+assert_contains "decision-recorder: history 仅含事件类别" "$line" "HostInteractionRecorded"
+case "$line" in
+  *"走 Tenon"*|*'"A: tenon'*|*'Q: '*) bad "decision-recorder: history 不含原始问答" "$line" ;;
+  *) ok "decision-recorder: history 不含原始问答" ;;
+esac
 jsonl_valid "$JL"; vrc=$?
 case "$vrc" in 0) ok "decision-recorder: JSONL 全行合法 JSON（node 校验）" ;; 2) printf 'skip - node 不可用，跳过 decision-recorder JSONL 合法性\n' ;; *) bad "decision-recorder: JSONL 全行合法 JSON（node 校验）" "解析失败：$line" ;; esac
 # 转义硬测（别写坏 JSONL）：问题/答案含 换行 + 反斜杠 + 双引号 → 仍恰一行 + 合法 JSON
@@ -1665,10 +1667,21 @@ RC=$?
 assert_exit "interactive-skill-gate: 非 Skill 工具 → exit 0" 0 "$RC"
 assert_empty "interactive-skill-gate: 非 Skill 工具 → 空输出" "$OUT"
 
-# ── 10e. 红线自证：PostToolUse 热路径 → 纯 bash，零 node/python/jq ──
+# ── 10e. 红线自证：PostToolUse 热路径保持 bash；唯二 producer hook 只允许精确 managed CLI bridge ──
 for f in "$CC" "$CP" "$DR" "$ST" "$IG" "$IA" "$TA"; do
   base="$(basename "$f")"
-  n="$(grep -c "node" "$f" 2>/dev/null || true)";   [ "$n" = "0" ] && ok "红线: $base 内无 node" || bad "红线: $base 内无 node" "实得 ${n} 行"
+  case "$base" in
+    decision-recorder.sh|skill-tracker.sh)
+      n="$(grep -c "node" "$f" 2>/dev/null || true)"
+      unexpected="$(grep -n "node" "$f" 2>/dev/null | grep -Ev 'command -v node|^[0-9]+:[[:space:]]*node "\$BUNDLE"' || true)"
+      [ "$n" = "2" ] && [ -z "$unexpected" ] \
+        && ok "红线: $base 仅含精确 managed CLI bridge" \
+        || bad "红线: $base 仅含精确 managed CLI bridge" "node 行数=$n unexpected=$unexpected"
+      ;;
+    *)
+      n="$(grep -c "node" "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 内无 node" || bad "红线: $base 内无 node" "实得 ${n} 行"
+      ;;
+  esac
   n="$(grep -c "python" "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
   n="$(grep -c '\bjq\b' "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 不依赖 jq" || bad "红线: $base 不依赖 jq" "实得 ${n} 行"
 done

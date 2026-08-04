@@ -283,6 +283,16 @@ function validateExistingLedger(events: readonly SkillInvocationEventV1[]): void
   }
 }
 
+export async function readSkillInvocationEventsForApplication(
+  changeDir: string,
+): Promise<readonly SkillInvocationEventV1[]> {
+  const identity = await captureLedgerIdentity(ledgerPath(changeDir))
+  const events = await readLedgerEvents(changeDir)
+  await assertLedgerIdentity(ledgerPath(changeDir), identity)
+  validateExistingLedger(events)
+  return structuredClone(events)
+}
+
 function validateResultingLedger(events: readonly SkillInvocationEventV1[]): void {
   if (events.length > SKILL_INVOCATION_LIMITS.maxEvents) {
     throw new SkillInvocationEvidenceBindingError('SkillInvocation ledger would exceed the event budget')
@@ -315,78 +325,126 @@ function intentFor(
   return intent?.payload
 }
 
+export interface SkillInvocationChangeLock {
+  readonly kind: 'skill-invocation-change-lock'
+}
+
+const activeChangeLocks = new WeakMap<SkillInvocationChangeLock, string>()
+
+export async function withSkillInvocationChangeLock<T>(
+  changeDir: string,
+  operation: (lock: SkillInvocationChangeLock) => Promise<T>,
+): Promise<T> {
+  return withLock(changeDir, async () => {
+    const lock: SkillInvocationChangeLock = Object.freeze({ kind: 'skill-invocation-change-lock' })
+    activeChangeLocks.set(lock, changeDir)
+    try {
+      return await operation(lock)
+    } finally {
+      activeChangeLocks.delete(lock)
+    }
+  })
+}
+
+async function appendSkillInvocationEventWithLockHeld(
+  changeDir: string,
+  input: SkillInvocationEventV1,
+  options: AppendSkillInvocationEventOptions,
+): Promise<{ readonly appended: boolean }> {
+  const identity = await captureLedgerIdentity(ledgerPath(changeDir))
+  const events = await readLedgerEvents(changeDir)
+  await assertLedgerIdentity(ledgerPath(changeDir), identity)
+  validateExistingLedger(events)
+  const replay = events.find((event) => event.event_id === input.event_id)
+  if (replay !== undefined) {
+    if (encodeSkillInvocationEventV1(replay) === encodeSkillInvocationEventV1(input)) {
+      await assertLedgerIdentity(ledgerPath(changeDir), identity)
+      return { appended: false }
+    }
+    throw new SkillInvocationEvidenceCorruptError('event id conflicts with an existing fact')
+  }
+  const expected = await canonicalBinding(changeDir, options.attempt)
+  assertBinding(input, expected)
+  const invocationEvents = events.filter((event) => event.invocation_id === input.invocation_id)
+  const resultingEvents = [...events, input]
+  const encodedLine = `${encodeSkillInvocationEventV1(input)}\n`
+  if ((identity?.size ?? 0) + Buffer.byteLength(encodedLine) > SKILL_INVOCATION_LIMITS.maxLedgerBytes) {
+    throw new SkillInvocationEvidenceBindingError('SkillInvocation ledger would exceed the byte budget')
+  }
+  validateResultingLedger(resultingEvents)
+  const invocationStarted = startedEvent(
+    input.type === 'invocation-started' ? [input] : invocationEvents,
+  )
+  if (input.type === 'decision-recorded' && input.payload.mode === 'recommended-default') {
+    const decisionEvent = input
+    const question = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'question-recorded' }> =>
+      event.type === 'question-recorded' && event.payload.question_id === decisionEvent.payload.question_id)
+    if (question === undefined || !await (options.verify_recommended_default?.({
+      decision: structuredClone(decisionEvent.payload),
+      question: structuredClone(question.payload),
+      started: structuredClone(invocationStarted),
+      subject: structuredClone(decisionEvent.subject),
+      events: structuredClone(invocationEvents),
+    }) ?? Promise.resolve(false))) {
+      throw new SkillInvocationEvidenceBindingError('recommended default is not allowed by the exact frozen policy')
+    }
+  }
+  if (
+    input.type === 'invocation-completed'
+    && !await (options.verify_completed_adapter?.({
+      completion: structuredClone(input),
+      started: structuredClone(invocationStarted),
+      subject: structuredClone(input.subject),
+      events: structuredClone(invocationEvents),
+    }) ?? Promise.resolve(false))
+  ) {
+    throw new SkillInvocationEvidenceBindingError('completed invocation lacks a trusted adapter verdict')
+  }
+  if (
+    input.type === 'invocation-interrupted'
+    && !await (options.verify_interruption_recovery?.(structuredClone(input)) ?? Promise.resolve(false))
+  ) {
+    throw new SkillInvocationEvidenceBindingError('interrupted invocation lacks exact ownership recovery')
+  }
+  if (input.type === 'artifact-bound') {
+    const intent = intentFor(events, input)
+    if (intent === undefined || !await verifyArtifact(changeDir, intent, input.payload, options)) {
+      throw new SkillInvocationEvidenceBindingError('artifact binding does not match the current artifact or canonical document record')
+    }
+  }
+  await appendFsync(ledgerPath(changeDir), encodedLine, identity)
+  return { appended: true }
+}
+
+function decodeApplicationEvent(input: SkillInvocationEventV1): SkillInvocationEventV1 {
+  const decoded = decodeSkillInvocationEventV1(input)
+  if (!decoded.ok) {
+    throw new SkillInvocationEvidenceBindingError(`event codec rejected input: ${decoded.code} ${decoded.path}`)
+  }
+  return decoded.value
+}
+
 export async function appendSkillInvocationEvent(
   changeDir: string,
   input: SkillInvocationEventV1,
   options: AppendSkillInvocationEventOptions,
 ): Promise<{ readonly appended: boolean }> {
-  const decoded = decodeSkillInvocationEventV1(input)
-  if (!decoded.ok) throw new SkillInvocationEvidenceBindingError(`event codec rejected input: ${decoded.code} ${decoded.path}`)
-  return withLock(changeDir, async () => {
-    const identity = await captureLedgerIdentity(ledgerPath(changeDir))
-    const events = await readLedgerEvents(changeDir)
-    await assertLedgerIdentity(ledgerPath(changeDir), identity)
-    validateExistingLedger(events)
-    const replay = events.find((event) => event.event_id === decoded.value.event_id)
-    if (replay !== undefined) {
-      if (encodeSkillInvocationEventV1(replay) === encodeSkillInvocationEventV1(decoded.value)) {
-        await assertLedgerIdentity(ledgerPath(changeDir), identity)
-        return { appended: false }
-      }
-      throw new SkillInvocationEvidenceCorruptError('event id conflicts with an existing fact')
-    }
-    const expected = await canonicalBinding(changeDir, options.attempt)
-    assertBinding(decoded.value, expected)
-    const invocationEvents = events.filter((event) => event.invocation_id === decoded.value.invocation_id)
-    const resultingEvents = [...events, decoded.value]
-    const encodedLine = `${encodeSkillInvocationEventV1(decoded.value)}\n`
-    if ((identity?.size ?? 0) + Buffer.byteLength(encodedLine) > SKILL_INVOCATION_LIMITS.maxLedgerBytes) {
-      throw new SkillInvocationEvidenceBindingError('SkillInvocation ledger would exceed the byte budget')
-    }
-    validateResultingLedger(resultingEvents)
-    const invocationStarted = startedEvent(
-      decoded.value.type === 'invocation-started' ? [decoded.value] : invocationEvents,
-    )
-    if (decoded.value.type === 'decision-recorded' && decoded.value.payload.mode === 'recommended-default') {
-      const decisionEvent = decoded.value
-      const question = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'question-recorded' }> =>
-        event.type === 'question-recorded' && event.payload.question_id === decisionEvent.payload.question_id)
-      if (question === undefined || !await (options.verify_recommended_default?.({
-        decision: structuredClone(decisionEvent.payload),
-        question: structuredClone(question.payload),
-        started: structuredClone(invocationStarted),
-        subject: structuredClone(decisionEvent.subject),
-        events: structuredClone(invocationEvents),
-      }) ?? Promise.resolve(false))) {
-        throw new SkillInvocationEvidenceBindingError('recommended default is not allowed by the exact frozen policy')
-      }
-    }
-    if (
-      decoded.value.type === 'invocation-completed'
-      && !await (options.verify_completed_adapter?.({
-        completion: structuredClone(decoded.value),
-        started: structuredClone(invocationStarted),
-        subject: structuredClone(decoded.value.subject),
-        events: structuredClone(invocationEvents),
-      }) ?? Promise.resolve(false))
-    ) {
-      throw new SkillInvocationEvidenceBindingError('completed invocation lacks a trusted adapter verdict')
-    }
-    if (
-      decoded.value.type === 'invocation-interrupted'
-      && !await (options.verify_interruption_recovery?.(structuredClone(decoded.value)) ?? Promise.resolve(false))
-    ) {
-      throw new SkillInvocationEvidenceBindingError('interrupted invocation lacks exact ownership recovery')
-    }
-    if (decoded.value.type === 'artifact-bound') {
-      const intent = intentFor(events, decoded.value)
-      if (intent === undefined || !await verifyArtifact(changeDir, intent, decoded.value.payload, options)) {
-        throw new SkillInvocationEvidenceBindingError('artifact binding does not match the current artifact or canonical document record')
-      }
-    }
-    await appendFsync(ledgerPath(changeDir), encodedLine, identity)
-    return { appended: true }
-  })
+  const decoded = decodeApplicationEvent(input)
+  return withLock(changeDir, async () => appendSkillInvocationEventWithLockHeld(changeDir, decoded, options))
+}
+
+/** Internal application-command seam. The caller must already own the canonical Change lock. */
+export async function appendSkillInvocationEventUnderLock(
+  changeDir: string,
+  lock: SkillInvocationChangeLock,
+  input: SkillInvocationEventV1,
+  options: AppendSkillInvocationEventOptions,
+): Promise<{ readonly appended: boolean }> {
+  if (activeChangeLocks.get(lock) !== changeDir) {
+    throw new SkillInvocationEvidenceBindingError('SkillInvocation Change lock capability is invalid')
+  }
+  const decoded = decodeApplicationEvent(input)
+  return appendSkillInvocationEventWithLockHeld(changeDir, decoded, options)
 }
 
 export async function readSkillInvocationEvidence(changeDir: string): Promise<SkillInvocationListReadModelV1> {

@@ -53,6 +53,7 @@ export * from './runner/docker.js'
 export * from './config/automationJson.js'
 // sdk：对外编排 API
 export * from './sdk/sdk.js'
+export type { AfkInteractionReceiptPort } from './skillInvocationAfkLifecycle.js'
 // #29-wire：真 docker 执行接线（createLifecyclePorts + runChangeInSandbox → RunChange）
 export * from './sdk/dockerRunChange.js'
 // ─── BACKLOG #29c：docker 全链执行（真 docker / 真 git worktree / 真 merge-back）───

@@ -41,6 +41,10 @@ import {
 import type { CliDeps, GuardFileContext } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 import { readBoundedRegularFileSync } from './guardContext.js'
+import {
+  recordCanonicalDocumentSkillInvocation,
+  recordNativeDocumentSkillConfirmation,
+} from './test-support.js'
 
 /** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
 function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
@@ -173,21 +177,56 @@ export async function seedGovernedDocumentEvidence(
   ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
   await writeFile(historyPath, `${originalHistory ?? ''}${skillLines}\n`, 'utf8')
 
+  const store = createStateStore()
+  const originalPhase = String((await store.read(changeDir)).fields.phase)
+  let receiptSequence = 0
+  const record = async (
+    phase: string,
+    kind: Parameters<typeof recordDocument>[0]['kind'],
+    path: string,
+    producer: string,
+  ): Promise<void> => {
+    await store.set(changeDir, 'phase', phase)
+    receiptSequence += 1
+    await appendFile(historyPath, `${JSON.stringify({
+      ts: FIXED_CLOCK, kind: 'init', raw: `fixture visit ${phase}`,
+    })}\n${JSON.stringify({
+      ts: FIXED_CLOCK, kind: 'tool', raw: `Skill: ${producer}`,
+    })}\n`, 'utf8')
+    const confirmed = await recordNativeDocumentSkillConfirmation(changeDir, producer, phase, {
+      sessionId: `integration-harness-${name}`,
+      toolUseId: `document-${receiptSequence}`,
+      observedAt: FIXED_CLOCK,
+    })
+    if (!confirmed) throw new Error(`fixture native confirmation rejected for ${producer}`)
+    const ledger = await recordDocument({
+      repoRoot: root, changeDir, phase, kind, path, producer, recordedAt: FIXED_CLOCK,
+    })
+    const canonicalRecord = [...ledger.records].reverse().find((candidate) =>
+      candidate.kind === kind && candidate.path === path && candidate.recordedAt === FIXED_CLOCK)
+    if (canonicalRecord === undefined) throw new Error(`fixture canonical record missing for ${path}`)
+    const invocation = await recordCanonicalDocumentSkillInvocation(
+      changeDir, kind, FIXED_CLOCK, { record: canonicalRecord },
+    )
+    if (invocation === undefined) throw new Error(`fixture canonical invocation missing for ${path}`)
+  }
+
   try {
     const recordedAt = FIXED_CLOCK
     // CLI init currently creates this sidecar, but keep the harness fixture valid for callers
     // that initialize through the StateStore seam rather than the CLI command.
     await ensureDocumentLedger(changeDir, recordedAt)
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: docs.proposal, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'openspec-design', path: docs.design, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'tasks', path: docs.tasks, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'superpower-design', path: docs.superpowerDesign, producer: 'brainstorming', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: docs.adr, producer: 'brainstorming', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: docs.delta, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'superpower-plan', path: docs.plan, producer: 'writing-plans', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
+    await record('open', 'proposal', docs.proposal, 'openspec-propose')
+    await record('open', 'openspec-design', docs.design, 'openspec-propose')
+    await record('open', 'tasks', docs.tasks, 'openspec-propose')
+    await record('explore', 'superpower-design', docs.superpowerDesign, 'brainstorming')
+    await record('explore', 'adr', docs.adr, 'brainstorming')
+    await record('spec', 'delta-spec', docs.delta, 'openspec-propose')
+    await record('spec', 'superpower-plan', docs.plan, 'writing-plans')
+    await record('spec', 'plan', docs.plan, 'writing-plans')
+    await record('verify', 'verification-report', docs.report, 'verification-before-completion')
+    await record('ship', 'applied-spec', docs.applied, 'openspec-apply-change')
+    await store.set(changeDir, 'phase', originalPhase)
     await readGovernedDocumentsForCurrentVisit(root, changeDir, recordedAt)
   } finally {
     if (originalHistory === undefined) {

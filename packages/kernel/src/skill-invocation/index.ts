@@ -5,13 +5,25 @@ export {
   SkillInvocationAdapterProofError,
 } from './adapters.js'
 export type { NativeSkillInvocationCompletion } from './adapters.js'
+export type {
+  AfkInteractionPolicyReceiptInputV1,
+  VerifiedAfkInteractionReceipt,
+} from './afk-interaction-receipt.js'
 export { projectSkillInvocationEvents, SkillInvocationEvidenceConflictError } from './domain.js'
-export { recordCanonicalDocumentSkillInvocation } from './document-producer.js'
+export { SkillInvocationInteractionBindingError } from './interaction-command.js'
+export type { HostSkillInvocationInteractionReceiptV1 } from './interaction-command.js'
 export {
-  AfkSkillInvocationProofError,
-  finishDurableAfkSkillInvocations,
-  startDurableAfkSkillInvocations,
-} from './afk-producer.js'
+  currentDocumentSkillConfirmation,
+  DOCUMENT_SKILL_CONFIRMATIONS_FILE,
+  readDocumentSkillConfirmations,
+  resolveNativeActiveDocumentSkill,
+} from './document-confirmation.js'
+export type {
+  DocumentSkillConfirmationV1,
+  NativeActiveDocumentSkill,
+  NativeDocumentSkillReceipt,
+} from './document-confirmation.js'
+export { AfkSkillInvocationProofError } from './afk-producer.js'
 export type { DurableAfkSkillInvocationHandle } from './afk-producer.js'
 export {
   readSkillInvocationEvidence,

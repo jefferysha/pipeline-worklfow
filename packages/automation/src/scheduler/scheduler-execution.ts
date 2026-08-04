@@ -382,9 +382,12 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
           })
           return { ok: false, change: name, failure }
         }
+        const executionError = controller.signal.aborted
+          ? new SchedulerInterruptedError('scheduler interrupted while AFK execution was in flight')
+          : err
         // 执行/结算异常：分类落态 + 关闭 reservation（业务失败路，非 round 基础设施故障——settle I/O 失败另经 tryLedger 记）。
-        const failureClassification = classifyFailure(err)
-        const terminalCommit = await applyFailure(name, err, failureClassification)
+        const failureClassification = classifyFailure(executionError)
+        const terminalCommit = await applyFailure(name, executionError, failureClassification)
         if (terminalCommit.status === 'recovery-pending') {
           const detail = terminalCommit.error !== undefined
             ? errText(terminalCommit.error)
@@ -407,14 +410,14 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         }
         const settled = terminalCommit.terminal
         phase = 'settlement'
-        await settleTerminal(report, preparedCtx, settled, { err, classification: failureClassification, ran: true })
+        await settleTerminal(report, preparedCtx, settled, { err: executionError, classification: failureClassification, ran: true })
         if (invocationHandles.length > 0) {
           await deps.skillInvocations?.finish(invocationHandles)
           activeSkillInvocations.delete(name)
           invocationHandles = []
         }
         emitTerminal(name, settled)
-        const baseAdvanced = isBaseAdvancedFailure(err)
+        const baseAdvanced = isBaseAdvancedFailure(executionError)
         const cleanupFailed = failureClassification.cause === 'container-cleanup'
         const schedulerInterrupted = failureClassification.cause === 'scheduler-interrupted'
         report.entries.push({
@@ -428,7 +431,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         // 另记一条 round failure 使 ok=false（CLI 非零、不打印跑完一轮）。H14 r3 同样要求容器清理失败
         // fail-loud：即便已按 conflict 安全落态，也不能让 round/CLI 报成功。普通 content-conflict 不进此表。
         if (baseAdvanced || cleanupFailed || schedulerInterrupted) {
-          report.failures.push(classifyRoundFailure(name, 'execution', err))
+          report.failures.push(classifyRoundFailure(name, 'execution', executionError))
         }
       } finally {
         inFlight.delete(name)

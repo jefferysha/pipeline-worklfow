@@ -21,6 +21,12 @@ import {
 } from '../workflow/document-contract.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import {
+  currentDocumentStepVisitId,
+  parseDocumentProducerInvocation,
+  requiredDocumentProducerInvocation,
+  type DocumentProducerInvocationAnchor,
+} from './document-producer-invocation.js'
+import {
   deltaSpecSlot,
   documentSlot,
   DocumentLedgerError,
@@ -35,7 +41,7 @@ import {
   currentSpecVisitEnteredViaRequirementsChanged, requiresRequirementsChangedForSpecAdr,
   skillsEquivalent,
 } from './document-record-policy.js'
-import { readCurrentRunRevision } from './run-revision-store.js'
+export { currentDocumentStepVisitId } from './document-producer-invocation.js'
 export { DocumentLedgerError } from './document-path.js'
 export const DOCUMENT_LEDGER_FILE = '.pipeline-documents.json'
 export const MAX_DOCUMENT_LEDGER_BYTES = 1024 * 1024
@@ -53,6 +59,7 @@ export interface DocumentRecord {
   readonly sha256: string
   readonly producer: string
   readonly recordedAt: string
+  readonly producerInvocation?: DocumentProducerInvocationAnchor
   readonly reads: readonly DocumentReadReceipt[]
 }
 
@@ -123,6 +130,7 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
     throw new DocumentLedgerError(`document ledger records[${index}].producer 非法`)
   }
   if (!recordedAt) throw new DocumentLedgerError(`document ledger records[${index}].recordedAt 必须是非空字符串`)
+  const producerInvocation = parseDocumentProducerInvocation(item.producerInvocation, index)
   if (!Array.isArray(item.reads)) throw new DocumentLedgerError(`document ledger records[${index}].reads 必须是数组`)
   const reads = item.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex))
   const readVisits = new Set<string>()
@@ -131,17 +139,9 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
     if (readVisits.has(key)) throw new DocumentLedgerError(`document ledger records[${index}] 对 phase '${receipt.phase}' 的同一 visit 有重复 read receipt`)
     readVisits.add(key)
   }
-  return { kind, path, sha256: digest, producer, recordedAt, reads }
+  return { kind, path, sha256: digest, producer, recordedAt,
+    ...(producerInvocation === undefined ? {} : { producerInvocation }), reads }
 }
-/** Stable authored-step visit identity; legacy YAML-only Changes fail closed until canonicalized. */
-export async function currentDocumentStepVisitId(changeDir: string): Promise<string> {
-  const metadata = (await readCurrentRunRevision(changeDir))?.state.runMetadata
-  if (metadata === undefined) throw new DocumentLedgerError(
-    '缺少 canonical WorkflowRun visit identity；旧 Change 必须先通过受控 state mutation 建立 run identity，再重新读取 document',
-  )
-  return JSON.stringify([metadata.runId, metadata.transitionSequence])
-}
-
 export function parseDocumentLedger(raw: string): DocumentLedger {
   let value: unknown
   try {
@@ -362,12 +362,16 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
       `缺少 Skill 调用证据（当前 phase）: '${input.producer}'；先由宿主在本 phase 实际调用该 skill，确认完成态证据已写入 history 后再登记 '${input.kind}'`,
     )
   }
+  const producerInvocation = await requiredDocumentProducerInvocation(
+    input.changeDir, input.producer, input.phase, input.recordedAt, input.allowBackfill === true,
+  )
   const replacement: DocumentRecord = {
     kind: input.kind,
     path: resolved.relativePath,
     sha256: resolved.digest,
     producer: input.producer,
     recordedAt: input.recordedAt,
+    ...(producerInvocation === undefined ? {} : { producerInvocation }),
     reads: old?.sha256 === resolved.digest ? old.reads : [],
   }
   // Singleton kinds use one named slot. Delta specs use one slot per canonical capability.

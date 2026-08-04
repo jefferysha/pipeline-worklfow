@@ -384,7 +384,11 @@ ensure_oracle_document() {
 
 track_oracle_skill() {
   local dir="$1" skill="$2"
-  printf '{"cwd":"%s","tool_name":"Skill","skill":"%s"}' "$dir" "$skill" \
+  # Exercise the same host-neutral native PostToolUse boundary as Claude. Session/tool identity is
+  # required to seal the invocation against the canonical current StepVisit; a bare history row is
+  # deliberately insufficient and would make this fixture fail closed at `document record`.
+  printf '{"cwd":"%s","tool_name":"Skill","skill":"%s","session_id":"oracle-document-bootstrap","tool_use_id":"oracle-%s"}' \
+    "$dir" "$skill" "$skill" \
     | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/skill-tracker.sh" >/dev/null
 }
 

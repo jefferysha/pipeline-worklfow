@@ -1,17 +1,20 @@
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { readDocumentLedger, type DocumentRecord } from '../state/document-ledger.js'
-import { readOptionalBoundedRegularTextFile } from '../state/document-path.js'
 import { readCurrentRunRevision } from '../state/run-revision-store.js'
-import { HISTORY_FILE } from '../state/history.js'
-import { skillsEquivalent } from '../state/document-record-policy.js'
 import type { DocumentKind } from '../workflow/document-contract.js'
-import { appendSkillInvocationEvent, skillInvocationProjectId } from './repository.js'
+import {
+  appendSkillInvocationEvent,
+  appendSkillInvocationEventUnderLock,
+  readSkillInvocationEventsForApplication,
+  skillInvocationProjectId,
+} from './repository.js'
+import type { SkillInvocationChangeLock } from './repository.js'
 import type { SkillInvocationEventV1, SkillInvocationSubjectV1 } from './types.js'
-
-const CONFIRMATIONS_FILE = '.pipeline-codex-skill-confirmations.jsonl'
-const MAX_CONFIRMATIONS_BYTES = 1024 * 1024
-const MAX_HISTORY_BYTES = 2 * 1024 * 1024
+import {
+  currentDocumentSkillConfirmation,
+  type DocumentSkillConfirmationV1,
+} from './document-confirmation.js'
 
 function digest(...values: readonly string[]): string {
   const hash = createHash('sha256')
@@ -36,77 +39,18 @@ async function canonicalSubject(changeDir: string): Promise<SkillInvocationSubje
   }
 }
 
-async function hasConfirmation(
+async function matchingConfirmation(
   changeDir: string,
   subject: SkillInvocationSubjectV1,
   record: DocumentRecord,
-): Promise<boolean> {
-  const raw = await readOptionalBoundedRegularTextFile(
-    join(changeDir, CONFIRMATIONS_FILE), MAX_CONFIRMATIONS_BYTES, 'Codex Skill confirmation ledger',
+): Promise<DocumentSkillConfirmationV1 | undefined> {
+  const confirmation = await currentDocumentSkillConfirmation(
+    changeDir, record.producer, subject.step_id, record.recordedAt,
   )
-  if (raw === undefined || raw === '' || !raw.endsWith('\n')) return false
-  const expectedDigest = `sha256:${createHash('sha256')
-    .update(basename(changeDir)).update('\0').update(record.producer).update('\0').update(record.recordedAt)
-    .update('\0').update(subject.step_visit.run_id)
-    .update('\0').update(String(subject.step_visit.transition_sequence))
-    .digest('hex')}`
-  return raw.slice(0, -1).split('\n').some((line) => {
-    try {
-      const value: unknown = JSON.parse(line)
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-      const confirmation = value as Record<string, unknown>
-      const stepVisit = confirmation.step_visit
-      return Object.keys(confirmation).length === 6
-        && confirmation.schema_version === 'codex-skill-confirmation/v2'
-        && confirmation.producer === record.producer
-        && confirmation.recorded_at === record.recordedAt
-        && confirmation.evidence_scope === subject.step_id
-        && typeof stepVisit === 'object' && stepVisit !== null && !Array.isArray(stepVisit)
-        && Object.keys(stepVisit).length === 2
-        && (stepVisit as Record<string, unknown>).run_id === subject.step_visit.run_id
-        && (stepVisit as Record<string, unknown>).transition_sequence === subject.step_visit.transition_sequence
-        && confirmation.receipt_digest === expectedDigest
-    } catch {
-      return false
-    }
-  })
-}
-
-async function hasExactHistoryEvidence(
-  changeDir: string,
-  subject: SkillInvocationSubjectV1,
-  record: DocumentRecord,
-): Promise<boolean> {
-  const raw = await readOptionalBoundedRegularTextFile(
-    join(changeDir, HISTORY_FILE), MAX_HISTORY_BYTES, 'Change history',
-  )
-  if (raw === undefined || raw === '' || !raw.endsWith('\n')) return false
-  const rows = raw.slice(0, -1).split('\n')
-  const hasRead = rows.some((line) => {
-    try {
-      const value: unknown = JSON.parse(line)
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-      const entry = value as Record<string, unknown>
-      if (entry.kind !== 'tool' || entry.ts !== record.recordedAt || typeof entry.raw !== 'string') return false
-      const match = /^CodexSkillRead: (.+)$/u.exec(entry.raw)
-      return match !== null && skillsEquivalent(match[1] ?? '', record.producer)
-    } catch {
-      return false
-    }
-  })
-  const binding = `CodexSkillReadBinding: ${record.producer} ${subject.step_visit.run_id} ${subject.step_visit.transition_sequence}`
-  const hasBinding = rows.some((line) => {
-    try {
-      const value: unknown = JSON.parse(line)
-      return typeof value === 'object' && value !== null && !Array.isArray(value)
-        && (value as Record<string, unknown>).kind === 'tool'
-        && (value as Record<string, unknown>).ts === record.recordedAt
-        && (value as Record<string, unknown>).raw === binding
-    } catch {
-      return false
-    }
-  })
-  return hasRead && hasBinding
+  return confirmation?.step_visit.run_id === subject.step_visit.run_id
+    && confirmation.step_visit.transition_sequence === subject.step_visit.transition_sequence
+    ? confirmation
+    : undefined
 }
 
 /**
@@ -117,22 +61,74 @@ export async function recordCanonicalDocumentSkillInvocation(
   changeDir: string,
   kind: DocumentKind,
   recordedAt: string,
+  options: {
+    readonly lock?: SkillInvocationChangeLock
+    readonly record?: Pick<DocumentRecord, 'path' | 'sha256'>
+  } = {},
 ): Promise<{ readonly invocation_id: string } | undefined> {
+  const lock = options.lock
+  const appendEvent = lock === undefined
+    ? appendSkillInvocationEvent
+    : (dir: string, event: SkillInvocationEventV1, appendOptions: Parameters<typeof appendSkillInvocationEvent>[2]) =>
+        appendSkillInvocationEventUnderLock(dir, lock, event, appendOptions)
   const subject = await canonicalSubject(changeDir)
   const ledger = await readDocumentLedger(changeDir)
   const records = ledger?.records.filter((record) =>
-    record.kind === kind && record.recordedAt === recordedAt) ?? []
-  const confirmed: DocumentRecord[] = []
+    record.kind === kind
+    && record.recordedAt === recordedAt
+    && (options.record === undefined
+      || (record.path === options.record.path && record.sha256 === options.record.sha256))) ?? []
+  const confirmed: Array<{
+    readonly record: DocumentRecord
+    readonly confirmation: DocumentSkillConfirmationV1
+  }> = []
   for (const record of records) {
-    if (await hasConfirmation(changeDir, subject, record)
-      && await hasExactHistoryEvidence(changeDir, subject, record)) confirmed.push(record)
+    const confirmation = await matchingConfirmation(changeDir, subject, record)
+    if (confirmation !== undefined) confirmed.push({ record, confirmation })
   }
   if (confirmed.length === 0) return undefined
   if (confirmed.length !== 1) throw new Error('canonical document producer confirmation is ambiguous')
-  const record = confirmed[0]!
-  const invocationId = `invocation-${digest('codex-document', record.producer, record.path, record.sha256, record.recordedAt)}`
-  const adapter = { kind: 'codex' as const, proof_ref: `codex-document-${digest(record.producer, record.sha256)}` }
-  const started: Extract<SkillInvocationEventV1, { type: 'invocation-started' }> = {
+  const { record, confirmation } = confirmed[0]!
+  let invocationId = confirmation.invocation_id
+  const adapter = { kind: confirmation.adapter.kind, proof_ref: confirmation.adapter.proof_ref }
+  const allInvocationEvents = await readSkillInvocationEventsForApplication(changeDir)
+  let invocationEvents = allInvocationEvents
+    .filter((event) => event.invocation_id === invocationId)
+  const existingIntent = invocationEvents.find((event): event is Extract<
+    SkillInvocationEventV1, { type: 'artifact-binding-intent' }
+  > =>
+    event.type === 'artifact-binding-intent'
+    && event.payload.artifact.ref === record.path
+    && event.payload.artifact.digest === `sha256:${record.sha256}`)
+  if (existingIntent !== undefined && invocationEvents.some((event) =>
+    event.type === 'artifact-bound' && event.payload.binding_id === existingIntent.payload.binding_id)) {
+    return { invocation_id: invocationId }
+  }
+  if (invocationEvents.some((event) => event.type === 'invocation-completed')) {
+    // One declared output can bind only one artifact. A host Skill may legitimately produce
+    // several canonical documents, so subsequent document applications derive a stable child
+    // invocation from the sealed host proof plus the exact canonical record instead of reusing an
+    // output id or accepting caller identity.
+    invocationId = `invocation-${digest(
+      'document-application', confirmation.invocation_id, record.kind,
+      record.path, record.sha256, record.recordedAt,
+    )}`
+    invocationEvents = allInvocationEvents.filter((event) => event.invocation_id === invocationId)
+    const childIntent = invocationEvents.find((event): event is Extract<
+      SkillInvocationEventV1, { type: 'artifact-binding-intent' }
+    > =>
+      event.type === 'artifact-binding-intent'
+      && event.payload.artifact.ref === record.path
+      && event.payload.artifact.digest === `sha256:${record.sha256}`)
+    if (childIntent !== undefined && invocationEvents.some((event) =>
+      event.type === 'artifact-bound' && event.payload.binding_id === childIntent.payload.binding_id)) {
+      return { invocation_id: invocationId }
+    }
+  }
+  let started = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'invocation-started' }> =>
+    event.type === 'invocation-started')
+  if (started === undefined) {
+    started = {
     schema_version: 'skill-invocation-evidence/v1', event_id: `${invocationId}-started`,
     invocation_id: invocationId, sequence: 1, type: 'invocation-started',
     subject, recorded_at: record.recordedAt,
@@ -146,26 +142,34 @@ export async function recordCanonicalDocumentSkillInvocation(
         validator: { id: 'document-path-contract', status: 'pass' },
       }] },
     },
+    }
+    await appendEvent(changeDir, started, {})
+    invocationEvents = [started]
   }
-  const completed: Extract<SkillInvocationEventV1, { type: 'invocation-completed' }> = {
-    ...started, event_id: `${invocationId}-completed`, sequence: 2, type: 'invocation-completed',
-    payload: { adapter, output: { schema_id: 'tenon-document-producer-output/v1', fields: [{
-      name: 'document_record', classification: 'project-data', digest: `sha256:${record.sha256}`,
-      validator: { id: 'canonical-document-record', status: 'pass' },
-    }] } },
+  let sequence = Math.max(...invocationEvents.map((event) => event.sequence)) + 1
+  if (!invocationEvents.some((event) => event.type === 'invocation-completed')) {
+    const completed: Extract<SkillInvocationEventV1, { type: 'invocation-completed' }> = {
+      ...started, event_id: `${invocationId}-completed`, sequence, type: 'invocation-completed',
+      payload: { adapter, output: { schema_id: 'tenon-document-producer-output/v1', fields: [{
+        name: 'document_record', classification: 'project-data', digest: `sha256:${record.sha256}`,
+        validator: { id: 'canonical-document-record', status: 'pass' },
+      }] } },
+    }
+    await appendEvent(changeDir, completed, { verify_completed_adapter: async () => true })
+    sequence += 1
   }
-  await appendSkillInvocationEvent(changeDir, started, {})
-  await appendSkillInvocationEvent(changeDir, completed, { verify_completed_adapter: async () => true })
   const bindingId = `binding-${digest(invocationId, record.sha256)}`
-  await appendSkillInvocationEvent(changeDir, {
-    ...started, event_id: `${invocationId}-artifact-intent`, sequence: 3, type: 'artifact-binding-intent',
+  const artifactEventRef = digest(record.path, record.sha256)
+  await appendEvent(changeDir, {
+    ...started, event_id: `${invocationId}-artifact-intent-${artifactEventRef}`, sequence, type: 'artifact-binding-intent',
     payload: { binding_id: bindingId, output_id: 'document_record',
       artifact: { kind: 'document', ref: record.path, digest: `sha256:${record.sha256}`,
         document: { kind: record.kind, recorded_at: record.recordedAt } },
       validator_ids: ['canonical-document-record'] },
   }, {})
-  await appendSkillInvocationEvent(changeDir, {
-    ...started, event_id: `${invocationId}-artifact-bound`, sequence: 4, type: 'artifact-bound',
+  sequence += 1
+  await appendEvent(changeDir, {
+    ...started, event_id: `${invocationId}-artifact-bound-${artifactEventRef}`, sequence, type: 'artifact-bound',
     payload: { binding_id: bindingId, artifact_digest: `sha256:${record.sha256}`,
       validators: [{ id: 'canonical-document-record', status: 'pass' }] },
   }, { verify_artifact: async () => true })

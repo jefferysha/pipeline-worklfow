@@ -13,6 +13,7 @@ import {
   finishDurableAfkSkillInvocations,
   startDurableAfkSkillInvocations,
 } from './afk-producer.js'
+import { issueVerifiedAfkInteractionReceipt } from './afk-interaction-receipt.js'
 
 const roots: string[] = []
 const now = '2026-08-04T00:00:00.000Z'
@@ -103,6 +104,49 @@ describe('durable AFK SkillInvocation producer', () => {
       .rejects.toBeInstanceOf(AfkSkillInvocationProofError)
     await expect(readSkillInvocationEvidence(changeDir)).resolves.toEqual({
       schema_version: 'skill-invocation-list/v1', state: 'empty', items: [],
+    })
+  })
+
+  it('records a recommended default only from a sealed verified frozen-policy receipt', async () => {
+    const { root, changeDir } = await fixture()
+    const input = {
+      schema_version: 'afk-interaction-policy-receipt/v1' as const,
+      attempt_id: 'attempt-1', reservation_id: 'reservation-1', snapshot_sha256: snapshotSha,
+      skill_id: 'tenon-build', recorded_at: now,
+      question: {
+        question_id: 'afk-default', key: 'build.mode', schema_id: 'build-mode/v1',
+        option_ids: ['direct'], requiredness: 'routine' as const, shown: false,
+      },
+      decision: {
+        decision_id: 'afk-default-decision', question_id: 'afk-default',
+        mode: 'recommended-default' as const, selected_option_ids: ['direct'],
+        policy: { id: 'interaction-policy', version: '7', rule_id: 'build-mode' },
+        rationale_code: 'afk-conservative-default',
+      },
+    }
+    await expect(issueVerifiedAfkInteractionReceipt(input, async () => false))
+      .rejects.toThrow(/frozen interaction policy/u)
+    const receipt = await issueVerifiedAfkInteractionReceipt(input, async (candidate) =>
+      candidate.decision.policy.version === '7')
+    const handles = await startDurableAfkSkillInvocations(changeDir, 'reservation-1', [receipt])
+    expect(handles).toHaveLength(1)
+    await expect(readSkillInvocationEvidence(changeDir)).resolves.toMatchObject({
+      items: [{
+        status: 'incomplete', questions: [{ shown: false }],
+        decisions: [{ mode: 'recommended-default', selected_option_ids: ['direct'] }],
+      }],
+    })
+    await createLoopLedgerStore().closeReservationIfOpen(root, 'reservation-1', (reservation) => ({
+      schema_version: 1, record_id: 'record-run-default', recorded_at: now, kind: 'run',
+      run_record_id: 'run-default', reservation_id: reservation.reservation_id,
+      attempt_id: reservation.attempt_id, loop_id: reservation.loop_id, change: reservation.change,
+      workflow_run_id: 'run-1', level: 'L1', runner: 'codex', admitted_at: now, finished_at: now, result: 'paused',
+      skill_bundle_snapshot_sha256: snapshotSha,
+      usage_record_ids: [], accounting: { reserved_tokens: 1024, charged_tokens: 0, charge_source: 'none' },
+    }))
+    await finishDurableAfkSkillInvocations(handles)
+    await expect(readSkillInvocationEvidence(changeDir)).resolves.toMatchObject({
+      items: [{ status: 'completed', questions: [{ shown: false }], decisions: [{ mode: 'recommended-default' }] }],
     })
   })
 })

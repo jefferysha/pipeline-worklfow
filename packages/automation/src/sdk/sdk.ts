@@ -29,7 +29,10 @@ import {
   type StateWriter,
 } from '../scheduler/scheduler.js'
 import { type AutomationConfig, DEFAULT_CONFIG } from '../types.js'
-import { createAfkSkillInvocationLifecycle } from '../skillInvocationAfkLifecycle.js'
+import {
+  createAfkSkillInvocationLifecycle,
+  type AfkInteractionReceiptPort,
+} from '../skillInvocationAfkLifecycle.js'
 
 /**
  * 二次任务（queued 卡死回归修复）：createAutomation 未显式注入 `deps.preparation` 时的缺省
@@ -100,6 +103,8 @@ export interface AutomationDeps {
   readonly preparation?: ExecutionPreparationPort
   /** Process/runtime shutdown registration. Production defaults to SIGINT/SIGTERM with async drain. */
   readonly registerShutdown?: RegisterShutdown
+  /** Verified PR3 InteractionPolicy receipts; absence means AFK records no synthetic default. */
+  readonly interactionReceipts?: AfkInteractionReceiptPort
 }
 
 const registerProcessShutdown: RegisterShutdown = (teardown) => {
@@ -204,6 +209,7 @@ export function createAutomation(deps: AutomationDeps): Automation {
   // （none-bundle 直通 + bundle 绑定 fail-loud，见其头注），不再让 runRound 因 preparation 缺席整轮短路成
   // config RoundFailure；显式 production preparation 与安全缺省都经同一字段传给 createScheduler。
   const preparation: ExecutionPreparationPort = deps.preparation ?? createDefaultExecutionPreparation()
+  const skillInvocations = createAfkSkillInvocationLifecycle(changeDir, deps.interactionReceipts)
   const schedulerFor = (runChange: RunChange) => createScheduler({
     state: storeWriter(store, changeDir),
     runChange,
@@ -213,7 +219,7 @@ export function createAutomation(deps: AutomationDeps): Automation {
     preparation,
     pauseLoop: deps.pauseLoop,
     validateExecutionWiring: deps.validateExecutionWiring,
-    skillInvocations: createAfkSkillInvocationLifecycle(changeDir),
+    skillInvocations,
   })
 
   return {

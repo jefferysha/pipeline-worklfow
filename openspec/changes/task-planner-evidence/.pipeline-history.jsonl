@@ -52,3 +52,17 @@
 {"ts":"2026-08-04T04:50:49Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-04T06:34:13Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
 {"ts":"2026-08-04T06:34:13Z","kind":"set","field":"verify_result","to":"pending"}
+{"ts":"2026-08-04T06:51:00Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-04T06:51:00Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-04T06:51:21Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"5a256d5f-53f5-4681-9fea-f97d2f5a785e"}
+{"ts":"2026-08-04T07:05:26Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-04T07:05:38Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-04-task-planner-evidence-verify-fail-2.md"}
+{"ts":"2026-08-04T07:05:43Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-04T07:05:43Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion b8d354ee-3a20-441d-9a20-c7492ffee1b7 8"}
+{"ts":"2026-08-04T07:05:53Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-08-04T07:05:53Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-04T07:05:59Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-04T07:06:03Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-04T04:02:17Z authority_host_session=019fcabc-9b43-70b0-ae31-4e4b6f97dbc7"}
+{"ts":"2026-08-04T07:06:06Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"03b524f0-3cd6-49f6-8b42-e13780ffd2a8"}
+{"ts":"2026-08-04T07:45:28Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcb99-7974-7ca0-9dbb-d06b9914ff7b"}
+{"ts":"2026-08-04T09:39:19Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

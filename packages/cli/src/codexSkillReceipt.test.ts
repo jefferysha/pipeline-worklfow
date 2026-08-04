@@ -2907,7 +2907,7 @@ describe('Codex transcript skill receipt', () => {
     expect(history.match(/CodexSkillRead: openspec-propose/g)).toHaveLength(2)
   })
 
-  it('upgrades an existing current-visit skill read to an exact document StepVisit binding', async () => {
+  it('rejects a caller-supplied document StepVisit when canonical WorkflowRun identity is absent', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     await bindHostSession()
     await writeFile(join(changeDir, '.pipeline-history.jsonl'), [
@@ -2928,11 +2928,11 @@ describe('Codex transcript skill receipt', () => {
       codexHomeDir: join(home, '.codex'),
     })
 
-    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(result.confirmedSkillIds).toEqual([])
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'))
-      .toContain('CodexSkillReadBinding: openspec-propose run-current 7')
-    expect(await readFile(join(changeDir, '.pipeline-codex-skill-confirmations.jsonl'), 'utf8'))
-      .toContain('"schema_version":"codex-skill-confirmation/v2"')
+      .not.toContain('CodexSkillReadBinding: openspec-propose run-current 7')
+    await expect(readFile(join(changeDir, '.pipeline-skill-confirmations.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('reconciles a current host session larger than the direct-receipt cap', async () => {

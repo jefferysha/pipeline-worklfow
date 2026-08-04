@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 # decision-recorder.sh — PostToolUse hook（matcher: AskUserQuestion|request_user_input）。
 #
-# 捕获每次 AskUserQuestion / Codex request_user_input 的「问 + 答」，append 进已明确选择的 change 的
-#   openspec/changes/<name>/.pipeline-history.jsonl（一行一个 JSON，CONTRACT §1）。
-# lite 用 JSONL 侧文件（非老仓 base64 塞 YAML），kind=prompt、raw="Q: <q> | A: <a>"——
-# 逐字对齐 tenon import 老仓历史迁移的 prompt kind 形态（kernel legacy.ts），live 与 import 同构。
-# 修复断档：自由文本 prompt 有 recorder，但用户对 AskUserQuestion 的硬取舍决策以前不入库，这里补齐。
+# 捕获 AskUserQuestion / Codex request_user_input 的发生事实。兼容 history 只保存事件类别；
+# 结构化 invocation ledger 由下方 application command 写入，同样不持久化原始问题或答案。
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，
 # stdin JSON 全用 bash 字符串扫描提取。JSON 构造严格转义（\ " \t \r \n）——绝不写坏 JSONL。
@@ -93,9 +90,30 @@ PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh"
 CHANGE_DIR="$(pipeline_active_change_dir "$PROOT" || true)"
 [ -n "$CHANGE_DIR" ] || exit 0
+CHANGE_NAME="${CHANGE_DIR##*/}"
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-RAW="$(json_escape "Q: $Q | A: $A")"
+RAW="HostInteractionRecorded"
 printf '{"ts":"%s","kind":"prompt","raw":"%s"}\n' "$TS" "$RAW" >> "$CHANGE_DIR/.pipeline-history.jsonl" 2>/dev/null || true
+
+# The compatibility history above is not structured invocation evidence. When this hook runs from
+# a verified managed payload, pass the exact host PostToolUse envelope to the internal application
+# command. It selects the only incomplete invocation from canonical StepVisit state, redacts raw
+# question/answer text before persistence, and fails closed on ambiguity. Hook delivery itself
+# remains best-effort so an unrelated question cannot break the host conversation.
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd -P || true)"
+BUNDLE="$PLUGIN_ROOT/packages/cli/dist/tenon.mjs"
+if command -v node >/dev/null 2>&1 && [ -f "$BUNDLE" ]; then
+  umask 077
+  PAYLOAD_FILE="$(mktemp "${TMPDIR:-/tmp}/tenon-host-interaction.XXXXXX" 2>/dev/null || true)"
+  if [ -n "$PAYLOAD_FILE" ]; then
+    trap 'rm -f "$PAYLOAD_FILE"' EXIT HUP INT TERM
+    printf '%s' "$INPUT" > "$PAYLOAD_FILE" 2>/dev/null || true
+    (
+      cd "$PROOT" || exit 0
+      node "$BUNDLE" internal-host-interaction "$CHANGE_NAME" "$PAYLOAD_FILE"
+    ) >/dev/null 2>&1 || true
+  fi
+fi
 
 exit 0
