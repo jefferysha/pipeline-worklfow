@@ -66,3 +66,23 @@
 {"ts":"2026-08-04T07:06:06Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"03b524f0-3cd6-49f6-8b42-e13780ffd2a8"}
 {"ts":"2026-08-04T07:45:28Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcb99-7974-7ca0-9dbb-d06b9914ff7b"}
 {"ts":"2026-08-04T09:39:19Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-04T09:41:09Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fcabc-9b43-70b0-ae31-4e4b6f97dbc7"}
+{"ts":"2026-08-04T09:41:20Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-04T09:41:20Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-04T09:41:39Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"7d80d337-2d1b-4fa1-9ae2-9a83723ae05e"}
+{"ts":"2026-08-04T09:43:53Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-04T09:43:59Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-04T09:44:00Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-04T09:44:00Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-04T09:44:05Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-04-task-planner-evidence-verify.md"}
+{"ts":"2026-08-04T09:44:10Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-04T09:44:10Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion b8d354ee-3a20-441d-9a20-c7492ffee1b7 10"}
+{"ts":"2026-08-04T09:44:20Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-04T09:44:20Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify b8d354ee-3a20-441d-9a20-c7492ffee1b7 10"}
+{"ts":"2026-08-04T09:44:40Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-04T09:44:45Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-04T09:41:09Z authority_host_session=019fcabc-9b43-70b0-ae31-4e4b6f97dbc7"}
+{"ts":"2026-08-04T09:44:50Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"12c7551e-07dd-40c9-820c-adf80af2474c"}
+{"ts":"2026-08-04T09:45:57Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-04T09:45:57Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-08-04T09:46:19Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-04T09:46:19Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change b8d354ee-3a20-441d-9a20-c7492ffee1b7 11"}

@@ -23,8 +23,8 @@
 
 ## 验证
 
-- [ ] 验证并发、坏行、中断、错绑、缺失提问、默认决策和 artifact 漂移。 (verify)
-- [ ] 验证隐私 DTO 不暴露 prompt/answer/output/session/path/digest。 (verify)
+- [x] 验证并发、坏行、中断、错绑、缺失提问、默认决策和 artifact 漂移。 (verify)
+- [x] 验证隐私 DTO 不暴露 prompt/answer/output/session/path/digest。 (verify)
 
 ## 交付
 
