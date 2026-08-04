@@ -18,8 +18,23 @@
 | High | A macOS-only fd-path requirement rejected every legitimate read with 403. | Reader retains an opened Change directory fd and uses the repository's cross-platform path fallback with pre/post root, parent, Change identity and mutation-version checks; path-swap test returns 403 before data is returned. |
 | Medium | Dashboard decoder initially accepted partial subject/question fields and unknown nested policy members. | Public DTO decoder is closed at every object boundary, requires TaskPlanRevision/WorkItem pairing and validates definition, non-negative StepVisit, schemas, bounded options, classifications, policy, artifact and validator enums. |
 | Medium | Acceptance fixture test resolved its path differently under the Dashboard Vitest root. | The test resolves both workspace-root and package-root execution forms; the closed fixture test passes. |
+| Critical | The package roots exposed raw append, caller-selected adapter/input/output/interactions and an injectable always-true completion verifier. | Root exports omit raw append, configurable command construction and caller-selected AFK fail/interrupt. The only AFK finish path requires one exact durable RunRecord and derives completed/failed/interrupted from its terminal cause. |
+| Critical | Only the document producer called the application command; native Task Planner and the general AFK runner had no production lifecycle. | Canonical TaskPlan publication records a native `task-planner` started and completed/failed lifecycle. The production SDK scheduler records every selected loop-bundle Skill as AFK started and completed/failed, with shutdown interruption recovery. |
+| High | AFK start followed by caller-selected interrupt could mint a terminal without proof that a runner executed. | Shutdown only aborts and drains the scheduler. After canonical settlement, AFK finish requires exact attempt/change/loop/workflow-run/snapshot bindings and derives interruption from the durable terminal's `scheduler-interrupted` cause. |
+| Critical | A document confirmation could be replayed after leaving and re-entering the same named phase. | Confirmation v2, receipt digest and an exact history binding all include WorkflowRun ID and transition sequence. The producer independently compares them with the current canonical StepVisit and fails closed on drift. |
+| High | Multiple canonical delta-spec records of the same kind were treated as ambiguous. | The command selects the just-recorded canonical entry by `kind + recordedAt`; path and digest remain ledger-derived. Two capability delta-specs persist independent Invocation and artifact evidence. |
+| High | A normal current-visit `CodexSkillRead` suppressed the v2 document binding, while the command ignored a missing Invocation. | Document reconciliation re-verifies the strict receipt/transcript even when ordinary history already contains the Skill. Missing confirmation is rejected before document registration, and a missing producer result is fail-loud. |
+| Medium | This report previously said there were no open C/H/M findings while new Build tasks remained incomplete. | The exact current diff received three independent review rounds. The final review reports Critical PASS, High PASS and Medium PASS with zero open findings. |
 
 Open Critical/High/Medium findings: **0**.
+
+## Build gates
+
+- Focused regression: 7 files, 314 passed, 0 failed.
+- Root suite: 348 files, 6199 passed, 26 honest environment skips, 0 failed.
+- Dashboard suite: 89 files, 1642 passed, 0 failed.
+- TypeScript, production build, OpenSpec 38/38, default-workflow freshness, oracle 0 mismatches,
+  architecture (761 production files), comment honesty and `git diff --check`: PASS.
 
 ## Production browser acceptance
 
@@ -51,5 +66,6 @@ Change.
 
 ## Verdict
 
-PASS: specification, security/privacy, backend architecture and UI review have no open C/H/M issue;
-production browser acceptance passed with the existing macOS Context Bundle 501 recorded above.
+PASS: exact-diff specification, security/privacy, backend architecture and UI review have zero open
+Critical/High/Medium findings; the full Build gate chain and production browser acceptance passed.
+The existing macOS Context Bundle 501 remains honestly recorded above as a host-platform limitation.

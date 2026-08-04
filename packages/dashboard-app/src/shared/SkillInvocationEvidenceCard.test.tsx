@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { SkillInvocationEvidenceCard } from './SkillInvocationEvidenceCard'
@@ -22,7 +22,13 @@ const ready = {
       step_visit: { run_id: 'run-1', transition_sequence: 3 }, work_item_id: 'item-1',
     },
     started_at: '2026-08-03T00:00:00Z', finished_at: '2026-08-03T00:00:01Z',
-    input: { schema_id: 'input/v1', fields: [] }, output: { schema_id: 'output/v1', fields: [] },
+    input: { schema_id: 'input/v1', fields: [
+      { name: 'requirements', classification: 'project-data' as const, validator: { id: 'input-schema', status: 'pass' as const } },
+      { name: 'secret', classification: 'sensitive-redacted' as const, validator: { id: 'redaction', status: 'fail' as const, code: 'missing-redaction' } },
+    ] },
+    output: { schema_id: 'output/v1', fields: [
+      { name: 'revision_id', classification: 'identifier' as const, validator: { id: 'output-schema', status: 'unknown' as const } },
+    ] },
     questions: [{
       id: 'q-1', key: 'build.mode', schema_id: 'build-mode-question/v1',
       option_ids: ['direct', 'subagent'], requiredness: 'routine' as const, shown: false,
@@ -30,11 +36,14 @@ const ready = {
     decisions: [{
       id: 'd-1', question_id: 'q-1', mode: 'recommended-default' as const,
       selected_option_ids: ['direct'], policy: { id: 'policy', version: '2', rule_id: 'build-mode' },
-      rationale_code: 'overlapping-files',
+      rationale_code: 'overlapping-files', free_text_classification: 'user-provided' as const,
     }],
     artifacts: [{
       binding_id: 'b-1', output_id: 'plan', kind: 'file' as const,
-      ref: 'artifacts/plan.json', state: 'bound' as const, validators: [{ id: 'digest', status: 'pass' as const }],
+      ref: 'artifacts/plan.json', state: 'bound' as const, validators: [
+        { id: 'digest', status: 'fail' as const, code: 'mismatch' },
+        { id: 'schema', status: 'unknown' as const },
+      ],
     }],
   }],
 }
@@ -59,7 +68,15 @@ describe('SkillInvocationEvidenceCard', () => {
     expect(screen.getByText('build.mode')).toBeInTheDocument()
     expect(screen.getByText(/未展示/)).toBeInTheDocument()
     expect(screen.getByText(/direct.*build-mode.*overlapping-files/)).toBeInTheDocument()
+    expect(screen.getByText(/requirements.*项目数据.*input-schema.*通过/)).toBeInTheDocument()
+    expect(screen.getByText(/secret.*敏感信息已脱敏.*redaction.*失败.*missing-redaction/)).toBeInTheDocument()
+    expect(screen.getByText(/revision_id.*标识符.*output-schema.*未知/)).toBeInTheDocument()
+    expect(screen.getByText(/自由文本存在.*用户提供/)).toBeInTheDocument()
     expect(screen.getByText(/plan.*已绑定/)).toBeInTheDocument()
+    const artifactValidators = screen.getByRole('list', { name: '产物 validator' })
+    expect(within(artifactValidators).getByText(/digest.*失败.*mismatch/)).toBeInTheDocument()
+    expect(within(artifactValidators).getByText(/schema.*未知/)).toBeInTheDocument()
+    expect(screen.queryByText('actual free text')).not.toBeInTheDocument()
   })
 
   it('renders empty and error states and retries', async () => {
@@ -82,5 +99,10 @@ describe('SkillInvocationEvidenceCard', () => {
     fireEvent.click(await screen.findByText('task-planner'))
     expect(screen.getByText(/Not shown/)).toBeInTheDocument()
     expect(screen.getByText('build.mode')).toBeInTheDocument()
+    expect(screen.getByText(/requirements.*Project data.*input-schema.*Passed/)).toBeInTheDocument()
+    expect(screen.getByText(/Free text present.*User provided/)).toBeInTheDocument()
+    const artifactValidators = screen.getByRole('list', { name: 'Artifact validators' })
+    expect(within(artifactValidators).getByText(/digest.*Failed.*mismatch/)).toBeInTheDocument()
+    expect(within(artifactValidators).getByText(/schema.*Unknown/)).toBeInTheDocument()
   })
 })

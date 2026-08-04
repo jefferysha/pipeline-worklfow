@@ -1,3 +1,4 @@
+import { SKILL_INVOCATION_LIMITS } from './types.js'
 import type {
   SkillInvocationArtifactBoundPayloadV1,
   SkillInvocationArtifactIntentPayloadV1,
@@ -41,6 +42,7 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
   let terminal: Extract<SkillInvocationEventV1, { type: 'invocation-completed' | 'invocation-failed' | 'invocation-interrupted' }> | undefined
   const questions = new Map<string, SkillInvocationQuestionPayloadV1>()
   const decisions = new Map<string, SkillInvocationDecisionPayloadV1>()
+  const decisionIds = new Set<string>()
   const intents = new Map<string, SkillInvocationArtifactIntentPayloadV1>()
   const bindings = new Map<string, SkillInvocationArtifactBoundPayloadV1>()
   const eventIds = new Set<string>()
@@ -55,6 +57,9 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
     if (event.type === 'question-recorded') {
       if (terminal !== undefined) throw new SkillInvocationEvidenceConflictError('question cannot be recorded after terminal')
       if (questions.has(event.payload.question_id)) throw new SkillInvocationEvidenceConflictError('duplicate question')
+      if (questions.size >= SKILL_INVOCATION_LIMITS.maxQuestions) {
+        throw new SkillInvocationEvidenceConflictError('invocation question budget exceeded')
+      }
       questions.set(event.payload.question_id, event.payload)
     }
     if (event.type === 'decision-recorded') {
@@ -62,11 +67,15 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
       const question = questions.get(event.payload.question_id)
       if (question === undefined) throw new SkillInvocationEvidenceConflictError('decision references a missing question')
       if (decisions.has(event.payload.question_id)) throw new SkillInvocationEvidenceConflictError('question already has a decision')
+      if (decisionIds.has(event.payload.decision_id)) throw new SkillInvocationEvidenceConflictError('duplicate decision id')
       if (event.payload.selected_option_ids.some((option) => !question.option_ids.includes(option))) {
         throw new SkillInvocationEvidenceConflictError('decision selects an unknown option')
       }
       if (event.payload.mode === 'user-answer') {
         if (!question.shown) throw new SkillInvocationEvidenceConflictError('user answer requires a shown question')
+        if (event.payload.selected_option_ids.length === 0 && event.payload.free_text === undefined) {
+          throw new SkillInvocationEvidenceConflictError('user answer must be non-empty')
+        }
         if (event.payload.policy !== undefined || event.payload.rationale_code !== undefined) {
           throw new SkillInvocationEvidenceConflictError('user answer cannot claim a default policy')
         }
@@ -76,8 +85,12 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
         if (event.payload.policy === undefined || event.payload.rationale_code === undefined) {
           throw new SkillInvocationEvidenceConflictError('recommended default requires frozen policy and rationale')
         }
+        if (event.payload.selected_option_ids.length === 0) {
+          throw new SkillInvocationEvidenceConflictError('recommended default must select an option')
+        }
       }
       decisions.set(event.payload.question_id, event.payload)
+      decisionIds.add(event.payload.decision_id)
     }
     if (event.type === 'invocation-completed' || event.type === 'invocation-failed' || event.type === 'invocation-interrupted') {
       if (terminal !== undefined) throw new SkillInvocationEvidenceConflictError('invocation terminal is unique')
@@ -89,6 +102,18 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
     if (event.type === 'artifact-binding-intent') {
       if (terminal?.type !== 'invocation-completed') throw new SkillInvocationEvidenceConflictError('artifact intent requires completed invocation')
       if (intents.has(event.payload.binding_id)) throw new SkillInvocationEvidenceConflictError('duplicate artifact binding intent')
+      if (intents.size >= SKILL_INVOCATION_LIMITS.maxArtifacts) {
+        throw new SkillInvocationEvidenceConflictError('invocation artifact budget exceeded')
+      }
+      if (!terminal.payload.output.fields.some((field) => field.name === event.payload.output_id)) {
+        throw new SkillInvocationEvidenceConflictError('artifact intent must reference a declared output')
+      }
+      if ([...intents.values()].some((intent) => intent.output_id === event.payload.output_id)) {
+        throw new SkillInvocationEvidenceConflictError('artifact output binding must be unique')
+      }
+      if (event.payload.validator_ids.length === 0) {
+        throw new SkillInvocationEvidenceConflictError('artifact intent requires at least one validator')
+      }
       intents.set(event.payload.binding_id, event.payload)
     }
     if (event.type === 'artifact-bound') {
@@ -97,7 +122,14 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
       if (bindings.has(event.payload.binding_id)) throw new SkillInvocationEvidenceConflictError('duplicate artifact binding commit')
       if (intent.artifact.digest !== event.payload.artifact_digest) throw new SkillInvocationEvidenceConflictError('artifact digest drift')
       const validatorIds = new Set(event.payload.validators.map((validator) => validator.id))
-      if (intent.validator_ids.some((id) => !validatorIds.has(id))) throw new SkillInvocationEvidenceConflictError('artifact validators are incomplete')
+      if (validatorIds.size !== event.payload.validators.length
+        || validatorIds.size !== intent.validator_ids.length
+        || intent.validator_ids.some((id) => !validatorIds.has(id))) {
+        throw new SkillInvocationEvidenceConflictError('artifact validators must exactly match the binding intent')
+      }
+      if (event.payload.validators.some((validator) => validator.status !== 'pass')) {
+        throw new SkillInvocationEvidenceConflictError('artifact validator verdicts must pass before binding')
+      }
       bindings.set(event.payload.binding_id, event.payload)
     }
   }

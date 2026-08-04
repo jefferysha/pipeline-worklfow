@@ -55,6 +55,34 @@ describe('skillInvocationClient', () => {
     })).toBeNull()
   })
 
+  it('rejects drift between the invocation workflow run and its StepVisit run', () => {
+    expect(decodeSkillInvocationList({
+      ...response,
+      items: [{
+        ...response.items[0],
+        subject: {
+          ...response.items[0].subject,
+          step_visit: { ...response.items[0].subject.step_visit, run_id: 'run-other' },
+        },
+      }],
+    })).toBeNull()
+  })
+
+  it('accepts only privacy-safe free-text presence metadata, never raw free text', () => {
+    const decision = {
+      id: 'decision-1', question_id: 'question-1', mode: 'user-answer',
+      selected_option_ids: [], free_text_classification: 'user-provided',
+    }
+    expect(decodeSkillInvocationList({
+      ...response,
+      items: [{ ...response.items[0], decisions: [decision] }],
+    })).not.toBeNull()
+    expect(decodeSkillInvocationList({
+      ...response,
+      items: [{ ...response.items[0], decisions: [{ ...decision, free_text: 'private answer' }] }],
+    })).toBeNull()
+  })
+
   it('fetches the scoped read endpoint', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(response), {
       status: 200, headers: { 'Content-Type': 'application/json' },

@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import {
   fetchSkillInvocations,
   type SkillInvocationList,
+  type SkillInvocationField,
   type SkillInvocationReadItem,
   type SkillInvocationStatus,
+  type SkillInvocationValidatorStatus,
 } from '../api/skillInvocationClient'
 import { useT } from '../i18n'
 
@@ -26,11 +28,55 @@ const statusTone: Record<SkillInvocationStatus, string> = {
   corrupt: 'border-red-b bg-red-t text-red-d',
 }
 
+const validatorTone: Record<SkillInvocationValidatorStatus, string> = {
+  pass: 'text-green-d',
+  fail: 'text-red-d',
+  unknown: 'text-amb-d',
+}
+
 function StatusIcon({ status }: { readonly status: SkillInvocationStatus }): JSX.Element {
   if (status === 'completed') return <Check className="size-3.5" aria-hidden="true" />
   if (status === 'failed' || status === 'corrupt') return <X className="size-3.5" aria-hidden="true" />
   if (status === 'interrupted') return <AlertTriangle className="size-3.5" aria-hidden="true" />
   return <CircleDashed className="size-3.5" aria-hidden="true" />
+}
+
+function validatorText(
+  validator: SkillInvocationField['validator'],
+  translate: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  return translate('skillInvocation.validator_evidence', {
+    id: validator.id,
+    status: translate(`skillInvocation.validator_${validator.status}`),
+    code: validator.code === undefined ? '' : ` · ${validator.code}`,
+  })
+}
+
+function FieldEvidenceList({
+  label,
+  fields,
+}: {
+  readonly label: string
+  readonly fields: readonly SkillInvocationField[]
+}): JSX.Element | null {
+  const { t } = useT()
+  if (fields.length === 0) return null
+  return (
+    <ul className="m-0 grid list-none gap-1 p-0" aria-label={label}>
+      {fields.map((field) => (
+        <li
+          className={`rounded-md border border-border bg-fill/50 px-2.5 py-1.5 font-mono text-[10.5px] ${validatorTone[field.validator.status]}`}
+          key={field.name}
+        >
+          {t('skillInvocation.field_evidence', {
+            name: field.name,
+            classification: t(`skillInvocation.classification_${field.classification}`),
+            validator: validatorText(field.validator, t),
+          })}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 function InvocationDetails({ item }: { readonly item: SkillInvocationReadItem }): JSX.Element {
@@ -54,6 +100,8 @@ function InvocationDetails({ item }: { readonly item: SkillInvocationReadItem })
           <span><b>{t('skillInvocation.input')}</b> · {item.input.fields.length}</span>
           <span><b>{t('skillInvocation.output')}</b> · {item.output?.fields.length ?? 0}</span>
         </div>
+        <FieldEvidenceList label={t('skillInvocation.input_details')} fields={item.input.fields} />
+        <FieldEvidenceList label={t('skillInvocation.output_details')} fields={item.output?.fields ?? []} />
         {item.questions.length === 0 ? (
           <p className="m-0 text-text-3">{t('skillInvocation.no_questions')}</p>
         ) : (
@@ -70,15 +118,24 @@ function InvocationDetails({ item }: { readonly item: SkillInvocationReadItem })
                     <span className="text-[10.5px] text-text-3">{t(`skillInvocation.required_${question.requiredness}`)}</span>
                   </div>
                   {decision !== undefined && (
-                    <p className="mt-1 mb-0 text-[11px] text-text-2">
-                      {decision.mode === 'recommended-default'
-                        ? t('skillInvocation.default_decision', {
-                            value: decision.selected_option_ids.join(', '),
-                            rule: decision.policy?.rule_id ?? 'unknown',
-                            reason: decision.rationale_code ?? 'unknown',
-                          })
-                        : t('skillInvocation.user_decision', { value: decision.selected_option_ids.join(', ') })}
-                    </p>
+                    <div className="mt-1 grid gap-0.5 text-[11px] text-text-2">
+                      <p className="m-0">
+                        {decision.mode === 'recommended-default'
+                          ? t('skillInvocation.default_decision', {
+                              value: decision.selected_option_ids.join(', '),
+                              rule: decision.policy?.rule_id ?? 'unknown',
+                              reason: decision.rationale_code ?? 'unknown',
+                            })
+                          : t('skillInvocation.user_decision', { value: decision.selected_option_ids.join(', ') })}
+                      </p>
+                      {decision.free_text_classification !== undefined && (
+                        <p className="m-0 text-text-3">
+                          {t('skillInvocation.free_text_present', {
+                            classification: t(`skillInvocation.classification_${decision.free_text_classification}`),
+                          })}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </li>
               )
@@ -86,10 +143,19 @@ function InvocationDetails({ item }: { readonly item: SkillInvocationReadItem })
           </ul>
         )}
         {item.artifacts.length > 0 && (
-          <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label={t('skillInvocation.artifacts')}>
+          <ul className="m-0 grid list-none gap-1.5 p-0" aria-label={t('skillInvocation.artifacts')}>
             {item.artifacts.map((artifact) => (
-              <li className="rounded-full border border-border bg-fill px-2 py-1 font-mono text-[10.5px]" key={artifact.binding_id}>
-                {artifact.output_id} · {t(`skillInvocation.artifact_${artifact.state}`)}
+              <li className="rounded-md border border-border bg-fill px-2 py-1.5 font-mono text-[10.5px]" key={artifact.binding_id}>
+                <div>{artifact.output_id} · {t(`skillInvocation.artifact_${artifact.state}`)}</div>
+                {artifact.validators.length > 0 && (
+                  <ul className="m-0 mt-0.5 grid list-none gap-0.5 p-0" aria-label={t('skillInvocation.artifact_validators')}>
+                    {artifact.validators.map((validator) => (
+                      <li className={validatorTone[validator.status]} key={validator.id}>
+                        {validatorText(validator, t)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

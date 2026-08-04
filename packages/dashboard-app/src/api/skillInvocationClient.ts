@@ -102,6 +102,7 @@ function subject(value: unknown): value is SkillInvocationReadItem['subject'] {
     || typeof value.workflow_run_id !== 'string' || typeof value.step_id !== 'string'
     || !isRecord(value.step_visit) || !closed(value.step_visit, ['run_id', 'transition_sequence'])
     || typeof value.step_visit.run_id !== 'string' || typeof value.step_visit.transition_sequence !== 'number'
+    || value.step_visit.run_id !== value.workflow_run_id
     || !Number.isSafeInteger(value.step_visit.transition_sequence)
     || value.step_visit.transition_sequence < 0) return false
   if (!optionalString(value.task_plan_revision_id) || !optionalString(value.work_item_id)) return false

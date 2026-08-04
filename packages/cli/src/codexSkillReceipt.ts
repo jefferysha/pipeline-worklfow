@@ -10,6 +10,7 @@
  * This is intentionally CLI adapter infrastructure, not kernel domain logic.  The kernel continues
  * to consume the same append-only history contract from every host.
  */
+import { createHash } from 'node:crypto'
 import { appendFile, lstat, mkdir, readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -25,6 +26,7 @@ import {
 } from './codexSkillTrust.js'
 
 export const CODEX_SKILL_RECEIPTS_FILE = join('.pipeline', 'codex-skill-receipts.jsonl')
+export const CODEX_SKILL_CONFIRMATIONS_FILE = '.pipeline-codex-skill-confirmations.jsonl'
 
 const RECEIPT_VERSION = 1
 export interface CodexSkillReceipt {
@@ -60,6 +62,8 @@ export interface CodexSkillEvidenceInput {
    * this node, so a lawful workflow loop (for example build → spec) must prove the skill again.
    */
   readonly evidenceScope?: string
+  /** Exact canonical StepVisit for document-production evidence. */
+  readonly stepVisit?: { readonly runId: string; readonly transitionSequence: number }
   /** Injectable for tests; production uses the current process user's Codex home. */
   readonly homeDir?: string
   /** Injectable Codex data root.  Production honours CODEX_HOME before falling back to ~/.codex. */
@@ -337,6 +341,10 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   const visitEvidence = currentVisitEvidence(await readHistory(input.changeDir), input.evidenceScope)
   if (!visitEvidence.valid) return { confirmedSkillIds: [] }
   const existing = visitEvidence.completedSkillIds
+  // Document production needs a fresh v2 binding for this exact StepVisit even when the normal
+  // skill gate already wrote CodexSkillRead in the same visit.  That earlier row proves ordering,
+  // but it does not carry the run/sequence identity required by the evidence producer.
+  const deduplicatedExisting = input.stepVisit === undefined ? existing : new Set<string>()
   const changeName = basename(resolve(input.changeDir))
   if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] }
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName)
@@ -350,7 +358,7 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
       && Date.parse(rawReceipt.receivedAt) < Date.parse(visitEvidence.startedAt)
     ) continue
     if (input.producer && !skillsEquivalent(rawReceipt.skillId, input.producer)) continue
-    if ([...existing, ...confirmed].some((skill) => skillsEquivalent(skill, rawReceipt.skillId))) continue
+    if ([...deduplicatedExisting, ...confirmed].some((skill) => skillsEquivalent(skill, rawReceipt.skillId))) continue
     const receipt = await validatedReceipt(rawReceipt, trustRoots, homeDir, codexHomeDir)
     if (!receipt) continue
     if (
@@ -376,7 +384,7 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   ])]
   const unresolvedCandidates = candidates.filter(
     (candidate) =>
-      ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate)),
+      ![...deduplicatedExisting, ...confirmed].some((skill) => skillsEquivalent(skill, candidate)),
   )
   if (unresolvedCandidates.length > 0 && boundHostSessionId !== undefined) {
     for (const skillId of await discoverCompletedCodexSkillReads(
@@ -388,16 +396,44 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
       boundHostSessionId,
       visitEvidence.startedAt,
     )) {
-      if (![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, skillId))) confirmed.add(skillId)
+      if (![...deduplicatedExisting, ...confirmed].some((skill) => skillsEquivalent(skill, skillId))) confirmed.add(skillId)
     }
   }
 
   for (const skillId of confirmed) {
+    const receiptHash = createHash('sha256')
+      .update(changeName).update('\0').update(skillId).update('\0').update(input.recordedAt)
+    if (input.stepVisit !== undefined) {
+      receiptHash.update('\0').update(input.stepVisit.runId)
+        .update('\0').update(String(input.stepVisit.transitionSequence))
+    }
     await input.history.append(input.changeDir, {
       ts: input.recordedAt,
       kind: 'tool',
       raw: `CodexSkillRead: ${skillId}`,
     })
+    if (input.stepVisit !== undefined) {
+      await input.history.append(input.changeDir, {
+        ts: input.recordedAt,
+        kind: 'tool',
+        raw: `CodexSkillReadBinding: ${skillId} ${input.stepVisit.runId} ${input.stepVisit.transitionSequence}`,
+      })
+    }
+    await appendFile(join(input.changeDir, CODEX_SKILL_CONFIRMATIONS_FILE), `${JSON.stringify({
+      schema_version: input.stepVisit === undefined
+        ? 'codex-skill-confirmation/v1'
+        : 'codex-skill-confirmation/v2',
+      producer: skillId,
+      recorded_at: input.recordedAt,
+      evidence_scope: input.evidenceScope ?? '',
+      ...(input.stepVisit === undefined ? {} : {
+        step_visit: {
+          run_id: input.stepVisit.runId,
+          transition_sequence: input.stepVisit.transitionSequence,
+        },
+      }),
+      receipt_digest: `sha256:${receiptHash.digest('hex')}`,
+    })}\n`, { encoding: 'utf8', mode: 0o600 })
   }
   return { confirmedSkillIds: [...confirmed] }
 }

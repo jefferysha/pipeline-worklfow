@@ -83,6 +83,11 @@ function assertVersion(anchor: WorkflowRootAnchor, expected: WorkflowRootMutatio
   }
 }
 
+function missingChange(cause: unknown): boolean {
+  if (cause instanceof ContextBundlePathError) return cause.status === 400
+  return typeof cause === 'object' && cause !== null && Reflect.get(cause, 'code') === 'ENOENT'
+}
+
 export async function readAnchoredSkillInvocationEvidence(
   anchor: WorkflowRootAnchor,
   change: string,
@@ -99,7 +104,11 @@ export async function readAnchoredSkillInvocationEvidence(
     assertRoot(anchor, deps.assertRoot)
     assertVersion(anchor, version)
     deps.assertChangeParent(parent)
-    throw Object.assign(new Error('Skill invocation Change does not exist'), { status: 404, cause })
+    if (cause instanceof ContextBundlePathError && cause.status === 403) throw cause
+    if (missingChange(cause)) {
+      throw Object.assign(new Error('Skill invocation Change does not exist'), { status: 404, cause })
+    }
+    throw new ContextBundlePathError(403, 'Skill invocation Change path is not trusted', cause)
   }
   assertRoot(anchor, deps.assertRoot)
   deps.assertChangeParent(parent)

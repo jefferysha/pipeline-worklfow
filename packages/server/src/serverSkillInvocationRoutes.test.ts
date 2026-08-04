@@ -8,6 +8,7 @@ import {
   resolveSkillInvocationRoute,
   type SkillInvocationRouteDeps,
 } from './serverSkillInvocationRoutes.js'
+import { ContextBundlePathError } from './contextBundlePreviewSupport.js'
 import { captureWorkflowRootAnchor, closeWorkflowRootAnchor } from './workflows.js'
 
 const evidence: SkillInvocationListReadModelV1 = {
@@ -91,6 +92,28 @@ describe('resolveSkillInvocationRoute', () => {
       closeWorkflowRootAnchor(anchor)
       await rm(root, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves forbidden path failures while mapping only missing Changes to 404', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tenon-invocation-route-status-'))
+    await mkdir(join(root, 'openspec', 'changes'), { recursive: true })
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      await expect(readAnchoredSkillInvocationEvidence(anchor, 'missing')).rejects.toMatchObject({ status: 404 })
+      await expect(readAnchoredSkillInvocationEvidence(anchor, 'demo', {
+        captureChange: () => {
+          throw new ContextBundlePathError(403, 'unsafe Change path')
+        },
+      })).rejects.toMatchObject({ status: 403, message: 'unsafe Change path' })
+      await expect(readAnchoredSkillInvocationEvidence(anchor, 'demo', {
+        captureChange: () => {
+          throw Object.assign(new Error('missing Change'), { code: 'ENOENT' })
+        },
+      })).rejects.toMatchObject({ status: 404 })
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+      await rm(root, { recursive: true, force: true })
     }
   })
 })

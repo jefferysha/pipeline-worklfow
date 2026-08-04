@@ -1808,6 +1808,12 @@ function digest(value, path7) {
     throw new DecodeFailure("field-invalid", path7);
   return result;
 }
+function artifactRef(value, path7) {
+  const result = string(value, path7);
+  if (result.startsWith("/") || result.includes("\\") || /^[A-Za-z]:/u.test(result) || result.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
+    throw new DecodeFailure("field-invalid", path7);
+  return result;
+}
 function timestamp(value, path7) {
   const result = string(value, path7, 64);
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(result) || Number.isNaN(Date.parse(result))) {
@@ -1997,7 +2003,7 @@ function decodePayload(type, value, path7) {
       output_id: id(item2.output_id, `${path7}.output_id`),
       artifact: {
         kind: enumValue2(artifact.kind, ARTIFACT_KINDS, `${path7}.artifact.kind`),
-        ref: string(artifact.ref, `${path7}.artifact.ref`),
+        ref: artifactRef(artifact.ref, `${path7}.artifact.ref`),
         digest: digest(artifact.digest, `${path7}.artifact.digest`),
         ...document === void 0 ? {} : { document }
       },
@@ -2091,6 +2097,7 @@ function projectSkillInvocationEvents(events) {
   let terminal;
   const questions = /* @__PURE__ */ new Map();
   const decisions = /* @__PURE__ */ new Map();
+  const decisionIds = /* @__PURE__ */ new Set();
   const intents = /* @__PURE__ */ new Map();
   const bindings = /* @__PURE__ */ new Map();
   const eventIds = /* @__PURE__ */ new Set();
@@ -2110,6 +2117,9 @@ function projectSkillInvocationEvents(events) {
         throw new SkillInvocationEvidenceConflictError("question cannot be recorded after terminal");
       if (questions.has(event.payload.question_id))
         throw new SkillInvocationEvidenceConflictError("duplicate question");
+      if (questions.size >= SKILL_INVOCATION_LIMITS.maxQuestions) {
+        throw new SkillInvocationEvidenceConflictError("invocation question budget exceeded");
+      }
       questions.set(event.payload.question_id, event.payload);
     }
     if (event.type === "decision-recorded") {
@@ -2120,12 +2130,17 @@ function projectSkillInvocationEvents(events) {
         throw new SkillInvocationEvidenceConflictError("decision references a missing question");
       if (decisions.has(event.payload.question_id))
         throw new SkillInvocationEvidenceConflictError("question already has a decision");
+      if (decisionIds.has(event.payload.decision_id))
+        throw new SkillInvocationEvidenceConflictError("duplicate decision id");
       if (event.payload.selected_option_ids.some((option) => !question.option_ids.includes(option))) {
         throw new SkillInvocationEvidenceConflictError("decision selects an unknown option");
       }
       if (event.payload.mode === "user-answer") {
         if (!question.shown)
           throw new SkillInvocationEvidenceConflictError("user answer requires a shown question");
+        if (event.payload.selected_option_ids.length === 0 && event.payload.free_text === void 0) {
+          throw new SkillInvocationEvidenceConflictError("user answer must be non-empty");
+        }
         if (event.payload.policy !== void 0 || event.payload.rationale_code !== void 0) {
           throw new SkillInvocationEvidenceConflictError("user answer cannot claim a default policy");
         }
@@ -2137,8 +2152,12 @@ function projectSkillInvocationEvents(events) {
         if (event.payload.policy === void 0 || event.payload.rationale_code === void 0) {
           throw new SkillInvocationEvidenceConflictError("recommended default requires frozen policy and rationale");
         }
+        if (event.payload.selected_option_ids.length === 0) {
+          throw new SkillInvocationEvidenceConflictError("recommended default must select an option");
+        }
       }
       decisions.set(event.payload.question_id, event.payload);
+      decisionIds.add(event.payload.decision_id);
     }
     if (event.type === "invocation-completed" || event.type === "invocation-failed" || event.type === "invocation-interrupted") {
       if (terminal !== void 0)
@@ -2153,6 +2172,18 @@ function projectSkillInvocationEvents(events) {
         throw new SkillInvocationEvidenceConflictError("artifact intent requires completed invocation");
       if (intents.has(event.payload.binding_id))
         throw new SkillInvocationEvidenceConflictError("duplicate artifact binding intent");
+      if (intents.size >= SKILL_INVOCATION_LIMITS.maxArtifacts) {
+        throw new SkillInvocationEvidenceConflictError("invocation artifact budget exceeded");
+      }
+      if (!terminal.payload.output.fields.some((field) => field.name === event.payload.output_id)) {
+        throw new SkillInvocationEvidenceConflictError("artifact intent must reference a declared output");
+      }
+      if ([...intents.values()].some((intent) => intent.output_id === event.payload.output_id)) {
+        throw new SkillInvocationEvidenceConflictError("artifact output binding must be unique");
+      }
+      if (event.payload.validator_ids.length === 0) {
+        throw new SkillInvocationEvidenceConflictError("artifact intent requires at least one validator");
+      }
       intents.set(event.payload.binding_id, event.payload);
     }
     if (event.type === "artifact-bound") {
@@ -2164,8 +2195,12 @@ function projectSkillInvocationEvents(events) {
       if (intent.artifact.digest !== event.payload.artifact_digest)
         throw new SkillInvocationEvidenceConflictError("artifact digest drift");
       const validatorIds = new Set(event.payload.validators.map((validator2) => validator2.id));
-      if (intent.validator_ids.some((id2) => !validatorIds.has(id2)))
-        throw new SkillInvocationEvidenceConflictError("artifact validators are incomplete");
+      if (validatorIds.size !== event.payload.validators.length || validatorIds.size !== intent.validator_ids.length || intent.validator_ids.some((id2) => !validatorIds.has(id2))) {
+        throw new SkillInvocationEvidenceConflictError("artifact validators must exactly match the binding intent");
+      }
+      if (event.payload.validators.some((validator2) => validator2.status !== "pass")) {
+        throw new SkillInvocationEvidenceConflictError("artifact validator verdicts must pass before binding");
+      }
       bindings.set(event.payload.binding_id, event.payload);
     }
   }
@@ -2213,1595 +2248,6 @@ function projectSkillInvocationEvents(events) {
     }),
     ...terminalCode === void 0 ? {} : { terminal_code: terminalCode }
   };
-}
-
-// packages/kernel/dist/skill-invocation/repository.js
-import { lstat as lstat6, open as open2, realpath as realpath3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute3, join as join13, relative as relative3, resolve as resolve3, sep as sep4 } from "node:path";
-
-// packages/kernel/dist/state/run-revision-store.js
-import { createHash as createHash5 } from "node:crypto";
-import { lstatSync as lstatSync2, readFileSync as readFileSync2 } from "node:fs";
-import { lstat as lstat3, mkdir as mkdir3, readFile as readFile4 } from "node:fs/promises";
-import { join as join8 } from "node:path";
-
-// packages/kernel/dist/state/atomic-publish.js
-import { randomUUID as randomUUID2 } from "node:crypto";
-import { link, rename, unlink, writeFile } from "node:fs/promises";
-import { join as join3 } from "node:path";
-async function atomicLinkPublish(dir, tmpNamePrefix, target, content) {
-  const tmp = join3(dir, `${tmpNamePrefix}-${randomUUID2()}`);
-  try {
-    await writeFile(tmp, content, { encoding: "utf8", flag: "wx" });
-    await link(tmp, target);
-  } finally {
-    await unlink(tmp).catch(() => {
-    });
-  }
-}
-async function atomicReplaceFile(target, content) {
-  const tmp = `${target}.tmp-${randomUUID2()}`;
-  try {
-    await writeFile(tmp, content, { encoding: "utf8", flag: "wx" });
-    await rename(tmp, target);
-  } finally {
-    await unlink(tmp).catch(() => {
-    });
-  }
-}
-
-// packages/kernel/dist/sha256.js
-import { createHash } from "node:crypto";
-function sha256Hex(content) {
-  return createHash("sha256").update(content).digest("hex");
-}
-
-// packages/kernel/dist/loops/automation-policy.js
-var EXCEED_ACTIONS = /* @__PURE__ */ new Set(["skip-run", "pause-loop", "halt-round"]);
-var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function closed3(value, keys, path7) {
-  const allowed = new Set(keys);
-  for (const key of Object.keys(value))
-    if (!allowed.has(key))
-      throw new Error(`${path7}: unknown key '${key}'`);
-  for (const key of keys)
-    if (!Object.hasOwn(value, key))
-      throw new Error(`${path7}.${key}: missing`);
-}
-function stringAt(value, path7) {
-  if (typeof value !== "string" || value === "")
-    throw new Error(`${path7}: expected non-empty string`);
-  return value;
-}
-function numberAt(value, path7) {
-  if (!Number.isSafeInteger(value) || value < 0)
-    throw new Error(`${path7}: expected non-negative safe integer`);
-  return value;
-}
-function stringsAt(value, path7) {
-  if (!Array.isArray(value) || !value.every((item2) => typeof item2 === "string"))
-    throw new Error(`${path7}: expected string[]`);
-  return [...value];
-}
-function deepFreeze2(value) {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value))
-    return value;
-  for (const child of Object.values(value))
-    deepFreeze2(child);
-  return Object.freeze(value);
-}
-function compileConstraintPolicy(loop) {
-  return deepFreeze2({
-    schema_version: 1,
-    admission: { require_active: true },
-    write: { allowlist: [...loop.allowlist], denylist: [...loop.denylist] },
-    transition: { require_active: true, human_gates: [...loop.human_gates] },
-    merge: { require_active: true, allowlist: [...loop.allowlist], denylist: [...loop.denylist] }
-  });
-}
-function validateAutomationPolicySnapshot(input) {
-  if (!isRecord2(input))
-    throw new Error("AutomationPolicy: expected object");
-  closed3(input, [
-    "schema_version",
-    "policy_id",
-    "policy_version",
-    "loop_id",
-    "goal",
-    "constraints",
-    "budget",
-    "kill_policy",
-    "verifier_binding",
-    "skill_bundle_id",
-    "captured_at"
-  ], "AutomationPolicy");
-  if (input.schema_version !== 1)
-    throw new Error("AutomationPolicy.schema_version: expected 1");
-  if (!isRecord2(input.constraints))
-    throw new Error("AutomationPolicy.constraints: expected object");
-  closed3(input.constraints, ["schema_version", "admission", "write", "transition", "merge"], "AutomationPolicy.constraints");
-  if (input.constraints.schema_version !== 1)
-    throw new Error("AutomationPolicy.constraints.schema_version: expected 1");
-  const admission = input.constraints.admission;
-  const write = input.constraints.write;
-  const transition = input.constraints.transition;
-  const merge = input.constraints.merge;
-  if (!isRecord2(admission) || !isRecord2(write) || !isRecord2(transition) || !isRecord2(merge)) {
-    throw new Error("AutomationPolicy.constraints: invalid operation policy");
-  }
-  closed3(admission, ["require_active"], "AutomationPolicy.constraints.admission");
-  closed3(write, ["allowlist", "denylist"], "AutomationPolicy.constraints.write");
-  closed3(transition, ["require_active", "human_gates"], "AutomationPolicy.constraints.transition");
-  closed3(merge, ["require_active", "allowlist", "denylist"], "AutomationPolicy.constraints.merge");
-  if (admission.require_active !== true || transition.require_active !== true || merge.require_active !== true) {
-    throw new Error("AutomationPolicy.constraints: require_active must be true");
-  }
-  if (!isRecord2(input.budget))
-    throw new Error("AutomationPolicy.budget: expected object");
-  const budgetKeys = ["max_runs_per_day", "max_in_flight", "on_exceed"];
-  const budgetOptional = ["max_tokens_per_day", "tokens_per_run"];
-  for (const key of Object.keys(input.budget)) {
-    if (![...budgetKeys, ...budgetOptional].includes(key))
-      throw new Error(`AutomationPolicy.budget: unknown key '${key}'`);
-  }
-  for (const key of budgetKeys)
-    if (!Object.hasOwn(input.budget, key))
-      throw new Error(`AutomationPolicy.budget.${key}: missing`);
-  const onExceed = input.budget.on_exceed;
-  if (typeof onExceed !== "string" || !EXCEED_ACTIONS.has(onExceed)) {
-    throw new Error("AutomationPolicy.budget.on_exceed: invalid typed action");
-  }
-  if (!isRecord2(input.kill_policy))
-    throw new Error("AutomationPolicy.kill_policy: expected object");
-  closed3(input.kill_policy, ["required_status", "on_inactive", "recheck"], "AutomationPolicy.kill_policy");
-  if (input.kill_policy.required_status !== "active" || input.kill_policy.on_inactive !== "skip-run" || JSON.stringify(input.kill_policy.recheck) !== JSON.stringify(["schedule", "pre-claim", "transition", "settlement"])) {
-    throw new Error("AutomationPolicy.kill_policy: invalid");
-  }
-  if (!isRecord2(input.verifier_binding))
-    throw new Error("AutomationPolicy.verifier_binding: expected object");
-  closed3(input.verifier_binding, ["kind", "verifier", "version"], "AutomationPolicy.verifier_binding");
-  if (input.verifier_binding.kind !== "runtime-verifier" || input.verifier_binding.verifier !== "pipeline-git-integrity" || input.verifier_binding.version !== "1")
-    throw new Error("AutomationPolicy.verifier_binding: invalid");
-  const payload = {
-    schema_version: 1,
-    policy_id: stringAt(input.policy_id, "AutomationPolicy.policy_id"),
-    loop_id: stringAt(input.loop_id, "AutomationPolicy.loop_id"),
-    goal: stringAt(input.goal, "AutomationPolicy.goal"),
-    constraints: {
-      schema_version: 1,
-      admission: { require_active: true },
-      write: {
-        allowlist: stringsAt(write.allowlist, "AutomationPolicy.constraints.write.allowlist"),
-        denylist: stringsAt(write.denylist, "AutomationPolicy.constraints.write.denylist")
-      },
-      transition: {
-        require_active: true,
-        human_gates: stringsAt(transition.human_gates, "AutomationPolicy.constraints.transition.human_gates")
-      },
-      merge: {
-        require_active: true,
-        allowlist: stringsAt(merge.allowlist, "AutomationPolicy.constraints.merge.allowlist"),
-        denylist: stringsAt(merge.denylist, "AutomationPolicy.constraints.merge.denylist")
-      }
-    },
-    budget: {
-      max_runs_per_day: numberAt(input.budget.max_runs_per_day, "AutomationPolicy.budget.max_runs_per_day"),
-      max_in_flight: numberAt(input.budget.max_in_flight, "AutomationPolicy.budget.max_in_flight"),
-      ...input.budget.max_tokens_per_day === void 0 ? {} : {
-        max_tokens_per_day: numberAt(input.budget.max_tokens_per_day, "AutomationPolicy.budget.max_tokens_per_day")
-      },
-      ...input.budget.tokens_per_run === void 0 ? {} : {
-        tokens_per_run: numberAt(input.budget.tokens_per_run, "AutomationPolicy.budget.tokens_per_run")
-      },
-      on_exceed: onExceed
-    },
-    kill_policy: {
-      required_status: "active",
-      on_inactive: "skip-run",
-      recheck: ["schedule", "pre-claim", "transition", "settlement"]
-    },
-    verifier_binding: { kind: "runtime-verifier", verifier: "pipeline-git-integrity", version: "1" },
-    skill_bundle_id: stringAt(input.skill_bundle_id, "AutomationPolicy.skill_bundle_id")
-  };
-  const expectedVersion = sha256Hex(JSON.stringify(payload));
-  if (input.policy_version !== expectedVersion)
-    throw new Error("AutomationPolicy.policy_version: content digest mismatch");
-  const capturedAt = stringAt(input.captured_at, "AutomationPolicy.captured_at");
-  if (!Number.isFinite(Date.parse(capturedAt)))
-    throw new Error("AutomationPolicy.captured_at: invalid timestamp");
-  return deepFreeze2({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
-}
-function explainConstraintPaths(policy2, operation, paths, matches) {
-  const { allowlist, denylist } = policy2[operation];
-  return paths.map((path7) => {
-    const deniedBy = denylist.find((pattern) => matches(path7, pattern));
-    if (deniedBy !== void 0) {
-      return { path: path7, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
-    }
-    const allowedBy = allowlist.find((pattern) => matches(path7, pattern));
-    return allowedBy === void 0 ? { path: path7, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path7, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
-  });
-}
-function pathDecision(policy2, operation, input) {
-  const explanations = explainConstraintPaths(policy2, operation, input.paths ?? [], input.matches);
-  const denied = explanations.filter((item2) => item2.reason === "path-denied").map((item2) => item2.path);
-  if (denied.length > 0)
-    return { allowed: false, reason: "path-denied", paths: denied };
-  const outside = explanations.filter((item2) => item2.reason === "path-outside-allowlist").map((item2) => item2.path);
-  if (outside.length > 0)
-    return { allowed: false, reason: "path-outside-allowlist", paths: outside };
-  return { allowed: true };
-}
-function evaluateConstraintPolicy(policy2, input) {
-  if (!input.active)
-    return { allowed: false, reason: "loop-inactive" };
-  if (input.operation === "admission")
-    return { allowed: true };
-  if (input.operation === "transition") {
-    const humanGateApplies = input.transitionTarget === void 0 ? policy2.transition.human_gates.length > 0 : policy2.transition.human_gates.includes(input.transitionTarget);
-    return humanGateApplies && input.humanGateSatisfied !== true ? { allowed: false, reason: "human-gate-required" } : { allowed: true };
-  }
-  return input.operation === "write" ? pathDecision(policy2, "write", input) : pathDecision(policy2, "merge", input);
-}
-
-// packages/kernel/dist/state/run-metadata.js
-var RUN_ID_KEY = "pipeline_run_id";
-var SEQUENCE_KEY = "pipeline_transition_sequence";
-var HEAD_KEY = "pipeline_transition_head";
-var POLICY_KEY = "pipeline_automation_policy_b64";
-var LOOP_ID_KEY = "pipeline_loop_id";
-var ITERATION_ID_KEY = "pipeline_iteration_id";
-var DOCUMENT_PROFILE_KEY = "pipeline_document_profile";
-var DOCUMENT_GOVERNANCE_FINGERPRINT_KEY = "pipeline_document_governance_fingerprint";
-var WORKFLOW_PLAN_FINGERPRINT_KEY = "pipeline_workflow_plan_fingerprint";
-var STATE_REVISION_KEY = "pipeline_state_revision";
-var STATE_REVISION_ID_KEY = "pipeline_state_revision_id";
-var STATE_DIGEST_KEY = "pipeline_state_digest";
-var NULL_LITERAL = "null";
-function serializeRunMetadataLines(metadata) {
-  if (!metadata)
-    return [];
-  const lines = [
-    `${RUN_ID_KEY}: ${metadata.runId}`,
-    `${SEQUENCE_KEY}: ${metadata.transitionSequence}`,
-    `${HEAD_KEY}: ${metadata.transitionHead ?? NULL_LITERAL}`
-  ];
-  if (metadata.automationPolicy !== void 0) {
-    lines.push(`${POLICY_KEY}: ${Buffer.from(JSON.stringify(metadata.automationPolicy)).toString("base64url")}`);
-    if (metadata.loopId !== void 0 && metadata.iterationId !== void 0) {
-      lines.push(`${LOOP_ID_KEY}: ${metadata.loopId}`);
-      lines.push(`${ITERATION_ID_KEY}: ${metadata.iterationId}`);
-    }
-  }
-  if (metadata.documentProfile !== void 0) {
-    lines.push(`${DOCUMENT_PROFILE_KEY}: ${metadata.documentProfile}`);
-  }
-  if (metadata.documentGovernanceFingerprint !== void 0) {
-    if (!/^[0-9a-f]{64}$/.test(metadata.documentGovernanceFingerprint)) {
-      throw new Error("document governance fingerprint \u5FC5\u987B\u662F 64 \u4F4D\u5C0F\u5199 SHA-256");
-    }
-    if (metadata.documentProfile === void 0) {
-      throw new Error("document governance fingerprint \u7F3A\u5C11 document profile");
-    }
-    lines.push(`${DOCUMENT_GOVERNANCE_FINGERPRINT_KEY}: ${metadata.documentGovernanceFingerprint}`);
-  }
-  if (metadata.workflowPlanFingerprint !== void 0) {
-    if (!/^[0-9a-f]{64}$/.test(metadata.workflowPlanFingerprint)) {
-      throw new Error("workflow plan fingerprint \u5FC5\u987B\u662F 64 \u4F4D\u5C0F\u5199 SHA-256");
-    }
-    lines.push(`${WORKFLOW_PLAN_FINGERPRINT_KEY}: ${metadata.workflowPlanFingerprint}`);
-  }
-  return lines;
-}
-function parseRunMetadataLines(lines) {
-  const NOT_FOUND = { metadata: void 0, consumedLines: 0 };
-  const l0 = lines[0];
-  const l1 = lines[1];
-  const l2 = lines[2];
-  if (l0 === void 0 || l1 === void 0 || l2 === void 0)
-    return NOT_FOUND;
-  const runId = matchLine(l0, RUN_ID_KEY);
-  const sequenceRaw = matchLine(l1, SEQUENCE_KEY);
-  const headRaw = matchLine(l2, HEAD_KEY);
-  if (runId === void 0 || sequenceRaw === void 0 || headRaw === void 0)
-    return NOT_FOUND;
-  const transitionSequence = Number(sequenceRaw);
-  if (!Number.isInteger(transitionSequence) || transitionSequence < 0)
-    return NOT_FOUND;
-  const metadata = {
-    runId,
-    transitionSequence,
-    transitionHead: headRaw === NULL_LITERAL ? void 0 : headRaw
-  };
-  let consumedLines = 3;
-  const policyLine = lines[consumedLines];
-  const policyRaw = policyLine === void 0 ? void 0 : matchLine(policyLine, POLICY_KEY);
-  if (policyRaw !== void 0) {
-    try {
-      metadata.automationPolicy = validateAutomationPolicySnapshot(JSON.parse(Buffer.from(policyRaw, "base64url").toString("utf8")));
-      const loopId = lines[4] === void 0 ? void 0 : matchLine(lines[4], LOOP_ID_KEY);
-      const iterationId = lines[5] === void 0 ? void 0 : matchLine(lines[5], ITERATION_ID_KEY);
-      if (loopId !== void 0 && iterationId !== void 0 && loopId === metadata.automationPolicy.loop_id && iterationId.length > 0) {
-        metadata.loopId = loopId;
-        metadata.iterationId = iterationId;
-        consumedLines = 6;
-      } else {
-        consumedLines = 4;
-      }
-    } catch {
-    }
-  }
-  const profileLine = lines[consumedLines];
-  const profileRaw = profileLine === void 0 ? void 0 : matchLine(profileLine, DOCUMENT_PROFILE_KEY);
-  if (profileRaw === "legacy-full" || profileRaw === "document-v1") {
-    metadata.documentProfile = profileRaw;
-    consumedLines += 1;
-  }
-  const fingerprintLine = lines[consumedLines];
-  const fingerprintRaw = fingerprintLine === void 0 ? void 0 : matchLine(fingerprintLine, DOCUMENT_GOVERNANCE_FINGERPRINT_KEY);
-  if (fingerprintRaw !== void 0) {
-    if (metadata.documentProfile === void 0 || !/^[0-9a-f]{64}$/.test(fingerprintRaw)) {
-      throw new Error("tenon document governance fingerprint \u635F\u574F");
-    }
-    metadata.documentGovernanceFingerprint = fingerprintRaw;
-    consumedLines += 1;
-  }
-  const workflowFingerprintLine = lines[consumedLines];
-  const workflowFingerprintRaw = workflowFingerprintLine === void 0 ? void 0 : matchLine(workflowFingerprintLine, WORKFLOW_PLAN_FINGERPRINT_KEY);
-  if (workflowFingerprintRaw !== void 0) {
-    if (!/^[0-9a-f]{64}$/.test(workflowFingerprintRaw)) {
-      throw new Error("tenon workflow plan fingerprint \u635F\u574F");
-    }
-    metadata.workflowPlanFingerprint = workflowFingerprintRaw;
-    consumedLines += 1;
-  }
-  return { metadata, consumedLines };
-}
-function serializeProjectionMetadataLines(metadata) {
-  if (!metadata)
-    return [];
-  return [
-    `${STATE_REVISION_KEY}: ${metadata.stateRevision}`,
-    `${STATE_REVISION_ID_KEY}: ${metadata.stateRevisionId}`,
-    `${STATE_DIGEST_KEY}: ${metadata.stateDigest}`
-  ];
-}
-function parseProjectionMetadataLines(lines) {
-  const revisionRaw = lines[0] === void 0 ? void 0 : matchLine(lines[0], STATE_REVISION_KEY);
-  const revisionId = lines[1] === void 0 ? void 0 : matchLine(lines[1], STATE_REVISION_ID_KEY);
-  const stateDigest = lines[2] === void 0 ? void 0 : matchLine(lines[2], STATE_DIGEST_KEY);
-  const stateRevision = Number(revisionRaw);
-  if (!Number.isSafeInteger(stateRevision) || stateRevision < 0 || revisionId === void 0 || !/^[A-Za-z0-9_-]+$/.test(revisionId) || stateDigest === void 0 || !/^[0-9a-f]{64}$/.test(stateDigest)) {
-    return { metadata: void 0, consumedLines: 0 };
-  }
-  return { metadata: { stateRevision, stateRevisionId: revisionId, stateDigest }, consumedLines: 3 };
-}
-function matchLine(line, key) {
-  const prefix = `${key}: `;
-  return line.startsWith(prefix) ? line.slice(prefix.length) : void 0;
-}
-function fieldValueEqual(a, b) {
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b))
-      return false;
-    if (a.length !== b.length)
-      return false;
-    return a.every((v, i) => v === b[i]);
-  }
-  return a === b;
-}
-function diffFieldsToEffects(before, after) {
-  const effects = [];
-  const fields = /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)]);
-  for (const field of fields) {
-    const from = before[field] ?? "";
-    const to = after[field] ?? "";
-    if (!fieldValueEqual(from, to)) {
-      effects.push({ kind: "state-field-change", field, from, to });
-    }
-  }
-  return effects;
-}
-function diffWireFieldsToEffects(before, after) {
-  return diffFieldsToEffects(before, after).filter(({ field }) => field !== PRE_VERIFY_REVIEW_FIELD);
-}
-
-// packages/kernel/dist/state/run-revision-codec.js
-import { createHash as createHash2, randomUUID as randomUUID3 } from "node:crypto";
-
-// packages/kernel/dist/state/run-revision-validation.js
-var RUN_STATE_SCHEMA_VERSION = 1;
-var RunStateCorruptError = class extends Error {
-  _tag = "RunStateCorruptError";
-};
-var UnsupportedRunStateVersionError = class extends Error {
-  foundVersion;
-  supportedVersion;
-  _tag = "UnsupportedRunStateVersionError";
-  constructor(foundVersion, supportedVersion = RUN_STATE_SCHEMA_VERSION) {
-    super(`canonical schemaVersion ${foundVersion} \u9AD8\u4E8E\u5F53\u524D\u652F\u6301\u7248\u672C ${supportedVersion}`);
-    this.foundVersion = foundVersion;
-    this.supportedVersion = supportedVersion;
-    this.name = "UnsupportedRunStateVersionError";
-  }
-};
-function ownRecord(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return void 0;
-  return Object.fromEntries(Object.entries(value));
-}
-
-// packages/kernel/dist/state/workflow-governance-binding.js
-import { lstat, readFile } from "node:fs/promises";
-import { join as join4 } from "node:path";
-var WORKFLOW_GOVERNANCE_BINDING_FILE = ".pipeline-workflow-governance.json";
-function errorCode(error2) {
-  if (typeof error2 !== "object" || error2 === null || !("code" in error2))
-    return void 0;
-  const value = Reflect.get(error2, "code");
-  return typeof value === "string" ? value : void 0;
-}
-function parseWorkflowGovernanceBinding(raw) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    throw new Error("workflow governance binding \u4E0D\u662F\u5408\u6CD5 JSON");
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("workflow governance binding \u5FC5\u987B\u662F\u5BF9\u8C61");
-  }
-  const record4 = value;
-  const allowed = /* @__PURE__ */ new Set([
-    "version",
-    "run_id",
-    "document_profile",
-    "document_governance_fingerprint",
-    "workflow_plan_fingerprint"
-  ]);
-  const digest4 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record4).some((key) => !allowed.has(key)) || record4.version !== 1 || typeof record4.run_id !== "string" || record4.run_id === "" || record4.document_profile !== void 0 && record4.document_profile !== "legacy-full" && record4.document_profile !== "document-v1" || record4.document_governance_fingerprint !== void 0 && !digest4(record4.document_governance_fingerprint) || record4.workflow_plan_fingerprint !== void 0 && !digest4(record4.workflow_plan_fingerprint) || record4.document_governance_fingerprint !== void 0 && record4.document_profile === void 0) {
-    throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
-  }
-  return {
-    version: 1,
-    run_id: record4.run_id,
-    ...record4.document_profile === void 0 ? {} : { document_profile: record4.document_profile },
-    ...record4.document_governance_fingerprint === void 0 ? {} : { document_governance_fingerprint: record4.document_governance_fingerprint },
-    ...record4.workflow_plan_fingerprint === void 0 ? {} : { workflow_plan_fingerprint: record4.workflow_plan_fingerprint }
-  };
-}
-async function readWorkflowGovernanceBinding(changeDir) {
-  const target = join4(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
-  try {
-    const info = await lstat(target);
-    if (!info.isFile() || info.isSymbolicLink()) {
-      throw new Error(`workflow governance binding \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
-    }
-    return parseWorkflowGovernanceBinding(await readFile(target, "utf8"));
-  } catch (error2) {
-    if (errorCode(error2) === "ENOENT")
-      return void 0;
-    throw error2;
-  }
-}
-function bindingFor(metadata) {
-  return {
-    version: 1,
-    run_id: metadata.runId,
-    ...metadata.documentProfile === void 0 ? {} : { document_profile: metadata.documentProfile },
-    ...metadata.documentGovernanceFingerprint === void 0 ? {} : { document_governance_fingerprint: metadata.documentGovernanceFingerprint },
-    ...metadata.workflowPlanFingerprint === void 0 ? {} : { workflow_plan_fingerprint: metadata.workflowPlanFingerprint }
-  };
-}
-async function ensureWorkflowGovernanceBinding(changeDir, metadata) {
-  const requested = bindingFor(metadata);
-  const existing = await readWorkflowGovernanceBinding(changeDir);
-  if (existing !== void 0) {
-    if (JSON.stringify(existing) !== JSON.stringify(requested)) {
-      throw new Error("Change \u5DF2\u56FA\u5B9A\u4E0D\u540C\u7684 workflow governance binding\uFF0C\u62D2\u7EDD\u8986\u76D6");
-    }
-    return existing;
-  }
-  const target = join4(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
-  try {
-    await atomicLinkPublish(changeDir, ".pipeline-workflow-governance.tmp", target, `${JSON.stringify(requested)}
-`);
-    return requested;
-  } catch (error2) {
-    if (errorCode(error2) !== "EEXIST")
-      throw error2;
-    const raced = await readWorkflowGovernanceBinding(changeDir);
-    if (raced === void 0 || JSON.stringify(raced) !== JSON.stringify(requested)) {
-      throw new Error("workflow governance binding \u5E76\u53D1\u521B\u5EFA\u540E\u5185\u5BB9\u4E0D\u4E00\u81F4");
-    }
-    return raced;
-  }
-}
-function attachWorkflowGovernanceBinding(metadata, binding) {
-  if (metadata === void 0)
-    return void 0;
-  if (binding === void 0)
-    return metadata;
-  if (binding.run_id !== metadata.runId) {
-    throw new Error("workflow governance binding \u4E0E canonical runId \u4E0D\u4E00\u81F4");
-  }
-  const asserted = [
-    ["documentProfile", metadata.documentProfile, binding.document_profile],
-    ["documentGovernanceFingerprint", metadata.documentGovernanceFingerprint, binding.document_governance_fingerprint],
-    ["workflowPlanFingerprint", metadata.workflowPlanFingerprint, binding.workflow_plan_fingerprint]
-  ];
-  for (const [field, canonical, sidecar] of asserted) {
-    if (canonical !== void 0 && sidecar !== void 0 && canonical !== sidecar) {
-      throw new Error(`workflow governance binding \u4E0E legacy canonical ${field} \u4E0D\u4E00\u81F4`);
-    }
-  }
-  return {
-    ...metadata,
-    ...binding.document_profile === void 0 ? {} : { documentProfile: binding.document_profile },
-    ...binding.document_governance_fingerprint === void 0 ? {} : { documentGovernanceFingerprint: binding.document_governance_fingerprint },
-    ...binding.workflow_plan_fingerprint === void 0 ? {} : { workflowPlanFingerprint: binding.workflow_plan_fingerprint }
-  };
-}
-function withoutWorkflowGovernanceBinding(metadata) {
-  const { documentProfile: _documentProfile, documentGovernanceFingerprint: _documentGovernanceFingerprint, workflowPlanFingerprint: _workflowPlanFingerprint, workflowPlanSnapshot: _workflowPlanSnapshot, ...canonical } = metadata;
-  return canonical;
-}
-
-// packages/kernel/dist/state/run-revision-codec.js
-var SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
-var FIELD_SET = new Set(FIELD_ORDER);
-var LIST_FIELD_SET = new Set(LIST_FIELDS);
-var PRE_VERIFY_REVIEW_ANCHOR_PREFIX = "# tenon-internal-pre-verify-review-v1: ";
-var SHA256_RE = /^[0-9a-f]{64}$/;
-function preVerifyReviewResult(state) {
-  const result = state.fields[PRE_VERIFY_REVIEW_FIELD];
-  if (typeof result !== "string" || !["pending", "pass"].includes(result)) {
-    throw new RunStateCorruptError(`canonical ${PRE_VERIFY_REVIEW_FIELD} \u975E\u6CD5\uFF1A\u4EC5\u5141\u8BB8 pending/pass`);
-  }
-  return result;
-}
-function preVerifyReviewPayloadDigest(revision, revisionId, result) {
-  return createHash2("sha256").update(JSON.stringify({
-    schemaVersion: 1,
-    revision,
-    revisionId,
-    result
-  })).digest("hex");
-}
-function parsePreVerifyReviewAnchor(encoded) {
-  let value;
-  try {
-    value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-  } catch (error2) {
-    throw new RunStateCorruptError(`pre-Verify opaqueTail anchor \u635F\u574F\uFF08${String(error2)}\uFF09`);
-  }
-  const raw = ownRecord(value);
-  if (!raw || Object.keys(raw).sort().join(",") !== "payloadDigest,revision,revisionId,schemaVersion" || raw.schemaVersion !== 1 || typeof raw.revision !== "number" || !Number.isSafeInteger(raw.revision) || raw.revision < 0 || typeof raw.revisionId !== "string" || !SAFE_ID_RE.test(raw.revisionId) || typeof raw.payloadDigest !== "string" || !SHA256_RE.test(raw.payloadDigest)) {
-    throw new RunStateCorruptError("pre-Verify opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
-  }
-  return {
-    schemaVersion: 1,
-    revision: raw.revision,
-    revisionId: raw.revisionId,
-    payloadDigest: raw.payloadDigest
-  };
-}
-function splitPreVerifyReviewAnchor(state) {
-  if (!state.opaqueTail.startsWith(PRE_VERIFY_REVIEW_ANCHOR_PREFIX))
-    return { state };
-  const lineEnd = state.opaqueTail.indexOf("\n");
-  const encoded = lineEnd < 0 ? "" : state.opaqueTail.slice(PRE_VERIFY_REVIEW_ANCHOR_PREFIX.length, lineEnd);
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
-    throw new RunStateCorruptError("pre-Verify opaqueTail anchor \u7F16\u7801\u975E\u6CD5");
-  }
-  return {
-    state: {
-      ...state,
-      opaqueTail: state.opaqueTail.slice(lineEnd + 1)
-    },
-    anchor: parsePreVerifyReviewAnchor(encoded)
-  };
-}
-function withoutPreVerifyReviewField(state, revision, revisionId) {
-  const logical = splitPreVerifyReviewAnchor(state).state;
-  const fields = structuredClone(state.fields);
-  delete fields[PRE_VERIFY_REVIEW_FIELD];
-  const anchor = {
-    schemaVersion: 1,
-    revision,
-    revisionId,
-    payloadDigest: preVerifyReviewPayloadDigest(revision, revisionId, preVerifyReviewResult(logical))
-  };
-  const encodedAnchor = Buffer.from(JSON.stringify(anchor), "utf8").toString("base64url");
-  return {
-    fields,
-    ...logical.runMetadata === void 0 ? {} : { runMetadata: logical.runMetadata },
-    opaqueTail: `${PRE_VERIFY_REVIEW_ANCHOR_PREFIX}${encodedAnchor}
-${logical.opaqueTail}`
-  };
-}
-function rollbackCompatibleState(revision) {
-  return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId);
-}
-function stringField(fields, field) {
-  const value = fields[field];
-  return Array.isArray(value) ? value.join(",") : value;
-}
-function hookStateFor(state) {
-  return {
-    phase: stringField(state.fields, "phase"),
-    workflow: stringField(state.fields, "workflow") || "default",
-    track: stringField(state.fields, "track"),
-    archived: stringField(state.fields, "archived"),
-    automation: stringField(state.fields, "automation")
-  };
-}
-function canonicalRunMetadata(value) {
-  if (value === void 0)
-    return void 0;
-  const raw = ownRecord(value);
-  if (!raw)
-    throw new RunStateCorruptError("canonical state.runMetadata \u4E0D\u662F\u5BF9\u8C61");
-  const allowed = /* @__PURE__ */ new Set([
-    "runId",
-    "transitionSequence",
-    "transitionHead",
-    "automationPolicy",
-    "loopId",
-    "iterationId",
-    "documentProfile",
-    "documentGovernanceFingerprint",
-    "workflowPlanFingerprint"
-  ]);
-  if (Object.keys(raw).some((key) => !allowed.has(key))) {
-    throw new RunStateCorruptError("canonical state.runMetadata \u542B\u672A\u77E5\u5B57\u6BB5");
-  }
-  if (typeof raw.runId !== "string" || raw.runId.length === 0 || !Number.isSafeInteger(raw.transitionSequence) || raw.transitionSequence < 0 || raw.transitionHead !== void 0 && typeof raw.transitionHead !== "string" || raw.documentProfile !== void 0 && raw.documentProfile !== "legacy-full" && raw.documentProfile !== "document-v1" || raw.documentGovernanceFingerprint !== void 0 && (typeof raw.documentGovernanceFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(raw.documentGovernanceFingerprint)) || raw.workflowPlanFingerprint !== void 0 && (typeof raw.workflowPlanFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(raw.workflowPlanFingerprint)) || raw.loopId !== void 0 && typeof raw.loopId !== "string" || raw.iterationId !== void 0 && typeof raw.iterationId !== "string") {
-    throw new RunStateCorruptError("canonical state.runMetadata \u5B57\u6BB5\u975E\u6CD5");
-  }
-  const automationPolicy = raw.automationPolicy === void 0 ? void 0 : validateAutomationPolicySnapshot(raw.automationPolicy);
-  if (raw.loopId === void 0 !== (raw.iterationId === void 0)) {
-    throw new RunStateCorruptError("canonical governed identity \u5FC5\u987B loopId/iterationId \u6210\u5BF9");
-  }
-  if (raw.loopId !== void 0 && automationPolicy === void 0) {
-    throw new RunStateCorruptError("canonical governed identity \u7F3A automationPolicy");
-  }
-  if (raw.documentGovernanceFingerprint !== void 0 && raw.documentProfile === void 0) {
-    throw new RunStateCorruptError("canonical document governance fingerprint \u7F3A profile");
-  }
-  return {
-    runId: raw.runId,
-    transitionSequence: raw.transitionSequence,
-    ...raw.transitionHead === void 0 ? {} : { transitionHead: raw.transitionHead },
-    ...raw.documentProfile === void 0 ? {} : { documentProfile: raw.documentProfile },
-    ...raw.documentGovernanceFingerprint === void 0 ? {} : { documentGovernanceFingerprint: raw.documentGovernanceFingerprint },
-    ...raw.workflowPlanFingerprint === void 0 ? {} : { workflowPlanFingerprint: raw.workflowPlanFingerprint },
-    ...automationPolicy === void 0 ? {} : { automationPolicy },
-    ...raw.loopId === void 0 ? {} : { loopId: raw.loopId, iterationId: raw.iterationId }
-  };
-}
-function canonicalState(value, opts = {}) {
-  const raw = ownRecord(value);
-  if (!raw || Object.keys(raw).some((key) => !["fields", "runMetadata", "opaqueTail"].includes(key))) {
-    throw new RunStateCorruptError("canonical state \u5F62\u72B6\u975E\u6CD5");
-  }
-  const rawFields = ownRecord(raw.fields);
-  const rawKeys = rawFields ? Object.keys(rawFields) : [];
-  const missing4 = rawFields ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field)) : [];
-  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing4.includes(field));
-  const isCompleteReviewGateOmission = missingReviewGateFields.length === REVIEW_GATE_FIELDS.length;
-  const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1 && missingReviewGateFields[0] === "review_gate_event" && REVIEW_GATE_FIELDS.filter((field) => field !== "review_gate_event").every((field) => rawFields?.[field] === "");
-  const legacyReviewGateDefaults = opts.allowLegacyFieldOmissions === true && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent) ? new Set(missingReviewGateFields) : /* @__PURE__ */ new Set();
-  const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true && missing4.includes(PRE_VERIFY_REVIEW_FIELD) ? /* @__PURE__ */ new Set([PRE_VERIFY_REVIEW_FIELD]) : /* @__PURE__ */ new Set();
-  const allowedLegacyDefaults = /* @__PURE__ */ new Set([
-    ...legacyReviewGateDefaults,
-    ...legacyPreVerifyDefault
-  ]);
-  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing4.some((field) => !allowedLegacyDefaults.has(field))) {
-    throw new RunStateCorruptError("canonical state.fields \u4E0D\u662F FIELD_ORDER \u95ED\u96C6");
-  }
-  const fields = {};
-  for (const field of FIELD_ORDER) {
-    if (legacyReviewGateDefaults.has(field)) {
-      fields[field] = REVIEW_GATE_FIELD_DEFAULTS[field];
-      continue;
-    }
-    if (legacyPreVerifyDefault.has(field)) {
-      fields[field] = PRE_VERIFY_REVIEW_DEFAULT;
-      continue;
-    }
-    const fieldValue = rawFields[field];
-    if (typeof fieldValue === "string") {
-      fields[field] = fieldValue;
-    } else if (LIST_FIELD_SET.has(field) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
-      fields[field] = [...fieldValue];
-    } else {
-      throw new RunStateCorruptError(`canonical state.fields.${field} \u7C7B\u578B\u975E\u6CD5`);
-    }
-  }
-  if (typeof raw.opaqueTail !== "string")
-    throw new RunStateCorruptError("canonical opaqueTail \u975E string");
-  return {
-    fields,
-    ...raw.runMetadata === void 0 ? {} : { runMetadata: canonicalRunMetadata(raw.runMetadata) },
-    opaqueTail: raw.opaqueTail
-  };
-}
-function canonicalEffect(value, index) {
-  const raw = ownRecord(value);
-  if (!raw || Object.keys(raw).sort().join(",") !== "field,from,kind,to" || raw.kind !== "state-field-change" || typeof raw.field !== "string" || !FIELD_SET.has(raw.field)) {
-    throw new RunStateCorruptError(`canonical mutation.effects[${index}] shape \u975E\u6CD5`);
-  }
-  const field = raw.field;
-  const valueAt = (candidate, side) => {
-    if (typeof candidate === "string")
-      return candidate;
-    if (LIST_FIELD_SET.has(field) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
-      return [...candidate];
-    throw new RunStateCorruptError(`canonical mutation.effects[${index}].${side} \u7C7B\u578B\u975E\u6CD5`);
-  };
-  return {
-    kind: "state-field-change",
-    field,
-    from: valueAt(raw.from, "from"),
-    to: valueAt(raw.to, "to")
-  };
-}
-function revisionBody(input) {
-  return {
-    schemaVersion: 1,
-    hookState: input.hookState,
-    revision: input.revision,
-    revisionId: input.revisionId,
-    ...input.previousRevisionId === void 0 ? {} : { previousRevisionId: input.previousRevisionId },
-    state: input.state,
-    mutation: input.mutation
-  };
-}
-function digestBody(body) {
-  return createHash2("sha256").update(JSON.stringify(body)).digest("hex");
-}
-function createRunRevision(input) {
-  const state = splitPreVerifyReviewAnchor(canonicalState({
-    fields: structuredClone(input.state.fields),
-    ...input.state.runMetadata === void 0 ? {} : { runMetadata: withoutWorkflowGovernanceBinding(structuredClone(input.state.runMetadata)) },
-    opaqueTail: input.state.opaqueTail
-  })).state;
-  const revisionId = input.revisionId ?? randomUUID3();
-  const body = revisionBody({
-    schemaVersion: 1,
-    hookState: hookStateFor(state),
-    revision: input.revision,
-    revisionId,
-    ...input.previousRevisionId === void 0 ? {} : { previousRevisionId: input.previousRevisionId },
-    state,
-    mutation: input.mutation
-  });
-  const wireBody = revisionBody({
-    ...body,
-    state: withoutPreVerifyReviewField(state, input.revision, revisionId)
-  });
-  return { ...body, stateDigest: digestBody(wireBody) };
-}
-function serializeRunRevision(revision) {
-  const { stateDigest, ...logicalBody } = revision;
-  const wireBody = revisionBody({ ...logicalBody, state: rollbackCompatibleState(revision) });
-  if (digestBody(wireBody) !== stateDigest) {
-    throw new RunStateCorruptError("\u5F85\u53D1\u5E03 revision \u7684 wire digest \u4E0E\u903B\u8F91\u72B6\u6001\u4E0D\u4E00\u81F4");
-  }
-  return JSON.stringify({ ...wireBody, stateDigest });
-}
-function parseRunRevision(raw, source) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch (error2) {
-    throw new RunStateCorruptError(`${source}: JSON \u635F\u574F\uFF08${String(error2)}\uFF09`);
-  }
-  const record4 = ownRecord(value);
-  if (!record4)
-    throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
-  if (typeof record4.schemaVersion === "number" && Number.isSafeInteger(record4.schemaVersion) && record4.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
-    throw new UnsupportedRunStateVersionError(record4.schemaVersion);
-  }
-  if (Object.keys(record4).some((key) => ![
-    "schemaVersion",
-    "hookState",
-    "revision",
-    "revisionId",
-    "previousRevisionId",
-    "state",
-    "mutation",
-    "stateDigest"
-  ].includes(key)))
-    throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
-  const hook = ownRecord(record4.hookState);
-  const mutation = ownRecord(record4.mutation);
-  if (record4.schemaVersion !== RUN_STATE_SCHEMA_VERSION || typeof record4.revision !== "number" || !Number.isSafeInteger(record4.revision) || record4.revision < 0 || typeof record4.revisionId !== "string" || !SAFE_ID_RE.test(record4.revisionId) || record4.revision === 0 !== (record4.previousRevisionId === void 0) || record4.previousRevisionId !== void 0 && (typeof record4.previousRevisionId !== "string" || !SAFE_ID_RE.test(record4.previousRevisionId)) || typeof record4.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record4.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
-    "kind",
-    "observedAt",
-    "effects",
-    "transitionRecordId",
-    "transitionRecordDigest"
-  ].includes(key)) || !["init", "migration", "replace", "set", "set-many", "cas", "cas-many", "automation", "transition", "legacy-import"].includes(String(mutation.kind)) || typeof mutation.observedAt !== "string" || !Array.isArray(mutation.effects) || mutation.transitionRecordId !== void 0 && (typeof mutation.transitionRecordId !== "string" || !SAFE_ID_RE.test(mutation.transitionRecordId)) || mutation.transitionRecordDigest !== void 0 && (typeof mutation.transitionRecordDigest !== "string" || !/^[0-9a-f]{64}$/.test(mutation.transitionRecordDigest))) {
-    throw new RunStateCorruptError(`${source}: canonical revision \u5B57\u6BB5\u975E\u6CD5`);
-  }
-  const phase = hook.phase;
-  const workflow = hook.workflow;
-  const track = hook.track;
-  const archived = hook.archived;
-  const automation = hook.automation;
-  if (typeof phase !== "string" || typeof workflow !== "string" || typeof track !== "string" || typeof archived !== "string" || typeof automation !== "string") {
-    throw new RunStateCorruptError(`${source}: hookState \u5B57\u6BB5\u975E\u6CD5`);
-  }
-  const { stateDigest: _rawDigest, ...rawBody } = record4;
-  const observedDigest = createHash2("sha256").update(JSON.stringify(rawBody)).digest("hex");
-  if (observedDigest !== record4.stateDigest) {
-    throw new RunStateCorruptError(`${source}: digest \u4E0D\u5339\u914D`);
-  }
-  const state = canonicalState(record4.state, { allowLegacyFieldOmissions: true });
-  const effects = mutation.effects.map(canonicalEffect);
-  const transitionRecordId = typeof mutation.transitionRecordId === "string" ? mutation.transitionRecordId : void 0;
-  const transitionRecordDigest = typeof mutation.transitionRecordDigest === "string" ? mutation.transitionRecordDigest : void 0;
-  const isTransition = mutation.kind === "transition";
-  const isInitial = mutation.kind === "init" || mutation.kind === "migration";
-  if (record4.revision === 0 !== isInitial || record4.revision === 0 && effects.length !== 0) {
-    throw new RunStateCorruptError(`${source}: revision 0 \u4E0E init/migration \u7A7A effects \u5FC5\u987B\u6210\u5BF9`);
-  }
-  if (isTransition !== (transitionRecordId !== void 0 && transitionRecordDigest !== void 0)) {
-    throw new RunStateCorruptError(`${source}: transition mutation \u4E0E transitionRecordId/transitionRecordDigest \u5FC5\u987B\u6210\u5BF9`);
-  }
-  if (isTransition && state.runMetadata?.transitionHead !== transitionRecordId) {
-    throw new RunStateCorruptError(`${source}: transitionRecordId \u4E0E state transitionHead \u4E0D\u4E00\u81F4`);
-  }
-  const parsed = {
-    schemaVersion: 1,
-    hookState: { phase, workflow, track, archived, automation },
-    revision: record4.revision,
-    revisionId: record4.revisionId,
-    ...typeof record4.previousRevisionId === "string" ? { previousRevisionId: record4.previousRevisionId } : {},
-    state,
-    mutation: {
-      kind: mutation.kind,
-      observedAt: mutation.observedAt,
-      effects,
-      ...transitionRecordId === void 0 ? {} : { transitionRecordId },
-      ...transitionRecordDigest === void 0 ? {} : { transitionRecordDigest }
-    },
-    stateDigest: record4.stateDigest
-  };
-  if (JSON.stringify(parsed.hookState) !== JSON.stringify(hookStateFor(state))) {
-    throw new RunStateCorruptError(`${source}: hookState \u4E0E\u5B8C\u6574 state \u4E0D\u4E00\u81F4`);
-  }
-  return parsed;
-}
-
-// packages/kernel/dist/state/transition-record-store.js
-import { mkdir, readFile as readFile2 } from "node:fs/promises";
-import { join as join5 } from "node:path";
-var TRANSITION_RECORDS_DIR = ".pipeline-transitions";
-var RecordAlreadyExistsError = class extends Error {
-  path;
-  constructor(path7) {
-    super(`TransitionRecord \u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6\uFF08\u8BB0\u5F55\u4E0D\u53EF\u53D8\uFF09: ${path7}`);
-    this.path = path7;
-  }
-};
-var InvalidRecordIdentityError = class extends Error {
-};
-var SAFE_RECORD_ID_RE = /^[A-Za-z0-9_-]+$/;
-var TRANSITION_KEYS = /* @__PURE__ */ new Set([
-  "schemaVersion",
-  "id",
-  "runId",
-  "policyId",
-  "policyVersion",
-  "loopId",
-  "iterationId",
-  "sequence",
-  "previousRecordId",
-  "workflowId",
-  "event",
-  "from",
-  "to",
-  "effects",
-  "actor",
-  "observedAt"
-]);
-var EFFECT_KEYS = /* @__PURE__ */ new Set(["kind", "field", "from", "to"]);
-function isRecord3(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function isStringValue(value) {
-  return typeof value === "string" || Array.isArray(value) && value.every((item2) => typeof item2 === "string");
-}
-function isTransitionRecord(value) {
-  if (!isRecord3(value) || Object.keys(value).some((key) => !TRANSITION_KEYS.has(key)))
-    return false;
-  if (value.schemaVersion !== 1 || typeof value.id !== "string" || typeof value.runId !== "string" || !Number.isSafeInteger(value.sequence) || typeof value.sequence !== "number" || value.sequence < 1 || typeof value.workflowId !== "string" || typeof value.event !== "string" || typeof value.from !== "string" || typeof value.to !== "string" || typeof value.observedAt !== "string" || !Array.isArray(value.effects))
-    return false;
-  for (const key of ["policyId", "policyVersion", "loopId", "iterationId", "previousRecordId", "actor"]) {
-    if (value[key] !== void 0 && typeof value[key] !== "string")
-      return false;
-  }
-  const fields = new Set(FIELD_ORDER);
-  return value.effects.every((effect) => isRecord3(effect) && Object.keys(effect).every((key) => EFFECT_KEYS.has(key)) && effect.kind === "state-field-change" && typeof effect.field === "string" && fields.has(effect.field) && isStringValue(effect.from) && isStringValue(effect.to));
-}
-function parseTransitionRecord(value, source = "TransitionRecord") {
-  if (!isTransitionRecord(value))
-    throw new SyntaxError(`${source}: TransitionRecord schema invalid`);
-  return value;
-}
-function assertValidIdentity(sequence, recordId) {
-  if (!Number.isInteger(sequence) || sequence < 1) {
-    throw new InvalidRecordIdentityError(`\u975E\u6CD5 sequence\uFF08\u5FC5\u987B\u662F\u6B63\u6574\u6570\uFF09: ${sequence}`);
-  }
-  if (!SAFE_RECORD_ID_RE.test(recordId)) {
-    throw new InvalidRecordIdentityError(`\u975E\u6CD5 recordId\uFF08\u53EA\u5141\u8BB8\u5B57\u6BCD\u6570\u5B57/\u8FDE\u5B57\u7B26/\u4E0B\u5212\u7EBF\uFF09: ${recordId}`);
-  }
-}
-function recordPath(changeDir, sequence, recordId) {
-  assertValidIdentity(sequence, recordId);
-  const seqPart = String(sequence).padStart(6, "0");
-  return join5(changeDir, TRANSITION_RECORDS_DIR, `${seqPart}-${recordId}.json`);
-}
-var FsTransitionRecordStore = class {
-  async write(changeDir, record4) {
-    const dir = join5(changeDir, TRANSITION_RECORDS_DIR);
-    await mkdir(dir, { recursive: true });
-    const target = recordPath(changeDir, record4.sequence, record4.id);
-    try {
-      await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record4));
-    } catch (e) {
-      if (e.code === "EEXIST") {
-        throw new RecordAlreadyExistsError(target);
-      }
-      throw e;
-    }
-  }
-  async read(changeDir, sequence, recordId) {
-    try {
-      const raw = await readFile2(recordPath(changeDir, sequence, recordId), "utf8");
-      const parsed = JSON.parse(raw);
-      return parseTransitionRecord(parsed);
-    } catch (e) {
-      if (e.code === "ENOENT")
-        return void 0;
-      throw e;
-    }
-  }
-  async readChain(changeDir, headSequence, headId, expectedRunId) {
-    const chain = [];
-    const visited = /* @__PURE__ */ new Set();
-    let sequence = headSequence;
-    let id2 = headId;
-    let steps = 0;
-    while (sequence !== void 0 && id2 !== void 0) {
-      if (steps >= headSequence)
-        break;
-      steps++;
-      let record4;
-      try {
-        record4 = await this.read(changeDir, sequence, id2);
-      } catch (e) {
-        if (e instanceof InvalidRecordIdentityError || e instanceof SyntaxError)
-          break;
-        throw e;
-      }
-      if (!record4)
-        break;
-      if (record4.id !== id2 || record4.sequence !== sequence)
-        break;
-      if (record4.runId !== expectedRunId)
-        break;
-      if (visited.has(record4.id))
-        break;
-      visited.add(record4.id);
-      chain.unshift(record4);
-      id2 = record4.previousRecordId;
-      sequence = id2 === void 0 ? void 0 : record4.sequence - 1;
-    }
-    return chain;
-  }
-};
-function createTransitionRecordStore() {
-  return new FsTransitionRecordStore();
-}
-
-// packages/kernel/dist/state/pre-verify-review-store.js
-import { lstat as lstat2, mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
-import { join as join6 } from "node:path";
-var PRE_VERIFY_REVIEW_DIR = "pre-verify-review";
-var SAFE_ID_RE2 = /^[A-Za-z0-9_-]+$/;
-var ALLOWED_RESULTS = /* @__PURE__ */ new Set(["pending", "pass"]);
-function errnoCode(error2) {
-  if (error2 === null || typeof error2 !== "object")
-    return void 0;
-  const code = Reflect.get(error2, "code");
-  return typeof code === "string" ? code : void 0;
-}
-function preVerifyReviewFileName(revision, revisionId) {
-  return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
-}
-function preVerifyReviewRelativePath(revision, revisionId) {
-  return join6(".pipeline-run", PRE_VERIFY_REVIEW_DIR, preVerifyReviewFileName(revision, revisionId));
-}
-function resultFor(state) {
-  const value = state.fields[PRE_VERIFY_REVIEW_FIELD];
-  if (typeof value !== "string" || !ALLOWED_RESULTS.has(value)) {
-    throw new RunStateCorruptError(`canonical ${PRE_VERIFY_REVIEW_FIELD} \u975E\u6CD5\uFF1A\u4EC5\u5141\u8BB8 pending/pass`);
-  }
-  return value;
-}
-function recordFor(revision, state) {
-  return {
-    schemaVersion: 1,
-    revision: revision.revision,
-    revisionId: revision.revisionId,
-    stateDigest: revision.stateDigest,
-    result: resultFor(state)
-  };
-}
-function parseRecord(raw, source) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch (error2) {
-    throw new RunStateCorruptError(`${source}: pre-Verify companion JSON \u635F\u574F\uFF08${String(error2)}\uFF09`);
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new RunStateCorruptError(`${source}: pre-Verify companion \u4E0D\u662F\u5BF9\u8C61`);
-  }
-  const record4 = value;
-  if (Object.keys(record4).sort().join(",") !== "result,revision,revisionId,schemaVersion,stateDigest" || record4.schemaVersion !== 1 || typeof record4.revision !== "number" || !Number.isSafeInteger(record4.revision) || record4.revision < 0 || typeof record4.revisionId !== "string" || !SAFE_ID_RE2.test(record4.revisionId) || typeof record4.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record4.stateDigest) || typeof record4.result !== "string" || !ALLOWED_RESULTS.has(record4.result)) {
-    throw new RunStateCorruptError(`${source}: pre-Verify companion \u5F62\u72B6\u975E\u6CD5`);
-  }
-  return {
-    schemaVersion: 1,
-    revision: record4.revision,
-    revisionId: record4.revisionId,
-    stateDigest: record4.stateDigest,
-    result: record4.result
-  };
-}
-function attach(revision, record4) {
-  const { state, anchor } = splitPreVerifyReviewAnchor(revision.state);
-  const anchorIsCurrent = anchor !== void 0 && anchor.revision === revision.revision && anchor.revisionId === revision.revisionId;
-  const result = anchorIsCurrent && record4 !== void 0 ? record4.result : PRE_VERIFY_REVIEW_DEFAULT;
-  if (record4 !== void 0 && (record4.revision !== revision.revision || record4.revisionId !== revision.revisionId || record4.stateDigest !== revision.stateDigest)) {
-    throw new RunStateCorruptError("pre-Verify companion \u4E0E canonical revision \u8EAB\u4EFD/\u6458\u8981\u4E0D\u4E00\u81F4");
-  }
-  if (anchorIsCurrent && record4 !== void 0 && anchor.payloadDigest !== preVerifyReviewPayloadDigest(record4.revision, record4.revisionId, record4.result)) {
-    throw new RunStateCorruptError("pre-Verify companion \u5185\u5BB9\u4E0E canonical anchor \u6458\u8981\u4E0D\u4E00\u81F4");
-  }
-  return {
-    ...revision,
-    state: {
-      ...state,
-      fields: {
-        ...state.fields,
-        [PRE_VERIFY_REVIEW_FIELD]: result
-      }
-    }
-  };
-}
-async function publishPreVerifyReviewRecord(changeDir, revision, logicalState) {
-  const dir = join6(changeDir, ".pipeline-run", PRE_VERIFY_REVIEW_DIR);
-  await mkdir2(dir, { recursive: true });
-  const target = join6(dir, preVerifyReviewFileName(revision.revision, revision.revisionId));
-  await atomicLinkPublish(dir, ".tmp", target, `${JSON.stringify(recordFor(revision, logicalState))}
-`);
-}
-async function hydratePreVerifyReview(changeDir, revision) {
-  const target = join6(changeDir, preVerifyReviewRelativePath(revision.revision, revision.revisionId));
-  let info;
-  try {
-    info = await lstat2(target);
-  } catch (error2) {
-    if (errnoCode(error2) === "ENOENT")
-      return attach(revision);
-    throw error2;
-  }
-  if (!info.isFile() || info.isSymbolicLink()) {
-    throw new RunStateCorruptError(`${target}: pre-Verify companion \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
-  }
-  return attach(revision, parseRecord(await readFile3(target, "utf8"), target));
-}
-function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
-  const relative11 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
-  const raw = readText(relative11);
-  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative11)));
-}
-
-// packages/kernel/dist/state/run-revision-continuity.js
-import { createHash as createHash4 } from "node:crypto";
-
-// packages/kernel/dist/state/transition-head-anchor.js
-import { createHash as createHash3 } from "node:crypto";
-import { join as join7 } from "node:path";
-var PREFIX = "# tenon-internal-transition-head-v1: ";
-var SHA256_RE2 = /^[0-9a-f]{64}$/;
-var SAFE_ID_RE3 = /^[A-Za-z0-9_-]+$/;
-function parseAnchor(encoded) {
-  let value;
-  try {
-    value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-  } catch (error2) {
-    throw new RunStateCorruptError(`transition head opaqueTail anchor \u635F\u574F\uFF08${String(error2)}\uFF09`);
-  }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new RunStateCorruptError("transition head opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
-  }
-  const raw = Object.fromEntries(Object.entries(value));
-  if (Object.keys(raw).sort().join(",") !== "recordDigest,recordId,runId,schemaVersion,sequence" || raw.schemaVersion !== 1 || typeof raw.runId !== "string" || !SAFE_ID_RE3.test(raw.runId) || typeof raw.sequence !== "number" || !Number.isSafeInteger(raw.sequence) || raw.sequence < 1 || typeof raw.recordId !== "string" || !SAFE_ID_RE3.test(raw.recordId) || typeof raw.recordDigest !== "string" || !SHA256_RE2.test(raw.recordDigest)) {
-    throw new RunStateCorruptError("transition head opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
-  }
-  return {
-    schemaVersion: 1,
-    runId: raw.runId,
-    sequence: raw.sequence,
-    recordId: raw.recordId,
-    recordDigest: raw.recordDigest
-  };
-}
-function readTransitionHeadAnchor(state) {
-  if (!state.opaqueTail.startsWith(PREFIX))
-    return void 0;
-  const lineEnd = state.opaqueTail.indexOf("\n");
-  if (lineEnd < 0)
-    throw new RunStateCorruptError("transition head opaqueTail anchor \u7F3A\u6362\u884C");
-  const encoded = state.opaqueTail.slice(PREFIX.length, lineEnd);
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
-    throw new RunStateCorruptError("transition head opaqueTail anchor \u7F16\u7801\u975E\u6CD5");
-  }
-  return parseAnchor(encoded);
-}
-function withTransitionHeadAnchor(state, metadata, recordDigest) {
-  if (metadata.transitionHead === void 0 || metadata.transitionSequence < 1 || !SHA256_RE2.test(recordDigest)) {
-    throw new RunStateCorruptError("transition head anchor \u7F3A\u5339\u914D\u7684 canonical metadata/digest");
-  }
-  const existing = readTransitionHeadAnchor(state);
-  const tail = existing === void 0 ? state.opaqueTail : state.opaqueTail.slice(state.opaqueTail.indexOf("\n") + 1);
-  const anchor = {
-    schemaVersion: 1,
-    runId: metadata.runId,
-    sequence: metadata.transitionSequence,
-    recordId: metadata.transitionHead,
-    recordDigest
-  };
-  const encoded = Buffer.from(JSON.stringify(anchor), "utf8").toString("base64url");
-  return { ...state, opaqueTail: `${PREFIX}${encoded}
-${tail}` };
-}
-function assertTransitionHeadAnchorMatchesMetadata(anchor, metadata) {
-  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata)) {
-    throw new RunStateCorruptError("transition head anchor \u4E0E canonical runMetadata \u4E0D\u4E00\u81F4");
-  }
-}
-function transitionHeadAnchorMatchesMetadata(anchor, metadata) {
-  return anchor.runId === metadata.runId && anchor.sequence === metadata.transitionSequence && anchor.recordId === metadata.transitionHead;
-}
-function anchoredRecordPath(anchor) {
-  return join7(TRANSITION_RECORDS_DIR, `${String(anchor.sequence).padStart(6, "0")}-${anchor.recordId}.json`);
-}
-function validateAnchoredRecord(revision, raw, source) {
-  const anchor = readTransitionHeadAnchor(revision.state);
-  if (anchor === void 0)
-    throw new RunStateCorruptError("transition head anchor \u7F3A\u5931");
-  if (createHash3("sha256").update(raw).digest("hex") !== anchor.recordDigest) {
-    throw new RunStateCorruptError("canonical head TransitionRecord digest \u4E0E anchor \u4E0D\u4E00\u81F4");
-  }
-  try {
-    const record4 = parseTransitionRecord(JSON.parse(raw), source);
-    if (record4.id !== anchor.recordId || record4.sequence !== anchor.sequence || record4.runId !== anchor.runId) {
-      throw new RunStateCorruptError("canonical head TransitionRecord \u4E0E anchor \u4E0D\u4E00\u81F4");
-    }
-    return record4;
-  } catch (error2) {
-    if (error2 instanceof RunStateCorruptError)
-      throw error2;
-    throw new RunStateCorruptError(`canonical head TransitionRecord \u635F\u574F: ${String(error2)}`);
-  }
-}
-async function validateAnchoredTransitionHead(revision, readText, sourceRoot) {
-  const anchor = readTransitionHeadAnchor(revision.state);
-  if (anchor === void 0)
-    return void 0;
-  const metadata = revision.state.runMetadata;
-  if (metadata === void 0) {
-    throw new RunStateCorruptError("transition head anchor \u7F3A canonical runMetadata");
-  }
-  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata))
-    return void 0;
-  const relativePath = anchoredRecordPath(anchor);
-  const raw = await readText(relativePath);
-  if (raw === void 0)
-    throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
-  return validateAnchoredRecord(revision, raw, join7(sourceRoot, relativePath));
-}
-function validateAnchoredTransitionHeadFromSync(revision, readText, sourceRoot) {
-  const anchor = readTransitionHeadAnchor(revision.state);
-  if (anchor === void 0)
-    return void 0;
-  const metadata = revision.state.runMetadata;
-  if (metadata === void 0) {
-    throw new RunStateCorruptError("transition head anchor \u7F3A canonical runMetadata");
-  }
-  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata))
-    return void 0;
-  const relativePath = anchoredRecordPath(anchor);
-  const raw = readText(relativePath);
-  if (raw === void 0)
-    throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
-  return validateAnchoredRecord(revision, raw, join7(sourceRoot, relativePath));
-}
-
-// packages/kernel/dist/state/run-revision-continuity.js
-function ownRecord2(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    return void 0;
-  return Object.fromEntries(Object.entries(value));
-}
-function assertRunMetadataContinuity(current, previous) {
-  const before = previous.state.runMetadata;
-  const after = current.state.runMetadata;
-  const beforeAnchor = readTransitionHeadAnchor(previous.state);
-  const afterAnchor = readTransitionHeadAnchor(current.state);
-  if (current.mutation.kind === "transition") {
-    if (after === void 0 || before !== void 0 && after.runId !== before.runId || after.transitionSequence !== (before?.transitionSequence ?? 0) + 1 || after.transitionHead !== current.mutation.transitionRecordId) {
-      throw new RunStateCorruptError("transition revision \u7684 runMetadata head/sequence \u94FE\u4E0D\u8FDE\u7EED");
-    }
-    if (afterAnchor !== void 0 && transitionHeadAnchorMatchesMetadata(afterAnchor, after)) {
-      if (afterAnchor.recordDigest !== current.mutation.transitionRecordDigest) {
-        throw new RunStateCorruptError("transition revision \u7684 transition head anchor digest \u4E0D\u5339\u914D");
-      }
-      assertTransitionHeadAnchorMatchesMetadata(afterAnchor, after);
-    } else if (afterAnchor !== void 0 && JSON.stringify(afterAnchor) !== JSON.stringify(beforeAnchor)) {
-      throw new RunStateCorruptError("transition revision \u643A\u5E26\u672A\u77E5\u7684 stale transition head anchor");
-    }
-    return;
-  }
-  if (before === void 0) {
-    if (after !== void 0 && (after.transitionSequence !== 0 || after.transitionHead !== void 0)) {
-      throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u4F2A\u9020\u5386\u53F2 transition head");
-    }
-    if (afterAnchor !== void 0) {
-      throw new RunStateCorruptError("\u65E0 canonical runMetadata \u7684 revision \u4E0D\u5F97\u643A\u5E26 transition head anchor");
-    }
-    return;
-  }
-  if (after === void 0 || after.runId !== before.runId || after.transitionSequence !== before.transitionSequence || after.transitionHead !== before.transitionHead) {
-    throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u6539\u5199 runMetadata head/sequence");
-  }
-  if (JSON.stringify(afterAnchor) !== JSON.stringify(beforeAnchor)) {
-    throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u6539\u5199 transition head anchor");
-  }
-  if (afterAnchor !== void 0 && transitionHeadAnchorMatchesMetadata(afterAnchor, after)) {
-    assertTransitionHeadAnchorMatchesMetadata(afterAnchor, after);
-  }
-}
-function assertMutationEffects(current, previous) {
-  const expected = diffWireFieldsToEffects(previous.state.fields, current.state.fields);
-  if (JSON.stringify(current.mutation.effects) !== JSON.stringify(expected)) {
-    throw new RunStateCorruptError("canonical mutation.effects \u4E0E previous\u2192current \u771F\u5B9E diff \u4E0D\u4E00\u81F4");
-  }
-  assertRunMetadataContinuity(current, previous);
-}
-function assertTransitionRevisionLink(current, transition, raw, previous) {
-  const observedDigest = createHash4("sha256").update(raw).digest("hex");
-  if (observedDigest !== current.mutation.transitionRecordDigest) {
-    throw new RunStateCorruptError("TransitionRecord digest \u4E0E canonical revision \u5BA1\u8BA1\u7ED1\u5B9A\u4E0D\u4E00\u81F4");
-  }
-  const metadata = current.state.runMetadata;
-  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
-    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
-  }
-  let parsed;
-  try {
-    parsed = parseTransitionRecord(transition, "canonical transition revision");
-  } catch (error2) {
-    throw new RunStateCorruptError(`TransitionRecord schema \u635F\u574F: ${String(error2)}`);
-  }
-  const record4 = ownRecord2(parsed);
-  if (record4 === void 0)
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-  const previousPhase = previous?.state.fields.phase;
-  const currentPhase = current.state.fields.phase;
-  const workflowId = String(current.state.fields.workflow || "default");
-  if (record4.id !== current.mutation.transitionRecordId || record4.sequence !== metadata.transitionSequence || record4.runId !== metadata.runId || previous !== void 0 && record4.previousRecordId !== previous.state.runMetadata?.transitionHead || previous !== void 0 && record4.from !== previousPhase || record4.to !== currentPhase || record4.workflowId !== workflowId || JSON.stringify(record4.effects) !== JSON.stringify(current.mutation.effects)) {
-    throw new RunStateCorruptError("transition revision \u4E0E TransitionRecord \u4E0D\u4E00\u81F4");
-  }
-  return parsed;
-}
-function assertDirectPredecessor(revision, previous) {
-  if (revision.revision < 1 || previous === void 0) {
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
-  }
-  if (previous.revisionId !== revision.previousRevisionId || previous.revision !== revision.revision - 1) {
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
-  }
-  assertMutationEffects(revision, previous);
-  return previous;
-}
-
-// packages/kernel/dist/state/run-revision-store.js
-var RUN_STATE_DIR = ".pipeline-run";
-var RUN_CURRENT_FILE = "current.json";
-var RUN_REVISIONS_DIR = "revisions";
-var SAFE_ID_RE4 = /^[A-Za-z0-9_-]+$/;
-function errnoCode2(error2) {
-  if (error2 === null || typeof error2 !== "object")
-    return void 0;
-  const record4 = Object.fromEntries(Object.entries(error2));
-  return typeof record4.code === "string" ? record4.code : void 0;
-}
-function stateStorageSourcePathSync(changeDir) {
-  const current = join8(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
-  try {
-    lstatSync2(current);
-    return current;
-  } catch (error2) {
-    if (errnoCode2(error2) !== "ENOENT")
-      throw error2;
-  }
-  const legacy = join8(changeDir, ".pipeline.yaml");
-  try {
-    lstatSync2(legacy);
-    return legacy;
-  } catch (error2) {
-    if (errnoCode2(error2) === "ENOENT")
-      return void 0;
-    throw error2;
-  }
-}
-function stateStorageExistsSync(changeDir) {
-  return stateStorageSourcePathSync(changeDir) !== void 0;
-}
-function previousRevisionIdFor(revision) {
-  if (revision.previousRevisionId === void 0) {
-    throw new RunStateCorruptError("\u975E\u521D\u59CB revision \u7F3A previousRevisionId");
-  }
-  return revision.previousRevisionId;
-}
-function revisionFileName(revision, revisionId) {
-  return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
-}
-async function assertTransitionRecordFile(changeDir, revision, previous) {
-  if (revision.mutation.kind !== "transition")
-    return void 0;
-  const metadata = revision.state.runMetadata;
-  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
-    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
-  }
-  const transitionPath = join8(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
-  const transitionRaw = await readRegularTextIfExists(transitionPath);
-  if (transitionRaw === void 0) {
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-  }
-  let transition;
-  try {
-    transition = JSON.parse(transitionRaw);
-  } catch (error2) {
-    throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error2)}`);
-  }
-  assertTransitionRevisionLink(revision, transition, transitionRaw, previous);
-  return transition;
-}
-function assertTransitionRecordFromSync(readText, revision, sourceRoot, previous) {
-  if (revision.mutation.kind !== "transition")
-    return void 0;
-  const metadata = revision.state.runMetadata;
-  if (!metadata?.transitionHead || metadata.transitionSequence < 1) {
-    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
-  }
-  const transitionRel = join8(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
-  const transitionRaw = readText(transitionRel);
-  if (transitionRaw === void 0)
-    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-  try {
-    const transition = JSON.parse(transitionRaw);
-    assertTransitionRevisionLink(revision, transition, transitionRaw, previous);
-    return transition;
-  } catch (error2) {
-    if (error2 instanceof RunStateCorruptError)
-      throw error2;
-    throw new RunStateCorruptError(`${join8(sourceRoot, transitionRel)}: TransitionRecord \u635F\u574F: ${String(error2)}`);
-  }
-}
-function projectionMetadataFor(revision) {
-  return {
-    stateRevision: revision.revision,
-    stateRevisionId: revision.revisionId,
-    stateDigest: revision.stateDigest
-  };
-}
-async function publishInitialRunRevision(changeDir, state, observedAt, kind = "init") {
-  const runDir = join8(changeDir, RUN_STATE_DIR);
-  const revisionsDir = join8(runDir, RUN_REVISIONS_DIR);
-  await mkdir3(revisionsDir, { recursive: true });
-  const revision = createRunRevision({
-    state,
-    revision: 0,
-    mutation: { kind, observedAt, effects: [] }
-  });
-  await publishPreVerifyReviewRecord(changeDir, revision, state);
-  const raw = serializeRunRevision(revision);
-  await atomicLinkPublish(revisionsDir, ".tmp", join8(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
-  await atomicLinkPublish(runDir, ".current.tmp", join8(runDir, RUN_CURRENT_FILE), raw);
-  return revision;
-}
-async function publishRunRevision(changeDir, current, state, mutation) {
-  const runDir = join8(changeDir, RUN_STATE_DIR);
-  const revisionsDir = join8(runDir, RUN_REVISIONS_DIR);
-  await mkdir3(revisionsDir, { recursive: true });
-  let transitionRaw;
-  let transition;
-  let revisionState = state;
-  let mutationWithDigest = mutation;
-  if (mutation.kind === "transition") {
-    const metadata = state.runMetadata;
-    if (metadata === void 0 || metadata.transitionHead !== mutation.transitionRecordId || metadata.transitionSequence < 1) {
-      throw new RunStateCorruptError("transition publish \u7F3A\u5339\u914D\u7684 canonical run head/sequence");
-    }
-    const transitionPath = join8(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${mutation.transitionRecordId}.json`);
-    transitionRaw = await readRegularTextIfExists(transitionPath);
-    if (transitionRaw === void 0) {
-      throw new RunStateCorruptError("transition publish \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
-    }
-    try {
-      transition = JSON.parse(transitionRaw);
-    } catch (error2) {
-      throw new RunStateCorruptError(`transition publish \u7684 TransitionRecord \u635F\u574F: ${String(error2)}`);
-    }
-    mutationWithDigest = {
-      ...mutation,
-      transitionRecordDigest: createHash5("sha256").update(transitionRaw).digest("hex")
-    };
-    const transitionRecordDigest = mutationWithDigest.transitionRecordDigest;
-    if (transitionRecordDigest === void 0) {
-      throw new RunStateCorruptError("transition publish \u7F3A TransitionRecord digest");
-    }
-    revisionState = withTransitionHeadAnchor(state, metadata, transitionRecordDigest);
-  }
-  const revision = createRunRevision({
-    state: revisionState,
-    revision: current.revision + 1,
-    previousRevisionId: current.revisionId,
-    mutation: {
-      ...mutationWithDigest,
-      effects: diffWireFieldsToEffects(current.state.fields, state.fields)
-    }
-  });
-  assertMutationEffects(revision, current);
-  if (transitionRaw !== void 0) {
-    assertTransitionRevisionLink(revision, transition, transitionRaw, current);
-  }
-  await publishPreVerifyReviewRecord(changeDir, revision, revisionState);
-  const raw = serializeRunRevision(revision);
-  await atomicLinkPublish(revisionsDir, ".tmp", join8(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
-  await atomicReplaceFile(join8(runDir, RUN_CURRENT_FILE), raw);
-  return revision;
-}
-async function readCurrentRunRevision(changeDir) {
-  const currentPath = join8(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
-  const raw = await readRegularTextIfExists(currentPath);
-  if (raw === void 0)
-    return void 0;
-  const current = await hydratePreVerifyReview(changeDir, parseRunRevision(raw, currentPath));
-  const immutablePath = join8(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(current.revision, current.revisionId));
-  const immutableRaw = await readRegularTextIfExists(immutablePath);
-  if (immutableRaw === void 0) {
-    throw new RunStateCorruptError(`current \u5F15\u7528\u7684 immutable revision \u7F3A\u5931: ${immutablePath}`);
-  }
-  await hydratePreVerifyReview(changeDir, parseRunRevision(immutableRaw, immutablePath));
-  if (immutableRaw !== raw)
-    throw new RunStateCorruptError("current \u4E0E immutable revision \u5B57\u8282\u4E0D\u4E00\u81F4");
-  let previous;
-  if (current.revision > 0) {
-    const previousRevisionId = previousRevisionIdFor(current);
-    previous = await readImmutableRunRevision(changeDir, current.revision - 1, previousRevisionId);
-    if (previous === void 0) {
-      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
-    }
-    if (previous.revisionId !== previousRevisionId || previous.revision !== current.revision - 1) {
-      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
-    }
-    assertMutationEffects(current, previous);
-  }
-  await assertTransitionRecordFile(changeDir, current, previous);
-  await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists(join8(changeDir, relativePath)), changeDir);
-  if (previous?.mutation.kind === "transition") {
-    const predecessor = assertDirectPredecessor(previous, await readImmutableRunRevision(changeDir, previous.revision - 1, previousRevisionIdFor(previous)));
-    await assertTransitionRecordFile(changeDir, previous, predecessor);
-  }
-  return current;
-}
-async function validateCanonicalRevisionHistory(changeDir) {
-  let cursor = await readCurrentRunRevision(changeDir);
-  if (cursor === void 0)
-    return;
-  while (cursor.revision > 0) {
-    const previousRevisionId = previousRevisionIdFor(cursor);
-    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousRevisionId);
-    if (previous === void 0) {
-      throw new RunStateCorruptError(`canonical history revision ${cursor.revision - 1} \u7F3A\u5931`);
-    }
-    if (previous.revision !== cursor.revision - 1 || previous.revisionId !== previousRevisionId) {
-      throw new RunStateCorruptError("canonical history previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
-    }
-    assertMutationEffects(cursor, previous);
-    await assertTransitionRecordFile(changeDir, cursor, previous);
-    cursor = previous;
-  }
-}
-async function readRegularTextIfExists(pathname) {
-  let entry;
-  try {
-    entry = await lstat3(pathname);
-  } catch (error2) {
-    if (errnoCode2(error2) === "ENOENT")
-      return void 0;
-    throw error2;
-  }
-  if (entry.isSymbolicLink() || !entry.isFile()) {
-    throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
-  }
-  try {
-    return await readFile4(pathname, "utf8");
-  } catch (error2) {
-    if (errnoCode2(error2) === "ENOENT") {
-      throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5728\u6821\u9A8C\u671F\u95F4\u6D88\u5931`);
-    }
-    throw error2;
-  }
-}
-function readCurrentRunRevisionFromSync(readText, sourceRoot = "canonical state") {
-  const currentRel = join8(RUN_STATE_DIR, RUN_CURRENT_FILE);
-  const raw = readText(currentRel);
-  if (raw === void 0)
-    return void 0;
-  const currentSource = join8(sourceRoot, currentRel);
-  const current = hydratePreVerifyReviewFromSync(readText, parseRunRevision(raw, currentSource), sourceRoot);
-  const revisionsRel = join8(RUN_STATE_DIR, RUN_REVISIONS_DIR);
-  const immutableRel = join8(revisionsRel, revisionFileName(current.revision, current.revisionId));
-  const immutableRaw = readText(immutableRel);
-  if (immutableRaw === void 0) {
-    throw new RunStateCorruptError(`current \u5F15\u7528\u7684 immutable revision \u7F3A\u5931: ${join8(sourceRoot, immutableRel)}`);
-  }
-  hydratePreVerifyReviewFromSync(readText, parseRunRevision(immutableRaw, join8(sourceRoot, immutableRel)), sourceRoot);
-  if (immutableRaw !== raw)
-    throw new RunStateCorruptError("current \u4E0E immutable revision \u5B57\u8282\u4E0D\u4E00\u81F4");
-  let previous;
-  if (current.revision > 0) {
-    const previousRevisionId = previousRevisionIdFor(current);
-    const previousRel = join8(revisionsRel, revisionFileName(current.revision - 1, previousRevisionId));
-    const previousRaw = readText(previousRel);
-    if (previousRaw === void 0)
-      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
-    previous = hydratePreVerifyReviewFromSync(readText, parseRunRevision(previousRaw, join8(sourceRoot, previousRel)), sourceRoot);
-    if (previous.revisionId !== previousRevisionId || previous.revision !== current.revision - 1) {
-      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
-    }
-    assertMutationEffects(current, previous);
-  }
-  assertTransitionRecordFromSync(readText, current, sourceRoot, previous);
-  validateAnchoredTransitionHeadFromSync(current, readText, sourceRoot);
-  if (previous?.mutation.kind === "transition") {
-    const predecessorId = previousRevisionIdFor(previous);
-    const predecessorRel = join8(revisionsRel, revisionFileName(previous.revision - 1, predecessorId));
-    const predecessorRaw = readText(predecessorRel);
-    const predecessor = assertDirectPredecessor(previous, predecessorRaw === void 0 ? void 0 : hydratePreVerifyReviewFromSync(readText, parseRunRevision(predecessorRaw, join8(sourceRoot, predecessorRel)), sourceRoot));
-    assertTransitionRecordFromSync(readText, previous, sourceRoot, predecessor);
-  }
-  return current;
-}
-async function readImmutableRunRevision(changeDir, revision, revisionId) {
-  if (!Number.isSafeInteger(revision) || revision < 0 || !SAFE_ID_RE4.test(revisionId))
-    return void 0;
-  const pathname = join8(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(revision, revisionId));
-  const raw = await readRegularTextIfExists(pathname);
-  return raw === void 0 ? void 0 : hydratePreVerifyReview(changeDir, parseRunRevision(raw, pathname));
 }
 
 // packages/kernel/dist/state/document-ledger.js
@@ -4281,10 +2727,35 @@ function shouldEnforceDocumentPolicyOnTransition(policy2, from, to) {
   return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
 }
 
+// packages/kernel/dist/state/atomic-publish.js
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { link, rename, unlink, writeFile } from "node:fs/promises";
+import { join as join3 } from "node:path";
+async function atomicLinkPublish(dir, tmpNamePrefix, target, content) {
+  const tmp = join3(dir, `${tmpNamePrefix}-${randomUUID2()}`);
+  try {
+    await writeFile(tmp, content, { encoding: "utf8", flag: "wx" });
+    await link(tmp, target);
+  } finally {
+    await unlink(tmp).catch(() => {
+    });
+  }
+}
+async function atomicReplaceFile(target, content) {
+  const tmp = `${target}.tmp-${randomUUID2()}`;
+  try {
+    await writeFile(tmp, content, { encoding: "utf8", flag: "wx" });
+    await rename(tmp, target);
+  } finally {
+    await unlink(tmp).catch(() => {
+    });
+  }
+}
+
 // packages/kernel/dist/state/document-path.js
-import { createHash as createHash6 } from "node:crypto";
+import { createHash } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { lstat as lstat4, open, realpath } from "node:fs/promises";
+import { lstat, open, realpath } from "node:fs/promises";
 import { basename, dirname as dirname2, isAbsolute, relative, resolve as resolve2, sep as sep2 } from "node:path";
 var DocumentLedgerError = class extends Error {
   constructor(message) {
@@ -4316,7 +2787,7 @@ async function readBoundedFileHandle(handle, maxBytes) {
 }
 async function readBoundedRegularFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
   const parent = dirname2(path7);
-  const parentBefore = await lstat4(parent, { bigint: true });
+  const parentBefore = await lstat(parent, { bigint: true });
   if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
     throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
   }
@@ -4328,9 +2799,9 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
       throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path7}`);
     const assertStable = async () => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat4(parent, { bigint: true }),
+        lstat(parent, { bigint: true }),
         realpath(parent),
-        lstat4(path7, { bigint: true })
+        lstat(path7, { bigint: true })
       ]);
       if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
         throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
@@ -4399,7 +2870,7 @@ async function resolveDocument(repoRoot, path7, readSource = readBoundedFileHand
   if (!relativePath.startsWith("openspec/") && !relativePath.startsWith("docs/")) {
     throw new DocumentLedgerError(`document path \u53EA\u80FD\u4F4D\u4E8E openspec/ \u6216 docs/: ${relativePath}`);
   }
-  const info = await lstat4(lexicalTarget);
+  const info = await lstat(lexicalTarget);
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new DocumentLedgerError(`document \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${relativePath}`);
   }
@@ -4419,17 +2890,17 @@ async function resolveDocument(repoRoot, path7, readSource = readBoundedFileHand
   }
   if (content.byteLength === 0)
     throw new DocumentLedgerError(`document \u4E0D\u5F97\u4E3A\u7A7A: ${relativePath}`);
-  return { relativePath, digest: createHash6("sha256").update(content).digest("hex") };
+  return { relativePath, digest: createHash("sha256").update(content).digest("hex") };
 }
 
 // packages/kernel/dist/state/history.js
 import { appendFile } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { join as join4 } from "node:path";
 var HISTORY_FILE = ".pipeline-history.jsonl";
 function createHistoryWriter() {
   return {
     async append(changeDir, entry) {
-      await appendFile(join9(changeDir, HISTORY_FILE), `${JSON.stringify(entry)}
+      await appendFile(join4(changeDir, HISTORY_FILE), `${JSON.stringify(entry)}
 `, "utf8");
     }
   };
@@ -4447,6 +2918,1568 @@ function transitionRecordToHistoryEntry(record4) {
 
 // packages/kernel/dist/state/run-revision-head-reader.js
 import { join as join10 } from "node:path";
+
+// packages/kernel/dist/state/pre-verify-review-store.js
+import { lstat as lstat3, mkdir, readFile as readFile2 } from "node:fs/promises";
+import { join as join6 } from "node:path";
+
+// packages/kernel/dist/state/run-revision-codec.js
+import { createHash as createHash3, randomUUID as randomUUID3 } from "node:crypto";
+
+// packages/kernel/dist/sha256.js
+import { createHash as createHash2 } from "node:crypto";
+function sha256Hex(content) {
+  return createHash2("sha256").update(content).digest("hex");
+}
+
+// packages/kernel/dist/loops/automation-policy.js
+var EXCEED_ACTIONS = /* @__PURE__ */ new Set(["skip-run", "pause-loop", "halt-round"]);
+var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function closed3(value, keys, path7) {
+  const allowed = new Set(keys);
+  for (const key of Object.keys(value))
+    if (!allowed.has(key))
+      throw new Error(`${path7}: unknown key '${key}'`);
+  for (const key of keys)
+    if (!Object.hasOwn(value, key))
+      throw new Error(`${path7}.${key}: missing`);
+}
+function stringAt(value, path7) {
+  if (typeof value !== "string" || value === "")
+    throw new Error(`${path7}: expected non-empty string`);
+  return value;
+}
+function numberAt(value, path7) {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new Error(`${path7}: expected non-negative safe integer`);
+  return value;
+}
+function stringsAt(value, path7) {
+  if (!Array.isArray(value) || !value.every((item2) => typeof item2 === "string"))
+    throw new Error(`${path7}: expected string[]`);
+  return [...value];
+}
+function deepFreeze2(value) {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value))
+    return value;
+  for (const child of Object.values(value))
+    deepFreeze2(child);
+  return Object.freeze(value);
+}
+function compileConstraintPolicy(loop) {
+  return deepFreeze2({
+    schema_version: 1,
+    admission: { require_active: true },
+    write: { allowlist: [...loop.allowlist], denylist: [...loop.denylist] },
+    transition: { require_active: true, human_gates: [...loop.human_gates] },
+    merge: { require_active: true, allowlist: [...loop.allowlist], denylist: [...loop.denylist] }
+  });
+}
+function validateAutomationPolicySnapshot(input) {
+  if (!isRecord2(input))
+    throw new Error("AutomationPolicy: expected object");
+  closed3(input, [
+    "schema_version",
+    "policy_id",
+    "policy_version",
+    "loop_id",
+    "goal",
+    "constraints",
+    "budget",
+    "kill_policy",
+    "verifier_binding",
+    "skill_bundle_id",
+    "captured_at"
+  ], "AutomationPolicy");
+  if (input.schema_version !== 1)
+    throw new Error("AutomationPolicy.schema_version: expected 1");
+  if (!isRecord2(input.constraints))
+    throw new Error("AutomationPolicy.constraints: expected object");
+  closed3(input.constraints, ["schema_version", "admission", "write", "transition", "merge"], "AutomationPolicy.constraints");
+  if (input.constraints.schema_version !== 1)
+    throw new Error("AutomationPolicy.constraints.schema_version: expected 1");
+  const admission = input.constraints.admission;
+  const write = input.constraints.write;
+  const transition = input.constraints.transition;
+  const merge = input.constraints.merge;
+  if (!isRecord2(admission) || !isRecord2(write) || !isRecord2(transition) || !isRecord2(merge)) {
+    throw new Error("AutomationPolicy.constraints: invalid operation policy");
+  }
+  closed3(admission, ["require_active"], "AutomationPolicy.constraints.admission");
+  closed3(write, ["allowlist", "denylist"], "AutomationPolicy.constraints.write");
+  closed3(transition, ["require_active", "human_gates"], "AutomationPolicy.constraints.transition");
+  closed3(merge, ["require_active", "allowlist", "denylist"], "AutomationPolicy.constraints.merge");
+  if (admission.require_active !== true || transition.require_active !== true || merge.require_active !== true) {
+    throw new Error("AutomationPolicy.constraints: require_active must be true");
+  }
+  if (!isRecord2(input.budget))
+    throw new Error("AutomationPolicy.budget: expected object");
+  const budgetKeys = ["max_runs_per_day", "max_in_flight", "on_exceed"];
+  const budgetOptional = ["max_tokens_per_day", "tokens_per_run"];
+  for (const key of Object.keys(input.budget)) {
+    if (![...budgetKeys, ...budgetOptional].includes(key))
+      throw new Error(`AutomationPolicy.budget: unknown key '${key}'`);
+  }
+  for (const key of budgetKeys)
+    if (!Object.hasOwn(input.budget, key))
+      throw new Error(`AutomationPolicy.budget.${key}: missing`);
+  const onExceed = input.budget.on_exceed;
+  if (typeof onExceed !== "string" || !EXCEED_ACTIONS.has(onExceed)) {
+    throw new Error("AutomationPolicy.budget.on_exceed: invalid typed action");
+  }
+  if (!isRecord2(input.kill_policy))
+    throw new Error("AutomationPolicy.kill_policy: expected object");
+  closed3(input.kill_policy, ["required_status", "on_inactive", "recheck"], "AutomationPolicy.kill_policy");
+  if (input.kill_policy.required_status !== "active" || input.kill_policy.on_inactive !== "skip-run" || JSON.stringify(input.kill_policy.recheck) !== JSON.stringify(["schedule", "pre-claim", "transition", "settlement"])) {
+    throw new Error("AutomationPolicy.kill_policy: invalid");
+  }
+  if (!isRecord2(input.verifier_binding))
+    throw new Error("AutomationPolicy.verifier_binding: expected object");
+  closed3(input.verifier_binding, ["kind", "verifier", "version"], "AutomationPolicy.verifier_binding");
+  if (input.verifier_binding.kind !== "runtime-verifier" || input.verifier_binding.verifier !== "pipeline-git-integrity" || input.verifier_binding.version !== "1")
+    throw new Error("AutomationPolicy.verifier_binding: invalid");
+  const payload = {
+    schema_version: 1,
+    policy_id: stringAt(input.policy_id, "AutomationPolicy.policy_id"),
+    loop_id: stringAt(input.loop_id, "AutomationPolicy.loop_id"),
+    goal: stringAt(input.goal, "AutomationPolicy.goal"),
+    constraints: {
+      schema_version: 1,
+      admission: { require_active: true },
+      write: {
+        allowlist: stringsAt(write.allowlist, "AutomationPolicy.constraints.write.allowlist"),
+        denylist: stringsAt(write.denylist, "AutomationPolicy.constraints.write.denylist")
+      },
+      transition: {
+        require_active: true,
+        human_gates: stringsAt(transition.human_gates, "AutomationPolicy.constraints.transition.human_gates")
+      },
+      merge: {
+        require_active: true,
+        allowlist: stringsAt(merge.allowlist, "AutomationPolicy.constraints.merge.allowlist"),
+        denylist: stringsAt(merge.denylist, "AutomationPolicy.constraints.merge.denylist")
+      }
+    },
+    budget: {
+      max_runs_per_day: numberAt(input.budget.max_runs_per_day, "AutomationPolicy.budget.max_runs_per_day"),
+      max_in_flight: numberAt(input.budget.max_in_flight, "AutomationPolicy.budget.max_in_flight"),
+      ...input.budget.max_tokens_per_day === void 0 ? {} : {
+        max_tokens_per_day: numberAt(input.budget.max_tokens_per_day, "AutomationPolicy.budget.max_tokens_per_day")
+      },
+      ...input.budget.tokens_per_run === void 0 ? {} : {
+        tokens_per_run: numberAt(input.budget.tokens_per_run, "AutomationPolicy.budget.tokens_per_run")
+      },
+      on_exceed: onExceed
+    },
+    kill_policy: {
+      required_status: "active",
+      on_inactive: "skip-run",
+      recheck: ["schedule", "pre-claim", "transition", "settlement"]
+    },
+    verifier_binding: { kind: "runtime-verifier", verifier: "pipeline-git-integrity", version: "1" },
+    skill_bundle_id: stringAt(input.skill_bundle_id, "AutomationPolicy.skill_bundle_id")
+  };
+  const expectedVersion = sha256Hex(JSON.stringify(payload));
+  if (input.policy_version !== expectedVersion)
+    throw new Error("AutomationPolicy.policy_version: content digest mismatch");
+  const capturedAt = stringAt(input.captured_at, "AutomationPolicy.captured_at");
+  if (!Number.isFinite(Date.parse(capturedAt)))
+    throw new Error("AutomationPolicy.captured_at: invalid timestamp");
+  return deepFreeze2({ ...payload, policy_version: expectedVersion, captured_at: capturedAt });
+}
+function explainConstraintPaths(policy2, operation, paths, matches) {
+  const { allowlist, denylist } = policy2[operation];
+  return paths.map((path7) => {
+    const deniedBy = denylist.find((pattern) => matches(path7, pattern));
+    if (deniedBy !== void 0) {
+      return { path: path7, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
+    }
+    const allowedBy = allowlist.find((pattern) => matches(path7, pattern));
+    return allowedBy === void 0 ? { path: path7, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path7, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
+  });
+}
+function pathDecision(policy2, operation, input) {
+  const explanations = explainConstraintPaths(policy2, operation, input.paths ?? [], input.matches);
+  const denied = explanations.filter((item2) => item2.reason === "path-denied").map((item2) => item2.path);
+  if (denied.length > 0)
+    return { allowed: false, reason: "path-denied", paths: denied };
+  const outside = explanations.filter((item2) => item2.reason === "path-outside-allowlist").map((item2) => item2.path);
+  if (outside.length > 0)
+    return { allowed: false, reason: "path-outside-allowlist", paths: outside };
+  return { allowed: true };
+}
+function evaluateConstraintPolicy(policy2, input) {
+  if (!input.active)
+    return { allowed: false, reason: "loop-inactive" };
+  if (input.operation === "admission")
+    return { allowed: true };
+  if (input.operation === "transition") {
+    const humanGateApplies = input.transitionTarget === void 0 ? policy2.transition.human_gates.length > 0 : policy2.transition.human_gates.includes(input.transitionTarget);
+    return humanGateApplies && input.humanGateSatisfied !== true ? { allowed: false, reason: "human-gate-required" } : { allowed: true };
+  }
+  return input.operation === "write" ? pathDecision(policy2, "write", input) : pathDecision(policy2, "merge", input);
+}
+
+// packages/kernel/dist/state/run-revision-validation.js
+var RUN_STATE_SCHEMA_VERSION = 1;
+var RunStateCorruptError = class extends Error {
+  _tag = "RunStateCorruptError";
+};
+var UnsupportedRunStateVersionError = class extends Error {
+  foundVersion;
+  supportedVersion;
+  _tag = "UnsupportedRunStateVersionError";
+  constructor(foundVersion, supportedVersion = RUN_STATE_SCHEMA_VERSION) {
+    super(`canonical schemaVersion ${foundVersion} \u9AD8\u4E8E\u5F53\u524D\u652F\u6301\u7248\u672C ${supportedVersion}`);
+    this.foundVersion = foundVersion;
+    this.supportedVersion = supportedVersion;
+    this.name = "UnsupportedRunStateVersionError";
+  }
+};
+function ownRecord(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return void 0;
+  return Object.fromEntries(Object.entries(value));
+}
+
+// packages/kernel/dist/state/workflow-governance-binding.js
+import { lstat as lstat2, readFile } from "node:fs/promises";
+import { join as join5 } from "node:path";
+var WORKFLOW_GOVERNANCE_BINDING_FILE = ".pipeline-workflow-governance.json";
+function errorCode(error2) {
+  if (typeof error2 !== "object" || error2 === null || !("code" in error2))
+    return void 0;
+  const value = Reflect.get(error2, "code");
+  return typeof value === "string" ? value : void 0;
+}
+function parseWorkflowGovernanceBinding(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("workflow governance binding \u4E0D\u662F\u5408\u6CD5 JSON");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("workflow governance binding \u5FC5\u987B\u662F\u5BF9\u8C61");
+  }
+  const record4 = value;
+  const allowed = /* @__PURE__ */ new Set([
+    "version",
+    "run_id",
+    "document_profile",
+    "document_governance_fingerprint",
+    "workflow_plan_fingerprint"
+  ]);
+  const digest4 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
+  if (Object.keys(record4).some((key) => !allowed.has(key)) || record4.version !== 1 || typeof record4.run_id !== "string" || record4.run_id === "" || record4.document_profile !== void 0 && record4.document_profile !== "legacy-full" && record4.document_profile !== "document-v1" || record4.document_governance_fingerprint !== void 0 && !digest4(record4.document_governance_fingerprint) || record4.workflow_plan_fingerprint !== void 0 && !digest4(record4.workflow_plan_fingerprint) || record4.document_governance_fingerprint !== void 0 && record4.document_profile === void 0) {
+    throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
+  }
+  return {
+    version: 1,
+    run_id: record4.run_id,
+    ...record4.document_profile === void 0 ? {} : { document_profile: record4.document_profile },
+    ...record4.document_governance_fingerprint === void 0 ? {} : { document_governance_fingerprint: record4.document_governance_fingerprint },
+    ...record4.workflow_plan_fingerprint === void 0 ? {} : { workflow_plan_fingerprint: record4.workflow_plan_fingerprint }
+  };
+}
+async function readWorkflowGovernanceBinding(changeDir) {
+  const target = join5(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
+  try {
+    const info = await lstat2(target);
+    if (!info.isFile() || info.isSymbolicLink()) {
+      throw new Error(`workflow governance binding \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
+    }
+    return parseWorkflowGovernanceBinding(await readFile(target, "utf8"));
+  } catch (error2) {
+    if (errorCode(error2) === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+}
+function bindingFor(metadata) {
+  return {
+    version: 1,
+    run_id: metadata.runId,
+    ...metadata.documentProfile === void 0 ? {} : { document_profile: metadata.documentProfile },
+    ...metadata.documentGovernanceFingerprint === void 0 ? {} : { document_governance_fingerprint: metadata.documentGovernanceFingerprint },
+    ...metadata.workflowPlanFingerprint === void 0 ? {} : { workflow_plan_fingerprint: metadata.workflowPlanFingerprint }
+  };
+}
+async function ensureWorkflowGovernanceBinding(changeDir, metadata) {
+  const requested = bindingFor(metadata);
+  const existing = await readWorkflowGovernanceBinding(changeDir);
+  if (existing !== void 0) {
+    if (JSON.stringify(existing) !== JSON.stringify(requested)) {
+      throw new Error("Change \u5DF2\u56FA\u5B9A\u4E0D\u540C\u7684 workflow governance binding\uFF0C\u62D2\u7EDD\u8986\u76D6");
+    }
+    return existing;
+  }
+  const target = join5(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
+  try {
+    await atomicLinkPublish(changeDir, ".pipeline-workflow-governance.tmp", target, `${JSON.stringify(requested)}
+`);
+    return requested;
+  } catch (error2) {
+    if (errorCode(error2) !== "EEXIST")
+      throw error2;
+    const raced = await readWorkflowGovernanceBinding(changeDir);
+    if (raced === void 0 || JSON.stringify(raced) !== JSON.stringify(requested)) {
+      throw new Error("workflow governance binding \u5E76\u53D1\u521B\u5EFA\u540E\u5185\u5BB9\u4E0D\u4E00\u81F4");
+    }
+    return raced;
+  }
+}
+function attachWorkflowGovernanceBinding(metadata, binding) {
+  if (metadata === void 0)
+    return void 0;
+  if (binding === void 0)
+    return metadata;
+  if (binding.run_id !== metadata.runId) {
+    throw new Error("workflow governance binding \u4E0E canonical runId \u4E0D\u4E00\u81F4");
+  }
+  const asserted = [
+    ["documentProfile", metadata.documentProfile, binding.document_profile],
+    ["documentGovernanceFingerprint", metadata.documentGovernanceFingerprint, binding.document_governance_fingerprint],
+    ["workflowPlanFingerprint", metadata.workflowPlanFingerprint, binding.workflow_plan_fingerprint]
+  ];
+  for (const [field, canonical, sidecar] of asserted) {
+    if (canonical !== void 0 && sidecar !== void 0 && canonical !== sidecar) {
+      throw new Error(`workflow governance binding \u4E0E legacy canonical ${field} \u4E0D\u4E00\u81F4`);
+    }
+  }
+  return {
+    ...metadata,
+    ...binding.document_profile === void 0 ? {} : { documentProfile: binding.document_profile },
+    ...binding.document_governance_fingerprint === void 0 ? {} : { documentGovernanceFingerprint: binding.document_governance_fingerprint },
+    ...binding.workflow_plan_fingerprint === void 0 ? {} : { workflowPlanFingerprint: binding.workflow_plan_fingerprint }
+  };
+}
+function withoutWorkflowGovernanceBinding(metadata) {
+  const { documentProfile: _documentProfile, documentGovernanceFingerprint: _documentGovernanceFingerprint, workflowPlanFingerprint: _workflowPlanFingerprint, workflowPlanSnapshot: _workflowPlanSnapshot, ...canonical } = metadata;
+  return canonical;
+}
+
+// packages/kernel/dist/state/run-revision-codec.js
+var SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
+var FIELD_SET = new Set(FIELD_ORDER);
+var LIST_FIELD_SET = new Set(LIST_FIELDS);
+var PRE_VERIFY_REVIEW_ANCHOR_PREFIX = "# tenon-internal-pre-verify-review-v1: ";
+var SHA256_RE = /^[0-9a-f]{64}$/;
+function preVerifyReviewResult(state) {
+  const result = state.fields[PRE_VERIFY_REVIEW_FIELD];
+  if (typeof result !== "string" || !["pending", "pass"].includes(result)) {
+    throw new RunStateCorruptError(`canonical ${PRE_VERIFY_REVIEW_FIELD} \u975E\u6CD5\uFF1A\u4EC5\u5141\u8BB8 pending/pass`);
+  }
+  return result;
+}
+function preVerifyReviewPayloadDigest(revision, revisionId, result) {
+  return createHash3("sha256").update(JSON.stringify({
+    schemaVersion: 1,
+    revision,
+    revisionId,
+    result
+  })).digest("hex");
+}
+function parsePreVerifyReviewAnchor(encoded) {
+  let value;
+  try {
+    value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch (error2) {
+    throw new RunStateCorruptError(`pre-Verify opaqueTail anchor \u635F\u574F\uFF08${String(error2)}\uFF09`);
+  }
+  const raw = ownRecord(value);
+  if (!raw || Object.keys(raw).sort().join(",") !== "payloadDigest,revision,revisionId,schemaVersion" || raw.schemaVersion !== 1 || typeof raw.revision !== "number" || !Number.isSafeInteger(raw.revision) || raw.revision < 0 || typeof raw.revisionId !== "string" || !SAFE_ID_RE.test(raw.revisionId) || typeof raw.payloadDigest !== "string" || !SHA256_RE.test(raw.payloadDigest)) {
+    throw new RunStateCorruptError("pre-Verify opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
+  }
+  return {
+    schemaVersion: 1,
+    revision: raw.revision,
+    revisionId: raw.revisionId,
+    payloadDigest: raw.payloadDigest
+  };
+}
+function splitPreVerifyReviewAnchor(state) {
+  if (!state.opaqueTail.startsWith(PRE_VERIFY_REVIEW_ANCHOR_PREFIX))
+    return { state };
+  const lineEnd = state.opaqueTail.indexOf("\n");
+  const encoded = lineEnd < 0 ? "" : state.opaqueTail.slice(PRE_VERIFY_REVIEW_ANCHOR_PREFIX.length, lineEnd);
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new RunStateCorruptError("pre-Verify opaqueTail anchor \u7F16\u7801\u975E\u6CD5");
+  }
+  return {
+    state: {
+      ...state,
+      opaqueTail: state.opaqueTail.slice(lineEnd + 1)
+    },
+    anchor: parsePreVerifyReviewAnchor(encoded)
+  };
+}
+function withoutPreVerifyReviewField(state, revision, revisionId) {
+  const logical = splitPreVerifyReviewAnchor(state).state;
+  const fields = structuredClone(state.fields);
+  delete fields[PRE_VERIFY_REVIEW_FIELD];
+  const anchor = {
+    schemaVersion: 1,
+    revision,
+    revisionId,
+    payloadDigest: preVerifyReviewPayloadDigest(revision, revisionId, preVerifyReviewResult(logical))
+  };
+  const encodedAnchor = Buffer.from(JSON.stringify(anchor), "utf8").toString("base64url");
+  return {
+    fields,
+    ...logical.runMetadata === void 0 ? {} : { runMetadata: logical.runMetadata },
+    opaqueTail: `${PRE_VERIFY_REVIEW_ANCHOR_PREFIX}${encodedAnchor}
+${logical.opaqueTail}`
+  };
+}
+function rollbackCompatibleState(revision) {
+  return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId);
+}
+function stringField(fields, field) {
+  const value = fields[field];
+  return Array.isArray(value) ? value.join(",") : value;
+}
+function hookStateFor(state) {
+  return {
+    phase: stringField(state.fields, "phase"),
+    workflow: stringField(state.fields, "workflow") || "default",
+    track: stringField(state.fields, "track"),
+    archived: stringField(state.fields, "archived"),
+    automation: stringField(state.fields, "automation")
+  };
+}
+function canonicalRunMetadata(value) {
+  if (value === void 0)
+    return void 0;
+  const raw = ownRecord(value);
+  if (!raw)
+    throw new RunStateCorruptError("canonical state.runMetadata \u4E0D\u662F\u5BF9\u8C61");
+  const allowed = /* @__PURE__ */ new Set([
+    "runId",
+    "transitionSequence",
+    "transitionHead",
+    "automationPolicy",
+    "loopId",
+    "iterationId",
+    "documentProfile",
+    "documentGovernanceFingerprint",
+    "workflowPlanFingerprint"
+  ]);
+  if (Object.keys(raw).some((key) => !allowed.has(key))) {
+    throw new RunStateCorruptError("canonical state.runMetadata \u542B\u672A\u77E5\u5B57\u6BB5");
+  }
+  if (typeof raw.runId !== "string" || raw.runId.length === 0 || !Number.isSafeInteger(raw.transitionSequence) || raw.transitionSequence < 0 || raw.transitionHead !== void 0 && typeof raw.transitionHead !== "string" || raw.documentProfile !== void 0 && raw.documentProfile !== "legacy-full" && raw.documentProfile !== "document-v1" || raw.documentGovernanceFingerprint !== void 0 && (typeof raw.documentGovernanceFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(raw.documentGovernanceFingerprint)) || raw.workflowPlanFingerprint !== void 0 && (typeof raw.workflowPlanFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(raw.workflowPlanFingerprint)) || raw.loopId !== void 0 && typeof raw.loopId !== "string" || raw.iterationId !== void 0 && typeof raw.iterationId !== "string") {
+    throw new RunStateCorruptError("canonical state.runMetadata \u5B57\u6BB5\u975E\u6CD5");
+  }
+  const automationPolicy = raw.automationPolicy === void 0 ? void 0 : validateAutomationPolicySnapshot(raw.automationPolicy);
+  if (raw.loopId === void 0 !== (raw.iterationId === void 0)) {
+    throw new RunStateCorruptError("canonical governed identity \u5FC5\u987B loopId/iterationId \u6210\u5BF9");
+  }
+  if (raw.loopId !== void 0 && automationPolicy === void 0) {
+    throw new RunStateCorruptError("canonical governed identity \u7F3A automationPolicy");
+  }
+  if (raw.documentGovernanceFingerprint !== void 0 && raw.documentProfile === void 0) {
+    throw new RunStateCorruptError("canonical document governance fingerprint \u7F3A profile");
+  }
+  return {
+    runId: raw.runId,
+    transitionSequence: raw.transitionSequence,
+    ...raw.transitionHead === void 0 ? {} : { transitionHead: raw.transitionHead },
+    ...raw.documentProfile === void 0 ? {} : { documentProfile: raw.documentProfile },
+    ...raw.documentGovernanceFingerprint === void 0 ? {} : { documentGovernanceFingerprint: raw.documentGovernanceFingerprint },
+    ...raw.workflowPlanFingerprint === void 0 ? {} : { workflowPlanFingerprint: raw.workflowPlanFingerprint },
+    ...automationPolicy === void 0 ? {} : { automationPolicy },
+    ...raw.loopId === void 0 ? {} : { loopId: raw.loopId, iterationId: raw.iterationId }
+  };
+}
+function canonicalState(value, opts = {}) {
+  const raw = ownRecord(value);
+  if (!raw || Object.keys(raw).some((key) => !["fields", "runMetadata", "opaqueTail"].includes(key))) {
+    throw new RunStateCorruptError("canonical state \u5F62\u72B6\u975E\u6CD5");
+  }
+  const rawFields = ownRecord(raw.fields);
+  const rawKeys = rawFields ? Object.keys(rawFields) : [];
+  const missing4 = rawFields ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field)) : [];
+  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing4.includes(field));
+  const isCompleteReviewGateOmission = missingReviewGateFields.length === REVIEW_GATE_FIELDS.length;
+  const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1 && missingReviewGateFields[0] === "review_gate_event" && REVIEW_GATE_FIELDS.filter((field) => field !== "review_gate_event").every((field) => rawFields?.[field] === "");
+  const legacyReviewGateDefaults = opts.allowLegacyFieldOmissions === true && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent) ? new Set(missingReviewGateFields) : /* @__PURE__ */ new Set();
+  const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true && missing4.includes(PRE_VERIFY_REVIEW_FIELD) ? /* @__PURE__ */ new Set([PRE_VERIFY_REVIEW_FIELD]) : /* @__PURE__ */ new Set();
+  const allowedLegacyDefaults = /* @__PURE__ */ new Set([
+    ...legacyReviewGateDefaults,
+    ...legacyPreVerifyDefault
+  ]);
+  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing4.some((field) => !allowedLegacyDefaults.has(field))) {
+    throw new RunStateCorruptError("canonical state.fields \u4E0D\u662F FIELD_ORDER \u95ED\u96C6");
+  }
+  const fields = {};
+  for (const field of FIELD_ORDER) {
+    if (legacyReviewGateDefaults.has(field)) {
+      fields[field] = REVIEW_GATE_FIELD_DEFAULTS[field];
+      continue;
+    }
+    if (legacyPreVerifyDefault.has(field)) {
+      fields[field] = PRE_VERIFY_REVIEW_DEFAULT;
+      continue;
+    }
+    const fieldValue = rawFields[field];
+    if (typeof fieldValue === "string") {
+      fields[field] = fieldValue;
+    } else if (LIST_FIELD_SET.has(field) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
+      fields[field] = [...fieldValue];
+    } else {
+      throw new RunStateCorruptError(`canonical state.fields.${field} \u7C7B\u578B\u975E\u6CD5`);
+    }
+  }
+  if (typeof raw.opaqueTail !== "string")
+    throw new RunStateCorruptError("canonical opaqueTail \u975E string");
+  return {
+    fields,
+    ...raw.runMetadata === void 0 ? {} : { runMetadata: canonicalRunMetadata(raw.runMetadata) },
+    opaqueTail: raw.opaqueTail
+  };
+}
+function canonicalEffect(value, index) {
+  const raw = ownRecord(value);
+  if (!raw || Object.keys(raw).sort().join(",") !== "field,from,kind,to" || raw.kind !== "state-field-change" || typeof raw.field !== "string" || !FIELD_SET.has(raw.field)) {
+    throw new RunStateCorruptError(`canonical mutation.effects[${index}] shape \u975E\u6CD5`);
+  }
+  const field = raw.field;
+  const valueAt = (candidate, side) => {
+    if (typeof candidate === "string")
+      return candidate;
+    if (LIST_FIELD_SET.has(field) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
+      return [...candidate];
+    throw new RunStateCorruptError(`canonical mutation.effects[${index}].${side} \u7C7B\u578B\u975E\u6CD5`);
+  };
+  return {
+    kind: "state-field-change",
+    field,
+    from: valueAt(raw.from, "from"),
+    to: valueAt(raw.to, "to")
+  };
+}
+function revisionBody(input) {
+  return {
+    schemaVersion: 1,
+    hookState: input.hookState,
+    revision: input.revision,
+    revisionId: input.revisionId,
+    ...input.previousRevisionId === void 0 ? {} : { previousRevisionId: input.previousRevisionId },
+    state: input.state,
+    mutation: input.mutation
+  };
+}
+function digestBody(body) {
+  return createHash3("sha256").update(JSON.stringify(body)).digest("hex");
+}
+function createRunRevision(input) {
+  const state = splitPreVerifyReviewAnchor(canonicalState({
+    fields: structuredClone(input.state.fields),
+    ...input.state.runMetadata === void 0 ? {} : { runMetadata: withoutWorkflowGovernanceBinding(structuredClone(input.state.runMetadata)) },
+    opaqueTail: input.state.opaqueTail
+  })).state;
+  const revisionId = input.revisionId ?? randomUUID3();
+  const body = revisionBody({
+    schemaVersion: 1,
+    hookState: hookStateFor(state),
+    revision: input.revision,
+    revisionId,
+    ...input.previousRevisionId === void 0 ? {} : { previousRevisionId: input.previousRevisionId },
+    state,
+    mutation: input.mutation
+  });
+  const wireBody = revisionBody({
+    ...body,
+    state: withoutPreVerifyReviewField(state, input.revision, revisionId)
+  });
+  return { ...body, stateDigest: digestBody(wireBody) };
+}
+function serializeRunRevision(revision) {
+  const { stateDigest, ...logicalBody } = revision;
+  const wireBody = revisionBody({ ...logicalBody, state: rollbackCompatibleState(revision) });
+  if (digestBody(wireBody) !== stateDigest) {
+    throw new RunStateCorruptError("\u5F85\u53D1\u5E03 revision \u7684 wire digest \u4E0E\u903B\u8F91\u72B6\u6001\u4E0D\u4E00\u81F4");
+  }
+  return JSON.stringify({ ...wireBody, stateDigest });
+}
+function parseRunRevision(raw, source) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (error2) {
+    throw new RunStateCorruptError(`${source}: JSON \u635F\u574F\uFF08${String(error2)}\uFF09`);
+  }
+  const record4 = ownRecord(value);
+  if (!record4)
+    throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
+  if (typeof record4.schemaVersion === "number" && Number.isSafeInteger(record4.schemaVersion) && record4.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
+    throw new UnsupportedRunStateVersionError(record4.schemaVersion);
+  }
+  if (Object.keys(record4).some((key) => ![
+    "schemaVersion",
+    "hookState",
+    "revision",
+    "revisionId",
+    "previousRevisionId",
+    "state",
+    "mutation",
+    "stateDigest"
+  ].includes(key)))
+    throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
+  const hook = ownRecord(record4.hookState);
+  const mutation = ownRecord(record4.mutation);
+  if (record4.schemaVersion !== RUN_STATE_SCHEMA_VERSION || typeof record4.revision !== "number" || !Number.isSafeInteger(record4.revision) || record4.revision < 0 || typeof record4.revisionId !== "string" || !SAFE_ID_RE.test(record4.revisionId) || record4.revision === 0 !== (record4.previousRevisionId === void 0) || record4.previousRevisionId !== void 0 && (typeof record4.previousRevisionId !== "string" || !SAFE_ID_RE.test(record4.previousRevisionId)) || typeof record4.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record4.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
+    "kind",
+    "observedAt",
+    "effects",
+    "transitionRecordId",
+    "transitionRecordDigest"
+  ].includes(key)) || !["init", "migration", "replace", "set", "set-many", "cas", "cas-many", "automation", "transition", "legacy-import"].includes(String(mutation.kind)) || typeof mutation.observedAt !== "string" || !Array.isArray(mutation.effects) || mutation.transitionRecordId !== void 0 && (typeof mutation.transitionRecordId !== "string" || !SAFE_ID_RE.test(mutation.transitionRecordId)) || mutation.transitionRecordDigest !== void 0 && (typeof mutation.transitionRecordDigest !== "string" || !/^[0-9a-f]{64}$/.test(mutation.transitionRecordDigest))) {
+    throw new RunStateCorruptError(`${source}: canonical revision \u5B57\u6BB5\u975E\u6CD5`);
+  }
+  const phase = hook.phase;
+  const workflow = hook.workflow;
+  const track = hook.track;
+  const archived = hook.archived;
+  const automation = hook.automation;
+  if (typeof phase !== "string" || typeof workflow !== "string" || typeof track !== "string" || typeof archived !== "string" || typeof automation !== "string") {
+    throw new RunStateCorruptError(`${source}: hookState \u5B57\u6BB5\u975E\u6CD5`);
+  }
+  const { stateDigest: _rawDigest, ...rawBody } = record4;
+  const observedDigest = createHash3("sha256").update(JSON.stringify(rawBody)).digest("hex");
+  if (observedDigest !== record4.stateDigest) {
+    throw new RunStateCorruptError(`${source}: digest \u4E0D\u5339\u914D`);
+  }
+  const state = canonicalState(record4.state, { allowLegacyFieldOmissions: true });
+  const effects = mutation.effects.map(canonicalEffect);
+  const transitionRecordId = typeof mutation.transitionRecordId === "string" ? mutation.transitionRecordId : void 0;
+  const transitionRecordDigest = typeof mutation.transitionRecordDigest === "string" ? mutation.transitionRecordDigest : void 0;
+  const isTransition = mutation.kind === "transition";
+  const isInitial = mutation.kind === "init" || mutation.kind === "migration";
+  if (record4.revision === 0 !== isInitial || record4.revision === 0 && effects.length !== 0) {
+    throw new RunStateCorruptError(`${source}: revision 0 \u4E0E init/migration \u7A7A effects \u5FC5\u987B\u6210\u5BF9`);
+  }
+  if (isTransition !== (transitionRecordId !== void 0 && transitionRecordDigest !== void 0)) {
+    throw new RunStateCorruptError(`${source}: transition mutation \u4E0E transitionRecordId/transitionRecordDigest \u5FC5\u987B\u6210\u5BF9`);
+  }
+  if (isTransition && state.runMetadata?.transitionHead !== transitionRecordId) {
+    throw new RunStateCorruptError(`${source}: transitionRecordId \u4E0E state transitionHead \u4E0D\u4E00\u81F4`);
+  }
+  const parsed = {
+    schemaVersion: 1,
+    hookState: { phase, workflow, track, archived, automation },
+    revision: record4.revision,
+    revisionId: record4.revisionId,
+    ...typeof record4.previousRevisionId === "string" ? { previousRevisionId: record4.previousRevisionId } : {},
+    state,
+    mutation: {
+      kind: mutation.kind,
+      observedAt: mutation.observedAt,
+      effects,
+      ...transitionRecordId === void 0 ? {} : { transitionRecordId },
+      ...transitionRecordDigest === void 0 ? {} : { transitionRecordDigest }
+    },
+    stateDigest: record4.stateDigest
+  };
+  if (JSON.stringify(parsed.hookState) !== JSON.stringify(hookStateFor(state))) {
+    throw new RunStateCorruptError(`${source}: hookState \u4E0E\u5B8C\u6574 state \u4E0D\u4E00\u81F4`);
+  }
+  return parsed;
+}
+
+// packages/kernel/dist/state/pre-verify-review-store.js
+var PRE_VERIFY_REVIEW_DIR = "pre-verify-review";
+var SAFE_ID_RE2 = /^[A-Za-z0-9_-]+$/;
+var ALLOWED_RESULTS = /* @__PURE__ */ new Set(["pending", "pass"]);
+function errnoCode(error2) {
+  if (error2 === null || typeof error2 !== "object")
+    return void 0;
+  const code = Reflect.get(error2, "code");
+  return typeof code === "string" ? code : void 0;
+}
+function preVerifyReviewFileName(revision, revisionId) {
+  return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
+}
+function preVerifyReviewRelativePath(revision, revisionId) {
+  return join6(".pipeline-run", PRE_VERIFY_REVIEW_DIR, preVerifyReviewFileName(revision, revisionId));
+}
+function resultFor(state) {
+  const value = state.fields[PRE_VERIFY_REVIEW_FIELD];
+  if (typeof value !== "string" || !ALLOWED_RESULTS.has(value)) {
+    throw new RunStateCorruptError(`canonical ${PRE_VERIFY_REVIEW_FIELD} \u975E\u6CD5\uFF1A\u4EC5\u5141\u8BB8 pending/pass`);
+  }
+  return value;
+}
+function recordFor(revision, state) {
+  return {
+    schemaVersion: 1,
+    revision: revision.revision,
+    revisionId: revision.revisionId,
+    stateDigest: revision.stateDigest,
+    result: resultFor(state)
+  };
+}
+function parseRecord(raw, source) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (error2) {
+    throw new RunStateCorruptError(`${source}: pre-Verify companion JSON \u635F\u574F\uFF08${String(error2)}\uFF09`);
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new RunStateCorruptError(`${source}: pre-Verify companion \u4E0D\u662F\u5BF9\u8C61`);
+  }
+  const record4 = value;
+  if (Object.keys(record4).sort().join(",") !== "result,revision,revisionId,schemaVersion,stateDigest" || record4.schemaVersion !== 1 || typeof record4.revision !== "number" || !Number.isSafeInteger(record4.revision) || record4.revision < 0 || typeof record4.revisionId !== "string" || !SAFE_ID_RE2.test(record4.revisionId) || typeof record4.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record4.stateDigest) || typeof record4.result !== "string" || !ALLOWED_RESULTS.has(record4.result)) {
+    throw new RunStateCorruptError(`${source}: pre-Verify companion \u5F62\u72B6\u975E\u6CD5`);
+  }
+  return {
+    schemaVersion: 1,
+    revision: record4.revision,
+    revisionId: record4.revisionId,
+    stateDigest: record4.stateDigest,
+    result: record4.result
+  };
+}
+function attach(revision, record4) {
+  const { state, anchor } = splitPreVerifyReviewAnchor(revision.state);
+  const anchorIsCurrent = anchor !== void 0 && anchor.revision === revision.revision && anchor.revisionId === revision.revisionId;
+  const result = anchorIsCurrent && record4 !== void 0 ? record4.result : PRE_VERIFY_REVIEW_DEFAULT;
+  if (record4 !== void 0 && (record4.revision !== revision.revision || record4.revisionId !== revision.revisionId || record4.stateDigest !== revision.stateDigest)) {
+    throw new RunStateCorruptError("pre-Verify companion \u4E0E canonical revision \u8EAB\u4EFD/\u6458\u8981\u4E0D\u4E00\u81F4");
+  }
+  if (anchorIsCurrent && record4 !== void 0 && anchor.payloadDigest !== preVerifyReviewPayloadDigest(record4.revision, record4.revisionId, record4.result)) {
+    throw new RunStateCorruptError("pre-Verify companion \u5185\u5BB9\u4E0E canonical anchor \u6458\u8981\u4E0D\u4E00\u81F4");
+  }
+  return {
+    ...revision,
+    state: {
+      ...state,
+      fields: {
+        ...state.fields,
+        [PRE_VERIFY_REVIEW_FIELD]: result
+      }
+    }
+  };
+}
+async function publishPreVerifyReviewRecord(changeDir, revision, logicalState) {
+  const dir = join6(changeDir, ".pipeline-run", PRE_VERIFY_REVIEW_DIR);
+  await mkdir(dir, { recursive: true });
+  const target = join6(dir, preVerifyReviewFileName(revision.revision, revision.revisionId));
+  await atomicLinkPublish(dir, ".tmp", target, `${JSON.stringify(recordFor(revision, logicalState))}
+`);
+}
+async function hydratePreVerifyReview(changeDir, revision) {
+  const target = join6(changeDir, preVerifyReviewRelativePath(revision.revision, revision.revisionId));
+  let info;
+  try {
+    info = await lstat3(target);
+  } catch (error2) {
+    if (errnoCode(error2) === "ENOENT")
+      return attach(revision);
+    throw error2;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new RunStateCorruptError(`${target}: pre-Verify companion \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
+  }
+  return attach(revision, parseRecord(await readFile2(target, "utf8"), target));
+}
+function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
+  const relative11 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
+  const raw = readText(relative11);
+  return attach(revision, raw === void 0 ? void 0 : parseRecord(raw, join6(sourceRoot, relative11)));
+}
+
+// packages/kernel/dist/state/run-revision-continuity.js
+import { createHash as createHash5 } from "node:crypto";
+
+// packages/kernel/dist/state/run-metadata.js
+var RUN_ID_KEY = "pipeline_run_id";
+var SEQUENCE_KEY = "pipeline_transition_sequence";
+var HEAD_KEY = "pipeline_transition_head";
+var POLICY_KEY = "pipeline_automation_policy_b64";
+var LOOP_ID_KEY = "pipeline_loop_id";
+var ITERATION_ID_KEY = "pipeline_iteration_id";
+var DOCUMENT_PROFILE_KEY = "pipeline_document_profile";
+var DOCUMENT_GOVERNANCE_FINGERPRINT_KEY = "pipeline_document_governance_fingerprint";
+var WORKFLOW_PLAN_FINGERPRINT_KEY = "pipeline_workflow_plan_fingerprint";
+var STATE_REVISION_KEY = "pipeline_state_revision";
+var STATE_REVISION_ID_KEY = "pipeline_state_revision_id";
+var STATE_DIGEST_KEY = "pipeline_state_digest";
+var NULL_LITERAL = "null";
+function serializeRunMetadataLines(metadata) {
+  if (!metadata)
+    return [];
+  const lines = [
+    `${RUN_ID_KEY}: ${metadata.runId}`,
+    `${SEQUENCE_KEY}: ${metadata.transitionSequence}`,
+    `${HEAD_KEY}: ${metadata.transitionHead ?? NULL_LITERAL}`
+  ];
+  if (metadata.automationPolicy !== void 0) {
+    lines.push(`${POLICY_KEY}: ${Buffer.from(JSON.stringify(metadata.automationPolicy)).toString("base64url")}`);
+    if (metadata.loopId !== void 0 && metadata.iterationId !== void 0) {
+      lines.push(`${LOOP_ID_KEY}: ${metadata.loopId}`);
+      lines.push(`${ITERATION_ID_KEY}: ${metadata.iterationId}`);
+    }
+  }
+  if (metadata.documentProfile !== void 0) {
+    lines.push(`${DOCUMENT_PROFILE_KEY}: ${metadata.documentProfile}`);
+  }
+  if (metadata.documentGovernanceFingerprint !== void 0) {
+    if (!/^[0-9a-f]{64}$/.test(metadata.documentGovernanceFingerprint)) {
+      throw new Error("document governance fingerprint \u5FC5\u987B\u662F 64 \u4F4D\u5C0F\u5199 SHA-256");
+    }
+    if (metadata.documentProfile === void 0) {
+      throw new Error("document governance fingerprint \u7F3A\u5C11 document profile");
+    }
+    lines.push(`${DOCUMENT_GOVERNANCE_FINGERPRINT_KEY}: ${metadata.documentGovernanceFingerprint}`);
+  }
+  if (metadata.workflowPlanFingerprint !== void 0) {
+    if (!/^[0-9a-f]{64}$/.test(metadata.workflowPlanFingerprint)) {
+      throw new Error("workflow plan fingerprint \u5FC5\u987B\u662F 64 \u4F4D\u5C0F\u5199 SHA-256");
+    }
+    lines.push(`${WORKFLOW_PLAN_FINGERPRINT_KEY}: ${metadata.workflowPlanFingerprint}`);
+  }
+  return lines;
+}
+function parseRunMetadataLines(lines) {
+  const NOT_FOUND = { metadata: void 0, consumedLines: 0 };
+  const l0 = lines[0];
+  const l1 = lines[1];
+  const l2 = lines[2];
+  if (l0 === void 0 || l1 === void 0 || l2 === void 0)
+    return NOT_FOUND;
+  const runId = matchLine(l0, RUN_ID_KEY);
+  const sequenceRaw = matchLine(l1, SEQUENCE_KEY);
+  const headRaw = matchLine(l2, HEAD_KEY);
+  if (runId === void 0 || sequenceRaw === void 0 || headRaw === void 0)
+    return NOT_FOUND;
+  const transitionSequence = Number(sequenceRaw);
+  if (!Number.isInteger(transitionSequence) || transitionSequence < 0)
+    return NOT_FOUND;
+  const metadata = {
+    runId,
+    transitionSequence,
+    transitionHead: headRaw === NULL_LITERAL ? void 0 : headRaw
+  };
+  let consumedLines = 3;
+  const policyLine = lines[consumedLines];
+  const policyRaw = policyLine === void 0 ? void 0 : matchLine(policyLine, POLICY_KEY);
+  if (policyRaw !== void 0) {
+    try {
+      metadata.automationPolicy = validateAutomationPolicySnapshot(JSON.parse(Buffer.from(policyRaw, "base64url").toString("utf8")));
+      const loopId = lines[4] === void 0 ? void 0 : matchLine(lines[4], LOOP_ID_KEY);
+      const iterationId = lines[5] === void 0 ? void 0 : matchLine(lines[5], ITERATION_ID_KEY);
+      if (loopId !== void 0 && iterationId !== void 0 && loopId === metadata.automationPolicy.loop_id && iterationId.length > 0) {
+        metadata.loopId = loopId;
+        metadata.iterationId = iterationId;
+        consumedLines = 6;
+      } else {
+        consumedLines = 4;
+      }
+    } catch {
+    }
+  }
+  const profileLine = lines[consumedLines];
+  const profileRaw = profileLine === void 0 ? void 0 : matchLine(profileLine, DOCUMENT_PROFILE_KEY);
+  if (profileRaw === "legacy-full" || profileRaw === "document-v1") {
+    metadata.documentProfile = profileRaw;
+    consumedLines += 1;
+  }
+  const fingerprintLine = lines[consumedLines];
+  const fingerprintRaw = fingerprintLine === void 0 ? void 0 : matchLine(fingerprintLine, DOCUMENT_GOVERNANCE_FINGERPRINT_KEY);
+  if (fingerprintRaw !== void 0) {
+    if (metadata.documentProfile === void 0 || !/^[0-9a-f]{64}$/.test(fingerprintRaw)) {
+      throw new Error("tenon document governance fingerprint \u635F\u574F");
+    }
+    metadata.documentGovernanceFingerprint = fingerprintRaw;
+    consumedLines += 1;
+  }
+  const workflowFingerprintLine = lines[consumedLines];
+  const workflowFingerprintRaw = workflowFingerprintLine === void 0 ? void 0 : matchLine(workflowFingerprintLine, WORKFLOW_PLAN_FINGERPRINT_KEY);
+  if (workflowFingerprintRaw !== void 0) {
+    if (!/^[0-9a-f]{64}$/.test(workflowFingerprintRaw)) {
+      throw new Error("tenon workflow plan fingerprint \u635F\u574F");
+    }
+    metadata.workflowPlanFingerprint = workflowFingerprintRaw;
+    consumedLines += 1;
+  }
+  return { metadata, consumedLines };
+}
+function serializeProjectionMetadataLines(metadata) {
+  if (!metadata)
+    return [];
+  return [
+    `${STATE_REVISION_KEY}: ${metadata.stateRevision}`,
+    `${STATE_REVISION_ID_KEY}: ${metadata.stateRevisionId}`,
+    `${STATE_DIGEST_KEY}: ${metadata.stateDigest}`
+  ];
+}
+function parseProjectionMetadataLines(lines) {
+  const revisionRaw = lines[0] === void 0 ? void 0 : matchLine(lines[0], STATE_REVISION_KEY);
+  const revisionId = lines[1] === void 0 ? void 0 : matchLine(lines[1], STATE_REVISION_ID_KEY);
+  const stateDigest = lines[2] === void 0 ? void 0 : matchLine(lines[2], STATE_DIGEST_KEY);
+  const stateRevision = Number(revisionRaw);
+  if (!Number.isSafeInteger(stateRevision) || stateRevision < 0 || revisionId === void 0 || !/^[A-Za-z0-9_-]+$/.test(revisionId) || stateDigest === void 0 || !/^[0-9a-f]{64}$/.test(stateDigest)) {
+    return { metadata: void 0, consumedLines: 0 };
+  }
+  return { metadata: { stateRevision, stateRevisionId: revisionId, stateDigest }, consumedLines: 3 };
+}
+function matchLine(line, key) {
+  const prefix = `${key}: `;
+  return line.startsWith(prefix) ? line.slice(prefix.length) : void 0;
+}
+function fieldValueEqual(a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b))
+      return false;
+    if (a.length !== b.length)
+      return false;
+    return a.every((v, i) => v === b[i]);
+  }
+  return a === b;
+}
+function diffFieldsToEffects(before, after) {
+  const effects = [];
+  const fields = /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const field of fields) {
+    const from = before[field] ?? "";
+    const to = after[field] ?? "";
+    if (!fieldValueEqual(from, to)) {
+      effects.push({ kind: "state-field-change", field, from, to });
+    }
+  }
+  return effects;
+}
+function diffWireFieldsToEffects(before, after) {
+  return diffFieldsToEffects(before, after).filter(({ field }) => field !== PRE_VERIFY_REVIEW_FIELD);
+}
+
+// packages/kernel/dist/state/transition-record-store.js
+import { mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
+import { join as join7 } from "node:path";
+var TRANSITION_RECORDS_DIR = ".pipeline-transitions";
+var RecordAlreadyExistsError = class extends Error {
+  path;
+  constructor(path7) {
+    super(`TransitionRecord \u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6\uFF08\u8BB0\u5F55\u4E0D\u53EF\u53D8\uFF09: ${path7}`);
+    this.path = path7;
+  }
+};
+var InvalidRecordIdentityError = class extends Error {
+};
+var SAFE_RECORD_ID_RE = /^[A-Za-z0-9_-]+$/;
+var TRANSITION_KEYS = /* @__PURE__ */ new Set([
+  "schemaVersion",
+  "id",
+  "runId",
+  "policyId",
+  "policyVersion",
+  "loopId",
+  "iterationId",
+  "sequence",
+  "previousRecordId",
+  "workflowId",
+  "event",
+  "from",
+  "to",
+  "effects",
+  "actor",
+  "observedAt"
+]);
+var EFFECT_KEYS = /* @__PURE__ */ new Set(["kind", "field", "from", "to"]);
+function isRecord3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isStringValue(value) {
+  return typeof value === "string" || Array.isArray(value) && value.every((item2) => typeof item2 === "string");
+}
+function isTransitionRecord(value) {
+  if (!isRecord3(value) || Object.keys(value).some((key) => !TRANSITION_KEYS.has(key)))
+    return false;
+  if (value.schemaVersion !== 1 || typeof value.id !== "string" || typeof value.runId !== "string" || !Number.isSafeInteger(value.sequence) || typeof value.sequence !== "number" || value.sequence < 1 || typeof value.workflowId !== "string" || typeof value.event !== "string" || typeof value.from !== "string" || typeof value.to !== "string" || typeof value.observedAt !== "string" || !Array.isArray(value.effects))
+    return false;
+  for (const key of ["policyId", "policyVersion", "loopId", "iterationId", "previousRecordId", "actor"]) {
+    if (value[key] !== void 0 && typeof value[key] !== "string")
+      return false;
+  }
+  const fields = new Set(FIELD_ORDER);
+  return value.effects.every((effect) => isRecord3(effect) && Object.keys(effect).every((key) => EFFECT_KEYS.has(key)) && effect.kind === "state-field-change" && typeof effect.field === "string" && fields.has(effect.field) && isStringValue(effect.from) && isStringValue(effect.to));
+}
+function parseTransitionRecord(value, source = "TransitionRecord") {
+  if (!isTransitionRecord(value))
+    throw new SyntaxError(`${source}: TransitionRecord schema invalid`);
+  return value;
+}
+function assertValidIdentity(sequence, recordId) {
+  if (!Number.isInteger(sequence) || sequence < 1) {
+    throw new InvalidRecordIdentityError(`\u975E\u6CD5 sequence\uFF08\u5FC5\u987B\u662F\u6B63\u6574\u6570\uFF09: ${sequence}`);
+  }
+  if (!SAFE_RECORD_ID_RE.test(recordId)) {
+    throw new InvalidRecordIdentityError(`\u975E\u6CD5 recordId\uFF08\u53EA\u5141\u8BB8\u5B57\u6BCD\u6570\u5B57/\u8FDE\u5B57\u7B26/\u4E0B\u5212\u7EBF\uFF09: ${recordId}`);
+  }
+}
+function recordPath(changeDir, sequence, recordId) {
+  assertValidIdentity(sequence, recordId);
+  const seqPart = String(sequence).padStart(6, "0");
+  return join7(changeDir, TRANSITION_RECORDS_DIR, `${seqPart}-${recordId}.json`);
+}
+var FsTransitionRecordStore = class {
+  async write(changeDir, record4) {
+    const dir = join7(changeDir, TRANSITION_RECORDS_DIR);
+    await mkdir2(dir, { recursive: true });
+    const target = recordPath(changeDir, record4.sequence, record4.id);
+    try {
+      await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record4));
+    } catch (e) {
+      if (e.code === "EEXIST") {
+        throw new RecordAlreadyExistsError(target);
+      }
+      throw e;
+    }
+  }
+  async read(changeDir, sequence, recordId) {
+    try {
+      const raw = await readFile3(recordPath(changeDir, sequence, recordId), "utf8");
+      const parsed = JSON.parse(raw);
+      return parseTransitionRecord(parsed);
+    } catch (e) {
+      if (e.code === "ENOENT")
+        return void 0;
+      throw e;
+    }
+  }
+  async readChain(changeDir, headSequence, headId, expectedRunId) {
+    const chain = [];
+    const visited = /* @__PURE__ */ new Set();
+    let sequence = headSequence;
+    let id2 = headId;
+    let steps = 0;
+    while (sequence !== void 0 && id2 !== void 0) {
+      if (steps >= headSequence)
+        break;
+      steps++;
+      let record4;
+      try {
+        record4 = await this.read(changeDir, sequence, id2);
+      } catch (e) {
+        if (e instanceof InvalidRecordIdentityError || e instanceof SyntaxError)
+          break;
+        throw e;
+      }
+      if (!record4)
+        break;
+      if (record4.id !== id2 || record4.sequence !== sequence)
+        break;
+      if (record4.runId !== expectedRunId)
+        break;
+      if (visited.has(record4.id))
+        break;
+      visited.add(record4.id);
+      chain.unshift(record4);
+      id2 = record4.previousRecordId;
+      sequence = id2 === void 0 ? void 0 : record4.sequence - 1;
+    }
+    return chain;
+  }
+};
+function createTransitionRecordStore() {
+  return new FsTransitionRecordStore();
+}
+
+// packages/kernel/dist/state/transition-head-anchor.js
+import { createHash as createHash4 } from "node:crypto";
+import { join as join8 } from "node:path";
+var PREFIX = "# tenon-internal-transition-head-v1: ";
+var SHA256_RE2 = /^[0-9a-f]{64}$/;
+var SAFE_ID_RE3 = /^[A-Za-z0-9_-]+$/;
+function parseAnchor(encoded) {
+  let value;
+  try {
+    value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch (error2) {
+    throw new RunStateCorruptError(`transition head opaqueTail anchor \u635F\u574F\uFF08${String(error2)}\uFF09`);
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new RunStateCorruptError("transition head opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
+  }
+  const raw = Object.fromEntries(Object.entries(value));
+  if (Object.keys(raw).sort().join(",") !== "recordDigest,recordId,runId,schemaVersion,sequence" || raw.schemaVersion !== 1 || typeof raw.runId !== "string" || !SAFE_ID_RE3.test(raw.runId) || typeof raw.sequence !== "number" || !Number.isSafeInteger(raw.sequence) || raw.sequence < 1 || typeof raw.recordId !== "string" || !SAFE_ID_RE3.test(raw.recordId) || typeof raw.recordDigest !== "string" || !SHA256_RE2.test(raw.recordDigest)) {
+    throw new RunStateCorruptError("transition head opaqueTail anchor \u5F62\u72B6\u975E\u6CD5");
+  }
+  return {
+    schemaVersion: 1,
+    runId: raw.runId,
+    sequence: raw.sequence,
+    recordId: raw.recordId,
+    recordDigest: raw.recordDigest
+  };
+}
+function readTransitionHeadAnchor(state) {
+  if (!state.opaqueTail.startsWith(PREFIX))
+    return void 0;
+  const lineEnd = state.opaqueTail.indexOf("\n");
+  if (lineEnd < 0)
+    throw new RunStateCorruptError("transition head opaqueTail anchor \u7F3A\u6362\u884C");
+  const encoded = state.opaqueTail.slice(PREFIX.length, lineEnd);
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new RunStateCorruptError("transition head opaqueTail anchor \u7F16\u7801\u975E\u6CD5");
+  }
+  return parseAnchor(encoded);
+}
+function withTransitionHeadAnchor(state, metadata, recordDigest) {
+  if (metadata.transitionHead === void 0 || metadata.transitionSequence < 1 || !SHA256_RE2.test(recordDigest)) {
+    throw new RunStateCorruptError("transition head anchor \u7F3A\u5339\u914D\u7684 canonical metadata/digest");
+  }
+  const existing = readTransitionHeadAnchor(state);
+  const tail = existing === void 0 ? state.opaqueTail : state.opaqueTail.slice(state.opaqueTail.indexOf("\n") + 1);
+  const anchor = {
+    schemaVersion: 1,
+    runId: metadata.runId,
+    sequence: metadata.transitionSequence,
+    recordId: metadata.transitionHead,
+    recordDigest
+  };
+  const encoded = Buffer.from(JSON.stringify(anchor), "utf8").toString("base64url");
+  return { ...state, opaqueTail: `${PREFIX}${encoded}
+${tail}` };
+}
+function assertTransitionHeadAnchorMatchesMetadata(anchor, metadata) {
+  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata)) {
+    throw new RunStateCorruptError("transition head anchor \u4E0E canonical runMetadata \u4E0D\u4E00\u81F4");
+  }
+}
+function transitionHeadAnchorMatchesMetadata(anchor, metadata) {
+  return anchor.runId === metadata.runId && anchor.sequence === metadata.transitionSequence && anchor.recordId === metadata.transitionHead;
+}
+function anchoredRecordPath(anchor) {
+  return join8(TRANSITION_RECORDS_DIR, `${String(anchor.sequence).padStart(6, "0")}-${anchor.recordId}.json`);
+}
+function validateAnchoredRecord(revision, raw, source) {
+  const anchor = readTransitionHeadAnchor(revision.state);
+  if (anchor === void 0)
+    throw new RunStateCorruptError("transition head anchor \u7F3A\u5931");
+  if (createHash4("sha256").update(raw).digest("hex") !== anchor.recordDigest) {
+    throw new RunStateCorruptError("canonical head TransitionRecord digest \u4E0E anchor \u4E0D\u4E00\u81F4");
+  }
+  try {
+    const record4 = parseTransitionRecord(JSON.parse(raw), source);
+    if (record4.id !== anchor.recordId || record4.sequence !== anchor.sequence || record4.runId !== anchor.runId) {
+      throw new RunStateCorruptError("canonical head TransitionRecord \u4E0E anchor \u4E0D\u4E00\u81F4");
+    }
+    return record4;
+  } catch (error2) {
+    if (error2 instanceof RunStateCorruptError)
+      throw error2;
+    throw new RunStateCorruptError(`canonical head TransitionRecord \u635F\u574F: ${String(error2)}`);
+  }
+}
+async function validateAnchoredTransitionHead(revision, readText, sourceRoot) {
+  const anchor = readTransitionHeadAnchor(revision.state);
+  if (anchor === void 0)
+    return void 0;
+  const metadata = revision.state.runMetadata;
+  if (metadata === void 0) {
+    throw new RunStateCorruptError("transition head anchor \u7F3A canonical runMetadata");
+  }
+  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata))
+    return void 0;
+  const relativePath = anchoredRecordPath(anchor);
+  const raw = await readText(relativePath);
+  if (raw === void 0)
+    throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
+  return validateAnchoredRecord(revision, raw, join8(sourceRoot, relativePath));
+}
+function validateAnchoredTransitionHeadFromSync(revision, readText, sourceRoot) {
+  const anchor = readTransitionHeadAnchor(revision.state);
+  if (anchor === void 0)
+    return void 0;
+  const metadata = revision.state.runMetadata;
+  if (metadata === void 0) {
+    throw new RunStateCorruptError("transition head anchor \u7F3A canonical runMetadata");
+  }
+  if (!transitionHeadAnchorMatchesMetadata(anchor, metadata))
+    return void 0;
+  const relativePath = anchoredRecordPath(anchor);
+  const raw = readText(relativePath);
+  if (raw === void 0)
+    throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
+  return validateAnchoredRecord(revision, raw, join8(sourceRoot, relativePath));
+}
+
+// packages/kernel/dist/state/run-revision-continuity.js
+function ownRecord2(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  return Object.fromEntries(Object.entries(value));
+}
+function assertRunMetadataContinuity(current, previous) {
+  const before = previous.state.runMetadata;
+  const after = current.state.runMetadata;
+  const beforeAnchor = readTransitionHeadAnchor(previous.state);
+  const afterAnchor = readTransitionHeadAnchor(current.state);
+  if (current.mutation.kind === "transition") {
+    if (after === void 0 || before !== void 0 && after.runId !== before.runId || after.transitionSequence !== (before?.transitionSequence ?? 0) + 1 || after.transitionHead !== current.mutation.transitionRecordId) {
+      throw new RunStateCorruptError("transition revision \u7684 runMetadata head/sequence \u94FE\u4E0D\u8FDE\u7EED");
+    }
+    if (afterAnchor !== void 0 && transitionHeadAnchorMatchesMetadata(afterAnchor, after)) {
+      if (afterAnchor.recordDigest !== current.mutation.transitionRecordDigest) {
+        throw new RunStateCorruptError("transition revision \u7684 transition head anchor digest \u4E0D\u5339\u914D");
+      }
+      assertTransitionHeadAnchorMatchesMetadata(afterAnchor, after);
+    } else if (afterAnchor !== void 0 && JSON.stringify(afterAnchor) !== JSON.stringify(beforeAnchor)) {
+      throw new RunStateCorruptError("transition revision \u643A\u5E26\u672A\u77E5\u7684 stale transition head anchor");
+    }
+    return;
+  }
+  if (before === void 0) {
+    if (after !== void 0 && (after.transitionSequence !== 0 || after.transitionHead !== void 0)) {
+      throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u4F2A\u9020\u5386\u53F2 transition head");
+    }
+    if (afterAnchor !== void 0) {
+      throw new RunStateCorruptError("\u65E0 canonical runMetadata \u7684 revision \u4E0D\u5F97\u643A\u5E26 transition head anchor");
+    }
+    return;
+  }
+  if (after === void 0 || after.runId !== before.runId || after.transitionSequence !== before.transitionSequence || after.transitionHead !== before.transitionHead) {
+    throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u6539\u5199 runMetadata head/sequence");
+  }
+  if (JSON.stringify(afterAnchor) !== JSON.stringify(beforeAnchor)) {
+    throw new RunStateCorruptError("\u975E transition revision \u4E0D\u5F97\u6539\u5199 transition head anchor");
+  }
+  if (afterAnchor !== void 0 && transitionHeadAnchorMatchesMetadata(afterAnchor, after)) {
+    assertTransitionHeadAnchorMatchesMetadata(afterAnchor, after);
+  }
+}
+function assertMutationEffects(current, previous) {
+  const expected = diffWireFieldsToEffects(previous.state.fields, current.state.fields);
+  if (JSON.stringify(current.mutation.effects) !== JSON.stringify(expected)) {
+    throw new RunStateCorruptError("canonical mutation.effects \u4E0E previous\u2192current \u771F\u5B9E diff \u4E0D\u4E00\u81F4");
+  }
+  assertRunMetadataContinuity(current, previous);
+}
+function assertTransitionRevisionLink(current, transition, raw, previous) {
+  const observedDigest = createHash5("sha256").update(raw).digest("hex");
+  if (observedDigest !== current.mutation.transitionRecordDigest) {
+    throw new RunStateCorruptError("TransitionRecord digest \u4E0E canonical revision \u5BA1\u8BA1\u7ED1\u5B9A\u4E0D\u4E00\u81F4");
+  }
+  const metadata = current.state.runMetadata;
+  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  let parsed;
+  try {
+    parsed = parseTransitionRecord(transition, "canonical transition revision");
+  } catch (error2) {
+    throw new RunStateCorruptError(`TransitionRecord schema \u635F\u574F: ${String(error2)}`);
+  }
+  const record4 = ownRecord2(parsed);
+  if (record4 === void 0)
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+  const previousPhase = previous?.state.fields.phase;
+  const currentPhase = current.state.fields.phase;
+  const workflowId = String(current.state.fields.workflow || "default");
+  if (record4.id !== current.mutation.transitionRecordId || record4.sequence !== metadata.transitionSequence || record4.runId !== metadata.runId || previous !== void 0 && record4.previousRecordId !== previous.state.runMetadata?.transitionHead || previous !== void 0 && record4.from !== previousPhase || record4.to !== currentPhase || record4.workflowId !== workflowId || JSON.stringify(record4.effects) !== JSON.stringify(current.mutation.effects)) {
+    throw new RunStateCorruptError("transition revision \u4E0E TransitionRecord \u4E0D\u4E00\u81F4");
+  }
+  return parsed;
+}
+function assertDirectPredecessor(revision, previous) {
+  if (revision.revision < 1 || previous === void 0) {
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
+  }
+  if (previous.revisionId !== revision.previousRevisionId || previous.revision !== revision.revision - 1) {
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
+  }
+  assertMutationEffects(revision, previous);
+  return previous;
+}
+
+// packages/kernel/dist/state/run-revision-store.js
+import { createHash as createHash6 } from "node:crypto";
+import { lstatSync as lstatSync2, readFileSync as readFileSync2 } from "node:fs";
+import { lstat as lstat4, mkdir as mkdir3, readFile as readFile4 } from "node:fs/promises";
+import { join as join9 } from "node:path";
+var RUN_STATE_DIR = ".pipeline-run";
+var RUN_CURRENT_FILE = "current.json";
+var RUN_REVISIONS_DIR = "revisions";
+var SAFE_ID_RE4 = /^[A-Za-z0-9_-]+$/;
+function errnoCode2(error2) {
+  if (error2 === null || typeof error2 !== "object")
+    return void 0;
+  const record4 = Object.fromEntries(Object.entries(error2));
+  return typeof record4.code === "string" ? record4.code : void 0;
+}
+function stateStorageSourcePathSync(changeDir) {
+  const current = join9(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
+  try {
+    lstatSync2(current);
+    return current;
+  } catch (error2) {
+    if (errnoCode2(error2) !== "ENOENT")
+      throw error2;
+  }
+  const legacy = join9(changeDir, ".pipeline.yaml");
+  try {
+    lstatSync2(legacy);
+    return legacy;
+  } catch (error2) {
+    if (errnoCode2(error2) === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+}
+function stateStorageExistsSync(changeDir) {
+  return stateStorageSourcePathSync(changeDir) !== void 0;
+}
+function previousRevisionIdFor(revision) {
+  if (revision.previousRevisionId === void 0) {
+    throw new RunStateCorruptError("\u975E\u521D\u59CB revision \u7F3A previousRevisionId");
+  }
+  return revision.previousRevisionId;
+}
+function revisionFileName(revision, revisionId) {
+  return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
+}
+async function assertTransitionRecordFile(changeDir, revision, previous) {
+  if (revision.mutation.kind !== "transition")
+    return void 0;
+  const metadata = revision.state.runMetadata;
+  if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  const transitionPath = join9(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
+  const transitionRaw = await readRegularTextIfExists(transitionPath);
+  if (transitionRaw === void 0) {
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+  }
+  let transition;
+  try {
+    transition = JSON.parse(transitionRaw);
+  } catch (error2) {
+    throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error2)}`);
+  }
+  assertTransitionRevisionLink(revision, transition, transitionRaw, previous);
+  return transition;
+}
+function assertTransitionRecordFromSync(readText, revision, sourceRoot, previous) {
+  if (revision.mutation.kind !== "transition")
+    return void 0;
+  const metadata = revision.state.runMetadata;
+  if (!metadata?.transitionHead || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  const transitionRel = join9(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
+  const transitionRaw = readText(transitionRel);
+  if (transitionRaw === void 0)
+    throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+  try {
+    const transition = JSON.parse(transitionRaw);
+    assertTransitionRevisionLink(revision, transition, transitionRaw, previous);
+    return transition;
+  } catch (error2) {
+    if (error2 instanceof RunStateCorruptError)
+      throw error2;
+    throw new RunStateCorruptError(`${join9(sourceRoot, transitionRel)}: TransitionRecord \u635F\u574F: ${String(error2)}`);
+  }
+}
+function projectionMetadataFor(revision) {
+  return {
+    stateRevision: revision.revision,
+    stateRevisionId: revision.revisionId,
+    stateDigest: revision.stateDigest
+  };
+}
+async function publishInitialRunRevision(changeDir, state, observedAt, kind = "init") {
+  const runDir = join9(changeDir, RUN_STATE_DIR);
+  const revisionsDir = join9(runDir, RUN_REVISIONS_DIR);
+  await mkdir3(revisionsDir, { recursive: true });
+  const revision = createRunRevision({
+    state,
+    revision: 0,
+    mutation: { kind, observedAt, effects: [] }
+  });
+  await publishPreVerifyReviewRecord(changeDir, revision, state);
+  const raw = serializeRunRevision(revision);
+  await atomicLinkPublish(revisionsDir, ".tmp", join9(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
+  await atomicLinkPublish(runDir, ".current.tmp", join9(runDir, RUN_CURRENT_FILE), raw);
+  return revision;
+}
+async function publishRunRevision(changeDir, current, state, mutation) {
+  const runDir = join9(changeDir, RUN_STATE_DIR);
+  const revisionsDir = join9(runDir, RUN_REVISIONS_DIR);
+  await mkdir3(revisionsDir, { recursive: true });
+  let transitionRaw;
+  let transition;
+  let revisionState = state;
+  let mutationWithDigest = mutation;
+  if (mutation.kind === "transition") {
+    const metadata = state.runMetadata;
+    if (metadata === void 0 || metadata.transitionHead !== mutation.transitionRecordId || metadata.transitionSequence < 1) {
+      throw new RunStateCorruptError("transition publish \u7F3A\u5339\u914D\u7684 canonical run head/sequence");
+    }
+    const transitionPath = join9(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${mutation.transitionRecordId}.json`);
+    transitionRaw = await readRegularTextIfExists(transitionPath);
+    if (transitionRaw === void 0) {
+      throw new RunStateCorruptError("transition publish \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
+    }
+    try {
+      transition = JSON.parse(transitionRaw);
+    } catch (error2) {
+      throw new RunStateCorruptError(`transition publish \u7684 TransitionRecord \u635F\u574F: ${String(error2)}`);
+    }
+    mutationWithDigest = {
+      ...mutation,
+      transitionRecordDigest: createHash6("sha256").update(transitionRaw).digest("hex")
+    };
+    const transitionRecordDigest = mutationWithDigest.transitionRecordDigest;
+    if (transitionRecordDigest === void 0) {
+      throw new RunStateCorruptError("transition publish \u7F3A TransitionRecord digest");
+    }
+    revisionState = withTransitionHeadAnchor(state, metadata, transitionRecordDigest);
+  }
+  const revision = createRunRevision({
+    state: revisionState,
+    revision: current.revision + 1,
+    previousRevisionId: current.revisionId,
+    mutation: {
+      ...mutationWithDigest,
+      effects: diffWireFieldsToEffects(current.state.fields, state.fields)
+    }
+  });
+  assertMutationEffects(revision, current);
+  if (transitionRaw !== void 0) {
+    assertTransitionRevisionLink(revision, transition, transitionRaw, current);
+  }
+  await publishPreVerifyReviewRecord(changeDir, revision, revisionState);
+  const raw = serializeRunRevision(revision);
+  await atomicLinkPublish(revisionsDir, ".tmp", join9(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
+  await atomicReplaceFile(join9(runDir, RUN_CURRENT_FILE), raw);
+  return revision;
+}
+async function readCurrentRunRevision(changeDir) {
+  const currentPath = join9(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
+  const raw = await readRegularTextIfExists(currentPath);
+  if (raw === void 0)
+    return void 0;
+  const current = await hydratePreVerifyReview(changeDir, parseRunRevision(raw, currentPath));
+  const immutablePath = join9(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(current.revision, current.revisionId));
+  const immutableRaw = await readRegularTextIfExists(immutablePath);
+  if (immutableRaw === void 0) {
+    throw new RunStateCorruptError(`current \u5F15\u7528\u7684 immutable revision \u7F3A\u5931: ${immutablePath}`);
+  }
+  await hydratePreVerifyReview(changeDir, parseRunRevision(immutableRaw, immutablePath));
+  if (immutableRaw !== raw)
+    throw new RunStateCorruptError("current \u4E0E immutable revision \u5B57\u8282\u4E0D\u4E00\u81F4");
+  let previous;
+  if (current.revision > 0) {
+    const previousRevisionId = previousRevisionIdFor(current);
+    previous = await readImmutableRunRevision(changeDir, current.revision - 1, previousRevisionId);
+    if (previous === void 0) {
+      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
+    }
+    if (previous.revisionId !== previousRevisionId || previous.revision !== current.revision - 1) {
+      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
+    }
+    assertMutationEffects(current, previous);
+  }
+  await assertTransitionRecordFile(changeDir, current, previous);
+  await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists(join9(changeDir, relativePath)), changeDir);
+  if (previous?.mutation.kind === "transition") {
+    const predecessor = assertDirectPredecessor(previous, await readImmutableRunRevision(changeDir, previous.revision - 1, previousRevisionIdFor(previous)));
+    await assertTransitionRecordFile(changeDir, previous, predecessor);
+  }
+  return current;
+}
+async function validateCanonicalRevisionHistory(changeDir) {
+  let cursor = await readCurrentRunRevision(changeDir);
+  if (cursor === void 0)
+    return;
+  while (cursor.revision > 0) {
+    const previousRevisionId = previousRevisionIdFor(cursor);
+    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousRevisionId);
+    if (previous === void 0) {
+      throw new RunStateCorruptError(`canonical history revision ${cursor.revision - 1} \u7F3A\u5931`);
+    }
+    if (previous.revision !== cursor.revision - 1 || previous.revisionId !== previousRevisionId) {
+      throw new RunStateCorruptError("canonical history previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
+    }
+    assertMutationEffects(cursor, previous);
+    await assertTransitionRecordFile(changeDir, cursor, previous);
+    cursor = previous;
+  }
+}
+async function readRegularTextIfExists(pathname) {
+  let entry;
+  try {
+    entry = await lstat4(pathname);
+  } catch (error2) {
+    if (errnoCode2(error2) === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+  if (entry.isSymbolicLink() || !entry.isFile()) {
+    throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
+  }
+  try {
+    return await readFile4(pathname, "utf8");
+  } catch (error2) {
+    if (errnoCode2(error2) === "ENOENT") {
+      throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5728\u6821\u9A8C\u671F\u95F4\u6D88\u5931`);
+    }
+    throw error2;
+  }
+}
+function readCurrentRunRevisionFromSync(readText, sourceRoot = "canonical state") {
+  const currentRel = join9(RUN_STATE_DIR, RUN_CURRENT_FILE);
+  const raw = readText(currentRel);
+  if (raw === void 0)
+    return void 0;
+  const currentSource = join9(sourceRoot, currentRel);
+  const current = hydratePreVerifyReviewFromSync(readText, parseRunRevision(raw, currentSource), sourceRoot);
+  const revisionsRel = join9(RUN_STATE_DIR, RUN_REVISIONS_DIR);
+  const immutableRel = join9(revisionsRel, revisionFileName(current.revision, current.revisionId));
+  const immutableRaw = readText(immutableRel);
+  if (immutableRaw === void 0) {
+    throw new RunStateCorruptError(`current \u5F15\u7528\u7684 immutable revision \u7F3A\u5931: ${join9(sourceRoot, immutableRel)}`);
+  }
+  hydratePreVerifyReviewFromSync(readText, parseRunRevision(immutableRaw, join9(sourceRoot, immutableRel)), sourceRoot);
+  if (immutableRaw !== raw)
+    throw new RunStateCorruptError("current \u4E0E immutable revision \u5B57\u8282\u4E0D\u4E00\u81F4");
+  let previous;
+  if (current.revision > 0) {
+    const previousRevisionId = previousRevisionIdFor(current);
+    const previousRel = join9(revisionsRel, revisionFileName(current.revision - 1, previousRevisionId));
+    const previousRaw = readText(previousRel);
+    if (previousRaw === void 0)
+      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
+    previous = hydratePreVerifyReviewFromSync(readText, parseRunRevision(previousRaw, join9(sourceRoot, previousRel)), sourceRoot);
+    if (previous.revisionId !== previousRevisionId || previous.revision !== current.revision - 1) {
+      throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
+    }
+    assertMutationEffects(current, previous);
+  }
+  assertTransitionRecordFromSync(readText, current, sourceRoot, previous);
+  validateAnchoredTransitionHeadFromSync(current, readText, sourceRoot);
+  if (previous?.mutation.kind === "transition") {
+    const predecessorId = previousRevisionIdFor(previous);
+    const predecessorRel = join9(revisionsRel, revisionFileName(previous.revision - 1, predecessorId));
+    const predecessorRaw = readText(predecessorRel);
+    const predecessor = assertDirectPredecessor(previous, predecessorRaw === void 0 ? void 0 : hydratePreVerifyReviewFromSync(readText, parseRunRevision(predecessorRaw, join9(sourceRoot, predecessorRel)), sourceRoot));
+    assertTransitionRecordFromSync(readText, previous, sourceRoot, predecessor);
+  }
+  return current;
+}
+async function readImmutableRunRevision(changeDir, revision, revisionId) {
+  if (!Number.isSafeInteger(revision) || revision < 0 || !SAFE_ID_RE4.test(revisionId))
+    return void 0;
+  const pathname = join9(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(revision, revisionId));
+  const raw = await readRegularTextIfExists(pathname);
+  return raw === void 0 ? void 0 : hydratePreVerifyReview(changeDir, parseRunRevision(raw, pathname));
+}
+
+// packages/kernel/dist/state/run-revision-head-reader.js
 var MAX_LEGACY_REVISIONS = 64;
 var MAX_SYNC_CANONICAL_BYTES = 8 * 1024 * 1024;
 function previousRevisionIdFor2(revision) {
@@ -4638,6 +4671,10 @@ function initialDocumentLedgerContent(createdAt) {
   return `${JSON.stringify(ledger, null, 2)}
 `;
 }
+
+// packages/kernel/dist/skill-invocation/repository.js
+import { lstat as lstat6, open as open2, realpath as realpath3 } from "node:fs/promises";
+import { isAbsolute as isAbsolute3, join as join13, relative as relative3, resolve as resolve3, sep as sep4 } from "node:path";
 
 // packages/kernel/dist/state/lock.js
 import { randomBytes } from "node:crypto";
@@ -5169,8 +5206,1993 @@ async function readSkillInvocationEvidence(changeDir) {
   }
 }
 
+// packages/kernel/dist/skill-invocation/document-producer.js
+var MAX_CONFIRMATIONS_BYTES = 1024 * 1024;
+var MAX_HISTORY_BYTES = 2 * 1024 * 1024;
+
+// packages/kernel/dist/loops/ledger-store.js
+import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
+import { createHash as createHash8 } from "node:crypto";
+import { mkdir as mkdir6, open as open3, readFile as readFile6 } from "node:fs/promises";
+import { join as join15, resolve as resolve4 } from "node:path";
+
+// packages/kernel/dist/required.js
+function required(value, message = "required value is missing") {
+  if (value === void 0)
+    throw new Error(message);
+  return value;
+}
+
+// packages/kernel/dist/verification/validate.js
+function isObj(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function typeName(v) {
+  if (v === null)
+    return "null";
+  if (Array.isArray(v))
+    return "array";
+  return typeof v;
+}
+function safeErrorText(value) {
+  try {
+    if (value instanceof Error) {
+      const message = value.message;
+      if (message.length > 0)
+        return message;
+    }
+  } catch {
+  }
+  try {
+    return String(value);
+  } catch {
+    return "<\u65E0\u6CD5\u5B89\u5168\u8BFB\u53D6\u5F02\u5E38\u4FE1\u606F>";
+  }
+}
+function missing(o, key) {
+  return !(key in o) || o[key] === void 0;
+}
+function checkNonEmptyStr(o, key, path7, errors, optional = false) {
+  if (missing(o, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u7A7A string\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  if (v.length === 0)
+    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
+}
+function checkLit(o, key, literal, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
+    return;
+  }
+  if (o[key] !== literal)
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(o[key])}`);
+}
+function checkEnum(o, key, allowed, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string" || !allowed.includes(v)) {
+    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+}
+function checkNonNegInt(o, key, path7, errors, optional = false) {
+  if (missing(o, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u8D1F\u6574\u6570\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u975E\u8D1F\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+}
+function checkInt(o, key, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6574\u6570\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "number" || !Number.isInteger(v))
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+}
+var SHA256_RE3 = /^[0-9a-f]{64}$/;
+var GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+function checkSha256(o, key, path7, errors, optional = false) {
+  if (missing(o, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  if (!SHA256_RE3.test(v))
+    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+}
+function checkGitSha(o, key, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B git SHA\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  if (!GIT_SHA_RE.test(v))
+    errors.push(`${path7}.${key}: \u5E94\u4E3A 40 \u6216 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 git SHA\uFF08\u5B8C\u6574\u5BF9\u8C61\u540D\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+}
+function checkRepoRelPath(o, key, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  if (v.length === 0) {
+    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
+    return;
+  }
+  if (v.includes("\0")) {
+    errors.push(`${path7}.${key}: \u7981 NUL \u5B57\u8282\uFF08git tree \u8DEF\u5F84\u4E0D\u53EF\u542B NUL\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    return;
+  }
+  if (v.startsWith("/") || v.startsWith("\\") || /^[a-zA-Z]:/.test(v)) {
+    errors.push(`${path7}.${key}: \u7981\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u987B\u9879\u76EE\u76F8\u5BF9\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    return;
+  }
+  const segs = v.split(/[/\\]/);
+  if (segs.some((seg) => seg === "..")) {
+    errors.push(`${path7}.${key}: \u7981\u8DEF\u5F84\u9003\u9038 '..'\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+  if (segs.some((seg) => seg === ".")) {
+    errors.push(`${path7}.${key}: \u7981 '.' \u8DEF\u5F84\u6BB5\uFF08git tree \u4E0D\u4EA7\u751F\u6B64\u5F62\u5F0F\uFF0C\u975E\u89C4\u8303\u8DEF\u5F84\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+  if (segs.some((seg) => seg.length === 0)) {
+    errors.push(`${path7}.${key}: \u7981\u7A7A\u8DEF\u5F84\u6BB5\uFF08\u5F00\u5934/\u7ED3\u5C3E/\u8FDE\u7EED\u5206\u9694\u7B26\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+}
+var ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+function checkIsoTimestamp(o, key, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B ISO-8601 \u65F6\u95F4\u6233\uFF09`);
+    return;
+  }
+  const v = o[key];
+  if (typeof v !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  if (!ISO_TIMESTAMP_RE.test(v) || Number.isNaN(Date.parse(v))) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A ISO-8601 \u65F6\u95F4\u6233\uFF08\u5982 2026-07-18T00:00:00.000Z\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+  }
+}
+function subjectRevisionSha(subject2) {
+  const revision = subject2.revision;
+  if (!isObj(revision))
+    return void 0;
+  const sha = revision.sha;
+  return typeof sha === "string" ? sha : void 0;
+}
+function subObj(o, key, path7, errors) {
+  if (missing(o, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
+    return null;
+  }
+  const v = o[key];
+  if (!isObj(v)) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return null;
+  }
+  return v;
+}
+var VERDICTS = ["passed", "failed", "inconclusive"];
+var BINDING_KINDS = ["workflow-transition", "default-transition", "runtime-verifier"];
+var ISSUER_KINDS = ["host-verifier", "human-review", "sandbox-report"];
+var EVIDENCE_KINDS = ["repo-file", "command-result"];
+function validateSubject(o, path7, errors) {
+  checkNonEmptyStr(o, "workflow_run_id", path7, errors);
+  checkNonEmptyStr(o, "attempt_id", path7, errors);
+  checkNonEmptyStr(o, "change", path7, errors);
+  const rev = subObj(o, "revision", path7, errors);
+  if (rev !== null) {
+    const rp = `${path7}.revision`;
+    checkLit(rev, "kind", "named-branch-head", rp, errors);
+    checkGitSha(rev, "sha", rp, errors);
+  }
+}
+function validateBinding(o, path7, errors) {
+  switch (o.kind) {
+    case "workflow-transition":
+      checkNonEmptyStr(o, "workflow_digest", path7, errors);
+      checkNonEmptyStr(o, "workflow", path7, errors);
+      checkNonEmptyStr(o, "step", path7, errors);
+      checkNonEmptyStr(o, "event", path7, errors);
+      checkNonNegInt(o, "guard_index", path7, errors, true);
+      checkNonNegInt(o, "action_index", path7, errors, true);
+      break;
+    case "default-transition":
+      checkNonEmptyStr(o, "event", path7, errors);
+      break;
+    case "runtime-verifier":
+      checkNonEmptyStr(o, "verifier", path7, errors);
+      checkNonEmptyStr(o, "version", path7, errors);
+      break;
+    default:
+      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${BINDING_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
+  }
+}
+function validateIssuer(o, path7, errors) {
+  switch (o.kind) {
+    case "host-verifier":
+      checkNonEmptyStr(o, "verifier", path7, errors);
+      checkNonEmptyStr(o, "version", path7, errors);
+      checkLit(o, "trusted", true, path7, errors);
+      break;
+    case "human-review":
+      checkNonEmptyStr(o, "actor_id", path7, errors);
+      checkLit(o, "trusted", true, path7, errors);
+      break;
+    case "sandbox-report":
+      checkNonEmptyStr(o, "runner", path7, errors);
+      checkLit(o, "trusted", false, path7, errors);
+      break;
+    default:
+      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${ISSUER_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
+  }
+}
+function validateEvidenceRef(v, path7, errors) {
+  if (!isObj(v)) {
+    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    return;
+  }
+  switch (v.kind) {
+    case "repo-file":
+      checkRepoRelPath(v, "path", path7, errors);
+      checkSha256(v, "sha256", path7, errors);
+      checkGitSha(v, "revision_sha", path7, errors);
+      break;
+    case "command-result":
+      checkNonEmptyStr(v, "command_id", path7, errors);
+      checkInt(v, "exit_code", path7, errors);
+      checkSha256(v, "stdout_sha256", path7, errors, true);
+      checkSha256(v, "stderr_sha256", path7, errors, true);
+      break;
+    default:
+      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${EVIDENCE_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v.kind)}`);
+  }
+}
+function extractEvidenceItem(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const kind = raw.kind;
+  if (kind !== void 0)
+    out.kind = kind;
+  switch (kind) {
+    case "repo-file": {
+      const path7 = raw.path;
+      if (path7 !== void 0)
+        out.path = path7;
+      const sha256 = raw.sha256;
+      if (sha256 !== void 0)
+        out.sha256 = sha256;
+      const revision_sha = raw.revision_sha;
+      if (revision_sha !== void 0)
+        out.revision_sha = revision_sha;
+      break;
+    }
+    case "command-result": {
+      const command_id = raw.command_id;
+      if (command_id !== void 0)
+        out.command_id = command_id;
+      const exit_code = raw.exit_code;
+      if (exit_code !== void 0)
+        out.exit_code = exit_code;
+      const stdout_sha256 = raw.stdout_sha256;
+      if (stdout_sha256 !== void 0)
+        out.stdout_sha256 = stdout_sha256;
+      const stderr_sha256 = raw.stderr_sha256;
+      if (stderr_sha256 !== void 0)
+        out.stderr_sha256 = stderr_sha256;
+      break;
+    }
+    default:
+      break;
+  }
+  return out;
+}
+function extractEvidenceArray(raw) {
+  if (!Array.isArray(raw))
+    return raw;
+  const rawLength = raw.length;
+  const length = Number.isInteger(rawLength) && rawLength >= 0 ? rawLength : 0;
+  const out = [];
+  for (let i = 0; i < length; i++)
+    out.push(extractEvidenceItem(raw[i]));
+  return out;
+}
+function extractRevision(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const kind = raw.kind;
+  if (kind !== void 0)
+    out.kind = kind;
+  const sha = raw.sha;
+  if (sha !== void 0)
+    out.sha = sha;
+  return out;
+}
+function extractSubject(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const workflow_run_id = raw.workflow_run_id;
+  if (workflow_run_id !== void 0)
+    out.workflow_run_id = workflow_run_id;
+  const attempt_id = raw.attempt_id;
+  if (attempt_id !== void 0)
+    out.attempt_id = attempt_id;
+  const change = raw.change;
+  if (change !== void 0)
+    out.change = change;
+  const revision = raw.revision;
+  if (revision !== void 0)
+    out.revision = extractRevision(revision);
+  return out;
+}
+function extractBinding(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const kind = raw.kind;
+  if (kind !== void 0)
+    out.kind = kind;
+  switch (kind) {
+    case "workflow-transition": {
+      const workflow_digest = raw.workflow_digest;
+      if (workflow_digest !== void 0)
+        out.workflow_digest = workflow_digest;
+      const workflow = raw.workflow;
+      if (workflow !== void 0)
+        out.workflow = workflow;
+      const step = raw.step;
+      if (step !== void 0)
+        out.step = step;
+      const event = raw.event;
+      if (event !== void 0)
+        out.event = event;
+      const guard_index = raw.guard_index;
+      if (guard_index !== void 0)
+        out.guard_index = guard_index;
+      const action_index = raw.action_index;
+      if (action_index !== void 0)
+        out.action_index = action_index;
+      break;
+    }
+    case "default-transition": {
+      const event = raw.event;
+      if (event !== void 0)
+        out.event = event;
+      break;
+    }
+    case "runtime-verifier": {
+      const verifier = raw.verifier;
+      if (verifier !== void 0)
+        out.verifier = verifier;
+      const version = raw.version;
+      if (version !== void 0)
+        out.version = version;
+      break;
+    }
+    default:
+      break;
+  }
+  return out;
+}
+function extractIssuer(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const kind = raw.kind;
+  if (kind !== void 0)
+    out.kind = kind;
+  switch (kind) {
+    case "host-verifier": {
+      const verifier = raw.verifier;
+      if (verifier !== void 0)
+        out.verifier = verifier;
+      const version = raw.version;
+      if (version !== void 0)
+        out.version = version;
+      const trusted = raw.trusted;
+      if (trusted !== void 0)
+        out.trusted = trusted;
+      break;
+    }
+    case "human-review": {
+      const actor_id = raw.actor_id;
+      if (actor_id !== void 0)
+        out.actor_id = actor_id;
+      const trusted = raw.trusted;
+      if (trusted !== void 0)
+        out.trusted = trusted;
+      break;
+    }
+    case "sandbox-report": {
+      const runner = raw.runner;
+      if (runner !== void 0)
+        out.runner = runner;
+      const trusted = raw.trusted;
+      if (trusted !== void 0)
+        out.trusted = trusted;
+      break;
+    }
+    default:
+      break;
+  }
+  return out;
+}
+function extractAutomationPolicy(raw) {
+  if (!isObj(raw))
+    return raw;
+  const out = {};
+  const policy_id = raw.policy_id;
+  if (policy_id !== void 0)
+    out.policy_id = policy_id;
+  const policy_version = raw.policy_version;
+  if (policy_version !== void 0)
+    out.policy_version = policy_version;
+  const goal_sha256 = raw.goal_sha256;
+  if (goal_sha256 !== void 0)
+    out.goal_sha256 = goal_sha256;
+  return out;
+}
+function extractTopLevel(raw) {
+  const out = {};
+  const schema_version = raw.schema_version;
+  if (schema_version !== void 0)
+    out.schema_version = schema_version;
+  const verification_id = raw.verification_id;
+  if (verification_id !== void 0)
+    out.verification_id = verification_id;
+  const evaluated_at = raw.evaluated_at;
+  if (evaluated_at !== void 0)
+    out.evaluated_at = evaluated_at;
+  const verdict = raw.verdict;
+  if (verdict !== void 0)
+    out.verdict = verdict;
+  const subject2 = raw.subject;
+  if (subject2 !== void 0)
+    out.subject = extractSubject(subject2);
+  const binding = raw.binding;
+  if (binding !== void 0)
+    out.binding = extractBinding(binding);
+  const automation_policy = raw.automation_policy;
+  if (automation_policy !== void 0)
+    out.automation_policy = extractAutomationPolicy(automation_policy);
+  const issuer = raw.issuer;
+  if (issuer !== void 0)
+    out.issuer = extractIssuer(issuer);
+  const evidence = raw.evidence;
+  if (evidence !== void 0)
+    out.evidence = extractEvidenceArray(evidence);
+  return out;
+}
+function snapshotVerificationResultFields(input) {
+  if (!isObj(input))
+    return input;
+  return extractTopLevel(input);
+}
+function deepFreeze3(value) {
+  if (value === null || typeof value !== "object")
+    return value;
+  if (!Object.isFrozen(value)) {
+    const asObj = value;
+    Object.freeze(asObj);
+    for (const key of Object.keys(asObj))
+      deepFreeze3(asObj[key]);
+  }
+  return value;
+}
+function sanitizeVerificationResultForEncode(input) {
+  try {
+    return snapshotVerificationResultFields(input);
+  } catch (e) {
+    return {
+      __verification_unreadable__: true,
+      __read_error__: safeErrorText(e)
+    };
+  }
+}
+function collectVerificationResultErrors(value, path7, errors) {
+  if (!isObj(value)) {
+    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(value)}`);
+    return;
+  }
+  checkLit(value, "schema_version", 1, path7, errors);
+  checkNonEmptyStr(value, "verification_id", path7, errors);
+  checkIsoTimestamp(value, "evaluated_at", path7, errors);
+  checkEnum(value, "verdict", VERDICTS, path7, errors);
+  const subject2 = subObj(value, "subject", path7, errors);
+  if (subject2 !== null)
+    validateSubject(subject2, `${path7}.subject`, errors);
+  const binding = subObj(value, "binding", path7, errors);
+  if (binding !== null)
+    validateBinding(binding, `${path7}.binding`, errors);
+  if (!missing(value, "automation_policy")) {
+    const policy2 = subObj(value, "automation_policy", path7, errors);
+    if (policy2 !== null) {
+      checkNonEmptyStr(policy2, "policy_id", `${path7}.automation_policy`, errors);
+      checkSha256(policy2, "policy_version", `${path7}.automation_policy`, errors);
+      checkSha256(policy2, "goal_sha256", `${path7}.automation_policy`, errors);
+    }
+  }
+  const issuer = subObj(value, "issuer", path7, errors);
+  if (issuer !== null)
+    validateIssuer(issuer, `${path7}.issuer`, errors);
+  if (missing(value, "evidence")) {
+    errors.push(`${path7}.evidence: \u7F3A\u5931\uFF08\u5FC5\u586B EvidenceRef[]\uFF09`);
+  } else if (!Array.isArray(value.evidence)) {
+    errors.push(`${path7}.evidence: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName(value.evidence)}`);
+  } else {
+    value.evidence.forEach((item2, i) => validateEvidenceRef(item2, `${path7}.evidence[${i}]`, errors));
+    if (value.verdict === "passed" && value.evidence.length === 0) {
+      errors.push(`${path7}.evidence: verdict=passed \u81F3\u5C11\u9700\u4E00\u6761 evidence`);
+    }
+    if (value.verdict === "passed" && subject2 !== null) {
+      const subjectSha = subjectRevisionSha(subject2);
+      if (subjectSha !== void 0) {
+        value.evidence.forEach((item2, i) => {
+          if (isObj(item2) && item2.kind === "repo-file" && typeof item2.revision_sha === "string" && item2.revision_sha !== subjectSha) {
+            errors.push(`${path7}.evidence[${i}].revision_sha: repo-file evidence \u5FC5\u987B\u7ED1\u5B9A subject.revision.sha\uFF08\u671F\u671B ${JSON.stringify(subjectSha)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2.revision_sha)}\u2014\u2014\u65E7 revision \u7684\u8BC1\u636E\u4E0D\u5F97\u652F\u6491\u65B0 revision \u7684 passed\uFF09`);
+          }
+        });
+      }
+    }
+  }
+}
+function validateVerificationResult(input, path7 = "verification") {
+  let snapshot;
+  try {
+    snapshot = snapshotVerificationResultFields(input);
+  } catch (e) {
+    return {
+      ok: false,
+      errors: [`${path7}: \u8BFB\u53D6\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF08\u7591\u4F3C\u654C\u610F getter/Proxy trap\uFF09\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
+    };
+  }
+  const errors = [];
+  try {
+    collectVerificationResultErrors(snapshot, path7, errors);
+  } catch (e) {
+    return {
+      ok: false,
+      errors: [`${path7}: \u6821\u9A8C\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
+    };
+  }
+  if (errors.length > 0)
+    return { ok: false, errors };
+  return { ok: true, value: deepFreeze3(snapshot) };
+}
+
+// packages/kernel/dist/loops/registry.js
+import { readFileSync as readFileSync3 } from "node:fs";
+import { join as join14 } from "node:path";
+
+// packages/kernel/dist/tracks/types.js
+var TRACK_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
+
+// packages/kernel/dist/loops/registry.js
+var KEY_RE = /^([A-Za-z_][\w.-]*):(?:\s+(.*)|\s*)$/;
+function tokenize(text3) {
+  const tokens = [];
+  for (const rawLine of text3.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    if (line.trim() === "")
+      continue;
+    const trimmedStart = line.replace(/^\s*/, "");
+    if (trimmedStart.startsWith("#"))
+      continue;
+    const indent = line.length - trimmedStart.length;
+    const content = trimmedStart;
+    if (content === "-" || content.startsWith("- ")) {
+      const dashRest = content.slice(1);
+      const after = dashRest.replace(/^\s*/, "");
+      const itemCol = indent + 1 + (dashRest.length - after.length);
+      tokens.push({ indent, kind: "dash" });
+      if (after !== "") {
+        const km2 = after.match(KEY_RE);
+        if (km2)
+          tokens.push({ indent: itemCol, kind: "kv", key: required(km2[1]), rest: km2[2] ?? "" });
+        else
+          tokens.push({ indent: itemCol, kind: "scalar", raw: after });
+      }
+      continue;
+    }
+    const km = content.match(KEY_RE);
+    if (km) {
+      tokens.push({ indent, kind: "kv", key: required(km[1]), rest: km[2] ?? "" });
+    } else {
+      tokens.push({ indent, kind: "scalar", raw: content });
+    }
+  }
+  return tokens;
+}
+var YamlParseError = class extends Error {
+};
+function parseScalar(raw) {
+  let s = raw.trim();
+  if (!(s.startsWith('"') || s.startsWith("'") || s.startsWith("["))) {
+    const cm = s.match(/^(.*?)\s+#.*$/);
+    if (cm)
+      s = required(cm[1]).trimEnd();
+  }
+  if (s === "")
+    return null;
+  if (s.startsWith("[") && s.endsWith("]")) {
+    const inner = s.slice(1, -1).trim();
+    if (inner === "")
+      return [];
+    return inner.split(",").map((x) => parseScalar(x));
+  }
+  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
+    return s.slice(1, -1);
+  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+    return s.slice(1, -1);
+  if (s === "null" || s === "~")
+    return null;
+  if (s === "true")
+    return true;
+  if (s === "false")
+    return false;
+  if (/^-?\d+$/.test(s))
+    return Number(s);
+  return s;
+}
+function parseMapping(tokens, start, indent) {
+  const map = {};
+  let i = start;
+  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === "kv") {
+    const t = required(tokens[i]);
+    i++;
+    if ((t.rest ?? "") === "") {
+      if (i < tokens.length && required(tokens[i]).indent > indent) {
+        const r = parseValue(tokens, i, required(tokens[i]).indent);
+        map[required(t.key)] = r.value;
+        i = r.next;
+      } else {
+        map[required(t.key)] = null;
+      }
+    } else {
+      map[required(t.key)] = parseScalar(required(t.rest));
+    }
+  }
+  return { value: map, next: i };
+}
+function parseSequence(tokens, start, indent) {
+  const arr = [];
+  let i = start;
+  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === "dash") {
+    i++;
+    if (i < tokens.length && required(tokens[i]).indent > indent) {
+      const r = parseValue(tokens, i, required(tokens[i]).indent);
+      arr.push(r.value);
+      i = r.next;
+    } else {
+      arr.push(null);
+    }
+  }
+  return { value: arr, next: i };
+}
+function parseValue(tokens, i, indent) {
+  const t = required(tokens[i]);
+  if (t.kind === "dash")
+    return parseSequence(tokens, i, indent);
+  if (t.kind === "kv")
+    return parseMapping(tokens, i, indent);
+  return { value: parseScalar(required(t.raw)), next: i + 1 };
+}
+function parseLoopsYaml(text3) {
+  try {
+    const tokens = tokenize(text3);
+    if (tokens.length === 0)
+      return { data: null, error: "\u7A7A\u6587\u6863\uFF08\u65E0\u5185\u5BB9\uFF09" };
+    const first = required(tokens[0]);
+    if (first.indent !== 0)
+      throw new YamlParseError(`\u9876\u5C42\u610F\u5916\u7F29\u8FDB\uFF08\u7B2C\u4E00\u4E2A token indent=${first.indent}\uFF09`);
+    let result;
+    if (first.kind === "kv")
+      result = parseMapping(tokens, 0, 0);
+    else if (first.kind === "dash")
+      result = parseSequence(tokens, 0, 0);
+    else
+      throw new YamlParseError("\u9876\u5C42\u5FC5\u987B\u662F mapping \u6216 sequence\uFF08\u5F97\u5230\u88F8\u6807\u91CF\uFF09");
+    if (result.next !== tokens.length) {
+      throw new YamlParseError(`\u6B8B\u7559\u672A\u89E3\u6790\u5185\u5BB9\uFF08\u81EA token #${result.next}\uFF0C\u7F29\u8FDB\u4E0D\u4E00\u81F4\u6216\u5B50\u96C6\u5916\u7ED3\u6784\uFF09`);
+    }
+    return { data: result.value, error: null };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+var ANNOTATION_KEYWORDS = /* @__PURE__ */ new Set(["$schema", "$comment", "$id", "title", "description"]);
+var VALIDATION_KEYWORDS = /* @__PURE__ */ new Set([
+  "type",
+  "required",
+  "additionalProperties",
+  "enum",
+  "pattern",
+  "minLength",
+  "minItems",
+  "minimum",
+  "const",
+  "properties",
+  "items"
+]);
+function joinPath(path7, key) {
+  return path7 === "" ? key : `${path7}.${key}`;
+}
+function typeMatches(instance, typeSpec) {
+  const types = Array.isArray(typeSpec) ? typeSpec : [typeSpec];
+  for (const t of types) {
+    if (t === "object" && instance !== null && typeof instance === "object" && !Array.isArray(instance))
+      return true;
+    if (t === "array" && Array.isArray(instance))
+      return true;
+    if (t === "string" && typeof instance === "string")
+      return true;
+    if (t === "integer" && typeof instance === "number" && Number.isInteger(instance))
+      return true;
+    if (t === "number" && typeof instance === "number")
+      return true;
+    if (t === "boolean" && typeof instance === "boolean")
+      return true;
+    if (t === "null" && instance === null)
+      return true;
+  }
+  return false;
+}
+function validateSchema(instance, schema, path7 = "") {
+  if (typeof schema !== "object" || schema === null)
+    return [];
+  for (const kw of Object.keys(schema)) {
+    if (!ANNOTATION_KEYWORDS.has(kw) && !VALIDATION_KEYWORDS.has(kw)) {
+      throw new Error(`loops validator: unsupported schema keyword '${kw}' at ${path7 || "<root>"}`);
+    }
+  }
+  const label = path7 || "<root>";
+  const errors = [];
+  if ("const" in schema) {
+    if (instance !== schema.const) {
+      errors.push(`${label}: expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(instance)}`);
+      return errors;
+    }
+  }
+  if ("type" in schema) {
+    if (!typeMatches(instance, schema.type)) {
+      errors.push(`${label}: expected type ${JSON.stringify(schema.type)}, got ${instance === null ? "null" : typeof instance}`);
+      return errors;
+    }
+  }
+  if ("enum" in schema && Array.isArray(schema.enum)) {
+    if (!schema.enum.includes(instance)) {
+      errors.push(`${label}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(instance)}`);
+    }
+  }
+  if ("pattern" in schema && typeof instance === "string") {
+    if (!new RegExp(schema.pattern).test(instance)) {
+      errors.push(`${label}: does not match pattern ${JSON.stringify(schema.pattern)}`);
+    }
+  }
+  if ("minLength" in schema && typeof instance === "string") {
+    if (instance.length < schema.minLength) {
+      errors.push(`${label}: expected minLength ${schema.minLength}, got length ${instance.length}`);
+    }
+  }
+  if ("minItems" in schema && Array.isArray(instance)) {
+    if (instance.length < schema.minItems) {
+      errors.push(`${label}: expected minItems ${schema.minItems}, got ${instance.length}`);
+    }
+  }
+  if ("minimum" in schema && typeof instance === "number") {
+    if (instance < schema.minimum) {
+      errors.push(`${label}: expected >= ${schema.minimum}, got ${instance}`);
+    }
+  }
+  if (instance !== null && typeof instance === "object" && !Array.isArray(instance)) {
+    const obj = instance;
+    const props = schema.properties ?? {};
+    for (const req of schema.required ?? []) {
+      if (!(req in obj))
+        errors.push(`${joinPath(path7, req)}: missing required field`);
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(obj)) {
+        if (!(key in props))
+          errors.push(`${joinPath(path7, key)}: unexpected additional field (not in schema)`);
+      }
+    }
+    for (const [key, subschema] of Object.entries(props)) {
+      if (key in obj)
+        errors.push(...validateSchema(obj[key], subschema, joinPath(path7, key)));
+    }
+  }
+  if (Array.isArray(instance) && "items" in schema) {
+    const itemSchema = schema.items;
+    instance.forEach((item2, idx) => errors.push(...validateSchema(item2, itemSchema, `${path7}[${idx}]`)));
+  }
+  return errors;
+}
+var SKILL_BUNDLE_ID_RE = new RegExp(`^_all$|${TRACK_ID_RE.source}`);
+var SAFE_KEBAB_TOKEN_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+var LOOPS_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  required: ["version", "loops"],
+  additionalProperties: false,
+  properties: {
+    version: { const: 1 },
+    loops: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        required: [
+          "id",
+          "name",
+          "kind",
+          "goal",
+          "cadence",
+          "risk",
+          "runner",
+          "change_prefix",
+          "phases",
+          "human_gates",
+          "design_doc",
+          "status",
+          "budget",
+          "kill_criteria"
+        ],
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", pattern: "^[a-z][a-z0-9-]*$" },
+          name: { type: "string", minLength: 3 },
+          kind: { type: "string", enum: ["orchestrator", "executor"] },
+          goal: { type: "string", minLength: 10 },
+          cadence: { type: "string", pattern: "^([0-9]+[mhd](-[0-9]+[mhd])?|continuous)$" },
+          risk: { type: "string", enum: ["low", "medium", "high"] },
+          runner: { type: "string", minLength: 2 },
+          change_prefix: { type: ["string", "null"] },
+          phases: { type: "array", minItems: 2, items: { type: "string" } },
+          human_gates: { type: "array", minItems: 1, items: { type: "string" } },
+          // H9 legacy import only. New writers omit this field; iteration state is projected from ledger facts.
+          state: { type: "string", minLength: 2 },
+          design_doc: { type: "string", minLength: 2 },
+          status: { type: "string", enum: ["active", "paused", "retired"] },
+          budget: {
+            type: "object",
+            required: ["max_runs_per_day", "max_in_flight", "on_exceed"],
+            additionalProperties: false,
+            properties: {
+              max_runs_per_day: { type: "integer", minimum: 1 },
+              max_in_flight: { type: "integer", minimum: 0 },
+              on_exceed: { type: "string", minLength: 2 },
+              // #36 token 级预算（可选，向后兼容——旧登记表不含即无 token 预算/熔断）：
+              max_tokens_per_day: { type: "integer", minimum: 1 },
+              tokens_per_run: { type: "integer", minimum: 1 }
+            }
+          },
+          kill_criteria: { type: "array", minItems: 1, items: { type: "string" } },
+          // 本轮新增：分级放权级别（可选；缺省 L1 由 loadRegistry 派生填充）。
+          autonomy_level: { type: "string", enum: ["L1", "L2", "L3"] },
+          // v5 决议 #12：路径 glob 白/黑名单（可选，缺省 [] 由 loadRegistry 派生填充；
+          // denylist 运行时消费见 automation/lifecycle/denylist.ts）。
+          allowlist: { type: "array", items: { type: "string" } },
+          denylist: { type: "array", items: { type: "string" } },
+          // H11 starter provenance/binding（均可选，旧登记表保持兼容；template catalog 存在性不在本层）。
+          template_id: { type: "string", minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
+          template_version: { const: 1 },
+          workflow_id: { type: "string", minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
+          // H10 §1：skill bundle 引用（可选；缺席/null 由 loadRegistry 派生归一化为 null=unwired）。
+          // 非空须过 SKILL_BUNDLE_ID_RE 词法；profile 是否被 manifest 真声明是存在性语义校验，不在此 schema。
+          skill_bundle_id: { type: ["string", "null"], pattern: SKILL_BUNDLE_ID_RE.source }
+        }
+      }
+    }
+  }
+};
+var RegistryReadError = class extends Error {
+  _tag = "RegistryReadError";
+  constructor(message) {
+    super(message);
+    this.name = "RegistryReadError";
+  }
+};
+var nodeLoopIo = {
+  readText: (p) => {
+    try {
+      return readFileSync3(p, "utf8");
+    } catch {
+      return null;
+    }
+  }
+};
+var nodeLoopIoStrict = {
+  readText: (p) => {
+    try {
+      return readFileSync3(p, "utf8");
+    } catch (e) {
+      if (e.code === "ENOENT")
+        return null;
+      throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+};
+var LOOPS_REL_PATH = [".pipeline", "loops.yaml"];
+function deriveRegistry(data) {
+  const errors = validateSchema(data, LOOPS_SCHEMA);
+  if (!isValidatedLoopRegistry(data, errors)) {
+    throw new Error(`validated loop registry expected: ${errors.join("; ")}`);
+  }
+  const loops = data.loops.map((loop) => ({
+    ...loop,
+    autonomy_level: loop.autonomy_level ?? "L1",
+    allowlist: loop.allowlist ?? [],
+    denylist: loop.denylist ?? [],
+    skill_bundle_id: loop.skill_bundle_id ?? null
+  }));
+  return { version: 1, loops };
+}
+function isValidatedLoopRegistry(value, errors) {
+  return errors.length === 0;
+}
+function loadRegistry(repoRoot, io2 = nodeLoopIo) {
+  const text3 = io2.readText(join14(repoRoot, ...LOOPS_REL_PATH));
+  if (text3 === null)
+    return { data: null, errors: [] };
+  const { data, error: error2 } = parseLoopsYaml(text3);
+  if (error2 !== null)
+    return { data: null, errors: [`loops.yaml: ${error2}`] };
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { data: null, errors: ["<root>: loops.yaml \u9876\u5C42\u5FC5\u987B\u662F mapping\uFF08\u5BF9\u8C61\uFF09"] };
+  }
+  const errors = validateSchema(data, LOOPS_SCHEMA);
+  if (errors.length > 0)
+    return { data: null, errors };
+  return { data: deriveRegistry(data), errors: [] };
+}
+
+// packages/kernel/dist/loops/ledger-codec-primitives.js
+function isObj2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function typeName2(value) {
+  if (value === null)
+    return "null";
+  if (Array.isArray(value))
+    return "array";
+  return typeof value;
+}
+function missing2(value, key) {
+  return !(key in value) || value[key] === void 0;
+}
+function checkStr(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string\uFF09`);
+    return;
+  }
+  if (typeof value[key] !== "string")
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+}
+function checkNum(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B number\uFF09`);
+    return;
+  }
+  if (typeof value[key] !== "number")
+    errors.push(`${path7}.${key}: \u5E94\u4E3A number\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+}
+function checkBool(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B boolean\uFF09`);
+    return;
+  }
+  if (typeof value[key] !== "boolean")
+    errors.push(`${path7}.${key}: \u5E94\u4E3A boolean\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+}
+function checkKnownKeys(value, allowed, path7, errors) {
+  const known = new Set(allowed);
+  for (const key of Object.keys(value)) {
+    if (!known.has(key))
+      errors.push(`${path7}.${key}: \u672A\u77E5\u5B57\u6BB5`);
+  }
+}
+function checkEnum2(value, key, allowed, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
+    return;
+  }
+  const item2 = value[key];
+  if (typeof item2 !== "string" || !allowed.includes(item2)) {
+    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
+  }
+}
+function checkLit2(value, key, literal, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
+    return;
+  }
+  if (value[key] !== literal) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(value[key])}`);
+  }
+}
+function checkStrArray(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string[]\uFF09`);
+    return;
+  }
+  const items = value[key];
+  if (!Array.isArray(items)) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string[]\uFF0C\u5B9E\u5F97 ${typeName2(items)}`);
+    return;
+  }
+  items.forEach((item2, index) => {
+    if (typeof item2 !== "string")
+      errors.push(`${path7}.${key}[${index}]: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
+  });
+}
+function subObj2(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
+    return null;
+  }
+  const child = value[key];
+  if (!isObj2(child)) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(child)}`);
+    return null;
+  }
+  return child;
+}
+var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+function checkSha2562(value, key, path7, errors, optional = false) {
+  if (missing2(value, key)) {
+    if (!optional)
+      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
+    return;
+  }
+  const digest4 = value[key];
+  if (typeof digest4 !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest4)}`);
+    return;
+  }
+  if (!SHA256_HEX_RE.test(digest4)) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest4)}`);
+  }
+}
+function checkPattern(value, key, pattern, path7, errors) {
+  if (missing2(value, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u987B\u5339\u914D ${pattern.source}\uFF09`);
+    return;
+  }
+  const item2 = value[key];
+  if (typeof item2 !== "string") {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
+    return;
+  }
+  if (!pattern.test(item2))
+    errors.push(`${path7}.${key}: \u4E0D\u5339\u914D\u8BCD\u6CD5 ${pattern.source}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
+}
+function checkSlotArray(value, key, path7, errors) {
+  if (missing2(value, key)) {
+    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6570\u7EC4\uFF0C\u5141\u8BB8\u4E3A\u7A7A\uFF09`);
+    return;
+  }
+  const slots = value[key];
+  if (!Array.isArray(slots)) {
+    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName2(slots)}`);
+    return;
+  }
+  slots.forEach((item2, index) => {
+    const itemPath = `${path7}.${key}[${index}]`;
+    if (!isObj2(item2)) {
+      errors.push(`${itemPath}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
+      return;
+    }
+    checkStr(item2, "token", itemPath, errors);
+    checkStrArray(item2, "alternatives", itemPath, errors);
+    checkStr(item2, "concrete_skill_id", itemPath, errors);
+    checkSha2562(item2, "tree_sha256", itemPath, errors);
+  });
+}
+
+// packages/kernel/dist/loops/ledger-codec.js
+function encodeLedgerRecord(record4) {
+  if (record4.kind !== "run" && record4.kind !== "merge-intent" || record4.verification === void 0) {
+    return JSON.stringify(record4);
+  }
+  const sanitizedVerification = sanitizeVerificationResultForEncode(record4.verification);
+  return JSON.stringify({ ...record4, verification: sanitizedVerification });
+}
+var BINDING_SOURCES = ["explicit", "longest-prefix"];
+var TOKEN_BASES = ["budget.tokens_per_run", "risk-default"];
+var EXCEED_ACTIONS2 = ["skip-run", "pause-loop", "halt-round"];
+var LEVELS = ["L1", "L2", "L3"];
+var RUN_RESULTS = ["merged", "paused", "conflict", "failed", "retry-queued", "skipped"];
+var RUN_REASONS = [
+  "completed",
+  "host-sync-pending",
+  "merge-journal-pending",
+  "no-op",
+  "verify-fail",
+  "claim-lost",
+  "admission-denied",
+  "kill-switch",
+  "cancelled",
+  "infrastructure-error",
+  "recovered",
+  "reservation-expired",
+  // H7 verifier Phase 2：settlement verification gate 的 fail-closed 诊断成因。
+  "verification-missing",
+  "verification-untrusted",
+  "verification-inconclusive",
+  "verification-subject-mismatch",
+  // H7-S2（返工 r2 阻断4 custom fail-closed）：custom workflow 核验结果未真正落在 workflow-transition
+  // binding 时的诊断成因。
+  "verification-binding-unresolved",
+  "verification-policy-mismatch",
+  "automation-policy-bind-failed",
+  // H10 §5/§8任务5：admission/prepareSkillBundle 的精确 fail-closed 诊断闭集（同构镜像
+  // automation/admission/execution-context.ts::PreparationFailureReason；前两值 unwired/
+  // profile-not-found 实践中只出现在 AdmissionDenial 自由 string，从不落 RunRecord，仍纳入本
+  // 闭集只为与设计定稿 §5 十项闭集保持同一份字面量列表，见 ledger-types.ts::RunRecord.reason 头注）。
+  "skill-bundle-unwired",
+  "skill-bundle-profile-not-found",
+  "skill-bundle-resolve-failed",
+  "skill-bundle-skill-not-found",
+  "skill-bundle-content-invalid",
+  "skill-bundle-source-ambiguous",
+  "skill-bundle-policy-changed",
+  "skill-bundle-source-unstable",
+  "skill-bundle-snapshot-io",
+  "skill-bundle-snapshot-corrupt"
+];
+var CHARGE_SOURCES = ["provider-structured", "reserved-estimate", "none"];
+var RESOLUTION_SOURCES = ["default", "custom"];
+function validateBinding2(o, errors) {
+  const p = "change-loop-binding";
+  checkStr(o, "change", p, errors);
+  checkStr(o, "loop_id", p, errors);
+  checkEnum2(o, "source", BINDING_SOURCES, p, errors);
+  checkStr(o, "supersedes_record_id", p, errors, true);
+}
+function validateReservation(o, errors) {
+  const p = "budget-reservation";
+  checkStr(o, "reservation_id", p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "iteration_id", p, errors, true);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "change", p, errors);
+  checkStr(o, "budget_day", p, errors);
+  checkLit2(o, "reserved_runs", 1, p, errors);
+  checkNum(o, "reserved_tokens", p, errors);
+  checkEnum2(o, "token_basis", TOKEN_BASES, p, errors);
+  const limits = subObj2(o, "limits_snapshot", p, errors);
+  if (limits !== null) {
+    const lp = `${p}.limits_snapshot`;
+    checkNum(limits, "max_runs_per_day", lp, errors);
+    checkNum(limits, "max_in_flight", lp, errors);
+    checkNum(limits, "max_tokens_per_day", lp, errors, true);
+    checkEnum2(limits, "on_exceed", EXCEED_ACTIONS2, lp, errors);
+  }
+  const context = subObj2(o, "attempt_context", p, errors, true);
+  if (context !== null) {
+    const cp = `${p}.attempt_context`;
+    checkKnownKeys(context, ["source_run_record_ids", "omitted_attempt_ids", "rendered", "stagnation"], cp, errors);
+    checkStrArray(context, "source_run_record_ids", cp, errors);
+    checkStrArray(context, "omitted_attempt_ids", cp, errors);
+    checkStr(context, "rendered", cp, errors);
+    const stagnation = subObj2(context, "stagnation", cp, errors);
+    if (stagnation !== null) {
+      const sp = `${cp}.stagnation`;
+      checkKnownKeys(stagnation, ["stagnant", "fingerprint", "repeated_attempt_ids"], sp, errors);
+      checkBool(stagnation, "stagnant", sp, errors);
+      checkSha2562(stagnation, "fingerprint", sp, errors, true);
+      checkStrArray(stagnation, "repeated_attempt_ids", sp, errors);
+    }
+  }
+  checkStr(o, "expires_at", p, errors);
+}
+function validateSkillBundleSnapshot(o, errors) {
+  const p = "skill-bundle-snapshot";
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "reservation_id", p, errors);
+  checkStr(o, "loop_id", p, errors);
+  checkPattern(o, "skill_bundle_id", SKILL_BUNDLE_ID_RE, p, errors);
+  checkStr(o, "policy_epoch", p, errors);
+  checkEnum2(o, "resolution_source", RESOLUTION_SOURCES, p, errors);
+  checkStr(o, "workflow_run_id", p, errors);
+  checkStr(o, "workflow", p, errors);
+  checkStr(o, "step", p, errors);
+  checkStr(o, "track", p, errors);
+  checkSha2562(o, "coordinate_digest", p, errors);
+  checkSha2562(o, "snapshot_sha256", p, errors);
+  checkStr(o, "cas_relative_path", p, errors);
+  checkSlotArray(o, "slots", p, errors);
+}
+function validateActivated(o, errors) {
+  const p = "reservation-activated";
+  checkStr(o, "reservation_id", p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "iteration_id", p, errors, true);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "change", p, errors);
+  checkStr(o, "started_at", p, errors);
+}
+function validateUsage(o, errors) {
+  const p = "usage";
+  checkStr(o, "usage_id", p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "iteration_id", p, errors, true);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "provider", p, errors);
+  checkStr(o, "model", p, errors, true);
+  checkStr(o, "request_id", p, errors, true);
+  const tokens = subObj2(o, "tokens", p, errors);
+  if (tokens !== null) {
+    const tp = `${p}.tokens`;
+    checkNum(tokens, "input", tp, errors);
+    checkNum(tokens, "output", tp, errors);
+    checkNum(tokens, "cached_input", tp, errors, true);
+    checkNum(tokens, "reasoning", tp, errors, true);
+    checkNum(tokens, "total", tp, errors);
+    const count = (key) => {
+      const value = tokens[key];
+      if (typeof value !== "number")
+        return void 0;
+      if (!Number.isSafeInteger(value) || value < 0) {
+        errors.push(`${tp}.${key}: token count \u5FC5\u987B\u662F\u975E\u8D1F safe integer`);
+        return void 0;
+      }
+      return value;
+    };
+    const input = count("input");
+    const output = count("output");
+    const cached = missing2(tokens, "cached_input") ? void 0 : count("cached_input");
+    const reasoning = missing2(tokens, "reasoning") ? void 0 : count("reasoning");
+    const total = count("total");
+    if (input !== void 0 && cached !== void 0 && cached > input) {
+      errors.push(`${tp}.cached_input: \u4E0D\u5F97\u5927\u4E8E input`);
+    }
+    if (output !== void 0 && reasoning !== void 0 && reasoning > output) {
+      errors.push(`${tp}.reasoning: \u4E0D\u5F97\u5927\u4E8E output`);
+    }
+    if (input !== void 0 && output !== void 0 && total !== void 0 && (!Number.isSafeInteger(input + output) || total !== input + output)) {
+      errors.push(`${tp}.total: \u5FC5\u987B\u7B49\u4E8E input + output`);
+    }
+  }
+  checkLit2(o, "source", "provider-structured", p, errors);
+  checkStr(o, "observed_at", p, errors);
+}
+var RECORD_HEAD_KEYS = ["schema_version", "record_id", "recorded_at", "kind"];
+var VERIFY_KEYS = ["result", "source", "trusted"];
+var ARTIFACT_KEYS = ["build_sha", "build_sha_source", "branch", "commit_shas"];
+var ACCOUNTING_KEYS = ["reserved_tokens", "charged_tokens", "charge_source"];
+var ERROR_KEYS = ["cause", "message"];
+function validateMergeIntent(o, errors) {
+  const p = "merge-intent";
+  checkKnownKeys(o, [
+    ...RECORD_HEAD_KEYS,
+    "attempt_id",
+    "iteration_id",
+    "reservation_id",
+    "loop_id",
+    "change",
+    "workflow_run_id",
+    "base_ref",
+    "expected_base_sha",
+    "branch_ref",
+    "expected_branch_sha",
+    "merged_commit_sha",
+    "level",
+    "runner",
+    "image",
+    "admitted_at",
+    "started_at",
+    "created_at",
+    "verify",
+    "verification",
+    "artifacts",
+    "skill_bundle_snapshot_sha256",
+    "usage_record_ids",
+    "accounting"
+  ], p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "iteration_id", p, errors, true);
+  checkStr(o, "reservation_id", p, errors);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "change", p, errors);
+  checkStr(o, "workflow_run_id", p, errors);
+  checkStr(o, "base_ref", p, errors);
+  checkStr(o, "expected_base_sha", p, errors);
+  checkStr(o, "branch_ref", p, errors);
+  checkStr(o, "expected_branch_sha", p, errors);
+  checkStr(o, "merged_commit_sha", p, errors);
+  checkEnum2(o, "level", LEVELS, p, errors);
+  checkStr(o, "runner", p, errors);
+  checkStr(o, "image", p, errors, true);
+  checkStr(o, "admitted_at", p, errors);
+  checkStr(o, "started_at", p, errors, true);
+  checkStr(o, "created_at", p, errors);
+  const verify = subObj2(o, "verify", p, errors, true);
+  if (verify !== null) {
+    const vp = `${p}.verify`;
+    checkKnownKeys(verify, VERIFY_KEYS, vp, errors);
+    checkEnum2(verify, "result", ["pass", "fail"], vp, errors);
+    checkLit2(verify, "source", "sandbox-output", vp, errors);
+    checkLit2(verify, "trusted", false, vp, errors);
+  }
+  if (!missing2(o, "verification")) {
+    const verified = validateVerificationResult(o.verification, `${p}.verification`);
+    if (!verified.ok)
+      errors.push(...verified.errors);
+    else
+      o.verification = verified.value;
+  }
+  const artifacts = subObj2(o, "artifacts", p, errors, true);
+  if (artifacts !== null) {
+    const ap = `${p}.artifacts`;
+    checkKnownKeys(artifacts, ARTIFACT_KEYS, ap, errors);
+    checkStr(artifacts, "build_sha", ap, errors, true);
+    checkLit2(artifacts, "build_sha_source", "named-branch-head", ap, errors, true);
+    checkStr(artifacts, "branch", ap, errors, true);
+    checkStrArray(artifacts, "commit_shas", ap, errors);
+  }
+  checkSha2562(o, "skill_bundle_snapshot_sha256", p, errors, true);
+  checkStrArray(o, "usage_record_ids", p, errors);
+  const accounting = subObj2(o, "accounting", p, errors);
+  if (accounting !== null) {
+    const ap = `${p}.accounting`;
+    checkKnownKeys(accounting, ACCOUNTING_KEYS, ap, errors);
+    checkNum(accounting, "reserved_tokens", ap, errors);
+    checkNum(accounting, "charged_tokens", ap, errors);
+    checkEnum2(accounting, "charge_source", CHARGE_SOURCES, ap, errors);
+  }
+}
+function validateMergeLanded(o, errors) {
+  const p = "merge-landed";
+  checkKnownKeys(o, [
+    ...RECORD_HEAD_KEYS,
+    "intent_record_id",
+    "attempt_id",
+    "reservation_id",
+    "loop_id",
+    "change",
+    "base_ref",
+    "base_before_sha",
+    "branch_sha",
+    "merged_commit_sha",
+    "host_synced",
+    "host_sync_error",
+    "landed_at"
+  ], p, errors);
+  checkStr(o, "intent_record_id", p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "reservation_id", p, errors);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "change", p, errors);
+  checkStr(o, "base_ref", p, errors);
+  checkStr(o, "base_before_sha", p, errors);
+  checkStr(o, "branch_sha", p, errors);
+  checkStr(o, "merged_commit_sha", p, errors);
+  checkBool(o, "host_synced", p, errors);
+  const syncError = subObj2(o, "host_sync_error", p, errors, true);
+  if (syncError !== null) {
+    const ep = `${p}.host_sync_error`;
+    checkKnownKeys(syncError, ERROR_KEYS, ep, errors);
+    checkStr(syncError, "cause", ep, errors);
+    checkStr(syncError, "message", ep, errors);
+    if (o.host_synced === true)
+      errors.push(`${p}.host_sync_error: host_synced=true \u65F6\u4E0D\u5F97\u5B58\u5728`);
+  }
+  checkStr(o, "landed_at", p, errors);
+}
+function validateRun(o, errors) {
+  const p = "run";
+  checkStr(o, "run_record_id", p, errors);
+  checkStr(o, "attempt_id", p, errors);
+  checkStr(o, "iteration_id", p, errors, true);
+  checkStr(o, "reservation_id", p, errors, true);
+  checkStr(o, "loop_id", p, errors);
+  checkStr(o, "change", p, errors);
+  checkStr(o, "workflow_run_id", p, errors, true);
+  checkEnum2(o, "level", LEVELS, p, errors);
+  checkStr(o, "runner", p, errors);
+  checkStr(o, "image", p, errors, true);
+  checkStr(o, "admitted_at", p, errors);
+  checkStr(o, "started_at", p, errors, true);
+  checkStr(o, "finished_at", p, errors);
+  checkEnum2(o, "result", RUN_RESULTS, p, errors);
+  checkEnum2(o, "reason", RUN_REASONS, p, errors, true);
+  const verify = subObj2(o, "verify", p, errors, true);
+  if (verify !== null) {
+    const vp = `${p}.verify`;
+    checkEnum2(verify, "result", ["pass", "fail"], vp, errors);
+    checkLit2(verify, "source", "sandbox-output", vp, errors);
+    checkLit2(verify, "trusted", false, vp, errors);
+  }
+  if (!missing2(o, "verification")) {
+    const verified = validateVerificationResult(o.verification, `${p}.verification`);
+    if (!verified.ok)
+      errors.push(...verified.errors);
+    else
+      o.verification = verified.value;
+  }
+  const artifacts = subObj2(o, "artifacts", p, errors, true);
+  if (artifacts !== null) {
+    const ap = `${p}.artifacts`;
+    checkStr(artifacts, "build_sha", ap, errors, true);
+    checkLit2(artifacts, "build_sha_source", "named-branch-head", ap, errors, true);
+    checkStr(artifacts, "branch", ap, errors, true);
+    checkStrArray(artifacts, "commit_shas", ap, errors);
+  }
+  checkSha2562(o, "skill_bundle_snapshot_sha256", p, errors, true);
+  checkStrArray(o, "usage_record_ids", p, errors);
+  const accounting = subObj2(o, "accounting", p, errors);
+  if (accounting !== null) {
+    const cp = `${p}.accounting`;
+    checkNum(accounting, "reserved_tokens", cp, errors);
+    checkNum(accounting, "charged_tokens", cp, errors);
+    checkEnum2(accounting, "charge_source", CHARGE_SOURCES, cp, errors);
+  }
+  const error2 = subObj2(o, "error", p, errors, true);
+  if (error2 !== null) {
+    const ep = `${p}.error`;
+    checkStr(error2, "cause", ep, errors);
+    checkStr(error2, "message", ep, errors);
+  }
+}
+var KIND_VALIDATORS = {
+  "change-loop-binding": validateBinding2,
+  "budget-reservation": validateReservation,
+  "skill-bundle-snapshot": validateSkillBundleSnapshot,
+  "reservation-activated": validateActivated,
+  usage: validateUsage,
+  "merge-intent": validateMergeIntent,
+  "merge-landed": validateMergeLanded,
+  run: validateRun
+};
+function decodeLedgerLine(line) {
+  let parsed;
+  try {
+    parsed = JSON.parse(line);
+  } catch (e) {
+    return { ok: false, error: `\u975E\u6CD5 JSON: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!isObj2(parsed)) {
+    return { ok: false, error: `\u9876\u5C42\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u4E00\u884C\u4E00\u6761\u8BB0\u5F55\uFF09\uFF0C\u5B9E\u5F97 ${typeName2(parsed)}` };
+  }
+  const errors = [];
+  checkLit2(parsed, "schema_version", 1, "record", errors);
+  checkStr(parsed, "record_id", "record", errors);
+  checkStr(parsed, "recorded_at", "record", errors);
+  const kind = parsed.kind;
+  const validate = typeof kind === "string" ? KIND_VALIDATORS[kind] : void 0;
+  if (validate === void 0) {
+    errors.push(`record.kind: \u672A\u77E5\u8BB0\u5F55\u7C7B\u578B ${JSON.stringify(kind)}\uFF08\u95ED\u96C6 ${Object.keys(KIND_VALIDATORS).join("|")}\uFF09`);
+    return { ok: false, error: errors.join("; ") };
+  }
+  validate(parsed, errors);
+  if (!isValidatedLedgerRecord(parsed, errors))
+    return { ok: false, error: errors.join("; ") };
+  return { ok: true, record: parsed };
+}
+function isValidatedLedgerRecord(value, errors) {
+  return isObj2(value) && errors.length === 0;
+}
+
+// packages/kernel/dist/loops/enforce.js
+var FAIL_STREAK_WARN = 2;
+var CADENCE_RE = /^(\d+)([mhd])$/;
+var CADENCE_UNIT_MINUTES = { m: 1, h: 60, d: 1440 };
+function cadenceMinutes(cadence) {
+  if (cadence === "continuous")
+    return null;
+  const upper = cadence.split("-").pop() ?? cadence;
+  const m = upper.match(CADENCE_RE);
+  if (!m)
+    return null;
+  return Number(required(m[1])) * required(CADENCE_UNIT_MINUTES[required(m[2])]);
+}
+function budgetWarnThreshold(maxRuns) {
+  return Math.ceil(maxRuns * 4 / 5);
+}
+function enforcementFor(level) {
+  return level === "L1" ? "report-only" : level === "L2" ? "assisted" : "unattended";
+}
+
+// packages/kernel/dist/loops/budget.js
+var TS_FULL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+var TS_SHORT_RE = /^(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+var TOKENS_RE = /tokens=(\d+)/;
+function mkUTC(y, mo, d, hh, mm) {
+  const dt = new Date(Date.UTC(y, mo - 1, d, hh, mm));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d || dt.getUTCHours() !== hh || dt.getUTCMinutes() !== mm)
+    return null;
+  return dt;
+}
+function parseTimestamp(raw, now) {
+  const s = raw.trim();
+  const full = s.match(TS_FULL_RE);
+  if (full)
+    return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]));
+  const short2 = s.match(TS_SHORT_RE);
+  if (short2)
+    return mkUTC(now.getUTCFullYear(), +required(short2[1]), +required(short2[2]), +required(short2[3]), +required(short2[4]));
+  return null;
+}
+function sameUTCDate(a, b) {
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
+}
+function sumRunLogTokens(text3, loopId, now) {
+  if (text3 === null)
+    return { spentToday: 0, runsToday: 0 };
+  let spentToday = 0;
+  let runsToday = 0;
+  for (const rawLine of text3.split("\n")) {
+    const line = rawLine.trim();
+    if (!line.startsWith("|"))
+      continue;
+    const cols = line.replace(/^\|+/, "").replace(/\|+$/, "").split("|").map((c) => c.trim());
+    if (cols.length < 2)
+      continue;
+    if (cols[1] !== loopId)
+      continue;
+    const ts = parseTimestamp(required(cols[0]), now);
+    if (ts === null || !sameUTCDate(ts, now))
+      continue;
+    runsToday++;
+    const tm = line.match(TOKENS_RE);
+    if (tm)
+      spentToday += Number(tm[1]);
+  }
+  return { spentToday, runsToday };
+}
+function computeBudgetStatus(loop, runLogText, now) {
+  const { spentToday, runsToday } = sumRunLogTokens(runLogText, loop.id, now);
+  const budget = loop.budget;
+  const max = budget.max_tokens_per_day ?? null;
+  const reportOnly = loop.autonomy_level === "L1";
+  if (max === null) {
+    return {
+      id: loop.id,
+      hasBudget: false,
+      maxTokensPerDay: null,
+      warnThreshold: null,
+      spentToday,
+      remaining: null,
+      usedRatio: null,
+      runsToday,
+      breaker: "ok",
+      onExceed: budget.on_exceed,
+      autonomyLevel: loop.autonomy_level,
+      reportOnly,
+      reason: `\u672A\u58F0\u660E max_tokens_per_day \u2014\u2014 \u65E0 token \u9884\u7B97/\u7194\u65AD\uFF08\u4EC5\u8FFD\u8E2A\u4ECA\u65E5\u82B1\u8D39 ${spentToday}\uFF09`
+    };
+  }
+  const warnThreshold = budgetWarnThreshold(max);
+  let breaker;
+  let reason;
+  if (spentToday >= max) {
+    breaker = "tripped";
+    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} \u2265 \u9884\u7B97 ${max}\uFF08circuit breaker \u7194\u65AD\u89E6\u53D1\uFF09`;
+  } else if (spentToday >= warnThreshold) {
+    breaker = "warn";
+    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} \u2265 \u51CF\u901F\u7EBF ${warnThreshold}\uFF0880% of ${max}\uFF09`;
+  } else {
+    breaker = "ok";
+    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} < \u51CF\u901F\u7EBF ${warnThreshold}\uFF08\u9884\u7B97 ${max}\uFF09`;
+  }
+  return {
+    id: loop.id,
+    hasBudget: true,
+    maxTokensPerDay: max,
+    warnThreshold,
+    spentToday,
+    remaining: Math.max(0, max - spentToday),
+    usedRatio: spentToday / max,
+    runsToday,
+    breaker,
+    onExceed: budget.on_exceed,
+    autonomyLevel: loop.autonomy_level,
+    reportOnly,
+    reason
+  };
+}
+
+// packages/kernel/dist/loops/binding.js
+function budgetDayOf(iso) {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+// packages/kernel/dist/loops/ledger-projection.js
+function indexReservationTerminals(records) {
+  const reservationById = /* @__PURE__ */ new Map();
+  const terminalByReservationId = /* @__PURE__ */ new Map();
+  const duplicateReservations = [];
+  const duplicateTerminals = [];
+  const activatedReservationIds = /* @__PURE__ */ new Set();
+  const invalidActivations = [];
+  const invalidTerminals = [];
+  for (const r of records) {
+    if (r.kind === "budget-reservation") {
+      const first = reservationById.get(r.reservation_id);
+      if (first === void 0)
+        reservationById.set(r.reservation_id, r);
+      else
+        duplicateReservations.push({
+          reservationId: r.reservation_id,
+          firstRecordId: first.record_id,
+          duplicateRecordId: r.record_id
+        });
+    } else if (r.kind === "reservation-activated") {
+      const reservation = reservationById.get(r.reservation_id);
+      const reason = reservation === void 0 ? "orphan" : reservation.attempt_id !== r.attempt_id ? "attempt-mismatch" : reservation.iteration_id !== void 0 && r.iteration_id !== reservation.iteration_id ? "iteration-mismatch" : reservation.loop_id !== r.loop_id ? "loop-mismatch" : reservation.change !== r.change ? "change-mismatch" : activatedReservationIds.has(r.reservation_id) ? "duplicate" : null;
+      if (reason === null)
+        activatedReservationIds.add(r.reservation_id);
+      else
+        invalidActivations.push({ reservationId: r.reservation_id, recordId: r.record_id, reason });
+    } else if (r.kind === "run" && r.reservation_id !== void 0) {
+      const reservation = reservationById.get(r.reservation_id);
+      const reason = reservation === void 0 ? "orphan" : reservation.attempt_id !== r.attempt_id ? "attempt-mismatch" : reservation.iteration_id !== void 0 && r.iteration_id !== reservation.iteration_id ? "iteration-mismatch" : reservation.loop_id !== r.loop_id ? "loop-mismatch" : reservation.change !== r.change ? "change-mismatch" : null;
+      if (reason !== null) {
+        invalidTerminals.push({ reservationId: r.reservation_id, recordId: r.run_record_id, reason });
+        continue;
+      }
+      const first = terminalByReservationId.get(r.reservation_id);
+      if (first === void 0)
+        terminalByReservationId.set(r.reservation_id, r);
+      else
+        duplicateTerminals.push({ reservationId: r.reservation_id, firstRecordId: first.run_record_id, duplicateRecordId: r.run_record_id });
+    }
+  }
+  return {
+    reservationById,
+    terminalByReservationId,
+    duplicateReservations,
+    duplicateTerminals,
+    activatedReservationIds,
+    invalidActivations,
+    invalidTerminals
+  };
+}
+function indexSkillBundleSnapshots(records) {
+  const out = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    if (r.kind === "skill-bundle-snapshot" && !out.has(r.reservation_id))
+      out.set(r.reservation_id, r);
+  }
+  return out;
+}
+function countsAsRun(reservation, terminal, activated) {
+  void reservation;
+  if (terminal === void 0)
+    return true;
+  if (activated)
+    return true;
+  if (terminal.reason === "claim-lost")
+    return false;
+  if (terminal.reason === "reservation-expired")
+    return false;
+  return terminal.accounting.charge_source !== "none";
+}
+function projectLoopLedger(records, rejectedCount, loopId, budgetDay) {
+  const index = indexReservationTerminals(records);
+  const { reservationById, terminalByReservationId, activatedReservationIds } = index;
+  const openReservations = [];
+  let inFlight = 0;
+  let activatedInFlight = 0;
+  let reservedTokensOutstanding = 0;
+  for (const r of records) {
+    if (r.kind !== "budget-reservation" || r.loop_id !== loopId)
+      continue;
+    if (reservationById.get(r.reservation_id) !== r)
+      continue;
+    const isOpen = !terminalByReservationId.has(r.reservation_id);
+    if (isOpen) {
+      inFlight++;
+      openReservations.push(r);
+      if (activatedReservationIds.has(r.reservation_id))
+        activatedInFlight++;
+      if (r.budget_day === budgetDay)
+        reservedTokensOutstanding += r.reserved_tokens;
+    }
+  }
+  let runsToday = 0;
+  for (const [rid, reservation] of reservationById) {
+    if (reservation.loop_id !== loopId || reservation.budget_day !== budgetDay)
+      continue;
+    if (countsAsRun(reservation, terminalByReservationId.get(rid), activatedReservationIds.has(rid)))
+      runsToday++;
+  }
+  let settledTokensActual = 0;
+  let settledTokensEstimated = 0;
+  let lastResult;
+  let lastFinishedAt;
+  for (const r of records) {
+    if (r.kind !== "run" || r.loop_id !== loopId)
+      continue;
+    if (r.reservation_id !== void 0 && terminalByReservationId.get(r.reservation_id) !== r)
+      continue;
+    lastResult = r.result;
+    lastFinishedAt = r.finished_at;
+    const day = r.reservation_id !== void 0 ? reservationById.get(r.reservation_id)?.budget_day ?? budgetDayOf(r.finished_at) : budgetDayOf(r.finished_at);
+    if (day !== budgetDay)
+      continue;
+    if (r.accounting.charge_source === "provider-structured")
+      settledTokensActual += r.accounting.charged_tokens;
+    else if (r.accounting.charge_source === "reserved-estimate")
+      settledTokensEstimated += r.accounting.charged_tokens;
+  }
+  const duplicateReservations = index.duplicateReservations.length;
+  const duplicateTerminals = index.duplicateTerminals.length;
+  const invalidActivations = index.invalidActivations.length;
+  const invalidTerminals = index.invalidTerminals.length;
+  return {
+    loopId,
+    budgetDay,
+    runsToday,
+    inFlight,
+    activatedInFlight,
+    reservedTokensOutstanding,
+    settledTokensActual,
+    settledTokensEstimated,
+    lastResult,
+    lastFinishedAt,
+    openReservations,
+    rejectedRecords: rejectedCount,
+    duplicateReservations,
+    duplicateTerminals,
+    invalidActivations,
+    invalidTerminals,
+    health: rejectedCount > 0 || duplicateReservations > 0 || duplicateTerminals > 0 || invalidActivations > 0 || invalidTerminals > 0 ? "degraded" : "ok"
+  };
+}
+function remainingTokens(projection, maxTokensPerDay) {
+  if (maxTokensPerDay === void 0)
+    return null;
+  const used = projection.settledTokensActual + projection.settledTokensEstimated + projection.reservedTokensOutstanding;
+  return Math.max(0, maxTokensPerDay - used);
+}
+
+// packages/kernel/dist/loops/ledger-store.js
+var LEDGER_DIR = [".pipeline", "loops"];
+var LEDGER_FILE = "ledger.jsonl";
+function ledgerDirPath(repoRoot) {
+  return join15(repoRoot, ...LEDGER_DIR);
+}
+function ledgerFilePath(repoRoot) {
+  return join15(ledgerDirPath(repoRoot), LEDGER_FILE);
+}
+var LedgerDegradedError = class extends Error {
+  _tag = "LedgerDegradedError";
+  constructor(message) {
+    super(message);
+    this.name = "LedgerDegradedError";
+  }
+};
+var UnknownReservationError = class extends Error {
+  _tag = "UnknownReservationError";
+  constructor(message) {
+    super(message);
+    this.name = "UnknownReservationError";
+  }
+};
+var ReservationCorruptionError = class extends Error {
+  _tag = "ReservationCorruptionError";
+  constructor(message) {
+    super(message);
+    this.name = "ReservationCorruptionError";
+  }
+};
+var ReservationMismatchError = class extends Error {
+  _tag = "ReservationMismatchError";
+  constructor(message) {
+    super(message);
+    this.name = "ReservationMismatchError";
+  }
+};
+var ReservationAppendError = class extends Error {
+  _tag = "ReservationAppendError";
+  constructor(message) {
+    super(message);
+    this.name = "ReservationAppendError";
+  }
+};
+var heldLedgerDirs = new AsyncLocalStorage2();
+function shortHash(raw) {
+  return createHash8("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+}
+function createLoopLedgerStore() {
+  function withLedgerLock(repoRoot, fn) {
+    const key = resolve4(ledgerDirPath(repoRoot));
+    const currentToken = heldLedgerDirs.getStore()?.get(key);
+    if (currentToken?.active === true) {
+      const p = fn();
+      currentToken.pending.add(p);
+      void p.catch(() => {
+      });
+      return p;
+    }
+    return acquireAndRun(key, fn);
+  }
+  async function acquireAndRun(key, fn) {
+    const held = heldLedgerDirs.getStore();
+    await mkdir6(key, { recursive: true });
+    return withLock(key, async () => {
+      const token = { active: true, pending: /* @__PURE__ */ new Set() };
+      const next = /* @__PURE__ */ new Map();
+      for (const [k, t] of held ?? [])
+        if (t.active)
+          next.set(k, t);
+      next.set(key, token);
+      try {
+        return await heldLedgerDirs.run(next, fn);
+      } finally {
+        while (token.pending.size > 0) {
+          const batch = [...token.pending];
+          token.pending.clear();
+          await Promise.allSettled(batch);
+        }
+        token.active = false;
+      }
+    });
+  }
+  async function writeRecordLine(repoRoot, record4) {
+    const line = encodeLedgerRecord(record4);
+    const back = decodeLedgerLine(line);
+    if (!back.ok) {
+      throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
+    }
+    const fh = await open3(ledgerFilePath(repoRoot), "a");
+    try {
+      const buf = Buffer.from(`${line}
+`, "utf8");
+      const { bytesWritten } = await fh.write(buf, 0, buf.length);
+      if (bytesWritten !== buf.length) {
+        throw new Error(`loops ledger append: \u77ED\u5199 ${bytesWritten}/${buf.length} \u5B57\u8282\uFF08\u78C1\u76D8\u6EE1/IO \u6545\u969C\uFF09`);
+      }
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  }
+  async function append2(repoRoot, record4) {
+    if (record4.kind === "run" && record4.reservation_id !== void 0) {
+      throw new ReservationAppendError("RunRecord with reservation_id must use closeReservationIfOpen()\uFF08\u5E26 reservation_id \u7684 terminal \u8BB0\u5F55\u7981\u8D70\u666E\u901A append\uFF09");
+    }
+    const back = decodeLedgerLine(encodeLedgerRecord(record4));
+    if (!back.ok) {
+      throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
+    }
+    await withLedgerLock(repoRoot, () => writeRecordLine(repoRoot, record4));
+  }
+  async function closeReservationIfOpen(repoRoot, reservationId, create) {
+    return withLedgerLock(repoRoot, async () => {
+      const { records, rejected } = await read(repoRoot);
+      if (rejected.length > 0) {
+        throw new LedgerDegradedError(`loops ledger closeReservationIfOpen: \u8D26\u672C\u6709 ${rejected.length} \u6761\u574F\u884C\uFF0C\u62D2\u7EDD\u5728\u635F\u574F\u8D26\u672C\u4E0A\u5173\u95ED reservation\u300C${reservationId}\u300D\uFF08\u4E0D\u731C\u662F\u5426\u5DF2\u5173\u95ED\uFF09`);
+      }
+      const reservations = records.filter((r) => r.kind === "budget-reservation" && r.reservation_id === reservationId);
+      if (reservations.length === 0) {
+        throw new UnknownReservationError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u5728\u8D26\u672C\u4E2D\u4E0D\u5B58\u5728`);
+      }
+      if (reservations.length > 1) {
+        throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u6709 ${reservations.length} \u6761\u540C ID \u9884\u5360\u8BB0\u5F55\uFF08\u8D26\u672C\u635F\u574F\uFF09`);
+      }
+      const reservation = required(reservations[0]);
+      const terminals = records.filter((r) => r.kind === "run" && r.reservation_id === reservationId);
+      if (terminals.length === 1) {
+        return { status: "already-closed", existing: terminals[0] };
+      }
+      if (terminals.length > 1) {
+        throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u6709 ${terminals.length} \u6761 terminal\uFF08\u8D26\u672C\u635F\u574F\uFF0C\u91CD\u590D\u7ED3\u7B97\u75D5\u8FF9\uFF09`);
+      }
+      const record4 = create(reservation);
+      if (record4.kind !== "run" || record4.reservation_id !== reservationId || record4.attempt_id !== reservation.attempt_id || record4.loop_id !== reservation.loop_id || record4.change !== reservation.change || reservation.iteration_id !== void 0 && record4.iteration_id !== reservation.iteration_id) {
+        throw new ReservationMismatchError(`loops ledger closeReservationIfOpen: create \u4EA7\u51FA\u7684 RunRecord \u4E0E reservation\u300C${reservationId}\u300D\u5173\u952E\u5B57\u6BB5\u4E0D\u4E00\u81F4\uFF08reservation_id/attempt_id/iteration_id/loop_id/change\uFF09`);
+      }
+      await writeRecordLine(repoRoot, record4);
+      return { status: "committed", record: record4 };
+    });
+  }
+  async function read(repoRoot) {
+    let text3;
+    try {
+      text3 = await readFile6(ledgerFilePath(repoRoot), "utf8");
+    } catch (e) {
+      if (e.code === "ENOENT")
+        return { records: [], rejected: [] };
+      throw e;
+    }
+    const records = [];
+    const rejected = [];
+    const lines = text3.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const raw = required(lines[i]);
+      if (raw.trim() === "") {
+        if (raw === "" && i === lines.length - 1)
+          continue;
+        rejected.push({
+          line: i + 1,
+          raw_hash: shortHash(raw),
+          error: "\u7A7A\u767D\u884C\uFF08blank/whitespace line\uFF09\uFF1AJSONL \u8BB0\u5F55\u4E4B\u95F4\u4E0D\u5141\u8BB8\u7A7A\u884C\uFF0C\u89C6\u4E3A\u6587\u4EF6\u635F\u574F\u75D5\u8FF9"
+        });
+        continue;
+      }
+      const r = decodeLedgerLine(raw);
+      if (r.ok)
+        records.push(r.record);
+      else
+        rejected.push({ line: i + 1, raw_hash: shortHash(raw), error: r.error });
+    }
+    return { records, rejected };
+  }
+  async function readRunWindow(repoRoot, opts) {
+    const { records, rejected } = await read(repoRoot);
+    const inScope = (loopId) => opts.loopId === void 0 || loopId === opts.loopId;
+    const closedReservationIds = /* @__PURE__ */ new Set();
+    for (const rec of records) {
+      if (rec.kind === "run" && rec.reservation_id !== void 0)
+        closedReservationIds.add(rec.reservation_id);
+    }
+    const fileIndex = /* @__PURE__ */ new Map();
+    const runsByLoop = /* @__PURE__ */ new Map();
+    records.forEach((rec, idx) => {
+      if (rec.kind !== "run" || !inScope(rec.loop_id))
+        return;
+      fileIndex.set(rec, idx);
+      const bucket = runsByLoop.get(rec.loop_id);
+      if (bucket === void 0)
+        runsByLoop.set(rec.loop_id, [rec]);
+      else
+        bucket.push(rec);
+    });
+    const runs = [...runsByLoop.values()].flatMap((bucket) => opts.limit > 0 ? bucket.slice(-opts.limit) : []).sort((a, b) => required(fileIndex.get(a)) - required(fileIndex.get(b)));
+    const openReservations = records.filter((rec) => rec.kind === "budget-reservation" && inScope(rec.loop_id) && !closedReservationIds.has(rec.reservation_id));
+    const openIds = new Set(openReservations.map((r) => r.reservation_id));
+    const activated = records.filter((rec) => rec.kind === "reservation-activated" && openIds.has(rec.reservation_id));
+    const snapshotByReservation = indexSkillBundleSnapshots(records);
+    const skillBundleSnapshots = openReservations.map((r) => snapshotByReservation.get(r.reservation_id)).filter((s) => s !== void 0);
+    return { runs, openReservations, activated, skillBundleSnapshots, rejected };
+  }
+  return { append: append2, closeReservationIfOpen, withLedgerLock, read, readRunWindow };
+}
+
 // packages/kernel/dist/state/store.js
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 import path4 from "node:path";
 
 // packages/kernel/dist/state/parse.js
@@ -5178,7 +7200,7 @@ var KNOWN_FIELDS = new Set(FIELD_ORDER);
 var LIST_FIELD_SET2 = new Set(LIST_FIELDS);
 var REVIEW_GATE_FIELD_SET = new Set(REVIEW_GATE_FIELDS);
 var LIST_ITEM_PREFIX = "  - ";
-var KEY_RE = /^([A-Za-z0-9_]+):(.*)$/;
+var KEY_RE2 = /^([A-Za-z0-9_]+):(.*)$/;
 function unquoteScalar(s) {
   if (s.length >= 2) {
     const first = s.charAt(0);
@@ -5216,7 +7238,7 @@ function parsePipeline(content) {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    const m = KEY_RE.exec(line);
+    const m = KEY_RE2.exec(line);
     if (!m)
       break;
     const key = m[1] ?? "";
@@ -5307,7 +7329,7 @@ function priorLogicalProjectionContent(revision) {
 }
 
 // packages/kernel/dist/state/state-init.js
-import { readFile as readFile6, stat as stat2 } from "node:fs/promises";
+import { readFile as readFile7, stat as stat2 } from "node:fs/promises";
 import path2 from "node:path";
 
 // packages/kernel/dist/workflow/builtin-workflows.js
@@ -5576,7 +7598,7 @@ var STEP_KEYS = /* @__PURE__ */ new Set([
 ]);
 var SKILL_KEYS = /* @__PURE__ */ new Set(["id", "depends_on"]);
 var FIELD_REF_KEYS = /* @__PURE__ */ new Set(["field", "type"]);
-var ARTIFACT_KEYS = /* @__PURE__ */ new Set(["field", "type", "kind", "producerPolicy", "requiredWhen"]);
+var ARTIFACT_KEYS2 = /* @__PURE__ */ new Set(["field", "type", "kind", "producerPolicy", "requiredWhen"]);
 var TRANSITION_KEYS2 = /* @__PURE__ */ new Set(["event", "to", "guards", "actions"]);
 var ACTION_KEYS = /* @__PURE__ */ new Set(["type"]);
 var DOCUMENT_CONTRACT_KEYS = /* @__PURE__ */ new Set(["version", "slots", "reads"]);
@@ -5655,7 +7677,7 @@ function compileSkillRef(raw, path7) {
 }
 function compileArtifact(raw, path7, outputs2, allowedPolicies) {
   const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, ARTIFACT_KEYS, path7);
+  rejectExtraKeys2(rec, ARTIFACT_KEYS2, path7);
   if (rec.type !== void 0 && rec.type !== "file_path") {
     compileError2(`${path7}.type`, `\u5FC5\u987B\u662F 'file_path'\uFF08\u5B9E\u9645 ${JSON.stringify(rec.type)}\uFF09`);
   }
@@ -5801,10 +7823,10 @@ function compileDocumentContract(value) {
   });
   return { version: "v1", slots, reads };
 }
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (value !== null && typeof value === "object") {
     for (const key of Object.keys(value)) {
-      deepFreeze3(value[key]);
+      deepFreeze4(value[key]);
     }
     Object.freeze(value);
   }
@@ -5823,7 +7845,7 @@ function compileWith(def, allowedPolicies) {
     compileError2("documentContract", "\u4E0D\u5F97\u4E0E openspecContract \u540C\u65F6\u58F0\u660E");
   }
   const steps = asArray2(rec.steps, "steps").map((s, i) => compileStep(s, i, allowedPolicies));
-  return deepFreeze3({
+  return deepFreeze4({
     name,
     ...openspecContract === void 0 ? {} : { openspecContract },
     ...documentContract === void 0 ? {} : { documentContract },
@@ -5959,8 +7981,8 @@ function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
 }
 
 // packages/kernel/dist/workflow/loadWorkflow.js
-import { existsSync as existsSync2, readFileSync as readFileSync3 } from "node:fs";
-import { join as join14 } from "node:path";
+import { existsSync as existsSync2, readFileSync as readFileSync4 } from "node:fs";
+import { join as join16 } from "node:path";
 
 // packages/kernel/dist/workflow/parse-document-contract.js
 function indentOf(line) {
@@ -6742,10 +8764,10 @@ ${errors2.map((e) => `  - ${e}`).join("\n")}`);
     }
     return builtin;
   }
-  const p = join14(repoRoot, ".pipeline", "workflows", `${name}.yaml`);
+  const p = join16(repoRoot, ".pipeline", "workflows", `${name}.yaml`);
   if (!existsSync2(p))
     return null;
-  const wf = parseWorkflow(readFileSync3(p, "utf8"));
+  const wf = parseWorkflow(readFileSync4(p, "utf8"));
   const errors = validateWorkflow(wf);
   if (errors.length > 0) {
     throw new Error(`ERROR: workflow '${name}' \u6821\u9A8C\u5931\u8D25\uFF08${p}\uFF09\uFF1A
@@ -6995,14 +9017,14 @@ async function detectBaseBranch(repoRoot) {
     let gitDir = gitPath;
     const entry = await stat2(gitPath);
     if (!entry.isDirectory()) {
-      const pointer = await readFile6(gitPath, "utf8");
+      const pointer = await readFile7(gitPath, "utf8");
       const match = /^gitdir:\s*(.+)$/m.exec(pointer);
       const target = match?.[1]?.trim();
       if (!target)
         return "main";
       gitDir = path2.resolve(repoRoot, target);
     }
-    const head = await readFile6(path2.join(gitDir, "HEAD"), "utf8");
+    const head = await readFile7(path2.join(gitDir, "HEAD"), "utf8");
     const branch = /^ref: refs\/heads\/(\S+)$/.exec(head.trim())?.[1];
     if (branch)
       return branch;
@@ -7103,8 +9125,8 @@ function initialFields(opts, timestamp2, baseBranch, createdBy) {
 }
 
 // packages/kernel/dist/state/document-locale.js
-import { lstat as lstat7, readFile as readFile7 } from "node:fs/promises";
-import { join as join15 } from "node:path";
+import { lstat as lstat7, readFile as readFile8 } from "node:fs/promises";
+import { join as join17 } from "node:path";
 var DOCUMENT_LOCALE_FILE = ".pipeline-document-locale.json";
 function errorCode2(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
@@ -7129,13 +9151,13 @@ function parseDocumentLocalePin(raw) {
   return { version: 1, locale: record4.locale };
 }
 async function readDocumentLocalePin(changeDir) {
-  const target = join15(changeDir, DOCUMENT_LOCALE_FILE);
+  const target = join17(changeDir, DOCUMENT_LOCALE_FILE);
   try {
     const info = await lstat7(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`document locale pin \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseDocumentLocalePin(await readFile7(target, "utf8"));
+    return parseDocumentLocalePin(await readFile8(target, "utf8"));
   } catch (error2) {
     if (errorCode2(error2) === "ENOENT")
       return void 0;
@@ -7151,7 +9173,7 @@ async function ensureDocumentLocalePin(changeDir, locale) {
     return existing;
   }
   const pin = { version: 1, locale };
-  const target = join15(changeDir, DOCUMENT_LOCALE_FILE);
+  const target = join17(changeDir, DOCUMENT_LOCALE_FILE);
   try {
     await atomicLinkPublish(changeDir, ".pipeline-document-locale.tmp", target, `${JSON.stringify(pin)}
 `);
@@ -7170,8 +9192,8 @@ async function ensureDocumentLocalePin(changeDir, locale) {
 }
 
 // packages/kernel/dist/state/workflow-plan-snapshot.js
-import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { join as join16 } from "node:path";
+import { lstat as lstat8, readFile as readFile9 } from "node:fs/promises";
+import { join as join18 } from "node:path";
 var WORKFLOW_PLAN_SNAPSHOT_FILE = ".pipeline-workflow-plan.json";
 function errorCode3(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
@@ -7225,13 +9247,13 @@ function workflowPlanSnapshotContent(runId, snapshot) {
 `;
 }
 async function readWorkflowPlanSnapshot(changeDir) {
-  const target = join16(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
+  const target = join18(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
     const info = await lstat8(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow plan snapshot \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseWorkflowPlanSnapshot(await readFile8(target, "utf8"));
+    return parseWorkflowPlanSnapshot(await readFile9(target, "utf8"));
   } catch (error2) {
     if (errorCode3(error2) === "ENOENT")
       return void 0;
@@ -7248,7 +9270,7 @@ async function ensureWorkflowPlanSnapshot(changeDir, runId, snapshot) {
     }
     return;
   }
-  const target = join16(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
+  const target = join18(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
     await atomicLinkPublish(changeDir, ".pipeline-workflow-plan.tmp", target, requested);
   } catch (error2) {
@@ -7275,12 +9297,12 @@ function attachWorkflowPlanSnapshot(metadata, envelope) {
 
 // packages/kernel/dist/state/initial-change-publish.js
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { link as link2, lstat as lstat10, mkdir as mkdir7, readdir, rm as rm2, rmdir, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
+import { link as link2, lstat as lstat10, mkdir as mkdir8, readdir, rm as rm2, rmdir, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
 import path3 from "node:path";
 
 // packages/kernel/dist/state/trusted-project-path.js
-import { lstat as lstat9, mkdir as mkdir6, realpath as realpath4 } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolve4, sep as sep5 } from "node:path";
+import { lstat as lstat9, mkdir as mkdir7, realpath as realpath4 } from "node:fs/promises";
+import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolve5, sep as sep5 } from "node:path";
 function escaped(root, target) {
   const rel = relative4(root, target);
   return rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute4(rel);
@@ -7292,8 +9314,8 @@ async function ordinaryDirectory(target) {
   }
 }
 async function ensureTrustedProjectDirectory(repoRoot, targetDirectory) {
-  const root = resolve4(repoRoot);
-  const target = resolve4(targetDirectory);
+  const root = resolve5(repoRoot);
+  const target = resolve5(targetDirectory);
   if (escaped(root, target)) {
     throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${targetDirectory}`);
   }
@@ -7301,14 +9323,14 @@ async function ensureTrustedProjectDirectory(repoRoot, targetDirectory) {
   let cursor = root;
   const segments = relative4(root, target).split(sep5).filter(Boolean);
   for (const segment of segments) {
-    cursor = resolve4(cursor, segment);
+    cursor = resolve5(cursor, segment);
     try {
       await ordinaryDirectory(cursor);
     } catch (error2) {
       if (error2.code !== "ENOENT")
         throw error2;
       try {
-        await mkdir6(cursor);
+        await mkdir7(cursor);
       } catch (mkdirError) {
         if (mkdirError.code !== "EEXIST")
           throw mkdirError;
@@ -7370,7 +9392,7 @@ async function publishTreeNoReplace(sourceDir, targetDir, published) {
     const source = path3.join(sourceDir, entry.name);
     const target = path3.join(targetDir, entry.name);
     if (entry.isDirectory()) {
-      await mkdir7(target);
+      await mkdir8(target);
       await rememberPublishedEntry(target, "directory", published);
       await publishTreeNoReplace(source, target, published);
       await rmdir(source);
@@ -7408,7 +9430,7 @@ async function acquireInitialNameLock(changesDir, name) {
   const deadline = Date.now() + INITIAL_LOCK_WAIT_MS;
   while (true) {
     try {
-      await mkdir7(lockDir);
+      await mkdir8(lockDir);
       return lockDir;
     } catch (error2) {
       if (errorCode4(error2) !== "EEXIST")
@@ -7450,7 +9472,7 @@ async function prepareInitialChangePublication(inputRoot, name) {
   try {
     await assertMissing(finalChangeDir);
     const candidateChangeDir = path3.join(changesDir, `.pipeline-init-${name}-${process.pid}-${randomUUID4()}`);
-    await mkdir7(candidateChangeDir);
+    await mkdir8(candidateChangeDir);
     return { repoRoot, changesDir, finalChangeDir, candidateChangeDir, lockDir };
   } catch (error2) {
     await rmdir(lockDir).catch(() => {
@@ -7466,7 +9488,7 @@ async function writeInitialChangeFiles(changeDir, files) {
       throw new Error(`init: initial file \u8DEF\u5F84\u975E\u6CD5\u6216\u91CD\u590D: ${file.relativePath}`);
     }
     observed.add(target);
-    await mkdir7(path3.dirname(target), { recursive: true });
+    await mkdir8(path3.dirname(target), { recursive: true });
     await writeFile3(target, file.content, { encoding: "utf8", flag: "wx" });
   }
 }
@@ -7475,7 +9497,7 @@ async function publishInitialChange(publication) {
   await ensureTrustedProjectDirectory(repoRoot, changesDir);
   const published = [];
   try {
-    await mkdir7(finalChangeDir);
+    await mkdir8(finalChangeDir);
     await rememberPublishedEntry(finalChangeDir, "directory", published);
     await publishTreeNoReplace(candidateChangeDir, finalChangeDir, published);
     await rmdir(candidateChangeDir);
@@ -7553,7 +9575,7 @@ async function inspectProjectionAgainst(changeDir, current) {
   const identity = { revision: current.revision, revisionId: current.revisionId };
   let raw;
   try {
-    raw = await readFile9(stateFilePath(changeDir), "utf8");
+    raw = await readFile10(stateFilePath(changeDir), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT")
       return { status: "missing", ...identity };
@@ -7614,7 +9636,7 @@ var FsStateStore = class {
         ...metadata === void 0 ? {} : { runMetadata: metadata }
       };
     }
-    return parsePipeline(await readFile9(stateFilePath(changeDir), "utf8"));
+    return parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
   }
   async write(changeDir, state, mutation = { kind: "replace" }) {
     return withLock(changeDir, () => this.writeUnderLock(changeDir, state, mutation));
@@ -7630,7 +9652,7 @@ var FsStateStore = class {
     serializePipeline(nextState);
     let current = await readCurrentRunRevision(changeDir);
     if (current === void 0) {
-      const legacy = parsePipeline(await readFile9(stateFilePath(changeDir), "utf8"));
+      const legacy = parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
       current = await publishInitialRunRevision(changeDir, legacy, defaultStateClock(), "migration");
     } else {
       const status2 = await inspectProjectionAgainst(changeDir, current);
@@ -7721,7 +9743,7 @@ var FsStateStore = class {
       if (current === void 0) {
         throw new StateProjectionDriftError("import-legacy: canonical current \u4E0D\u5B58\u5728\uFF1B\u65E0\u9700\u89E3\u51B3\u53CC\u4E3B drift");
       }
-      const legacy = parsePipeline(await readFile9(stateFilePath(changeDir), "utf8"));
+      const legacy = parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
       const imported = {
         fields: legacy.fields,
         ...current.state.runMetadata === void 0 ? {} : { runMetadata: structuredClone(current.state.runMetadata) },
@@ -8439,11 +10461,11 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
 }
 
 // packages/kernel/dist/state/spec-migration-evidence.js
-import { createHash as createHash8 } from "node:crypto";
-import { lstat as lstat11, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
-import { isAbsolute as isAbsolute5, relative as relative5, resolve as resolve5, sep as sep6 } from "node:path";
+import { createHash as createHash9 } from "node:crypto";
+import { lstat as lstat11, readFile as readFile11, realpath as realpath5 } from "node:fs/promises";
+import { isAbsolute as isAbsolute5, relative as relative5, resolve as resolve6, sep as sep6 } from "node:path";
 function digest3(content) {
-  return createHash8("sha256").update(content).digest("hex");
+  return createHash9("sha256").update(content).digest("hex");
 }
 function escaped2(root, target) {
   const rel = relative5(root, target);
@@ -8456,14 +10478,14 @@ function errorCode5(error2) {
   return typeof code === "string" ? code : void 0;
 }
 async function trustedOrdinaryFile(repoRoot, candidate, optional = false) {
-  const root = resolve5(repoRoot);
-  const target = resolve5(candidate);
+  const root = resolve6(repoRoot);
+  const target = resolve6(candidate);
   if (escaped2(root, target))
     throw new Error("\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839");
   let cursor = root;
   const segments = relative5(root, target).split(sep6).filter(Boolean);
   for (const [index, segment] of segments.entries()) {
-    cursor = resolve5(cursor, segment);
+    cursor = resolve6(cursor, segment);
     let info;
     try {
       info = await lstat11(cursor);
@@ -8484,7 +10506,7 @@ async function trustedOrdinaryFile(repoRoot, candidate, optional = false) {
   const [rootReal, targetReal] = await Promise.all([realpath5(root), realpath5(target)]);
   if (escaped2(rootReal, targetReal))
     throw new Error("\u8FC1\u79FB\u8BC1\u636E\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839");
-  return readFile10(target);
+  return readFile11(target);
 }
 function record3(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -8508,13 +10530,13 @@ function parseJson(raw, label) {
 }
 async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
   try {
-    const root = resolve5(repoRoot);
-    const expectedChangeDir = resolve5(root, "openspec", "changes", changeName);
-    if (resolve5(changeDir) !== expectedChangeDir || escaped2(root, expectedChangeDir)) {
+    const root = resolve6(repoRoot);
+    const expectedChangeDir = resolve6(root, "openspec", "changes", changeName);
+    if (resolve6(changeDir) !== expectedChangeDir || escaped2(root, expectedChangeDir)) {
       return { kind: "invalid", reason: "change-directory-mismatch" };
     }
-    const migrationDir = resolve5(expectedChangeDir, "migration");
-    const receiptPath = resolve5(migrationDir, "spec-application.json");
+    const migrationDir = resolve6(expectedChangeDir, "migration");
+    const receiptPath = resolve6(migrationDir, "spec-application.json");
     const receiptRaw = await trustedOrdinaryFile(root, receiptPath, true);
     if (!receiptRaw)
       return { kind: "not-required" };
@@ -8533,18 +10555,18 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
     }
     const expectedDigest = text2(receipt.expectedAfterDigest, "receipt.expectedAfterDigest");
     const deltaDigest = text2(receipt.deltaDigest, "receipt.deltaDigest");
-    const deltaRaw = await trustedOrdinaryFile(root, resolve5(root, expectedDeltaPath));
+    const deltaRaw = await trustedOrdinaryFile(root, resolve6(root, expectedDeltaPath));
     if (!deltaRaw || digest3(deltaRaw) !== deltaDigest) {
       return { kind: "invalid", reason: "delta-digest-mismatch" };
     }
-    const resultRaw = await trustedOrdinaryFile(root, resolve5(migrationDir, "spec-application-result.json"), true);
+    const resultRaw = await trustedOrdinaryFile(root, resolve6(migrationDir, "spec-application-result.json"), true);
     if (!resultRaw)
       return { kind: "invalid", reason: "application-result-missing" };
     const result = parseJson(resultRaw, "migration result");
     if (result.schemaVersion !== 1 || result.kind !== "spec-migration-application" || result.change !== changeName || result.capability !== capability || result.receiptDigest !== digest3(receiptRaw) || result.targetPath !== expectedMainPath || result.effect !== "changed" && result.effect !== "no-op" || result.expectedAfterDigest !== expectedDigest || result.afterDigest !== expectedDigest) {
       return { kind: "invalid", reason: "application-result-mismatch" };
     }
-    const mainRaw = await trustedOrdinaryFile(root, resolve5(root, expectedMainPath));
+    const mainRaw = await trustedOrdinaryFile(root, resolve6(root, expectedMainPath));
     if (!mainRaw || digest3(mainRaw) !== expectedDigest) {
       return { kind: "invalid", reason: "main-spec-digest-mismatch" };
     }
@@ -8559,12 +10581,12 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
 
 // packages/kernel/dist/state/markers.js
 import { writeFile as writeFile4 } from "node:fs/promises";
-import { join as join17 } from "node:path";
+import { join as join19 } from "node:path";
 var BREADCRUMB_FILE = ".breadcrumb";
 function createBreadcrumbWriter() {
   return {
     async write(changeDir, content) {
-      await writeFile4(join17(changeDir, BREADCRUMB_FILE), content, "utf8");
+      await writeFile4(join19(changeDir, BREADCRUMB_FILE), content, "utf8");
     }
   };
 }
@@ -8616,7 +10638,7 @@ async function applyBreadcrumbTail(port, args) {
 import { randomUUID as randomUUID5 } from "node:crypto";
 
 // packages/kernel/dist/workflow/stepGuard.js
-import { readFileSync as readFileSync4 } from "node:fs";
+import { readFileSync as readFileSync5 } from "node:fs";
 import path5 from "node:path";
 
 // packages/kernel/dist/workflow/predicates.js
@@ -8985,9 +11007,9 @@ function evaluateGuard(state, ctx) {
 }
 
 // packages/kernel/dist/workspace/fingerprint.js
-import { createHash as createHash9 } from "node:crypto";
-import { lstat as lstat12, readdir as readdir2, readFile as readFile11, readlink } from "node:fs/promises";
-import { join as join18 } from "node:path";
+import { createHash as createHash10 } from "node:crypto";
+import { lstat as lstat12, readdir as readdir2, readFile as readFile12, readlink } from "node:fs/promises";
+import { join as join20 } from "node:path";
 var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
 var EXCLUDED_TOP_LEVEL = /* @__PURE__ */ new Set([
   ".git",
@@ -9052,7 +11074,7 @@ function writeRecord(hash, kind, relativePath, details = "") {
 async function fingerprintEntry(root, relativePath, hash) {
   if (isExcluded(relativePath))
     return;
-  const absolutePath = join18(root, ...relativePath.split("/"));
+  const absolutePath = join20(root, ...relativePath.split("/"));
   const before = await lstat12(absolutePath);
   if (before.isDirectory()) {
     writeRecord(hash, "D", relativePath, modeOf(before));
@@ -9063,7 +11085,7 @@ async function fingerprintEntry(root, relativePath, hash) {
   }
   if (before.isFile()) {
     writeRecord(hash, "F", relativePath, `${modeOf(before)}:${before.size}`);
-    hash.update(await readFile11(absolutePath));
+    hash.update(await readFile12(absolutePath));
     const after = await lstat12(absolutePath);
     if (!after.isFile() || !sameFileIdentity(before, after)) {
       throw new Error(`workspace baseline capture raced with a file change: ${relativePath}`);
@@ -9080,7 +11102,7 @@ async function fingerprintWorkspace(root) {
   const rootStat = await lstat12(root);
   if (!rootStat.isDirectory())
     throw new Error(`workspace root is not a directory: ${root}`);
-  const hash = createHash9("sha256");
+  const hash = createHash10("sha256");
   writeRecord(hash, "D", ".", modeOf(rootStat));
   const names = sortNames(await readdir2(root));
   for (const name of names)
@@ -9423,7 +11445,7 @@ function fieldStr2(v) {
 }
 function readChangeText(changeDirAbs, rel) {
   try {
-    return readFileSync4(path5.join(changeDirAbs, rel), "utf8");
+    return readFileSync5(path5.join(changeDirAbs, rel), "utf8");
   } catch {
     return void 0;
   }
@@ -9549,13 +11571,6 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
 }
 function applyStepTransition(state, to, clock) {
   return { ...state, fields: { ...state.fields, phase: to, updated_at: clock() } };
-}
-
-// packages/kernel/dist/required.js
-function required(value, message = "required value is missing") {
-  if (value === void 0)
-    throw new Error(message);
-  return value;
 }
 
 // packages/kernel/dist/state/workflow-run-repository.js
@@ -9783,12 +11798,12 @@ function createWorkflowRunRepository(deps) {
 }
 
 // packages/kernel/dist/state/projectRegistry.js
-import { readFileSync as readFileSync5 } from "node:fs";
-import { mkdir as mkdir8, rename as rename3, writeFile as writeFile5 } from "node:fs/promises";
+import { readFileSync as readFileSync6 } from "node:fs";
+import { mkdir as mkdir9, rename as rename3, writeFile as writeFile5 } from "node:fs/promises";
 import { dirname as dirname3, resolve as resolvePath } from "node:path";
 function readProjectRegistry(registryPath) {
   try {
-    const data = JSON.parse(readFileSync5(registryPath, "utf8"));
+    const data = JSON.parse(readFileSync6(registryPath, "utf8"));
     return Array.isArray(data) ? data.map((x) => String(x)) : [];
   } catch {
     return [];
@@ -9796,7 +11811,7 @@ function readProjectRegistry(registryPath) {
 }
 var tmpSeq = 0;
 async function writeProjectRegistryUnlocked(registryPath, roots) {
-  await mkdir8(dirname3(registryPath), { recursive: true });
+  await mkdir9(dirname3(registryPath), { recursive: true });
   const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`;
   await writeFile5(tmp, `${JSON.stringify(roots, null, 2)}
 `, "utf8");
@@ -9804,7 +11819,7 @@ async function writeProjectRegistryUnlocked(registryPath, roots) {
 }
 async function withProjectRegistryLock(registryPath, operation) {
   const dir = dirname3(registryPath);
-  await mkdir8(dir, { recursive: true });
+  await mkdir9(dir, { recursive: true });
   return withLock(dir, operation);
 }
 async function registerProjectRoot(registryPath, rawRoot) {
@@ -9830,8 +11845,8 @@ async function unregisterProjectRoot(registryPath, rawRoot) {
 }
 
 // packages/kernel/dist/state/secrets.js
-import { existsSync as existsSync3, readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir9, rename as rename4, writeFile as writeFile6 } from "node:fs/promises";
+import { existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
+import { mkdir as mkdir10, rename as rename4, writeFile as writeFile6 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 var SECRET_KEYS = ["CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY"];
 function isSecretKey(key) {
@@ -9844,7 +11859,7 @@ function assertSecretKey(key) {
 }
 function readSecrets(path7) {
   try {
-    const parsed = JSON.parse(readFileSync6(path7, "utf8"));
+    const parsed = JSON.parse(readFileSync7(path7, "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
       return { version: 1, keys: {} };
     const rawKeys = parsed.keys;
@@ -9863,7 +11878,7 @@ function readSecrets(path7) {
 }
 var tmpSeq2 = 0;
 async function atomicWriteSecrets(path7, store) {
-  await mkdir9(dirname4(path7), { recursive: true });
+  await mkdir10(dirname4(path7), { recursive: true });
   const tmp = `${path7}.tmp.${process.pid}.${tmpSeq2++}`;
   await writeFile6(tmp, `${JSON.stringify(store, null, 2)}
 `, { encoding: "utf8", mode: 384 });
@@ -9871,7 +11886,7 @@ async function atomicWriteSecrets(path7, store) {
 }
 async function withSecretsLock(path7, fn) {
   const dir = dirname4(path7);
-  await mkdir9(dir, { recursive: true });
+  await mkdir10(dir, { recursive: true });
   return withLock(dir, fn);
 }
 async function writeSecretKey(path7, key, value) {
@@ -9907,7 +11922,7 @@ function validateChangeName(name) {
 }
 
 // packages/kernel/dist/flow/manifest.js
-import { readFileSync as readFileSync7 } from "node:fs";
+import { readFileSync as readFileSync8 } from "node:fs";
 var ManifestError = class extends Error {
   constructor(message) {
     super(`manifest: ${message}`);
@@ -10278,7 +12293,7 @@ function deriveSkillTable(raw, declared, section2) {
   return table;
 }
 function loadManifest(path7) {
-  const text3 = readFileSync7(path7, "utf8");
+  const text3 = readFileSync8(path7, "utf8");
   const raw = scanSections(text3, path7);
   if (!raw.phases || raw.phases.length === 0)
     throw new ManifestError(`${path7} \u7F3A phases \u5C0F\u8282`);
@@ -10383,14 +12398,14 @@ function eventEdge(event) {
 }
 
 // packages/kernel/dist/machine-state-scope.js
-import { createHash as createHash10 } from "node:crypto";
-import { resolve as resolve6 } from "node:path";
+import { createHash as createHash11 } from "node:crypto";
+import { resolve as resolve7 } from "node:path";
 var STATE_SCOPE_NAMESPACE = "tenon:machine-state-scope:v1\0";
 function canonicalMachineStateRoot(stateRoot) {
-  return resolve6(stateRoot);
+  return resolve7(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest4 = createHash10("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  const digest4 = createHash11("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
   return `sha256-v1-${digest4}`;
 }
 
@@ -10537,9 +12552,6 @@ function liveTerminalActivity(record4, nowMs) {
   };
 }
 
-// packages/kernel/dist/tracks/types.js
-var TRACK_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
-
 // packages/kernel/dist/tracks/builtins.js
 var BUILTIN_TRACK_IDS = ["chat", "simple", "pm", "frontend", "backend", "free"];
 function isBuiltinTrackId(id2) {
@@ -10664,8 +12676,8 @@ var TrackConfigParseError = class extends Error {
 };
 
 // packages/kernel/dist/tracks/parse.js
-var KEY_RE2 = /^([A-Za-z_][\w.-]*):(?:\s+([\s\S]*)|\s*)$/;
-function tokenize(text3) {
+var KEY_RE3 = /^([A-Za-z_][\w.-]*):(?:\s+([\s\S]*)|\s*)$/;
+function tokenize2(text3) {
   const tokens = [];
   const lines = text3.split("\n");
   for (let n = 0; n < lines.length; n++) {
@@ -10685,7 +12697,7 @@ function tokenize(text3) {
       const itemCol = indent + 1 + (dashRest.length - after.length);
       tokens.push({ line: lineNo, indent, kind: "dash" });
       if (after !== "") {
-        const km2 = after.match(KEY_RE2);
+        const km2 = after.match(KEY_RE3);
         if (km2)
           tokens.push({ line: lineNo, indent: itemCol, kind: "kv", key: km2[1], rest: km2[2] ?? "" });
         else
@@ -10693,7 +12705,7 @@ function tokenize(text3) {
       }
       continue;
     }
-    const km = content.match(KEY_RE2);
+    const km = content.match(KEY_RE3);
     if (km)
       tokens.push({ line: lineNo, indent, kind: "kv", key: km[1], rest: km[2] ?? "" });
     else
@@ -10749,7 +12761,7 @@ function parseScalarText(raw, line) {
     return { kind: "scalar", line, value: Number(bare) };
   return { kind: "scalar", line, value: bare };
 }
-function parseMapping(tokens, start, indent) {
+function parseMapping2(tokens, start, indent) {
   const entries = [];
   const seen = /* @__PURE__ */ new Set();
   const line = tokens[start].line;
@@ -10776,7 +12788,7 @@ function parseMapping(tokens, start, indent) {
   }
   return { node: { kind: "map", line, entries }, next: i };
 }
-function parseSequence(tokens, start, indent) {
+function parseSequence2(tokens, start, indent) {
   const items = [];
   const line = tokens[start].line;
   let i = start;
@@ -10796,13 +12808,13 @@ function parseSequence(tokens, start, indent) {
 function parseNode(tokens, i, indent) {
   const t = tokens[i];
   if (t.kind === "dash")
-    return parseSequence(tokens, i, indent);
+    return parseSequence2(tokens, i, indent);
   if (t.kind === "kv")
-    return parseMapping(tokens, i, indent);
+    return parseMapping2(tokens, i, indent);
   return { node: parseScalarText(t.raw, t.line), next: i + 1 };
 }
 function parseDocumentRoot(text3) {
-  const tokens = tokenize(text3);
+  const tokens = tokenize2(text3);
   if (tokens.length === 0)
     throw new TrackConfigParseError(null, "\u7A7A\u6587\u6863\uFF08\u7F3A\u5C11\u5FC5\u586B\u9876\u5C42\u952E version\uFF09");
   const first = tokens[0];
@@ -10811,7 +12823,7 @@ function parseDocumentRoot(text3) {
   if (first.kind !== "kv") {
     throw new TrackConfigParseError(first.line, "\u9876\u5C42\u5FC5\u987B\u662F mapping\uFF08version/builtins/tracks \u952E\uFF09");
   }
-  const r = parseMapping(tokens, 0, 0);
+  const r = parseMapping2(tokens, 0, 0);
   if (r.next !== tokens.length) {
     throw new TrackConfigParseError(tokens[r.next].line, "\u6B8B\u7559\u672A\u89E3\u6790\u5185\u5BB9\uFF08\u7F29\u8FDB\u9519\u4E71\u6216\u8D85\u51FA\u652F\u6301\u7684 YAML \u5B50\u96C6\uFF09");
   }
@@ -11412,9 +13424,9 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash11 } from "node:crypto";
-import { readFileSync as readFileSync8 } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile12 } from "node:fs/promises";
+import { createHash as createHash12 } from "node:crypto";
+import { readFileSync as readFileSync9 } from "node:fs";
+import { mkdir as mkdir11, readFile as readFile13 } from "node:fs/promises";
 import path6 from "node:path";
 var TENON_DIR = ".pipeline";
 var TRACKS_FILE = "tracks.yaml";
@@ -11423,7 +13435,7 @@ function trackRegistryPath(repoRoot) {
   return path6.join(repoRoot, TENON_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash11("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash12("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 var RegistryRevisionConflictError = class extends Error {
   expected;
@@ -11506,7 +13518,7 @@ function synthesize(text3, context) {
 function loadTrackRegistry(repoRoot, context) {
   let text3 = null;
   try {
-    text3 = readFileSync8(trackRegistryPath(repoRoot), "utf8");
+    text3 = readFileSync9(trackRegistryPath(repoRoot), "utf8");
   } catch (e) {
     if (e.code !== "ENOENT")
       throw e;
@@ -11530,7 +13542,7 @@ function assertWorkflowAllowed(track, workflowId) {
 async function freshReadUnderLock(file, context) {
   let text3 = null;
   try {
-    text3 = await readFile12(file, "utf8");
+    text3 = await readFile13(file, "utf8");
   } catch (e) {
     if (e.code !== "ENOENT")
       throw e;
@@ -11540,7 +13552,7 @@ async function freshReadUnderLock(file, context) {
 async function withTrackRegistryLock(repoRoot, context, callback) {
   const file = trackRegistryPath(repoRoot);
   const dir = path6.dirname(file);
-  await mkdir10(dir, { recursive: true });
+  await mkdir11(dir, { recursive: true });
   return withLock(dir, async () => callback(await freshReadUnderLock(file, context)));
 }
 async function mutateTrackRegistry(repoRoot, context, callback) {
@@ -11748,7 +13760,7 @@ async function assertUpdatePreservesReferences(next, id2, scan) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { closeSync as closeSync2, existsSync as existsSync4, fstatSync, openSync as openSync2, opendirSync, readFileSync as readFileSync9, readSync as readSync2, readdirSync as readdirSync2, realpathSync as realpathSync2, statSync } from "node:fs";
+import { closeSync as closeSync2, existsSync as existsSync4, fstatSync, openSync as openSync2, opendirSync, readFileSync as readFileSync10, readSync as readSync2, readdirSync as readdirSync2, realpathSync as realpathSync2, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
 function readMemSessionMetadataChecked(fs, path7) {
@@ -11854,7 +13866,7 @@ function nodeMemFs(homeOverride) {
     readDirBounded: readDirectoryBounded,
     readText: (p) => {
       try {
-        return readFileSync9(p, "utf8");
+        return readFileSync10(p, "utf8");
       } catch {
         return void 0;
       }
@@ -11886,7 +13898,7 @@ function mtimeIso(fs, path7) {
 // packages/kernel/dist/mem/adapters/opencode.js
 import { statSync as statSync2 } from "node:fs";
 import { createRequire } from "node:module";
-import { join as join19 } from "node:path";
+import { join as join21 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // packages/kernel/dist/mem/dialogue.js
@@ -11944,7 +13956,7 @@ function isHostSummaryTurn(turn) {
 }
 
 // packages/kernel/dist/mem/filter.js
-import { resolve as resolve7, sep as sep7 } from "node:path";
+import { resolve as resolve8, sep as sep7 } from "node:path";
 function parseIso(iso) {
   if (!iso)
     return null;
@@ -11973,8 +13985,8 @@ function sameProject(sessionCwd, target) {
     return true;
   if (!sessionCwd)
     return false;
-  const a = resolve7(sessionCwd);
-  const b = resolve7(target);
+  const a = resolve8(sessionCwd);
+  const b = resolve8(target);
   return a === b || a.startsWith(b + sep7);
 }
 function sameProjectForMemFs(fs, sessionCwd, target) {
@@ -12142,7 +14154,7 @@ function createChunkLocator(text3, maxChars) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode-budget.js
-import { resolve as resolve8 } from "node:path";
+import { resolve as resolve9 } from "node:path";
 var sqliteSourceBudgets = /* @__PURE__ */ new WeakMap();
 function sqliteSourceBudget(fs, dbPath) {
   const budget = fs.contentReadBudget;
@@ -12278,7 +14290,7 @@ function projectIdsForFilter(fs, db, f, source, budget) {
   if (projects === null)
     return null;
   const directories = boundedProjectRows(db, "project_directory", source, budget) ?? [];
-  const target = f.cwd ? resolve8(f.cwd) : null;
+  const target = f.cwd ? resolve9(f.cwd) : null;
   const ids2 = /* @__PURE__ */ new Set();
   for (const row of [...projects, ...directories]) {
     if (typeof row.project_id !== "string" || typeof row.directory !== "string")
@@ -12566,8 +14578,8 @@ function loadSqlite() {
 }
 function opencodeDbPath(fs) {
   const xdgData = fs.env?.("XDG_DATA_HOME");
-  const dataHome = xdgData && xdgData.trim() ? xdgData : join19(fs.home, ".local", "share");
-  return join19(dataHome, "opencode", "opencode.db");
+  const dataHome = xdgData && xdgData.trim() ? xdgData : join21(fs.home, ".local", "share");
+  return join21(dataHome, "opencode", "opencode.db");
 }
 function createRelatedImmutableTarget(fs, dbPath) {
   const walPath = `${dbPath}-wal`;
@@ -12909,7 +14921,7 @@ function splitShellArgs(s) {
 }
 
 // packages/kernel/dist/mem/adapters/claude.js
-import { basename as basename2, dirname as dirname5, join as join21 } from "node:path";
+import { basename as basename2, dirname as dirname5, join as join23 } from "node:path";
 
 // packages/kernel/dist/mem/jsonl.js
 var OPEN_BRACE = 123;
@@ -12966,7 +14978,7 @@ function findInJsonl(text3, predicate, maxLines = 200) {
 }
 
 // packages/kernel/dist/mem/paths.js
-import { join as join20, resolve as resolve9 } from "node:path";
+import { join as join22, resolve as resolve10 } from "node:path";
 var SEP_RE = /[/\\:_.]/g;
 var PI_SEP_RE = /[/\\:]/g;
 var PI_LEAD_RE = /^[/\\]/;
@@ -12974,29 +14986,29 @@ function expandHome(fs, p) {
   if (p === "~")
     return fs.home;
   if (p.startsWith("~/") || p.startsWith("~\\"))
-    return join20(fs.home, p.slice(2));
+    return join22(fs.home, p.slice(2));
   return p;
 }
 function claudeProjectsRoot(fs) {
-  return join20(fs.home, ".claude", "projects");
+  return join22(fs.home, ".claude", "projects");
 }
 function codexSessionsRoot(fs) {
-  return join20(fs.home, ".codex", "sessions");
+  return join22(fs.home, ".codex", "sessions");
 }
 function claudeProjectDirFromCwd(fs, cwd) {
-  return join20(claudeProjectsRoot(fs), cwd.replace(SEP_RE, "-"));
+  return join22(claudeProjectsRoot(fs), cwd.replace(SEP_RE, "-"));
 }
 function piAgentDir(fs) {
   const env = fs.env?.("PI_CODING_AGENT_DIR");
-  return expandHome(fs, env || join20(fs.home, ".pi", "agent"));
+  return expandHome(fs, env || join22(fs.home, ".pi", "agent"));
 }
 function piProjectDirFromCwd(fs, cwd) {
-  const resolved = resolve9(cwd);
+  const resolved = resolve10(cwd);
   const safe = "--" + resolved.replace(PI_LEAD_RE, "").replace(PI_SEP_RE, "-") + "--";
-  return join20(piAgentDir(fs), "sessions", safe);
+  return join22(piAgentDir(fs), "sessions", safe);
 }
 function readPiSettingsSessionDir(fs) {
-  const raw = fs.readText(join20(piAgentDir(fs), "settings.json"));
+  const raw = fs.readText(join22(piAgentDir(fs), "settings.json"));
   if (!raw)
     return null;
   let parsed;
@@ -13013,7 +15025,7 @@ function readPiSettingsSessionDir(fs) {
   return null;
 }
 function piSessionRoots(fs) {
-  const roots = [join20(piAgentDir(fs), "sessions")];
+  const roots = [join22(piAgentDir(fs), "sessions")];
   const envSess = fs.env?.("PI_CODING_AGENT_SESSION_DIR");
   if (envSess)
     roots.push(expandHome(fs, envSess));
@@ -13023,7 +15035,7 @@ function piSessionRoots(fs) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized2 = resolve9(root);
+    const normalized2 = resolve10(root);
     if (seen.has(normalized2))
       continue;
     seen.add(normalized2);
@@ -13041,7 +15053,7 @@ function walkDir(fs, root) {
     if (cur === void 0)
       break;
     for (const e of fs.readDir(cur)) {
-      const full = join20(cur, e.name);
+      const full = join22(cur, e.name);
       if (e.isDirectory)
         stack.push(full);
       else if (e.isFile)
@@ -13109,7 +15121,7 @@ function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDesc
         break;
       }
       budget.consumeDiscoveryEntries(source, 1);
-      const path7 = join20(current.path, entry.name);
+      const path7 = join22(current.path, entry.name);
       ranked.push({ entry, path: path7, mtime: entry.isFile ? fs.mtimeMs(path7) ?? 0 : 0 });
     }
     ranked.sort((left, right) => {
@@ -13154,7 +15166,7 @@ function claudeListSessions(fs, f) {
     return [];
   const out = [];
   const projectDirs = () => {
-    const allDirs = () => fs.readDir(root).filter((entry) => entry.isDirectory).map((entry) => join21(root, entry.name));
+    const allDirs = () => fs.readDir(root).filter((entry) => entry.isDirectory).map((entry) => join23(root, entry.name));
     if (!f.cwd)
       return allDirs();
     const derived = claudeProjectDirFromCwd(fs, f.cwd);
@@ -13166,7 +15178,7 @@ function claudeListSessions(fs, f) {
     if (cached)
       return cached;
     const indexById = /* @__PURE__ */ new Map();
-    const indexPath = join21(directory, "sessions-index.json");
+    const indexPath = join23(directory, "sessions-index.json");
     const indexRaw = fs.exists(indexPath) ? fs.readText(indexPath) : void 0;
     if (indexRaw) {
       try {
@@ -13186,8 +15198,8 @@ function claudeListSessions(fs, f) {
     directory: dirname5(file),
     entry: { name: basename2(file), isFile: true, isDirectory: false }
   })) : projectDirs().flatMap((directory) => fs.readDir(directory).filter((entry) => entry.isFile && entry.name.endsWith(".jsonl")).map((entry) => ({ directory, entry }))).sort((left, right) => {
-    const leftPath = join21(left.directory, left.entry.name);
-    const rightPath = join21(right.directory, right.entry.name);
+    const leftPath = join23(left.directory, left.entry.name);
+    const rightPath = join23(right.directory, right.entry.name);
     return (fs.mtimeMs(rightPath) ?? 0) - (fs.mtimeMs(leftPath) ?? 0);
   });
   for (const { directory, entry } of sessionEntries) {
@@ -13195,7 +15207,7 @@ function claudeListSessions(fs, f) {
       fs.contentReadBudget.noteTotalExhausted();
       break;
     }
-    const filePath = join21(directory, entry.name);
+    const filePath = join23(directory, entry.name);
     const sid = entry.name.slice(0, -".jsonl".length);
     const idx = indexFor(directory).get(sid);
     let cwd = idx?.cwd ?? null;
@@ -13414,7 +15426,7 @@ function codexSearch(fs, s, kw) {
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename4, join as join22, resolve as resolve10 } from "node:path";
+import { basename as basename4, join as join24, resolve as resolve11 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
@@ -13475,7 +15487,7 @@ function piListSessions(fs, f) {
   return out;
 }
 function candidateFiles(fs, f) {
-  const defaultRoot = join22(piAgentDir(fs), "sessions");
+  const defaultRoot = join24(piAgentDir(fs), "sessions");
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   const pushJsonl = (root, fileLimit) => {
@@ -13485,7 +15497,7 @@ function candidateFiles(fs, f) {
     for (const file of discovered) {
       if (!file.endsWith(".jsonl"))
         continue;
-      const normalized2 = resolve10(file);
+      const normalized2 = resolve11(file);
       if (seen.has(normalized2))
         continue;
       seen.add(normalized2);
@@ -13501,7 +15513,7 @@ function candidateFiles(fs, f) {
     const remainingRoots = roots.length - index;
     const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.("pi");
     const fairLimit = remainingFiles === void 0 ? normalLimit : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots));
-    if (f.cwd && resolve10(root) === resolve10(defaultRoot)) {
+    if (f.cwd && resolve11(root) === resolve11(defaultRoot)) {
       pushJsonl(fs.contentReadBudget ? root : piProjectDirFromCwd(fs, f.cwd), fairLimit);
     } else {
       pushJsonl(root, fairLimit);
@@ -14234,507 +16246,6 @@ function searchRelatedSessions(fs, options) {
   };
 }
 
-// packages/kernel/dist/loops/registry.js
-import { readFileSync as readFileSync10 } from "node:fs";
-import { join as join23 } from "node:path";
-var KEY_RE3 = /^([A-Za-z_][\w.-]*):(?:\s+(.*)|\s*)$/;
-function tokenize2(text3) {
-  const tokens = [];
-  for (const rawLine of text3.split("\n")) {
-    const line = rawLine.replace(/\r$/, "");
-    if (line.trim() === "")
-      continue;
-    const trimmedStart = line.replace(/^\s*/, "");
-    if (trimmedStart.startsWith("#"))
-      continue;
-    const indent = line.length - trimmedStart.length;
-    const content = trimmedStart;
-    if (content === "-" || content.startsWith("- ")) {
-      const dashRest = content.slice(1);
-      const after = dashRest.replace(/^\s*/, "");
-      const itemCol = indent + 1 + (dashRest.length - after.length);
-      tokens.push({ indent, kind: "dash" });
-      if (after !== "") {
-        const km2 = after.match(KEY_RE3);
-        if (km2)
-          tokens.push({ indent: itemCol, kind: "kv", key: required(km2[1]), rest: km2[2] ?? "" });
-        else
-          tokens.push({ indent: itemCol, kind: "scalar", raw: after });
-      }
-      continue;
-    }
-    const km = content.match(KEY_RE3);
-    if (km) {
-      tokens.push({ indent, kind: "kv", key: required(km[1]), rest: km[2] ?? "" });
-    } else {
-      tokens.push({ indent, kind: "scalar", raw: content });
-    }
-  }
-  return tokens;
-}
-var YamlParseError = class extends Error {
-};
-function parseScalar(raw) {
-  let s = raw.trim();
-  if (!(s.startsWith('"') || s.startsWith("'") || s.startsWith("["))) {
-    const cm = s.match(/^(.*?)\s+#.*$/);
-    if (cm)
-      s = required(cm[1]).trimEnd();
-  }
-  if (s === "")
-    return null;
-  if (s.startsWith("[") && s.endsWith("]")) {
-    const inner = s.slice(1, -1).trim();
-    if (inner === "")
-      return [];
-    return inner.split(",").map((x) => parseScalar(x));
-  }
-  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
-    return s.slice(1, -1);
-  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
-    return s.slice(1, -1);
-  if (s === "null" || s === "~")
-    return null;
-  if (s === "true")
-    return true;
-  if (s === "false")
-    return false;
-  if (/^-?\d+$/.test(s))
-    return Number(s);
-  return s;
-}
-function parseMapping2(tokens, start, indent) {
-  const map = {};
-  let i = start;
-  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === "kv") {
-    const t = required(tokens[i]);
-    i++;
-    if ((t.rest ?? "") === "") {
-      if (i < tokens.length && required(tokens[i]).indent > indent) {
-        const r = parseValue(tokens, i, required(tokens[i]).indent);
-        map[required(t.key)] = r.value;
-        i = r.next;
-      } else {
-        map[required(t.key)] = null;
-      }
-    } else {
-      map[required(t.key)] = parseScalar(required(t.rest));
-    }
-  }
-  return { value: map, next: i };
-}
-function parseSequence2(tokens, start, indent) {
-  const arr = [];
-  let i = start;
-  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === "dash") {
-    i++;
-    if (i < tokens.length && required(tokens[i]).indent > indent) {
-      const r = parseValue(tokens, i, required(tokens[i]).indent);
-      arr.push(r.value);
-      i = r.next;
-    } else {
-      arr.push(null);
-    }
-  }
-  return { value: arr, next: i };
-}
-function parseValue(tokens, i, indent) {
-  const t = required(tokens[i]);
-  if (t.kind === "dash")
-    return parseSequence2(tokens, i, indent);
-  if (t.kind === "kv")
-    return parseMapping2(tokens, i, indent);
-  return { value: parseScalar(required(t.raw)), next: i + 1 };
-}
-function parseLoopsYaml(text3) {
-  try {
-    const tokens = tokenize2(text3);
-    if (tokens.length === 0)
-      return { data: null, error: "\u7A7A\u6587\u6863\uFF08\u65E0\u5185\u5BB9\uFF09" };
-    const first = required(tokens[0]);
-    if (first.indent !== 0)
-      throw new YamlParseError(`\u9876\u5C42\u610F\u5916\u7F29\u8FDB\uFF08\u7B2C\u4E00\u4E2A token indent=${first.indent}\uFF09`);
-    let result;
-    if (first.kind === "kv")
-      result = parseMapping2(tokens, 0, 0);
-    else if (first.kind === "dash")
-      result = parseSequence2(tokens, 0, 0);
-    else
-      throw new YamlParseError("\u9876\u5C42\u5FC5\u987B\u662F mapping \u6216 sequence\uFF08\u5F97\u5230\u88F8\u6807\u91CF\uFF09");
-    if (result.next !== tokens.length) {
-      throw new YamlParseError(`\u6B8B\u7559\u672A\u89E3\u6790\u5185\u5BB9\uFF08\u81EA token #${result.next}\uFF0C\u7F29\u8FDB\u4E0D\u4E00\u81F4\u6216\u5B50\u96C6\u5916\u7ED3\u6784\uFF09`);
-    }
-    return { data: result.value, error: null };
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-var ANNOTATION_KEYWORDS = /* @__PURE__ */ new Set(["$schema", "$comment", "$id", "title", "description"]);
-var VALIDATION_KEYWORDS = /* @__PURE__ */ new Set([
-  "type",
-  "required",
-  "additionalProperties",
-  "enum",
-  "pattern",
-  "minLength",
-  "minItems",
-  "minimum",
-  "const",
-  "properties",
-  "items"
-]);
-function joinPath(path7, key) {
-  return path7 === "" ? key : `${path7}.${key}`;
-}
-function typeMatches(instance, typeSpec) {
-  const types = Array.isArray(typeSpec) ? typeSpec : [typeSpec];
-  for (const t of types) {
-    if (t === "object" && instance !== null && typeof instance === "object" && !Array.isArray(instance))
-      return true;
-    if (t === "array" && Array.isArray(instance))
-      return true;
-    if (t === "string" && typeof instance === "string")
-      return true;
-    if (t === "integer" && typeof instance === "number" && Number.isInteger(instance))
-      return true;
-    if (t === "number" && typeof instance === "number")
-      return true;
-    if (t === "boolean" && typeof instance === "boolean")
-      return true;
-    if (t === "null" && instance === null)
-      return true;
-  }
-  return false;
-}
-function validateSchema(instance, schema, path7 = "") {
-  if (typeof schema !== "object" || schema === null)
-    return [];
-  for (const kw of Object.keys(schema)) {
-    if (!ANNOTATION_KEYWORDS.has(kw) && !VALIDATION_KEYWORDS.has(kw)) {
-      throw new Error(`loops validator: unsupported schema keyword '${kw}' at ${path7 || "<root>"}`);
-    }
-  }
-  const label = path7 || "<root>";
-  const errors = [];
-  if ("const" in schema) {
-    if (instance !== schema.const) {
-      errors.push(`${label}: expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(instance)}`);
-      return errors;
-    }
-  }
-  if ("type" in schema) {
-    if (!typeMatches(instance, schema.type)) {
-      errors.push(`${label}: expected type ${JSON.stringify(schema.type)}, got ${instance === null ? "null" : typeof instance}`);
-      return errors;
-    }
-  }
-  if ("enum" in schema && Array.isArray(schema.enum)) {
-    if (!schema.enum.includes(instance)) {
-      errors.push(`${label}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(instance)}`);
-    }
-  }
-  if ("pattern" in schema && typeof instance === "string") {
-    if (!new RegExp(schema.pattern).test(instance)) {
-      errors.push(`${label}: does not match pattern ${JSON.stringify(schema.pattern)}`);
-    }
-  }
-  if ("minLength" in schema && typeof instance === "string") {
-    if (instance.length < schema.minLength) {
-      errors.push(`${label}: expected minLength ${schema.minLength}, got length ${instance.length}`);
-    }
-  }
-  if ("minItems" in schema && Array.isArray(instance)) {
-    if (instance.length < schema.minItems) {
-      errors.push(`${label}: expected minItems ${schema.minItems}, got ${instance.length}`);
-    }
-  }
-  if ("minimum" in schema && typeof instance === "number") {
-    if (instance < schema.minimum) {
-      errors.push(`${label}: expected >= ${schema.minimum}, got ${instance}`);
-    }
-  }
-  if (instance !== null && typeof instance === "object" && !Array.isArray(instance)) {
-    const obj = instance;
-    const props = schema.properties ?? {};
-    for (const req of schema.required ?? []) {
-      if (!(req in obj))
-        errors.push(`${joinPath(path7, req)}: missing required field`);
-    }
-    if (schema.additionalProperties === false) {
-      for (const key of Object.keys(obj)) {
-        if (!(key in props))
-          errors.push(`${joinPath(path7, key)}: unexpected additional field (not in schema)`);
-      }
-    }
-    for (const [key, subschema] of Object.entries(props)) {
-      if (key in obj)
-        errors.push(...validateSchema(obj[key], subschema, joinPath(path7, key)));
-    }
-  }
-  if (Array.isArray(instance) && "items" in schema) {
-    const itemSchema = schema.items;
-    instance.forEach((item2, idx) => errors.push(...validateSchema(item2, itemSchema, `${path7}[${idx}]`)));
-  }
-  return errors;
-}
-var SKILL_BUNDLE_ID_RE = new RegExp(`^_all$|${TRACK_ID_RE.source}`);
-var SAFE_KEBAB_TOKEN_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-var LOOPS_SCHEMA = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  type: "object",
-  required: ["version", "loops"],
-  additionalProperties: false,
-  properties: {
-    version: { const: 1 },
-    loops: {
-      type: "array",
-      minItems: 1,
-      items: {
-        type: "object",
-        required: [
-          "id",
-          "name",
-          "kind",
-          "goal",
-          "cadence",
-          "risk",
-          "runner",
-          "change_prefix",
-          "phases",
-          "human_gates",
-          "design_doc",
-          "status",
-          "budget",
-          "kill_criteria"
-        ],
-        additionalProperties: false,
-        properties: {
-          id: { type: "string", pattern: "^[a-z][a-z0-9-]*$" },
-          name: { type: "string", minLength: 3 },
-          kind: { type: "string", enum: ["orchestrator", "executor"] },
-          goal: { type: "string", minLength: 10 },
-          cadence: { type: "string", pattern: "^([0-9]+[mhd](-[0-9]+[mhd])?|continuous)$" },
-          risk: { type: "string", enum: ["low", "medium", "high"] },
-          runner: { type: "string", minLength: 2 },
-          change_prefix: { type: ["string", "null"] },
-          phases: { type: "array", minItems: 2, items: { type: "string" } },
-          human_gates: { type: "array", minItems: 1, items: { type: "string" } },
-          // H9 legacy import only. New writers omit this field; iteration state is projected from ledger facts.
-          state: { type: "string", minLength: 2 },
-          design_doc: { type: "string", minLength: 2 },
-          status: { type: "string", enum: ["active", "paused", "retired"] },
-          budget: {
-            type: "object",
-            required: ["max_runs_per_day", "max_in_flight", "on_exceed"],
-            additionalProperties: false,
-            properties: {
-              max_runs_per_day: { type: "integer", minimum: 1 },
-              max_in_flight: { type: "integer", minimum: 0 },
-              on_exceed: { type: "string", minLength: 2 },
-              // #36 token 级预算（可选，向后兼容——旧登记表不含即无 token 预算/熔断）：
-              max_tokens_per_day: { type: "integer", minimum: 1 },
-              tokens_per_run: { type: "integer", minimum: 1 }
-            }
-          },
-          kill_criteria: { type: "array", minItems: 1, items: { type: "string" } },
-          // 本轮新增：分级放权级别（可选；缺省 L1 由 loadRegistry 派生填充）。
-          autonomy_level: { type: "string", enum: ["L1", "L2", "L3"] },
-          // v5 决议 #12：路径 glob 白/黑名单（可选，缺省 [] 由 loadRegistry 派生填充；
-          // denylist 运行时消费见 automation/lifecycle/denylist.ts）。
-          allowlist: { type: "array", items: { type: "string" } },
-          denylist: { type: "array", items: { type: "string" } },
-          // H11 starter provenance/binding（均可选，旧登记表保持兼容；template catalog 存在性不在本层）。
-          template_id: { type: "string", minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
-          template_version: { const: 1 },
-          workflow_id: { type: "string", minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
-          // H10 §1：skill bundle 引用（可选；缺席/null 由 loadRegistry 派生归一化为 null=unwired）。
-          // 非空须过 SKILL_BUNDLE_ID_RE 词法；profile 是否被 manifest 真声明是存在性语义校验，不在此 schema。
-          skill_bundle_id: { type: ["string", "null"], pattern: SKILL_BUNDLE_ID_RE.source }
-        }
-      }
-    }
-  }
-};
-var RegistryReadError = class extends Error {
-  _tag = "RegistryReadError";
-  constructor(message) {
-    super(message);
-    this.name = "RegistryReadError";
-  }
-};
-var nodeLoopIo = {
-  readText: (p) => {
-    try {
-      return readFileSync10(p, "utf8");
-    } catch {
-      return null;
-    }
-  }
-};
-var nodeLoopIoStrict = {
-  readText: (p) => {
-    try {
-      return readFileSync10(p, "utf8");
-    } catch (e) {
-      if (e.code === "ENOENT")
-        return null;
-      throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-};
-var LOOPS_REL_PATH = [".pipeline", "loops.yaml"];
-function deriveRegistry(data) {
-  const errors = validateSchema(data, LOOPS_SCHEMA);
-  if (!isValidatedLoopRegistry(data, errors)) {
-    throw new Error(`validated loop registry expected: ${errors.join("; ")}`);
-  }
-  const loops = data.loops.map((loop) => ({
-    ...loop,
-    autonomy_level: loop.autonomy_level ?? "L1",
-    allowlist: loop.allowlist ?? [],
-    denylist: loop.denylist ?? [],
-    skill_bundle_id: loop.skill_bundle_id ?? null
-  }));
-  return { version: 1, loops };
-}
-function isValidatedLoopRegistry(value, errors) {
-  return errors.length === 0;
-}
-function loadRegistry(repoRoot, io2 = nodeLoopIo) {
-  const text3 = io2.readText(join23(repoRoot, ...LOOPS_REL_PATH));
-  if (text3 === null)
-    return { data: null, errors: [] };
-  const { data, error: error2 } = parseLoopsYaml(text3);
-  if (error2 !== null)
-    return { data: null, errors: [`loops.yaml: ${error2}`] };
-  if (data === null || typeof data !== "object" || Array.isArray(data)) {
-    return { data: null, errors: ["<root>: loops.yaml \u9876\u5C42\u5FC5\u987B\u662F mapping\uFF08\u5BF9\u8C61\uFF09"] };
-  }
-  const errors = validateSchema(data, LOOPS_SCHEMA);
-  if (errors.length > 0)
-    return { data: null, errors };
-  return { data: deriveRegistry(data), errors: [] };
-}
-
-// packages/kernel/dist/loops/enforce.js
-var FAIL_STREAK_WARN = 2;
-var CADENCE_RE = /^(\d+)([mhd])$/;
-var CADENCE_UNIT_MINUTES = { m: 1, h: 60, d: 1440 };
-function cadenceMinutes(cadence) {
-  if (cadence === "continuous")
-    return null;
-  const upper = cadence.split("-").pop() ?? cadence;
-  const m = upper.match(CADENCE_RE);
-  if (!m)
-    return null;
-  return Number(required(m[1])) * required(CADENCE_UNIT_MINUTES[required(m[2])]);
-}
-function budgetWarnThreshold(maxRuns) {
-  return Math.ceil(maxRuns * 4 / 5);
-}
-function enforcementFor(level) {
-  return level === "L1" ? "report-only" : level === "L2" ? "assisted" : "unattended";
-}
-
-// packages/kernel/dist/loops/budget.js
-var TS_FULL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
-var TS_SHORT_RE = /^(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
-var TOKENS_RE = /tokens=(\d+)/;
-function mkUTC(y, mo, d, hh, mm) {
-  const dt = new Date(Date.UTC(y, mo - 1, d, hh, mm));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d || dt.getUTCHours() !== hh || dt.getUTCMinutes() !== mm)
-    return null;
-  return dt;
-}
-function parseTimestamp(raw, now) {
-  const s = raw.trim();
-  const full = s.match(TS_FULL_RE);
-  if (full)
-    return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]));
-  const short2 = s.match(TS_SHORT_RE);
-  if (short2)
-    return mkUTC(now.getUTCFullYear(), +required(short2[1]), +required(short2[2]), +required(short2[3]), +required(short2[4]));
-  return null;
-}
-function sameUTCDate(a, b) {
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
-}
-function sumRunLogTokens(text3, loopId, now) {
-  if (text3 === null)
-    return { spentToday: 0, runsToday: 0 };
-  let spentToday = 0;
-  let runsToday = 0;
-  for (const rawLine of text3.split("\n")) {
-    const line = rawLine.trim();
-    if (!line.startsWith("|"))
-      continue;
-    const cols = line.replace(/^\|+/, "").replace(/\|+$/, "").split("|").map((c) => c.trim());
-    if (cols.length < 2)
-      continue;
-    if (cols[1] !== loopId)
-      continue;
-    const ts = parseTimestamp(required(cols[0]), now);
-    if (ts === null || !sameUTCDate(ts, now))
-      continue;
-    runsToday++;
-    const tm = line.match(TOKENS_RE);
-    if (tm)
-      spentToday += Number(tm[1]);
-  }
-  return { spentToday, runsToday };
-}
-function computeBudgetStatus(loop, runLogText, now) {
-  const { spentToday, runsToday } = sumRunLogTokens(runLogText, loop.id, now);
-  const budget = loop.budget;
-  const max = budget.max_tokens_per_day ?? null;
-  const reportOnly = loop.autonomy_level === "L1";
-  if (max === null) {
-    return {
-      id: loop.id,
-      hasBudget: false,
-      maxTokensPerDay: null,
-      warnThreshold: null,
-      spentToday,
-      remaining: null,
-      usedRatio: null,
-      runsToday,
-      breaker: "ok",
-      onExceed: budget.on_exceed,
-      autonomyLevel: loop.autonomy_level,
-      reportOnly,
-      reason: `\u672A\u58F0\u660E max_tokens_per_day \u2014\u2014 \u65E0 token \u9884\u7B97/\u7194\u65AD\uFF08\u4EC5\u8FFD\u8E2A\u4ECA\u65E5\u82B1\u8D39 ${spentToday}\uFF09`
-    };
-  }
-  const warnThreshold = budgetWarnThreshold(max);
-  let breaker;
-  let reason;
-  if (spentToday >= max) {
-    breaker = "tripped";
-    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} \u2265 \u9884\u7B97 ${max}\uFF08circuit breaker \u7194\u65AD\u89E6\u53D1\uFF09`;
-  } else if (spentToday >= warnThreshold) {
-    breaker = "warn";
-    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} \u2265 \u51CF\u901F\u7EBF ${warnThreshold}\uFF0880% of ${max}\uFF09`;
-  } else {
-    breaker = "ok";
-    reason = `\u4ECA\u65E5\u82B1\u8D39 ${spentToday} < \u51CF\u901F\u7EBF ${warnThreshold}\uFF08\u9884\u7B97 ${max}\uFF09`;
-  }
-  return {
-    id: loop.id,
-    hasBudget: true,
-    maxTokensPerDay: max,
-    warnThreshold,
-    spentToday,
-    remaining: Math.max(0, max - spentToday),
-    usedRatio: spentToday / max,
-    runsToday,
-    breaker,
-    onExceed: budget.on_exceed,
-    autonomyLevel: loop.autonomy_level,
-    reportOnly,
-    reason
-  };
-}
-
 // packages/kernel/dist/loops/drift.js
 var DRIFT_CADENCE_MULTIPLIER = 2;
 var READY_STRONG = 90;
@@ -15205,11 +16716,11 @@ async function applyLevelChange(repoRoot, loopId, target, opts, fs) {
 
 // packages/kernel/dist/loops/drafts.js
 import { readFileSync as readFileSync11 } from "node:fs";
-import { mkdir as mkdir11, rename as rename5, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname6, join as join24 } from "node:path";
+import { mkdir as mkdir12, rename as rename5, writeFile as writeFile7 } from "node:fs/promises";
+import { dirname as dirname6, join as join25 } from "node:path";
 var DRAFT_MARKS_FILE = "loops.drafts.json";
 function draftMarksPath(repoRoot) {
-  return join24(repoRoot, ".pipeline", DRAFT_MARKS_FILE);
+  return join25(repoRoot, ".pipeline", DRAFT_MARKS_FILE);
 }
 function readDraftMarks(path7) {
   try {
@@ -15224,7 +16735,7 @@ function readDraftMarks(path7) {
 }
 var tmpSeq3 = 0;
 async function writeDraftMarks(path7, ids2) {
-  await mkdir11(dirname6(path7), { recursive: true });
+  await mkdir12(dirname6(path7), { recursive: true });
   const tmp = `${path7}.tmp.${process.pid}.${tmpSeq3++}`;
   await writeFile7(tmp, `${JSON.stringify({ version: 1, ids: ids2 }, null, 2)}
 `, "utf8");
@@ -15399,1472 +16910,6 @@ function updateLoopInYaml(text3, loopId, patch) {
       return { text: null, error: e.message };
     throw e;
   }
-}
-
-// packages/kernel/dist/loops/binding.js
-function budgetDayOf(iso) {
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
-// packages/kernel/dist/loops/ledger-projection.js
-function indexReservationTerminals(records) {
-  const reservationById = /* @__PURE__ */ new Map();
-  const terminalByReservationId = /* @__PURE__ */ new Map();
-  const duplicateReservations = [];
-  const duplicateTerminals = [];
-  const activatedReservationIds = /* @__PURE__ */ new Set();
-  const invalidActivations = [];
-  const invalidTerminals = [];
-  for (const r of records) {
-    if (r.kind === "budget-reservation") {
-      const first = reservationById.get(r.reservation_id);
-      if (first === void 0)
-        reservationById.set(r.reservation_id, r);
-      else
-        duplicateReservations.push({
-          reservationId: r.reservation_id,
-          firstRecordId: first.record_id,
-          duplicateRecordId: r.record_id
-        });
-    } else if (r.kind === "reservation-activated") {
-      const reservation = reservationById.get(r.reservation_id);
-      const reason = reservation === void 0 ? "orphan" : reservation.attempt_id !== r.attempt_id ? "attempt-mismatch" : reservation.iteration_id !== void 0 && r.iteration_id !== reservation.iteration_id ? "iteration-mismatch" : reservation.loop_id !== r.loop_id ? "loop-mismatch" : reservation.change !== r.change ? "change-mismatch" : activatedReservationIds.has(r.reservation_id) ? "duplicate" : null;
-      if (reason === null)
-        activatedReservationIds.add(r.reservation_id);
-      else
-        invalidActivations.push({ reservationId: r.reservation_id, recordId: r.record_id, reason });
-    } else if (r.kind === "run" && r.reservation_id !== void 0) {
-      const reservation = reservationById.get(r.reservation_id);
-      const reason = reservation === void 0 ? "orphan" : reservation.attempt_id !== r.attempt_id ? "attempt-mismatch" : reservation.iteration_id !== void 0 && r.iteration_id !== reservation.iteration_id ? "iteration-mismatch" : reservation.loop_id !== r.loop_id ? "loop-mismatch" : reservation.change !== r.change ? "change-mismatch" : null;
-      if (reason !== null) {
-        invalidTerminals.push({ reservationId: r.reservation_id, recordId: r.run_record_id, reason });
-        continue;
-      }
-      const first = terminalByReservationId.get(r.reservation_id);
-      if (first === void 0)
-        terminalByReservationId.set(r.reservation_id, r);
-      else
-        duplicateTerminals.push({ reservationId: r.reservation_id, firstRecordId: first.run_record_id, duplicateRecordId: r.run_record_id });
-    }
-  }
-  return {
-    reservationById,
-    terminalByReservationId,
-    duplicateReservations,
-    duplicateTerminals,
-    activatedReservationIds,
-    invalidActivations,
-    invalidTerminals
-  };
-}
-function indexSkillBundleSnapshots(records) {
-  const out = /* @__PURE__ */ new Map();
-  for (const r of records) {
-    if (r.kind === "skill-bundle-snapshot" && !out.has(r.reservation_id))
-      out.set(r.reservation_id, r);
-  }
-  return out;
-}
-function countsAsRun(reservation, terminal, activated) {
-  void reservation;
-  if (terminal === void 0)
-    return true;
-  if (activated)
-    return true;
-  if (terminal.reason === "claim-lost")
-    return false;
-  if (terminal.reason === "reservation-expired")
-    return false;
-  return terminal.accounting.charge_source !== "none";
-}
-function projectLoopLedger(records, rejectedCount, loopId, budgetDay) {
-  const index = indexReservationTerminals(records);
-  const { reservationById, terminalByReservationId, activatedReservationIds } = index;
-  const openReservations = [];
-  let inFlight = 0;
-  let activatedInFlight = 0;
-  let reservedTokensOutstanding = 0;
-  for (const r of records) {
-    if (r.kind !== "budget-reservation" || r.loop_id !== loopId)
-      continue;
-    if (reservationById.get(r.reservation_id) !== r)
-      continue;
-    const isOpen = !terminalByReservationId.has(r.reservation_id);
-    if (isOpen) {
-      inFlight++;
-      openReservations.push(r);
-      if (activatedReservationIds.has(r.reservation_id))
-        activatedInFlight++;
-      if (r.budget_day === budgetDay)
-        reservedTokensOutstanding += r.reserved_tokens;
-    }
-  }
-  let runsToday = 0;
-  for (const [rid, reservation] of reservationById) {
-    if (reservation.loop_id !== loopId || reservation.budget_day !== budgetDay)
-      continue;
-    if (countsAsRun(reservation, terminalByReservationId.get(rid), activatedReservationIds.has(rid)))
-      runsToday++;
-  }
-  let settledTokensActual = 0;
-  let settledTokensEstimated = 0;
-  let lastResult;
-  let lastFinishedAt;
-  for (const r of records) {
-    if (r.kind !== "run" || r.loop_id !== loopId)
-      continue;
-    if (r.reservation_id !== void 0 && terminalByReservationId.get(r.reservation_id) !== r)
-      continue;
-    lastResult = r.result;
-    lastFinishedAt = r.finished_at;
-    const day = r.reservation_id !== void 0 ? reservationById.get(r.reservation_id)?.budget_day ?? budgetDayOf(r.finished_at) : budgetDayOf(r.finished_at);
-    if (day !== budgetDay)
-      continue;
-    if (r.accounting.charge_source === "provider-structured")
-      settledTokensActual += r.accounting.charged_tokens;
-    else if (r.accounting.charge_source === "reserved-estimate")
-      settledTokensEstimated += r.accounting.charged_tokens;
-  }
-  const duplicateReservations = index.duplicateReservations.length;
-  const duplicateTerminals = index.duplicateTerminals.length;
-  const invalidActivations = index.invalidActivations.length;
-  const invalidTerminals = index.invalidTerminals.length;
-  return {
-    loopId,
-    budgetDay,
-    runsToday,
-    inFlight,
-    activatedInFlight,
-    reservedTokensOutstanding,
-    settledTokensActual,
-    settledTokensEstimated,
-    lastResult,
-    lastFinishedAt,
-    openReservations,
-    rejectedRecords: rejectedCount,
-    duplicateReservations,
-    duplicateTerminals,
-    invalidActivations,
-    invalidTerminals,
-    health: rejectedCount > 0 || duplicateReservations > 0 || duplicateTerminals > 0 || invalidActivations > 0 || invalidTerminals > 0 ? "degraded" : "ok"
-  };
-}
-function remainingTokens(projection, maxTokensPerDay) {
-  if (maxTokensPerDay === void 0)
-    return null;
-  const used = projection.settledTokensActual + projection.settledTokensEstimated + projection.reservedTokensOutstanding;
-  return Math.max(0, maxTokensPerDay - used);
-}
-
-// packages/kernel/dist/verification/validate.js
-function isObj(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function typeName(v) {
-  if (v === null)
-    return "null";
-  if (Array.isArray(v))
-    return "array";
-  return typeof v;
-}
-function safeErrorText(value) {
-  try {
-    if (value instanceof Error) {
-      const message = value.message;
-      if (message.length > 0)
-        return message;
-    }
-  } catch {
-  }
-  try {
-    return String(value);
-  } catch {
-    return "<\u65E0\u6CD5\u5B89\u5168\u8BFB\u53D6\u5F02\u5E38\u4FE1\u606F>";
-  }
-}
-function missing(o, key) {
-  return !(key in o) || o[key] === void 0;
-}
-function checkNonEmptyStr(o, key, path7, errors, optional = false) {
-  if (missing(o, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u7A7A string\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  if (v.length === 0)
-    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
-}
-function checkLit(o, key, literal, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
-    return;
-  }
-  if (o[key] !== literal)
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(o[key])}`);
-}
-function checkEnum(o, key, allowed, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string" || !allowed.includes(v)) {
-    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-}
-function checkNonNegInt(o, key, path7, errors, optional = false) {
-  if (missing(o, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u8D1F\u6574\u6570\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u975E\u8D1F\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-}
-function checkInt(o, key, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6574\u6570\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "number" || !Number.isInteger(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-}
-var SHA256_RE3 = /^[0-9a-f]{64}$/;
-var GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-function checkSha256(o, key, path7, errors, optional = false) {
-  if (missing(o, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  if (!SHA256_RE3.test(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-}
-function checkGitSha(o, key, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B git SHA\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  if (!GIT_SHA_RE.test(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 40 \u6216 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 git SHA\uFF08\u5B8C\u6574\u5BF9\u8C61\u540D\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-}
-function checkRepoRelPath(o, key, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  if (v.length === 0) {
-    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
-    return;
-  }
-  if (v.includes("\0")) {
-    errors.push(`${path7}.${key}: \u7981 NUL \u5B57\u8282\uFF08git tree \u8DEF\u5F84\u4E0D\u53EF\u542B NUL\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-    return;
-  }
-  if (v.startsWith("/") || v.startsWith("\\") || /^[a-zA-Z]:/.test(v)) {
-    errors.push(`${path7}.${key}: \u7981\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u987B\u9879\u76EE\u76F8\u5BF9\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-    return;
-  }
-  const segs = v.split(/[/\\]/);
-  if (segs.some((seg) => seg === "..")) {
-    errors.push(`${path7}.${key}: \u7981\u8DEF\u5F84\u9003\u9038 '..'\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-  if (segs.some((seg) => seg === ".")) {
-    errors.push(`${path7}.${key}: \u7981 '.' \u8DEF\u5F84\u6BB5\uFF08git tree \u4E0D\u4EA7\u751F\u6B64\u5F62\u5F0F\uFF0C\u975E\u89C4\u8303\u8DEF\u5F84\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-  if (segs.some((seg) => seg.length === 0)) {
-    errors.push(`${path7}.${key}: \u7981\u7A7A\u8DEF\u5F84\u6BB5\uFF08\u5F00\u5934/\u7ED3\u5C3E/\u8FDE\u7EED\u5206\u9694\u7B26\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-}
-var ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
-function checkIsoTimestamp(o, key, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B ISO-8601 \u65F6\u95F4\u6233\uFF09`);
-    return;
-  }
-  const v = o[key];
-  if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  if (!ISO_TIMESTAMP_RE.test(v) || Number.isNaN(Date.parse(v))) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A ISO-8601 \u65F6\u95F4\u6233\uFF08\u5982 2026-07-18T00:00:00.000Z\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
-  }
-}
-function subjectRevisionSha(subject2) {
-  const revision = subject2.revision;
-  if (!isObj(revision))
-    return void 0;
-  const sha = revision.sha;
-  return typeof sha === "string" ? sha : void 0;
-}
-function subObj(o, key, path7, errors) {
-  if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
-    return null;
-  }
-  const v = o[key];
-  if (!isObj(v)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return null;
-  }
-  return v;
-}
-var VERDICTS = ["passed", "failed", "inconclusive"];
-var BINDING_KINDS = ["workflow-transition", "default-transition", "runtime-verifier"];
-var ISSUER_KINDS = ["host-verifier", "human-review", "sandbox-report"];
-var EVIDENCE_KINDS = ["repo-file", "command-result"];
-function validateSubject(o, path7, errors) {
-  checkNonEmptyStr(o, "workflow_run_id", path7, errors);
-  checkNonEmptyStr(o, "attempt_id", path7, errors);
-  checkNonEmptyStr(o, "change", path7, errors);
-  const rev = subObj(o, "revision", path7, errors);
-  if (rev !== null) {
-    const rp = `${path7}.revision`;
-    checkLit(rev, "kind", "named-branch-head", rp, errors);
-    checkGitSha(rev, "sha", rp, errors);
-  }
-}
-function validateBinding(o, path7, errors) {
-  switch (o.kind) {
-    case "workflow-transition":
-      checkNonEmptyStr(o, "workflow_digest", path7, errors);
-      checkNonEmptyStr(o, "workflow", path7, errors);
-      checkNonEmptyStr(o, "step", path7, errors);
-      checkNonEmptyStr(o, "event", path7, errors);
-      checkNonNegInt(o, "guard_index", path7, errors, true);
-      checkNonNegInt(o, "action_index", path7, errors, true);
-      break;
-    case "default-transition":
-      checkNonEmptyStr(o, "event", path7, errors);
-      break;
-    case "runtime-verifier":
-      checkNonEmptyStr(o, "verifier", path7, errors);
-      checkNonEmptyStr(o, "version", path7, errors);
-      break;
-    default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${BINDING_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
-  }
-}
-function validateIssuer(o, path7, errors) {
-  switch (o.kind) {
-    case "host-verifier":
-      checkNonEmptyStr(o, "verifier", path7, errors);
-      checkNonEmptyStr(o, "version", path7, errors);
-      checkLit(o, "trusted", true, path7, errors);
-      break;
-    case "human-review":
-      checkNonEmptyStr(o, "actor_id", path7, errors);
-      checkLit(o, "trusted", true, path7, errors);
-      break;
-    case "sandbox-report":
-      checkNonEmptyStr(o, "runner", path7, errors);
-      checkLit(o, "trusted", false, path7, errors);
-      break;
-    default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${ISSUER_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
-  }
-}
-function validateEvidenceRef(v, path7, errors) {
-  if (!isObj(v)) {
-    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
-    return;
-  }
-  switch (v.kind) {
-    case "repo-file":
-      checkRepoRelPath(v, "path", path7, errors);
-      checkSha256(v, "sha256", path7, errors);
-      checkGitSha(v, "revision_sha", path7, errors);
-      break;
-    case "command-result":
-      checkNonEmptyStr(v, "command_id", path7, errors);
-      checkInt(v, "exit_code", path7, errors);
-      checkSha256(v, "stdout_sha256", path7, errors, true);
-      checkSha256(v, "stderr_sha256", path7, errors, true);
-      break;
-    default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${EVIDENCE_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v.kind)}`);
-  }
-}
-function extractEvidenceItem(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const kind = raw.kind;
-  if (kind !== void 0)
-    out.kind = kind;
-  switch (kind) {
-    case "repo-file": {
-      const path7 = raw.path;
-      if (path7 !== void 0)
-        out.path = path7;
-      const sha256 = raw.sha256;
-      if (sha256 !== void 0)
-        out.sha256 = sha256;
-      const revision_sha = raw.revision_sha;
-      if (revision_sha !== void 0)
-        out.revision_sha = revision_sha;
-      break;
-    }
-    case "command-result": {
-      const command_id = raw.command_id;
-      if (command_id !== void 0)
-        out.command_id = command_id;
-      const exit_code = raw.exit_code;
-      if (exit_code !== void 0)
-        out.exit_code = exit_code;
-      const stdout_sha256 = raw.stdout_sha256;
-      if (stdout_sha256 !== void 0)
-        out.stdout_sha256 = stdout_sha256;
-      const stderr_sha256 = raw.stderr_sha256;
-      if (stderr_sha256 !== void 0)
-        out.stderr_sha256 = stderr_sha256;
-      break;
-    }
-    default:
-      break;
-  }
-  return out;
-}
-function extractEvidenceArray(raw) {
-  if (!Array.isArray(raw))
-    return raw;
-  const rawLength = raw.length;
-  const length = Number.isInteger(rawLength) && rawLength >= 0 ? rawLength : 0;
-  const out = [];
-  for (let i = 0; i < length; i++)
-    out.push(extractEvidenceItem(raw[i]));
-  return out;
-}
-function extractRevision(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const kind = raw.kind;
-  if (kind !== void 0)
-    out.kind = kind;
-  const sha = raw.sha;
-  if (sha !== void 0)
-    out.sha = sha;
-  return out;
-}
-function extractSubject(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const workflow_run_id = raw.workflow_run_id;
-  if (workflow_run_id !== void 0)
-    out.workflow_run_id = workflow_run_id;
-  const attempt_id = raw.attempt_id;
-  if (attempt_id !== void 0)
-    out.attempt_id = attempt_id;
-  const change = raw.change;
-  if (change !== void 0)
-    out.change = change;
-  const revision = raw.revision;
-  if (revision !== void 0)
-    out.revision = extractRevision(revision);
-  return out;
-}
-function extractBinding(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const kind = raw.kind;
-  if (kind !== void 0)
-    out.kind = kind;
-  switch (kind) {
-    case "workflow-transition": {
-      const workflow_digest = raw.workflow_digest;
-      if (workflow_digest !== void 0)
-        out.workflow_digest = workflow_digest;
-      const workflow = raw.workflow;
-      if (workflow !== void 0)
-        out.workflow = workflow;
-      const step = raw.step;
-      if (step !== void 0)
-        out.step = step;
-      const event = raw.event;
-      if (event !== void 0)
-        out.event = event;
-      const guard_index = raw.guard_index;
-      if (guard_index !== void 0)
-        out.guard_index = guard_index;
-      const action_index = raw.action_index;
-      if (action_index !== void 0)
-        out.action_index = action_index;
-      break;
-    }
-    case "default-transition": {
-      const event = raw.event;
-      if (event !== void 0)
-        out.event = event;
-      break;
-    }
-    case "runtime-verifier": {
-      const verifier = raw.verifier;
-      if (verifier !== void 0)
-        out.verifier = verifier;
-      const version = raw.version;
-      if (version !== void 0)
-        out.version = version;
-      break;
-    }
-    default:
-      break;
-  }
-  return out;
-}
-function extractIssuer(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const kind = raw.kind;
-  if (kind !== void 0)
-    out.kind = kind;
-  switch (kind) {
-    case "host-verifier": {
-      const verifier = raw.verifier;
-      if (verifier !== void 0)
-        out.verifier = verifier;
-      const version = raw.version;
-      if (version !== void 0)
-        out.version = version;
-      const trusted = raw.trusted;
-      if (trusted !== void 0)
-        out.trusted = trusted;
-      break;
-    }
-    case "human-review": {
-      const actor_id = raw.actor_id;
-      if (actor_id !== void 0)
-        out.actor_id = actor_id;
-      const trusted = raw.trusted;
-      if (trusted !== void 0)
-        out.trusted = trusted;
-      break;
-    }
-    case "sandbox-report": {
-      const runner = raw.runner;
-      if (runner !== void 0)
-        out.runner = runner;
-      const trusted = raw.trusted;
-      if (trusted !== void 0)
-        out.trusted = trusted;
-      break;
-    }
-    default:
-      break;
-  }
-  return out;
-}
-function extractAutomationPolicy(raw) {
-  if (!isObj(raw))
-    return raw;
-  const out = {};
-  const policy_id = raw.policy_id;
-  if (policy_id !== void 0)
-    out.policy_id = policy_id;
-  const policy_version = raw.policy_version;
-  if (policy_version !== void 0)
-    out.policy_version = policy_version;
-  const goal_sha256 = raw.goal_sha256;
-  if (goal_sha256 !== void 0)
-    out.goal_sha256 = goal_sha256;
-  return out;
-}
-function extractTopLevel(raw) {
-  const out = {};
-  const schema_version = raw.schema_version;
-  if (schema_version !== void 0)
-    out.schema_version = schema_version;
-  const verification_id = raw.verification_id;
-  if (verification_id !== void 0)
-    out.verification_id = verification_id;
-  const evaluated_at = raw.evaluated_at;
-  if (evaluated_at !== void 0)
-    out.evaluated_at = evaluated_at;
-  const verdict = raw.verdict;
-  if (verdict !== void 0)
-    out.verdict = verdict;
-  const subject2 = raw.subject;
-  if (subject2 !== void 0)
-    out.subject = extractSubject(subject2);
-  const binding = raw.binding;
-  if (binding !== void 0)
-    out.binding = extractBinding(binding);
-  const automation_policy = raw.automation_policy;
-  if (automation_policy !== void 0)
-    out.automation_policy = extractAutomationPolicy(automation_policy);
-  const issuer = raw.issuer;
-  if (issuer !== void 0)
-    out.issuer = extractIssuer(issuer);
-  const evidence = raw.evidence;
-  if (evidence !== void 0)
-    out.evidence = extractEvidenceArray(evidence);
-  return out;
-}
-function snapshotVerificationResultFields(input) {
-  if (!isObj(input))
-    return input;
-  return extractTopLevel(input);
-}
-function deepFreeze4(value) {
-  if (value === null || typeof value !== "object")
-    return value;
-  if (!Object.isFrozen(value)) {
-    const asObj = value;
-    Object.freeze(asObj);
-    for (const key of Object.keys(asObj))
-      deepFreeze4(asObj[key]);
-  }
-  return value;
-}
-function sanitizeVerificationResultForEncode(input) {
-  try {
-    return snapshotVerificationResultFields(input);
-  } catch (e) {
-    return {
-      __verification_unreadable__: true,
-      __read_error__: safeErrorText(e)
-    };
-  }
-}
-function collectVerificationResultErrors(value, path7, errors) {
-  if (!isObj(value)) {
-    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(value)}`);
-    return;
-  }
-  checkLit(value, "schema_version", 1, path7, errors);
-  checkNonEmptyStr(value, "verification_id", path7, errors);
-  checkIsoTimestamp(value, "evaluated_at", path7, errors);
-  checkEnum(value, "verdict", VERDICTS, path7, errors);
-  const subject2 = subObj(value, "subject", path7, errors);
-  if (subject2 !== null)
-    validateSubject(subject2, `${path7}.subject`, errors);
-  const binding = subObj(value, "binding", path7, errors);
-  if (binding !== null)
-    validateBinding(binding, `${path7}.binding`, errors);
-  if (!missing(value, "automation_policy")) {
-    const policy2 = subObj(value, "automation_policy", path7, errors);
-    if (policy2 !== null) {
-      checkNonEmptyStr(policy2, "policy_id", `${path7}.automation_policy`, errors);
-      checkSha256(policy2, "policy_version", `${path7}.automation_policy`, errors);
-      checkSha256(policy2, "goal_sha256", `${path7}.automation_policy`, errors);
-    }
-  }
-  const issuer = subObj(value, "issuer", path7, errors);
-  if (issuer !== null)
-    validateIssuer(issuer, `${path7}.issuer`, errors);
-  if (missing(value, "evidence")) {
-    errors.push(`${path7}.evidence: \u7F3A\u5931\uFF08\u5FC5\u586B EvidenceRef[]\uFF09`);
-  } else if (!Array.isArray(value.evidence)) {
-    errors.push(`${path7}.evidence: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName(value.evidence)}`);
-  } else {
-    value.evidence.forEach((item2, i) => validateEvidenceRef(item2, `${path7}.evidence[${i}]`, errors));
-    if (value.verdict === "passed" && value.evidence.length === 0) {
-      errors.push(`${path7}.evidence: verdict=passed \u81F3\u5C11\u9700\u4E00\u6761 evidence`);
-    }
-    if (value.verdict === "passed" && subject2 !== null) {
-      const subjectSha = subjectRevisionSha(subject2);
-      if (subjectSha !== void 0) {
-        value.evidence.forEach((item2, i) => {
-          if (isObj(item2) && item2.kind === "repo-file" && typeof item2.revision_sha === "string" && item2.revision_sha !== subjectSha) {
-            errors.push(`${path7}.evidence[${i}].revision_sha: repo-file evidence \u5FC5\u987B\u7ED1\u5B9A subject.revision.sha\uFF08\u671F\u671B ${JSON.stringify(subjectSha)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2.revision_sha)}\u2014\u2014\u65E7 revision \u7684\u8BC1\u636E\u4E0D\u5F97\u652F\u6491\u65B0 revision \u7684 passed\uFF09`);
-          }
-        });
-      }
-    }
-  }
-}
-function validateVerificationResult(input, path7 = "verification") {
-  let snapshot;
-  try {
-    snapshot = snapshotVerificationResultFields(input);
-  } catch (e) {
-    return {
-      ok: false,
-      errors: [`${path7}: \u8BFB\u53D6\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF08\u7591\u4F3C\u654C\u610F getter/Proxy trap\uFF09\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
-    };
-  }
-  const errors = [];
-  try {
-    collectVerificationResultErrors(snapshot, path7, errors);
-  } catch (e) {
-    return {
-      ok: false,
-      errors: [`${path7}: \u6821\u9A8C\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
-    };
-  }
-  if (errors.length > 0)
-    return { ok: false, errors };
-  return { ok: true, value: deepFreeze4(snapshot) };
-}
-
-// packages/kernel/dist/loops/ledger-codec-primitives.js
-function isObj2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function typeName2(value) {
-  if (value === null)
-    return "null";
-  if (Array.isArray(value))
-    return "array";
-  return typeof value;
-}
-function missing2(value, key) {
-  return !(key in value) || value[key] === void 0;
-}
-function checkStr(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string\uFF09`);
-    return;
-  }
-  if (typeof value[key] !== "string")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
-}
-function checkNum(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B number\uFF09`);
-    return;
-  }
-  if (typeof value[key] !== "number")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A number\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
-}
-function checkBool(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B boolean\uFF09`);
-    return;
-  }
-  if (typeof value[key] !== "boolean")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A boolean\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
-}
-function checkKnownKeys(value, allowed, path7, errors) {
-  const known = new Set(allowed);
-  for (const key of Object.keys(value)) {
-    if (!known.has(key))
-      errors.push(`${path7}.${key}: \u672A\u77E5\u5B57\u6BB5`);
-  }
-}
-function checkEnum2(value, key, allowed, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
-    return;
-  }
-  const item2 = value[key];
-  if (typeof item2 !== "string" || !allowed.includes(item2)) {
-    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
-  }
-}
-function checkLit2(value, key, literal, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
-    return;
-  }
-  if (value[key] !== literal) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(value[key])}`);
-  }
-}
-function checkStrArray(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string[]\uFF09`);
-    return;
-  }
-  const items = value[key];
-  if (!Array.isArray(items)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string[]\uFF0C\u5B9E\u5F97 ${typeName2(items)}`);
-    return;
-  }
-  items.forEach((item2, index) => {
-    if (typeof item2 !== "string")
-      errors.push(`${path7}.${key}[${index}]: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
-  });
-}
-function subObj2(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
-    return null;
-  }
-  const child = value[key];
-  if (!isObj2(child)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(child)}`);
-    return null;
-  }
-  return child;
-}
-var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
-function checkSha2562(value, key, path7, errors, optional = false) {
-  if (missing2(value, key)) {
-    if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
-    return;
-  }
-  const digest4 = value[key];
-  if (typeof digest4 !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest4)}`);
-    return;
-  }
-  if (!SHA256_HEX_RE.test(digest4)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest4)}`);
-  }
-}
-function checkPattern(value, key, pattern, path7, errors) {
-  if (missing2(value, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u987B\u5339\u914D ${pattern.source}\uFF09`);
-    return;
-  }
-  const item2 = value[key];
-  if (typeof item2 !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
-    return;
-  }
-  if (!pattern.test(item2))
-    errors.push(`${path7}.${key}: \u4E0D\u5339\u914D\u8BCD\u6CD5 ${pattern.source}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
-}
-function checkSlotArray(value, key, path7, errors) {
-  if (missing2(value, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6570\u7EC4\uFF0C\u5141\u8BB8\u4E3A\u7A7A\uFF09`);
-    return;
-  }
-  const slots = value[key];
-  if (!Array.isArray(slots)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName2(slots)}`);
-    return;
-  }
-  slots.forEach((item2, index) => {
-    const itemPath = `${path7}.${key}[${index}]`;
-    if (!isObj2(item2)) {
-      errors.push(`${itemPath}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
-      return;
-    }
-    checkStr(item2, "token", itemPath, errors);
-    checkStrArray(item2, "alternatives", itemPath, errors);
-    checkStr(item2, "concrete_skill_id", itemPath, errors);
-    checkSha2562(item2, "tree_sha256", itemPath, errors);
-  });
-}
-
-// packages/kernel/dist/loops/ledger-codec.js
-function encodeLedgerRecord(record4) {
-  if (record4.kind !== "run" && record4.kind !== "merge-intent" || record4.verification === void 0) {
-    return JSON.stringify(record4);
-  }
-  const sanitizedVerification = sanitizeVerificationResultForEncode(record4.verification);
-  return JSON.stringify({ ...record4, verification: sanitizedVerification });
-}
-var BINDING_SOURCES = ["explicit", "longest-prefix"];
-var TOKEN_BASES = ["budget.tokens_per_run", "risk-default"];
-var EXCEED_ACTIONS2 = ["skip-run", "pause-loop", "halt-round"];
-var LEVELS = ["L1", "L2", "L3"];
-var RUN_RESULTS = ["merged", "paused", "conflict", "failed", "retry-queued", "skipped"];
-var RUN_REASONS = [
-  "completed",
-  "host-sync-pending",
-  "merge-journal-pending",
-  "no-op",
-  "verify-fail",
-  "claim-lost",
-  "admission-denied",
-  "kill-switch",
-  "cancelled",
-  "infrastructure-error",
-  "recovered",
-  "reservation-expired",
-  // H7 verifier Phase 2：settlement verification gate 的 fail-closed 诊断成因。
-  "verification-missing",
-  "verification-untrusted",
-  "verification-inconclusive",
-  "verification-subject-mismatch",
-  // H7-S2（返工 r2 阻断4 custom fail-closed）：custom workflow 核验结果未真正落在 workflow-transition
-  // binding 时的诊断成因。
-  "verification-binding-unresolved",
-  "verification-policy-mismatch",
-  "automation-policy-bind-failed",
-  // H10 §5/§8任务5：admission/prepareSkillBundle 的精确 fail-closed 诊断闭集（同构镜像
-  // automation/admission/execution-context.ts::PreparationFailureReason；前两值 unwired/
-  // profile-not-found 实践中只出现在 AdmissionDenial 自由 string，从不落 RunRecord，仍纳入本
-  // 闭集只为与设计定稿 §5 十项闭集保持同一份字面量列表，见 ledger-types.ts::RunRecord.reason 头注）。
-  "skill-bundle-unwired",
-  "skill-bundle-profile-not-found",
-  "skill-bundle-resolve-failed",
-  "skill-bundle-skill-not-found",
-  "skill-bundle-content-invalid",
-  "skill-bundle-source-ambiguous",
-  "skill-bundle-policy-changed",
-  "skill-bundle-source-unstable",
-  "skill-bundle-snapshot-io",
-  "skill-bundle-snapshot-corrupt"
-];
-var CHARGE_SOURCES = ["provider-structured", "reserved-estimate", "none"];
-var RESOLUTION_SOURCES = ["default", "custom"];
-function validateBinding2(o, errors) {
-  const p = "change-loop-binding";
-  checkStr(o, "change", p, errors);
-  checkStr(o, "loop_id", p, errors);
-  checkEnum2(o, "source", BINDING_SOURCES, p, errors);
-  checkStr(o, "supersedes_record_id", p, errors, true);
-}
-function validateReservation(o, errors) {
-  const p = "budget-reservation";
-  checkStr(o, "reservation_id", p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "iteration_id", p, errors, true);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "change", p, errors);
-  checkStr(o, "budget_day", p, errors);
-  checkLit2(o, "reserved_runs", 1, p, errors);
-  checkNum(o, "reserved_tokens", p, errors);
-  checkEnum2(o, "token_basis", TOKEN_BASES, p, errors);
-  const limits = subObj2(o, "limits_snapshot", p, errors);
-  if (limits !== null) {
-    const lp = `${p}.limits_snapshot`;
-    checkNum(limits, "max_runs_per_day", lp, errors);
-    checkNum(limits, "max_in_flight", lp, errors);
-    checkNum(limits, "max_tokens_per_day", lp, errors, true);
-    checkEnum2(limits, "on_exceed", EXCEED_ACTIONS2, lp, errors);
-  }
-  const context = subObj2(o, "attempt_context", p, errors, true);
-  if (context !== null) {
-    const cp = `${p}.attempt_context`;
-    checkKnownKeys(context, ["source_run_record_ids", "omitted_attempt_ids", "rendered", "stagnation"], cp, errors);
-    checkStrArray(context, "source_run_record_ids", cp, errors);
-    checkStrArray(context, "omitted_attempt_ids", cp, errors);
-    checkStr(context, "rendered", cp, errors);
-    const stagnation = subObj2(context, "stagnation", cp, errors);
-    if (stagnation !== null) {
-      const sp = `${cp}.stagnation`;
-      checkKnownKeys(stagnation, ["stagnant", "fingerprint", "repeated_attempt_ids"], sp, errors);
-      checkBool(stagnation, "stagnant", sp, errors);
-      checkSha2562(stagnation, "fingerprint", sp, errors, true);
-      checkStrArray(stagnation, "repeated_attempt_ids", sp, errors);
-    }
-  }
-  checkStr(o, "expires_at", p, errors);
-}
-function validateSkillBundleSnapshot(o, errors) {
-  const p = "skill-bundle-snapshot";
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "reservation_id", p, errors);
-  checkStr(o, "loop_id", p, errors);
-  checkPattern(o, "skill_bundle_id", SKILL_BUNDLE_ID_RE, p, errors);
-  checkStr(o, "policy_epoch", p, errors);
-  checkEnum2(o, "resolution_source", RESOLUTION_SOURCES, p, errors);
-  checkStr(o, "workflow_run_id", p, errors);
-  checkStr(o, "workflow", p, errors);
-  checkStr(o, "step", p, errors);
-  checkStr(o, "track", p, errors);
-  checkSha2562(o, "coordinate_digest", p, errors);
-  checkSha2562(o, "snapshot_sha256", p, errors);
-  checkStr(o, "cas_relative_path", p, errors);
-  checkSlotArray(o, "slots", p, errors);
-}
-function validateActivated(o, errors) {
-  const p = "reservation-activated";
-  checkStr(o, "reservation_id", p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "iteration_id", p, errors, true);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "change", p, errors);
-  checkStr(o, "started_at", p, errors);
-}
-function validateUsage(o, errors) {
-  const p = "usage";
-  checkStr(o, "usage_id", p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "iteration_id", p, errors, true);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "provider", p, errors);
-  checkStr(o, "model", p, errors, true);
-  checkStr(o, "request_id", p, errors, true);
-  const tokens = subObj2(o, "tokens", p, errors);
-  if (tokens !== null) {
-    const tp = `${p}.tokens`;
-    checkNum(tokens, "input", tp, errors);
-    checkNum(tokens, "output", tp, errors);
-    checkNum(tokens, "cached_input", tp, errors, true);
-    checkNum(tokens, "reasoning", tp, errors, true);
-    checkNum(tokens, "total", tp, errors);
-    const count = (key) => {
-      const value = tokens[key];
-      if (typeof value !== "number")
-        return void 0;
-      if (!Number.isSafeInteger(value) || value < 0) {
-        errors.push(`${tp}.${key}: token count \u5FC5\u987B\u662F\u975E\u8D1F safe integer`);
-        return void 0;
-      }
-      return value;
-    };
-    const input = count("input");
-    const output = count("output");
-    const cached = missing2(tokens, "cached_input") ? void 0 : count("cached_input");
-    const reasoning = missing2(tokens, "reasoning") ? void 0 : count("reasoning");
-    const total = count("total");
-    if (input !== void 0 && cached !== void 0 && cached > input) {
-      errors.push(`${tp}.cached_input: \u4E0D\u5F97\u5927\u4E8E input`);
-    }
-    if (output !== void 0 && reasoning !== void 0 && reasoning > output) {
-      errors.push(`${tp}.reasoning: \u4E0D\u5F97\u5927\u4E8E output`);
-    }
-    if (input !== void 0 && output !== void 0 && total !== void 0 && (!Number.isSafeInteger(input + output) || total !== input + output)) {
-      errors.push(`${tp}.total: \u5FC5\u987B\u7B49\u4E8E input + output`);
-    }
-  }
-  checkLit2(o, "source", "provider-structured", p, errors);
-  checkStr(o, "observed_at", p, errors);
-}
-var RECORD_HEAD_KEYS = ["schema_version", "record_id", "recorded_at", "kind"];
-var VERIFY_KEYS = ["result", "source", "trusted"];
-var ARTIFACT_KEYS2 = ["build_sha", "build_sha_source", "branch", "commit_shas"];
-var ACCOUNTING_KEYS = ["reserved_tokens", "charged_tokens", "charge_source"];
-var ERROR_KEYS = ["cause", "message"];
-function validateMergeIntent(o, errors) {
-  const p = "merge-intent";
-  checkKnownKeys(o, [
-    ...RECORD_HEAD_KEYS,
-    "attempt_id",
-    "iteration_id",
-    "reservation_id",
-    "loop_id",
-    "change",
-    "workflow_run_id",
-    "base_ref",
-    "expected_base_sha",
-    "branch_ref",
-    "expected_branch_sha",
-    "merged_commit_sha",
-    "level",
-    "runner",
-    "image",
-    "admitted_at",
-    "started_at",
-    "created_at",
-    "verify",
-    "verification",
-    "artifacts",
-    "skill_bundle_snapshot_sha256",
-    "usage_record_ids",
-    "accounting"
-  ], p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "iteration_id", p, errors, true);
-  checkStr(o, "reservation_id", p, errors);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "change", p, errors);
-  checkStr(o, "workflow_run_id", p, errors);
-  checkStr(o, "base_ref", p, errors);
-  checkStr(o, "expected_base_sha", p, errors);
-  checkStr(o, "branch_ref", p, errors);
-  checkStr(o, "expected_branch_sha", p, errors);
-  checkStr(o, "merged_commit_sha", p, errors);
-  checkEnum2(o, "level", LEVELS, p, errors);
-  checkStr(o, "runner", p, errors);
-  checkStr(o, "image", p, errors, true);
-  checkStr(o, "admitted_at", p, errors);
-  checkStr(o, "started_at", p, errors, true);
-  checkStr(o, "created_at", p, errors);
-  const verify = subObj2(o, "verify", p, errors, true);
-  if (verify !== null) {
-    const vp = `${p}.verify`;
-    checkKnownKeys(verify, VERIFY_KEYS, vp, errors);
-    checkEnum2(verify, "result", ["pass", "fail"], vp, errors);
-    checkLit2(verify, "source", "sandbox-output", vp, errors);
-    checkLit2(verify, "trusted", false, vp, errors);
-  }
-  if (!missing2(o, "verification")) {
-    const verified = validateVerificationResult(o.verification, `${p}.verification`);
-    if (!verified.ok)
-      errors.push(...verified.errors);
-    else
-      o.verification = verified.value;
-  }
-  const artifacts = subObj2(o, "artifacts", p, errors, true);
-  if (artifacts !== null) {
-    const ap = `${p}.artifacts`;
-    checkKnownKeys(artifacts, ARTIFACT_KEYS2, ap, errors);
-    checkStr(artifacts, "build_sha", ap, errors, true);
-    checkLit2(artifacts, "build_sha_source", "named-branch-head", ap, errors, true);
-    checkStr(artifacts, "branch", ap, errors, true);
-    checkStrArray(artifacts, "commit_shas", ap, errors);
-  }
-  checkSha2562(o, "skill_bundle_snapshot_sha256", p, errors, true);
-  checkStrArray(o, "usage_record_ids", p, errors);
-  const accounting = subObj2(o, "accounting", p, errors);
-  if (accounting !== null) {
-    const ap = `${p}.accounting`;
-    checkKnownKeys(accounting, ACCOUNTING_KEYS, ap, errors);
-    checkNum(accounting, "reserved_tokens", ap, errors);
-    checkNum(accounting, "charged_tokens", ap, errors);
-    checkEnum2(accounting, "charge_source", CHARGE_SOURCES, ap, errors);
-  }
-}
-function validateMergeLanded(o, errors) {
-  const p = "merge-landed";
-  checkKnownKeys(o, [
-    ...RECORD_HEAD_KEYS,
-    "intent_record_id",
-    "attempt_id",
-    "reservation_id",
-    "loop_id",
-    "change",
-    "base_ref",
-    "base_before_sha",
-    "branch_sha",
-    "merged_commit_sha",
-    "host_synced",
-    "host_sync_error",
-    "landed_at"
-  ], p, errors);
-  checkStr(o, "intent_record_id", p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "reservation_id", p, errors);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "change", p, errors);
-  checkStr(o, "base_ref", p, errors);
-  checkStr(o, "base_before_sha", p, errors);
-  checkStr(o, "branch_sha", p, errors);
-  checkStr(o, "merged_commit_sha", p, errors);
-  checkBool(o, "host_synced", p, errors);
-  const syncError = subObj2(o, "host_sync_error", p, errors, true);
-  if (syncError !== null) {
-    const ep = `${p}.host_sync_error`;
-    checkKnownKeys(syncError, ERROR_KEYS, ep, errors);
-    checkStr(syncError, "cause", ep, errors);
-    checkStr(syncError, "message", ep, errors);
-    if (o.host_synced === true)
-      errors.push(`${p}.host_sync_error: host_synced=true \u65F6\u4E0D\u5F97\u5B58\u5728`);
-  }
-  checkStr(o, "landed_at", p, errors);
-}
-function validateRun(o, errors) {
-  const p = "run";
-  checkStr(o, "run_record_id", p, errors);
-  checkStr(o, "attempt_id", p, errors);
-  checkStr(o, "iteration_id", p, errors, true);
-  checkStr(o, "reservation_id", p, errors, true);
-  checkStr(o, "loop_id", p, errors);
-  checkStr(o, "change", p, errors);
-  checkStr(o, "workflow_run_id", p, errors, true);
-  checkEnum2(o, "level", LEVELS, p, errors);
-  checkStr(o, "runner", p, errors);
-  checkStr(o, "image", p, errors, true);
-  checkStr(o, "admitted_at", p, errors);
-  checkStr(o, "started_at", p, errors, true);
-  checkStr(o, "finished_at", p, errors);
-  checkEnum2(o, "result", RUN_RESULTS, p, errors);
-  checkEnum2(o, "reason", RUN_REASONS, p, errors, true);
-  const verify = subObj2(o, "verify", p, errors, true);
-  if (verify !== null) {
-    const vp = `${p}.verify`;
-    checkEnum2(verify, "result", ["pass", "fail"], vp, errors);
-    checkLit2(verify, "source", "sandbox-output", vp, errors);
-    checkLit2(verify, "trusted", false, vp, errors);
-  }
-  if (!missing2(o, "verification")) {
-    const verified = validateVerificationResult(o.verification, `${p}.verification`);
-    if (!verified.ok)
-      errors.push(...verified.errors);
-    else
-      o.verification = verified.value;
-  }
-  const artifacts = subObj2(o, "artifacts", p, errors, true);
-  if (artifacts !== null) {
-    const ap = `${p}.artifacts`;
-    checkStr(artifacts, "build_sha", ap, errors, true);
-    checkLit2(artifacts, "build_sha_source", "named-branch-head", ap, errors, true);
-    checkStr(artifacts, "branch", ap, errors, true);
-    checkStrArray(artifacts, "commit_shas", ap, errors);
-  }
-  checkSha2562(o, "skill_bundle_snapshot_sha256", p, errors, true);
-  checkStrArray(o, "usage_record_ids", p, errors);
-  const accounting = subObj2(o, "accounting", p, errors);
-  if (accounting !== null) {
-    const cp = `${p}.accounting`;
-    checkNum(accounting, "reserved_tokens", cp, errors);
-    checkNum(accounting, "charged_tokens", cp, errors);
-    checkEnum2(accounting, "charge_source", CHARGE_SOURCES, cp, errors);
-  }
-  const error2 = subObj2(o, "error", p, errors, true);
-  if (error2 !== null) {
-    const ep = `${p}.error`;
-    checkStr(error2, "cause", ep, errors);
-    checkStr(error2, "message", ep, errors);
-  }
-}
-var KIND_VALIDATORS = {
-  "change-loop-binding": validateBinding2,
-  "budget-reservation": validateReservation,
-  "skill-bundle-snapshot": validateSkillBundleSnapshot,
-  "reservation-activated": validateActivated,
-  usage: validateUsage,
-  "merge-intent": validateMergeIntent,
-  "merge-landed": validateMergeLanded,
-  run: validateRun
-};
-function decodeLedgerLine(line) {
-  let parsed;
-  try {
-    parsed = JSON.parse(line);
-  } catch (e) {
-    return { ok: false, error: `\u975E\u6CD5 JSON: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  if (!isObj2(parsed)) {
-    return { ok: false, error: `\u9876\u5C42\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u4E00\u884C\u4E00\u6761\u8BB0\u5F55\uFF09\uFF0C\u5B9E\u5F97 ${typeName2(parsed)}` };
-  }
-  const errors = [];
-  checkLit2(parsed, "schema_version", 1, "record", errors);
-  checkStr(parsed, "record_id", "record", errors);
-  checkStr(parsed, "recorded_at", "record", errors);
-  const kind = parsed.kind;
-  const validate = typeof kind === "string" ? KIND_VALIDATORS[kind] : void 0;
-  if (validate === void 0) {
-    errors.push(`record.kind: \u672A\u77E5\u8BB0\u5F55\u7C7B\u578B ${JSON.stringify(kind)}\uFF08\u95ED\u96C6 ${Object.keys(KIND_VALIDATORS).join("|")}\uFF09`);
-    return { ok: false, error: errors.join("; ") };
-  }
-  validate(parsed, errors);
-  if (!isValidatedLedgerRecord(parsed, errors))
-    return { ok: false, error: errors.join("; ") };
-  return { ok: true, record: parsed };
-}
-function isValidatedLedgerRecord(value, errors) {
-  return isObj2(value) && errors.length === 0;
-}
-
-// packages/kernel/dist/loops/ledger-store.js
-import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
-import { createHash as createHash12 } from "node:crypto";
-import { mkdir as mkdir12, open as open3, readFile as readFile13 } from "node:fs/promises";
-import { join as join25, resolve as resolve11 } from "node:path";
-var LEDGER_DIR = [".pipeline", "loops"];
-var LEDGER_FILE = "ledger.jsonl";
-function ledgerDirPath(repoRoot) {
-  return join25(repoRoot, ...LEDGER_DIR);
-}
-function ledgerFilePath(repoRoot) {
-  return join25(ledgerDirPath(repoRoot), LEDGER_FILE);
-}
-var LedgerDegradedError = class extends Error {
-  _tag = "LedgerDegradedError";
-  constructor(message) {
-    super(message);
-    this.name = "LedgerDegradedError";
-  }
-};
-var UnknownReservationError = class extends Error {
-  _tag = "UnknownReservationError";
-  constructor(message) {
-    super(message);
-    this.name = "UnknownReservationError";
-  }
-};
-var ReservationCorruptionError = class extends Error {
-  _tag = "ReservationCorruptionError";
-  constructor(message) {
-    super(message);
-    this.name = "ReservationCorruptionError";
-  }
-};
-var ReservationMismatchError = class extends Error {
-  _tag = "ReservationMismatchError";
-  constructor(message) {
-    super(message);
-    this.name = "ReservationMismatchError";
-  }
-};
-var ReservationAppendError = class extends Error {
-  _tag = "ReservationAppendError";
-  constructor(message) {
-    super(message);
-    this.name = "ReservationAppendError";
-  }
-};
-var heldLedgerDirs = new AsyncLocalStorage2();
-function shortHash(raw) {
-  return createHash12("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
-}
-function createLoopLedgerStore() {
-  function withLedgerLock(repoRoot, fn) {
-    const key = resolve11(ledgerDirPath(repoRoot));
-    const currentToken = heldLedgerDirs.getStore()?.get(key);
-    if (currentToken?.active === true) {
-      const p = fn();
-      currentToken.pending.add(p);
-      void p.catch(() => {
-      });
-      return p;
-    }
-    return acquireAndRun(key, fn);
-  }
-  async function acquireAndRun(key, fn) {
-    const held = heldLedgerDirs.getStore();
-    await mkdir12(key, { recursive: true });
-    return withLock(key, async () => {
-      const token = { active: true, pending: /* @__PURE__ */ new Set() };
-      const next = /* @__PURE__ */ new Map();
-      for (const [k, t] of held ?? [])
-        if (t.active)
-          next.set(k, t);
-      next.set(key, token);
-      try {
-        return await heldLedgerDirs.run(next, fn);
-      } finally {
-        while (token.pending.size > 0) {
-          const batch = [...token.pending];
-          token.pending.clear();
-          await Promise.allSettled(batch);
-        }
-        token.active = false;
-      }
-    });
-  }
-  async function writeRecordLine(repoRoot, record4) {
-    const line = encodeLedgerRecord(record4);
-    const back = decodeLedgerLine(line);
-    if (!back.ok) {
-      throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
-    }
-    const fh = await open3(ledgerFilePath(repoRoot), "a");
-    try {
-      const buf = Buffer.from(`${line}
-`, "utf8");
-      const { bytesWritten } = await fh.write(buf, 0, buf.length);
-      if (bytesWritten !== buf.length) {
-        throw new Error(`loops ledger append: \u77ED\u5199 ${bytesWritten}/${buf.length} \u5B57\u8282\uFF08\u78C1\u76D8\u6EE1/IO \u6545\u969C\uFF09`);
-      }
-      await fh.sync();
-    } finally {
-      await fh.close();
-    }
-  }
-  async function append2(repoRoot, record4) {
-    if (record4.kind === "run" && record4.reservation_id !== void 0) {
-      throw new ReservationAppendError("RunRecord with reservation_id must use closeReservationIfOpen()\uFF08\u5E26 reservation_id \u7684 terminal \u8BB0\u5F55\u7981\u8D70\u666E\u901A append\uFF09");
-    }
-    const back = decodeLedgerLine(encodeLedgerRecord(record4));
-    if (!back.ok) {
-      throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
-    }
-    await withLedgerLock(repoRoot, () => writeRecordLine(repoRoot, record4));
-  }
-  async function closeReservationIfOpen(repoRoot, reservationId, create) {
-    return withLedgerLock(repoRoot, async () => {
-      const { records, rejected } = await read(repoRoot);
-      if (rejected.length > 0) {
-        throw new LedgerDegradedError(`loops ledger closeReservationIfOpen: \u8D26\u672C\u6709 ${rejected.length} \u6761\u574F\u884C\uFF0C\u62D2\u7EDD\u5728\u635F\u574F\u8D26\u672C\u4E0A\u5173\u95ED reservation\u300C${reservationId}\u300D\uFF08\u4E0D\u731C\u662F\u5426\u5DF2\u5173\u95ED\uFF09`);
-      }
-      const reservations = records.filter((r) => r.kind === "budget-reservation" && r.reservation_id === reservationId);
-      if (reservations.length === 0) {
-        throw new UnknownReservationError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u5728\u8D26\u672C\u4E2D\u4E0D\u5B58\u5728`);
-      }
-      if (reservations.length > 1) {
-        throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u6709 ${reservations.length} \u6761\u540C ID \u9884\u5360\u8BB0\u5F55\uFF08\u8D26\u672C\u635F\u574F\uFF09`);
-      }
-      const reservation = required(reservations[0]);
-      const terminals = records.filter((r) => r.kind === "run" && r.reservation_id === reservationId);
-      if (terminals.length === 1) {
-        return { status: "already-closed", existing: terminals[0] };
-      }
-      if (terminals.length > 1) {
-        throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u6709 ${terminals.length} \u6761 terminal\uFF08\u8D26\u672C\u635F\u574F\uFF0C\u91CD\u590D\u7ED3\u7B97\u75D5\u8FF9\uFF09`);
-      }
-      const record4 = create(reservation);
-      if (record4.kind !== "run" || record4.reservation_id !== reservationId || record4.attempt_id !== reservation.attempt_id || record4.loop_id !== reservation.loop_id || record4.change !== reservation.change || reservation.iteration_id !== void 0 && record4.iteration_id !== reservation.iteration_id) {
-        throw new ReservationMismatchError(`loops ledger closeReservationIfOpen: create \u4EA7\u51FA\u7684 RunRecord \u4E0E reservation\u300C${reservationId}\u300D\u5173\u952E\u5B57\u6BB5\u4E0D\u4E00\u81F4\uFF08reservation_id/attempt_id/iteration_id/loop_id/change\uFF09`);
-      }
-      await writeRecordLine(repoRoot, record4);
-      return { status: "committed", record: record4 };
-    });
-  }
-  async function read(repoRoot) {
-    let text3;
-    try {
-      text3 = await readFile13(ledgerFilePath(repoRoot), "utf8");
-    } catch (e) {
-      if (e.code === "ENOENT")
-        return { records: [], rejected: [] };
-      throw e;
-    }
-    const records = [];
-    const rejected = [];
-    const lines = text3.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const raw = required(lines[i]);
-      if (raw.trim() === "") {
-        if (raw === "" && i === lines.length - 1)
-          continue;
-        rejected.push({
-          line: i + 1,
-          raw_hash: shortHash(raw),
-          error: "\u7A7A\u767D\u884C\uFF08blank/whitespace line\uFF09\uFF1AJSONL \u8BB0\u5F55\u4E4B\u95F4\u4E0D\u5141\u8BB8\u7A7A\u884C\uFF0C\u89C6\u4E3A\u6587\u4EF6\u635F\u574F\u75D5\u8FF9"
-        });
-        continue;
-      }
-      const r = decodeLedgerLine(raw);
-      if (r.ok)
-        records.push(r.record);
-      else
-        rejected.push({ line: i + 1, raw_hash: shortHash(raw), error: r.error });
-    }
-    return { records, rejected };
-  }
-  async function readRunWindow(repoRoot, opts) {
-    const { records, rejected } = await read(repoRoot);
-    const inScope = (loopId) => opts.loopId === void 0 || loopId === opts.loopId;
-    const closedReservationIds = /* @__PURE__ */ new Set();
-    for (const rec of records) {
-      if (rec.kind === "run" && rec.reservation_id !== void 0)
-        closedReservationIds.add(rec.reservation_id);
-    }
-    const fileIndex = /* @__PURE__ */ new Map();
-    const runsByLoop = /* @__PURE__ */ new Map();
-    records.forEach((rec, idx) => {
-      if (rec.kind !== "run" || !inScope(rec.loop_id))
-        return;
-      fileIndex.set(rec, idx);
-      const bucket = runsByLoop.get(rec.loop_id);
-      if (bucket === void 0)
-        runsByLoop.set(rec.loop_id, [rec]);
-      else
-        bucket.push(rec);
-    });
-    const runs = [...runsByLoop.values()].flatMap((bucket) => opts.limit > 0 ? bucket.slice(-opts.limit) : []).sort((a, b) => required(fileIndex.get(a)) - required(fileIndex.get(b)));
-    const openReservations = records.filter((rec) => rec.kind === "budget-reservation" && inScope(rec.loop_id) && !closedReservationIds.has(rec.reservation_id));
-    const openIds = new Set(openReservations.map((r) => r.reservation_id));
-    const activated = records.filter((rec) => rec.kind === "reservation-activated" && openIds.has(rec.reservation_id));
-    const snapshotByReservation = indexSkillBundleSnapshots(records);
-    const skillBundleSnapshots = openReservations.map((r) => snapshotByReservation.get(r.reservation_id)).filter((s) => s !== void 0);
-    return { runs, openReservations, activated, skillBundleSnapshots, rejected };
-  }
-  return { append: append2, closeReservationIfOpen, withLedgerLock, read, readRunWindow };
 }
 
 // packages/kernel/dist/loops/governance.js
@@ -26092,6 +26137,10 @@ function assertVersion2(anchor, expected) {
     throw new ContextBundlePathError(403, "Skill invocation registered root changed during read", cause);
   }
 }
+function missingChange(cause) {
+  if (cause instanceof ContextBundlePathError) return cause.status === 400;
+  return typeof cause === "object" && cause !== null && Reflect.get(cause, "code") === "ENOENT";
+}
 async function readAnchoredSkillInvocationEvidence(anchor, change, overrides = {}) {
   const deps = { ...anchoredDeps, ...overrides };
   assertRoot(anchor, deps.assertRoot);
@@ -26104,7 +26153,11 @@ async function readAnchoredSkillInvocationEvidence(anchor, change, overrides = {
     assertRoot(anchor, deps.assertRoot);
     assertVersion2(anchor, version);
     deps.assertChangeParent(parent);
-    throw Object.assign(new Error("Skill invocation Change does not exist"), { status: 404, cause });
+    if (cause instanceof ContextBundlePathError && cause.status === 403) throw cause;
+    if (missingChange(cause)) {
+      throw Object.assign(new Error("Skill invocation Change does not exist"), { status: 404, cause });
+    }
+    throw new ContextBundlePathError(403, "Skill invocation Change path is not trusted", cause);
   }
   assertRoot(anchor, deps.assertRoot);
   deps.assertChangeParent(parent);

@@ -14,6 +14,7 @@ import {
   isDocumentPolicyStep,
   migrateLegacyDeltaDocument,
   recordDocument,
+  recordCanonicalDocumentSkillInvocation,
   recordDocumentReads,
   renderDocumentTemplate,
   documentPathForKind,
@@ -212,22 +213,33 @@ export async function cmdDocumentRecord(
   if (producer === '') return reject(deps, '--producer 不得为空')
   if (producer.includes('|')) return reject(deps, `--producer '${producer}' 必须是单个具体 skill id`)
   try {
+    const recordedAt = deps.clock()
     await deps.store.withLock(dir, async () => {
-      const context = governedDocumentContext(deps, await deps.store.read(dir))
+      const state = await deps.store.read(dir)
+      const context = governedDocumentContext(deps, state)
       const { phase, policy } = assertGoverned(context)
+      const runMetadata = state.runMetadata
+      if (runMetadata === undefined) throw new Error('canonical WorkflowRun StepVisit identity is missing')
       // Native PostToolUse remains the fast path.  On Codex hosts that omit that callback for a
       // completed `exec` tool call, reconcile the earlier PreToolUse receipt against the
       // host-owned transcript *inside this same change lock* before the kernel inspects history.
       // A receipt alone cannot pass this point.
-      await reconcileCodexSkillEvidence({
+      const reconciled = await reconcileCodexSkillEvidence({
         repoRoot: deps.cwd,
         changeDir: dir,
         producer,
-        recordedAt: deps.clock(),
+        recordedAt,
         history: deps.history,
         evidenceScope: phase,
+        stepVisit: {
+          runId: runMetadata.runId,
+          transitionSequence: runMetadata.transitionSequence,
+        },
       })
-      await recordDocument({
+      if (reconciled.confirmedSkillIds.length === 0) {
+        throw new Error(`current StepVisit lacks exact Codex confirmation for document producer '${producer}'`)
+      }
+      const ledger = await recordDocument({
         repoRoot: deps.cwd,
         changeDir: dir,
         phase,
@@ -235,10 +247,21 @@ export async function cmdDocumentRecord(
         kind: kind as DocumentKind,
         path,
         producer,
-        recordedAt: deps.clock(),
+        recordedAt,
         allowBackfill: backfill,
       })
+      const canonicalRecord = ledger.records.find((record) =>
+        record.kind === kind
+        && record.producer === producer
+        && record.recordedAt === recordedAt)
+      if (canonicalRecord === undefined) throw new Error('canonical document record missing after registration')
     })
+    // The evidence repository takes the same Change lock internally. It derives every event field
+    // from the canonical document record and current transcript confirmation after this lock exits.
+    const invocation = await recordCanonicalDocumentSkillInvocation(dir, kind as DocumentKind, recordedAt)
+    if (invocation === undefined) {
+      throw new Error('canonical document record lacks exact current-StepVisit invocation evidence')
+    }
     return 0
   } catch (error) {
     return reject(deps, errMsg(error))

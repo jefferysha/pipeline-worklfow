@@ -39,6 +39,7 @@
 import { isSettled, type FailureCommitInput, type FailureCommitResult } from '../queue/claim.js'
 import { settleSuccess } from '../queue/state-machine.js'
 import { type AutomationConfig, type AutomationState, type RunOutcome } from '../types.js'
+import type { AfkSkillInvocationHandle, AfkSkillInvocationLifecycle } from '../skillInvocationAfkLifecycle.js'
 import type {
   ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
 } from '../admission/execution-context.js'
@@ -149,8 +150,8 @@ export type HandleResult =
  */
 export type RunChange = (context: PreparedExecutionContext, signal: AbortSignal) => Promise<RunOutcome>
 
-/** 注册同步 shutdown teardown；返回反注册 fn。 */
-export type RegisterShutdown = (teardown: () => void) => () => void
+/** 注册可异步排空的 shutdown teardown；SIGINT/SIGTERM 处理会保持进程存活直至 Promise 落地。 */
+export type RegisterShutdown = (teardown: () => void | Promise<void>) => () => void
 
 /** 旁路 kanban observer（fire-and-forget，绝不 throw 出去）。 */
 export interface AfkObserver {
@@ -210,6 +211,8 @@ export interface SchedulerDeps {
    * admission/claim/runChange），绝不把裸 ExecutionContext 冒充 PreparedExecutionContext。
    */
   readonly preparation?: ExecutionPreparationPort
+  /** Production SDK binds the trusted AFK Skill lifecycle; direct unit constructors may omit it. */
+  readonly skillInvocations?: AfkSkillInvocationLifecycle
 }
 
 /** 一个候选的处置（RoundReport 明细）。 */

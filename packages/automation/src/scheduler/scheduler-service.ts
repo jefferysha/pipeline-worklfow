@@ -42,6 +42,7 @@ import {
 } from './scheduler-support.js'
 import { createSchedulerExecution } from './scheduler-execution.js'
 import { createSchedulerOutcomes } from './scheduler-outcomes.js'
+import type { AfkSkillInvocationHandle } from '../skillInvocationAfkLifecycle.js'
 
 export const createScheduler = (deps: SchedulerDeps): Scheduler => {
   const validateExecutionWiring = deps.validateExecutionWiring ?? (async (context: ExecutionContext) => {
@@ -51,16 +52,29 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
   const observer = deps.observer
   const semaphore = createSemaphore(config.maxParallel)
   const inFlight = new Set<string>()
+  const abortControllers = new Map<string, AbortController>()
+  const shutdownCompletions = new Map<string, { readonly promise: Promise<void>; readonly resolve: () => void }>()
+  const activeSkillInvocations = new Map<string, readonly AfkSkillInvocationHandle[]>()
+  let shutdownBarrier: Promise<void> = Promise.resolve()
+  let shutdownStarted = false
 
-  registerShutdown(() => {
+  const interruptInFlight = (): Promise<void> => {
+    if (shutdownStarted) return shutdownBarrier
+    shutdownStarted = true
+    const interrupts: Promise<void>[] = []
     for (const name of inFlight) {
+      abortControllers.get(name)?.abort(new Error('scheduler interrupted'))
+      const completion = shutdownCompletions.get(name)
+      if (completion !== undefined) interrupts.push(completion.promise)
       try {
         state.markFailedSync(name, 'scheduler interrupted')
       } catch {
         // best-effort
       }
     }
-  })
+    shutdownBarrier = Promise.all(interrupts).then(() => undefined)
+    return shutdownBarrier
+  }
   const tryLedger = async (
     report: MutableReport,
     change: string,
@@ -118,6 +132,9 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     scheduler: deps,
     semaphore,
     inFlight,
+    abortControllers,
+    shutdownCompletions,
+    activeSkillInvocations,
     validateExecutionWiring,
     outcomes,
     applyDenial,
@@ -125,7 +142,7 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     settleTerminal,
   })
 
-  const runRoundOnce = async (
+  const runRoundOnceRegistered = async (
     candidates: readonly string[],
     options: RunRoundOptions = {},
   ): Promise<RoundReport> => {
@@ -187,6 +204,22 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       failures: report.failures, ledgerFailures: report.ledgerFailures, halted: report.halted,
       ledgerDegraded: report.ledgerDegraded,
       ok: report.failures.length === 0 && report.ledgerFailures.length === 0 && !report.ledgerDegraded,
+    }
+  }
+
+  const runRoundOnce = async (
+    candidates: readonly string[],
+    options: RunRoundOptions = {},
+  ): Promise<RoundReport> => {
+    const unregisterShutdown = registerShutdown(interruptInFlight)
+    try {
+      return await runRoundOnceRegistered(candidates, options)
+    } finally {
+      try {
+        await shutdownBarrier
+      } finally {
+        unregisterShutdown()
+      }
     }
   }
 

@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { buildProgram, CliExit } from './program.js'
 import { freshHarness, realDeps, REPO_ROOT, type Harness } from './integration-harness.js'
+import { recordDocument } from '@tenon/kernel'
 
 describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', () => {
   let h: Harness
@@ -204,8 +205,18 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
       `${JSON.stringify({ kind: 'tool', raw: 'Skill: openspec-propose' })}\n`,
       { encoding: 'utf8', flag: 'a' },
     )
-    expect(await h.run(['document', 'record', 'multi', 'delta-spec', alpha, '--producer', 'openspec-propose'])).toBe(0)
-    expect(await h.run(['document', 'record', 'multi', 'delta-spec', beta, '--producer', 'openspec-propose'])).toBe(0)
+    // Manual history cannot mint production Invocation evidence; the real CLI must fail closed.
+    expect(await h.run(['document', 'record', 'multi', 'delta-spec', alpha, '--producer', 'openspec-propose'])).toBe(1)
+    expect(await h.run(['document', 'record', 'multi', 'delta-spec', beta, '--producer', 'openspec-propose'])).toBe(1)
+    const changeDir = join(h.cwd, 'openspec', 'changes', 'multi')
+    await recordDocument({
+      repoRoot: h.cwd, changeDir, phase: 'spec', kind: 'delta-spec', path: alpha,
+      producer: 'openspec-propose', recordedAt: '2026-07-07T00:01:00Z',
+    })
+    await recordDocument({
+      repoRoot: h.cwd, changeDir, phase: 'spec', kind: 'delta-spec', path: beta,
+      producer: 'openspec-propose', recordedAt: '2026-07-07T00:02:00Z',
+    })
 
     await h.seedArtifact('multi', 'plan', 'docs/superpowers/plans/multi.md')
     expect(await h.run(['review', 'request', 'multi', '--event', 'spec-complete'])).toBe(0)

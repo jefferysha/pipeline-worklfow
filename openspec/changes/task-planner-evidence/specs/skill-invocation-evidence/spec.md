@@ -6,6 +6,8 @@
 
 系统 MUST 为所有 Skill 提供统一 Invocation 协议，并绑定 Project、WorkflowDefinition、PipelineRun、StepVisit、可选 TaskPlanRevision/WorkItem 与 attempt；Task Planner 不得拥有私有证据通道。
 
+生产写入 MUST 通过受信任 application command，并由 repository 无条件读取 canonical state；公开 API 不得允许调用者替换 Project、Run、StepVisit、TaskPlanRevision、WorkItem 或 attempt binding。
+
 #### Scenario: 精确绑定成功
 
 - **WHEN** started event 的冗余 run/step/visit/item/attempt 身份全部一致
@@ -16,9 +18,21 @@
 - **WHEN** 任一 identity 缺失、跨 Change/visit/item/attempt 或 fingerprint 不一致
 - **THEN** 不追加事件且返回结构化 binding error
 
+#### Scenario: 调用者尝试覆盖 canonical binding
+
+- **WHEN** producer 提交自带的 Project、Run、StepVisit、WorkItem 或 attempt context
+- **THEN** application command 忽略或拒绝该上下文，并只按当前 canonical state 校验
+
+#### Scenario: 生产 Skill 生命周期
+
+- **WHEN** Codex document producer、native/Task Planner 或 AFK runner 真实开始并结束一次 Skill 调用
+- **THEN** 对应生产 adapter MUST 经受信任 command 持久化同一 invocation 的 started、terminal 与适用的 question、decision、artifact 事实
+
 ### Requirement: 唯一且可恢复的调用状态机
 
 每个 Invocation MUST 恰有一个 started 和最多一个 terminal；相同重放幂等、冲突重放拒绝，中断不得推断 completed。
+
+repository MUST 在任何 append 前验证 ledger 中所有 invocation 的 aggregate，并在新事实会超过 event、byte、invocation、question 或 artifact budget 时拒绝写入。
 
 #### Scenario: 进程中断
 
@@ -33,6 +47,8 @@
 ### Requirement: 调用前输入与调用后输出证明
 
 Invocation MUST 记录版本化 input/output schema、字段分类、bounded digest、validator verdict 与 trusted adapter proof，而不是原始 Prompt 或输出正文。
+
+字段、question/answer 与 validator verdict MUST 来自受信任 producer receipt；terminal verifier 必须核对 started Skill/schema/input 与当前 aggregate，不得只验证孤立 terminal event。
 
 #### Scenario: trusted Codex 完成
 
@@ -51,7 +67,7 @@ QuestionEvent MUST 绑定 invocation 与版本化 question key/schema/options、
 #### Scenario: 用户实际回答
 
 - **WHEN** question 已 shown 且 DecisionEvent 引用同一 question/invocation/visit
-- **THEN** 保存 option ID 或自由文本分类/keyed digest，不保存原文
+- **THEN** 保存至少一个 option ID 或自由文本分类/keyed digest，不保存原文；空回答不得满足任何 question，尤其不得满足 hard-gate
 
 #### Scenario: 不存在的问题
 
@@ -60,7 +76,7 @@ QuestionEvent MUST 绑定 invocation 与版本化 question key/schema/options、
 
 ### Requirement: 推荐默认决策证明
 
-未展示例行问题时，DecisionEvent MUST 证明原 question key、冻结 InteractionPolicy rule、推荐 option、理由和 mode；hard-gate 永不允许默认。
+未展示例行问题时，DecisionEvent MUST 证明原 question key/schema、精确 subject、冻结 InteractionPolicy rule、推荐 option、理由和 mode；repository 必须把匹配 QuestionEvent 与当前 aggregate 交给 policy verifier，hard-gate 永不允许默认。
 
 #### Scenario: 合法默认
 
@@ -74,7 +90,7 @@ QuestionEvent MUST 绑定 invocation 与版本化 question key/schema/options、
 
 ### Requirement: ArtifactBinding 与 validator
 
-只有 completed invocation 才能绑定当前 digest 的 artifact；文档引用 canonical document record，其他 artifact 使用结构化 intent/commit binding。
+系统 MUST 只允许 completed invocation 绑定当前 digest 的 artifact；文档引用 canonical document record，文件使用安全项目相对路径，其他 artifact 使用 bounded opaque ref。Intent 必须在公开前通过 ref 隐私校验并引用唯一 declared output；commit validator 必须与受信任执行结果精确匹配且达到契约要求的 verdict。
 
 #### Scenario: 中断绑定
 
@@ -98,6 +114,8 @@ repository MUST 在 Change lock 下使用 closed JSONL codec、bounded read、ap
 ### Requirement: 隐私最小化只读 API
 
 server MUST 提供稳定只读投影，并排除 transcript path、绝对 Skill path、host session/turn、raw prompt/answer/output、内部 digest 与 credentials。
+
+Dashboard MUST 展示 privacy-safe 的字段 classification/validator、free-text-present/classification、artifact validator，以及 loading/empty/error/completed/incomplete/failed/interrupted 状态；client decoder 必须拒绝冗余 run identity 冲突。Change path forbidden/symlink 必须稳定保留 403，仅真实不存在映射 404。
 
 #### Scenario: Dashboard 查询
 

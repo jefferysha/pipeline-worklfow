@@ -23,6 +23,12 @@ import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from './document-path.js'
 import { withLock } from './lock.js'
 import { runTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.js'
+import { publishTaskPlanProjection } from './task-plan-projection.js'
+import {
+  beginNativeTaskPlanInvocation,
+  completeNativeTaskPlanInvocation,
+  failNativeTaskPlanInvocation,
+} from '../skill-invocation/native-task-plan.js'
 
 export const TASK_PLAN_STATE_DIR = '.pipeline-task-plan'
 export const TASK_PLAN_CURRENT_FILE = 'current.json'
@@ -315,33 +321,6 @@ async function publishImmutable(path: string, dir: string, raw: string): Promise
   }
 }
 
-async function publishProjection(
-  changeDir: string,
-  revision: TaskPlanRevisionRecordV1,
-  raw: string,
-  completedWorkItemIds: readonly string[],
-): Promise<TaskPlanReadModelV1> {
-  const markdown = renderTaskPlanTasksMd(revision, {
-    completed_work_item_ids: completedWorkItemIds,
-    digest: digest(raw),
-  })
-  if (Buffer.byteLength(markdown) > MAX_CANONICAL_TASKS_MD_BYTES) {
-    return toTaskPlanReadModelV1(revision, {
-      state: 'pending',
-      reason: 'tasks.md projection exceeds the canonical byte budget',
-    })
-  }
-  try {
-    await atomicReplaceFile(join(changeDir, 'tasks.md'), markdown)
-    return toTaskPlanReadModelV1(revision, { state: 'current' })
-  } catch {
-    return toTaskPlanReadModelV1(revision, {
-      state: 'pending',
-      reason: 'tasks.md projection publication failed',
-    })
-  }
-}
-
 export async function publishTaskPlanRevision(
   changeDir: string,
   revision: TaskPlanRevisionV1,
@@ -369,7 +348,9 @@ export async function publishTaskPlanRevision(
     || completed.some((id) => typeof id !== 'string' || !knownItemIds.has(id))) {
     throw new TypeError('TaskPlan completed work item ids are invalid')
   }
-  return withLock(changeDir, async () => {
+  const invocation = await beginNativeTaskPlanInvocation(changeDir, decoded.value)
+  try {
+    const result = await withLock(changeDir, async () => {
     const stateDir = join(changeDir, TASK_PLAN_STATE_DIR)
     const revisionsDir = join(stateDir, TASK_PLAN_REVISIONS_DIR)
     await ensureOwnedDirectory(changeDir, stateDir)
@@ -406,15 +387,21 @@ export async function publishTaskPlanRevision(
       }
     }
     const admission = await assertCommittedLineageAndAdmission(revisionsDir, accepted, raw, current, exactCurrent)
-    if (exactCurrent) return publishProjection(changeDir, accepted, raw, completed)
+    if (exactCurrent) return publishTaskPlanProjection(changeDir, accepted, raw, completed)
     if (!admission.targetExists) {
       await publishImmutable(join(revisionsDir, revisionFileName(accepted)), revisionsDir, raw)
       await runTaskPlanPublicationFaultForTest()
     }
     await atomicReplaceFile(join(stateDir, TASK_PLAN_CURRENT_FILE), raw)
 
-    return publishProjection(changeDir, accepted, raw, completed)
-  })
+    return publishTaskPlanProjection(changeDir, accepted, raw, completed)
+    })
+    if (invocation !== undefined) await completeNativeTaskPlanInvocation(invocation, decoded.value)
+    return result
+  } catch (error) {
+    if (invocation !== undefined) await failNativeTaskPlanInvocation(invocation).catch(() => {})
+    throw error
+  }
 }
 
 interface CanonicalTaskPlanState {

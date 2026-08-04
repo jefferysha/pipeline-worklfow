@@ -163,4 +163,82 @@ describe('SkillInvocation evidence contract', () => {
     expect(JSON.stringify(compatible)).not.toContain('proof')
     expect(JSON.stringify(compatible)).not.toContain('session')
   })
+
+  it('rejects empty user answers and enforces the per-invocation question budget', () => {
+    const question = event('question-recorded', {
+      question_id: 'question-1', key: 'scope', schema_id: 'scope/v1',
+      option_ids: ['confirm'], requiredness: 'advisory', shown: true,
+    }, 2)
+    const emptyAnswer = event('decision-recorded', {
+      decision_id: 'decision-1', question_id: 'question-1', mode: 'user-answer',
+      selected_option_ids: [],
+    }, 3)
+    expect(() => projectSkillInvocationEvents([started, question, emptyAnswer])).toThrow(/non-empty|answer/u)
+
+    const questions = Array.from({ length: 129 }, (_, index) => event('question-recorded', {
+      question_id: `question-${index}`, key: `question.${index}`, schema_id: 'question/v1',
+      option_ids: [], requiredness: 'routine', shown: false,
+    }, index + 2))
+    expect(() => projectSkillInvocationEvents([started, ...questions])).toThrow(/question.*budget/u)
+  })
+
+  it('binds artifacts only to unique declared outputs with passing validator verdicts', () => {
+    const completed = event('invocation-completed', {
+      output: { schema_id: 'output/v1', fields: [{
+        name: 'plan', classification: 'project-data',
+        digest: `sha256:${'b'.repeat(64)}`, validator: { id: 'output-schema', status: 'pass' },
+      }] },
+      adapter: { kind: 'native', proof_ref: 'proof-1' },
+    }, 2)
+    const missingOutput = event('artifact-binding-intent', {
+      binding_id: 'binding-1', output_id: 'missing',
+      artifact: { kind: 'file', ref: 'artifacts/plan.json', digest: `sha256:${'c'.repeat(64)}` },
+      validator_ids: ['digest'],
+    }, 3)
+    expect(() => projectSkillInvocationEvents([started, completed, missingOutput])).toThrow(/declared output/u)
+
+    const intent: Extract<SkillInvocationEventV1, { type: 'artifact-binding-intent' }> = {
+      ...missingOutput,
+      type: 'artifact-binding-intent',
+      payload: { ...missingOutput.payload, output_id: 'plan' },
+    } as Extract<SkillInvocationEventV1, { type: 'artifact-binding-intent' }>
+    const duplicateOutput = event('artifact-binding-intent', {
+      ...intent.payload, binding_id: 'binding-2',
+    }, 4)
+    expect(() => projectSkillInvocationEvents([started, completed, intent, duplicateOutput])).toThrow(/output.*unique/u)
+
+    const failedBinding = event('artifact-bound', {
+      binding_id: 'binding-1', artifact_digest: intent.payload.artifact.digest,
+      validators: [{ id: 'digest', status: 'fail', code: 'digest-mismatch' }],
+    }, 4)
+    expect(() => projectSkillInvocationEvents([started, completed, intent, failedBinding])).toThrow(/validator.*pass/u)
+  })
+
+  it('rejects unsafe artifact references before they can enter the public projection', () => {
+    const unsafe = event('artifact-binding-intent', {
+      binding_id: 'binding-1', output_id: 'plan',
+      artifact: { kind: 'file', ref: '/Users/private/plan.json', digest: `sha256:${'c'.repeat(64)}` },
+      validator_ids: ['digest'],
+    }, 2)
+    expect(decodeSkillInvocationEventV1(unsafe)).toMatchObject({ ok: false, path: '$.payload.artifact.ref' })
+  })
+
+  it('enforces the per-invocation artifact budget on the resulting aggregate', () => {
+    const fields = Array.from({ length: 129 }, (_, index) => ({
+      name: `output-${index}`, classification: 'project-data' as const,
+      digest: `sha256:${'b'.repeat(64)}`, validator: { id: 'output-schema', status: 'pass' as const },
+    }))
+    const completed = event('invocation-completed', {
+      output: { schema_id: 'output/v1', fields },
+      adapter: { kind: 'native', proof_ref: 'proof-1' },
+    }, 2)
+    const intents = fields.map((field, index) => event('artifact-binding-intent', {
+      binding_id: `binding-${index}`, output_id: field.name,
+      artifact: {
+        kind: 'file', ref: `artifacts/output-${index}.json`, digest: `sha256:${'c'.repeat(64)}`,
+      },
+      validator_ids: ['digest'],
+    }, index + 3))
+    expect(() => projectSkillInvocationEvents([started, completed, ...intents])).toThrow(/artifact budget/u)
+  })
 })

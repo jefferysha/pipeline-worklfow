@@ -17,6 +17,9 @@
 - [x] 以 tracer bullet 打通 Invocation repository、精确 subject 与真实只读 API。 (build)
 - [x] 实现唯一 terminal、中断恢复、Question/Decision 与默认策略证明。 (build)
 - [x] 实现 ArtifactBinding、validators、Codex/native/AFK adapters 和兼容投影。 (build)
+- [x] 接入 trusted application command 与真实 Codex/native/Task Planner/AFK production lifecycle，移除公开 canonical binding bypass。 (build)
+- [x] 修复全 ledger/budget、question/answer/default、artifact/output/validator 的 fail-closed 边界。 (build)
+- [x] 补齐真实 persisted invocation API 集成、稳定 403/404、Dashboard validator/free-text 消费与 closed decoder。 (build)
 
 ## 验证
 

@@ -76,7 +76,7 @@ export * from './skills/types.js'
 export * from './starters/wiring.js'
 export * from './starters/execution-guard.js'
 export {
-  afkSkillInvocationAdapterProof,
-  AfkSkillInvocationBindingError,
-} from './skillInvocationAfkAdapter.js'
-export type { AfkSkillInvocationProof } from './skillInvocationAfkAdapter.js'
+  readSealedAfkSkillInvocationContext,
+  SealedAfkSkillInvocationContextError,
+} from './skillInvocationSealedAfkContext.js'
+export type { SealedAfkSkillInvocationContext } from './skillInvocationSealedAfkContext.js'

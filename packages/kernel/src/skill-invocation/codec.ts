@@ -66,6 +66,17 @@ function digest(value: unknown, path: string): string {
   return result
 }
 
+function artifactRef(value: unknown, path: string): string {
+  const result = string(value, path)
+  if (
+    result.startsWith('/')
+    || result.includes('\\')
+    || /^[A-Za-z]:/u.test(result)
+    || result.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+  ) throw new DecodeFailure('field-invalid', path)
+  return result
+}
+
 function timestamp(value: unknown, path: string): string {
   const result = string(value, path, 64)
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(result) || Number.isNaN(Date.parse(result))) {
@@ -271,7 +282,7 @@ function decodePayload(type: SkillInvocationEventV1['type'], value: unknown, pat
       output_id: id(item.output_id, `${path}.output_id`),
       artifact: {
         kind: enumValue(artifact.kind, ARTIFACT_KINDS, `${path}.artifact.kind`),
-        ref: string(artifact.ref, `${path}.artifact.ref`),
+        ref: artifactRef(artifact.ref, `${path}.artifact.ref`),
         digest: digest(artifact.digest, `${path}.artifact.digest`),
         ...(document === undefined ? {} : { document }),
       },

@@ -6,7 +6,7 @@ Every Skill, including Task Planner, can produce privacy-minimized, append-only,
 
 ## Aggregate and identity
 
-`SkillInvocationEvidenceV1` is a kernel bounded context with a strict event codec and repository. Every event binds `projectId`, `workflowDefinitionId`, `workflowRunId`, `stepId`, `stepVisit={runId,transitionSequence}`, optional `taskPlanRevisionId/workItemId`, and optional `attemptId/reservationId`. Redundant identities must agree; absence or mismatch fails closed.
+`SkillInvocationEvidenceV1` is a kernel bounded context with a strict event codec and repository. Every event binds `projectId`, `workflowDefinitionId`, `workflowRunId`, `stepId`, `stepVisit={runId,transitionSequence}`, optional `taskPlanRevisionId/workItemId`, and optional `attemptId/reservationId`. Redundant identities must agree; absence or mismatch fails closed. The public production command always derives these coordinates from canonical state; caller-supplied binding is not an exported seam.
 
 Task Planner uses the same aggregate and declares its input/output schemas; it is not a privileged special case.
 
@@ -31,6 +31,10 @@ Started and terminal events are unique. Exact replay is idempotent; conflicting 
 6. A recommended-default decision must reference the exact frozen InteractionPolicy rule, original question key, selected default, and rationale code. Hard-gate questions can never default.
 7. ArtifactBinding can commit only after matching invocation completion and current artifact digest. Document artifacts reference canonical document evidence; other artifacts use the invocation repository's structured binding records.
 8. Cross-run/visit/item/attempt references, missing questions, multiple terminal decisions, interrupted completion, stale policy, or artifact digest drift are rejected.
+9. A trusted application command owns evidence minting. It validates the started event and current aggregate together with host/runner receipts for questions, answers, outputs, validators and terminal completion; a raw event append function is internal infrastructure.
+10. Codex document producers, native/Task Planner execution and AFK prepared runs call the same command at real lifecycle boundaries. At least one real persisted invocation is exercised through the production server; fixture-only evidence is insufficient.
+11. Before every append, all existing aggregates must project successfully and the resulting JSONL must remain within event/byte/invocation/question/artifact budgets.
+12. Artifact intents validate public refs before persistence, reference a declared output, and bind only when trusted validator results match the declared contract.
 
 ## Persistence and compatibility
 
@@ -38,7 +42,7 @@ The structured ledger is canonical for v1 evidence. Existing `Skill:`/`CodexSkil
 
 ## Privacy projection
 
-The stable server DTO exposes Skill ID/version, status/times, subject IDs, input/output field names and validation status, question key/requiredness/shown state, decision mode/selected option/rationale, artifacts, and validators. It excludes transcript paths, absolute Skill paths, host session/turn IDs, raw prompts/answers/output, internal digests, and credentials.
+The stable server DTO exposes Skill ID/version, status/times, subject IDs, input/output field names/classification/validation status, question key/requiredness/shown state, decision mode/selected option/rationale and privacy-safe free-text presence/classification, artifacts, and validators. It excludes transcript paths, absolute Skill paths, host session/turn IDs, raw prompts/answers/output, internal digests, and credentials. The Dashboard renders those verdicts and rejects redundant run-identity drift; the server preserves path-forbidden 403 separately from missing 404.
 
 ## Failure model
 
@@ -62,7 +66,7 @@ Invocation status is `started | completed | failed | interrupted | incomplete | 
 
 ## Verification matrix
 
-Tests cover strict codec/budgets, concurrent append/replay, malformed ledger degradation, all identity mismatches, terminal uniqueness/recovery, actual-question proof, default-policy binding, hard gates, privacy projection, artifact commit/digest drift, native/Codex adapters, AFK attempts, and compatibility projection without reverse minting.
+Tests cover strict codec/budgets including boundary append, concurrent append/replay, whole-ledger semantic degradation, all identity mismatches and caller override rejection, terminal uniqueness/recovery, actual-question/answer receipt proof, default-policy binding to the matching question, hard gates, privacy projection, artifact output/ref/validator binding, native/Codex adapters, AFK attempts, production lifecycle wiring, a real persisted server projection, Dashboard validator states, stable 403/404, and compatibility projection without reverse minting.
 
 ```coverage
 touches: auth, skill-provenance, privacy, api-boundary, append-only-ledger

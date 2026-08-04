@@ -8,13 +8,16 @@ import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from '../s
 import { withLock } from '../state/lock.js'
 import { readTaskPlanForChange } from '../state/task-plan-store.js'
 import { decodeSkillInvocationEventV1, encodeSkillInvocationEventV1 } from './codec.js'
-import { projectSkillInvocationEvents, SkillInvocationEvidenceConflictError } from './domain.js'
+import { projectSkillInvocationEvents } from './domain.js'
 import {
   SKILL_INVOCATION_LIMITS,
+  type SkillInvocationArtifactBoundPayloadV1,
   type SkillInvocationArtifactIntentPayloadV1,
   type SkillInvocationDecisionPayloadV1,
   type SkillInvocationEventV1,
   type SkillInvocationListReadModelV1,
+  type SkillInvocationQuestionPayloadV1,
+  type SkillInvocationSubjectV1,
 } from './types.js'
 
 export const SKILL_INVOCATION_LEDGER_FILE = '.pipeline-skill-invocations.jsonl'
@@ -27,7 +30,7 @@ export class SkillInvocationEvidenceBindingError extends Error {
   override readonly name = 'SkillInvocationEvidenceBindingError'
 }
 
-export interface SkillInvocationBindingContextV1 {
+interface SkillInvocationBindingContextV1 {
   readonly project_id: string
   readonly workflow_definition_id: string
   readonly workflow_run_id: string
@@ -38,17 +41,34 @@ export interface SkillInvocationBindingContextV1 {
   readonly attempt?: { readonly attempt_id: string; readonly reservation_id: string }
 }
 
+export interface SkillInvocationRecommendedDefaultVerificationContextV1 {
+  readonly decision: SkillInvocationDecisionPayloadV1
+  readonly question: SkillInvocationQuestionPayloadV1
+  readonly started: Extract<SkillInvocationEventV1, { type: 'invocation-started' }>
+  readonly subject: SkillInvocationSubjectV1
+  readonly events: readonly SkillInvocationEventV1[]
+}
+
+export interface SkillInvocationCompletionVerificationContextV1 {
+  readonly completion: Extract<SkillInvocationEventV1, { type: 'invocation-completed' }>
+  readonly started: Extract<SkillInvocationEventV1, { type: 'invocation-started' }>
+  readonly subject: SkillInvocationSubjectV1
+  readonly events: readonly SkillInvocationEventV1[]
+}
+
 export interface AppendSkillInvocationEventOptions {
   readonly attempt?: { readonly attempt_id: string; readonly reservation_id: string }
-  readonly binding?: (changeDir: string) => Promise<SkillInvocationBindingContextV1>
-  readonly verify_recommended_default?: (decision: SkillInvocationDecisionPayloadV1) => Promise<boolean>
-  readonly verify_completed_adapter?: (
-    event: Extract<SkillInvocationEventV1, { type: 'invocation-completed' }>,
+  readonly verify_recommended_default?: (
+    context: SkillInvocationRecommendedDefaultVerificationContextV1,
   ) => Promise<boolean>
+  readonly verify_completed_adapter?: (context: SkillInvocationCompletionVerificationContextV1) => Promise<boolean>
   readonly verify_interruption_recovery?: (
     event: Extract<SkillInvocationEventV1, { type: 'invocation-interrupted' }>,
   ) => Promise<boolean>
-  readonly verify_artifact?: (intent: SkillInvocationArtifactIntentPayloadV1) => Promise<boolean>
+  readonly verify_artifact?: (
+    intent: SkillInvocationArtifactIntentPayloadV1,
+    binding: SkillInvocationArtifactBoundPayloadV1,
+  ) => Promise<boolean>
 }
 
 function stringField(value: string | readonly string[] | undefined, fallback: string): string {
@@ -62,7 +82,7 @@ export async function skillInvocationProjectId(repoRoot: string): Promise<string
 
 async function canonicalBinding(
   changeDir: string,
-  options: AppendSkillInvocationEventOptions,
+  attempt: AppendSkillInvocationEventOptions['attempt'],
 ): Promise<SkillInvocationBindingContextV1> {
   const current = await readCurrentRunRevision(changeDir)
   const metadata = current?.state.runMetadata
@@ -84,7 +104,7 @@ async function canonicalBinding(
     transition_sequence: metadata.transitionSequence,
     ...(plan?.source === 'canonical' ? { task_plan_revision_id: plan.revision_id } : {}),
     work_item_ids: plan?.source === 'canonical' ? plan.items.map((item) => item.id) : [],
-    ...(options.attempt === undefined ? {} : { attempt: { ...options.attempt } }),
+    ...(attempt === undefined ? {} : { attempt: { ...attempt } }),
   }
 }
 
@@ -241,11 +261,47 @@ async function verifyDocumentArtifact(changeDir: string, intent: SkillInvocation
 async function verifyArtifact(
   changeDir: string,
   intent: SkillInvocationArtifactIntentPayloadV1,
+  binding: SkillInvocationArtifactBoundPayloadV1,
   options: AppendSkillInvocationEventOptions,
 ): Promise<boolean> {
-  if (intent.artifact.kind === 'document') return verifyDocumentArtifact(changeDir, intent)
-  if (intent.artifact.kind === 'file') return verifyFileArtifact(changeDir, intent)
-  return options.verify_artifact?.(intent) ?? Promise.resolve(false)
+  if (intent.artifact.kind === 'document') {
+    if (!await verifyDocumentArtifact(changeDir, intent)) return false
+    if (intent.validator_ids.every((id) => id === 'document-ledger')) return true
+  } else if (intent.artifact.kind === 'file') {
+    if (!await verifyFileArtifact(changeDir, intent)) return false
+    if (intent.validator_ids.every((id) => id === 'digest')) return true
+  }
+  return options.verify_artifact?.(structuredClone(intent), structuredClone(binding)) ?? Promise.resolve(false)
+}
+
+function validateExistingLedger(events: readonly SkillInvocationEventV1[]): void {
+  try {
+    for (const invocationEvents of grouped(events).values()) projectSkillInvocationEvents(invocationEvents)
+  } catch (cause) {
+    if (cause instanceof SkillInvocationEvidenceCorruptError) throw cause
+    throw new SkillInvocationEvidenceCorruptError(`SkillInvocation ledger violates aggregate invariants: ${String(cause)}`)
+  }
+}
+
+function validateResultingLedger(events: readonly SkillInvocationEventV1[]): void {
+  if (events.length > SKILL_INVOCATION_LIMITS.maxEvents) {
+    throw new SkillInvocationEvidenceBindingError('SkillInvocation ledger would exceed the event budget')
+  }
+  try {
+    for (const invocationEvents of grouped(events).values()) projectSkillInvocationEvents(invocationEvents)
+  } catch (cause) {
+    if (cause instanceof SkillInvocationEvidenceBindingError) throw cause
+    throw new SkillInvocationEvidenceBindingError(`SkillInvocation event violates aggregate invariants: ${String(cause)}`)
+  }
+}
+
+function startedEvent(
+  events: readonly SkillInvocationEventV1[],
+): Extract<SkillInvocationEventV1, { type: 'invocation-started' }> {
+  const started = events.find((event): event is Extract<SkillInvocationEventV1, { type: 'invocation-started' }> =>
+    event.type === 'invocation-started')
+  if (started === undefined) throw new SkillInvocationEvidenceBindingError('invocation started event is missing')
+  return started
 }
 
 function intentFor(
@@ -270,6 +326,7 @@ export async function appendSkillInvocationEvent(
     const identity = await captureLedgerIdentity(ledgerPath(changeDir))
     const events = await readLedgerEvents(changeDir)
     await assertLedgerIdentity(ledgerPath(changeDir), identity)
+    validateExistingLedger(events)
     const replay = events.find((event) => event.event_id === decoded.value.event_id)
     if (replay !== undefined) {
       if (encodeSkillInvocationEventV1(replay) === encodeSkillInvocationEventV1(decoded.value)) {
@@ -278,41 +335,56 @@ export async function appendSkillInvocationEvent(
       }
       throw new SkillInvocationEvidenceCorruptError('event id conflicts with an existing fact')
     }
-    const expected = await (options.binding?.(changeDir) ?? canonicalBinding(changeDir, options))
+    const expected = await canonicalBinding(changeDir, options.attempt)
     assertBinding(decoded.value, expected)
+    const invocationEvents = events.filter((event) => event.invocation_id === decoded.value.invocation_id)
+    const resultingEvents = [...events, decoded.value]
+    const encodedLine = `${encodeSkillInvocationEventV1(decoded.value)}\n`
+    if ((identity?.size ?? 0) + Buffer.byteLength(encodedLine) > SKILL_INVOCATION_LIMITS.maxLedgerBytes) {
+      throw new SkillInvocationEvidenceBindingError('SkillInvocation ledger would exceed the byte budget')
+    }
+    validateResultingLedger(resultingEvents)
+    const invocationStarted = startedEvent(
+      decoded.value.type === 'invocation-started' ? [decoded.value] : invocationEvents,
+    )
     if (decoded.value.type === 'decision-recorded' && decoded.value.payload.mode === 'recommended-default') {
-      if (!await (options.verify_recommended_default?.(decoded.value.payload) ?? Promise.resolve(false))) {
+      const decisionEvent = decoded.value
+      const question = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'question-recorded' }> =>
+        event.type === 'question-recorded' && event.payload.question_id === decisionEvent.payload.question_id)
+      if (question === undefined || !await (options.verify_recommended_default?.({
+        decision: structuredClone(decisionEvent.payload),
+        question: structuredClone(question.payload),
+        started: structuredClone(invocationStarted),
+        subject: structuredClone(decisionEvent.subject),
+        events: structuredClone(invocationEvents),
+      }) ?? Promise.resolve(false))) {
         throw new SkillInvocationEvidenceBindingError('recommended default is not allowed by the exact frozen policy')
       }
     }
     if (
       decoded.value.type === 'invocation-completed'
-      && !await (options.verify_completed_adapter?.(decoded.value) ?? Promise.resolve(false))
+      && !await (options.verify_completed_adapter?.({
+        completion: structuredClone(decoded.value),
+        started: structuredClone(invocationStarted),
+        subject: structuredClone(decoded.value.subject),
+        events: structuredClone(invocationEvents),
+      }) ?? Promise.resolve(false))
     ) {
       throw new SkillInvocationEvidenceBindingError('completed invocation lacks a trusted adapter verdict')
     }
     if (
       decoded.value.type === 'invocation-interrupted'
-      && !await (options.verify_interruption_recovery?.(decoded.value) ?? Promise.resolve(false))
+      && !await (options.verify_interruption_recovery?.(structuredClone(decoded.value)) ?? Promise.resolve(false))
     ) {
       throw new SkillInvocationEvidenceBindingError('interrupted invocation lacks exact ownership recovery')
     }
     if (decoded.value.type === 'artifact-bound') {
       const intent = intentFor(events, decoded.value)
-      if (intent === undefined || !await verifyArtifact(changeDir, intent, options)) {
+      if (intent === undefined || !await verifyArtifact(changeDir, intent, decoded.value.payload, options)) {
         throw new SkillInvocationEvidenceBindingError('artifact binding does not match the current artifact or canonical document record')
       }
     }
-    const invocationEvents = events.filter((event) => event.invocation_id === decoded.value.invocation_id)
-    try {
-      projectSkillInvocationEvents([...invocationEvents, decoded.value])
-    } catch (cause) {
-      if (cause instanceof SkillInvocationEvidenceConflictError) {
-        throw new SkillInvocationEvidenceBindingError(cause.message)
-      }
-      throw cause
-    }
-    await appendFsync(ledgerPath(changeDir), `${encodeSkillInvocationEventV1(decoded.value)}\n`, identity)
+    await appendFsync(ledgerPath(changeDir), encodedLine, identity)
     return { appended: true }
   })
 }
