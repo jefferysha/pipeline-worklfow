@@ -33,4 +33,23 @@ describe('bounded regular file identity fence', () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it('does not downgrade a post-open ENOENT to an optional absence', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tenon-bounded-text-disappear-'))
+    const path = join(dir, 'tasks.md')
+    const content = Buffer.from('# Tasks\n')
+    await writeFile(path, content)
+    try {
+      await expect(readOptionalBoundedRegularTextFile(
+        path,
+        1024,
+        'TaskPlan tasks projection',
+        async () => {
+          throw Object.assign(new Error('path disappeared after open'), { code: 'ENOENT' })
+        },
+      )).rejects.toThrow(/读取期间变化/u)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

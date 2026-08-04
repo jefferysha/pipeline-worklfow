@@ -7182,6 +7182,11 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
     }
     await assertStable();
     return content;
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
+    }
+    throw error2;
   } finally {
     await handle.close();
   }

@@ -1083,3 +1083,100 @@ PID 的偏差；未写真实 repo。按授权仅对受管 Tenon Dashboard 执行
 `verify-fail`。由于新 HIGH 本身会阻断当前带未完成 Verify task 的 repo bundle，回退必须使用同一官方
 Tenon 安装的上一稳定 CLI 执行已批准 event，不手改 canonical state；进入 Build 后以 TDD 修复 HIGH
 与 MEDIUM、重建 tracked bundles、重新冻结 `build_sha` 并从零执行三轨 Verify。
+
+---
+
+# 第 22 轮 pre-Verify（Round21 findings 收敛）
+
+## 结论
+
+PASS，C0/H0/M0/L0。Round21 的回退死锁与 CLI 无界 `tasks.md` 读取已修复：只有前向完成事件执行
+tasks-through-phase，`requirements-changed` 与 `verify-fail` 始终可达；CLI 在分配前固定 registered
+root/全部祖先/叶子身份、执行 canonical/legacy 字节预算与 fatal UTF-8。server snapshot 与 store
+共用同一 fatal UTF-8 解码和 legacy projection 上限。分支已合入 `origin/main@315f334c`，独立复核
+401 项聚焦测试、build 与 diff check 全通过。证据：`/tmp/tenon-pr1-r22-build-reviewer.md`，SHA-256
+`b0b6d4f4386b17a90d5c599652e83c77e6b8c61c78631db0511d6a43c9292fe0`。
+
+---
+
+# 第 23 轮 Verify（冻结基线 `d693c383b30811146781b1122b0ac110f8dae16c`）
+
+## 聚合结论
+
+FAIL，C0/H0/M3/L2。独立 Reviewer 与 E2E 均 PASS，但原生 Codex CLI 安全轨确认 3 个 MEDIUM；
+按三轨 findings 严格并集，不得设置 Verify tasks、`branch_status=handled` 或请求 `verify-pass`。
+receipt bridge 的 129+ transcript discovery 与合法 positive literal `max_output_tokens` 已由三轨确认
+修复且未放宽 session/turn/worktree/ABI/完整输出/inode 门禁，本轮失败来自相邻文件读取竞态。
+
+## 冻结身份与零输出 barrier
+
+- exact base：`315f334c9e7f7fa4e6b56389425476e97a789593`；frozen tree：
+  `eb227e94122dfc0c17ac242b0ec8c24a11456b6c`。
+- binary diff SHA-256：`117cc3e14e37a442322ab1591498c8ce2f3b9ada9984d70288ecc68fde5998a8`；
+  name-status SHA-256：`f281f3c9bae53343f1035387118b879ba8e136d3773b332bbeea2c5932376ebd`。
+- 真实工作树 tracked diff fingerprint 前后均为
+  `6424aa74218880c97ef19d58fc5d9c0809c94c27a83f82c7a5805a5124f5f510`；三轨未写实现、配置、
+  生成物或真实 `openspec/specs`。
+
+## 三轨证据
+
+- Reviewer：PASS，C0/H0/M0/L0。完整审查 456 paths（35 production、19 tests、2 bundles，
+  其余为治理/文档），冻结副本 18 files / 606 passed；真实工作树 status/diff fingerprint 一致。
+  证据：`/tmp/tenon-pr1-r23-reviewer.md`，SHA-256
+  `5a8b08bff7ee5ca7148d6b17b42fe5e049682f1e0d4ea6b3458eb85689f796b1`。
+- E2E：PASS。15 files / 537 focused passed；build passed；build 后全量 340 files / 6153 passed /
+  26 honest skips；Web 87 files / 1633 passed；comments、architecture、OpenSpec 37/37、docs、
+  repository hygiene、default workflow freshness、migration CAS 13/13、hooks 512/512 全通过。
+  首次全量在隔离 clone 尚无 dist 时诚实出现 2 个 dist-smoke failure，完成正式 build 后从头重跑并
+  全绿。archive rehearsal 为 7 added + 2 modified、strict 37/37；正式 Archive 仍须处理生成主规格的
+  尾空行并重跑 whitespace hygiene。证据：`/tmp/tenon-pr1-r23-e2e.md`，SHA-256
+  `8a49625c39cac1a1affa9cfc587361a9fe3c63f73993c01f2c44f464511e3831`。
+- Codex CLI：FAIL，C0/H0/M3/L2。完整审查 456 paths；10 files / 456 focused passed、build、
+  OpenSpec strict、diff check 与 389 个 JSON/JSONL parse 均通过，但确认下述三个竞态。
+  证据：`/tmp/tenon-pr1-r23-codex.md`，SHA-256
+  `d0bb5ba9cad0fac3a519525692a8ac94a00599694b5eb90e0c2fd12df4135fd3`。
+
+## 阻断 findings
+
+### MEDIUM — open 后路径消失被误降级为合法 absence
+
+`readOptionalBoundedRegularTextFile` 与 `task-plan-store.ts` 的 strict state reader 对整个稳定读取捕获
+任意 `ENOENT` 并返回 `undefined`。若文件已成功 open，随后在 pathname/parent 复核时被 unlink 或
+rename，稳定性失败会被误判为“初始不存在”；canonical state 可因此退化为 legacy/missing，非 Build
+phase 的缺失 tasks 又可能被当作通过。只有 initial open 的 `ENOENT` 可代表 absence；open 后消失必须
+保持 corruption/stability error，并补 delete/rename-during-read 回归。
+
+### MEDIUM — transcript candidate 可在 open 前被换成阻塞 FIFO
+
+`packages/cli/src/codexTranscriptDiscovery.ts` 在早期 `lstat` 后以
+`O_RDONLY | O_NOFOLLOW` 打开 candidate。regular file 若在竞态窗口被替换成 FIFO，POSIX `open` 可在
+fd/type/inode 复核前无限阻塞 exact/fallback receipt discovery。必须增加 `O_NONBLOCK` 并补
+regular-file→FIFO 确定性回归。
+
+### MEDIUM — CLI TaskPlan bounded reader 存在同类 FIFO 阻塞
+
+`packages/cli/src/guardContext.ts` 的同步 `openSync` 同样缺少 `O_NONBLOCK`；叶子在 `lstat` 与 open
+之间被替换为 FIFO 时可永久阻塞 `tenon check` 或前向 transition。必须以 TDD 加 pre-open replacement
+seam/回归，并保持现有 ancestor、identity、byte budget 与 fatal UTF-8 fences。
+
+## LOW 与未覆盖项
+
+- LOW：TaskPlan publication 的目录在写前检查但未通过 dirfd 或 mutation version 固定整个写周期，
+  同用户 parent replacement 仍有极窄 TOCTOU；该用户已有同等文件系统权限，本轮不阻断。
+- LOW：`task-plan-store.ts` 499 行同时承担 trust/history/publication/projection/legacy/gate，超过“考虑拆分”
+  阈值但未越 500 行硬门；作为后续维护项，不在安全修复中顺手重构。
+- Docker/real-Codex 凭证套件按条件未在 E2E 轨运行；原生 Codex review 轨本身已实际完成。
+
+## Step 1.5 逐文件 capability 回读
+
+冻结范围 456 paths：339 个 `.pipeline-run/**`、45 个 `.pipeline-transitions/**`、72 个其余路径。
+治理 records、Change docs、ADR/research/design/plan/report 全部映射到两项 delta 与 document governance；
+CLI receipt/discovery/tool-program 映射 `codex-skill-receipt-current-turn`；CLI guard/transition、kernel
+TaskPlan/domain/codec/store/Todo/flow 与 server TaskPlan/snapshot/transition 映射 `task-plan-contract`；
+两个 tracked bundle 映射对应源码。Reviewer/Codex 均逐路径完成回读，无未映射交付文件。
+
+## 处理决定
+
+保持两项 Verify task 未勾、`verify_result=fail`。正式登记本报告与当前 phase Skill evidence，随后请求
+exact `verify-fail`、delegated acknowledge 并回 Build；以 TDD 一次性修复 3 个 MEDIUM，重建 bundles、
+全量验证、重新冻结，再从零执行三轨，不接受偏差。

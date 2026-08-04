@@ -180,10 +180,14 @@ function matchesCandidate(
 
 export async function openVerifiedHostTranscript(
   candidate: HostTranscriptCandidate,
+  openCandidate: (path: string, flags: number) => Promise<FileHandle> = (path, flags) => open(path, flags),
 ): Promise<FileHandle | undefined> {
   let handle: FileHandle | undefined
   try {
-    handle = await open(candidate.path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    handle = await openCandidate(
+      candidate.path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    )
     const info = await handle.stat({ bigint: true })
     if (matchesCandidate(candidate, info)) return handle
   } catch {

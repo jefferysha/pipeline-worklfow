@@ -61,6 +61,9 @@
 - [x] 为 CLI TaskPlan tasks.md 读取增加 regular-file 身份栅栏与 canonical/legacy 预分配字节上限。 (build)
 - [x] 将 TaskPlan 文本解码统一为 fatal UTF-8，并让 CLI、server snapshot 与 store 共用 legacy projection 字节预算。 (build)
 - [x] 锚定 registered root 及其每一级祖先身份、合入最新 origin/main，并通过独立 Build 复核。 (build)
+- [x] 区分 initial absence 与 open 后路径消失，保持 TaskPlan canonical state 稳定读取失败关闭。 (build)
+- [x] 为 transcript 与 CLI TaskPlan open 增加非阻塞特殊文件防护及 regular→FIFO 回归。 (build)
+- [x] 重建正式生成物并完成 Round23 findings 的全量 Build 收敛复核。 (build)
 
 ## 验证
 

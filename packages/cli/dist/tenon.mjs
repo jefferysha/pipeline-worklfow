@@ -9685,6 +9685,11 @@ async function readBoundedRegularFile(path9, maxBytes, label, readSource = readB
     }
     await assertStable();
     return content;
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
+    }
+    throw error2;
   } finally {
     await handle.close();
   }
@@ -36808,10 +36813,13 @@ async function exactHostTranscript(sessionsRoot, transcriptPath) {
 function matchesCandidate(candidate, info) {
   return info.isFile() && info.dev === candidate.device && info.ino === candidate.inode && info.size === BigInt(candidate.size) && info.mtimeNs === candidate.modifiedAtNs && info.ctimeNs === candidate.changedAtNs;
 }
-async function openVerifiedHostTranscript(candidate) {
+async function openVerifiedHostTranscript(candidate, openCandidate = (path9, flags) => open7(path9, flags)) {
   let handle;
   try {
-    handle = await open7(candidate.path, constants6.O_RDONLY | constants6.O_NOFOLLOW);
+    handle = await openCandidate(
+      candidate.path,
+      constants6.O_RDONLY | constants6.O_NOFOLLOW | constants6.O_NONBLOCK
+    );
     const info = await handle.stat({ bigint: true });
     if (matchesCandidate(candidate, info)) return handle;
   } catch {
@@ -52422,7 +52430,7 @@ function sameBoundedAncestors(ancestors) {
     return current.isDirectory() && !current.isSymbolicLink() && sameBoundedFile(ancestor.info, current) && realpathSync6(ancestor.path) === ancestor.real;
   });
 }
-function readBoundedRegularFileSync(path9, maxBytes, root) {
+function readBoundedRegularFileSync(path9, maxBytes, root, hooks = {}) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return { kind: "invalid" };
   let fd;
   let inspected = false;
@@ -52432,7 +52440,10 @@ function readBoundedRegularFileSync(path9, maxBytes, root) {
     const lexical = lstatSync4(path9, { bigint: true });
     inspected = true;
     if (!lexical.isFile() || lexical.size > BigInt(maxBytes)) return { kind: "invalid" };
-    fd = openSync7(path9, constants9.O_RDONLY | constants9.O_NOFOLLOW);
+    fd = (hooks.openFile ?? openSync7)(
+      path9,
+      constants9.O_RDONLY | constants9.O_NOFOLLOW | constants9.O_NONBLOCK
+    );
     const opened = fstatSync2(fd, { bigint: true });
     if (!opened.isFile() || !sameBoundedFile(lexical, opened)) return { kind: "invalid" };
     const raw = Buffer.allocUnsafe(maxBytes + 1);

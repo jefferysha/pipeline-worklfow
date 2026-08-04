@@ -109,6 +109,15 @@ export async function readBoundedRegularFile(
     }
     await assertStable()
     return content
+  } catch (error) {
+    if (
+      typeof error === 'object'
+      && error !== null
+      && Reflect.get(error, 'code') === 'ENOENT'
+    ) {
+      throw new DocumentLedgerError(`${label} 在读取期间变化: ${path}`)
+    }
+    throw error
   } finally {
     await handle.close()
   }

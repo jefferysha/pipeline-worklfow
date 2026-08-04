@@ -12,6 +12,7 @@ import {
   utimes,
   writeFile,
 } from 'node:fs/promises'
+import { constants } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -2480,6 +2481,23 @@ describe('Codex transcript skill receipt', () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
 
     expect(candidate && await openVerifiedHostTranscript(candidate)).toBeUndefined()
+  })
+
+  it('requests a nonblocking open so a replacement FIFO cannot stall receipt discovery', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    const candidate = (await recentHostTranscripts(join(home, '.codex', 'sessions')))?.[0]
+    expect(candidate).toBeDefined()
+    if (candidate === undefined) return
+    let observedFlags = 0
+
+    const handle = await openVerifiedHostTranscript(candidate, async (_path, flags) => {
+      observedFlags = flags
+      throw Object.assign(new Error('replacement FIFO'), { code: 'ENXIO' })
+    })
+    await handle?.close()
+
+    expect(handle).toBeUndefined()
+    expect(observedFlags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
   })
 
   it('detects a fallback candidate that grows after its verified open', async () => {

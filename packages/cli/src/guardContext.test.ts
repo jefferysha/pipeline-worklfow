@@ -1,9 +1,10 @@
+import { constants, openSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createStateStore } from '@tenon/kernel'
-import { makeGuardCtx } from './guardContext.js'
+import { makeGuardCtx, readBoundedRegularFileSync } from './guardContext.js'
 
 describe('guard context dependency archive sources', () => {
   let root: string
@@ -76,6 +77,21 @@ describe('guard context dependency archive sources', () => {
     await writeFile(tasks, Buffer.from([0xc3, 0x28]))
     expect(context.readFileBounded?.('openspec/changes/subject/tasks.md', 4))
       .toEqual({ kind: 'invalid' })
+  })
+
+  test('bounded reader requests a nonblocking open before leaf identity verification', async () => {
+    const tasks = join(root, 'openspec', 'changes', 'subject', 'tasks.md')
+    await mkdir(join(tasks, '..'), { recursive: true })
+    await writeFile(tasks, '# Tasks\n', 'utf8')
+    let observedFlags = 0
+
+    expect(readBoundedRegularFileSync(tasks, 1024, root, {
+      openFile: (path, flags) => {
+        observedFlags = flags
+        return openSync(path, flags)
+      },
+    })).toEqual({ kind: 'ok', text: '# Tasks\n' })
+    expect(observedFlags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
   })
 
   test('bounded reader rejects a regular leaf reached through an ancestor symlink outside the project root', async () => {

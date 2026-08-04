@@ -33,6 +33,10 @@ interface BoundedAncestor {
   readonly real: string
 }
 
+interface BoundedRegularFileSyncHooks {
+  readonly openFile?: (path: string, flags: number) => number
+}
+
 function boundedAncestors(root: string, path: string): readonly BoundedAncestor[] | undefined {
   const fromRoot = relative(root, path)
   if (
@@ -79,7 +83,12 @@ function sameBoundedAncestors(ancestors: readonly BoundedAncestor[]): boolean {
  * regular-file identity before/after materialization. Oversized/symlink/replaced inputs are never
  * returned as text, so TaskPlan byte budgets apply before allocation rather than after it.
  */
-export function readBoundedRegularFileSync(path: string, maxBytes: number, root: string): BoundedFileRead {
+export function readBoundedRegularFileSync(
+  path: string,
+  maxBytes: number,
+  root: string,
+  hooks: BoundedRegularFileSyncHooks = {},
+): BoundedFileRead {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return { kind: 'invalid' }
   let fd: number | undefined
   let inspected = false
@@ -89,7 +98,10 @@ export function readBoundedRegularFileSync(path: string, maxBytes: number, root:
     const lexical = lstatSync(path, { bigint: true })
     inspected = true
     if (!lexical.isFile() || lexical.size > BigInt(maxBytes)) return { kind: 'invalid' }
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    fd = (hooks.openFile ?? openSync)(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    )
     const opened = fstatSync(fd, { bigint: true })
     if (!opened.isFile() || !sameBoundedFile(lexical, opened)) return { kind: 'invalid' }
     // Never let a concurrent grow race make readFileSync allocate past the admitted size. One
