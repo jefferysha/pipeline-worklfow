@@ -178,7 +178,6 @@ function resourceDiagnostics(
           })
         } else {
           conflicts.push({ resource, work_item_ids: [left, right] })
-          issue(collector, 'resource-write-conflict', '$.work_items', [resource, left, right])
         }
       }
     }

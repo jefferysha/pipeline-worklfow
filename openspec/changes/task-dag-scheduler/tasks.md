@@ -1,0 +1,34 @@
+# 任务
+
+## 立项
+
+- [x] 确认 DAG 调度、资源冲突、AFK admission 与状态传播范围。
+
+## 调研
+
+- [x] 调研 AFK admission、runner lifecycle、CAS 与取消恢复语义。 (explore)
+
+## 规格
+
+- [x] 冻结波次、状态传播、AFK admission、操作、blocker DTO 与外层所有权。 (spec)
+
+## 实现
+
+- [ ] 以 tracer bullet 打通 DAG compiler、subordinate executor 与 task-run API。 (build)
+- [ ] 实现资源序列化、失败/重试失效传播和 parent/integration 完成推导。 (build)
+- [ ] 实现 AFK authoritative admission、attempt journal 与 retry/cancel/resume。 (build)
+- [ ] 完成 Dashboard task-run/v1 消费闭环、zh/en、loading/empty/error/blocked 状态与键盘操作。 (build)
+
+## 验证
+
+- [ ] 验证环、冲突、稳定波次、失败/失效、parent validators 与公平性。 (verify)
+- [ ] 验证 AFK/default evidence、hard blockers、并发操作、取消和恢复。 (verify)
+- [ ] 验证 client/server DTO、i18n、状态组件与真实桌面浏览器 retry/cancel/resume 路径。 (verify)
+
+## 交付
+
+- [ ] 更新运行时契约并创建 base=codex/workflow-decomposition-policy-20260803 的独立非草稿 PR，等待 CI 全绿。 (ship)
+
+## 归档
+
+- [ ] 归档 Change 并记录调度兼容结论。 (archive)

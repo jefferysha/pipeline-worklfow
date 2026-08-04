@@ -59,6 +59,8 @@ interface AnchoredTaskPlanReaderDeps {
   readonly readPlan: (changeDir: string) => Promise<TaskPlanReadModelV1 | null>
 }
 
+type AnchoredChangeReader<T> = (changeDir: string) => Promise<T | null>
+
 const defaultAnchoredReaderDeps: AnchoredTaskPlanReaderDeps = {
   assertRoot: assertWorkflowRootAnchor,
   captureChangeParent: captureChangeParentPathAnchor,
@@ -102,12 +104,17 @@ function assertRootMutationVersion(
   }
 }
 
-export async function readAnchoredTaskPlan(
+async function readAnchoredChangeWithDeps<T>(
   anchor: WorkflowRootAnchor,
   change: string,
+  reader: AnchoredChangeReader<T>,
   overrides: Partial<AnchoredTaskPlanReaderDeps> = {},
-): Promise<TaskPlanReadModelV1 | null> {
-  const deps = { ...defaultAnchoredReaderDeps, ...overrides }
+): Promise<T | null> {
+  const deps = {
+    ...defaultAnchoredReaderDeps,
+    ...overrides,
+    readPlan: (overrides.readPlan ?? reader) as AnchoredChangeReader<T>,
+  }
   assertTrustedRoot(anchor, deps.assertRoot)
   const rootVersion = trustedRootMutationVersion(anchor)
   const changeParentAnchor = deps.captureChangeParent(anchor)
@@ -146,7 +153,7 @@ export async function readAnchoredTaskPlan(
     closeSync(changeFd)
     throw new ContextBundlePathError(403, 'TaskPlan Change directory identity changed while anchoring')
   }
-  let result: TaskPlanReadModelV1 | null = null
+  let result: T | null = null
   let readFailed = false
   let readError: unknown
   try {
@@ -164,6 +171,22 @@ export async function readAnchoredTaskPlan(
   } finally {
     closeSync(changeFd)
   }
+}
+
+export async function readAnchoredChange<T>(
+  anchor: WorkflowRootAnchor,
+  change: string,
+  reader: AnchoredChangeReader<T>,
+): Promise<T | null> {
+  return readAnchoredChangeWithDeps(anchor, change, reader)
+}
+
+export async function readAnchoredTaskPlan(
+  anchor: WorkflowRootAnchor,
+  change: string,
+  overrides: Partial<AnchoredTaskPlanReaderDeps> = {},
+): Promise<TaskPlanReadModelV1 | null> {
+  return readAnchoredChangeWithDeps(anchor, change, readTaskPlanForChange, overrides)
 }
 
 function isChangeName(name: string): boolean {

@@ -943,14 +943,17 @@ describe('TaskPlan v1 validation and read projection', () => {
     for (const entry of adversarial.issues) assertSorted(entry.related_ids, (id) => id)
   })
 
-  it('rejects unordered exact writer overlap but allows distinct exact resources', () => {
+  it('reports schedulable unordered exact writer overlap without making the plan unfreezable', () => {
     const conflicting = revision({
       work_items: revision().work_items.map((item) => ({ ...item, depends_on: [] })),
     })
-    expect(validateTaskPlanRevisionV1(conflicting).resources.conflicts).toEqual([{
+    const validation = validateTaskPlanRevisionV1(conflicting)
+    expect(validation.resources.conflicts).toEqual([{
       resource: 'path:packages/kernel/src/task-plan/types.ts',
       work_item_ids: ['wi-a', 'wi-b'],
     }])
+    expect(validation.valid).toBe(true)
+    expect(validation.freezable).toBe(true)
 
     const distinct = revision({
       work_items: revision().work_items.map((item, index) => ({

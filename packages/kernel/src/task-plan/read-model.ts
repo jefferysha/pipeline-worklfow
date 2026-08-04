@@ -1,4 +1,5 @@
-import { decodeTaskPlanRevisionV1 } from './codec.js'
+import { decodeTaskPlanRevisionV1, encodeTaskPlanRevisionV1 } from './codec.js'
+import { sha256Hex } from '../sha256.js'
 import { deepFreeze } from './internal.js'
 import { validateTaskPlanRevisionV1 } from './validation.js'
 import {
@@ -49,6 +50,7 @@ export function toTaskPlanReadModelV1(
     plan_id: projectedRevision.plan_id,
     revision_id: projectedRevision.revision_id,
     revision_number: projectedRevision.revision_number,
+    fingerprint: `sha256:${sha256Hex(encodeTaskPlanRevisionV1(projectedRevision))}`,
     revision_status: projectedRevision.status,
     validation,
     completeness: { state: validation.coverage.complete ? 'complete' : 'incomplete' },

@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-03T09:19:52Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-03-task-dag-scheduler-explore.md",
+      "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-03T09:56:59Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
+          "readAt": "2026-08-03T10:04:47Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
+          "readAt": "2026-08-04T03:08:03Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
+          "readAt": "2026-08-04T03:15:30Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/task-dag-scheduler/proposal.md",
+      "sha256": "64fef41b7185a2865583d81132bd3da41405bcb51d6a385fcb9c342f6c79f3fb",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:15:23Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "64fef41b7185a2865583d81132bd3da41405bcb51d6a385fcb9c342f6c79f3fb",
+          "readAt": "2026-08-04T03:15:30Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "64fef41b7185a2865583d81132bd3da41405bcb51d6a385fcb9c342f6c79f3fb",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/task-dag-scheduler/design.md",
+      "sha256": "a1a47991407758d5f63558e7dabfe847cde786242491b78a14bfc080674da820",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:15:23Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "a1a47991407758d5f63558e7dabfe847cde786242491b78a14bfc080674da820",
+          "readAt": "2026-08-04T03:15:30Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a1a47991407758d5f63558e7dabfe847cde786242491b78a14bfc080674da820",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/task-dag-scheduler/tasks.md",
+      "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:15:23Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
+          "readAt": "2026-08-04T03:15:30Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/task-dag-scheduler/specs/task-dag-scheduler/spec.md",
+      "sha256": "f9c42b7418f562d8fc7f6f9ef0faec63672a66021898e438fe3972d0e4af4d8e",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-04T03:15:23Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f9c42b7418f562d8fc7f6f9ef0faec63672a66021898e438fe3972d0e4af4d8e",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-03-task-dag-scheduler-design.md",
+      "sha256": "4fd6406d760b8519b97e07b5b821a118606332fe44fdd6bef1cd40a2af878e35",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-04T03:15:23Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "4fd6406d760b8519b97e07b5b821a118606332fe44fdd6bef1cd40a2af878e35",
+          "readAt": "2026-08-04T03:15:30Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4fd6406d760b8519b97e07b5b821a118606332fe44fdd6bef1cd40a2af878e35",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-dag-scheduler.md",
+      "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T03:15:24Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-03-task-dag-scheduler.md",
+      "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-04T03:15:24Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
+          "readAt": "2026-08-04T03:16:10Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { lstatSync } from 'node:fs'
 import { join, resolve as resolvePath } from 'node:path'
 import {
@@ -70,6 +71,12 @@ import {
 } from './workflows.js'
 
 import type { PostRouteDeps } from './serverPostRoutes.js'
+import { readAnchoredChange } from './serverTaskPlanRoutes.js'
+import {
+  applyTaskRunOperationForChange,
+  resolveTaskRunOperation,
+  TaskRunOperationConflictError,
+} from './serverTaskRunOperations.js'
 
 export async function handlePostExecutionRoutes(
   req: IncomingMessage,
@@ -89,6 +96,24 @@ export async function handlePostExecutionRoutes(
   function isWorkflowName(name: string): boolean {
     return name !== '' && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name)
   }
+    if (/^\/api\/task-runs\/[^/]+\/operations$/.test(path)) {
+      const rawBody = await readJsonBody(req)
+      const result = await resolveTaskRunOperation(path, rawBody, {
+        workflowRootForRequest,
+        clock,
+        operationId: randomUUID,
+        mutateRun: async (anchor, change, operation) => {
+          const updated = await readAnchoredChange(
+            anchor,
+            change,
+            async (changeDir) => applyTaskRunOperationForChange(changeDir, operation),
+          )
+          if (updated === null) throw new TaskRunOperationConflictError('Task Run is missing')
+          return updated
+        },
+      })
+      if (result !== null) return sendJson(res, result.status, result.body)
+    }
     const cancelMatch = /^\/api\/afk\/([^/]+)\/cancel$/.exec(path)
     if (cancelMatch) {
       const segment = cancelMatch[1]
