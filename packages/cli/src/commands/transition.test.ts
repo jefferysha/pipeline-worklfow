@@ -2,8 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { IllegalTransitionError, TRANSITION_EVENTS, eventEdge as kernelEventEdge } from '@tenon/kernel'
-import type { Phase, PipelineState, TransitionResult } from '@tenon/kernel'
+import {
+  IllegalTransitionError,
+  TRANSITION_EVENTS,
+  eventEdge as kernelEventEdge,
+  publishTaskPlanRevision,
+} from '@tenon/kernel'
+import type { Phase, PipelineState, TaskPlanRevisionV1, TransitionResult } from '@tenon/kernel'
 import { cmdTransition } from './transition.js'
 import { EVENTS, eventEdge } from '../events.js'
 import { makeGuardCtx } from '../guardContext.js'
@@ -83,6 +88,49 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     try {
       expect(await cmdTransition(deps, 'demo', 'build-complete')).toBe(1)
       expect(deps.errLines).toContain('build 出口：tasks.md 仍有 1 项未勾')
+      expect(deps.store.write.calls).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('verify-pass 在 transition 锁内拒绝 canonical current 的缺失 tasks projection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-missing-canonical-projection-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [],
+      work_items: [],
+    }
+    await publishTaskPlanRevision(dir, revision, { expected_current_revision_id: null })
+    await rm(join(dir, 'tasks.md'))
+    await mkdir(join(root, 'docs'), { recursive: true })
+    await writeFile(join(root, 'docs', 'v.md'), '# Verify\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: approvedReviewState({
+        phase: 'verify',
+        track: 'backend',
+        verification_report: 'docs/v.md',
+        branch_status: 'handled',
+        agent_review_result: 'pass',
+        codex_review_result: 'pass',
+        build_sha: 'null',
+      }),
+      guardCtx: makeGuardCtx(root),
+    })
+
+    try {
+      expect(await cmdTransition(deps, 'demo', 'verify-pass')).toBe(1)
+      expect(deps.errLines).toContain('verify 出口：tasks.md 缺失')
       expect(deps.store.write.calls).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })

@@ -1256,3 +1256,74 @@ OpenSpec/ledger/review/报告投影；CLI、kernel、server 与 bundles 均由 R
 保持两项 Verify task 未勾、`verify_result=fail`。正式登记本报告与当前 phase Skill evidence，请求 exact
 `verify-fail` 并以 delegated acknowledgement 回 Build；以 TDD 移除公共测试 callback、保留 crash
 recovery 验收能力，重建 bundles、全量验证、重新冻结并从零执行下一轮三轨，不接受偏差。
+
+---
+
+# 第 25 轮 Verify（冻结基线 `092d948fd629cbe89683893dda3f4e8f3dcea875`）
+
+## 聚合结论
+
+FAIL，C0/H0/M1/L6。独立 Reviewer 与 E2E 均 PASS；原生 Codex CLI 完整审查确认一个新的 MEDIUM：
+canonical TaskPlan current 已存在但 `tasks.md` compatibility projection 缺失时，非 Build phase 的
+tasks-through-phase predicate 错误返回通过。按三轨 findings 并集，本轮不得勾选 Verify tasks、设置
+`branch_status=handled` 或请求 `verify-pass`。
+
+原始首次登记拒绝被三轨一致确认是已修复的 receipt bridge 假阴性：discovery metadata 候选预算已与
+4096-entry 上限对齐，同时保持 newest-32 body reads、512 MiB、session/turn/worktree/ABI/file identity
+与完整 `exit_code=0` 证明；合法 inline positive safe-integer `max_output_tokens` 只在精确 awaited
+`tools.exec_command` + same-result `text(result)` wrapper 中被接受。动态路径、loop 或 `sed` 读取不被
+采信是正确 fail-closed 行为，不是 bridge 回归。Round23 的 post-open `ENOENT`、FIFO 与
+`O_NONBLOCK` 修复，以及 Round24 的公共 callback/重入死锁公共面修复也继续成立。
+
+## 三轨证据
+
+- Reviewer：PASS，C0/H0/M0/L4。完整覆盖 489 paths；隔离副本 fresh build 且 tracked bundle diff=0；
+  focused 10 files / 316 passed；全量 340 files / 6157 passed / 26 honest skipped；Web 87 files /
+  1633 passed；静态与治理门全部通过。公共 root/type/subpath 未导出私有 ALS harness，并发隔离 probe
+  通过。真实工作树前后指纹均为
+  `696816ac5ca1c103ae4c1418dbfae92c0caaebdbc20669717e46d23dbe705302`。证据：
+  `/tmp/tenon-pr1-r25-verify-reviewer.md`，SHA-256
+  `afe8d65e799ae5d718c877d8c6e7aafc1c070efc2e94d140c581e791fd7f9702`。
+- E2E：PASS，C0/H0/M0/L0。callback/ALS/crash 3/3；receipt/ENOENT/FIFO 9/9；相关 19 files /
+  640 passed；全量 6157、Web 1633、hooks 512、migration CAS 13、build、comments、architecture
+  744、OpenSpec 37/37、docs、hygiene、freshness 与 diff check 全通过。隔离 archive rehearsal 为
+  7 added / 2 modified，归档后 strict 37/37；真实 HEAD/status/main-spec digest 前后一致。证据：
+  `/tmp/tenon-pr1-r25-verify-e2e.md`，SHA-256
+  `652288af9812b0d59a3b8aca4bb0e931106ea9e8fad0ba1d4e8ab07735368950`。
+- Codex CLI：FAIL，C0/H0/M1/L6。完整覆盖 489 paths；按要求在 detached read-only copy 只做静态
+  审查，不运行安装或测试，测试证据由前两轨独立提供。证据：`/tmp/tenon-pr1-r25-codex.md`，
+  SHA-256 `d9fe7d3d1dbfe2c10a5c60e8e68dd3bf30e52bd5d960aaaf3af21b0c27211e04`。
+
+## 阻断 finding
+
+### MEDIUM — canonical current 存在时缺失 tasks.md projection 令非 Build 出口误通过
+
+`taskPlanTasksThroughPhaseForChange` 先识别 canonical current 并选择 canonical byte limit，但
+`tasks.md` 缺失后仅对 Build 返回失败，对 Open、Explore、Spec、Verify、Ship 与 Archive 返回
+`{ pass: true }`。这些 forward completion event 都启用 tasks exit gate，因此 projection pending/
+missing 被错误降级为 legacy-style absence，TaskPlan 完成性 predicate 自身被绕过；CLI 同步 guard 的
+missing 分支也保留相同歧义。其他文档门可能偶然拦住某些 transition，但不能替代 canonical TaskPlan
+门禁。修复必须让 canonical current + absent projection 对所有受治理 task exit 失败关闭，并为 kernel
+predicate、`tenon check` 与 transition execution 增加代表性非 Build 红绿回归。
+
+## LOW 与剩余风险
+
+- 私有 ALS crash seam 仍能被仓内测试代码传入同 Change 重入 callback；它已从公共 API、types 与
+  package subpath 隔离，不构成产品调用面，但任务描述应限定为消除公共重入能力。
+- filesystem error cause 诊断、publication parent 同用户窄 TOCTOU、498 行 store 耦合、server anchored
+  readers 重复与 domain/persistence entity-ID traversal 重复继续作为 LOW 维护项。
+- E2E 诚实保留 26 个条件性 skip；原生 Codex review 本身已实际完成。
+
+## Step 1.5 capability 回读与 Step 1.6 隔离演练
+
+489 个 changed paths 全部映射到 `task-plan-contract`、`codex-skill-receipt-current-turn` 或其官方
+OpenSpec/ledger/review/报告投影；57 个 package paths（36 production、19 tests、2 bundles）由
+Reviewer/Codex 逐路径复核。E2E 在外部副本完成 official show 9 deltas、change strict、archive
+rehearsal 与归档后主规格 strict 37/37；真实主规格 digest 不变。
+
+## 处理决定
+
+保持两项 Verify task 未勾、`verify_result=fail`。登记本报告与当前 phase 的精确 Skill evidence，请求
+exact `verify-fail` 并以 delegated acknowledgement 回 Build；以 TDD 修复 canonical current + missing
+projection 的所有 phase fail-closed 语义，重建 bundles、全量验证、重新冻结并从零执行下一轮三轨，
+不接受偏差。

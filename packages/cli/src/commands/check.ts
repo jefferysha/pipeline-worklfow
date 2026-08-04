@@ -73,7 +73,9 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   const canonicalStatePath = fileContext?.changeDirRel === undefined
     ? undefined
     : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
-  const tasksByteLimit = canonicalStatePath !== undefined && fileContext?.fileExists?.(canonicalStatePath)
+  const canonicalStatePresent = canonicalStatePath !== undefined
+    && fileContext?.fileExists?.(canonicalStatePath) === true
+  const tasksByteLimit = canonicalStatePresent
     ? TASK_PLAN_LIMITS.maxRevisionBytes
     : TASK_PLAN_LIMITS.maxLegacyProjectionBytes
   const boundedTasks = tasksPath === undefined
@@ -83,7 +85,9 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
       : fileContext.readFileBounded(tasksPath, tasksByteLimit)
   const authenticatedTasksSource = boundedTasks?.kind === 'ok' ? boundedTasks.text : undefined
   let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' =
-    boundedTasks?.kind === 'invalid' ? 'invalid' : 'legacy'
+    boundedTasks?.kind === 'invalid' || (canonicalStatePresent && boundedTasks?.kind === 'missing')
+      ? 'invalid'
+      : 'legacy'
   if (authenticatedTasksSource !== undefined) {
     try {
       canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(

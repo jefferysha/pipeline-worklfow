@@ -359,6 +359,22 @@ describe('task plan store', () => {
     })
   })
 
+  it('fails every governed phase exit when canonical current exists but tasks projection is missing', async () => {
+    const dir = await changeDir()
+    await publishTaskPlanRevision(dir, plan(), { expected_current_revision_id: null })
+    await rm(join(dir, 'tasks.md'))
+
+    for (const phase of ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
+      await expect(taskPlanTasksThroughPhaseForChange(dir, phase)).resolves.toEqual({
+        pass: false,
+        failure: `${phase} 出口：tasks.md 缺失`,
+      })
+    }
+
+    const legacyDir = await changeDir()
+    await expect(taskPlanTasksThroughPhaseForChange(legacyDir, 'verify')).resolves.toEqual({ pass: true })
+  })
+
   it('never falls back to legacy when current exists but is corrupt or lacks its immutable twin', async () => {
     const dir = await changeDir()
     await mkdir(join(dir, TASK_PLAN_STATE_DIR), { recursive: true })

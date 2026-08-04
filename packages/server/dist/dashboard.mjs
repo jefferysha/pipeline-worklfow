@@ -7967,8 +7967,9 @@ async function taskPlanTasksThroughPhaseForChange(changeDir, phase, sourceOverri
     } catch {
       return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
     }
-  if (source === void 0)
-    return phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
+  if (source === void 0) {
+    return state !== void 0 || phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
+  }
   if (Buffer.byteLength(source) > limit)
     return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
   if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) }))

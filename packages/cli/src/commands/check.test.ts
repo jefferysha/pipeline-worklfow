@@ -128,6 +128,47 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     }
   })
 
+  test('真实 check 对 canonical current 的缺失 tasks projection 失败关闭，不能按非 Build absence 放行', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-missing-canonical-projection-'))
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(changeDir, { recursive: true })
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [],
+      work_items: [],
+    }
+    await publishTaskPlanRevision(changeDir, revision, { expected_current_revision_id: null })
+    await rm(join(changeDir, 'tasks.md'))
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'verify', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo',
+        tasksMarkdown: '',
+      })
+      return { pass: status !== 'invalid', failures: status === 'invalid' ? ['invalid projection'] : [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+      expect(deps.outLines).toContain('  [FAIL] invalid projection')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('canonical tasks 投影漂移时注入 invalid，不能降级为 legacy phase 解析', async () => {
     const root = await mkdtemp(join(tmpdir(), 'check-drifted-task-plan-'))
     const canonicalDir = join(root, 'openspec', 'changes', 'demo')

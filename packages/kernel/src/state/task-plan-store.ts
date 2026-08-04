@@ -465,7 +465,8 @@ export async function taskPlanTasksThroughPhaseForChange(changeDir: string, phas
   const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES
   let source = sourceOverride ?? undefined
   if (sourceOverride === undefined) try { source = await readRegular(join(changeDir, 'tasks.md'), limit) } catch { return { pass: false, failure: `${phase} 出口：tasks.md 不可信或超出预算` } }
-  if (source === undefined) return phase === 'build' ? { pass: false, failure: `${phase} 出口：tasks.md 缺失` } : { pass: true }
+  if (source === undefined) return state !== undefined || phase === 'build'
+    ? { pass: false, failure: `${phase} 出口：tasks.md 缺失` } : { pass: true }
   if (Buffer.byteLength(source) > limit) return { pass: false, failure: `${phase} 出口：tasks.md 不可信或超出预算` }
   if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) }))
     return { pass: false, failure: `${phase} 出口：canonical TaskPlan tasks.md 投影认证失败` }
