@@ -73,8 +73,12 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   const canonicalStatePath = fileContext?.changeDirRel === undefined
     ? undefined
     : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
-  const canonicalStatePresent = canonicalStatePath !== undefined
-    && fileContext?.fileExists?.(canonicalStatePath) === true
+  const boundedCanonicalState = canonicalStatePath === undefined
+    ? undefined
+    : fileContext?.readFileBounded === undefined
+      ? { kind: 'invalid' as const }
+      : fileContext.readFileBounded(canonicalStatePath, TASK_PLAN_LIMITS.maxRevisionBytes)
+  const canonicalStatePresent = boundedCanonicalState?.kind === 'ok'
   const tasksByteLimit = canonicalStatePresent
     ? TASK_PLAN_LIMITS.maxRevisionBytes
     : TASK_PLAN_LIMITS.maxLegacyProjectionBytes
@@ -85,7 +89,9 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
       : fileContext.readFileBounded(tasksPath, tasksByteLimit)
   const authenticatedTasksSource = boundedTasks?.kind === 'ok' ? boundedTasks.text : undefined
   let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' =
-    boundedTasks?.kind === 'invalid' || (canonicalStatePresent && boundedTasks?.kind === 'missing')
+    boundedCanonicalState?.kind === 'invalid'
+    || boundedTasks?.kind === 'invalid'
+    || (canonicalStatePresent && boundedTasks?.kind === 'missing')
       ? 'invalid'
       : 'legacy'
   if (authenticatedTasksSource !== undefined) {

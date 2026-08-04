@@ -169,6 +169,55 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     }
   })
 
+  test('真实 check 对非普通 canonical current + 缺失 tasks projection 失败关闭', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-invalid-canonical-current-'))
+    const changeDir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(join(changeDir, '.pipeline-task-plan', 'current.json'), { recursive: true })
+    let status: string | undefined
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'verify', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      status = context?.canonicalTasksProjectionStatus?.({
+        changeDirRel: 'openspec/changes/demo',
+        tasksMarkdown: '',
+      })
+      return { pass: status !== 'invalid', failures: status === 'invalid' ? ['invalid projection'] : [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(2)
+      expect(status).toBe('invalid')
+      expect(deps.outLines).toContain('  [FAIL] invalid projection')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('真实 check 仅对真正缺失 canonical current 保留 legacy tasks absence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'check-legacy-absence-'))
+    await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
+    let receivedCanonicalStatus = false
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'verify', track: 'backend' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
+      receivedCanonicalStatus = context?.canonicalTasksProjectionStatus !== undefined
+      return { pass: !receivedCanonicalStatus, failures: receivedCanonicalStatus ? ['not legacy'] : [] }
+    })
+
+    try {
+      expect(await cmdCheck(deps, 'demo')).toBe(0)
+      expect(receivedCanonicalStatus).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('canonical tasks 投影漂移时注入 invalid，不能降级为 legacy phase 解析', async () => {
     const root = await mkdtemp(join(tmpdir(), 'check-drifted-task-plan-'))
     const canonicalDir = join(root, 'openspec', 'changes', 'demo')

@@ -1327,3 +1327,63 @@ rehearsal 与归档后主规格 strict 37/37；真实主规格 digest 不变。
 exact `verify-fail` 并以 delegated acknowledgement 回 Build；以 TDD 修复 canonical current + missing
 projection 的所有 phase fail-closed 语义，重建 bundles、全量验证、重新冻结并从零执行下一轮三轨，
 不接受偏差。
+
+---
+
+# 第 26 轮 Verify（冻结基线 `3f5a48a10e7b1da4b049ace8942430b7968a6da0`）
+
+## 聚合结论
+
+FAIL，C0/H0/M1/L7。Reviewer 与原生 Codex CLI 静态审查均 PASS；E2E 确认 Round25 的
+canonical current + missing `tasks.md` 修复在七个 phase predicate、真实 `tenon check` 与锁内
+transition 零提交路径上均正确，但 fresh `npm run build` 会改写两个 tracked bundle。差异只有无语义
+大括号正规化，正式 committed dist 的运行行为也正确；然而冻结 SHA 不能由当前源码与锁定生成器逐字节
+重现，违反 release bundle freshness，所以本轮按三轨 findings 并集为 FAIL。
+
+原始首次登记的 receipt bridge 假阴性继续被三轨确认已修复：4096-entry metadata 候选预算、newest-32
+body reads、512 MiB 边界与精确 session/turn/worktree/ABI/file identity 均保持；合法 inline positive
+safe-integer `max_output_tokens` 只在单次 awaited `tools.exec_command` + same-result `text(result)` wrapper
+中接受，截断、动态、pragma 与非完整输出继续失败关闭。动态路径、loop 或 `sed` 不构成合法 Skill 完成态
+证据，其拒绝不是 bridge 回归。
+
+## 三轨证据
+
+- Reviewer：PASS，C0/H0/M0/L4。重点 536/536；全量 340 files / 6160 passed / 26 honest skipped；
+  Web 1633、hooks 512 与全部静态/治理门通过。新增 Low：当 canonical `current.json` 是目录、断链或
+  FIFO 等非普通文件且 `tasks.md` 缺失时，`cmdCheck` 仅靠 `fileExists` 会误按 legacy absence 返回 0；
+  真实 transition 仍安全拒绝且零提交。证据：`/tmp/tenon-pr1-r26-verify-reviewer.md`，SHA-256
+  `21844296eb4b836b20b397dacd37334ec52fa21fcf7bbb966d10d5f27cd1986a`。
+- E2E：FAIL，C0/H0/M1/L0。相关 19 files / 643 passed；全量 6160、Web 1633、hooks 512、
+  migration CAS 13 与所有治理门通过；正式 dist 缺失投影场景 `check` exit 2、transition exit 1 且
+  零写。fresh build 后 CLI/server 两个 tracked bundle 共 2 insertions / 4 deletions，阻断 release
+  freshness。证据：`/tmp/tenon-pr1-r26-verify-e2e.md`，SHA-256
+  `fff006724933f4ce20d3fb66a793a6c8e157940200268a740994a3f6abc2f35a`。
+- Codex CLI：PASS，C0/H0/M0/L3。完整静态覆盖 507 paths；明确确认 receipt bridge、
+  `max_output_tokens`、ENOENT/FIFO、私有 ALS crash recovery、七 phase missing projection 与锁内
+  transition 契约成立；未安装依赖或运行测试，执行证据由 Reviewer/E2E 提供。证据：
+  `/tmp/tenon-pr1-r26-codex.md`，SHA-256
+  `30ced00cf0f89ad9a863f14d44588df9134cb312820b13811edd5027004ddc30`。
+
+## 阻断 finding
+
+### MEDIUM — fresh build 不能逐字节重现冻结 tracked CLI/server bundles
+
+`packages/cli/dist/tenon.mjs` 与 `packages/server/dist/dashboard.mjs` 在 fresh build 后都把
+`if (source === void 0) { return ... }` 正规化为无大括号形式。运行语义等价并已由 committed dist
+实测，但 release build 必然留下 tracked diff，因此冻结提交不是可重现生成产物。必须回 Build 重建、
+提交、再次 build 证明零 diff，并重新冻结。
+
+## LOW 与同类修复
+
+- 同次 Build 修复 `cmdCheck` 对 canonical `current.json` 非普通文件 + missing `tasks.md` 的 legacy
+  误分类：必须用 bounded regular-file read 区分 `missing`、`ok` 与 `invalid`，invalid 失败关闭，真正
+  missing 才保留 legacy compatibility。
+- publication parent 同用户窄 ABA、生产 bundle 中不可达 ALS test seam、filesystem cause 丢失与两个
+  secure tasks readers 重复保留为 Low 维护项，不改变本轮 M1 阻断结论。
+
+## 处理决定
+
+保持两项 Verify task 未勾、`verify_result=fail`。正式登记本报告和当前 phase Skill evidence，请求 exact
+`verify-fail` 并以 delegated acknowledgement 回 Build；增加两个 Build task，先以 TDD 修复 current
+非普通文件误分类，再重建 tracked bundles、证明二次 build 字节稳定、独立预审、重新冻结并从零执行
+下一轮三轨。

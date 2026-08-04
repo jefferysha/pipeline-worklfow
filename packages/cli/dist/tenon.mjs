@@ -10682,9 +10682,8 @@ async function taskPlanTasksThroughPhaseForChange(changeDir2, phase, sourceOverr
     } catch {
       return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
     }
-  if (source === void 0) {
+  if (source === void 0)
     return state !== void 0 || phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
-  }
   if (Buffer.byteLength(source) > limit)
     return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
   if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) }))
@@ -34746,11 +34745,12 @@ async function cmdCheck(deps, name2) {
   const fileContext = deps.guardCtx?.(name2);
   const tasksPath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/tasks.md`;
   const canonicalStatePath = fileContext?.changeDirRel === void 0 ? void 0 : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`;
-  const canonicalStatePresent = canonicalStatePath !== void 0 && fileContext?.fileExists?.(canonicalStatePath) === true;
+  const boundedCanonicalState = canonicalStatePath === void 0 ? void 0 : fileContext?.readFileBounded === void 0 ? { kind: "invalid" } : fileContext.readFileBounded(canonicalStatePath, TASK_PLAN_LIMITS.maxRevisionBytes);
+  const canonicalStatePresent = boundedCanonicalState?.kind === "ok";
   const tasksByteLimit = canonicalStatePresent ? TASK_PLAN_LIMITS.maxRevisionBytes : TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
   const boundedTasks = tasksPath === void 0 ? void 0 : fileContext?.readFileBounded === void 0 ? { kind: "invalid" } : fileContext.readFileBounded(tasksPath, tasksByteLimit);
   const authenticatedTasksSource = boundedTasks?.kind === "ok" ? boundedTasks.text : void 0;
-  let canonicalTasksProjectionStatus = boundedTasks?.kind === "invalid" || canonicalStatePresent && boundedTasks?.kind === "missing" ? "invalid" : "legacy";
+  let canonicalTasksProjectionStatus = boundedCanonicalState?.kind === "invalid" || boundedTasks?.kind === "invalid" || canonicalStatePresent && boundedTasks?.kind === "missing" ? "invalid" : "legacy";
   if (authenticatedTasksSource !== void 0) {
     try {
       canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(

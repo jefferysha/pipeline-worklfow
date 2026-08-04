@@ -66,6 +66,8 @@
 - [x] 重建正式生成物并完成 Round23 findings 的全量 Build 收敛复核。 (build)
 - [x] 移除公开 publication fault-injection callback，以模块私有 harness 保留 crash-window 验收并消除同 Change 重入死锁。 (build)
 - [x] canonical current 存在而 tasks.md projection 缺失时，让所有受治理 phase exit、check 与 transition 一致失败关闭。 (build)
+- [x] canonical current 为非普通文件且 tasks.md 缺失时，让真实 check 失败关闭并仅对真正缺失 current 保留 legacy compatibility。 (build)
+- [x] 重建并提交 CLI/server tracked bundles，确保 frozen SHA 与正式生成器逐字节一致。 (build)
 
 ## 验证
 
