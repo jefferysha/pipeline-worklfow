@@ -71,8 +71,8 @@
 
 ## 验证
 
-- [ ] 验证旧格式、 hostile input、循环依赖、覆盖缺口、资源冲突和稳定 ID。 (verify)
-- [ ] 验证 immutable/current 原子性、投影恢复、API trust boundary 与 129+ transcript。 (verify)
+- [x] 验证旧格式、 hostile input、循环依赖、覆盖缺口、资源冲突和稳定 ID。 (verify)
+- [x] 验证 immutable/current 原子性、投影恢复、API trust boundary 与 129+ transcript。 (verify)
 
 ## 交付
 

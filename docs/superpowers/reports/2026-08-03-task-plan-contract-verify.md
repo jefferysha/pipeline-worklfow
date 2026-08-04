@@ -1387,3 +1387,67 @@ safe-integer `max_output_tokens` 只在单次 awaited `tools.exec_command` + sam
 `verify-fail` 并以 delegated acknowledgement 回 Build；增加两个 Build task，先以 TDD 修复 current
 非普通文件误分类，再重建 tracked bundles、证明二次 build 字节稳定、独立预审、重新冻结并从零执行
 下一轮三轨。
+
+---
+
+# 第 27 轮 Verify（冻结基线 `b54669fe400e368469e7ae3d1184e583c72e7ca8`）
+
+## 聚合结论
+
+PASS，C0/H0/M0/L3。Reviewer、E2E 与原生 Codex CLI 三轨全部 PASS；三轨 findings 去重后没有
+Critical、High 或 Medium。Round26 的两个阻断均已关闭：fresh build 与第二次独立 bundle build
+对 CLI/server tracked bundles 都保持逐字节稳定；`cmdCheck` 对 canonical `current.json` 非普通文件
+且 missing `tasks.md` 失败关闭，而真正缺失 current 继续保持 legacy compatibility。
+
+首次登记拒绝被本轮三轨再次一致确认是 receipt bridge false-negative bug，且修复有效：discovery 在
+4096-entry metadata/transcript 预算内支持 129+ 历史候选，只全文读取 newest 32 并保留 512 MiB
+边界；合法 inline positive safe-integer `max_output_tokens` 仍要求单次 awaited exec、same-result
+`text(result)`、完整输出与 `exit_code=0`。session/turn/worktree/ABI/inode/mtime/ctime、`O_NOFOLLOW`、
+`O_NONBLOCK` 和截断/动态/pragma fail-closed 边界均未放宽。
+
+## 三轨证据
+
+- Reviewer：PASS，C0/H0/M0/L3。全量 340 files / 6162 passed / 26 honest skipped；fresh build
+  前后 CLI SHA `2d718a795088...`、server SHA `da054f5be776...` 各自稳定；全部静态与治理门通过，
+  真实工作树前后指纹一致。证据：`/tmp/tenon-pr1-r27-verify-reviewer.md`，SHA-256
+  `338c8dd6cc0abe83ceb1aeda9a864b979bd8eb88e110fceb71b1a81a31e660f0`。
+- E2E：PASS，C0/H0/M0/L0。正式 frozen dist 的 non-regular/legacy 双路径符合预期；窄测 2、
+  receipt/ENOENT/FIFO 9、相关 19 files / 645 passed、全量 6162 / 26 skipped、Web 1633、hooks
+  512 和全部静态门通过；OpenSpec show 9 deltas，archive rehearsal 7 added / 2 modified，归档后
+  strict 37/37；真实 HEAD/status/diff/untracked/specs 四指纹一致。证据：
+  `/tmp/tenon-pr1-r27-verify-e2e.md`，SHA-256
+  `7a909fc8f05d7d0c07e16483e22eaa8c2e2c2ac79de8f01d8e6f694a458dc50e`。
+- Codex CLI：PASS，C0/H0/M0/L1。只读静态覆盖 525 changed paths，逐项确认 receipt bridge、
+  `max_output_tokens`、ENOENT/FIFO、私有 ALS crash harness、TaskPlan check/transition 与 bundles
+  中的对应行为；未安装依赖或运行测试，动态证据由前两轨独立提供。证据：
+  `/tmp/tenon-pr1-r27-codex.md`，SHA-256
+  `764a1b5b91de948b8075c28d7a9427e41e77de2f6d8f14cf49e77f31147fba0c`。
+
+## Step 1.5 逐文件 capability 回读
+
+525 个 changed paths 全部按类别映射到 `task-plan-contract`、
+`codex-skill-receipt-current-turn` 或对应 OpenSpec/ledger/review/report 投影；73 个 package paths 由
+Reviewer/Codex 逐路径审查。proposal、design、ADR、plan、两个 delta spec 与实现对 stable identity、
+coverage/dependency/resource、bounded hostile input、atomic revision/current、legacy non-inference、
+read DTO/API 和 receipt 完成态约束一致。
+
+## Step 1.6 OpenSpec 隔离应用演练
+
+E2E 在隔离副本运行官方 show、strict validate 与 archive；归档为
+`2026-08-04-task-plan-contract`，7 added / 2 modified / 0 removed / 0 renamed，归档后全量 strict
+37/37。真实 `openspec/specs` digest 前后保持一致，真实工作树没有收到演练输出。
+
+## LOW 与剩余风险
+
+- TaskPlan publication 仍有同用户并发替换 parent/change/state/revisions 目录的窄 ABA/TOCTOU；当前
+  Change lock 只约束合作方。需要 dirfd/openat 或 publication 前后目录身份 fence 才能彻底关闭。
+- root/change fence 的稳定错误映射丢失底层 filesystem cause，影响内部诊断但不泄漏路径或改变 API
+  machine code。
+- CLI 同步 guard 与 kernel/store 仍各有一套 security-sensitive tasks reader，未来修改存在漂移维护
+  风险；当前两套的预算、regular-file 与身份 fence 已由测试对齐。
+
+## 处理决定
+
+勾选两项 Verify task，登记最终报告和 tasks 的当前 phase Skill evidence，设置 Reviewer/Codex 通过与
+`branch_status=handled`，运行成功出口 guard，并请求 exact `verify-pass` review。未执行项仅为
+Docker/Linux/secret-backed 条件用例的 26 条诚实 skip；不伪装为已覆盖。
