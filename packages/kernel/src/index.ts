@@ -1,5 +1,6 @@
 export * from './types.js'
 export * from './task-plan/index.js'
+export * from './skill-invocation/index.js'
 export { PRODUCT_IDENTITY } from './product-identity.generated.js'
 export type { ProductIdentity } from './product-identity.generated.js'
 export * from './state/index.js'

@@ -312,6 +312,29 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
   `Accept-Encoding` 协商 gzip，返回 `Vary: Accept-Encoding` 并遵守显式 `gzip;q=0`；
   原始与 gzip 响应字节均由真实 HTTP 测试校验。
 
+### 3.3 Skill Invocation evidence v1
+
+- **canonical ledger**：每个 Change 的 `.pipeline-skill-invocations.jsonl` 是
+  `skill-invocation-evidence/v1` 唯一真相源；history 只能由 completed event 单向生成兼容行，
+  `Skill:`、`CodexSkillRead:` 或自由文本 history 永远不能反向铸造 completed evidence。
+- **身份和状态**：每个事件必须绑定由 repository 重读得到的 Project、WorkflowDefinition、
+  WorkflowRun 与 StepVisit；TaskPlanRevision/WorkItem 和 AFK attempt/reservation 存在时也必须精确
+  匹配。每个 invocation 恰有一个 started、至多一个 terminal；相同 event 重放幂等，冲突、坏行、
+  不连续 sequence、错误 subject、adapter 漂移、无 ownership recovery 的 interrupted 均失败关闭。
+- **证明而非正文**：input/output 只保存版本化 schema、字段名/分类、SHA-256 与 validator verdict；
+  QuestionEvent 保存 question key/schema/options/requiredness/shown；自由文本回答只保存分类和 digest。
+  API/Dashboard 投影排除 Project ID、所有 digest/proof、transcript/Skill 绝对路径、host session/turn、
+  raw prompt/answer/output 与 credentials。
+- **默认和产物**：recommended-default 只能引用 repository 精确复核通过的 frozen policy/rule、
+  option 与 rationale，且 question 必须 `shown=false`；hard-gate 永不默认。ArtifactBinding 先写 intent，
+  仅 completed invocation 可写；commit 时重新核对 canonical document record 或当前文件 digest，漂移
+  拒绝，未 commit 的 intent 保持未绑定。
+- **存储和读取**：写入在 Change lock 下使用 closed codec、bounded read、O_NOFOLLOW、inode/size
+  fence、append、fsync；读取使用 ledger identity fence。只读入口为
+  `GET /api/skill-invocations/:change?root=<registered-root>&run_id=<optional>&work_item_id=<optional>`；
+  server 在 registered root、Change parent、Change 与 root mutation version 上做前后锚定。坏证据返回
+  `409 SKILL_INVOCATION_CORRUPT`，路径漂移返回 403，未知/future DTO 不显示为成功。
+
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 
 | 目录 | 所有者 | 内容 |

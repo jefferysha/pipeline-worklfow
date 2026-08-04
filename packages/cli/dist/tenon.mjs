@@ -4138,30 +4138,25 @@ function validateTaskPlanAggregate(validatedRevision) {
   });
 }
 
-// packages/kernel/dist/product-identity.generated.js
-var PRODUCT_IDENTITY = {
-  schemaVersion: 1,
-  displayName: "Tenon",
-  cli: "tenon",
-  hookLauncher: "tenon-hook",
-  dashboardLauncher: "tenon-dashboard",
-  plugin: "tenon",
-  marketplace: "tenon",
-  entrySkill: "tenon",
-  skillPrefix: "tenon-",
-  runtimeApp: "tenon",
-  environmentPrefix: "TENON_",
-  browserPrefix: "__TENON_",
-  repository: "jefferysha/tenon",
-  repositoryUrl: "https://github.com/jefferysha/tenon",
-  pagesBase: "/tenon/",
-  dashboardHost: "127.0.0.1",
-  dashboardPort: 18765
-};
+// packages/kernel/dist/skill-invocation/types.js
+var SKILL_INVOCATION_LIMITS = Object.freeze({
+  maxLedgerBytes: 16 * 1024 * 1024,
+  maxEventBytes: 128 * 1024,
+  maxEvents: 8192,
+  maxInvocations: 1024,
+  maxFields: 128,
+  maxQuestions: 128,
+  maxArtifacts: 128,
+  maxOptions: 64,
+  maxIdBytes: 192,
+  maxRefBytes: 1024
+});
 
-// packages/kernel/dist/state/store.js
-import { readFile as readFile9 } from "node:fs/promises";
-import path4 from "node:path";
+// packages/kernel/dist/state/run-revision-store.js
+import { createHash as createHash5 } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { lstat as lstat3, mkdir as mkdir3, readFile as readFile4 } from "node:fs/promises";
+import { join as join6 } from "node:path";
 
 // packages/kernel/dist/state/atomic-publish.js
 import { randomUUID } from "node:crypto";
@@ -4186,148 +4181,6 @@ async function atomicReplaceFile(target, content) {
     await unlink(tmp).catch(() => {
     });
   }
-}
-
-// packages/kernel/dist/state/lock.js
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename as rename2, rm, stat, utimes, writeFile as writeFile2 } from "node:fs/promises";
-import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-var LOCK_DIR_NAME = ".pipeline.lock";
-var LOCK_OWNER_FILE = "owner";
-var STALE_LOCK_MS = 6e4;
-var HEARTBEAT_MS = Math.floor(STALE_LOCK_MS / 3);
-var ACQUIRE_TIMEOUT_MS = 1e4;
-var POLL_MS = 10;
-var queues = /* @__PURE__ */ new Map();
-function lockDirFor(changeDir2) {
-  return path.join(path.resolve(changeDir2), LOCK_DIR_NAME);
-}
-function ownerPathFor(lockDir) {
-  return path.join(lockDir, LOCK_OWNER_FILE);
-}
-async function lockAgeMs(lockDir) {
-  try {
-    const st = await stat(ownerPathFor(lockDir));
-    return Date.now() - st.mtimeMs;
-  } catch {
-    try {
-      const st = await stat(lockDir);
-      return Date.now() - st.mtimeMs;
-    } catch {
-      return null;
-    }
-  }
-}
-async function lockOwnerProcessIsDead(lockDir) {
-  let owner;
-  try {
-    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
-  } catch {
-    return false;
-  }
-  const pidText = owner.split(".", 1)[0] ?? "";
-  if (!/^[1-9][0-9]*$/.test(pidText))
-    return false;
-  const pid = Number(pidText);
-  if (!Number.isSafeInteger(pid) || pid <= 0)
-    return false;
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (error2) {
-    return error2.code === "ESRCH";
-  }
-}
-async function reclaimAbandoned(lockDir) {
-  const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString("hex")}`;
-  try {
-    await rename2(lockDir, grave);
-  } catch {
-    return;
-  }
-  await rm(grave, { recursive: true, force: true }).catch(() => {
-  });
-}
-function startHeartbeat(lockDir) {
-  const owner = ownerPathFor(lockDir);
-  const t = setInterval(() => {
-    const now = /* @__PURE__ */ new Date();
-    void utimes(owner, now, now).catch(() => {
-    });
-  }, HEARTBEAT_MS);
-  if (typeof t.unref === "function")
-    t.unref();
-  return t;
-}
-async function acquire(lockDir) {
-  const token = `${process.pid}.${randomBytes(8).toString("hex")}.${Date.now()}`;
-  const deadline = Date.now() + ACQUIRE_TIMEOUT_MS;
-  for (; ; ) {
-    let created = false;
-    try {
-      await mkdir(lockDir);
-      created = true;
-      await writeFile2(ownerPathFor(lockDir), `${token}
-`, "utf8");
-      return { token, heartbeat: startHeartbeat(lockDir) };
-    } catch (err) {
-      if (created) {
-        await rm(lockDir, { recursive: true, force: true }).catch(() => {
-        });
-        throw err;
-      }
-      if (err.code !== "EEXIST")
-        throw err;
-    }
-    if (await lockOwnerProcessIsDead(lockDir)) {
-      await reclaimAbandoned(lockDir);
-      continue;
-    }
-    const age = await lockAgeMs(lockDir);
-    if (age === null)
-      continue;
-    if (age > STALE_LOCK_MS) {
-      await reclaimAbandoned(lockDir);
-      continue;
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`withLock: acquire timeout after ${ACQUIRE_TIMEOUT_MS}ms: ${lockDir}`);
-    }
-    await sleep(POLL_MS);
-  }
-}
-async function release(lockDir, held) {
-  clearInterval(held.heartbeat);
-  let owner = null;
-  try {
-    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
-  } catch {
-    owner = null;
-  }
-  if (owner !== held.token)
-    return;
-  await rm(lockDir, { recursive: true, force: true }).catch(() => {
-  });
-}
-async function withLock(changeDir2, fn) {
-  const lockDir = lockDirFor(changeDir2);
-  const prev = queues.get(lockDir) ?? Promise.resolve();
-  const run = prev.then(async () => {
-    const held = await acquire(lockDir);
-    try {
-      return await fn();
-    } finally {
-      await release(lockDir, held);
-    }
-  });
-  const settled = run.then(() => void 0, () => void 0);
-  queues.set(lockDir, settled);
-  void settled.then(() => {
-    if (queues.get(lockDir) === settled)
-      queues.delete(lockDir);
-  });
-  return run;
 }
 
 // packages/kernel/dist/sha256.js
@@ -4726,124 +4579,6 @@ function diffWireFieldsToEffects(before, after) {
   return diffFieldsToEffects(before, after).filter(({ field: field2 }) => field2 !== PRE_VERIFY_REVIEW_FIELD);
 }
 
-// packages/kernel/dist/state/parse.js
-var KNOWN_FIELDS = new Set(FIELD_ORDER);
-var LIST_FIELD_SET = new Set(LIST_FIELDS);
-var REVIEW_GATE_FIELD_SET = new Set(REVIEW_GATE_FIELDS);
-var LIST_ITEM_PREFIX = "  - ";
-var KEY_RE = /^([A-Za-z0-9_]+):(.*)$/;
-function unquoteScalar(s) {
-  if (s.length >= 2) {
-    const first = s.charAt(0);
-    const last = s.charAt(s.length - 1);
-    if (first === last && (first === '"' || first === "'"))
-      return s.slice(1, -1);
-  }
-  return s;
-}
-function emptyFields() {
-  const fields = {};
-  for (const f of FIELD_ORDER) {
-    fields[f] = f === "workflow" ? "default" : f === PRE_VERIFY_REVIEW_FIELD ? PRE_VERIFY_REVIEW_DEFAULT : "";
-  }
-  return fields;
-}
-function quoteGate(field2, value) {
-  if (value.includes("\n") || value.includes("\r")) {
-    throw new QuoteGateError(field2, "value contains a newline/carriage return (would inject fake fields)");
-  }
-  if (value.includes(": ")) {
-    throw new QuoteGateError(field2, 'value contains ": " (would break YAML parsing)');
-  }
-  if (value.includes(" #")) {
-    throw new QuoteGateError(field2, 'value contains " #" (would be eaten as an inline comment)');
-  }
-  const first = value.charAt(0);
-  if (first === '"' || first === "'") {
-    throw new QuoteGateError(field2, "value starts with a quote (would break YAML parsing)");
-  }
-}
-function parsePipeline(content) {
-  const lines = content.split("\n");
-  const fields = emptyFields();
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i] ?? "";
-    const m = KEY_RE.exec(line);
-    if (!m)
-      break;
-    const key = m[1] ?? "";
-    if (!KNOWN_FIELDS.has(key))
-      break;
-    const field2 = key;
-    const rest = (m[2] ?? "").trim();
-    i++;
-    if (LIST_FIELD_SET.has(field2)) {
-      if (rest === "") {
-        const items = [];
-        while (i < lines.length && (lines[i] ?? "").startsWith(LIST_ITEM_PREFIX)) {
-          items.push(unquoteScalar((lines[i] ?? "").slice(LIST_ITEM_PREFIX.length).trim()));
-          i++;
-        }
-        fields[field2] = items;
-      } else if (rest === "[]") {
-        fields[field2] = [];
-      } else {
-        fields[field2] = unquoteScalar(rest);
-      }
-    } else {
-      fields[field2] = unquoteScalar(rest);
-    }
-  }
-  const { metadata, consumedLines } = parseRunMetadataLines(lines.slice(i));
-  i += consumedLines;
-  const projection = parseProjectionMetadataLines(lines.slice(i));
-  i += projection.consumedLines;
-  return {
-    fields,
-    ...metadata === void 0 ? {} : { runMetadata: metadata },
-    ...projection.metadata === void 0 ? {} : { projectionMetadata: projection.metadata },
-    opaqueTail: lines.slice(i).join("\n")
-  };
-}
-function serializePipeline(state, options = {}) {
-  const out = [];
-  const hasReviewGateReceipt = REVIEW_GATE_FIELDS.some((field2) => {
-    const value = state.fields[field2];
-    return Array.isArray(value) ? value.length > 0 : value !== "";
-  });
-  for (const field2 of FIELD_ORDER) {
-    if (field2 === PRE_VERIFY_REVIEW_FIELD && options.omitPreVerifyReview === true)
-      continue;
-    if (REVIEW_GATE_FIELD_SET.has(field2) && !hasReviewGateReceipt)
-      continue;
-    const value = state.fields[field2] ?? "";
-    if (Array.isArray(value)) {
-      for (const item2 of value)
-        quoteGate(field2, item2);
-      if (value.length === 0) {
-        out.push(`${field2}: []`);
-      } else {
-        out.push(`${field2}:`);
-        for (const item2 of value)
-          out.push(`${LIST_ITEM_PREFIX}${item2}`);
-      }
-    } else {
-      quoteGate(field2, value);
-      out.push(`${field2}: ${value === "" ? '""' : value}`);
-    }
-  }
-  out.push(...serializeRunMetadataLines(state.runMetadata));
-  out.push(...serializeProjectionMetadataLines(state.projectionMetadata));
-  return out.join("\n") + "\n" + state.opaqueTail;
-}
-
-// packages/kernel/dist/state/run-revision-store.js
-import { createHash as createHash5 } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
-import { lstat as lstat3, mkdir as mkdir4, readFile as readFile5 } from "node:fs/promises";
-import { join as join6 } from "node:path";
-
 // packages/kernel/dist/state/run-revision-codec.js
 import { createHash as createHash2, randomUUID as randomUUID2 } from "node:crypto";
 
@@ -4870,7 +4605,7 @@ function ownRecord(value) {
 }
 
 // packages/kernel/dist/state/workflow-governance-binding.js
-import { lstat, readFile as readFile2 } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join as join2 } from "node:path";
 var WORKFLOW_GOVERNANCE_BINDING_FILE = ".pipeline-workflow-governance.json";
 function errorCode(error2) {
@@ -4916,7 +4651,7 @@ async function readWorkflowGovernanceBinding(changeDir2) {
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow governance binding \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseWorkflowGovernanceBinding(await readFile2(target, "utf8"));
+    return parseWorkflowGovernanceBinding(await readFile(target, "utf8"));
   } catch (error2) {
     if (errorCode(error2) === "ENOENT")
       return void 0;
@@ -4989,7 +4724,7 @@ function withoutWorkflowGovernanceBinding(metadata) {
 // packages/kernel/dist/state/run-revision-codec.js
 var SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
 var FIELD_SET = new Set(FIELD_ORDER);
-var LIST_FIELD_SET2 = new Set(LIST_FIELDS);
+var LIST_FIELD_SET = new Set(LIST_FIELDS);
 var PRE_VERIFY_REVIEW_ANCHOR_PREFIX = "# tenon-internal-pre-verify-review-v1: ";
 var SHA256_RE = /^[0-9a-f]{64}$/;
 function preVerifyReviewResult(state) {
@@ -5152,7 +4887,7 @@ function canonicalState(value, opts = {}) {
     const fieldValue = rawFields[field2];
     if (typeof fieldValue === "string") {
       fields[field2] = fieldValue;
-    } else if (LIST_FIELD_SET2.has(field2) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
+    } else if (LIST_FIELD_SET.has(field2) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
       fields[field2] = [...fieldValue];
     } else {
       throw new RunStateCorruptError(`canonical state.fields.${field2} \u7C7B\u578B\u975E\u6CD5`);
@@ -5175,7 +4910,7 @@ function canonicalEffect(value, index) {
   const valueAt = (candidate, side) => {
     if (typeof candidate === "string")
       return candidate;
-    if (LIST_FIELD_SET2.has(field2) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
+    if (LIST_FIELD_SET.has(field2) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
       return [...candidate];
     throw new RunStateCorruptError(`canonical mutation.effects[${index}].${side} \u7C7B\u578B\u975E\u6CD5`);
   };
@@ -5316,7 +5051,7 @@ function parseRunRevision(raw, source) {
 }
 
 // packages/kernel/dist/state/transition-record-store.js
-import { mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
+import { mkdir, readFile as readFile2 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 var TRANSITION_RECORDS_DIR = ".pipeline-transitions";
 var RecordAlreadyExistsError = class extends Error {
@@ -5387,7 +5122,7 @@ function recordPath(changeDir2, sequence, recordId) {
 var FsTransitionRecordStore = class {
   async write(changeDir2, record3) {
     const dir = join3(changeDir2, TRANSITION_RECORDS_DIR);
-    await mkdir2(dir, { recursive: true });
+    await mkdir(dir, { recursive: true });
     const target = recordPath(changeDir2, record3.sequence, record3.id);
     try {
       await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record3));
@@ -5400,7 +5135,7 @@ var FsTransitionRecordStore = class {
   }
   async read(changeDir2, sequence, recordId) {
     try {
-      const raw = await readFile3(recordPath(changeDir2, sequence, recordId), "utf8");
+      const raw = await readFile2(recordPath(changeDir2, sequence, recordId), "utf8");
       const parsed = JSON.parse(raw);
       return parseTransitionRecord(parsed);
     } catch (e) {
@@ -5448,7 +5183,7 @@ function createTransitionRecordStore() {
 }
 
 // packages/kernel/dist/state/pre-verify-review-store.js
-import { lstat as lstat2, mkdir as mkdir3, readFile as readFile4 } from "node:fs/promises";
+import { lstat as lstat2, mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 var PRE_VERIFY_REVIEW_DIR = "pre-verify-review";
 var SAFE_ID_RE2 = /^[A-Za-z0-9_-]+$/;
@@ -5526,7 +5261,7 @@ function attach(revision, record3) {
 }
 async function publishPreVerifyReviewRecord(changeDir2, revision, logicalState) {
   const dir = join4(changeDir2, ".pipeline-run", PRE_VERIFY_REVIEW_DIR);
-  await mkdir3(dir, { recursive: true });
+  await mkdir2(dir, { recursive: true });
   const target = join4(dir, preVerifyReviewFileName(revision.revision, revision.revisionId));
   await atomicLinkPublish(dir, ".tmp", target, `${JSON.stringify(recordFor(revision, logicalState))}
 `);
@@ -5544,7 +5279,7 @@ async function hydratePreVerifyReview(changeDir2, revision) {
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new RunStateCorruptError(`${target}: pre-Verify companion \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
   }
-  return attach(revision, parseRecord(await readFile4(target, "utf8"), target));
+  return attach(revision, parseRecord(await readFile3(target, "utf8"), target));
 }
 function hydratePreVerifyReviewFromSync(readText, revision, sourceRoot = "canonical state") {
   const relative20 = preVerifyReviewRelativePath(revision.revision, revision.revisionId);
@@ -5857,7 +5592,7 @@ function projectionMetadataFor(revision) {
 async function publishInitialRunRevision(changeDir2, state, observedAt, kind = "init") {
   const runDir = join6(changeDir2, RUN_STATE_DIR);
   const revisionsDir = join6(runDir, RUN_REVISIONS_DIR);
-  await mkdir4(revisionsDir, { recursive: true });
+  await mkdir3(revisionsDir, { recursive: true });
   const revision = createRunRevision({
     state,
     revision: 0,
@@ -5872,7 +5607,7 @@ async function publishInitialRunRevision(changeDir2, state, observedAt, kind = "
 async function publishRunRevision(changeDir2, current, state, mutation) {
   const runDir = join6(changeDir2, RUN_STATE_DIR);
   const revisionsDir = join6(runDir, RUN_REVISIONS_DIR);
-  await mkdir4(revisionsDir, { recursive: true });
+  await mkdir3(revisionsDir, { recursive: true });
   let transitionRaw;
   let transition;
   let revisionState = state;
@@ -5968,7 +5703,7 @@ async function readRegularTextIfExists(pathname) {
     throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
   }
   try {
-    return await readFile5(pathname, "utf8");
+    return await readFile4(pathname, "utf8");
   } catch (error2) {
     if (errnoCode2(error2) === "ENOENT") {
       throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5728\u6821\u9A8C\u671F\u95F4\u6D88\u5931`);
@@ -6048,6 +5783,1653 @@ async function readImmutableRunRevision(changeDir2, revision, revisionId) {
   return raw === void 0 ? void 0 : hydratePreVerifyReview(changeDir2, parseRunRevision(raw, pathname));
 }
 
+// packages/kernel/dist/state/document-ledger.js
+import { readFile as readFile6 } from "node:fs/promises";
+import { join as join9 } from "node:path";
+
+// packages/kernel/dist/workflow/document-contract-validation.js
+var CANONICAL_TRANSITIONS = {
+  open: ["explore"],
+  explore: ["spec"],
+  spec: ["build"],
+  build: ["verify", "spec"],
+  verify: ["ship", "build"],
+  ship: ["archive"],
+  archive: []
+};
+var REVIEW_PHASES = /* @__PURE__ */ new Set(["explore", "spec", "verify"]);
+var REQUIRED_RUNTIME_REFS = {
+  build: { outputs: [{ field: "build_sha", type: "string" }] },
+  verify: {
+    inputs: [{ field: "build_sha", type: "string" }],
+    outputs: [{ field: "verification_report", type: "file_path" }]
+  }
+};
+var REQUIRED_SKILL_GROUPS = {
+  open: [
+    { label: "OpenSpec proposal", alternatives: ["openspec-propose", "opsx:propose"] },
+    { label: "pipeline open", alternatives: ["tenon-open", "tenon:tenon-open"] }
+  ],
+  explore: [
+    { label: "pipeline explore", alternatives: ["tenon-explore", "tenon:tenon-explore"] },
+    { label: "Superpower brainstorming", alternatives: ["brainstorming", "superpowers:brainstorming"] }
+  ],
+  spec: [
+    { label: "tenon spec", alternatives: ["tenon-spec", "tenon:tenon-spec"] },
+    { label: "OpenSpec delta proposal", alternatives: ["openspec-propose", "opsx:propose"] },
+    { label: "Superpower plan", alternatives: ["writing-plans", "superpowers:writing-plans"] }
+  ],
+  build: [{ label: "pipeline build", alternatives: ["tenon-build", "tenon:tenon-build"] }],
+  verify: [
+    { label: "pipeline verify", alternatives: ["tenon-verify", "tenon:tenon-verify"] },
+    {
+      label: "Superpower verification",
+      alternatives: ["verification-before-completion", "superpowers:verification-before-completion"]
+    }
+  ],
+  ship: [
+    { label: "pipeline ship", alternatives: ["tenon-ship", "tenon:tenon-ship"] },
+    { label: "OpenSpec apply", alternatives: ["openspec-apply-change", "opsx:apply"] }
+  ],
+  archive: [{ label: "pipeline archive", alternatives: ["tenon-archive", "tenon:tenon-archive"] }]
+};
+function aliasesForSkill(id) {
+  const aliases = /* @__PURE__ */ new Set([id]);
+  if (id.startsWith("tenon:"))
+    aliases.add(id.slice("tenon:".length));
+  if (id.startsWith("superpowers:"))
+    aliases.add(id.slice("superpowers:".length));
+  if (id === "opsx:propose")
+    aliases.add("openspec-propose");
+  if (id === "openspec-propose")
+    aliases.add("opsx:propose");
+  if (id === "opsx:apply")
+    aliases.add("openspec-apply-change");
+  if (id === "openspec-apply-change")
+    aliases.add("opsx:apply");
+  return [...aliases];
+}
+function hasFieldRef(refs, required2) {
+  return refs.some((ref) => ref.field === required2.field && ref.type === required2.type);
+}
+function readerReachableWithoutOwner(workflow, ownerStep, readerStep) {
+  const entry = workflow.steps[0];
+  if (!entry || entry.id === ownerStep)
+    return false;
+  const steps = new Map(workflow.steps.map((step) => [step.id, step]));
+  const visited = /* @__PURE__ */ new Set();
+  const queue = [entry.id];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === void 0 || current === ownerStep || visited.has(current))
+      continue;
+    if (current === readerStep)
+      return true;
+    visited.add(current);
+    for (const transition of steps.get(current)?.transitions ?? []) {
+      if (transition.to !== ownerStep && !visited.has(transition.to))
+        queue.push(transition.to);
+    }
+  }
+  return false;
+}
+function validateLegacyContract(workflow) {
+  const errors = [];
+  const actualIds = workflow.steps.map((step) => step.id);
+  if (actualIds.length !== DOCUMENT_CONTRACT_PHASES.length) {
+    errors.push(`openspec_contract: required \u5FC5\u987B\u6070\u597D\u58F0\u660E ${DOCUMENT_CONTRACT_PHASES.length} \u4E2A\u6807\u51C6\u9636\u6BB5`);
+  }
+  for (const [index, expected] of DOCUMENT_CONTRACT_PHASES.entries()) {
+    const actual = actualIds[index];
+    if (actual !== expected) {
+      errors.push(`openspec_contract: required \u7684\u7B2C ${index + 1} \u9636\u6BB5\u5FC5\u987B\u662F '${expected}'\uFF08\u5F53\u524D '${actual ?? "\u7F3A\u5931"}'\uFF09`);
+    }
+  }
+  for (const phase of DOCUMENT_CONTRACT_PHASES) {
+    const step = workflow.steps.find((candidate) => candidate.id === phase);
+    if (!step)
+      continue;
+    for (const target of CANONICAL_TRANSITIONS[phase]) {
+      if (!step.transitions.some((transition) => transition.to === target)) {
+        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u53EF\u8F6C\u6362\u5230 '${target}'`);
+      }
+    }
+    if (REVIEW_PHASES.has(phase) && step.gate !== "review") {
+      errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u7684 gate=review`);
+    }
+    for (const group of REQUIRED_SKILL_GROUPS[phase]) {
+      const satisfied = step.skills.some((skill) => {
+        const aliases = new Set(aliasesForSkill(skill.id));
+        return group.alternatives.some((candidate) => aliasesForSkill(candidate).some((alias) => aliases.has(alias)));
+      });
+      if (!satisfied) {
+        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E ${group.label} skill\uFF08\u5141\u8BB8: ${group.alternatives.join(" | ")}\uFF09`);
+      }
+    }
+    const runtimeRefs = REQUIRED_RUNTIME_REFS[phase];
+    for (const required2 of runtimeRefs?.inputs ?? []) {
+      if (!hasFieldRef(step.inputs, required2)) {
+        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E input '${required2.field}'\uFF08type=${required2.type}\uFF09\u4EE5\u8BFB\u53D6\u6784\u5EFA\u57FA\u7EBF`);
+      }
+    }
+    for (const required2 of runtimeRefs?.outputs ?? []) {
+      if (!hasFieldRef(step.outputs, required2)) {
+        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E output '${required2.field}'\uFF08type=${required2.type}\uFF09\u4EE5\u7559\u4E0B\u53EF\u9A8C\u8BC1\u8BC1\u636E`);
+      }
+    }
+  }
+  return errors;
+}
+function validateDeclarativeContract(workflow) {
+  const contract = workflow.documentContract;
+  if (!contract)
+    return [];
+  const errors = [];
+  if (workflow.openspecContract !== void 0) {
+    errors.push("openspec_contract \u4E0E document_contract \u4E0D\u5F97\u540C\u65F6\u58F0\u660E");
+  }
+  const stepIds = new Set(workflow.steps.map((step) => step.id));
+  const kinds = /* @__PURE__ */ new Set();
+  for (const [index, slot] of contract.slots.entries()) {
+    if (!isDocumentKind(slot.kind)) {
+      errors.push(`document_contract.slots[${index}].kind '${slot.kind}' \u4E0D\u53D7\u652F\u6301`);
+      continue;
+    }
+    if (kinds.has(slot.kind)) {
+      errors.push(`document_contract document kind '${slot.kind}' \u53EA\u80FD\u58F0\u660E\u4E00\u4E2A owner_step`);
+    }
+    kinds.add(slot.kind);
+    if (!stepIds.has(slot.ownerStep)) {
+      errors.push(`document_contract document '${slot.kind}' \u7684 owner_step '${slot.ownerStep}' \u4E0D\u5B58\u5728`);
+    }
+    if (slot.producers.length === 0) {
+      errors.push(`document_contract document '${slot.kind}' \u7684 producers \u4E0D\u5F97\u4E3A\u7A7A`);
+    }
+    const ownerSkills = workflow.steps.find((step) => step.id === slot.ownerStep)?.skills.map((skill) => skill.id) ?? [];
+    for (const producer of slot.producers) {
+      if (!ownerSkills.some((skill) => {
+        const aliases = new Set(aliasesForSkill(skill));
+        return aliasesForSkill(producer).some((alias) => aliases.has(alias));
+      })) {
+        errors.push(`document_contract document '${slot.kind}' \u7684 producer '${producer}' \u672A\u5728 owner_step '${slot.ownerStep}' \u58F0\u660E`);
+      }
+    }
+  }
+  const readSteps = /* @__PURE__ */ new Set();
+  for (const [index, read] of contract.reads.entries()) {
+    if (!stepIds.has(read.step)) {
+      errors.push(`document_contract.reads[${index}].step '${read.step}' \u4E0D\u5B58\u5728`);
+      continue;
+    }
+    if (readSteps.has(read.step)) {
+      errors.push(`document_contract step '${read.step}' \u53EA\u80FD\u58F0\u660E\u4E00\u7EC4 reads`);
+    }
+    readSteps.add(read.step);
+    for (const rawKind of read.kinds) {
+      if (!isDocumentKind(rawKind) || !kinds.has(rawKind)) {
+        errors.push(`document_contract step '${read.step}' \u8BFB\u53D6\u4E86\u672A\u58F0\u660E\u7684 document '${rawKind}'`);
+        continue;
+      }
+      const owner = contract.slots.find((slot) => slot.kind === rawKind);
+      if (owner?.ownerStep === read.step) {
+        errors.push(`document_contract step '${read.step}' \u53EA\u80FD\u8BFB\u53D6\u66F4\u65E9 step \u4EA7\u51FA\u7684 '${rawKind}'`);
+      } else if (owner && readerReachableWithoutOwner(workflow, owner.ownerStep, read.step)) {
+        errors.push(`document_contract document '${rawKind}' \u7684 owner_step '${owner.ownerStep}' \u4E0D\u652F\u914D reader step '${read.step}'`);
+      }
+    }
+  }
+  return errors;
+}
+function validateOpenSpecContractWorkflow(workflow) {
+  return workflow.openspecContract === "required" ? validateLegacyContract(workflow) : validateDeclarativeContract(workflow);
+}
+
+// packages/kernel/dist/workflow/document-contract.js
+var DOCUMENT_CONTRACT_PHASES = [
+  "open",
+  "explore",
+  "spec",
+  "build",
+  "verify",
+  "ship",
+  "archive"
+];
+var DOCUMENT_KINDS = [
+  "proposal",
+  "openspec-design",
+  "tasks",
+  "superpower-design",
+  "adr",
+  "delta-spec",
+  "superpower-plan",
+  "plan",
+  "verification-report",
+  "applied-spec"
+];
+var OUTPUTS_BY_PHASE = {
+  open: [
+    { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
+    { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
+    { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
+  ],
+  explore: [
+    { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
+    { kind: "adr", producerCandidates: ["tenon-explore", "tenon:tenon-explore", "brainstorming", "superpowers:brainstorming"] }
+  ],
+  spec: [
+    { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
+    { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
+    { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
+  ],
+  build: [],
+  verify: [
+    {
+      kind: "verification-report",
+      producerCandidates: ["verification-before-completion", "superpowers:verification-before-completion", "tenon-verify", "tenon:tenon-verify"]
+    }
+  ],
+  ship: [
+    { kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }
+  ],
+  archive: []
+};
+var SPEC_ADR_LIVING_DOCUMENT = {
+  kind: "adr",
+  producerCandidates: ["tenon-spec", "tenon:tenon-spec"]
+};
+var MUTABLE_RECORDS_BY_PHASE = {
+  open: [],
+  explore: [
+    // Open creates intentionally small OpenSpec scaffolds. Explore owns consolidating the
+    // validated problem framing and initial design hypothesis into those living documents; the
+    // resulting digest must therefore be attributed to the phase driver, not left under the
+    // now-stale open-phase openspec-propose receipt.
+    { kind: "proposal", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
+    { kind: "openspec-design", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
+    { kind: "tasks", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] }
+  ],
+  spec: [
+    { kind: "proposal", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "openspec-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "tasks", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "superpower-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    SPEC_ADR_LIVING_DOCUMENT
+  ],
+  build: [
+    { kind: "tasks", producerCandidates: ["tenon-build", "tenon:tenon-build"] }
+  ],
+  verify: [
+    { kind: "tasks", producerCandidates: ["tenon-verify", "tenon:tenon-verify"] }
+  ],
+  ship: [
+    { kind: "tasks", producerCandidates: ["tenon-ship", "tenon:tenon-ship"] }
+  ],
+  archive: [
+    { kind: "tasks", producerCandidates: ["tenon-archive", "tenon:tenon-archive"] }
+  ]
+};
+var READS_BY_PHASE = {
+  open: [],
+  explore: ["proposal", "openspec-design", "tasks"],
+  spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
+  build: [
+    "proposal",
+    "openspec-design",
+    "tasks",
+    "superpower-design",
+    "adr",
+    "delta-spec",
+    "superpower-plan",
+    "plan"
+  ],
+  verify: [
+    "proposal",
+    "openspec-design",
+    "tasks",
+    "superpower-design",
+    "adr",
+    "delta-spec",
+    "superpower-plan",
+    "plan"
+  ],
+  ship: [
+    "proposal",
+    "openspec-design",
+    "tasks",
+    "superpower-design",
+    "adr",
+    "delta-spec",
+    "superpower-plan",
+    "plan",
+    "verification-report"
+  ],
+  archive: [
+    "proposal",
+    "openspec-design",
+    "tasks",
+    "superpower-design",
+    "adr",
+    "delta-spec",
+    "superpower-plan",
+    "plan",
+    "verification-report",
+    "applied-spec"
+  ]
+};
+var LEGACY_DOCUMENT_GOVERNANCE_POLICY = {
+  id: "openspec-v1",
+  steps: DOCUMENT_CONTRACT_PHASES,
+  outputsByStep: OUTPUTS_BY_PHASE,
+  mutableByStep: MUTABLE_RECORDS_BY_PHASE,
+  readsByStep: READS_BY_PHASE
+};
+function includes(values, value) {
+  return values.includes(value);
+}
+function isDocumentContractPhase(value) {
+  return includes(DOCUMENT_CONTRACT_PHASES, value);
+}
+function isDocumentKind(value) {
+  return includes(DOCUMENT_KINDS, value);
+}
+function documentGovernancePolicy(workflowName, workflow) {
+  if (workflowName === "default" || workflow?.openspecContract === "required") {
+    return LEGACY_DOCUMENT_GOVERNANCE_POLICY;
+  }
+  const contract = workflow?.documentContract;
+  if (!contract)
+    return void 0;
+  const outputsByStep = Object.fromEntries(workflow.steps.map((step) => [step.id, []]));
+  for (const slot of contract.slots) {
+    if (!isDocumentKind(slot.kind))
+      continue;
+    outputsByStep[slot.ownerStep]?.push({ kind: slot.kind, producerCandidates: slot.producers });
+  }
+  const readsByStep = Object.fromEntries(workflow.steps.map((step) => [step.id, []]));
+  for (const read of contract.reads) {
+    readsByStep[read.step] = read.kinds.filter(isDocumentKind);
+  }
+  return {
+    id: "document-v1",
+    steps: workflow.steps.map((step) => step.id),
+    outputsByStep,
+    mutableByStep: Object.fromEntries(workflow.steps.map((step) => [step.id, []])),
+    readsByStep
+  };
+}
+function isDocumentPolicyStep(policy, value) {
+  return policy.steps.includes(value);
+}
+function outputsRequiredForPolicyStep(policy, step) {
+  return policy.outputsByStep[step] ?? [];
+}
+function readsRequiredForPolicyStep(policy, step) {
+  return policy.readsByStep[step] ?? [];
+}
+function recordsRequiredForPolicyStep(policy, step) {
+  const required2 = [];
+  for (const candidate of policy.steps) {
+    required2.push(...outputsRequiredForPolicyStep(policy, candidate));
+    if (candidate === step)
+      break;
+  }
+  return required2;
+}
+function documentOwnerPolicyStep(policy, kind) {
+  return policy.steps.find((step) => outputsRequiredForPolicyStep(policy, step).some((requirement) => requirement.kind === kind));
+}
+function recordRequirementForPolicy(policy, kind, step) {
+  const frozenRequirement = [
+    ...outputsRequiredForPolicyStep(policy, step),
+    ...policy.mutableByStep[step] ?? []
+  ].find((requirement) => requirement.kind === kind);
+  if (frozenRequirement)
+    return frozenRequirement;
+  return policy.id === "openspec-v1" && step === "spec" && kind === "adr" ? SPEC_ADR_LIVING_DOCUMENT : void 0;
+}
+function isDocumentRecordAllowedInPolicyStep(policy, kind, step) {
+  return recordRequirementForPolicy(policy, kind, step) !== void 0;
+}
+function isDocumentProducerAllowedInPolicyStep(policy, kind, step, producer) {
+  const requirement = recordRequirementForPolicy(policy, kind, step);
+  if (!requirement)
+    return false;
+  const supplied = new Set(aliasesForSkill2(producer));
+  return requirement.producerCandidates.some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
+}
+function isRecordedDocumentProducerAllowedThroughPolicyStep(policy, kind, currentStep, producer) {
+  for (const step of policy.steps) {
+    if (isDocumentProducerAllowedInPolicyStep(policy, kind, step, producer))
+      return true;
+    if (step === currentStep)
+      break;
+  }
+  return false;
+}
+function recordProducerCandidatesForPolicyStep(policy, kind, step) {
+  return recordRequirementForPolicy(policy, kind, step)?.producerCandidates ?? [];
+}
+function readsRequiredForPhase(phase) {
+  return READS_BY_PHASE[phase];
+}
+function recordsRequiredForPhase(phase) {
+  const required2 = [];
+  for (const candidate of DOCUMENT_CONTRACT_PHASES) {
+    required2.push(...OUTPUTS_BY_PHASE[candidate]);
+    if (candidate === phase)
+      break;
+  }
+  return required2;
+}
+function outputRequirementFor(kind) {
+  for (const phase of DOCUMENT_CONTRACT_PHASES) {
+    const requirement = OUTPUTS_BY_PHASE[phase].find((candidate) => candidate.kind === kind);
+    if (requirement)
+      return requirement;
+  }
+  return void 0;
+}
+function recordRequirementFor(kind, phase) {
+  return [...OUTPUTS_BY_PHASE[phase], ...MUTABLE_RECORDS_BY_PHASE[phase]].find((candidate) => candidate.kind === kind);
+}
+function aliasesForSkill2(id) {
+  const aliases = /* @__PURE__ */ new Set([id]);
+  if (id.startsWith("tenon:"))
+    aliases.add(id.slice("tenon:".length));
+  if (id.startsWith("superpowers:"))
+    aliases.add(id.slice("superpowers:".length));
+  if (id === "opsx:propose")
+    aliases.add("openspec-propose");
+  if (id === "openspec-propose")
+    aliases.add("opsx:propose");
+  if (id === "opsx:apply")
+    aliases.add("openspec-apply-change");
+  if (id === "openspec-apply-change")
+    aliases.add("opsx:apply");
+  return [...aliases];
+}
+function isAcceptedDocumentProducer(kind, producer) {
+  const supplied = new Set(aliasesForSkill2(producer));
+  return producerCandidatesFor(kind).some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
+}
+function producerCandidatesFor(kind) {
+  const candidates = /* @__PURE__ */ new Set();
+  const origin = outputRequirementFor(kind);
+  for (const candidate of origin?.producerCandidates ?? [])
+    candidates.add(candidate);
+  for (const phase of DOCUMENT_CONTRACT_PHASES) {
+    for (const requirement of MUTABLE_RECORDS_BY_PHASE[phase]) {
+      if (requirement.kind !== kind)
+        continue;
+      for (const candidate of requirement.producerCandidates)
+        candidates.add(candidate);
+    }
+  }
+  return [...candidates];
+}
+function documentOwnerPhase(kind) {
+  return DOCUMENT_CONTRACT_PHASES.find((phase) => OUTPUTS_BY_PHASE[phase].some((requirement) => requirement.kind === kind));
+}
+function isDocumentRecordAllowedInPhase(kind, phase) {
+  return recordRequirementFor(kind, phase) !== void 0;
+}
+function isDocumentProducerAllowedInPhase(kind, phase, producer) {
+  const requirement = recordRequirementFor(kind, phase);
+  if (!requirement)
+    return false;
+  const supplied = new Set(aliasesForSkill2(producer));
+  return requirement.producerCandidates.some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
+}
+function recordProducerCandidatesFor(kind, phase) {
+  return recordRequirementFor(kind, phase)?.producerCandidates ?? [];
+}
+function shouldEnforceDocumentPolicyOnTransition(policy, from, to) {
+  const fromIndex = policy.steps.indexOf(from);
+  const toIndex = policy.steps.indexOf(to);
+  return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
+}
+
+// packages/kernel/dist/state/document-path.js
+import { createHash as createHash6 } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat as lstat4, open, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+var DocumentLedgerError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "DocumentLedgerError";
+  }
+};
+var MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024;
+function decodeUtf8Text(content, label) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    throw new DocumentLedgerError(`${label} \u4E0D\u662F\u6709\u6548 UTF-8 \u6587\u672C`);
+  }
+}
+async function readBoundedFileHandle(handle, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, null);
+    if (bytesRead === 0)
+      break;
+    chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  return Buffer.concat(chunks, total);
+}
+async function readBoundedRegularFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
+  const parent = dirname(path9);
+  const parentBefore = await lstat4(parent, { bigint: true });
+  if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
+    throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
+  }
+  const parentRealBefore = await realpath(parent);
+  const handle = await open(path9, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile())
+      throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path9}`);
+    const assertStable = async () => {
+      const [parentNow, parentRealNow, targetNow] = await Promise.all([
+        lstat4(parent, { bigint: true }),
+        realpath(parent),
+        lstat4(path9, { bigint: true })
+      ]);
+      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
+        throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
+      }
+    };
+    await assertStable();
+    if (opened.size > maxBytes)
+      throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
+    const content = await readSource(handle, maxBytes);
+    if (content.byteLength > maxBytes) {
+      throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
+    }
+    const after = await handle.stat({ bigint: true });
+    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
+    }
+    await assertStable();
+    return content;
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
+    }
+    throw error2;
+  } finally {
+    await handle.close();
+  }
+}
+async function readOptionalBoundedRegularTextFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
+  try {
+    const content = await readBoundedRegularFile(path9, maxBytes, label, readSource);
+    return decodeUtf8Text(content, label);
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+}
+function normalizeRelativePath(path9) {
+  return path9.split(sep).join("/");
+}
+function inside(base, candidate) {
+  const pathFromBase = relative(base, candidate);
+  return pathFromBase !== "" && pathFromBase !== ".." && !pathFromBase.startsWith(`..${sep}`) && !isAbsolute(pathFromBase);
+}
+function isSafeProjectRelativePath(value) {
+  if (value.startsWith("/") || value.includes("\\") || value.includes("\0") || /^[A-Za-z]:/.test(value))
+    return false;
+  return value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+function deltaSpecSlot(path9, changeDir2) {
+  const parts = path9.split("/");
+  const changeName = basename(resolve(changeDir2));
+  if (parts.length !== 6 || parts[0] !== "openspec" || parts[1] !== "changes" || parts[2] !== changeName || parts[3] !== "specs" || !parts[4] || parts[5] !== "spec.md") {
+    return void 0;
+  }
+  return `delta-spec:${parts[4]}`;
+}
+function documentSlot(kind, path9, changeDir2) {
+  if (kind !== "delta-spec")
+    return kind;
+  const slot = deltaSpecSlot(path9, changeDir2);
+  if (!slot) {
+    throw new DocumentLedgerError(`delta-spec \u5FC5\u987B\u4F4D\u4E8E\u5F53\u524D Change \u7684 canonical capability \u8DEF\u5F84: openspec/changes/${basename(resolve(changeDir2))}/specs/<capability>/spec.md`);
+  }
+  return slot;
+}
+async function resolveDocument(repoRoot, path9, readSource = readBoundedFileHandle) {
+  if (!path9 || isAbsolute(path9))
+    throw new DocumentLedgerError(`document path \u5FC5\u987B\u662F\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84: ${path9 || "(empty)"}`);
+  const lexicalRoot = resolve(repoRoot);
+  const lexicalTarget = resolve(repoRoot, path9);
+  if (!inside(lexicalRoot, lexicalTarget))
+    throw new DocumentLedgerError(`document path \u8D8A\u51FA\u9879\u76EE\u6839: ${path9}`);
+  const relativePath = normalizeRelativePath(relative(lexicalRoot, lexicalTarget));
+  if (!relativePath.startsWith("openspec/") && !relativePath.startsWith("docs/")) {
+    throw new DocumentLedgerError(`document path \u53EA\u80FD\u4F4D\u4E8E openspec/ \u6216 docs/: ${relativePath}`);
+  }
+  const info = await lstat4(lexicalTarget);
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new DocumentLedgerError(`document \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${relativePath}`);
+  }
+  if (info.size > MAX_DOCUMENT_SOURCE_BYTES) {
+    throw new DocumentLedgerError(`document \u8D85\u8FC7 ${MAX_DOCUMENT_SOURCE_BYTES} bytes \u4E0A\u9650: ${relativePath}`);
+  }
+  const [realRoot, realTarget, content] = await Promise.all([
+    realpath(repoRoot),
+    realpath(lexicalTarget),
+    readBoundedRegularFile(lexicalTarget, MAX_DOCUMENT_SOURCE_BYTES, `document ${relativePath}`, readSource)
+  ]);
+  if (!inside(realRoot, realTarget))
+    throw new DocumentLedgerError(`document realpath \u8D8A\u51FA\u9879\u76EE\u6839: ${relativePath}`);
+  const realRelativePath = normalizeRelativePath(relative(realRoot, realTarget));
+  if (realRelativePath !== relativePath) {
+    throw new DocumentLedgerError(`document \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u767B\u8BB0: ${relativePath} -> ${realRelativePath}`);
+  }
+  if (content.byteLength === 0)
+    throw new DocumentLedgerError(`document \u4E0D\u5F97\u4E3A\u7A7A: ${relativePath}`);
+  return { relativePath, digest: createHash6("sha256").update(content).digest("hex") };
+}
+
+// packages/kernel/dist/state/history.js
+import { appendFile } from "node:fs/promises";
+import { join as join7 } from "node:path";
+var HISTORY_FILE = ".pipeline-history.jsonl";
+function createHistoryWriter() {
+  return {
+    async append(changeDir2, entry) {
+      await appendFile(join7(changeDir2, HISTORY_FILE), `${JSON.stringify(entry)}
+`, "utf8");
+    }
+  };
+}
+function transitionRecordToHistoryEntry(record3) {
+  return {
+    ts: record3.observedAt,
+    kind: "transition",
+    from: record3.from,
+    to: record3.to,
+    raw: record3.event,
+    transitionRecordId: record3.id
+  };
+}
+
+// packages/kernel/dist/state/run-revision-head-reader.js
+import { lstat as lstat5, readFile as readFile5 } from "node:fs/promises";
+import { join as join8 } from "node:path";
+var MAX_LEGACY_REVISIONS = 64;
+var MAX_SYNC_CANONICAL_BYTES = 8 * 1024 * 1024;
+function previousRevisionIdFor2(revision) {
+  if (revision.previousRevisionId === void 0) {
+    throw new RunStateCorruptError("\u975E\u521D\u59CB revision \u7F3A previousRevisionId");
+  }
+  return revision.previousRevisionId;
+}
+async function readRegularTextIfExists2(pathname) {
+  try {
+    const entry = await lstat5(pathname);
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
+    }
+    return await readFile5(pathname, "utf8");
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
+      return void 0;
+    }
+    throw error2;
+  }
+}
+function transitionRelativePath(revision) {
+  const metadata = revision.state.runMetadata;
+  if (revision.mutation.kind !== "transition" || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1) {
+    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
+  }
+  return join8(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
+}
+function validateCommittingRecord(cursor, previous, raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error2) {
+    throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error2)}`);
+  }
+  return assertTransitionRevisionLink(cursor, parsed, raw, previous);
+}
+async function readValidatedTransitionHead(changeDir2) {
+  const current = await readCurrentRunRevision(changeDir2);
+  const metadata = current?.state.runMetadata;
+  if (current === void 0 || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1)
+    return void 0;
+  const anchored = await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists2(join8(changeDir2, relativePath)), changeDir2);
+  if (anchored !== void 0)
+    return { current, record: anchored };
+  let cursor = current;
+  for (let traversed = 0; traversed < MAX_LEGACY_REVISIONS; traversed++) {
+    if (cursor.revision === 0)
+      break;
+    const previousId = previousRevisionIdFor2(cursor);
+    const previous = await readImmutableRunRevision(changeDir2, cursor.revision - 1, previousId);
+    const bound = assertDirectPredecessor(cursor, previous);
+    if (cursor.mutation.kind === "transition" && cursor.mutation.transitionRecordId === metadata.transitionHead) {
+      const raw = await readRegularTextIfExists2(join8(changeDir2, transitionRelativePath(cursor)));
+      if (raw === void 0)
+        throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
+      const record3 = validateCommittingRecord(cursor, bound, raw);
+      if (record3.sequence !== metadata.transitionSequence || record3.runId !== metadata.runId) {
+        throw new RunStateCorruptError("canonical transition head \u4E0E\u63D0\u4EA4 revision \u4E0D\u4E00\u81F4");
+      }
+      return { current, record: record3 };
+    }
+    cursor = bound;
+  }
+  throw new RunStateCorruptError("legacy canonical transition head \u8D85\u8FC7\u517C\u5BB9\u6821\u9A8C\u4E0A\u9650\u6216\u7F3A\u63D0\u4EA4 revision");
+}
+
+// packages/kernel/dist/state/document-record-policy.js
+function skillsEquivalent(left, right) {
+  const aliases = (id) => {
+    const values = /* @__PURE__ */ new Set([id]);
+    if (id.startsWith("tenon:"))
+      values.add(id.slice("tenon:".length));
+    if (id.startsWith("superpowers:"))
+      values.add(id.slice("superpowers:".length));
+    if (id === "opsx:propose")
+      values.add("openspec-propose");
+    if (id === "openspec-propose")
+      values.add("opsx:propose");
+    if (id === "opsx:apply")
+      values.add("openspec-apply-change");
+    if (id === "openspec-apply-change")
+      values.add("opsx:apply");
+    return [...values];
+  };
+  const leftAliases = new Set(aliases(left));
+  return aliases(right).some((candidate) => leftAliases.has(candidate));
+}
+async function currentSpecVisitEnteredViaRequirementsChanged(changeDir2) {
+  const validated = await readValidatedTransitionHead(changeDir2);
+  if (validated === void 0)
+    return false;
+  const current = validated.current;
+  const metadata = current?.state.runMetadata;
+  if (current.state.fields.phase !== "spec" || metadata === void 0 || metadata.transitionSequence < 1 || metadata.transitionHead === void 0) {
+    return false;
+  }
+  const record3 = validated.record;
+  return record3.id === metadata.transitionHead && record3.sequence === metadata.transitionSequence && record3.runId === metadata.runId && record3.event === "requirements-changed" && (record3.from === "build" || record3.from === "verify") && record3.to === "spec";
+}
+function requiresRequirementsChangedForSpecAdr(input) {
+  return input.policy?.id !== "document-v1" && input.phase === "spec" && input.kind === "adr";
+}
+
+// packages/kernel/dist/state/document-ledger.js
+var DOCUMENT_LEDGER_FILE = ".pipeline-documents.json";
+var MAX_DOCUMENT_LEDGER_BYTES = 1024 * 1024;
+var MAX_DOCUMENT_LEDGER_RECORDS = 256;
+function errorCode2(error2) {
+  if (typeof error2 !== "object" || error2 === null || !("code" in error2))
+    return void 0;
+  const code = Reflect.get(error2, "code");
+  return typeof code === "string" ? code : void 0;
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function object(value) {
+  return isObject(value) ? value : void 0;
+}
+function string(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function validDigest(value) {
+  return /^[a-f0-9]{64}$/.test(value);
+}
+function parseReceipt(value, recordIndex, receiptIndex) {
+  const item2 = object(value);
+  if (!item2)
+    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
+  const phase = string(item2.phase);
+  const digest3 = string(item2.sha256);
+  const readAt = string(item2.readAt);
+  const visitId = item2.visitId === void 0 ? void 0 : string(item2.visitId);
+  if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
+    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
+  }
+  if (!digest3 || !validDigest(digest3)) {
+    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
+  }
+  if (!readAt)
+    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
+  if (item2.visitId !== void 0 && !visitId)
+    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
+  return { phase, sha256: digest3, readAt, ...visitId === void 0 ? {} : { visitId } };
+}
+function receiptKey(receipt) {
+  return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
+}
+function parseRecord2(value, index) {
+  const item2 = object(value);
+  if (!item2)
+    throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
+  const kind = string(item2.kind);
+  const path9 = string(item2.path);
+  const digest3 = string(item2.sha256);
+  const producer = string(item2.producer);
+  const recordedAt = string(item2.recordedAt);
+  if (!kind || !isDocumentKind(kind))
+    throw new DocumentLedgerError(`document ledger records[${index}].kind \u975E\u6CD5`);
+  if (!path9 || !isSafeProjectRelativePath(path9)) {
+    throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
+  }
+  if (!digest3 || !validDigest(digest3))
+    throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
+  if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
+    throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
+  }
+  if (!recordedAt)
+    throw new DocumentLedgerError(`document ledger records[${index}].recordedAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
+  if (!Array.isArray(item2.reads))
+    throw new DocumentLedgerError(`document ledger records[${index}].reads \u5FC5\u987B\u662F\u6570\u7EC4`);
+  const reads = item2.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex));
+  const readVisits = /* @__PURE__ */ new Set();
+  for (const receipt of reads) {
+    const key = receiptKey(receipt);
+    if (readVisits.has(key))
+      throw new DocumentLedgerError(`document ledger records[${index}] \u5BF9 phase '${receipt.phase}' \u7684\u540C\u4E00 visit \u6709\u91CD\u590D read receipt`);
+    readVisits.add(key);
+  }
+  return { kind, path: path9, sha256: digest3, producer, recordedAt, reads };
+}
+async function currentDocumentStepVisitId(changeDir2) {
+  const metadata = (await readCurrentRunRevision(changeDir2))?.state.runMetadata;
+  if (metadata === void 0)
+    throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
+  return JSON.stringify([metadata.runId, metadata.transitionSequence]);
+}
+function parseDocumentLedger(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new DocumentLedgerError("document ledger \u4E0D\u662F\u5408\u6CD5 JSON");
+  }
+  const item2 = object(value);
+  if (!item2)
+    throw new DocumentLedgerError("document ledger \u5FC5\u987B\u662F JSON \u5BF9\u8C61");
+  if (item2.version !== 1)
+    throw new DocumentLedgerError("document ledger version \u5FC5\u987B\u4E3A 1");
+  if (item2.contract !== "openspec-v1")
+    throw new DocumentLedgerError("document ledger contract \u5FC5\u987B\u4E3A 'openspec-v1'");
+  const createdAt = string(item2.createdAt);
+  if (!createdAt)
+    throw new DocumentLedgerError("document ledger createdAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
+  if (!Array.isArray(item2.records))
+    throw new DocumentLedgerError("document ledger records \u5FC5\u987B\u662F\u6570\u7EC4");
+  if (item2.records.length > MAX_DOCUMENT_LEDGER_RECORDS)
+    throw new DocumentLedgerError(`document ledger records \u8D85\u8FC7 ${MAX_DOCUMENT_LEDGER_RECORDS} \u6761\u4E0A\u9650`);
+  const records = item2.records.map((record3, index) => parseRecord2(record3, index));
+  const unique = /* @__PURE__ */ new Set();
+  for (const record3 of records) {
+    const key = `${record3.kind}\0${record3.path}`;
+    if (unique.has(key))
+      throw new DocumentLedgerError(`document ledger \u6709\u91CD\u590D record: ${record3.kind} ${record3.path}`);
+    unique.add(key);
+  }
+  return { version: 1, contract: "openspec-v1", createdAt, records };
+}
+async function readDocumentLedger(changeDir2, readSource = readBoundedFileHandle) {
+  const raw = await readOptionalBoundedRegularTextFile(join9(changeDir2, DOCUMENT_LEDGER_FILE), MAX_DOCUMENT_LEDGER_BYTES, "document ledger", readSource);
+  return raw === void 0 ? void 0 : parseDocumentLedger(raw);
+}
+function initialDocumentLedgerContent(createdAt) {
+  const ledger = { version: 1, contract: "openspec-v1", createdAt, records: [] };
+  return `${JSON.stringify(ledger, null, 2)}
+`;
+}
+async function ensureDocumentLedger(changeDir2, createdAt) {
+  const existing = await readDocumentLedger(changeDir2);
+  if (existing)
+    return existing;
+  const ledger = { version: 1, contract: "openspec-v1", createdAt, records: [] };
+  const target = join9(changeDir2, DOCUMENT_LEDGER_FILE);
+  try {
+    await atomicLinkPublish(changeDir2, ".pipeline-documents.tmp", target, initialDocumentLedgerContent(createdAt));
+    return ledger;
+  } catch (error2) {
+    if (errorCode2(error2) !== "EEXIST")
+      throw error2;
+    const raced = await readDocumentLedger(changeDir2);
+    if (!raced)
+      throw new DocumentLedgerError(`document ledger \u5E76\u53D1\u521B\u5EFA\u540E\u4E0D\u53EF\u8BFB\u53D6: ${target}`);
+    return raced;
+  }
+}
+async function writeDocumentLedger(changeDir2, ledger) {
+  const content = `${JSON.stringify(ledger, null, 2)}
+`;
+  parseDocumentLedger(content);
+  await atomicReplaceFile(join9(changeDir2, DOCUMENT_LEDGER_FILE), content);
+}
+async function hasSkillEvidence(changeDir2, producer, phase, allowEarlierPhaseEvidence) {
+  let text3;
+  try {
+    text3 = await readFile6(join9(changeDir2, HISTORY_FILE), "utf8");
+  } catch (error2) {
+    if (errorCode2(error2) === "ENOENT")
+      return false;
+    throw error2;
+  }
+  const entries = [];
+  for (const line of text3.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed)
+      continue;
+    try {
+      const entry = object(JSON.parse(trimmed));
+      if (entry)
+        entries.push(entry);
+    } catch {
+    }
+  }
+  let start = 0;
+  if (!allowEarlierPhaseEvidence) {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (entry?.kind === "transition" && entry.to === phase) {
+        start = index + 1;
+        break;
+      }
+    }
+  }
+  for (const entry of entries.slice(start)) {
+    if (entry.kind !== "tool")
+      continue;
+    try {
+      const raw = string(entry.raw);
+      const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null;
+      if (match && skillsEquivalent(match[1] ?? "", producer))
+        return true;
+    } catch {
+    }
+  }
+  return false;
+}
+async function recordDocument(input) {
+  const ownerPhase = input.policy ? documentOwnerPolicyStep(input.policy, input.kind) : documentOwnerPhase(input.kind);
+  if (!ownerPhase) {
+    throw new DocumentLedgerError(`document '${input.kind}' \u672A\u58F0\u660E\u6240\u5C5E phase`);
+  }
+  const current = await readDocumentLedger(input.changeDir);
+  if (!current)
+    throw new DocumentLedgerError(`document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init`);
+  const resolved = await resolveDocument(input.repoRoot, input.path);
+  const slot = documentSlot(input.kind, resolved.relativePath, input.changeDir);
+  const oldCandidates = current.records.filter((record3) => {
+    if (record3.kind !== input.kind)
+      return false;
+    if (record3.kind !== "delta-spec")
+      return true;
+    return deltaSpecSlot(record3.path, input.changeDir) === slot;
+  });
+  const old = oldCandidates.find((record3) => record3.sha256 === resolved.digest) ?? oldCandidates[0];
+  const policySteps = input.policy?.steps ?? DOCUMENT_CONTRACT_PHASES;
+  const ownerIndex = policySteps.indexOf(ownerPhase);
+  const currentIndex = policySteps.indexOf(input.phase);
+  if (currentIndex < 0) {
+    throw new DocumentLedgerError(`\u5F53\u524D step '${input.phase}' \u4E0D\u5C5E\u4E8E document contract`);
+  }
+  if (input.allowBackfill) {
+    if (oldCandidates.length > 0) {
+      throw new DocumentLedgerError(`--backfill \u53EA\u80FD\u9996\u6B21\u767B\u8BB0\u5386\u53F2 document \u69FD\uFF1B'${slot}' \u5DF2\u6709 record\uFF0C\u4FEE\u6539\u540E\u5FC5\u987B\u4F7F\u7528\u5F53\u524D phase \u7684\u5B9E\u9645 producer \u91CD\u65B0\u767B\u8BB0`);
+    }
+    if (ownerIndex >= currentIndex) {
+      if (ownerIndex > currentIndex) {
+        throw new DocumentLedgerError(`'${input.kind}' \u5C5E\u4E8E\u672A\u6765 phase '${ownerPhase}'\uFF0C\u4E0D\u80FD\u4ECE\u5F53\u524D ${input.phase} backfill`);
+      }
+      throw new DocumentLedgerError(`'${input.kind}' \u5F53\u524D\u6B63\u5904\u4E8E\u6240\u5C5E phase '${ownerPhase}'\uFF1B\u4E0D\u5F97\u4F7F\u7528 --backfill`);
+    }
+    const producerAllowed = input.policy ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, ownerPhase, input.producer) : isDocumentProducerAllowedInPhase(input.kind, ownerPhase, input.producer);
+    const producerCandidates = input.policy ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, ownerPhase) : recordProducerCandidatesFor(input.kind, ownerPhase);
+    if (!producerAllowed) {
+      throw new DocumentLedgerError(`document '${input.kind}' \u7684\u5386\u53F2 producer '${input.producer}' \u4E0D\u5408\u6CD5\uFF08\u5141\u8BB8: ${producerCandidates.join(" ")})`);
+    }
+  } else {
+    if (requiresRequirementsChangedForSpecAdr(input) && !await currentSpecVisitEnteredViaRequirementsChanged(input.changeDir)) {
+      throw new DocumentLedgerError("ADR living-document \u517C\u5BB9\u9762\u53EA\u5141\u8BB8\u5F53\u524D requirements-changed \u56DE\u5230 spec \u7684 visit");
+    }
+    const recordAllowed = input.policy ? isDocumentRecordAllowedInPolicyStep(input.policy, input.kind, input.phase) : isDocumentContractPhase(input.phase) && isDocumentRecordAllowedInPhase(input.kind, input.phase);
+    if (!recordAllowed) {
+      throw new DocumentLedgerError(`'${input.kind}' \u53EA\u80FD\u5728\u5176\u6240\u5C5E phase \u6216\u5141\u8BB8\u7684\u540E\u7EED\u66F4\u65B0 phase \u767B\u8BB0\uFF08\u5F53\u524D ${input.phase}\uFF09`);
+    }
+    const producerAllowed = input.policy ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, input.phase, input.producer) : isDocumentContractPhase(input.phase) && isDocumentProducerAllowedInPhase(input.kind, input.phase, input.producer);
+    const candidates = input.policy ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, input.phase) : isDocumentContractPhase(input.phase) ? recordProducerCandidatesFor(input.kind, input.phase) : [];
+    if (!producerAllowed) {
+      throw new DocumentLedgerError(`document '${input.kind}' \u7684 producer '${input.producer}' \u4E0D\u5408\u6CD5\uFF08\u5F53\u524D ${input.phase} \u5141\u8BB8: ${candidates.join(" ")})`);
+    }
+  }
+  if (!await hasSkillEvidence(input.changeDir, input.producer, input.phase, input.allowBackfill === true)) {
+    throw new DocumentLedgerError(`\u7F3A\u5C11 Skill \u8C03\u7528\u8BC1\u636E\uFF08\u5F53\u524D phase\uFF09: '${input.producer}'\uFF1B\u5148\u7531\u5BBF\u4E3B\u5728\u672C phase \u5B9E\u9645\u8C03\u7528\u8BE5 skill\uFF0C\u786E\u8BA4\u5B8C\u6210\u6001\u8BC1\u636E\u5DF2\u5199\u5165 history \u540E\u518D\u767B\u8BB0 '${input.kind}'`);
+  }
+  const replacement = {
+    kind: input.kind,
+    path: resolved.relativePath,
+    sha256: resolved.digest,
+    producer: input.producer,
+    recordedAt: input.recordedAt,
+    reads: old?.sha256 === resolved.digest ? old.reads : []
+  };
+  const records = current.records.filter((record3) => {
+    if (record3.kind !== input.kind)
+      return true;
+    if (record3.kind !== "delta-spec")
+      return false;
+    const recordSlot = deltaSpecSlot(record3.path, input.changeDir);
+    return recordSlot === void 0 || recordSlot !== slot;
+  });
+  records.push(replacement);
+  const next = { ...current, records };
+  await writeDocumentLedger(input.changeDir, next);
+  return next;
+}
+async function migrateLegacyDeltaDocument(input) {
+  const current = await readDocumentLedger(input.changeDir);
+  if (!current)
+    throw new DocumentLedgerError("document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init");
+  const canonical = await resolveDocument(input.repoRoot, input.canonicalPath);
+  const slot = documentSlot("delta-spec", canonical.relativePath, input.changeDir);
+  const source = current.records.find((record3) => record3.kind === "delta-spec" && record3.path === input.legacyPath && deltaSpecSlot(record3.path, input.changeDir) === void 0);
+  const target = current.records.find((record3) => record3.kind === "delta-spec" && deltaSpecSlot(record3.path, input.changeDir) === slot);
+  if (!source) {
+    if (target?.path === canonical.relativePath && target.sha256 === canonical.digest)
+      return current;
+    throw new DocumentLedgerError(`\u672A\u627E\u5230\u6307\u5B9A\u7684\u65E7 delta-spec record: ${input.legacyPath}`);
+  }
+  if (source.sha256 !== canonical.digest) {
+    throw new DocumentLedgerError("\u8FC1\u79FB\u62D2\u7EDD\uFF1Acanonical \u6587\u4EF6\u5185\u5BB9\u4E0E\u65E7 delta-spec digest \u4E0D\u4E00\u81F4");
+  }
+  if (target && target.sha256 !== source.sha256) {
+    throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u5DF2\u6709\u4E0D\u540C\u5185\u5BB9`);
+  }
+  if (target && (target.producer !== source.producer || target.recordedAt !== source.recordedAt)) {
+    throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u4E0E\u65E7 record \u7684 provenance \u51B2\u7A81`);
+  }
+  const receipts = /* @__PURE__ */ new Map();
+  for (const receipt of target?.reads ?? [])
+    receipts.set(receiptKey(receipt), receipt);
+  for (const receipt of source.reads) {
+    const key = receiptKey(receipt);
+    const existing = receipts.get(key);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(receipt)) {
+      throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u7684 ${receipt.phase} read receipt \u51B2\u7A81`);
+    }
+    receipts.set(key, receipt);
+  }
+  const replacement = target ? { ...target, reads: [...receipts.values()] } : { ...source, path: canonical.relativePath, reads: [...receipts.values()] };
+  const records = current.records.filter((record3) => record3 !== source && record3 !== target);
+  records.push(replacement);
+  const next = { ...current, records };
+  await writeDocumentLedger(input.changeDir, next);
+  return next;
+}
+async function recordDocumentReads(input) {
+  const current = await readDocumentLedger(input.changeDir);
+  if (!current)
+    throw new DocumentLedgerError(`document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init`);
+  const visitId = await currentDocumentStepVisitId(input.changeDir);
+  const requiredKinds = input.policy ? readsRequiredForPolicyStep(input.policy, input.phase) : isDocumentContractPhase(input.phase) ? readsRequiredForPhase(input.phase) : [];
+  const kinds = input.kind === "all" ? [...requiredKinds] : [input.kind];
+  for (const kind of kinds) {
+    if (!requiredKinds.includes(kind)) {
+      throw new DocumentLedgerError(`phase '${input.phase}' \u4E0D\u8981\u6C42\u8BFB\u53D6 document '${kind}'`);
+    }
+  }
+  const selected = current.records.filter((record3) => kinds.includes(record3.kind));
+  for (const kind of kinds) {
+    if (!selected.some((record3) => record3.kind === kind)) {
+      throw new DocumentLedgerError(`\u7F3A\u5C11 document '${kind}'\uFF1B\u5148\u767B\u8BB0\u540E\u518D\u8BFB\u53D6`);
+    }
+  }
+  const legacyDelta = selected.filter((record3) => record3.kind === "delta-spec" && deltaSpecSlot(record3.path, input.changeDir) === void 0);
+  if (legacyDelta.length > 0) {
+    throw new DocumentLedgerError(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record3) => record3.path).join(", ")}`);
+  }
+  const updated = [];
+  for (const record3 of current.records) {
+    if (!kinds.includes(record3.kind)) {
+      updated.push(record3);
+      continue;
+    }
+    const resolved = await resolveDocument(input.repoRoot, record3.path);
+    if (resolved.digest !== record3.sha256) {
+      throw new DocumentLedgerError(`document '${record3.kind}' \u5DF2\u53D8\u66F4: ${record3.path}\uFF1B\u5148\u91CD\u65B0 record \u540E\u518D read`);
+    }
+    const reads = record3.reads.filter((receipt) => receipt.phase !== input.phase || receipt.visitId !== visitId);
+    reads.push({ phase: input.phase, sha256: resolved.digest, readAt: input.readAt, visitId });
+    updated.push({ ...record3, reads });
+  }
+  const next = { ...current, records: updated };
+  await writeDocumentLedger(input.changeDir, next);
+  return next;
+}
+
+// packages/kernel/dist/state/lock.js
+import { randomBytes } from "node:crypto";
+import { mkdir as mkdir4, readFile as readFile7, rename as rename2, rm, stat, utimes, writeFile as writeFile2 } from "node:fs/promises";
+import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+var LOCK_DIR_NAME = ".pipeline.lock";
+var LOCK_OWNER_FILE = "owner";
+var STALE_LOCK_MS = 6e4;
+var HEARTBEAT_MS = Math.floor(STALE_LOCK_MS / 3);
+var ACQUIRE_TIMEOUT_MS = 1e4;
+var POLL_MS = 10;
+var queues = /* @__PURE__ */ new Map();
+function lockDirFor(changeDir2) {
+  return path.join(path.resolve(changeDir2), LOCK_DIR_NAME);
+}
+function ownerPathFor(lockDir) {
+  return path.join(lockDir, LOCK_OWNER_FILE);
+}
+async function lockAgeMs(lockDir) {
+  try {
+    const st = await stat(ownerPathFor(lockDir));
+    return Date.now() - st.mtimeMs;
+  } catch {
+    try {
+      const st = await stat(lockDir);
+      return Date.now() - st.mtimeMs;
+    } catch {
+      return null;
+    }
+  }
+}
+async function lockOwnerProcessIsDead(lockDir) {
+  let owner;
+  try {
+    owner = (await readFile7(ownerPathFor(lockDir), "utf8")).trim();
+  } catch {
+    return false;
+  }
+  const pidText = owner.split(".", 1)[0] ?? "";
+  if (!/^[1-9][0-9]*$/.test(pidText))
+    return false;
+  const pid = Number(pidText);
+  if (!Number.isSafeInteger(pid) || pid <= 0)
+    return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error2) {
+    return error2.code === "ESRCH";
+  }
+}
+async function reclaimAbandoned(lockDir) {
+  const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString("hex")}`;
+  try {
+    await rename2(lockDir, grave);
+  } catch {
+    return;
+  }
+  await rm(grave, { recursive: true, force: true }).catch(() => {
+  });
+}
+function startHeartbeat(lockDir) {
+  const owner = ownerPathFor(lockDir);
+  const t = setInterval(() => {
+    const now = /* @__PURE__ */ new Date();
+    void utimes(owner, now, now).catch(() => {
+    });
+  }, HEARTBEAT_MS);
+  if (typeof t.unref === "function")
+    t.unref();
+  return t;
+}
+async function acquire(lockDir) {
+  const token = `${process.pid}.${randomBytes(8).toString("hex")}.${Date.now()}`;
+  const deadline = Date.now() + ACQUIRE_TIMEOUT_MS;
+  for (; ; ) {
+    let created = false;
+    try {
+      await mkdir4(lockDir);
+      created = true;
+      await writeFile2(ownerPathFor(lockDir), `${token}
+`, "utf8");
+      return { token, heartbeat: startHeartbeat(lockDir) };
+    } catch (err) {
+      if (created) {
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {
+        });
+        throw err;
+      }
+      if (err.code !== "EEXIST")
+        throw err;
+    }
+    if (await lockOwnerProcessIsDead(lockDir)) {
+      await reclaimAbandoned(lockDir);
+      continue;
+    }
+    const age = await lockAgeMs(lockDir);
+    if (age === null)
+      continue;
+    if (age > STALE_LOCK_MS) {
+      await reclaimAbandoned(lockDir);
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`withLock: acquire timeout after ${ACQUIRE_TIMEOUT_MS}ms: ${lockDir}`);
+    }
+    await sleep(POLL_MS);
+  }
+}
+async function release(lockDir, held) {
+  clearInterval(held.heartbeat);
+  let owner = null;
+  try {
+    owner = (await readFile7(ownerPathFor(lockDir), "utf8")).trim();
+  } catch {
+    owner = null;
+  }
+  if (owner !== held.token)
+    return;
+  await rm(lockDir, { recursive: true, force: true }).catch(() => {
+  });
+}
+async function withLock(changeDir2, fn) {
+  const lockDir = lockDirFor(changeDir2);
+  const prev = queues.get(lockDir) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    const held = await acquire(lockDir);
+    try {
+      return await fn();
+    } finally {
+      await release(lockDir, held);
+    }
+  });
+  const settled = run.then(() => void 0, () => void 0);
+  queues.set(lockDir, settled);
+  void settled.then(() => {
+    if (queues.get(lockDir) === settled)
+      queues.delete(lockDir);
+  });
+  return run;
+}
+
+// packages/kernel/dist/state/task-plan-store.js
+import { createHash as createHash7 } from "node:crypto";
+import { lstat as lstat6, mkdir as mkdir5, opendir, realpath as realpath2 } from "node:fs/promises";
+import { isAbsolute as isAbsolute2, join as join10, relative as relative2, sep as sep2 } from "node:path";
+
+// packages/kernel/dist/workflow/default-workflow.generated.js
+var DEFAULT_WORKFLOW_SOURCE = "name: default\nsteps:\n  - id: open\n    label: \u7ACB\u9879\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: open-complete\n        to: explore\n  - id: explore\n    label: \u8C03\u7814\n    gate: review\n    skills: []\n    inputs: []\n    outputs:\n      - field: design_doc\n        type: file_path\n    artifacts:\n      - field: design_doc\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: explore-complete\n        to: spec\n  - id: spec\n    label: \u89C4\u683C\n    gate: review\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n    outputs:\n      - field: plan\n        type: file_path\n    artifacts:\n      - field: plan\n        type: file_path\n        producer_policy: effective-phase-skills\n        required_when:\n          track_not_in: [pm]\n    guards:\n      - type: tasks-at-least\n        n: 3\n    transitions:\n      - event: spec-complete\n        to: build\n        actions:\n          - type: reset-pre-verify-review\n  - id: build\n    label: \u5B9E\u73B0\n    gate: null\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n      - field: plan\n        type: file_path\n    outputs:\n      - field: build_sha\n        type: string\n    guards:\n      - type: field-equals\n        field: pre_verify_review_result\n        value: pass\n    transitions:\n      - event: build-complete\n        to: verify\n      - event: requirements-changed\n        to: spec\n        actions:\n          - type: reset-pre-verify-review\n  - id: verify\n    label: \u9A8C\u8BC1\n    gate: review\n    skills: []\n    inputs:\n      - field: build_sha\n        type: string\n    outputs:\n      - field: verification_report\n        type: file_path\n    artifacts:\n      - field: verification_report\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: verify-pass\n        to: ship\n      - event: verify-fail\n        to: build\n        actions:\n          - type: mark-verification-failed\n          - type: reset-pre-verify-review\n  - id: ship\n    label: \u4EA4\u4ED8\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards:\n      - type: spec-migration-applied\n    transitions:\n      - event: ship-complete\n        to: archive\n  - id: archive\n    label: \u5F52\u6863\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n";
+var DEFAULT_WORKFLOW_STEPS = [
+  { id: "open", label: "\u7ACB\u9879" },
+  { id: "explore", label: "\u8C03\u7814" },
+  { id: "spec", label: "\u89C4\u683C" },
+  { id: "build", label: "\u5B9E\u73B0" },
+  { id: "verify", label: "\u9A8C\u8BC1" },
+  { id: "ship", label: "\u4EA4\u4ED8" },
+  { id: "archive", label: "\u5F52\u6863" }
+];
+
+// packages/kernel/dist/workflow/todo-projection.js
+var DEFAULT_WORKFLOW_TODO_STAGES = DEFAULT_WORKFLOW_STEPS.map((step) => ({ id: step.id, label: step.label }));
+function normalized(value) {
+  return value.trim().replace(/^\d+\s*[.)、:：-]\s*/, "").replace(/^phase\s+/i, "").toLocaleLowerCase();
+}
+function stageForHeading(heading, stages) {
+  const candidate = normalized(heading);
+  for (const stage of stages) {
+    const id = normalized(stage.id);
+    const label = normalized(stage.label);
+    if (candidate === id || candidate === label)
+      return stage.id;
+    if (candidate.startsWith(`${id} `) || candidate.endsWith(` ${id}`))
+      return stage.id;
+    if (candidate.startsWith(`${label} `) || candidate.endsWith(` ${label}`))
+      return stage.id;
+  }
+  return void 0;
+}
+function parseTasks(markdown, currentStage, stages, trustedCanonicalProjection = false) {
+  const byStage = /* @__PURE__ */ new Map();
+  if (markdown === void 0)
+    return { byStage, structured: false };
+  let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
+  let structured = false;
+  for (const line of markdown.split(/\r?\n/)) {
+    const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
+    if (heading) {
+      if (trustedCanonicalProjection && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
+        continue;
+      const headingStage = stageForHeading(heading[1] ?? "", stages);
+      if (headingStage !== void 0) {
+        target = headingStage;
+        structured = true;
+      }
+      continue;
+    }
+    const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
+    if (!task || target === void 0)
+      continue;
+    const rawText = (task[2] ?? "").trim();
+    const text3 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
+    if (text3 === "")
+      continue;
+    const items = byStage.get(target) ?? [];
+    items.push({ text: text3, completed: (task[1] ?? "").toLowerCase() === "x" });
+    byStage.set(target, items);
+  }
+  return { byStage, structured };
+}
+function incompletePipelineTasksForExit(input) {
+  const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES;
+  const stages = declared.filter((stage, index) => stage.id !== "" && stage.label !== "" && declared.findIndex((other) => other.id === stage.id) === index);
+  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages, input.trustedCanonicalProjection);
+  if (!parsed.structured) {
+    const incomplete2 = input.phase === "build" ? [...parsed.byStage.values()].flat().filter((task) => !task.completed).length : 0;
+    return { structured: false, incomplete: incomplete2 };
+  }
+  const phaseIndex = stages.findIndex((stage) => stage.id === input.phase);
+  if (phaseIndex < 0)
+    return { structured: true, incomplete: 0 };
+  const incomplete = stages.slice(0, phaseIndex + 1).flatMap((stage) => parsed.byStage.get(stage.id) ?? []).filter((task) => !task.completed).length;
+  return { structured: true, incomplete };
+}
+
+// packages/kernel/dist/state/task-plan-publication-test-harness.js
+import { AsyncLocalStorage } from "node:async_hooks";
+var publicationFault = new AsyncLocalStorage();
+
+// packages/kernel/dist/state/task-plan-store.js
+var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
+var TASK_PLAN_CURRENT_FILE = "current.json";
+var TASK_PLAN_REVISIONS_DIR = "revisions";
+var MAX_LEGACY_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
+var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
+var TaskPlanStateCorruptError = class extends Error {
+  name = "TaskPlanStateCorruptError";
+};
+function revisionNumberPrefix(revision) {
+  return String(revision.revision_number).padStart(6, "0");
+}
+function planNamespace(planId) {
+  return createHash7("sha256").update(planId).digest("hex");
+}
+function revisionFileName2(revision) {
+  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`;
+}
+function legacyRevisionFileName(revision) {
+  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
+}
+function digest(raw) {
+  return `sha256:${createHash7("sha256").update(raw).digest("hex")}`;
+}
+function normalizeProjectionCompletion(markdown) {
+  return markdown.split("\n").map((line) => {
+    const item2 = /^- \[[ xX]\] (.+ <!-- work-item:[^>]+ -->)$/u.exec(line);
+    return item2 === null ? line : `- [ ] ${item2[1]}`;
+  }).join("\n");
+}
+async function assertOwnedDirectory(base, candidate) {
+  try {
+    const [baseReal, candidateInfo, candidateReal] = await Promise.all([
+      realpath2(base),
+      lstat6(candidate),
+      realpath2(candidate)
+    ]);
+    const fromBase = relative2(baseReal, candidateReal);
+    if (candidateInfo.isSymbolicLink() || !candidateInfo.isDirectory() || fromBase === "" || fromBase === ".." || fromBase.startsWith(`..${sep2}`) || isAbsolute2(fromBase))
+      throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
+  } catch (error2) {
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
+  }
+}
+async function readRegular(path9, maxBytes) {
+  try {
+    return await readOptionalBoundedRegularTextFile(path9, maxBytes, "TaskPlan state file");
+  } catch (error2) {
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
+  }
+}
+async function readStateFile(path9, maxBytes) {
+  let bytes;
+  try {
+    bytes = await readBoundedRegularFile(path9, maxBytes, "TaskPlan state file");
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
+      return void 0;
+    if (error2 instanceof TaskPlanStateCorruptError)
+      throw error2;
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
+  }
+  try {
+    return {
+      bytes,
+      text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+    };
+  } catch {
+    throw new TaskPlanStateCorruptError("TaskPlan state file is not valid UTF-8");
+  }
+}
+function assertCommittedRevisionSemantics(revision) {
+  const validation = validateTaskPlanAggregate(taskPlanRecordToDomain(revision));
+  if (revision.status !== "frozen" || !validation.freezable) {
+    throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
+  }
+}
+async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
+  const canonical = await readStateFile(join10(revisionsDir, revisionFileName2(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (canonical !== void 0) {
+    if (!canonical.bytes.equals(expectedRaw)) {
+      throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+    }
+    return canonical;
+  }
+  const legacy = await readStateFile(join10(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (legacy === void 0)
+    return void 0;
+  if (legacy.bytes.equals(expectedRaw))
+    return legacy;
+  const decoded = decodeTaskPlanRevisionRecordV1(legacy.text);
+  if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
+    return void 0;
+  throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
+}
+async function readCanonicalTaskPlanState(changeDir2) {
+  const stateDir = join10(changeDir2, TASK_PLAN_STATE_DIR);
+  const currentPath = join10(stateDir, TASK_PLAN_CURRENT_FILE);
+  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
+  if (currentRaw === void 0)
+    return void 0;
+  const decoded = decodeTaskPlanRevisionRecordV1(currentRaw.text);
+  if (!decoded.ok)
+    throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
+  const revision = decoded.value;
+  assertCommittedRevisionSemantics(revision);
+  await assertOwnedDirectory(changeDir2, stateDir);
+  await assertOwnedDirectory(changeDir2, join10(stateDir, TASK_PLAN_REVISIONS_DIR));
+  const immutableRaw = await readImmutableTwin(join10(stateDir, TASK_PLAN_REVISIONS_DIR), revision, currentRaw.bytes);
+  if (immutableRaw === void 0) {
+    throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
+  }
+  return { revision, currentBytes: currentRaw.bytes };
+}
+async function classifyTaskPlanProjectionForChange(changeDir2, source) {
+  const state = await readCanonicalTaskPlanState(changeDir2);
+  if (state === void 0)
+    return "legacy";
+  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) });
+  return normalizeProjectionCompletion(source) === expected ? "current" : "invalid";
+}
+async function taskPlanTasksThroughPhaseForChange(changeDir2, phase, sourceOverride) {
+  const state = await readCanonicalTaskPlanState(changeDir2);
+  const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES;
+  let source = sourceOverride ?? void 0;
+  if (sourceOverride === void 0)
+    try {
+      source = await readRegular(join10(changeDir2, "tasks.md"), limit);
+    } catch {
+      return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
+    }
+  if (source === void 0)
+    return state !== void 0 || phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
+  if (Buffer.byteLength(source) > limit)
+    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
+  if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest(state.currentBytes) }))
+    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Acanonical TaskPlan tasks.md \u6295\u5F71\u8BA4\u8BC1\u5931\u8D25` };
+  const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: source, trustedCanonicalProjection: state !== void 0 });
+  return status.incomplete > 0 ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4ECD\u6709 ${status.incomplete} \u9879\u672A\u52FE` } : { pass: true };
+}
+
+// packages/kernel/dist/product-identity.generated.js
+var PRODUCT_IDENTITY = {
+  schemaVersion: 1,
+  displayName: "Tenon",
+  cli: "tenon",
+  hookLauncher: "tenon-hook",
+  dashboardLauncher: "tenon-dashboard",
+  plugin: "tenon",
+  marketplace: "tenon",
+  entrySkill: "tenon",
+  skillPrefix: "tenon-",
+  runtimeApp: "tenon",
+  environmentPrefix: "TENON_",
+  browserPrefix: "__TENON_",
+  repository: "jefferysha/tenon",
+  repositoryUrl: "https://github.com/jefferysha/tenon",
+  pagesBase: "/tenon/",
+  dashboardHost: "127.0.0.1",
+  dashboardPort: 18765
+};
+
+// packages/kernel/dist/state/store.js
+import { readFile as readFile11 } from "node:fs/promises";
+import path4 from "node:path";
+
+// packages/kernel/dist/state/parse.js
+var KNOWN_FIELDS = new Set(FIELD_ORDER);
+var LIST_FIELD_SET2 = new Set(LIST_FIELDS);
+var REVIEW_GATE_FIELD_SET = new Set(REVIEW_GATE_FIELDS);
+var LIST_ITEM_PREFIX = "  - ";
+var KEY_RE = /^([A-Za-z0-9_]+):(.*)$/;
+function unquoteScalar(s) {
+  if (s.length >= 2) {
+    const first = s.charAt(0);
+    const last = s.charAt(s.length - 1);
+    if (first === last && (first === '"' || first === "'"))
+      return s.slice(1, -1);
+  }
+  return s;
+}
+function emptyFields() {
+  const fields = {};
+  for (const f of FIELD_ORDER) {
+    fields[f] = f === "workflow" ? "default" : f === PRE_VERIFY_REVIEW_FIELD ? PRE_VERIFY_REVIEW_DEFAULT : "";
+  }
+  return fields;
+}
+function quoteGate(field2, value) {
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new QuoteGateError(field2, "value contains a newline/carriage return (would inject fake fields)");
+  }
+  if (value.includes(": ")) {
+    throw new QuoteGateError(field2, 'value contains ": " (would break YAML parsing)');
+  }
+  if (value.includes(" #")) {
+    throw new QuoteGateError(field2, 'value contains " #" (would be eaten as an inline comment)');
+  }
+  const first = value.charAt(0);
+  if (first === '"' || first === "'") {
+    throw new QuoteGateError(field2, "value starts with a quote (would break YAML parsing)");
+  }
+}
+function parsePipeline(content) {
+  const lines = content.split("\n");
+  const fields = emptyFields();
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const m = KEY_RE.exec(line);
+    if (!m)
+      break;
+    const key = m[1] ?? "";
+    if (!KNOWN_FIELDS.has(key))
+      break;
+    const field2 = key;
+    const rest = (m[2] ?? "").trim();
+    i++;
+    if (LIST_FIELD_SET2.has(field2)) {
+      if (rest === "") {
+        const items = [];
+        while (i < lines.length && (lines[i] ?? "").startsWith(LIST_ITEM_PREFIX)) {
+          items.push(unquoteScalar((lines[i] ?? "").slice(LIST_ITEM_PREFIX.length).trim()));
+          i++;
+        }
+        fields[field2] = items;
+      } else if (rest === "[]") {
+        fields[field2] = [];
+      } else {
+        fields[field2] = unquoteScalar(rest);
+      }
+    } else {
+      fields[field2] = unquoteScalar(rest);
+    }
+  }
+  const { metadata, consumedLines } = parseRunMetadataLines(lines.slice(i));
+  i += consumedLines;
+  const projection = parseProjectionMetadataLines(lines.slice(i));
+  i += projection.consumedLines;
+  return {
+    fields,
+    ...metadata === void 0 ? {} : { runMetadata: metadata },
+    ...projection.metadata === void 0 ? {} : { projectionMetadata: projection.metadata },
+    opaqueTail: lines.slice(i).join("\n")
+  };
+}
+function serializePipeline(state, options = {}) {
+  const out = [];
+  const hasReviewGateReceipt = REVIEW_GATE_FIELDS.some((field2) => {
+    const value = state.fields[field2];
+    return Array.isArray(value) ? value.length > 0 : value !== "";
+  });
+  for (const field2 of FIELD_ORDER) {
+    if (field2 === PRE_VERIFY_REVIEW_FIELD && options.omitPreVerifyReview === true)
+      continue;
+    if (REVIEW_GATE_FIELD_SET.has(field2) && !hasReviewGateReceipt)
+      continue;
+    const value = state.fields[field2] ?? "";
+    if (Array.isArray(value)) {
+      for (const item2 of value)
+        quoteGate(field2, item2);
+      if (value.length === 0) {
+        out.push(`${field2}: []`);
+      } else {
+        out.push(`${field2}:`);
+        for (const item2 of value)
+          out.push(`${LIST_ITEM_PREFIX}${item2}`);
+      }
+    } else {
+      quoteGate(field2, value);
+      out.push(`${field2}: ${value === "" ? '""' : value}`);
+    }
+  }
+  out.push(...serializeRunMetadataLines(state.runMetadata));
+  out.push(...serializeProjectionMetadataLines(state.projectionMetadata));
+  return out.join("\n") + "\n" + state.opaqueTail;
+}
+
 // packages/kernel/dist/state/state-projection-codec.js
 function metadataFor(revision) {
   return {
@@ -6070,20 +7452,8 @@ function priorLogicalProjectionContent(revision) {
 }
 
 // packages/kernel/dist/state/state-init.js
-import { readFile as readFile6, stat as stat2 } from "node:fs/promises";
+import { readFile as readFile8, stat as stat2 } from "node:fs/promises";
 import path2 from "node:path";
-
-// packages/kernel/dist/workflow/default-workflow.generated.js
-var DEFAULT_WORKFLOW_SOURCE = "name: default\nsteps:\n  - id: open\n    label: \u7ACB\u9879\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: open-complete\n        to: explore\n  - id: explore\n    label: \u8C03\u7814\n    gate: review\n    skills: []\n    inputs: []\n    outputs:\n      - field: design_doc\n        type: file_path\n    artifacts:\n      - field: design_doc\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: explore-complete\n        to: spec\n  - id: spec\n    label: \u89C4\u683C\n    gate: review\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n    outputs:\n      - field: plan\n        type: file_path\n    artifacts:\n      - field: plan\n        type: file_path\n        producer_policy: effective-phase-skills\n        required_when:\n          track_not_in: [pm]\n    guards:\n      - type: tasks-at-least\n        n: 3\n    transitions:\n      - event: spec-complete\n        to: build\n        actions:\n          - type: reset-pre-verify-review\n  - id: build\n    label: \u5B9E\u73B0\n    gate: null\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n      - field: plan\n        type: file_path\n    outputs:\n      - field: build_sha\n        type: string\n    guards:\n      - type: field-equals\n        field: pre_verify_review_result\n        value: pass\n    transitions:\n      - event: build-complete\n        to: verify\n      - event: requirements-changed\n        to: spec\n        actions:\n          - type: reset-pre-verify-review\n  - id: verify\n    label: \u9A8C\u8BC1\n    gate: review\n    skills: []\n    inputs:\n      - field: build_sha\n        type: string\n    outputs:\n      - field: verification_report\n        type: file_path\n    artifacts:\n      - field: verification_report\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: verify-pass\n        to: ship\n      - event: verify-fail\n        to: build\n        actions:\n          - type: mark-verification-failed\n          - type: reset-pre-verify-review\n  - id: ship\n    label: \u4EA4\u4ED8\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards:\n      - type: spec-migration-applied\n    transitions:\n      - event: ship-complete\n        to: archive\n  - id: archive\n    label: \u5F52\u6863\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n";
-var DEFAULT_WORKFLOW_STEPS = [
-  { id: "open", label: "\u7ACB\u9879" },
-  { id: "explore", label: "\u8C03\u7814" },
-  { id: "spec", label: "\u89C4\u683C" },
-  { id: "build", label: "\u5B9E\u73B0" },
-  { id: "verify", label: "\u9A8C\u8BC1" },
-  { id: "ship", label: "\u4EA4\u4ED8" },
-  { id: "archive", label: "\u5F52\u6863" }
-];
 
 // packages/kernel/dist/workflow/builtin-workflows.js
 var SIMPLE_WORKFLOW = {
@@ -6612,508 +7982,6 @@ function compileDefaultWorkflow(def) {
   return compileWith(def, DEFAULT_PRODUCER_POLICIES);
 }
 
-// packages/kernel/dist/workflow/document-contract-validation.js
-var CANONICAL_TRANSITIONS = {
-  open: ["explore"],
-  explore: ["spec"],
-  spec: ["build"],
-  build: ["verify", "spec"],
-  verify: ["ship", "build"],
-  ship: ["archive"],
-  archive: []
-};
-var REVIEW_PHASES = /* @__PURE__ */ new Set(["explore", "spec", "verify"]);
-var REQUIRED_RUNTIME_REFS = {
-  build: { outputs: [{ field: "build_sha", type: "string" }] },
-  verify: {
-    inputs: [{ field: "build_sha", type: "string" }],
-    outputs: [{ field: "verification_report", type: "file_path" }]
-  }
-};
-var REQUIRED_SKILL_GROUPS = {
-  open: [
-    { label: "OpenSpec proposal", alternatives: ["openspec-propose", "opsx:propose"] },
-    { label: "pipeline open", alternatives: ["tenon-open", "tenon:tenon-open"] }
-  ],
-  explore: [
-    { label: "pipeline explore", alternatives: ["tenon-explore", "tenon:tenon-explore"] },
-    { label: "Superpower brainstorming", alternatives: ["brainstorming", "superpowers:brainstorming"] }
-  ],
-  spec: [
-    { label: "tenon spec", alternatives: ["tenon-spec", "tenon:tenon-spec"] },
-    { label: "OpenSpec delta proposal", alternatives: ["openspec-propose", "opsx:propose"] },
-    { label: "Superpower plan", alternatives: ["writing-plans", "superpowers:writing-plans"] }
-  ],
-  build: [{ label: "pipeline build", alternatives: ["tenon-build", "tenon:tenon-build"] }],
-  verify: [
-    { label: "pipeline verify", alternatives: ["tenon-verify", "tenon:tenon-verify"] },
-    {
-      label: "Superpower verification",
-      alternatives: ["verification-before-completion", "superpowers:verification-before-completion"]
-    }
-  ],
-  ship: [
-    { label: "pipeline ship", alternatives: ["tenon-ship", "tenon:tenon-ship"] },
-    { label: "OpenSpec apply", alternatives: ["openspec-apply-change", "opsx:apply"] }
-  ],
-  archive: [{ label: "pipeline archive", alternatives: ["tenon-archive", "tenon:tenon-archive"] }]
-};
-function aliasesForSkill(id) {
-  const aliases = /* @__PURE__ */ new Set([id]);
-  if (id.startsWith("tenon:"))
-    aliases.add(id.slice("tenon:".length));
-  if (id.startsWith("superpowers:"))
-    aliases.add(id.slice("superpowers:".length));
-  if (id === "opsx:propose")
-    aliases.add("openspec-propose");
-  if (id === "openspec-propose")
-    aliases.add("opsx:propose");
-  if (id === "opsx:apply")
-    aliases.add("openspec-apply-change");
-  if (id === "openspec-apply-change")
-    aliases.add("opsx:apply");
-  return [...aliases];
-}
-function hasFieldRef(refs, required2) {
-  return refs.some((ref) => ref.field === required2.field && ref.type === required2.type);
-}
-function readerReachableWithoutOwner(workflow, ownerStep, readerStep) {
-  const entry = workflow.steps[0];
-  if (!entry || entry.id === ownerStep)
-    return false;
-  const steps = new Map(workflow.steps.map((step) => [step.id, step]));
-  const visited = /* @__PURE__ */ new Set();
-  const queue = [entry.id];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current === void 0 || current === ownerStep || visited.has(current))
-      continue;
-    if (current === readerStep)
-      return true;
-    visited.add(current);
-    for (const transition of steps.get(current)?.transitions ?? []) {
-      if (transition.to !== ownerStep && !visited.has(transition.to))
-        queue.push(transition.to);
-    }
-  }
-  return false;
-}
-function validateLegacyContract(workflow) {
-  const errors = [];
-  const actualIds = workflow.steps.map((step) => step.id);
-  if (actualIds.length !== DOCUMENT_CONTRACT_PHASES.length) {
-    errors.push(`openspec_contract: required \u5FC5\u987B\u6070\u597D\u58F0\u660E ${DOCUMENT_CONTRACT_PHASES.length} \u4E2A\u6807\u51C6\u9636\u6BB5`);
-  }
-  for (const [index, expected] of DOCUMENT_CONTRACT_PHASES.entries()) {
-    const actual = actualIds[index];
-    if (actual !== expected) {
-      errors.push(`openspec_contract: required \u7684\u7B2C ${index + 1} \u9636\u6BB5\u5FC5\u987B\u662F '${expected}'\uFF08\u5F53\u524D '${actual ?? "\u7F3A\u5931"}'\uFF09`);
-    }
-  }
-  for (const phase of DOCUMENT_CONTRACT_PHASES) {
-    const step = workflow.steps.find((candidate) => candidate.id === phase);
-    if (!step)
-      continue;
-    for (const target of CANONICAL_TRANSITIONS[phase]) {
-      if (!step.transitions.some((transition) => transition.to === target)) {
-        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u53EF\u8F6C\u6362\u5230 '${target}'`);
-      }
-    }
-    if (REVIEW_PHASES.has(phase) && step.gate !== "review") {
-      errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u7684 gate=review`);
-    }
-    for (const group of REQUIRED_SKILL_GROUPS[phase]) {
-      const satisfied = step.skills.some((skill) => {
-        const aliases = new Set(aliasesForSkill(skill.id));
-        return group.alternatives.some((candidate) => aliasesForSkill(candidate).some((alias) => aliases.has(alias)));
-      });
-      if (!satisfied) {
-        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E ${group.label} skill\uFF08\u5141\u8BB8: ${group.alternatives.join(" | ")}\uFF09`);
-      }
-    }
-    const runtimeRefs = REQUIRED_RUNTIME_REFS[phase];
-    for (const required2 of runtimeRefs?.inputs ?? []) {
-      if (!hasFieldRef(step.inputs, required2)) {
-        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E input '${required2.field}'\uFF08type=${required2.type}\uFF09\u4EE5\u8BFB\u53D6\u6784\u5EFA\u57FA\u7EBF`);
-      }
-    }
-    for (const required2 of runtimeRefs?.outputs ?? []) {
-      if (!hasFieldRef(step.outputs, required2)) {
-        errors.push(`openspec_contract: required \u8981\u6C42 '${phase}' \u58F0\u660E output '${required2.field}'\uFF08type=${required2.type}\uFF09\u4EE5\u7559\u4E0B\u53EF\u9A8C\u8BC1\u8BC1\u636E`);
-      }
-    }
-  }
-  return errors;
-}
-function validateDeclarativeContract(workflow) {
-  const contract = workflow.documentContract;
-  if (!contract)
-    return [];
-  const errors = [];
-  if (workflow.openspecContract !== void 0) {
-    errors.push("openspec_contract \u4E0E document_contract \u4E0D\u5F97\u540C\u65F6\u58F0\u660E");
-  }
-  const stepIds = new Set(workflow.steps.map((step) => step.id));
-  const kinds = /* @__PURE__ */ new Set();
-  for (const [index, slot] of contract.slots.entries()) {
-    if (!isDocumentKind(slot.kind)) {
-      errors.push(`document_contract.slots[${index}].kind '${slot.kind}' \u4E0D\u53D7\u652F\u6301`);
-      continue;
-    }
-    if (kinds.has(slot.kind)) {
-      errors.push(`document_contract document kind '${slot.kind}' \u53EA\u80FD\u58F0\u660E\u4E00\u4E2A owner_step`);
-    }
-    kinds.add(slot.kind);
-    if (!stepIds.has(slot.ownerStep)) {
-      errors.push(`document_contract document '${slot.kind}' \u7684 owner_step '${slot.ownerStep}' \u4E0D\u5B58\u5728`);
-    }
-    if (slot.producers.length === 0) {
-      errors.push(`document_contract document '${slot.kind}' \u7684 producers \u4E0D\u5F97\u4E3A\u7A7A`);
-    }
-    const ownerSkills = workflow.steps.find((step) => step.id === slot.ownerStep)?.skills.map((skill) => skill.id) ?? [];
-    for (const producer of slot.producers) {
-      if (!ownerSkills.some((skill) => {
-        const aliases = new Set(aliasesForSkill(skill));
-        return aliasesForSkill(producer).some((alias) => aliases.has(alias));
-      })) {
-        errors.push(`document_contract document '${slot.kind}' \u7684 producer '${producer}' \u672A\u5728 owner_step '${slot.ownerStep}' \u58F0\u660E`);
-      }
-    }
-  }
-  const readSteps = /* @__PURE__ */ new Set();
-  for (const [index, read] of contract.reads.entries()) {
-    if (!stepIds.has(read.step)) {
-      errors.push(`document_contract.reads[${index}].step '${read.step}' \u4E0D\u5B58\u5728`);
-      continue;
-    }
-    if (readSteps.has(read.step)) {
-      errors.push(`document_contract step '${read.step}' \u53EA\u80FD\u58F0\u660E\u4E00\u7EC4 reads`);
-    }
-    readSteps.add(read.step);
-    for (const rawKind of read.kinds) {
-      if (!isDocumentKind(rawKind) || !kinds.has(rawKind)) {
-        errors.push(`document_contract step '${read.step}' \u8BFB\u53D6\u4E86\u672A\u58F0\u660E\u7684 document '${rawKind}'`);
-        continue;
-      }
-      const owner = contract.slots.find((slot) => slot.kind === rawKind);
-      if (owner?.ownerStep === read.step) {
-        errors.push(`document_contract step '${read.step}' \u53EA\u80FD\u8BFB\u53D6\u66F4\u65E9 step \u4EA7\u51FA\u7684 '${rawKind}'`);
-      } else if (owner && readerReachableWithoutOwner(workflow, owner.ownerStep, read.step)) {
-        errors.push(`document_contract document '${rawKind}' \u7684 owner_step '${owner.ownerStep}' \u4E0D\u652F\u914D reader step '${read.step}'`);
-      }
-    }
-  }
-  return errors;
-}
-function validateOpenSpecContractWorkflow(workflow) {
-  return workflow.openspecContract === "required" ? validateLegacyContract(workflow) : validateDeclarativeContract(workflow);
-}
-
-// packages/kernel/dist/workflow/document-contract.js
-var DOCUMENT_CONTRACT_PHASES = [
-  "open",
-  "explore",
-  "spec",
-  "build",
-  "verify",
-  "ship",
-  "archive"
-];
-var DOCUMENT_KINDS = [
-  "proposal",
-  "openspec-design",
-  "tasks",
-  "superpower-design",
-  "adr",
-  "delta-spec",
-  "superpower-plan",
-  "plan",
-  "verification-report",
-  "applied-spec"
-];
-var OUTPUTS_BY_PHASE = {
-  open: [
-    { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
-    { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
-    { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
-  ],
-  explore: [
-    { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
-    { kind: "adr", producerCandidates: ["tenon-explore", "tenon:tenon-explore", "brainstorming", "superpowers:brainstorming"] }
-  ],
-  spec: [
-    { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
-    { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
-    { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
-  ],
-  build: [],
-  verify: [
-    {
-      kind: "verification-report",
-      producerCandidates: ["verification-before-completion", "superpowers:verification-before-completion", "tenon-verify", "tenon:tenon-verify"]
-    }
-  ],
-  ship: [
-    { kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }
-  ],
-  archive: []
-};
-var SPEC_ADR_LIVING_DOCUMENT = {
-  kind: "adr",
-  producerCandidates: ["tenon-spec", "tenon:tenon-spec"]
-};
-var MUTABLE_RECORDS_BY_PHASE = {
-  open: [],
-  explore: [
-    // Open creates intentionally small OpenSpec scaffolds. Explore owns consolidating the
-    // validated problem framing and initial design hypothesis into those living documents; the
-    // resulting digest must therefore be attributed to the phase driver, not left under the
-    // now-stale open-phase openspec-propose receipt.
-    { kind: "proposal", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
-    { kind: "openspec-design", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
-    { kind: "tasks", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] }
-  ],
-  spec: [
-    { kind: "proposal", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
-    { kind: "openspec-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
-    { kind: "tasks", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
-    { kind: "superpower-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
-    SPEC_ADR_LIVING_DOCUMENT
-  ],
-  build: [
-    { kind: "tasks", producerCandidates: ["tenon-build", "tenon:tenon-build"] }
-  ],
-  verify: [
-    { kind: "tasks", producerCandidates: ["tenon-verify", "tenon:tenon-verify"] }
-  ],
-  ship: [
-    { kind: "tasks", producerCandidates: ["tenon-ship", "tenon:tenon-ship"] }
-  ],
-  archive: [
-    { kind: "tasks", producerCandidates: ["tenon-archive", "tenon:tenon-archive"] }
-  ]
-};
-var READS_BY_PHASE = {
-  open: [],
-  explore: ["proposal", "openspec-design", "tasks"],
-  spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
-  build: [
-    "proposal",
-    "openspec-design",
-    "tasks",
-    "superpower-design",
-    "adr",
-    "delta-spec",
-    "superpower-plan",
-    "plan"
-  ],
-  verify: [
-    "proposal",
-    "openspec-design",
-    "tasks",
-    "superpower-design",
-    "adr",
-    "delta-spec",
-    "superpower-plan",
-    "plan"
-  ],
-  ship: [
-    "proposal",
-    "openspec-design",
-    "tasks",
-    "superpower-design",
-    "adr",
-    "delta-spec",
-    "superpower-plan",
-    "plan",
-    "verification-report"
-  ],
-  archive: [
-    "proposal",
-    "openspec-design",
-    "tasks",
-    "superpower-design",
-    "adr",
-    "delta-spec",
-    "superpower-plan",
-    "plan",
-    "verification-report",
-    "applied-spec"
-  ]
-};
-var LEGACY_DOCUMENT_GOVERNANCE_POLICY = {
-  id: "openspec-v1",
-  steps: DOCUMENT_CONTRACT_PHASES,
-  outputsByStep: OUTPUTS_BY_PHASE,
-  mutableByStep: MUTABLE_RECORDS_BY_PHASE,
-  readsByStep: READS_BY_PHASE
-};
-function includes(values, value) {
-  return values.includes(value);
-}
-function isDocumentContractPhase(value) {
-  return includes(DOCUMENT_CONTRACT_PHASES, value);
-}
-function isDocumentKind(value) {
-  return includes(DOCUMENT_KINDS, value);
-}
-function documentGovernancePolicy(workflowName, workflow) {
-  if (workflowName === "default" || workflow?.openspecContract === "required") {
-    return LEGACY_DOCUMENT_GOVERNANCE_POLICY;
-  }
-  const contract = workflow?.documentContract;
-  if (!contract)
-    return void 0;
-  const outputsByStep = Object.fromEntries(workflow.steps.map((step) => [step.id, []]));
-  for (const slot of contract.slots) {
-    if (!isDocumentKind(slot.kind))
-      continue;
-    outputsByStep[slot.ownerStep]?.push({ kind: slot.kind, producerCandidates: slot.producers });
-  }
-  const readsByStep = Object.fromEntries(workflow.steps.map((step) => [step.id, []]));
-  for (const read of contract.reads) {
-    readsByStep[read.step] = read.kinds.filter(isDocumentKind);
-  }
-  return {
-    id: "document-v1",
-    steps: workflow.steps.map((step) => step.id),
-    outputsByStep,
-    mutableByStep: Object.fromEntries(workflow.steps.map((step) => [step.id, []])),
-    readsByStep
-  };
-}
-function isDocumentPolicyStep(policy, value) {
-  return policy.steps.includes(value);
-}
-function outputsRequiredForPolicyStep(policy, step) {
-  return policy.outputsByStep[step] ?? [];
-}
-function readsRequiredForPolicyStep(policy, step) {
-  return policy.readsByStep[step] ?? [];
-}
-function recordsRequiredForPolicyStep(policy, step) {
-  const required2 = [];
-  for (const candidate of policy.steps) {
-    required2.push(...outputsRequiredForPolicyStep(policy, candidate));
-    if (candidate === step)
-      break;
-  }
-  return required2;
-}
-function documentOwnerPolicyStep(policy, kind) {
-  return policy.steps.find((step) => outputsRequiredForPolicyStep(policy, step).some((requirement) => requirement.kind === kind));
-}
-function recordRequirementForPolicy(policy, kind, step) {
-  const frozenRequirement = [
-    ...outputsRequiredForPolicyStep(policy, step),
-    ...policy.mutableByStep[step] ?? []
-  ].find((requirement) => requirement.kind === kind);
-  if (frozenRequirement)
-    return frozenRequirement;
-  return policy.id === "openspec-v1" && step === "spec" && kind === "adr" ? SPEC_ADR_LIVING_DOCUMENT : void 0;
-}
-function isDocumentRecordAllowedInPolicyStep(policy, kind, step) {
-  return recordRequirementForPolicy(policy, kind, step) !== void 0;
-}
-function isDocumentProducerAllowedInPolicyStep(policy, kind, step, producer) {
-  const requirement = recordRequirementForPolicy(policy, kind, step);
-  if (!requirement)
-    return false;
-  const supplied = new Set(aliasesForSkill2(producer));
-  return requirement.producerCandidates.some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
-}
-function isRecordedDocumentProducerAllowedThroughPolicyStep(policy, kind, currentStep, producer) {
-  for (const step of policy.steps) {
-    if (isDocumentProducerAllowedInPolicyStep(policy, kind, step, producer))
-      return true;
-    if (step === currentStep)
-      break;
-  }
-  return false;
-}
-function recordProducerCandidatesForPolicyStep(policy, kind, step) {
-  return recordRequirementForPolicy(policy, kind, step)?.producerCandidates ?? [];
-}
-function readsRequiredForPhase(phase) {
-  return READS_BY_PHASE[phase];
-}
-function recordsRequiredForPhase(phase) {
-  const required2 = [];
-  for (const candidate of DOCUMENT_CONTRACT_PHASES) {
-    required2.push(...OUTPUTS_BY_PHASE[candidate]);
-    if (candidate === phase)
-      break;
-  }
-  return required2;
-}
-function outputRequirementFor(kind) {
-  for (const phase of DOCUMENT_CONTRACT_PHASES) {
-    const requirement = OUTPUTS_BY_PHASE[phase].find((candidate) => candidate.kind === kind);
-    if (requirement)
-      return requirement;
-  }
-  return void 0;
-}
-function recordRequirementFor(kind, phase) {
-  return [...OUTPUTS_BY_PHASE[phase], ...MUTABLE_RECORDS_BY_PHASE[phase]].find((candidate) => candidate.kind === kind);
-}
-function aliasesForSkill2(id) {
-  const aliases = /* @__PURE__ */ new Set([id]);
-  if (id.startsWith("tenon:"))
-    aliases.add(id.slice("tenon:".length));
-  if (id.startsWith("superpowers:"))
-    aliases.add(id.slice("superpowers:".length));
-  if (id === "opsx:propose")
-    aliases.add("openspec-propose");
-  if (id === "openspec-propose")
-    aliases.add("opsx:propose");
-  if (id === "opsx:apply")
-    aliases.add("openspec-apply-change");
-  if (id === "openspec-apply-change")
-    aliases.add("opsx:apply");
-  return [...aliases];
-}
-function isAcceptedDocumentProducer(kind, producer) {
-  const supplied = new Set(aliasesForSkill2(producer));
-  return producerCandidatesFor(kind).some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
-}
-function producerCandidatesFor(kind) {
-  const candidates = /* @__PURE__ */ new Set();
-  const origin = outputRequirementFor(kind);
-  for (const candidate of origin?.producerCandidates ?? [])
-    candidates.add(candidate);
-  for (const phase of DOCUMENT_CONTRACT_PHASES) {
-    for (const requirement of MUTABLE_RECORDS_BY_PHASE[phase]) {
-      if (requirement.kind !== kind)
-        continue;
-      for (const candidate of requirement.producerCandidates)
-        candidates.add(candidate);
-    }
-  }
-  return [...candidates];
-}
-function documentOwnerPhase(kind) {
-  return DOCUMENT_CONTRACT_PHASES.find((phase) => OUTPUTS_BY_PHASE[phase].some((requirement) => requirement.kind === kind));
-}
-function isDocumentRecordAllowedInPhase(kind, phase) {
-  return recordRequirementFor(kind, phase) !== void 0;
-}
-function isDocumentProducerAllowedInPhase(kind, phase, producer) {
-  const requirement = recordRequirementFor(kind, phase);
-  if (!requirement)
-    return false;
-  const supplied = new Set(aliasesForSkill2(producer));
-  return requirement.producerCandidates.some((candidate) => aliasesForSkill2(candidate).some((alias) => supplied.has(alias)));
-}
-function recordProducerCandidatesFor(kind, phase) {
-  return recordRequirementFor(kind, phase)?.producerCandidates ?? [];
-}
-function shouldEnforceDocumentPolicyOnTransition(policy, from, to) {
-  const fromIndex = policy.steps.indexOf(from);
-  const toIndex = policy.steps.indexOf(to);
-  return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
-}
-
 // packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
 var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
 var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
@@ -7233,7 +8101,7 @@ function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
 
 // packages/kernel/dist/workflow/loadWorkflow.js
 import { existsSync, readFileSync as readFileSync2 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join11 } from "node:path";
 
 // packages/kernel/dist/workflow/parse-document-contract.js
 function indentOf(line) {
@@ -8015,7 +8883,7 @@ ${errors2.map((e) => `  - ${e}`).join("\n")}`);
     }
     return builtin;
   }
-  const p = join7(repoRoot, ".pipeline", "workflows", `${name2}.yaml`);
+  const p = join11(repoRoot, ".pipeline", "workflows", `${name2}.yaml`);
   if (!existsSync(p))
     return null;
   const wf = parseWorkflow(readFileSync2(p, "utf8"));
@@ -8268,14 +9136,14 @@ async function detectBaseBranch(repoRoot) {
     let gitDir = gitPath;
     const entry = await stat2(gitPath);
     if (!entry.isDirectory()) {
-      const pointer = await readFile6(gitPath, "utf8");
+      const pointer = await readFile8(gitPath, "utf8");
       const match = /^gitdir:\s*(.+)$/m.exec(pointer);
       const target = match?.[1]?.trim();
       if (!target)
         return "main";
       gitDir = path2.resolve(repoRoot, target);
     }
-    const head = await readFile6(path2.join(gitDir, "HEAD"), "utf8");
+    const head = await readFile8(path2.join(gitDir, "HEAD"), "utf8");
     const branch = /^ref: refs\/heads\/(\S+)$/.exec(head.trim())?.[1];
     if (branch)
       return branch;
@@ -8376,10 +9244,10 @@ function initialFields(opts, timestamp, baseBranch, createdBy) {
 }
 
 // packages/kernel/dist/state/document-locale.js
-import { lstat as lstat4, readFile as readFile7 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { lstat as lstat7, readFile as readFile9 } from "node:fs/promises";
+import { join as join12 } from "node:path";
 var DOCUMENT_LOCALE_FILE = ".pipeline-document-locale.json";
-function errorCode2(error2) {
+function errorCode3(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
     return void 0;
   const value = Reflect.get(error2, "code");
@@ -8402,15 +9270,15 @@ function parseDocumentLocalePin(raw) {
   return { version: 1, locale: record3.locale };
 }
 async function readDocumentLocalePin(changeDir2) {
-  const target = join8(changeDir2, DOCUMENT_LOCALE_FILE);
+  const target = join12(changeDir2, DOCUMENT_LOCALE_FILE);
   try {
-    const info = await lstat4(target);
+    const info = await lstat7(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`document locale pin \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseDocumentLocalePin(await readFile7(target, "utf8"));
+    return parseDocumentLocalePin(await readFile9(target, "utf8"));
   } catch (error2) {
-    if (errorCode2(error2) === "ENOENT")
+    if (errorCode3(error2) === "ENOENT")
       return void 0;
     throw error2;
   }
@@ -8424,13 +9292,13 @@ async function ensureDocumentLocalePin(changeDir2, locale) {
     return existing;
   }
   const pin = { version: 1, locale };
-  const target = join8(changeDir2, DOCUMENT_LOCALE_FILE);
+  const target = join12(changeDir2, DOCUMENT_LOCALE_FILE);
   try {
     await atomicLinkPublish(changeDir2, ".pipeline-document-locale.tmp", target, `${JSON.stringify(pin)}
 `);
     return pin;
   } catch (error2) {
-    if (errorCode2(error2) !== "EEXIST")
+    if (errorCode3(error2) !== "EEXIST")
       throw error2;
     const raced = await readDocumentLocalePin(changeDir2);
     if (raced === void 0)
@@ -8443,10 +9311,10 @@ async function ensureDocumentLocalePin(changeDir2, locale) {
 }
 
 // packages/kernel/dist/state/workflow-plan-snapshot.js
-import { lstat as lstat5, readFile as readFile8 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { lstat as lstat8, readFile as readFile10 } from "node:fs/promises";
+import { join as join13 } from "node:path";
 var WORKFLOW_PLAN_SNAPSHOT_FILE = ".pipeline-workflow-plan.json";
-function errorCode3(error2) {
+function errorCode4(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
     return void 0;
   const value = Reflect.get(error2, "code");
@@ -8498,15 +9366,15 @@ function workflowPlanSnapshotContent(runId, snapshot) {
 `;
 }
 async function readWorkflowPlanSnapshot(changeDir2) {
-  const target = join9(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
+  const target = join13(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
-    const info = await lstat5(target);
+    const info = await lstat8(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow plan snapshot \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseWorkflowPlanSnapshot(await readFile8(target, "utf8"));
+    return parseWorkflowPlanSnapshot(await readFile10(target, "utf8"));
   } catch (error2) {
-    if (errorCode3(error2) === "ENOENT")
+    if (errorCode4(error2) === "ENOENT")
       return void 0;
     throw error2;
   }
@@ -8521,11 +9389,11 @@ async function ensureWorkflowPlanSnapshot(changeDir2, runId, snapshot) {
     }
     return;
   }
-  const target = join9(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
+  const target = join13(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
     await atomicLinkPublish(changeDir2, ".pipeline-workflow-plan.tmp", target, requested);
   } catch (error2) {
-    if (errorCode3(error2) !== "EEXIST")
+    if (errorCode4(error2) !== "EEXIST")
       throw error2;
     const raced = await readWorkflowPlanSnapshot(changeDir2);
     if (raced === void 0 || `${JSON.stringify(raced)}
@@ -8548,40 +9416,40 @@ function attachWorkflowPlanSnapshot(metadata, envelope) {
 
 // packages/kernel/dist/state/initial-change-publish.js
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { link as link2, lstat as lstat7, mkdir as mkdir6, readdir, rm as rm2, rmdir, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
+import { link as link2, lstat as lstat10, mkdir as mkdir7, readdir, rm as rm2, rmdir, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
 import path3 from "node:path";
 
 // packages/kernel/dist/state/trusted-project-path.js
-import { lstat as lstat6, mkdir as mkdir5, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat as lstat9, mkdir as mkdir6, realpath as realpath3 } from "node:fs/promises";
+import { isAbsolute as isAbsolute3, relative as relative3, resolve as resolve2, sep as sep3 } from "node:path";
 function escaped(root, target) {
-  const rel = relative(root, target);
-  return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  const rel = relative3(root, target);
+  return rel === ".." || rel.startsWith(`..${sep3}`) || isAbsolute3(rel);
 }
 async function ordinaryDirectory(target) {
-  const info = await lstat6(target);
+  const info = await lstat9(target);
   if (!info.isDirectory() || info.isSymbolicLink()) {
     throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${target}`);
   }
 }
 async function ensureTrustedProjectDirectory(repoRoot, targetDirectory) {
-  const root = resolve(repoRoot);
-  const target = resolve(targetDirectory);
+  const root = resolve2(repoRoot);
+  const target = resolve2(targetDirectory);
   if (escaped(root, target)) {
     throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839: ${targetDirectory}`);
   }
   await ordinaryDirectory(root);
   let cursor = root;
-  const segments = relative(root, target).split(sep).filter(Boolean);
+  const segments = relative3(root, target).split(sep3).filter(Boolean);
   for (const segment of segments) {
-    cursor = resolve(cursor, segment);
+    cursor = resolve2(cursor, segment);
     try {
       await ordinaryDirectory(cursor);
     } catch (error2) {
       if (error2.code !== "ENOENT")
         throw error2;
       try {
-        await mkdir5(cursor);
+        await mkdir6(cursor);
       } catch (mkdirError) {
         if (mkdirError.code !== "EEXIST")
           throw mkdirError;
@@ -8589,7 +9457,7 @@ async function ensureTrustedProjectDirectory(repoRoot, targetDirectory) {
       await ordinaryDirectory(cursor);
     }
   }
-  const [rootReal, targetReal] = await Promise.all([realpath(root), realpath(target)]);
+  const [rootReal, targetReal] = await Promise.all([realpath3(root), realpath3(target)]);
   if (escaped(rootReal, targetReal)) {
     throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u771F\u5B9E\u4F4D\u7F6E\u8D8A\u8FC7\u9879\u76EE\u6839: ${targetDirectory}`);
   }
@@ -8600,7 +9468,7 @@ async function ensureTrustedProjectDirectory(repoRoot, targetDirectory) {
 var CHANGE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 var INITIAL_LOCK_STALE_MS = 12e4;
 var INITIAL_LOCK_WAIT_MS = 1e4;
-function errorCode4(error2) {
+function errorCode5(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
     return void 0;
   const code = Reflect.get(error2, "code");
@@ -8618,10 +9486,10 @@ function contained(root, target) {
 }
 async function assertMissing(target) {
   try {
-    await lstat7(target);
+    await lstat10(target);
     throw alreadyInitialized(target);
   } catch (error2) {
-    if (errorCode4(error2) !== "ENOENT")
+    if (errorCode5(error2) !== "ENOENT")
       throw error2;
   }
 }
@@ -8633,7 +9501,7 @@ function publicationOrder(name2) {
   return 0;
 }
 async function rememberPublishedEntry(pathname, kind, published) {
-  const identity = await lstat7(pathname);
+  const identity = await lstat10(pathname);
   published.push({ pathname, dev: identity.dev, ino: identity.ino, kind });
 }
 async function publishTreeNoReplace(sourceDir, targetDir, published) {
@@ -8643,7 +9511,7 @@ async function publishTreeNoReplace(sourceDir, targetDir, published) {
     const source = path3.join(sourceDir, entry.name);
     const target = path3.join(targetDir, entry.name);
     if (entry.isDirectory()) {
-      await mkdir6(target);
+      await mkdir7(target);
       await rememberPublishedEntry(target, "directory", published);
       await publishTreeNoReplace(source, target, published);
       await rmdir(source);
@@ -8660,7 +9528,7 @@ async function publishTreeNoReplace(sourceDir, targetDir, published) {
 async function rollbackPublishedEntries(published) {
   for (const entry of [...published].reverse()) {
     try {
-      const current = await lstat7(entry.pathname);
+      const current = await lstat10(entry.pathname);
       if (current.dev !== entry.dev || current.ino !== entry.ino)
         continue;
       if (entry.kind === "directory")
@@ -8681,13 +9549,13 @@ async function acquireInitialNameLock(changesDir, name2) {
   const deadline = Date.now() + INITIAL_LOCK_WAIT_MS;
   while (true) {
     try {
-      await mkdir6(lockDir);
+      await mkdir7(lockDir);
       return lockDir;
     } catch (error2) {
-      if (errorCode4(error2) !== "EEXIST")
+      if (errorCode5(error2) !== "EEXIST")
         throw error2;
       try {
-        const info = await lstat7(lockDir);
+        const info = await lstat10(lockDir);
         if (!info.isDirectory() || info.isSymbolicLink()) {
           throw alreadyInitialized(lockDir);
         }
@@ -8696,9 +9564,9 @@ async function acquireInitialNameLock(changesDir, name2) {
           continue;
         }
       } catch (inspectionError) {
-        if (errorCode4(inspectionError) === "ENOENT")
+        if (errorCode5(inspectionError) === "ENOENT")
           continue;
-        if (errorCode4(inspectionError) !== "ENOTEMPTY")
+        if (errorCode5(inspectionError) !== "ENOTEMPTY")
           throw inspectionError;
       }
       if (Date.now() >= deadline) {
@@ -8723,7 +9591,7 @@ async function prepareInitialChangePublication(inputRoot, name2) {
   try {
     await assertMissing(finalChangeDir);
     const candidateChangeDir = path3.join(changesDir, `.pipeline-init-${name2}-${process.pid}-${randomUUID3()}`);
-    await mkdir6(candidateChangeDir);
+    await mkdir7(candidateChangeDir);
     return { repoRoot, changesDir, finalChangeDir, candidateChangeDir, lockDir };
   } catch (error2) {
     await rmdir(lockDir).catch(() => {
@@ -8739,7 +9607,7 @@ async function writeInitialChangeFiles(changeDir2, files) {
       throw new Error(`init: initial file \u8DEF\u5F84\u975E\u6CD5\u6216\u91CD\u590D: ${file.relativePath}`);
     }
     observed.add(target);
-    await mkdir6(path3.dirname(target), { recursive: true });
+    await mkdir7(path3.dirname(target), { recursive: true });
     await writeFile3(target, file.content, { encoding: "utf8", flag: "wx" });
   }
 }
@@ -8748,13 +9616,13 @@ async function publishInitialChange(publication) {
   await ensureTrustedProjectDirectory(repoRoot, changesDir);
   const published = [];
   try {
-    await mkdir6(finalChangeDir);
+    await mkdir7(finalChangeDir);
     await rememberPublishedEntry(finalChangeDir, "directory", published);
     await publishTreeNoReplace(candidateChangeDir, finalChangeDir, published);
     await rmdir(candidateChangeDir);
   } catch (error2) {
     await rollbackPublishedEntries(published);
-    if (!["ENOTDIR", "EEXIST", "ENOTEMPTY"].includes(errorCode4(error2) ?? ""))
+    if (!["ENOTDIR", "EEXIST", "ENOTEMPTY"].includes(errorCode5(error2) ?? ""))
       throw error2;
     throw alreadyInitialized(finalChangeDir);
   }
@@ -8826,7 +9694,7 @@ async function inspectProjectionAgainst(changeDir2, current) {
   const identity = { revision: current.revision, revisionId: current.revisionId };
   let raw;
   try {
-    raw = await readFile9(stateFilePath(changeDir2), "utf8");
+    raw = await readFile11(stateFilePath(changeDir2), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT")
       return { status: "missing", ...identity };
@@ -8887,7 +9755,7 @@ var FsStateStore = class {
         ...metadata === void 0 ? {} : { runMetadata: metadata }
       };
     }
-    return parsePipeline(await readFile9(stateFilePath(changeDir2), "utf8"));
+    return parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
   }
   async write(changeDir2, state, mutation = { kind: "replace" }) {
     return withLock(changeDir2, () => this.writeUnderLock(changeDir2, state, mutation));
@@ -8903,7 +9771,7 @@ var FsStateStore = class {
     serializePipeline(nextState);
     let current = await readCurrentRunRevision(changeDir2);
     if (current === void 0) {
-      const legacy = parsePipeline(await readFile9(stateFilePath(changeDir2), "utf8"));
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
       current = await publishInitialRunRevision(changeDir2, legacy, defaultStateClock(), "migration");
     } else {
       const status = await inspectProjectionAgainst(changeDir2, current);
@@ -8994,7 +9862,7 @@ var FsStateStore = class {
       if (current === void 0) {
         throw new StateProjectionDriftError("import-legacy: canonical current \u4E0D\u5B58\u5728\uFF1B\u65E0\u9700\u89E3\u51B3\u53CC\u4E3B drift");
       }
-      const legacy = parsePipeline(await readFile9(stateFilePath(changeDir2), "utf8"));
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
       const imported = {
         fields: legacy.fields,
         ...current.state.runMetadata === void 0 ? {} : { runMetadata: structuredClone(current.state.runMetadata) },
@@ -9613,641 +10481,6 @@ function defaultOpenSpecScaffoldFiles(change, locale = "zh-CN", workflowSteps, w
   ];
 }
 
-// packages/kernel/dist/state/document-ledger.js
-import { readFile as readFile11 } from "node:fs/promises";
-import { join as join12 } from "node:path";
-
-// packages/kernel/dist/state/document-path.js
-import { createHash as createHash6 } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat as lstat8, open, realpath as realpath2 } from "node:fs/promises";
-import { basename, dirname, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
-var DocumentLedgerError = class extends Error {
-  constructor(message2) {
-    super(message2);
-    this.name = "DocumentLedgerError";
-  }
-};
-var MAX_DOCUMENT_SOURCE_BYTES = 2 * 1024 * 1024;
-function decodeUtf8Text(content, label) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(content);
-  } catch {
-    throw new DocumentLedgerError(`${label} \u4E0D\u662F\u6709\u6548 UTF-8 \u6587\u672C`);
-  }
-}
-async function readBoundedFileHandle(handle, maxBytes) {
-  const chunks = [];
-  let total = 0;
-  while (total <= maxBytes) {
-    const remaining = maxBytes + 1 - total;
-    const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
-    const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, null);
-    if (bytesRead === 0)
-      break;
-    chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
-    total += bytesRead;
-  }
-  return Buffer.concat(chunks, total);
-}
-async function readBoundedRegularFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
-  const parent = dirname(path9);
-  const parentBefore = await lstat8(parent, { bigint: true });
-  if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
-    throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
-  }
-  const parentRealBefore = await realpath2(parent);
-  const handle = await open(path9, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile())
-      throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path9}`);
-    const assertStable = async () => {
-      const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat8(parent, { bigint: true }),
-        realpath2(parent),
-        lstat8(path9, { bigint: true })
-      ]);
-      if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
-        throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
-      }
-    };
-    await assertStable();
-    if (opened.size > maxBytes)
-      throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
-    const content = await readSource(handle, maxBytes);
-    if (content.byteLength > maxBytes) {
-      throw new DocumentLedgerError(`${label} \u8D85\u8FC7 ${maxBytes} bytes \u4E0A\u9650`);
-    }
-    const after = await handle.stat({ bigint: true });
-    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
-      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
-    }
-    await assertStable();
-    return content;
-  } catch (error2) {
-    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
-      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path9}`);
-    }
-    throw error2;
-  } finally {
-    await handle.close();
-  }
-}
-async function readOptionalBoundedRegularTextFile(path9, maxBytes, label, readSource = readBoundedFileHandle) {
-  try {
-    const content = await readBoundedRegularFile(path9, maxBytes, label, readSource);
-    return decodeUtf8Text(content, label);
-  } catch (error2) {
-    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
-      return void 0;
-    throw error2;
-  }
-}
-function normalizeRelativePath(path9) {
-  return path9.split(sep2).join("/");
-}
-function inside(base, candidate) {
-  const pathFromBase = relative2(base, candidate);
-  return pathFromBase !== "" && pathFromBase !== ".." && !pathFromBase.startsWith(`..${sep2}`) && !isAbsolute2(pathFromBase);
-}
-function isSafeProjectRelativePath(value) {
-  if (value.startsWith("/") || value.includes("\\") || value.includes("\0") || /^[A-Za-z]:/.test(value))
-    return false;
-  return value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
-}
-function deltaSpecSlot(path9, changeDir2) {
-  const parts = path9.split("/");
-  const changeName = basename(resolve2(changeDir2));
-  if (parts.length !== 6 || parts[0] !== "openspec" || parts[1] !== "changes" || parts[2] !== changeName || parts[3] !== "specs" || !parts[4] || parts[5] !== "spec.md") {
-    return void 0;
-  }
-  return `delta-spec:${parts[4]}`;
-}
-function documentSlot(kind, path9, changeDir2) {
-  if (kind !== "delta-spec")
-    return kind;
-  const slot = deltaSpecSlot(path9, changeDir2);
-  if (!slot) {
-    throw new DocumentLedgerError(`delta-spec \u5FC5\u987B\u4F4D\u4E8E\u5F53\u524D Change \u7684 canonical capability \u8DEF\u5F84: openspec/changes/${basename(resolve2(changeDir2))}/specs/<capability>/spec.md`);
-  }
-  return slot;
-}
-async function resolveDocument(repoRoot, path9, readSource = readBoundedFileHandle) {
-  if (!path9 || isAbsolute2(path9))
-    throw new DocumentLedgerError(`document path \u5FC5\u987B\u662F\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84: ${path9 || "(empty)"}`);
-  const lexicalRoot = resolve2(repoRoot);
-  const lexicalTarget = resolve2(repoRoot, path9);
-  if (!inside(lexicalRoot, lexicalTarget))
-    throw new DocumentLedgerError(`document path \u8D8A\u51FA\u9879\u76EE\u6839: ${path9}`);
-  const relativePath = normalizeRelativePath(relative2(lexicalRoot, lexicalTarget));
-  if (!relativePath.startsWith("openspec/") && !relativePath.startsWith("docs/")) {
-    throw new DocumentLedgerError(`document path \u53EA\u80FD\u4F4D\u4E8E openspec/ \u6216 docs/: ${relativePath}`);
-  }
-  const info = await lstat8(lexicalTarget);
-  if (!info.isFile() || info.isSymbolicLink()) {
-    throw new DocumentLedgerError(`document \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${relativePath}`);
-  }
-  if (info.size > MAX_DOCUMENT_SOURCE_BYTES) {
-    throw new DocumentLedgerError(`document \u8D85\u8FC7 ${MAX_DOCUMENT_SOURCE_BYTES} bytes \u4E0A\u9650: ${relativePath}`);
-  }
-  const [realRoot, realTarget, content] = await Promise.all([
-    realpath2(repoRoot),
-    realpath2(lexicalTarget),
-    readBoundedRegularFile(lexicalTarget, MAX_DOCUMENT_SOURCE_BYTES, `document ${relativePath}`, readSource)
-  ]);
-  if (!inside(realRoot, realTarget))
-    throw new DocumentLedgerError(`document realpath \u8D8A\u51FA\u9879\u76EE\u6839: ${relativePath}`);
-  const realRelativePath = normalizeRelativePath(relative2(realRoot, realTarget));
-  if (realRelativePath !== relativePath) {
-    throw new DocumentLedgerError(`document \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u767B\u8BB0: ${relativePath} -> ${realRelativePath}`);
-  }
-  if (content.byteLength === 0)
-    throw new DocumentLedgerError(`document \u4E0D\u5F97\u4E3A\u7A7A: ${relativePath}`);
-  return { relativePath, digest: createHash6("sha256").update(content).digest("hex") };
-}
-
-// packages/kernel/dist/state/history.js
-import { appendFile } from "node:fs/promises";
-import { join as join10 } from "node:path";
-var HISTORY_FILE = ".pipeline-history.jsonl";
-function createHistoryWriter() {
-  return {
-    async append(changeDir2, entry) {
-      await appendFile(join10(changeDir2, HISTORY_FILE), `${JSON.stringify(entry)}
-`, "utf8");
-    }
-  };
-}
-function transitionRecordToHistoryEntry(record3) {
-  return {
-    ts: record3.observedAt,
-    kind: "transition",
-    from: record3.from,
-    to: record3.to,
-    raw: record3.event,
-    transitionRecordId: record3.id
-  };
-}
-
-// packages/kernel/dist/state/run-revision-head-reader.js
-import { lstat as lstat9, readFile as readFile10 } from "node:fs/promises";
-import { join as join11 } from "node:path";
-var MAX_LEGACY_REVISIONS = 64;
-var MAX_SYNC_CANONICAL_BYTES = 8 * 1024 * 1024;
-function previousRevisionIdFor2(revision) {
-  if (revision.previousRevisionId === void 0) {
-    throw new RunStateCorruptError("\u975E\u521D\u59CB revision \u7F3A previousRevisionId");
-  }
-  return revision.previousRevisionId;
-}
-async function readRegularTextIfExists2(pathname) {
-  try {
-    const entry = await lstat9(pathname);
-    if (entry.isSymbolicLink() || !entry.isFile()) {
-      throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
-    }
-    return await readFile10(pathname, "utf8");
-  } catch (error2) {
-    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
-      return void 0;
-    }
-    throw error2;
-  }
-}
-function transitionRelativePath(revision) {
-  const metadata = revision.state.runMetadata;
-  if (revision.mutation.kind !== "transition" || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1) {
-    throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
-  }
-  return join11(TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
-}
-function validateCommittingRecord(cursor, previous, raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error2) {
-    throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error2)}`);
-  }
-  return assertTransitionRevisionLink(cursor, parsed, raw, previous);
-}
-async function readValidatedTransitionHead(changeDir2) {
-  const current = await readCurrentRunRevision(changeDir2);
-  const metadata = current?.state.runMetadata;
-  if (current === void 0 || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1)
-    return void 0;
-  const anchored = await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists2(join11(changeDir2, relativePath)), changeDir2);
-  if (anchored !== void 0)
-    return { current, record: anchored };
-  let cursor = current;
-  for (let traversed = 0; traversed < MAX_LEGACY_REVISIONS; traversed++) {
-    if (cursor.revision === 0)
-      break;
-    const previousId = previousRevisionIdFor2(cursor);
-    const previous = await readImmutableRunRevision(changeDir2, cursor.revision - 1, previousId);
-    const bound = assertDirectPredecessor(cursor, previous);
-    if (cursor.mutation.kind === "transition" && cursor.mutation.transitionRecordId === metadata.transitionHead) {
-      const raw = await readRegularTextIfExists2(join11(changeDir2, transitionRelativePath(cursor)));
-      if (raw === void 0)
-        throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
-      const record3 = validateCommittingRecord(cursor, bound, raw);
-      if (record3.sequence !== metadata.transitionSequence || record3.runId !== metadata.runId) {
-        throw new RunStateCorruptError("canonical transition head \u4E0E\u63D0\u4EA4 revision \u4E0D\u4E00\u81F4");
-      }
-      return { current, record: record3 };
-    }
-    cursor = bound;
-  }
-  throw new RunStateCorruptError("legacy canonical transition head \u8D85\u8FC7\u517C\u5BB9\u6821\u9A8C\u4E0A\u9650\u6216\u7F3A\u63D0\u4EA4 revision");
-}
-
-// packages/kernel/dist/state/document-record-policy.js
-function skillsEquivalent(left, right) {
-  const aliases = (id) => {
-    const values = /* @__PURE__ */ new Set([id]);
-    if (id.startsWith("tenon:"))
-      values.add(id.slice("tenon:".length));
-    if (id.startsWith("superpowers:"))
-      values.add(id.slice("superpowers:".length));
-    if (id === "opsx:propose")
-      values.add("openspec-propose");
-    if (id === "openspec-propose")
-      values.add("opsx:propose");
-    if (id === "opsx:apply")
-      values.add("openspec-apply-change");
-    if (id === "openspec-apply-change")
-      values.add("opsx:apply");
-    return [...values];
-  };
-  const leftAliases = new Set(aliases(left));
-  return aliases(right).some((candidate) => leftAliases.has(candidate));
-}
-async function currentSpecVisitEnteredViaRequirementsChanged(changeDir2) {
-  const validated = await readValidatedTransitionHead(changeDir2);
-  if (validated === void 0)
-    return false;
-  const current = validated.current;
-  const metadata = current?.state.runMetadata;
-  if (current.state.fields.phase !== "spec" || metadata === void 0 || metadata.transitionSequence < 1 || metadata.transitionHead === void 0) {
-    return false;
-  }
-  const record3 = validated.record;
-  return record3.id === metadata.transitionHead && record3.sequence === metadata.transitionSequence && record3.runId === metadata.runId && record3.event === "requirements-changed" && (record3.from === "build" || record3.from === "verify") && record3.to === "spec";
-}
-function requiresRequirementsChangedForSpecAdr(input) {
-  return input.policy?.id !== "document-v1" && input.phase === "spec" && input.kind === "adr";
-}
-
-// packages/kernel/dist/state/document-ledger.js
-var DOCUMENT_LEDGER_FILE = ".pipeline-documents.json";
-var MAX_DOCUMENT_LEDGER_BYTES = 1024 * 1024;
-var MAX_DOCUMENT_LEDGER_RECORDS = 256;
-function errorCode5(error2) {
-  if (typeof error2 !== "object" || error2 === null || !("code" in error2))
-    return void 0;
-  const code = Reflect.get(error2, "code");
-  return typeof code === "string" ? code : void 0;
-}
-function isObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function object(value) {
-  return isObject(value) ? value : void 0;
-}
-function string(value) {
-  return typeof value === "string" ? value : void 0;
-}
-function validDigest(value) {
-  return /^[a-f0-9]{64}$/.test(value);
-}
-function parseReceipt(value, recordIndex, receiptIndex) {
-  const item2 = object(value);
-  if (!item2)
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
-  const phase = string(item2.phase);
-  const digest3 = string(item2.sha256);
-  const readAt = string(item2.readAt);
-  const visitId = item2.visitId === void 0 ? void 0 : string(item2.visitId);
-  if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
-  }
-  if (!digest3 || !validDigest(digest3)) {
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
-  }
-  if (!readAt)
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
-  if (item2.visitId !== void 0 && !visitId)
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
-  return { phase, sha256: digest3, readAt, ...visitId === void 0 ? {} : { visitId } };
-}
-function receiptKey(receipt) {
-  return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
-}
-function parseRecord2(value, index) {
-  const item2 = object(value);
-  if (!item2)
-    throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
-  const kind = string(item2.kind);
-  const path9 = string(item2.path);
-  const digest3 = string(item2.sha256);
-  const producer = string(item2.producer);
-  const recordedAt = string(item2.recordedAt);
-  if (!kind || !isDocumentKind(kind))
-    throw new DocumentLedgerError(`document ledger records[${index}].kind \u975E\u6CD5`);
-  if (!path9 || !isSafeProjectRelativePath(path9)) {
-    throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
-  }
-  if (!digest3 || !validDigest(digest3))
-    throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
-  if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
-    throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
-  }
-  if (!recordedAt)
-    throw new DocumentLedgerError(`document ledger records[${index}].recordedAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
-  if (!Array.isArray(item2.reads))
-    throw new DocumentLedgerError(`document ledger records[${index}].reads \u5FC5\u987B\u662F\u6570\u7EC4`);
-  const reads = item2.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex));
-  const readVisits = /* @__PURE__ */ new Set();
-  for (const receipt of reads) {
-    const key = receiptKey(receipt);
-    if (readVisits.has(key))
-      throw new DocumentLedgerError(`document ledger records[${index}] \u5BF9 phase '${receipt.phase}' \u7684\u540C\u4E00 visit \u6709\u91CD\u590D read receipt`);
-    readVisits.add(key);
-  }
-  return { kind, path: path9, sha256: digest3, producer, recordedAt, reads };
-}
-async function currentDocumentStepVisitId(changeDir2) {
-  const metadata = (await readCurrentRunRevision(changeDir2))?.state.runMetadata;
-  if (metadata === void 0)
-    throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
-  return JSON.stringify([metadata.runId, metadata.transitionSequence]);
-}
-function parseDocumentLedger(raw) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    throw new DocumentLedgerError("document ledger \u4E0D\u662F\u5408\u6CD5 JSON");
-  }
-  const item2 = object(value);
-  if (!item2)
-    throw new DocumentLedgerError("document ledger \u5FC5\u987B\u662F JSON \u5BF9\u8C61");
-  if (item2.version !== 1)
-    throw new DocumentLedgerError("document ledger version \u5FC5\u987B\u4E3A 1");
-  if (item2.contract !== "openspec-v1")
-    throw new DocumentLedgerError("document ledger contract \u5FC5\u987B\u4E3A 'openspec-v1'");
-  const createdAt = string(item2.createdAt);
-  if (!createdAt)
-    throw new DocumentLedgerError("document ledger createdAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
-  if (!Array.isArray(item2.records))
-    throw new DocumentLedgerError("document ledger records \u5FC5\u987B\u662F\u6570\u7EC4");
-  if (item2.records.length > MAX_DOCUMENT_LEDGER_RECORDS)
-    throw new DocumentLedgerError(`document ledger records \u8D85\u8FC7 ${MAX_DOCUMENT_LEDGER_RECORDS} \u6761\u4E0A\u9650`);
-  const records = item2.records.map((record3, index) => parseRecord2(record3, index));
-  const unique = /* @__PURE__ */ new Set();
-  for (const record3 of records) {
-    const key = `${record3.kind}\0${record3.path}`;
-    if (unique.has(key))
-      throw new DocumentLedgerError(`document ledger \u6709\u91CD\u590D record: ${record3.kind} ${record3.path}`);
-    unique.add(key);
-  }
-  return { version: 1, contract: "openspec-v1", createdAt, records };
-}
-async function readDocumentLedger(changeDir2, readSource = readBoundedFileHandle) {
-  const raw = await readOptionalBoundedRegularTextFile(join12(changeDir2, DOCUMENT_LEDGER_FILE), MAX_DOCUMENT_LEDGER_BYTES, "document ledger", readSource);
-  return raw === void 0 ? void 0 : parseDocumentLedger(raw);
-}
-function initialDocumentLedgerContent(createdAt) {
-  const ledger = { version: 1, contract: "openspec-v1", createdAt, records: [] };
-  return `${JSON.stringify(ledger, null, 2)}
-`;
-}
-async function ensureDocumentLedger(changeDir2, createdAt) {
-  const existing = await readDocumentLedger(changeDir2);
-  if (existing)
-    return existing;
-  const ledger = { version: 1, contract: "openspec-v1", createdAt, records: [] };
-  const target = join12(changeDir2, DOCUMENT_LEDGER_FILE);
-  try {
-    await atomicLinkPublish(changeDir2, ".pipeline-documents.tmp", target, initialDocumentLedgerContent(createdAt));
-    return ledger;
-  } catch (error2) {
-    if (errorCode5(error2) !== "EEXIST")
-      throw error2;
-    const raced = await readDocumentLedger(changeDir2);
-    if (!raced)
-      throw new DocumentLedgerError(`document ledger \u5E76\u53D1\u521B\u5EFA\u540E\u4E0D\u53EF\u8BFB\u53D6: ${target}`);
-    return raced;
-  }
-}
-async function writeDocumentLedger(changeDir2, ledger) {
-  const content = `${JSON.stringify(ledger, null, 2)}
-`;
-  parseDocumentLedger(content);
-  await atomicReplaceFile(join12(changeDir2, DOCUMENT_LEDGER_FILE), content);
-}
-async function hasSkillEvidence(changeDir2, producer, phase, allowEarlierPhaseEvidence) {
-  let text3;
-  try {
-    text3 = await readFile11(join12(changeDir2, HISTORY_FILE), "utf8");
-  } catch (error2) {
-    if (errorCode5(error2) === "ENOENT")
-      return false;
-    throw error2;
-  }
-  const entries = [];
-  for (const line of text3.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed)
-      continue;
-    try {
-      const entry = object(JSON.parse(trimmed));
-      if (entry)
-        entries.push(entry);
-    } catch {
-    }
-  }
-  let start = 0;
-  if (!allowEarlierPhaseEvidence) {
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const entry = entries[index];
-      if (entry?.kind === "transition" && entry.to === phase) {
-        start = index + 1;
-        break;
-      }
-    }
-  }
-  for (const entry of entries.slice(start)) {
-    if (entry.kind !== "tool")
-      continue;
-    try {
-      const raw = string(entry.raw);
-      const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null;
-      if (match && skillsEquivalent(match[1] ?? "", producer))
-        return true;
-    } catch {
-    }
-  }
-  return false;
-}
-async function recordDocument(input) {
-  const ownerPhase = input.policy ? documentOwnerPolicyStep(input.policy, input.kind) : documentOwnerPhase(input.kind);
-  if (!ownerPhase) {
-    throw new DocumentLedgerError(`document '${input.kind}' \u672A\u58F0\u660E\u6240\u5C5E phase`);
-  }
-  const current = await readDocumentLedger(input.changeDir);
-  if (!current)
-    throw new DocumentLedgerError(`document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init`);
-  const resolved = await resolveDocument(input.repoRoot, input.path);
-  const slot = documentSlot(input.kind, resolved.relativePath, input.changeDir);
-  const oldCandidates = current.records.filter((record3) => {
-    if (record3.kind !== input.kind)
-      return false;
-    if (record3.kind !== "delta-spec")
-      return true;
-    return deltaSpecSlot(record3.path, input.changeDir) === slot;
-  });
-  const old = oldCandidates.find((record3) => record3.sha256 === resolved.digest) ?? oldCandidates[0];
-  const policySteps = input.policy?.steps ?? DOCUMENT_CONTRACT_PHASES;
-  const ownerIndex = policySteps.indexOf(ownerPhase);
-  const currentIndex = policySteps.indexOf(input.phase);
-  if (currentIndex < 0) {
-    throw new DocumentLedgerError(`\u5F53\u524D step '${input.phase}' \u4E0D\u5C5E\u4E8E document contract`);
-  }
-  if (input.allowBackfill) {
-    if (oldCandidates.length > 0) {
-      throw new DocumentLedgerError(`--backfill \u53EA\u80FD\u9996\u6B21\u767B\u8BB0\u5386\u53F2 document \u69FD\uFF1B'${slot}' \u5DF2\u6709 record\uFF0C\u4FEE\u6539\u540E\u5FC5\u987B\u4F7F\u7528\u5F53\u524D phase \u7684\u5B9E\u9645 producer \u91CD\u65B0\u767B\u8BB0`);
-    }
-    if (ownerIndex >= currentIndex) {
-      if (ownerIndex > currentIndex) {
-        throw new DocumentLedgerError(`'${input.kind}' \u5C5E\u4E8E\u672A\u6765 phase '${ownerPhase}'\uFF0C\u4E0D\u80FD\u4ECE\u5F53\u524D ${input.phase} backfill`);
-      }
-      throw new DocumentLedgerError(`'${input.kind}' \u5F53\u524D\u6B63\u5904\u4E8E\u6240\u5C5E phase '${ownerPhase}'\uFF1B\u4E0D\u5F97\u4F7F\u7528 --backfill`);
-    }
-    const producerAllowed = input.policy ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, ownerPhase, input.producer) : isDocumentProducerAllowedInPhase(input.kind, ownerPhase, input.producer);
-    const producerCandidates = input.policy ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, ownerPhase) : recordProducerCandidatesFor(input.kind, ownerPhase);
-    if (!producerAllowed) {
-      throw new DocumentLedgerError(`document '${input.kind}' \u7684\u5386\u53F2 producer '${input.producer}' \u4E0D\u5408\u6CD5\uFF08\u5141\u8BB8: ${producerCandidates.join(" ")})`);
-    }
-  } else {
-    if (requiresRequirementsChangedForSpecAdr(input) && !await currentSpecVisitEnteredViaRequirementsChanged(input.changeDir)) {
-      throw new DocumentLedgerError("ADR living-document \u517C\u5BB9\u9762\u53EA\u5141\u8BB8\u5F53\u524D requirements-changed \u56DE\u5230 spec \u7684 visit");
-    }
-    const recordAllowed = input.policy ? isDocumentRecordAllowedInPolicyStep(input.policy, input.kind, input.phase) : isDocumentContractPhase(input.phase) && isDocumentRecordAllowedInPhase(input.kind, input.phase);
-    if (!recordAllowed) {
-      throw new DocumentLedgerError(`'${input.kind}' \u53EA\u80FD\u5728\u5176\u6240\u5C5E phase \u6216\u5141\u8BB8\u7684\u540E\u7EED\u66F4\u65B0 phase \u767B\u8BB0\uFF08\u5F53\u524D ${input.phase}\uFF09`);
-    }
-    const producerAllowed = input.policy ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, input.phase, input.producer) : isDocumentContractPhase(input.phase) && isDocumentProducerAllowedInPhase(input.kind, input.phase, input.producer);
-    const candidates = input.policy ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, input.phase) : isDocumentContractPhase(input.phase) ? recordProducerCandidatesFor(input.kind, input.phase) : [];
-    if (!producerAllowed) {
-      throw new DocumentLedgerError(`document '${input.kind}' \u7684 producer '${input.producer}' \u4E0D\u5408\u6CD5\uFF08\u5F53\u524D ${input.phase} \u5141\u8BB8: ${candidates.join(" ")})`);
-    }
-  }
-  if (!await hasSkillEvidence(input.changeDir, input.producer, input.phase, input.allowBackfill === true)) {
-    throw new DocumentLedgerError(`\u7F3A\u5C11 Skill \u8C03\u7528\u8BC1\u636E\uFF08\u5F53\u524D phase\uFF09: '${input.producer}'\uFF1B\u5148\u7531\u5BBF\u4E3B\u5728\u672C phase \u5B9E\u9645\u8C03\u7528\u8BE5 skill\uFF0C\u786E\u8BA4\u5B8C\u6210\u6001\u8BC1\u636E\u5DF2\u5199\u5165 history \u540E\u518D\u767B\u8BB0 '${input.kind}'`);
-  }
-  const replacement = {
-    kind: input.kind,
-    path: resolved.relativePath,
-    sha256: resolved.digest,
-    producer: input.producer,
-    recordedAt: input.recordedAt,
-    reads: old?.sha256 === resolved.digest ? old.reads : []
-  };
-  const records = current.records.filter((record3) => {
-    if (record3.kind !== input.kind)
-      return true;
-    if (record3.kind !== "delta-spec")
-      return false;
-    const recordSlot = deltaSpecSlot(record3.path, input.changeDir);
-    return recordSlot === void 0 || recordSlot !== slot;
-  });
-  records.push(replacement);
-  const next = { ...current, records };
-  await writeDocumentLedger(input.changeDir, next);
-  return next;
-}
-async function migrateLegacyDeltaDocument(input) {
-  const current = await readDocumentLedger(input.changeDir);
-  if (!current)
-    throw new DocumentLedgerError("document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init");
-  const canonical = await resolveDocument(input.repoRoot, input.canonicalPath);
-  const slot = documentSlot("delta-spec", canonical.relativePath, input.changeDir);
-  const source = current.records.find((record3) => record3.kind === "delta-spec" && record3.path === input.legacyPath && deltaSpecSlot(record3.path, input.changeDir) === void 0);
-  const target = current.records.find((record3) => record3.kind === "delta-spec" && deltaSpecSlot(record3.path, input.changeDir) === slot);
-  if (!source) {
-    if (target?.path === canonical.relativePath && target.sha256 === canonical.digest)
-      return current;
-    throw new DocumentLedgerError(`\u672A\u627E\u5230\u6307\u5B9A\u7684\u65E7 delta-spec record: ${input.legacyPath}`);
-  }
-  if (source.sha256 !== canonical.digest) {
-    throw new DocumentLedgerError("\u8FC1\u79FB\u62D2\u7EDD\uFF1Acanonical \u6587\u4EF6\u5185\u5BB9\u4E0E\u65E7 delta-spec digest \u4E0D\u4E00\u81F4");
-  }
-  if (target && target.sha256 !== source.sha256) {
-    throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u5DF2\u6709\u4E0D\u540C\u5185\u5BB9`);
-  }
-  if (target && (target.producer !== source.producer || target.recordedAt !== source.recordedAt)) {
-    throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u4E0E\u65E7 record \u7684 provenance \u51B2\u7A81`);
-  }
-  const receipts = /* @__PURE__ */ new Map();
-  for (const receipt of target?.reads ?? [])
-    receipts.set(receiptKey(receipt), receipt);
-  for (const receipt of source.reads) {
-    const key = receiptKey(receipt);
-    const existing = receipts.get(key);
-    if (existing && JSON.stringify(existing) !== JSON.stringify(receipt)) {
-      throw new DocumentLedgerError(`\u8FC1\u79FB\u62D2\u7EDD\uFF1A\u76EE\u6807\u69FD '${slot}' \u7684 ${receipt.phase} read receipt \u51B2\u7A81`);
-    }
-    receipts.set(key, receipt);
-  }
-  const replacement = target ? { ...target, reads: [...receipts.values()] } : { ...source, path: canonical.relativePath, reads: [...receipts.values()] };
-  const records = current.records.filter((record3) => record3 !== source && record3 !== target);
-  records.push(replacement);
-  const next = { ...current, records };
-  await writeDocumentLedger(input.changeDir, next);
-  return next;
-}
-async function recordDocumentReads(input) {
-  const current = await readDocumentLedger(input.changeDir);
-  if (!current)
-    throw new DocumentLedgerError(`document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init`);
-  const visitId = await currentDocumentStepVisitId(input.changeDir);
-  const requiredKinds = input.policy ? readsRequiredForPolicyStep(input.policy, input.phase) : isDocumentContractPhase(input.phase) ? readsRequiredForPhase(input.phase) : [];
-  const kinds = input.kind === "all" ? [...requiredKinds] : [input.kind];
-  for (const kind of kinds) {
-    if (!requiredKinds.includes(kind)) {
-      throw new DocumentLedgerError(`phase '${input.phase}' \u4E0D\u8981\u6C42\u8BFB\u53D6 document '${kind}'`);
-    }
-  }
-  const selected = current.records.filter((record3) => kinds.includes(record3.kind));
-  for (const kind of kinds) {
-    if (!selected.some((record3) => record3.kind === kind)) {
-      throw new DocumentLedgerError(`\u7F3A\u5C11 document '${kind}'\uFF1B\u5148\u767B\u8BB0\u540E\u518D\u8BFB\u53D6`);
-    }
-  }
-  const legacyDelta = selected.filter((record3) => record3.kind === "delta-spec" && deltaSpecSlot(record3.path, input.changeDir) === void 0);
-  if (legacyDelta.length > 0) {
-    throw new DocumentLedgerError(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record3) => record3.path).join(", ")}`);
-  }
-  const updated = [];
-  for (const record3 of current.records) {
-    if (!kinds.includes(record3.kind)) {
-      updated.push(record3);
-      continue;
-    }
-    const resolved = await resolveDocument(input.repoRoot, record3.path);
-    if (resolved.digest !== record3.sha256) {
-      throw new DocumentLedgerError(`document '${record3.kind}' \u5DF2\u53D8\u66F4: ${record3.path}\uFF1B\u5148\u91CD\u65B0 record \u540E\u518D read`);
-    }
-    const reads = record3.reads.filter((receipt) => receipt.phase !== input.phase || receipt.visitId !== visitId);
-    reads.push({ phase: input.phase, sha256: resolved.digest, readAt: input.readAt, visitId });
-    updated.push({ ...record3, reads });
-  }
-  const next = { ...current, records: updated };
-  await writeDocumentLedger(input.changeDir, next);
-  return next;
-}
-
 // packages/kernel/dist/state/document-evidence.js
 async function currentRecordDigest(repoRoot, record3) {
   try {
@@ -10355,15 +10588,15 @@ async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {},
 }
 
 // packages/kernel/dist/state/spec-migration-evidence.js
-import { createHash as createHash7 } from "node:crypto";
-import { lstat as lstat10, readFile as readFile12, realpath as realpath3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute3, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
-function digest(content) {
-  return createHash7("sha256").update(content).digest("hex");
+import { createHash as createHash8 } from "node:crypto";
+import { lstat as lstat11, readFile as readFile12, realpath as realpath4 } from "node:fs/promises";
+import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolve3, sep as sep4 } from "node:path";
+function digest2(content) {
+  return createHash8("sha256").update(content).digest("hex");
 }
 function escaped2(root, target) {
-  const rel = relative3(root, target);
-  return rel === ".." || rel.startsWith(`..${sep3}`) || isAbsolute3(rel);
+  const rel = relative4(root, target);
+  return rel === ".." || rel.startsWith(`..${sep4}`) || isAbsolute4(rel);
 }
 function errorCode6(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
@@ -10377,27 +10610,27 @@ async function trustedOrdinaryFile(repoRoot, candidate, optional = false) {
   if (escaped2(root, target))
     throw new Error("\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839");
   let cursor = root;
-  const segments = relative3(root, target).split(sep3).filter(Boolean);
+  const segments = relative4(root, target).split(sep4).filter(Boolean);
   for (const [index, segment] of segments.entries()) {
     cursor = resolve3(cursor, segment);
     let info;
     try {
-      info = await lstat10(cursor);
+      info = await lstat11(cursor);
     } catch (error2) {
       if (optional && errorCode6(error2) === "ENOENT")
         return void 0;
       throw error2;
     }
     if (info.isSymbolicLink())
-      throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u62D2\u7EDD symlink: ${relative3(root, cursor)}`);
+      throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u62D2\u7EDD symlink: ${relative4(root, cursor)}`);
     if (index < segments.length - 1 && !info.isDirectory()) {
-      throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u7236\u7EA7\u4E0D\u662F\u76EE\u5F55: ${relative3(root, cursor)}`);
+      throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u7236\u7EA7\u4E0D\u662F\u76EE\u5F55: ${relative4(root, cursor)}`);
     }
     if (index === segments.length - 1 && !info.isFile()) {
-      throw new Error(`\u8FC1\u79FB\u8BC1\u636E\u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${relative3(root, cursor)}`);
+      throw new Error(`\u8FC1\u79FB\u8BC1\u636E\u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${relative4(root, cursor)}`);
     }
   }
-  const [rootReal, targetReal] = await Promise.all([realpath3(root), realpath3(target)]);
+  const [rootReal, targetReal] = await Promise.all([realpath4(root), realpath4(target)]);
   if (escaped2(rootReal, targetReal))
     throw new Error("\u8FC1\u79FB\u8BC1\u636E\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839");
   return readFile12(target);
@@ -10450,18 +10683,18 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir2, changeName) {
     const expectedDigest = text2(receipt.expectedAfterDigest, "receipt.expectedAfterDigest");
     const deltaDigest = text2(receipt.deltaDigest, "receipt.deltaDigest");
     const deltaRaw = await trustedOrdinaryFile(root, resolve3(root, expectedDeltaPath));
-    if (!deltaRaw || digest(deltaRaw) !== deltaDigest) {
+    if (!deltaRaw || digest2(deltaRaw) !== deltaDigest) {
       return { kind: "invalid", reason: "delta-digest-mismatch" };
     }
     const resultRaw = await trustedOrdinaryFile(root, resolve3(migrationDir, "spec-application-result.json"), true);
     if (!resultRaw)
       return { kind: "invalid", reason: "application-result-missing" };
     const result = parseJson(resultRaw, "migration result");
-    if (result.schemaVersion !== 1 || result.kind !== "spec-migration-application" || result.change !== changeName || result.capability !== capability || result.receiptDigest !== digest(receiptRaw) || result.targetPath !== expectedMainPath || result.effect !== "changed" && result.effect !== "no-op" || result.expectedAfterDigest !== expectedDigest || result.afterDigest !== expectedDigest) {
+    if (result.schemaVersion !== 1 || result.kind !== "spec-migration-application" || result.change !== changeName || result.capability !== capability || result.receiptDigest !== digest2(receiptRaw) || result.targetPath !== expectedMainPath || result.effect !== "changed" && result.effect !== "no-op" || result.expectedAfterDigest !== expectedDigest || result.afterDigest !== expectedDigest) {
       return { kind: "invalid", reason: "application-result-mismatch" };
     }
     const mainRaw = await trustedOrdinaryFile(root, resolve3(root, expectedMainPath));
-    if (!mainRaw || digest(mainRaw) !== expectedDigest) {
+    if (!mainRaw || digest2(mainRaw) !== expectedDigest) {
       return { kind: "invalid", reason: "main-spec-digest-mismatch" };
     }
     return { kind: "applied" };
@@ -10471,225 +10704,6 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir2, changeName) {
       reason: error2 instanceof Error ? error2.message : "migration-evidence-read-failed"
     };
   }
-}
-
-// packages/kernel/dist/state/task-plan-store.js
-import { createHash as createHash8 } from "node:crypto";
-import { lstat as lstat11, mkdir as mkdir7, opendir, realpath as realpath4 } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, join as join13, relative as relative4, sep as sep4 } from "node:path";
-
-// packages/kernel/dist/workflow/todo-projection.js
-var DEFAULT_WORKFLOW_TODO_STAGES = DEFAULT_WORKFLOW_STEPS.map((step) => ({ id: step.id, label: step.label }));
-function normalized(value) {
-  return value.trim().replace(/^\d+\s*[.)、:：-]\s*/, "").replace(/^phase\s+/i, "").toLocaleLowerCase();
-}
-function stageForHeading(heading, stages) {
-  const candidate = normalized(heading);
-  for (const stage of stages) {
-    const id = normalized(stage.id);
-    const label = normalized(stage.label);
-    if (candidate === id || candidate === label)
-      return stage.id;
-    if (candidate.startsWith(`${id} `) || candidate.endsWith(` ${id}`))
-      return stage.id;
-    if (candidate.startsWith(`${label} `) || candidate.endsWith(` ${label}`))
-      return stage.id;
-  }
-  return void 0;
-}
-function parseTasks(markdown, currentStage, stages, trustedCanonicalProjection = false) {
-  const byStage = /* @__PURE__ */ new Map();
-  if (markdown === void 0)
-    return { byStage, structured: false };
-  let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id;
-  let structured = false;
-  for (const line of markdown.split(/\r?\n/)) {
-    const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
-    if (heading) {
-      if (trustedCanonicalProjection && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? ""))
-        continue;
-      const headingStage = stageForHeading(heading[1] ?? "", stages);
-      if (headingStage !== void 0) {
-        target = headingStage;
-        structured = true;
-      }
-      continue;
-    }
-    const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
-    if (!task || target === void 0)
-      continue;
-    const rawText = (task[2] ?? "").trim();
-    const text3 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
-    if (text3 === "")
-      continue;
-    const items = byStage.get(target) ?? [];
-    items.push({ text: text3, completed: (task[1] ?? "").toLowerCase() === "x" });
-    byStage.set(target, items);
-  }
-  return { byStage, structured };
-}
-function incompletePipelineTasksForExit(input) {
-  const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES;
-  const stages = declared.filter((stage, index) => stage.id !== "" && stage.label !== "" && declared.findIndex((other) => other.id === stage.id) === index);
-  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages, input.trustedCanonicalProjection);
-  if (!parsed.structured) {
-    const incomplete2 = input.phase === "build" ? [...parsed.byStage.values()].flat().filter((task) => !task.completed).length : 0;
-    return { structured: false, incomplete: incomplete2 };
-  }
-  const phaseIndex = stages.findIndex((stage) => stage.id === input.phase);
-  if (phaseIndex < 0)
-    return { structured: true, incomplete: 0 };
-  const incomplete = stages.slice(0, phaseIndex + 1).flatMap((stage) => parsed.byStage.get(stage.id) ?? []).filter((task) => !task.completed).length;
-  return { structured: true, incomplete };
-}
-
-// packages/kernel/dist/state/task-plan-publication-test-harness.js
-import { AsyncLocalStorage } from "node:async_hooks";
-var publicationFault = new AsyncLocalStorage();
-
-// packages/kernel/dist/state/task-plan-store.js
-var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
-var TASK_PLAN_CURRENT_FILE = "current.json";
-var TASK_PLAN_REVISIONS_DIR = "revisions";
-var MAX_LEGACY_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
-var MAX_CANONICAL_TASKS_MD_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
-var TaskPlanStateCorruptError = class extends Error {
-  name = "TaskPlanStateCorruptError";
-};
-function revisionNumberPrefix(revision) {
-  return String(revision.revision_number).padStart(6, "0");
-}
-function planNamespace(planId) {
-  return createHash8("sha256").update(planId).digest("hex");
-}
-function revisionFileName2(revision) {
-  return `${revisionNumberPrefix(revision)}--${planNamespace(revision.plan_id)}--${revision.revision_id}.json`;
-}
-function legacyRevisionFileName(revision) {
-  return `${revisionNumberPrefix(revision)}-${revision.revision_id}.json`;
-}
-function digest2(raw) {
-  return `sha256:${createHash8("sha256").update(raw).digest("hex")}`;
-}
-function normalizeProjectionCompletion(markdown) {
-  return markdown.split("\n").map((line) => {
-    const item2 = /^- \[[ xX]\] (.+ <!-- work-item:[^>]+ -->)$/u.exec(line);
-    return item2 === null ? line : `- [ ] ${item2[1]}`;
-  }).join("\n");
-}
-async function assertOwnedDirectory(base, candidate) {
-  try {
-    const [baseReal, candidateInfo, candidateReal] = await Promise.all([
-      realpath4(base),
-      lstat11(candidate),
-      realpath4(candidate)
-    ]);
-    const fromBase = relative4(baseReal, candidateReal);
-    if (candidateInfo.isSymbolicLink() || !candidateInfo.isDirectory() || fromBase === "" || fromBase === ".." || fromBase.startsWith(`..${sep4}`) || isAbsolute4(fromBase))
-      throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
-  } catch (error2) {
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
-  }
-}
-async function readRegular(path9, maxBytes) {
-  try {
-    return await readOptionalBoundedRegularTextFile(path9, maxBytes, "TaskPlan state file");
-  } catch (error2) {
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
-  }
-}
-async function readStateFile(path9, maxBytes) {
-  let bytes;
-  try {
-    bytes = await readBoundedRegularFile(path9, maxBytes, "TaskPlan state file");
-  } catch (error2) {
-    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
-      return void 0;
-    if (error2 instanceof TaskPlanStateCorruptError)
-      throw error2;
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
-  }
-  try {
-    return {
-      bytes,
-      text: new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-    };
-  } catch {
-    throw new TaskPlanStateCorruptError("TaskPlan state file is not valid UTF-8");
-  }
-}
-function assertCommittedRevisionSemantics(revision) {
-  const validation = validateTaskPlanAggregate(taskPlanRecordToDomain(revision));
-  if (revision.status !== "frozen" || !validation.freezable) {
-    throw new TaskPlanStateCorruptError("TaskPlan committed lineage contains non-freezable state");
-  }
-}
-async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
-  const canonical = await readStateFile(join13(revisionsDir, revisionFileName2(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (canonical !== void 0) {
-    if (!canonical.bytes.equals(expectedRaw)) {
-      throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
-    }
-    return canonical;
-  }
-  const legacy = await readStateFile(join13(revisionsDir, legacyRevisionFileName(revision)), TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (legacy === void 0)
-    return void 0;
-  if (legacy.bytes.equals(expectedRaw))
-    return legacy;
-  const decoded = decodeTaskPlanRevisionRecordV1(legacy.text);
-  if (decoded.ok && decoded.value.plan_id !== revision.plan_id && decoded.value.revision_number === revision.revision_number && decoded.value.revision_id === revision.revision_id)
-    return void 0;
-  throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
-}
-async function readCanonicalTaskPlanState(changeDir2) {
-  const stateDir = join13(changeDir2, TASK_PLAN_STATE_DIR);
-  const currentPath = join13(stateDir, TASK_PLAN_CURRENT_FILE);
-  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
-  if (currentRaw === void 0)
-    return void 0;
-  const decoded = decodeTaskPlanRevisionRecordV1(currentRaw.text);
-  if (!decoded.ok)
-    throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
-  const revision = decoded.value;
-  assertCommittedRevisionSemantics(revision);
-  await assertOwnedDirectory(changeDir2, stateDir);
-  await assertOwnedDirectory(changeDir2, join13(stateDir, TASK_PLAN_REVISIONS_DIR));
-  const immutableRaw = await readImmutableTwin(join13(stateDir, TASK_PLAN_REVISIONS_DIR), revision, currentRaw.bytes);
-  if (immutableRaw === void 0) {
-    throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
-  }
-  return { revision, currentBytes: currentRaw.bytes };
-}
-async function classifyTaskPlanProjectionForChange(changeDir2, source) {
-  const state = await readCanonicalTaskPlanState(changeDir2);
-  if (state === void 0)
-    return "legacy";
-  const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
-  return normalizeProjectionCompletion(source) === expected ? "current" : "invalid";
-}
-async function taskPlanTasksThroughPhaseForChange(changeDir2, phase, sourceOverride) {
-  const state = await readCanonicalTaskPlanState(changeDir2);
-  const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES;
-  let source = sourceOverride ?? void 0;
-  if (sourceOverride === void 0)
-    try {
-      source = await readRegular(join13(changeDir2, "tasks.md"), limit);
-    } catch {
-      return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
-    }
-  if (source === void 0)
-    return state !== void 0 || phase === "build" ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u7F3A\u5931` } : { pass: true };
-  if (Buffer.byteLength(source) > limit)
-    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
-  if (state && normalizeProjectionCompletion(source) !== renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) }))
-    return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Acanonical TaskPlan tasks.md \u6295\u5F71\u8BA4\u8BC1\u5931\u8D25` };
-  const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: source, trustedCanonicalProjection: state !== void 0 });
-  return status.incomplete > 0 ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4ECD\u6709 ${status.incomplete} \u9879\u672A\u52FE` } : { pass: true };
 }
 
 // packages/kernel/dist/state/markers.js
