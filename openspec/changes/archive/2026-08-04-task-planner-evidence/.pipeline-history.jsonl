@@ -91,3 +91,7 @@
 {"ts":"2026-08-04T09:47:56Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship b8d354ee-3a20-441d-9a20-c7492ffee1b7 11"}
 {"ts":"2026-08-04T09:48:23Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-08-04T09:48:23Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion b8d354ee-3a20-441d-9a20-c7492ffee1b7 11"}
+{"ts":"2026-08-04T09:50:09Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"dc003bf8-0993-4b04-a426-3bed92218ba9"}
+{"ts":"2026-08-04T09:50:34Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-08-04T09:50:34Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-archive b8d354ee-3a20-441d-9a20-c7492ffee1b7 12"}
+{"ts":"2026-08-04T09:50:51Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"7fc19247-52f4-4d9a-9293-5b9459040a26"}

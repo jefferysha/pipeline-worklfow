@@ -32,4 +32,4 @@
 
 ## 归档
 
-- [ ] 归档 Change 并记录证据兼容策略。 (archive)
+- [x] 归档 Change 并记录证据兼容策略。 (archive)
