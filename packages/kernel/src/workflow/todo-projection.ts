@@ -1,9 +1,10 @@
 /**
  * Pipeline Todo projection.
  *
- * OpenSpec `tasks.md` remains the editable source of truth. This module only projects its checkbox
- * rows onto the workflow's ordered stages, so a native Todo or dashboard can keep the seven pipeline
- * phases visible without inventing generic work items. It is intentionally pure and accepts custom
+ * This module projects trusted canonical or legacy `tasks.md` checkbox rows onto the workflow's
+ * ordered stages. Canonical TaskPlan current state remains authoritative when present; `tasks.md`
+ * is then its compatibility projection. A native Todo or dashboard can keep the seven pipeline
+ * phases visible without inventing generic work items. The projection stays pure and accepts custom
  * workflow stage definitions as data.
  */
 import { DEFAULT_WORKFLOW_STEPS } from './default-workflow.generated.js'

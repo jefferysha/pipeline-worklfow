@@ -22,6 +22,7 @@ import type { Phase } from '../types.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from './document-path.js'
 import { withLock } from './lock.js'
+import { runTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.js'
 
 export const TASK_PLAN_STATE_DIR = '.pipeline-task-plan'
 export const TASK_PLAN_CURRENT_FILE = 'current.json'
@@ -40,8 +41,6 @@ export class TaskPlanRevisionConflictError extends Error {
 export interface PublishTaskPlanOptions {
   readonly expected_current_revision_id: string | null
   readonly completed_work_item_ids?: readonly string[]
-  /** @internal Test-only crash injection at the immutable -> current commit boundary. */
-  readonly __test_after_immutable_publish?: () => void | Promise<void>
 }
 
 function revisionNumberPrefix(revision: TaskPlanRevisionRecordV1): string {
@@ -410,7 +409,7 @@ export async function publishTaskPlanRevision(
     if (exactCurrent) return publishProjection(changeDir, accepted, raw, completed)
     if (!admission.targetExists) {
       await publishImmutable(join(revisionsDir, revisionFileName(accepted)), revisionsDir, raw)
-      await options.__test_after_immutable_publish?.()
+      await runTaskPlanPublicationFaultForTest()
     }
     await atomicReplaceFile(join(stateDir, TASK_PLAN_CURRENT_FILE), raw)
 

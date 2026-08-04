@@ -13,6 +13,7 @@ import {
   readTaskPlanForChange,
   taskPlanTasksThroughPhaseForChange,
 } from './task-plan-store.js'
+import { withTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.js'
 
 function plan(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {
   return {
@@ -280,6 +281,20 @@ describe('task plan store', () => {
     expect(await readTaskPlanForChange(dir)).toMatchObject({ source: 'legacy', schedulable: false })
   })
 
+  it('does not execute callbacks smuggled through the public publish options', async () => {
+    const dir = await changeDir()
+    let callbackInvoked = false
+    const options = {
+      expected_current_revision_id: null,
+      __test_after_immutable_publish: () => { callbackInvoked = true },
+    }
+
+    await expect(publishTaskPlanRevision(dir, plan(), options)).resolves.toMatchObject({
+      revision_id: 'revision-1',
+    })
+    expect(callbackInvoked).toBe(false)
+  })
+
   it('recovers a byte-identical immutable revision after failure before current publication', async () => {
     const dir = await changeDir()
     const previous = plan()
@@ -287,10 +302,12 @@ describe('task plan store', () => {
     const injectedFailure = new Error('injected failure after immutable publication')
     await publishTaskPlanRevision(dir, previous, { expected_current_revision_id: null })
 
-    await expect(publishTaskPlanRevision(dir, revision, {
-      expected_current_revision_id: previous.revision_id,
-      __test_after_immutable_publish: () => { throw injectedFailure },
-    })).rejects.toBe(injectedFailure)
+    await expect(withTaskPlanPublicationFaultForTest(
+      () => { throw injectedFailure },
+      () => publishTaskPlanRevision(dir, revision, {
+        expected_current_revision_id: previous.revision_id,
+      }),
+    )).rejects.toBe(injectedFailure)
 
     expect(await readFile(
       join(dir, TASK_PLAN_STATE_DIR, 'revisions', canonicalRevisionFileName(revision)),

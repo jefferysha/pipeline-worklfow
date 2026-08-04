@@ -16,6 +16,7 @@ const CHILD_SOURCE = `
 import { existsSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { publishTaskPlanRevision, TaskPlanRevisionConflictError } from './task-plan-store.ts'
+import { withTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.ts'
 
 const [changeDir, revisionId, barrierPath, mode = 'contend'] = process.argv.slice(2)
 const revision = {
@@ -31,10 +32,12 @@ const revision = {
 process.stdout.write('ready\\n')
 while (!existsSync(barrierPath)) await sleep(5)
 try {
-  await publishTaskPlanRevision(changeDir, revision, {
+  const publish = () => publishTaskPlanRevision(changeDir, revision, {
     expected_current_revision_id: 'revision-1',
-    ...(mode === 'crash' ? { __test_after_immutable_publish: () => process.exit(17) } : {}),
   })
+  await (mode === 'crash'
+    ? withTaskPlanPublicationFaultForTest(() => process.exit(17), publish)
+    : publish())
   process.exit(0)
 } catch (error) {
   if (error instanceof TaskPlanRevisionConflictError) process.exit(3)

@@ -1180,3 +1180,79 @@ TaskPlan/domain/codec/store/Todo/flow 与 server TaskPlan/snapshot/transition �
 保持两项 Verify task 未勾、`verify_result=fail`。正式登记本报告与当前 phase Skill evidence，随后请求
 exact `verify-fail`、delegated acknowledge 并回 Build；以 TDD 一次性修复 3 个 MEDIUM，重建 bundles、
 全量验证、重新冻结，再从零执行三轨，不接受偏差。
+
+---
+
+# 第 24 轮 Verify（冻结基线 `e8fd4dcaf9ba7713a939601c7b94e9dec89f19ab`）
+
+## 聚合结论
+
+FAIL，C0/H0/M1/L4。独立 Reviewer 与 E2E 均 PASS；原生 Codex CLI 完整审查确认一个新的 MEDIUM：
+测试专用 publication callback 被暴露为 kernel 公共 API，并在持有非重入 Change lock 时被 await，
+调用方若在 callback 中再次发布同一 Change 会确定性死锁。按三轨 findings 并集，本轮不得勾选 Verify
+tasks、设置 `branch_status=handled` 或请求 `verify-pass`。
+
+Round23 的三个 MEDIUM 已由全部适用轨确认关闭：只有 initial open `ENOENT` 可表示缺失，open 后路径
+消失失败关闭；transcript 与 CLI TaskPlan leaf open 均使用 `O_NONBLOCK` 并保留原有普通文件与身份
+栅栏。129+ transcript discovery 和合法 positive safe-integer inline `max_output_tokens` 继续通过，
+没有放宽完整输出、session/turn/worktree/ABI/exit code/fd-path identity 证明。
+
+## 三轨证据
+
+- Reviewer：PASS，C0/H0/M0/L2。完整覆盖 `origin/main...e8fd4dca` 的 470 paths；19 个变更测试文件
+  639/639 通过，build、architecture、comments 与 OpenSpec 37/37 通过。LOW 为既有 publication
+  parent 同用户窄 TOCTOU 与 499 行 store 可维护性。证据：
+  `/tmp/tenon-pr1-r24-verify-reviewer.md`，SHA-256
+  `3879663b0e7399eaffb5a1b8599f5becb97f4073729fce5f03123dc53e21bc6e`。
+- E2E：PASS，C0/H0/M0/L0。关键边界 9/9；全量 340 files / 6156 passed / 26 honest skipped；
+  Web 87 files / 1633 passed；build、comments、architecture、OpenSpec、docs、hygiene、freshness、
+  migration CAS 13/13、hooks 512/512 与 diff check 全通过。隔离 archive rehearsal `+7/~2`，归档后
+  strict 37/37；真实 repo 与 `openspec/specs` 前后 digest 一致。证据：
+  `/tmp/tenon-pr1-r24-verify-e2e.md`，SHA-256
+  `78f733ac40a46cbad1e6aa4549b28e6630f25004e07416068375f8cde890badf`。
+- Codex CLI：FAIL，C0/H0/M1/L4。完整覆盖 470 paths 并确认 Round23/receipt/TaskPlan 主面；由于隔离
+  checkout 无本地依赖且 cached Rolldown native binding 不可用，该轨没有声明测试通过，测试证据由
+  E2E/Reviewer 轨独立提供。证据：`/tmp/tenon-pr1-r24-codex.md`，SHA-256
+  `f91add1794fbb8cfa38f8102377b165b135add35479d7c34af8b7fb36db0cc19`。
+
+## 冻结身份与 repo-zero-output
+
+- exact base：`315f334c9e7f7fa4e6b56389425476e97a789593`；frozen target：
+  `e8fd4dcaf9ba7713a939601c7b94e9dec89f19ab`。
+- 主线三轨前后内容指纹均为
+  `927b39664f375b5fbe1598097bc7d62213deea16d1443c9bed330b26c25f0910`；各轨均在外部冻结副本
+  运行，没有写真实实现、配置、生成物或主规格。
+
+## 阻断 finding
+
+### MEDIUM — 测试 fault-injection callback 暴露公共 API 并允许同 Change 重入死锁
+
+`packages/kernel/src/state/task-plan-store.ts` 的 `PublishTaskPlanOptions` 公开
+`__test_after_immutable_publish`，该类型又由 `packages/kernel/src/state/index.ts` 包导出。发布函数在持有
+非重入 Change lock 时 await callback；外部调用方可在 callback 内再次调用同一 Change 的 publish，
+内层等待外层释放 lock、外层等待 callback 返回，形成确定性死锁。该 callback 也把测试故障注入变成
+公开兼容面。修复必须把 crash-window 注入移到模块私有的 repository/filesystem harness，公共 publish
+options 只保留真实产品参数，并补公共类型面与中断恢复回归。
+
+## LOW 与未覆盖项
+
+- publication parent 未 dirfd 固定的同用户窄 TOCTOU 与 499 行 store 耦合继续保留为既有 LOW。
+- filesystem I/O 被映射为稳定 corrupt error 时未保留原始 `cause`；外部语义正确，诊断性可后续增强。
+- `todo-projection.ts` 仍把 `tasks.md` 注释为可编辑 source of truth，与 canonical TaskPlan 单向投影语义
+  不一致；属于文档债务。
+- server 的两个安全敏感 tasks reader 存在重复实现，后续应收敛以降低安全修复漂移风险。
+- E2E 诚实跳过 9 个 Linux-only、16 个 Docker、1 个 secret-backed real-Codex 场景；原生 Codex review
+  本身已实际完成。
+
+## Step 1.5 capability 回读与 Step 1.6 隔离演练
+
+470 个 changed paths 全部映射到 `task-plan-contract`、`codex-skill-receipt-current-turn` 或其官方
+OpenSpec/ledger/review/报告投影；CLI、kernel、server 与 bundles 均由 Reviewer/Codex 逐路径复核，
+没有未映射交付文件。E2E 在外部副本完成 official show（9 deltas）、change strict、archive rehearsal
+与归档后主规格 strict 37/37；真实主规格 digest 不变。
+
+## 处理决定
+
+保持两项 Verify task 未勾、`verify_result=fail`。正式登记本报告与当前 phase Skill evidence，请求 exact
+`verify-fail` 并以 delegated acknowledgement 回 Build；以 TDD 移除公共测试 callback、保留 crash
+recovery 验收能力，重建 bundles、全量验证、重新冻结并从零执行下一轮三轨，不接受偏差。

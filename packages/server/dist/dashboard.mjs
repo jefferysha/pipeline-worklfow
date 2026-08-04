@@ -7825,6 +7825,10 @@ function incompletePipelineTasksForExit(input) {
   return { structured: true, incomplete };
 }
 
+// packages/kernel/dist/state/task-plan-publication-test-harness.js
+import { AsyncLocalStorage } from "node:async_hooks";
+var publicationFault = new AsyncLocalStorage();
+
 // packages/kernel/dist/state/task-plan-store.js
 var TASK_PLAN_STATE_DIR = ".pipeline-task-plan";
 var TASK_PLAN_CURRENT_FILE = "current.json";
@@ -16093,7 +16097,7 @@ function isValidatedLedgerRecord(value, errors) {
 }
 
 // packages/kernel/dist/loops/ledger-store.js
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
 import { createHash as createHash12 } from "node:crypto";
 import { mkdir as mkdir12, open as open2, readFile as readFile13 } from "node:fs/promises";
 import { join as join24, resolve as resolve10 } from "node:path";
@@ -16140,7 +16144,7 @@ var ReservationAppendError = class extends Error {
     this.name = "ReservationAppendError";
   }
 };
-var heldLedgerDirs = new AsyncLocalStorage();
+var heldLedgerDirs = new AsyncLocalStorage2();
 function shortHash(raw) {
   return createHash12("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
 }
