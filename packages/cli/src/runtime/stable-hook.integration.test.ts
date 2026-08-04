@@ -180,7 +180,7 @@ describe('stable host-hook ABI', () => {
       'bash', [launchers.tenon, 'document', 'record', change, 'proposal', proposal, '--producer', 'openspec-propose'], '', env, project,
     )
     expect(beforeEvidence.code).toBe(1)
-    expect(beforeEvidence.stderr).toContain('Skill 调用证据')
+    expect(beforeEvidence.stderr).toContain('current StepVisit lacks exact Codex confirmation')
 
     const skillPath = join(hostCache, 'skills', 'openspec-propose', 'SKILL.md')
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'receipt.jsonl')
