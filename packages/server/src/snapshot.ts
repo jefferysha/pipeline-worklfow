@@ -10,6 +10,7 @@ import {
   evaluateDocumentEvidence,
   isDocumentPolicyStep,
   liveTerminalActivity,
+  loadWorkflow,
   parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
@@ -21,18 +22,18 @@ import {
 import type {
   ChangeSnapshot,
   DocumentEvidenceSnapshot,
-  ProjectSnapshot,
-  ProjectRepositoryIdentity,
+  ProjectSnapshot, ProjectRepositoryIdentity,
   Snapshot,
   TerminalActivitySnapshot,
 } from './types.js'
 import { projectReviewHandshake } from './reviewHandshake.js'
+import { readWorkflowSnapshotAuthority } from './workflowSnapshotAuthority.js'
 import {
   legacySnapshotWorkflowRules,
   resolveSnapshotEffectivePlan,
   snapshotTodoStages,
   snapshotWorkflowExecution,
-  snapshotWorkflowRules,
+  snapshotWorkflowRulesAtRoot,
   type WorkflowSnapshotCapabilityDeps,
 } from './workflowSnapshot.js'
 import { readBounded } from './contextBundleTrustedReader.js'
@@ -76,10 +77,7 @@ export function snapshotDepsFactory(
 ): (nowMs?: number) => SnapshotDeps {
   return (nowMs) => ({ ...base, ...(nowMs === undefined ? {} : { now: () => nowMs }) })
 }
-function str(v: string | string[] | undefined): string {
-  if (Array.isArray(v)) return v.join(',')
-  return v ?? ''
-}
+function str(v: string | string[] | undefined): string { return Array.isArray(v) ? v.join(',') : v ?? '' }
 
 /**
  * Read a strictly local, hook-written liveness sidecar.  This is intentionally fail-closed for
@@ -270,9 +268,10 @@ async function scanAnchoredProject(
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
       })
       legacyWorkflowRules[workflowName] ??= legacySnapshotWorkflowRules(plan)
-      const [documents, terminalActivity] = await Promise.all([
+      const [documents, terminalActivity, authority] = await Promise.all([
         documentEvidence(readRoot, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs),
+        readWorkflowSnapshotAuthority(changeDir, state, plan),
       ])
       const tasksProjection = await readTasksProjection(changeDir, {}, anchor)
       const todo = projectPipelineTodo({
@@ -293,7 +292,7 @@ async function scanAnchoredProject(
         updated_at: str(f.updated_at),
         fields: f,
         workflowPlanFingerprint: plan.workflowFingerprint,
-        workflowRules: snapshotWorkflowRules(plan),
+        workflowRules: snapshotWorkflowRulesAtRoot(plan, readRoot, workflowName, authority),
         workflowExecution: await snapshotWorkflowExecution(
           plan,
           state,

@@ -15,7 +15,11 @@ import {
   type TrackPolicyProfile,
 } from '@tenon/kernel'
 import { readAutomationJson, type AutomationJsonFs } from '../config/automationJson.js'
-import { createLoopAdmission, type LoopAdmission } from '../admission/loop-admission.js'
+import {
+  createLoopAdmission,
+  type LoopAdmission,
+  type LoopAdmissionDeps,
+} from '../admission/loop-admission.js'
 import { markNonLoopPrepared, type ExecutionContext, type ExecutionPreparationPort, type PrepareOutcome } from '../admission/execution-context.js'
 import { claim, commitFailureOwned, getAutomation, markQueued, setAutomationOwned, setAutomationOwnedWithFields } from '../queue/claim.js'
 import { shouldEnqueueOnSpecComplete } from '../queue/gate.js'
@@ -87,6 +91,14 @@ export interface AutomationDeps {
    * + kernel loadRegistry 装配）。测试注入 fake 断言编排；afk.ts 注入携带 image/自定义时钟的实例。
    */
   readonly admission?: LoopAdmission
+  /** Canonical WorkflowRun policy binding used only by the default admission wiring. */
+  readonly bindAutomationPolicy?: LoopAdmissionDeps['bindAutomationPolicy']
+  /** Kernel-owned immutable effective authority snapshot binding used by default admission. */
+  readonly bindWorkflowActionAuthority?: LoopAdmissionDeps['bindWorkflowActionAuthority']
+  /** Holds the exact TrackRegistry snapshot through final authority resolution and state claim. */
+  readonly withWorkflowActionAuthorityLock?: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
+  /** Fresh non-Workflow permission layers used only by the default admission wiring. */
+  readonly workflowActionAuthority?: LoopAdmissionDeps['workflowActionAuthority']
   /** ExecutionContext.image（写进 reservation 快照的沙箱镜像）；缺省 admission 装配点透传。 */
   readonly image?: string
   /** on_exceed=pause-loop 时把 loop status 改 paused（缺省无 → 降级 skip-run + 记 report）。 */
@@ -168,7 +180,8 @@ const scalar = (v: string | string[] | undefined): string => (typeof v === 'stri
 
 /** 把 kernel StateStore 适配成 scheduler 的 StateWriter port（每个方法定位到 changeDir(name)）。 */
 export const storeWriter = (store: StateStore, changeDir: (name: string) => string): StateWriter => ({
-  claim: (name) => claim(store, changeDir(name)),
+  claim: (name, expectedTrackId, expectedRun) =>
+    claim(store, changeDir(name), expectedTrackId, expectedRun),
   setAutomation: (name, s) => store.set(changeDir(name), 'automation', s),
   setField: (name, field, value) => store.set(changeDir(name), field as never, value),
   commitFailureOwned: (name, input) => commitFailureOwned(store, changeDir(name), input),
@@ -204,6 +217,10 @@ export function createAutomation(deps: AutomationDeps): Automation {
     level: config.level,
     image: deps.image,
     getAutomation: (change) => getAutomation(store, changeDir(change)),
+    bindAutomationPolicy: deps.bindAutomationPolicy,
+    bindWorkflowActionAuthority: deps.bindWorkflowActionAuthority,
+    withWorkflowActionAuthorityLock: deps.withWorkflowActionAuthorityLock,
+    workflowActionAuthority: deps.workflowActionAuthority,
   })
   // 二次任务（queued 卡死回归修复）：路由 SchedulerDeps.preparation——缺省 createDefaultExecutionPreparation()
   // （none-bundle 直通 + bundle 绑定 fail-loud，见其头注），不再让 runRound 因 preparation 缺席整轮短路成

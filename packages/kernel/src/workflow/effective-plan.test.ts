@@ -12,9 +12,10 @@ import { builtinTrack } from '../tracks/builtins.js'
 
 function preVerifyConvergenceWorkflow() {
   const current = compileEffectiveWorkflowPlan('default').workflow
+  const { decomposition: _decomposition, interaction: _interaction, ...legacy } = current
   return {
-    ...current,
-    steps: current.steps.map((step) => ({
+    ...legacy,
+    steps: legacy.steps.map((step) => ({
       ...step,
       guards: step.id === 'build'
         ? step.guards.filter((guard) =>
@@ -88,13 +89,15 @@ describe('compileEffectiveWorkflowPlan', () => {
     expect(roundTripped.workflowFingerprint).toBe(restored.workflowFingerprint)
   })
 
-  it('writes self-contained v2 snapshots with their frozen document policy', () => {
+  it('writes self-contained v3 snapshots with their frozen document policy and workflow policies', () => {
     const plan = compileEffectiveWorkflowPlan('default')
     const snapshot = workflowPlanSnapshot(plan)
 
-    expect(snapshot.version).toBe(2)
-    if (snapshot.version !== 2) throw new Error('expected v2 workflow snapshot')
+    expect(snapshot.version).toBe(3)
+    if (snapshot.version !== 3) throw new Error('expected v3 workflow snapshot')
     expect(snapshot.documentPolicy).toEqual(plan.documentPolicy)
+    expect(snapshot.decomposition).toEqual(plan.decomposition)
+    expect(snapshot.interaction).toEqual(plan.interaction)
     expect(effectiveWorkflowPlanFromSnapshot(snapshot).workflowFingerprint)
       .toBe(plan.workflowFingerprint)
   })

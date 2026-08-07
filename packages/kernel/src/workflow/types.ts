@@ -16,6 +16,37 @@ import type { TrackPredicate } from './predicates.js'
 export type FieldType = 'string' | 'file_path' | 'boolean'
 export type GateKind = 'review' | 'confirm' | null
 
+export type WorkflowDecompositionMode = 'off' | 'suggest' | 'auto-safe' | 'require-review'
+export type WorkflowDecompositionTarget = 'work-items' | 'child-pipelines'
+export type WorkflowDecompositionStrategy = 'balanced' | 'breadth-first' | 'depth-first'
+export type WorkflowDecompositionAutoCondition =
+  | 'independent-work-items'
+  | 'cross-component-boundary'
+  | 'context-budget-risk'
+export type WorkflowDecompositionAskCondition =
+  | 'ambiguous-requirements'
+  | 'hard-boundary'
+  | 'missing-authorization'
+  | 'limit-exceeded'
+
+export interface WorkflowDecompositionPolicyV1 {
+  readonly version: 'v1'
+  readonly mode: WorkflowDecompositionMode
+  readonly target: WorkflowDecompositionTarget
+  readonly strategy: WorkflowDecompositionStrategy
+  readonly max_items: number
+  readonly max_depth: number
+  readonly auto_when: readonly WorkflowDecompositionAutoCondition[]
+  readonly ask_when: readonly WorkflowDecompositionAskCondition[]
+}
+
+export type WorkflowInteractionMode = 'interactive' | 'recommended-defaults' | 'afk'
+
+export interface WorkflowInteractionPolicyV1 {
+  readonly version: 'v1'
+  readonly mode: WorkflowInteractionMode
+}
+
 export interface FieldRef {
   readonly field: string
   readonly type: FieldType
@@ -145,6 +176,8 @@ export interface StepDef {
 
 export interface WorkflowDef {
   readonly name: string
+  readonly decomposition?: Omit<Partial<WorkflowDecompositionPolicyV1>, 'version'> & { readonly version: 'v1' }
+  readonly interaction?: Omit<Partial<WorkflowInteractionPolicyV1>, 'version'> & { readonly version: 'v1' }
   /** Explicit opt-in: this custom workflow must retain the canonical OpenSpec seven-phase contract. */
   readonly openspecContract?: 'required'
   /**

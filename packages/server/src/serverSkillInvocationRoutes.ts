@@ -53,7 +53,10 @@ interface AnchoredReaderDeps {
   readonly assertChangeParent: (anchor: ChangeParentPathAnchor) => void
   readonly captureChange: (anchor: WorkflowRootAnchor, change: string) => ChangePathAnchor
   readonly assertChange: (anchor: ChangePathAnchor) => void
-  readonly readEvidence: (changeDir: string) => Promise<SkillInvocationListReadModelV1>
+  readonly readEvidence: (
+    changeDir: string,
+    anchoredDirectoryIdentity?: { readonly dev: number; readonly ino: number },
+  ) => Promise<SkillInvocationListReadModelV1>
 }
 
 const anchoredDeps: AnchoredReaderDeps = {
@@ -62,7 +65,10 @@ const anchoredDeps: AnchoredReaderDeps = {
   assertChangeParent: assertChangeParentPathAnchor,
   captureChange: captureChangePathAnchor,
   assertChange: assertChangePathAnchor,
-  readEvidence: readSkillInvocationEvidence,
+  readEvidence: (changeDir, anchoredDirectoryIdentity) => readSkillInvocationEvidence(
+    changeDir,
+    anchoredDirectoryIdentity === undefined ? {} : { anchoredDirectoryIdentity },
+  ),
 }
 
 function assertRoot(anchor: WorkflowRootAnchor, check: AnchoredReaderDeps['assertRoot']): void {
@@ -121,8 +127,11 @@ export async function readAnchoredSkillInvocationEvidence(
     if (!opened.isDirectory() || !sameIdentity(opened, identity)) {
       throw new ContextBundlePathError(403, 'Skill invocation Change identity changed while anchoring')
     }
-    const anchoredChangeDir = traversableDirectoryFdPath(fd, identity) ?? changeAnchor.changeDir
-    const result = await deps.readEvidence(anchoredChangeDir)
+    const fdChangeDir = traversableDirectoryFdPath(fd, identity)
+    const result = await deps.readEvidence(
+      fdChangeDir ?? changeAnchor.changeDir,
+      fdChangeDir === undefined ? undefined : identity,
+    )
     deps.assertChange(changeAnchor)
     assertRoot(anchor, deps.assertRoot)
     assertVersion(anchor, version)

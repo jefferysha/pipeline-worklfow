@@ -229,6 +229,37 @@ describe('派生面 · breadcrumb prose（对齐 manifest.py breadcrumb 子命�
   })
 })
 
+describe('派生面 · versioned Skill action authority', () => {
+  it('真读 templates：显式 closed actions 独立于 mandatory/recommended slots', () => {
+    const manifest = loadManifest(TEMPLATE_MANIFEST)
+    expect(manifest.skillActionAuthority).toEqual({
+      version: 'v1',
+      grants: {
+        _all: ['enter-afk'],
+        pm: ['enter-afk'],
+        frontend: ['enter-afk'],
+        backend: ['enter-afk'],
+        free: [],
+      },
+    })
+  })
+
+  it('缺 authority 节诚实返回 null，不从 skill slots 推断', () => {
+    const manifest = loadManifest(writeManifest('mandatory_skills:\n  build.backend: [test-driven-development]'))
+    expect(manifest.skillActionAuthority).toBeNull()
+  })
+
+  it.each([
+    ['unknown version', 'skill_action_authority:\n  version: v2\n  _all: [enter-afk]'],
+    ['unknown profile', 'skill_action_authority:\n  version: v1\n  arbitrary: [enter-afk]'],
+    ['unknown action', 'skill_action_authority:\n  version: v1\n  _all: [invent-action]'],
+    ['empty action', 'skill_action_authority:\n  version: v1\n  _all: [enter-afk, ]'],
+    ['duplicate section', 'skill_action_authority:\n  version: v1\n  _all: [enter-afk]\nskill_action_authority:\n  version: v1\n  _all: [enter-afk]'],
+  ])('fail-loud: %s', (_label, body) => {
+    expect(() => loadManifest(writeManifest(body))).toThrow(ManifestError)
+  })
+})
+
 describe('派生面 · 回归锚（既有 phases/transitions/reviewPhases 派生不受新增节影响）', () => {
   it('templates 加派生节后，核心三派生仍稳定', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)

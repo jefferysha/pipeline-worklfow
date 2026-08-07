@@ -34,6 +34,7 @@ import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
 import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime/scope.js'
 import { enabledHostPluginIds } from './commands/plugin-host.js'
 import { probeCodexAuth } from './codexAuth.js'
+import { createManifestSkillActionAuthorityResolver } from './skill-action-authority-provider.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -381,6 +382,10 @@ async function main(): Promise<void> {
     // afk.ts 的 cmdAfk('run') 装配 createLoopAdmission 时转发本字段；loop-run.ts 的 --dry-run
     // wiring 预览同样消费（见 deps.ts 头注）。
     isSkillProfileKnown: (id) => trackCtx.skillProfiles.has(id),
+    resolveSkillActionAuthority: createManifestSkillActionAuthorityResolver(
+      manifest,
+      (profile) => trackCtx.skillProfiles.has(profile),
+    ),
     store,
     runRepo,
     loadRegistry: () => loadTrackRegistry(process.cwd(), trackCtx),

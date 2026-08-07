@@ -76,6 +76,9 @@ export * from './skills/snapshot-store.js'
 export * from './skills/types.js'
 export * from './starters/wiring.js'
 export * from './starters/execution-guard.js'
+export * from './task-plan-run/journal.js'
+export * from './task-plan-run/admission.js'
+export * from './task-plan-run/executor.js'
 export {
   readSealedAfkSkillInvocationContext,
   SealedAfkSkillInvocationContextError,

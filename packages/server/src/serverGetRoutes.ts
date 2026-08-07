@@ -41,7 +41,8 @@ import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
-import { readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
+import { readAnchoredChange, readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
+import { readTaskRunForChange, resolveTaskRunRoute } from './serverTaskRunRoutes.js'
 import {
   readAnchoredSkillInvocationEvidence,
   resolveSkillInvocationRoute,
@@ -120,6 +121,11 @@ export async function handleGet(
     readPlan: readAnchoredTaskPlan,
   })
   if (taskPlan !== null) return sendJson(res, taskPlan.status, taskPlan.body)
+  const taskRun = await resolveTaskRunRoute(req.url ?? '/', path, {
+    workflowRootForRequest,
+    readRun: (anchor, change) => readAnchoredChange(anchor, change, readTaskRunForChange),
+  })
+  if (taskRun !== null) return sendJson(res, taskRun.status, taskRun.body)
   const skillInvocations = await resolveSkillInvocationRoute(req.url ?? '/', path, {
     workflowRootForRequest,
     readEvidence: readAnchoredSkillInvocationEvidence,

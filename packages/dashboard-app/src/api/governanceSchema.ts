@@ -11,6 +11,16 @@ import type {
   WbTransition,
   WbWorkflowDef,
 } from './governanceTypes'
+import {
+  DEFAULT_WB_DECOMPOSITION_POLICY,
+  DEFAULT_WB_INTERACTION_POLICY,
+  type WbDecompositionMode,
+  type WbDecompositionPolicy,
+  type WbDecompositionStrategy,
+  type WbDecompositionTarget,
+  type WbInteractionMode,
+  type WbInteractionPolicy,
+} from './governanceTypes'
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -102,6 +112,99 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   const sortedExpected = [...expected].sort()
   return keys.length === sortedExpected.length
     && keys.every((key, index) => key === sortedExpected[index])
+}
+
+function allowedKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedSet = new Set(allowed)
+  return Object.keys(value).every((key) => allowedSet.has(key))
+}
+
+const DECOMPOSITION_MODES = ['off', 'suggest', 'auto-safe', 'require-review'] as const
+const DECOMPOSITION_TARGETS = ['work-items', 'child-pipelines'] as const
+const DECOMPOSITION_STRATEGIES = ['balanced', 'breadth-first', 'depth-first'] as const
+const DECOMPOSITION_AUTO_WHEN = [
+  'independent-work-items',
+  'cross-component-boundary',
+  'context-budget-risk',
+] as const
+const DECOMPOSITION_ASK_WHEN = [
+  'ambiguous-requirements',
+  'hard-boundary',
+  'missing-authorization',
+  'limit-exceeded',
+] as const
+const INTERACTION_MODES = ['interactive', 'recommended-defaults', 'afk'] as const
+
+function isMember<T extends string>(value: unknown, values: readonly T[]): value is T {
+  if (typeof value !== 'string') return false
+  return values.some((candidate) => candidate === value)
+}
+
+function decodeUniqueMembers<T extends string>(value: unknown, values: readonly T[]): T[] | null {
+  if (!Array.isArray(value)) return null
+  const decoded: T[] = []
+  for (const entry of value) {
+    if (!isMember(entry, values) || decoded.includes(entry)) return null
+    decoded.push(entry)
+  }
+  return decoded
+}
+
+function decodeDecompositionPolicy(value: unknown): WbDecompositionPolicy | null {
+  if (value === undefined) {
+    return {
+      ...DEFAULT_WB_DECOMPOSITION_POLICY,
+      auto_when: [],
+      ask_when: [],
+    }
+  }
+  const item = record(value)
+  if (!item || !allowedKeys(item, [
+    'version', 'mode', 'target', 'strategy', 'max_items', 'max_depth', 'auto_when', 'ask_when',
+  ])) return null
+  // A present policy object is versioned just like the kernel contract; only the whole absent
+  // object is a legacy definition that receives safe defaults.
+  const version = item.version
+  const mode = item.mode ?? DEFAULT_WB_DECOMPOSITION_POLICY.mode
+  const target = item.target ?? DEFAULT_WB_DECOMPOSITION_POLICY.target
+  const strategy = item.strategy ?? DEFAULT_WB_DECOMPOSITION_POLICY.strategy
+  const maxItems = item.max_items ?? DEFAULT_WB_DECOMPOSITION_POLICY.max_items
+  const maxDepth = item.max_depth ?? DEFAULT_WB_DECOMPOSITION_POLICY.max_depth
+  const autoWhen = item.auto_when === undefined
+    ? []
+    : decodeUniqueMembers(item.auto_when, DECOMPOSITION_AUTO_WHEN)
+  const askWhen = item.ask_when === undefined
+    ? []
+    : decodeUniqueMembers(item.ask_when, DECOMPOSITION_ASK_WHEN)
+  if (version !== 'v1'
+    || !isMember<WbDecompositionMode>(mode, DECOMPOSITION_MODES)
+    || !isMember<WbDecompositionTarget>(target, DECOMPOSITION_TARGETS)
+    || !isMember<WbDecompositionStrategy>(strategy, DECOMPOSITION_STRATEGIES)
+    || typeof maxItems !== 'number' || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 32
+    || typeof maxDepth !== 'number' || !Number.isInteger(maxDepth) || maxDepth < 0 || maxDepth > 4
+    || autoWhen === null
+    || askWhen === null) return null
+  return {
+    version: 'v1',
+    mode,
+    target,
+    strategy,
+    max_items: maxItems,
+    max_depth: maxDepth,
+    auto_when: autoWhen,
+    ask_when: askWhen,
+  }
+}
+
+function decodeInteractionPolicy(value: unknown): WbInteractionPolicy | null {
+  if (value === undefined) return { ...DEFAULT_WB_INTERACTION_POLICY }
+  const item = record(value)
+  if (!item || !allowedKeys(item, ['version', 'mode'])) return null
+  const version = item.version
+  const mode = item.mode ?? DEFAULT_WB_INTERACTION_POLICY.mode
+  return version === 'v1' && isMember<WbInteractionMode>(mode, INTERACTION_MODES)
+    ? { version: 'v1', mode }
+    : null
 }
 
 function decodePredicate(value: unknown): WbTrackPredicate | null {
@@ -284,12 +387,16 @@ export function decodeWorkflowDefinition(value: unknown): WbWorkflowDef | null {
   if (body.openspecContract !== undefined && body.openspecContract !== 'required') return null
   if (body.openspecContract !== undefined && body.documentContract !== undefined) return null
   const documentContract = body.documentContract === undefined ? undefined : decodeDocumentContract(body.documentContract)
+  const decomposition = decodeDecompositionPolicy(body.decomposition)
+  const interaction = decodeInteractionPolicy(body.interaction)
   const steps = decodeArray(body.steps, decodeStep)
-  if (documentContract === null || steps === null) return null
+  if (documentContract === null || decomposition === null || interaction === null || steps === null) return null
   return {
     name: body.name,
     ...(body.openspecContract === undefined ? {} : { openspecContract: body.openspecContract }),
     ...(documentContract === undefined ? {} : { documentContract }),
+    decomposition,
+    interaction,
     steps,
   }
 }

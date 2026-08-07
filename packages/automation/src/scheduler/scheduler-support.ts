@@ -36,7 +36,9 @@
  * outcome.requireWorkflowBinding（lifecycle 按 cfg.workflowKind 判定后透传）。两处消费点共用同一个
  * verificationGateFor 辅助函数构造 gate 输入，结构上不可能各写一份漂移。
  */
-import { isSettled, type FailureCommitInput, type FailureCommitResult } from '../queue/claim.js'
+import {
+  isSettled, type FailureCommitInput, type FailureCommitResult, type WorkflowClaimRunIdentity,
+} from '../queue/claim.js'
 import { settleSuccess } from '../queue/state-machine.js'
 import { type AutomationConfig, type AutomationState, type RunOutcome } from '../types.js'
 import type { AfkSkillInvocationHandle, AfkSkillInvocationLifecycle } from '../skillInvocationAfkLifecycle.js'
@@ -44,7 +46,10 @@ import type {
   ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
-import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type {
+  ActivateResult, AdmissionDenial, ClaimAuthorizationResult, ReserveResult, RunSettlement,
+  WorkflowAuthorityClaimCapabilityV1,
+} from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -70,6 +75,8 @@ const CONFIG_ERROR_TAGS = new Set([
   'PathPolicyResolverUnconfiguredError',
   'PathPolicyUnconfiguredError',
 ])
+/** Dynamic Workflow authority providers read canonical state/contracts; failures are state I/O, not denials. */
+const AUTHORITY_ERROR_TAGS = new Set(['WorkflowActionAuthorityResolutionError'])
 
 const safeFailureProperty = (error: unknown, key: string): unknown => {
   if (typeof error !== 'object' || error === null) return undefined
@@ -79,7 +86,6 @@ const safeFailureProperty = (error: unknown, key: string): unknown => {
     return undefined
   }
 }
-
 /**
  * G² 子问题1：base 被第三方推进（lifecycle BaseAdvancedError 携 baseAdvanced=true）——这不是普通 per-change
  * 冲突，是并发异常。除了照 classify 落 conflict 留现场外，另记一条 round failure 使 ok=false（fail-loud：
@@ -88,7 +94,7 @@ export const isBaseAdvancedFailure = (err: unknown): boolean => safeFailurePrope
 
 /** 写回 port（由 fs StateStore 适配，见 sdk.ts::storeWriter）。全部经 kernel 锁串行。 */
 export interface StateWriter {
-  claim(name: string): Promise<boolean>
+  claim(name: string, expectedTrackId?: string, expectedRun?: WorkflowClaimRunIdentity): Promise<boolean>
   setAutomation(name: string, state: AutomationState): Promise<void>
   setField(name: string, field: string, value: string): Promise<void>
   getAutomation(name: string): Promise<string>
@@ -107,6 +113,11 @@ export interface AdmissionPort {
     readonly expectedLoopId?: string
     readonly expectedAutonomyLevel?: AutomationConfig['level'] | null
   }): Promise<ReserveResult>
+  claimWithFreshWorkflowAuthority?(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+  readonly workflowAuthorityClaim?: WorkflowAuthorityClaimCapabilityV1
   activate(ctx: ExecutionContext): Promise<ActivateResult>
   settleWon(ctx: ExecutionContext, settlement: RunSettlement): Promise<void>
   settleLost(ctx: ExecutionContext): Promise<void>
@@ -298,6 +309,8 @@ export const classifyRoundFailure = (change: string, phase: RoundFailure['phase'
     kind = 'ledger-io'
   } else if (tag !== undefined && CONFIG_ERROR_TAGS.has(tag)) {
     kind = 'config' // H10 §1：必要协作方/校验器未装配（如 SkillProfileValidatorUnconfiguredError）
+  } else if (tag !== undefined && AUTHORITY_ERROR_TAGS.has(tag)) {
+    kind = 'state-io'
   } else {
     switch (phase) {
       case 'admission':

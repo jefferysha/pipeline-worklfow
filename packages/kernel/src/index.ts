@@ -1,5 +1,6 @@
 export * from './types.js'
 export * from './task-plan/index.js'
+export * from './task-scheduler/index.js'
 export * from './skill-invocation/index.js'
 export { PRODUCT_IDENTITY } from './product-identity.generated.js'
 export type { ProductIdentity } from './product-identity.generated.js'
@@ -63,9 +64,54 @@ export { serializeWorkflow } from './workflow/serialize.js'
 export { validateWorkflow } from './workflow/validate.js'
 export { validateWorkflowTrackReferences } from './workflow/track-reference-validation.js'
 export type {
-  StepDef, StepTransition, WorkflowActionConfig, WorkflowDef, WorkflowDocumentContractV1,
-  WorkflowDocumentRead, WorkflowDocumentSlot, WorkflowGuardConfig,
+  StepDef, StepTransition, WorkflowActionConfig, WorkflowDecompositionAskCondition,
+  WorkflowDecompositionAutoCondition, WorkflowDecompositionMode, WorkflowDecompositionPolicyV1,
+  WorkflowDecompositionStrategy, WorkflowDecompositionTarget, WorkflowDef, WorkflowDocumentContractV1,
+  WorkflowDocumentRead, WorkflowDocumentSlot, WorkflowGuardConfig, WorkflowInteractionMode,
+  WorkflowInteractionPolicyV1,
 } from './workflow/types.js'
+export {
+  canUseWorkflowRecommendedDefault,
+  compileWorkflowDecompositionPolicy,
+  compileWorkflowInteractionPolicy,
+  DEFAULT_WORKFLOW_DECOMPOSITION_POLICY,
+  DEFAULT_WORKFLOW_INTERACTION_POLICY,
+  evaluateWorkflowAction,
+  WORKFLOW_ACTIONS,
+  WORKFLOW_DECOMPOSITION_ASK_CONDITIONS,
+  WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS,
+  WORKFLOW_DECOMPOSITION_MODES,
+  WORKFLOW_DECOMPOSITION_STRATEGIES,
+  WORKFLOW_DECOMPOSITION_TARGETS,
+  WORKFLOW_INTERACTION_MODES,
+  workflowPolicyPermissionLayer,
+} from './workflow/policy.js'
+export {
+  evaluateWorkflowDecompositionMaterialization,
+  workflowDecompositionCandidateFingerprint,
+} from './workflow/decomposition-policy-evaluator.js'
+export type {
+  EvaluateWorkflowDecompositionMaterializationInput,
+  WorkflowDecompositionCandidate,
+  WorkflowDecompositionReviewReceipt,
+} from './workflow/decomposition-policy-evaluator.js'
+export type {
+  EvaluateWorkflowActionInput,
+  RecommendedDefaultDecision,
+  RecommendedDefaultQuestion,
+  WorkflowAction,
+  WorkflowActionClassification,
+  WorkflowActionEvaluation,
+  WorkflowAuthorityBinding,
+  WorkflowHardConfirmation,
+  WorkflowPermissionContribution,
+  WorkflowPermissionDenial,
+  WorkflowPermissionLayer,
+  WorkflowPermissionLayerInput,
+  WorkflowPermissionLayers,
+  WorkflowPermissionLayerStatus,
+  WorkflowPermissionRemediationCode,
+} from './workflow/policy.js'
 export {
   DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, LEGACY_DOCUMENT_GOVERNANCE_POLICY,
   documentGovernancePolicy, documentOwnerPhase, documentOwnerPolicyStep, isAcceptedDocumentProducer,
@@ -93,7 +139,8 @@ export {
   workflowPlanSnapshot,
 } from './workflow/effective-plan.js'
 export type {
-  EffectiveWorkflowPlan, PersistedDocumentGovernanceBinding, WorkflowPlanSnapshot,
+  EffectiveWorkflowPlan, LegacyWorkflowIR, PersistedDocumentGovernanceBinding, WorkflowPlanSnapshot,
+  WorkflowPlanSnapshotV1, WorkflowPlanSnapshotV2, WorkflowPlanSnapshotV3,
 } from './workflow/effective-plan.js'
 export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
 export { readinessByTransition } from './workflow/transition-readiness.js'
@@ -138,6 +185,19 @@ export type {
   CommitResult, StateFieldEffect, TransitionDraft, TransitionRecord, WorkflowRun,
   WorkflowRunRepository, WorkflowRunTransaction,
 } from './workflow/run-types.js'
+export {
+  createWorkflowActionAuthoritySnapshot,
+  parseWorkflowActionAuthoritySnapshot,
+  sameWorkflowActionAuthoritySnapshot,
+  workflowActionAuthoritySnapshotContent,
+} from './state/workflow-action-authority-snapshot.js'
+export type {
+  CreateWorkflowActionAuthoritySnapshotInput,
+  WorkflowActionAuthorityLayerSnapshotV1,
+  WorkflowActionAuthorityProvenanceKind,
+  WorkflowActionAuthorityProvenanceV1,
+  WorkflowActionAuthoritySnapshotV1,
+} from './workflow/action-authority-types.js'
 // 唯一 TransitionApplication 用例（G1 支点，2026-07-17）：CLI 与 server 共用同一份转换编排，
 // 消灭此前 cli/commands/transition.ts 与 server/transition.ts 两处复制。
 export { createTransitionApplication } from './workflow/transition-application.js'

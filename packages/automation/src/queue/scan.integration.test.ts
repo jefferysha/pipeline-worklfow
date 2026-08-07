@@ -67,6 +67,13 @@ describe('scanReadyFromFs（真 fs 枚举 + 真读 automation 字段）', () => 
     expect(await scanReadyFromFs(changesDir(), store)).toEqual(['earlier', 'later'])
   })
 
+  it('archived=true 即使残留 build+queued 也不进入 reservation 候选', async () => {
+    const dir = await initQueued('archived-queued', '2026-07-07T08:00:00Z')
+    await store.set(dir, 'archived', 'true')
+
+    expect(await scanReadyFromFs(changesDir(), store)).toEqual([])
+  })
+
   it('dep automation=merged → 满足；dep 仍 queued → 不放行', async () => {
     await initQueued('dep', '2026-07-07T08:00:00Z')
     await initQueued('child', '2026-07-07T08:30:00Z', ['dep'])

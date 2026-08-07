@@ -1038,10 +1038,101 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     fireEvent.click(screen.getByTestId('wb-save'))
     await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
     expect(screen.getByTestId('wb-save-ok')).toHaveAttribute('role', 'status')
-    const body = lastSaveCall()?.body as { steps: Array<Record<string, unknown>> }
+    const body = lastSaveCall()?.body as {
+      decomposition: unknown
+      interaction: unknown
+      steps: Array<Record<string, unknown>>
+    }
+    expect(body.decomposition).toEqual({
+      version: 'v1', mode: 'off', target: 'work-items', strategy: 'balanced',
+      max_items: 16, max_depth: 2, auto_when: [], ask_when: [],
+    })
+    expect(body.interaction).toEqual({ version: 'v1', mode: 'interactive' })
     expect(body.steps[0]).toEqual({ ...RELEASE_TRAIN.steps[0], prompt: 'Implement and run browser E2E.' })
     expect(body.steps[1]).toEqual(RELEASE_TRAIN.steps[1])
     expect(body.steps[2]).toEqual(RELEASE_TRAIN.steps[2])
+  })
+
+  it('策略编辑保持拆分与互动正交，并通过完整 Workflow POST 保存', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    fireEvent.change(screen.getByLabelText('拆分模式'), { target: { value: 'auto-safe' } })
+    fireEvent.change(screen.getByLabelText('互动模式'), { target: { value: 'recommended-defaults' } })
+    fireEvent.click(screen.getByLabelText('跨组件边界'))
+    fireEvent.click(screen.getByRole('button', { name: '保存策略' }))
+
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+    const body = lastSaveCall()?.body as {
+      decomposition: { mode: string; target: string; auto_when: string[] }
+      interaction: { mode: string }
+      steps: unknown[]
+    }
+    expect(body.decomposition).toMatchObject({
+      mode: 'auto-safe',
+      target: 'work-items',
+      auto_when: ['cross-component-boundary'],
+    })
+    expect(body.interaction).toEqual({ version: 'v1', mode: 'recommended-defaults' })
+    expect(body.steps).toHaveLength(RELEASE_TRAIN.steps.length)
+  })
+
+  it('策略取消只恢复策略字段，并保留其他 Workflow 草稿', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', '未保存阶段')
+    fireEvent.change(screen.getByLabelText('拆分模式'), { target: { value: 'auto-safe' } })
+    fireEvent.change(screen.getByLabelText('互动模式'), { target: { value: 'afk' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消策略修改' }))
+
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存阶段')
+    expect(screen.getByLabelText('拆分模式')).toHaveValue('off')
+    expect(screen.getByLabelText('互动模式')).toHaveValue('interactive')
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+  })
+
+  it('策略 Escape 只恢复策略字段，并保留其他 Workflow 草稿', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', 'Escape 后仍保留')
+    fireEvent.click(screen.getByTestId('wb-lane-gate-sw-draft'))
+    fireEvent.change(screen.getByLabelText('拆分模式'), { target: { value: 'require-review' } })
+    fireEvent.keyDown(screen.getByTestId('workflow-policy-form'), { key: 'Escape' })
+
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Escape 后仍保留')
+    expect(screen.getByTestId('wb-lane-gate-sw-draft')).toBeChecked()
+    expect(screen.getByLabelText('拆分模式')).toHaveValue('off')
+    expect(screen.getByLabelText('拆分模式')).toHaveFocus()
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+  })
+
+  it('仅有非策略字段未保存时禁用策略取消', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', '阶段草稿')
+
+    expect(screen.getByRole('button', { name: '取消策略修改' })).toBeDisabled()
+  })
+
+  it('Workflow 策略读取失败可原地重试，成功后焦点与编辑面恢复', async () => {
+    const baseFetch = global.fetch
+    let attempts = 0
+    global.fetch = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
+        attempts += 1
+        if (attempts === 1) return new Response(JSON.stringify({ error: 'temporary' }), { status: 503 })
+      }
+      return baseFetch(url, options)
+    }) as unknown as typeof fetch
+
+    renderView()
+    expect(await screen.findByRole('button', { name: '重试' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByLabelText('拆分模式')).toHaveValue('off')
+    expect(attempts).toBeGreaterThanOrEqual(2)
   })
 
   it('编辑名称后保存：隐藏的 guard、inputs 与 outputs 均原样透传', async () => {
@@ -1059,6 +1150,11 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     // 页面不再让用户手工声明产出或守卫；保存别的字段时，这些运行契约仍不能丢。
     expect(save?.body).toEqual({
       ...RELEASE_TRAIN,
+      decomposition: {
+        version: 'v1', mode: 'off', target: 'work-items', strategy: 'balanced',
+        max_items: 16, max_depth: 2, auto_when: [], ask_when: [],
+      },
+      interaction: { version: 'v1', mode: 'interactive' },
       steps: [
         { ...RELEASE_TRAIN.steps[0], label: '初稿' },
         RELEASE_TRAIN.steps[1],

@@ -193,6 +193,7 @@ export interface CanonicalTaskPlanReadModelV1 {
   readonly plan_id: string
   readonly revision_id: string
   readonly revision_number: number
+  readonly fingerprint: `sha256:${string}`
   readonly revision_status: TaskPlanRevisionStatus
   readonly validation: TaskPlanValidationResult
   readonly completeness: { readonly state: 'complete' | 'incomplete' }

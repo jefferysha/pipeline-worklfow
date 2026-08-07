@@ -5,6 +5,8 @@ import { makeChange, makeProject, makeSnapshot } from '../testkit'
 import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { AfkView } from './AfkView'
 
+vi.mock('./TaskRunPanel', () => ({ TaskRunPanel: () => null }))
+
 const ROOT = '/tmp/afk-proj'
 
 // 沙箱三态 fixture（automation 字段驱动 progressModel 五态判定）：running/queued/failed 各一，

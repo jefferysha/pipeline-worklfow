@@ -3,6 +3,7 @@
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
 import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@tenon/kernel'
+import type { SkillActionAuthorityResolver } from '@tenon/automation'
 import type { AfkReadiness } from './afkReadiness.js'
 import type { CodexAuthStatus } from './codexAuth.js'
 
@@ -129,6 +130,8 @@ export interface CliDeps {
    * 此前锁外副作用可能因并发交错产生的撕裂。cmdTransition 唯一消费方。
    */
   runRepo: WorkflowRunRepository
+  /** Explicit machine-readable Skill contract authority; absent means the Skill layer is missing. */
+  resolveSkillActionAuthority?: SkillActionAuthorityResolver
   /**
    * OpenSpec evidence reader seam. Omit it in production: kernel/CLI then read the authoritative
    * hash-bound ledger. It exists so command unit tests can isolate rendering and exit-code logic

@@ -31,15 +31,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
-  createEffectiveSkillResolver, createLoopLedgerStore, createLoopsYamlText, createStateStore,
+  BUILTIN_TRACK_DEFINITIONS,
+  compileEffectiveWorkflowPlan, createEffectiveSkillResolver, createLoopLedgerStore, createLoopsYamlText,
+  createStateStore, createTransitionRecordStore, createWorkflowRunRepository,
   ledgerDirPath, ledgerFilePath, loadManifest, loadRegistry, nodeLoopIoStrict,
   readRegistrySnapshot, updateLoopInYaml, writeRegistryWithGovernance,
-  type ExtendedManifestData, type LoopLedgerStore, type NewLoopEntryInput, type StateStore, type VerificationResult,
+  workflowPlanSnapshot,
+  type ExtendedManifestData, type LoopLedgerStore, type NewLoopEntryInput, type StateStore, type TrackRegistry,
+  type VerificationResult, type WorkflowRunRepository,
 } from '@tenon/kernel'
 import {
   createExecutionPreparation, createFsSkillContentLocator, createLifecyclePorts, createLoopAdmission,
   createScheduler, dockerAvailable, evaluateLoopExecutionWiring, getAutomation, materializeSkillSnapshot,
-  markQueued, nodeExec, storeWriter,
+  markQueued, nodeExec, parseSkillActionAuthorityContract, skillActionAuthorityContract, storeWriter,
   SKILL_BUNDLE_CONTAINER_DIR, SkillBundleSnapshotMismatchError,
   type ExecFn, type ExecutionPreparationDeps, type ExecutionPreparationPort, type LoopAdmission,
   type MaterializeSkillSnapshotOptions, type PreparedExecutionContext, type RunChange,
@@ -51,6 +55,36 @@ import { createExecutionCoordinatePort } from './skillBundleAssembly.js'
 const PROFILE = 'backend' // 具名 profile（词法与存在性都合法，见 registry.ts::SKILL_BUNDLE_ID_RE + 下方 isSkillProfileKnown）
 const SKILL_ID = 'demo-skill'
 const FIXED_CLOCK = '2026-07-18T00:00:00.000Z'
+const TEST_TRACK_REGISTRY: TrackRegistry = {
+  ordered: BUILTIN_TRACK_DEFINITIONS,
+  byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+  revision: '0123456789abcdef',
+  source: 'builtin-only',
+}
+const AFK_WORKFLOW = compileEffectiveWorkflowPlan('skill-bundle-afk', {
+  name: 'skill-bundle-afk',
+  interaction: { version: 'v1', mode: 'afk' },
+  steps: [{
+    id: 'build', label: 'Build', gate: null,
+    skills: [{ id: SKILL_ID }], inputs: [], outputs: [], guards: [], transitions: [],
+  }],
+})
+const AFK_WORKFLOW_SNAPSHOT = workflowPlanSnapshot(AFK_WORKFLOW)
+const AFK_WORKFLOW_YAML = `name: ${AFK_WORKFLOW.id}
+interaction:
+  version: v1
+  mode: afk
+steps:
+  - id: build
+    label: Build
+    gate: null
+    skills:
+      - id: ${SKILL_ID}
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
 
 /** 最小真实 manifest 定稿：'build' 相位在 'backend' track 的 mandatory skill 恰是 SKILL_ID
  *  （resolveDefault('build','backend') 的三级回退第一档直接命中，不依赖 `_all` 兜底）。 */
@@ -135,6 +169,7 @@ interface Rig {
   readonly repoRoot: string
   readonly store: StateStore
   readonly ledger: LoopLedgerStore
+  readonly runRepo: WorkflowRunRepository
   readonly skillsRoot: string
   readonly manifest: ExtendedManifestData
   readonly loopId: string
@@ -144,6 +179,66 @@ interface Rig {
   readonly runChange: RunChange
 }
 
+async function initAfkChange(store: StateStore, repoRoot: string, name: string): Promise<string> {
+  return store.init({
+    repoRoot, name, track: 'backend', reviewSeed: 'pending', preset: 'full',
+    clock: () => FIXED_CLOCK,
+    runId: `run-${name}`,
+    initialWorkflow: {
+      workflow: AFK_WORKFLOW.id,
+      phase: 'build',
+      workflowPlanFingerprint: AFK_WORKFLOW.workflowFingerprint,
+      workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
+    },
+  })
+}
+
+function exactWorkflowActionAuthority(store: StateStore, repoRoot: string) {
+  return async (input: {
+    change: string
+    context: { loop_id: string; iteration_id?: string; skill_bundle_id: string | null }
+    run: {
+      id: string; workflowId?: string; workflowPlanFingerprint?: string
+      loopId?: string; iterationId?: string
+    }
+    registry: TrackRegistry
+  }) => {
+    const state = await store.read(changeDir(repoRoot, input.change))
+    const metadata = state.runMetadata
+    const exact = metadata !== undefined
+      && metadata.runId === input.run.id
+      && input.run.workflowId === AFK_WORKFLOW.id
+      && metadata.workflowPlanFingerprint === input.run.workflowPlanFingerprint
+      && metadata.loopId === input.run.loopId
+      && input.run.loopId === input.context.loop_id
+      && metadata.iterationId === input.run.iterationId
+      && input.run.iterationId === input.context.iteration_id
+    const query = input.context.skill_bundle_id && input.run.workflowPlanFingerprint
+      ? {
+          change: input.change,
+          skillBundleId: input.context.skill_bundle_id,
+          workflowRunId: input.run.id,
+          workflowFingerprint: input.run.workflowPlanFingerprint,
+        }
+      : null
+    return {
+      platform: { status: 'valid' as const, grants: ['enter-afk' as const] },
+      skill: query
+        ? parseSkillActionAuthorityContract(skillActionAuthorityContract(query, ['enter-afk']), query)
+        : { status: 'missing' as const, grants: [] },
+      project: { status: 'valid' as const, grants: ['enter-afk' as const] },
+      run: exact
+        ? { status: 'valid' as const, grants: ['enter-afk' as const] }
+        : { status: 'fingerprint-mismatch' as const, grants: [] },
+      projectAuthority: {
+        version: 'v1' as const,
+        track_id: 'backend',
+        track_registry_revision: input.registry.revision,
+      },
+    }
+  }
+}
+
 async function setupRig(opts: { loopId?: string } = {}): Promise<Rig> {
   const repoRoot = await mkdtemp(join(tmpdir(), 'h10-skill-lifecycle-'))
   const loopId = opts.loopId ?? 'lp'
@@ -151,6 +246,8 @@ async function setupRig(opts: { loopId?: string } = {}): Promise<Rig> {
   const change = `${changePrefix}x`
 
   await seedLoopYaml(repoRoot, { id: loopId, changePrefix, skillBundleId: PROFILE })
+  await mkdir(join(repoRoot, '.pipeline', 'workflows'), { recursive: true })
+  await writeFile(join(repoRoot, '.pipeline', 'workflows', `${AFK_WORKFLOW.id}.yaml`), AFK_WORKFLOW_YAML)
 
   const manifestPath = join(repoRoot, 'fixture-manifest.yaml')
   await writeFile(manifestPath, MANIFEST_YAML, 'utf8')
@@ -163,12 +260,14 @@ async function setupRig(opts: { loopId?: string } = {}): Promise<Rig> {
   await chmod(join(skillsRoot, SKILL_ID, 'scripts', 'run.sh'), 0o755)
 
   const store = createStateStore()
-  await store.init({ repoRoot, name: change, track: 'backend', reviewSeed: 'pending', preset: 'full', clock: () => FIXED_CLOCK })
+  await initAfkChange(store, repoRoot, change)
   const changeDirPath = changeDir(repoRoot, change)
-  await store.set(changeDirPath, 'phase', 'build')
   await markQueued(store, changeDirPath, () => FIXED_CLOCK)
 
   const ledger = createLoopLedgerStore()
+  const runRepo = createWorkflowRunRepository({
+    store, recordStore: createTransitionRecordStore(), clock: () => FIXED_CLOCK,
+  })
 
   const runCalls: PreparedExecutionContext[] = []
   const runChange: RunChange = async (ctx) => {
@@ -183,7 +282,7 @@ async function setupRig(opts: { loopId?: string } = {}): Promise<Rig> {
     }
   }
 
-  return { repoRoot, store, ledger, skillsRoot, manifest, loopId, change, changeDirPath, runCalls, runChange }
+  return { repoRoot, store, ledger, runRepo, skillsRoot, manifest, loopId, change, changeDirPath, runCalls, runChange }
 }
 
 function buildAdmission(rig: Rig): LoopAdmission {
@@ -195,6 +294,12 @@ function buildAdmission(rig: Rig): LoopAdmission {
     level: 'L1',
     getAutomation: (change) => getAutomation(rig.store, changeDir(rig.repoRoot, change)),
     isSkillProfileKnown: (id) => id === PROFILE,
+    bindAutomationPolicy: (change, policy, binding) =>
+      rig.runRepo.bindAutomationPolicy(changeDir(rig.repoRoot, change), policy, binding),
+    bindWorkflowActionAuthority: (change, snapshot) =>
+      rig.runRepo.bindWorkflowActionAuthority(changeDir(rig.repoRoot, change), snapshot),
+    withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
+    workflowActionAuthority: exactWorkflowActionAuthority(rig.store, rig.repoRoot),
   })
 }
 
@@ -318,7 +423,7 @@ describe('端到端全链 —— admission→prepareSkillBundle→snapshot→set
     expect(run).toBeDefined()
 
     if (snapshot?.kind !== 'skill-bundle-snapshot' || run?.kind !== 'run') throw new Error('unreachable：上方已 expect 定义')
-    expect(snapshot.resolution_source).toBe('default')
+    expect(snapshot.resolution_source).toBe('custom')
     expect(snapshot.skill_bundle_id).toBe(PROFILE)
     expect(snapshot.slots).toEqual([{ token: SKILL_ID, alternatives: [SKILL_ID], concrete_skill_id: SKILL_ID, tree_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }])
     expect(snapshot.snapshot_sha256).toBe(receivedBundle?.snapshotSha256)
@@ -613,11 +718,21 @@ describe('旧 ledger JSONL fixture 回归 —— 手写历史行与新真实 res
     await seedLoopYaml(repoRoot, { id: 'lp2', changePrefix: 'lp2-', skillBundleId: PROFILE })
     const store = createStateStore()
     const change = 'lp2-y'
-    await store.init({ repoRoot, name: change, track: 'backend', reviewSeed: 'pending', preset: 'full', clock: () => FIXED_CLOCK })
+    await initAfkChange(store, repoRoot, change)
+    await markQueued(store, changeDir(repoRoot, change), () => FIXED_CLOCK)
+    const runRepo = createWorkflowRunRepository({
+      store, recordStore: createTransitionRecordStore(), clock: () => FIXED_CLOCK,
+    })
 
     const admission = createLoopAdmission({
       repoRoot, ledger, loadRegistry: (r) => loadRegistry(r, nodeLoopIoStrict), clock: () => FIXED_CLOCK, level: 'L1',
       getAutomation: (c) => getAutomation(store, changeDir(repoRoot, c)), isSkillProfileKnown: (id) => id === PROFILE,
+      bindAutomationPolicy: (name, policy, binding) =>
+        runRepo.bindAutomationPolicy(changeDir(repoRoot, name), policy, binding),
+      bindWorkflowActionAuthority: (name, snapshot) =>
+        runRepo.bindWorkflowActionAuthority(changeDir(repoRoot, name), snapshot),
+      withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
+      workflowActionAuthority: exactWorkflowActionAuthority(store, repoRoot),
     })
     const result = await admission.reserve(change)
     expect(result.ok).toBe(true)
