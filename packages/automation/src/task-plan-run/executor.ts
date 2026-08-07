@@ -71,9 +71,11 @@ export async function claimNextTaskPlanWorkItem<PreparedContext>(
     run_revision: journal.run_revision,
   })
   const byId = new Map(readModel.items.map((item) => [item.work_item_id, item]))
-  const workItemId = schedule.waves
-    .flatMap((wave) => wave.work_item_ids)
-    .find((id) => byId.get(id)?.state === 'ready')
+  const earliestUnfinishedWave = schedule.waves.find((wave) => wave.work_item_ids.some((id) => {
+    const state = byId.get(id)?.state
+    return state === 'pending' || state === 'ready' || state === 'running' || state === 'invalidated'
+  }))
+  const workItemId = earliestUnfinishedWave?.work_item_ids.find((id) => byId.get(id)?.state === 'ready')
   if (workItemId === undefined) return { status: 'idle', run_revision: journal.run_revision }
 
   const workItem = input.plan.work_items.find(({ id }) => id === workItemId)
