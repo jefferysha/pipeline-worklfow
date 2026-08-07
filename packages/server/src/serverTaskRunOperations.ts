@@ -149,6 +149,9 @@ export async function applyTaskRunOperationForChange(
 ): Promise<TaskRunReadModelV1> {
   const current = await readTaskRunForChange(changeDir)
   if (current === null) throw new TaskRunOperationConflictError('Task Run is missing')
+  if (current.admission.status !== 'admitted') {
+    throw new TaskRunOperationConflictError('Task Run admission is not authoritative')
+  }
   const allowed = current.allowed_operations.some((candidate) =>
     candidate.operation === operation.operation
     && candidate.work_item_id === operation.work_item_id

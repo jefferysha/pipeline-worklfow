@@ -1,6 +1,16 @@
+import { mkdtemp, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { TaskRunReadModelV1 } from '@tenon/kernel'
 import {
+  publishTaskPlanRevision,
+  type TaskPlanRevisionV1,
+  type TaskRunReadModelV1,
+} from '@tenon/kernel'
+import { appendTaskRunAttempt, readTaskRunJournal } from '@tenon/automation'
+import {
+  applyTaskRunOperationForChange,
+  TaskRunOperationConflictError,
   resolveTaskRunOperation,
   type TaskRunOperationRouteDeps,
 } from './serverTaskRunOperations.js'
@@ -23,6 +33,29 @@ const body = {
   work_item_id: 'wi-1',
   expected_run_revision: 2,
   expected_state: 'running',
+}
+
+async function canonicalChangeDir(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'tenon-task-run-operations-'))
+  const change = join(root, 'change')
+  await mkdir(change)
+  const revision: TaskPlanRevisionV1 = {
+    schema_version: 'task-plan/v1',
+    plan_id: 'plan-1',
+    revision_id: 'revision-1',
+    revision_number: 1,
+    status: 'frozen',
+    created_at: '2026-08-04T00:00:00.000Z',
+    requirements: [],
+    acceptance_criteria: [],
+    groups: [{ id: 'root', title: 'Root', parent_id: null, work_item_ids: ['wi-1'] }],
+    work_items: [{
+      id: 'wi-1', title: 'Work item', group_id: 'root', requirement_refs: [], acceptance_refs: [],
+      depends_on: [], resource_claims: [], expected_outputs: [], validators: [],
+    }],
+  }
+  await publishTaskPlanRevision(change, revision, { expected_current_revision_id: null })
+  return change
 }
 
 describe('resolveTaskRunOperation', () => {
@@ -59,5 +92,24 @@ describe('resolveTaskRunOperation', () => {
     }))
     expect(conflict).toMatchObject({ status: 409, body: { code: 'TASK_RUN_OPERATION_CONFLICT' } })
     expect(JSON.stringify(conflict)).not.toContain('/secret')
+  })
+})
+
+describe('applyTaskRunOperationForChange', () => {
+  it('fails closed without authoritative admission and leaves the journal unchanged', async () => {
+    const change = await canonicalChangeDir()
+    await appendTaskRunAttempt(change, 'revision-1', 0, {
+      attempt_id: 'attempt-1', work_item_id: 'wi-1', attempt_number: 1, status: 'failed',
+      recorded_at: '2026-08-04T00:00:00.000Z', input_digests: {},
+    })
+    const operation = {
+      operation_id: 'retry-1', operation: 'retry' as const, work_item_id: 'wi-1',
+      expected_run_revision: 1, expected_state: 'failed', recorded_at: '2026-08-04T00:00:01.000Z',
+    }
+    const before = await readTaskRunJournal(change, 'revision-1')
+
+    await expect(applyTaskRunOperationForChange(change, operation))
+      .rejects.toBeInstanceOf(TaskRunOperationConflictError)
+    await expect(readTaskRunJournal(change, 'revision-1')).resolves.toEqual(before)
   })
 })

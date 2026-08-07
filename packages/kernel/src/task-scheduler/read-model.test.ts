@@ -69,6 +69,41 @@ describe('deriveTaskRunReadModel', () => {
     expect(model.state).toBe('failed')
   })
 
+  it('offers no server-authorized operations while authoritative admission is blocked', () => {
+    const revision = plan()
+    const model = deriveTaskRunReadModel({
+      plan: revision,
+      schedule: compileTaskSchedule(revision),
+      attempts: [attempt('a', 1, 'failed')],
+      validator_verdicts: [],
+      admission: {
+        status: 'blocked',
+        blockers: [{ code: 'AUTHORITATIVE_ADMISSION_MISSING', detail: 'missing', remediation: 'RECHECK' }],
+      },
+      run_revision: 1,
+    })
+
+    expect(model.state).toBe('blocked')
+    expect(model.allowed_operations).toEqual([])
+  })
+
+  it('offers no server-authorized operations when schedule compilation is invalid', () => {
+    const revision = { ...plan(), status: 'draft' as const }
+    const schedule = compileTaskSchedule(revision)
+    const model = deriveTaskRunReadModel({
+      plan: revision,
+      schedule,
+      attempts: [attempt('a', 1, 'failed')],
+      validator_verdicts: [],
+      admission: { status: 'admitted', blockers: [] },
+      run_revision: 1,
+    })
+
+    expect(schedule.valid).toBe(false)
+    expect(model.state).toBe('blocked')
+    expect(model.allowed_operations).toEqual([])
+  })
+
   it('uses the latest append-only status fact for the same attempt number', () => {
     const revision = plan()
     const running = { ...attempt('a', 1, 'running'), journal_sequence: 1 }

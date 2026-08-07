@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, open } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, open, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -16,6 +16,25 @@ async function changeDir(): Promise<string> {
   const change = join(root, 'change')
   await mkdir(change)
   return change
+}
+
+function journalPath(change: string): string {
+  return join(change, '.pipeline', 'task-runs', 'revision-1', 'events.jsonl')
+}
+
+function operationEvent(sequence: number, operationId: string): string {
+  return `${JSON.stringify({
+    schema_version: 'task-run-event/v1',
+    sequence,
+    type: 'operation',
+    operation: {
+      operation_id: operationId,
+      operation: 'resume',
+      expected_run_revision: sequence - 1,
+      expected_state: 'blocked',
+      recorded_at: '2026-08-04T00:00:00.000Z',
+    },
+  })}\n`
 }
 
 describe('task run journal', () => {
@@ -39,6 +58,79 @@ describe('task run journal', () => {
       await handle.close()
     }
   })
+
+  it('fails closed on a symlinked journal leaf without following it for reads or appends', async () => {
+    const change = await changeDir()
+    const directory = join(change, '.pipeline', 'task-runs', 'revision-1')
+    const target = join(change, 'outside-events.jsonl')
+    const leaf = journalPath(change)
+    const targetContents = operationEvent(1, 'target-operation')
+    await mkdir(directory, { recursive: true })
+    await writeFile(target, targetContents, 'utf8')
+    await symlink(target, leaf)
+
+    await expect(readTaskRunJournal(change, 'revision-1'))
+      .rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+    await expect(appendTaskRunOperation(change, 'revision-1', {
+      operation_id: 'new-operation', operation: 'resume', expected_run_revision: 1,
+      expected_state: 'blocked', recorded_at: '2026-08-04T00:00:01.000Z',
+    })).rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+    await expect(readFile(target, 'utf8')).resolves.toBe(targetContents)
+  })
+
+  it('fails closed on a non-regular journal leaf', async () => {
+    const change = await changeDir()
+    const leaf = journalPath(change)
+    await mkdir(leaf, { recursive: true })
+
+    await expect(readTaskRunJournal(change, 'revision-1'))
+      .rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+    await expect(appendTaskRunOperation(change, 'revision-1', {
+      operation_id: 'new-operation', operation: 'resume', expected_run_revision: 0,
+      expected_state: 'blocked', recorded_at: '2026-08-04T00:00:01.000Z',
+    })).rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+  })
+
+  it('rejects an incomplete final JSONL line as corrupt', async () => {
+    const change = await changeDir()
+    const leaf = journalPath(change)
+    await mkdir(join(change, '.pipeline', 'task-runs', 'revision-1'), { recursive: true })
+    await writeFile(leaf, operationEvent(1, 'incomplete').trimEnd(), 'utf8')
+
+    await expect(readTaskRunJournal(change, 'revision-1'))
+      .rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+  })
+
+  it('rejects an append that would exceed the journal byte budget before writing', async () => {
+    const change = await changeDir()
+    const leaf = journalPath(change)
+    await mkdir(join(change, '.pipeline', 'task-runs', 'revision-1'), { recursive: true })
+    const maxBytes = 8 * 1024 * 1024
+    const baseEvent = {
+      schema_version: 'task-run-event/v1',
+      sequence: 1,
+      type: 'operation' as const,
+      operation: {
+        operation_id: 'fill-operation', operation: 'resume' as const, expected_run_revision: 0,
+        expected_state: '', recorded_at: '2026-08-04T00:00:00.000Z',
+      },
+    }
+    const baseBytes = Buffer.byteLength(`${JSON.stringify(baseEvent)}\n`)
+    const event = {
+      ...baseEvent,
+      operation: { ...baseEvent.operation, expected_state: 'b'.repeat(maxBytes - baseBytes - 1) },
+    }
+    const contents = `${JSON.stringify(event)}\n`
+    expect(Buffer.byteLength(contents)).toBe(maxBytes - 1)
+    await writeFile(leaf, contents, 'utf8')
+    const before = await readFile(leaf)
+
+    await expect(appendTaskRunOperation(change, 'revision-1', {
+      operation_id: 'overflow-operation', operation: 'resume', expected_run_revision: 1,
+      expected_state: 'blocked', recorded_at: '2026-08-04T00:00:01.000Z',
+    })).rejects.toBeInstanceOf(TaskRunJournalCorruptError)
+    await expect(readFile(leaf)).resolves.toEqual(before)
+  }, 15_000)
 
   it('appends attempt and operation facts without rewriting history', async () => {
     const change = await changeDir()

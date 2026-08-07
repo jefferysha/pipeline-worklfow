@@ -1,4 +1,5 @@
-import { lstat, mkdir, open, readFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { lstat, mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   withLock,
@@ -32,6 +33,13 @@ interface ValidatorEvent {
 }
 
 type TaskRunJournalEvent = AttemptEvent | OperationEvent | ValidatorEvent
+type JournalFileHandle = Awaited<ReturnType<typeof open>>
+
+interface JournalFileIdentity {
+  readonly dev: number
+  readonly ino: number
+  readonly size: number
+}
 
 export interface TaskRunValidatorFact extends TaskValidatorVerdict {
   readonly recorded_at: string
@@ -156,6 +164,102 @@ function parseEvent(value: unknown, expectedSequence: number): TaskRunJournalEve
   throw new TaskRunJournalCorruptError('Task run journal event is invalid')
 }
 
+function parseEvents(raw: string): readonly TaskRunJournalEvent[] {
+  if (raw !== '' && !raw.endsWith('\n')) {
+    throw new TaskRunJournalCorruptError('Task run journal ends with an incomplete line')
+  }
+  const parsed: TaskRunJournalEvent[] = []
+  for (const line of raw.split(/\r?\n/)) {
+    if (line === '') continue
+    let value: unknown
+    try {
+      value = JSON.parse(line) as unknown
+    } catch {
+      throw new TaskRunJournalCorruptError('Task run journal contains malformed JSON')
+    }
+    parsed.push(parseEvent(value, parsed.length + 1))
+  }
+  return parsed
+}
+
+function fileIdentity(stat: { readonly dev: number; readonly ino: number; readonly size: number }): JournalFileIdentity {
+  return { dev: stat.dev, ino: stat.ino, size: stat.size }
+}
+
+function sameFileIdentity(left: JournalFileIdentity, right: JournalFileIdentity): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size
+}
+
+function assertRegularJournalFile(
+  stat: { readonly isFile: () => boolean; readonly dev: number; readonly ino: number; readonly size: number },
+): JournalFileIdentity {
+  if (!stat.isFile()) {
+    throw new TaskRunJournalCorruptError('Task run journal leaf is not a regular file')
+  }
+  return fileIdentity(stat)
+}
+
+async function assertJournalPathIdentity(path: string, expected: JournalFileIdentity): Promise<void> {
+  let current: Awaited<ReturnType<typeof lstat>>
+  try {
+    current = await lstat(path)
+  } catch {
+    throw new TaskRunJournalCorruptError('Task run journal leaf changed during access')
+  }
+  if (current.isSymbolicLink() || !current.isFile() || !sameFileIdentity(fileIdentity(current), expected)) {
+    throw new TaskRunJournalCorruptError('Task run journal leaf is not a stable regular file')
+  }
+}
+
+function journalLeafError(error: unknown): boolean {
+  return isRecord(error)
+    && ['ELOOP', 'EISDIR', 'ENODEV', 'ENXIO', 'ENOTDIR'].includes(String(error.code))
+}
+
+async function openJournalFile(path: string, flags: number, mode?: number): Promise<JournalFileHandle | null> {
+  try {
+    return await open(path, flags, mode)
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') return null
+    if (journalLeafError(error)) {
+      throw new TaskRunJournalCorruptError('Task run journal leaf is not a safe regular file')
+    }
+    throw error
+  }
+}
+
+async function readEventsFromHandle(
+  path: string,
+  handle: JournalFileHandle,
+): Promise<{ readonly events: readonly TaskRunJournalEvent[]; readonly identity: JournalFileIdentity }> {
+  const opened = assertRegularJournalFile(await handle.stat())
+  if (opened.size > MAX_JOURNAL_BYTES) {
+    throw new TaskRunJournalCorruptError('Task run journal exceeds its byte budget')
+  }
+  await assertJournalPathIdentity(path, opened)
+
+  const bytes = Buffer.allocUnsafe(Math.min(opened.size, MAX_JOURNAL_BYTES) + 1)
+  let total = 0
+  while (total < bytes.byteLength) {
+    const { bytesRead } = await handle.read(bytes, total, bytes.byteLength - total, total)
+    if (bytesRead === 0) break
+    total += bytesRead
+  }
+  if (total > MAX_JOURNAL_BYTES) {
+    throw new TaskRunJournalCorruptError('Task run journal exceeds its byte budget')
+  }
+
+  const afterRead = assertRegularJournalFile(await handle.stat())
+  if (!sameFileIdentity(opened, afterRead)) {
+    throw new TaskRunJournalCorruptError('Task run journal changed during read')
+  }
+  await assertJournalPathIdentity(path, afterRead)
+  return {
+    events: parseEvents(bytes.subarray(0, total).toString('utf8')),
+    identity: afterRead,
+  }
+}
+
 async function ordinaryDirectory(path: string): Promise<boolean> {
   try {
     const openedDirectoryPath = process.platform === 'linux'
@@ -204,28 +308,17 @@ async function journalDirectory(
 async function events(changeDir: string, revisionId: string): Promise<readonly TaskRunJournalEvent[]> {
   const directory = await journalDirectory(changeDir, revisionId, false)
   if (directory === null) return []
-  let raw: string
+  const path = join(directory, 'events.jsonl')
+  const handle = await openJournalFile(
+    path,
+    constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+  )
+  if (handle === null) return []
   try {
-    raw = await readFile(join(directory, 'events.jsonl'), { encoding: 'utf8', flag: 'r' })
-  } catch (error) {
-    if (isRecord(error) && error.code === 'ENOENT') return []
-    throw error
+    return (await readEventsFromHandle(path, handle)).events
+  } finally {
+    await handle.close()
   }
-  if (Buffer.byteLength(raw) > MAX_JOURNAL_BYTES) {
-    throw new TaskRunJournalCorruptError('Task run journal exceeds its byte budget')
-  }
-  const parsed: TaskRunJournalEvent[] = []
-  for (const line of raw.split(/\r?\n/)) {
-    if (line === '') continue
-    let value: unknown
-    try {
-      value = JSON.parse(line) as unknown
-    } catch {
-      throw new TaskRunJournalCorruptError('Task run journal contains malformed JSON')
-    }
-    parsed.push(parseEvent(value, parsed.length + 1))
-  }
-  return parsed
 }
 
 export async function readTaskRunJournal(changeDir: string, revisionId: string): Promise<TaskRunJournal> {
@@ -283,37 +376,65 @@ async function appendEvent(
     throw new TypeError('Task run expected revision is invalid')
   }
   return withLock(changeDir, async () => {
-    const current = await events(changeDir, revisionId)
-    if (current.length !== expectedRunRevision) {
-      throw new TaskRunRevisionConflictError('Task run expected revision is stale')
-    }
-    if (event.type === 'attempt') {
-      const coordinateConflict = current.find((entry) => entry.type === 'attempt'
-        && entry.attempt.work_item_id === event.attempt.work_item_id
-        && entry.attempt.attempt_number === event.attempt.attempt_number
-        && entry.attempt.attempt_id !== event.attempt.attempt_id)
-      if (coordinateConflict !== undefined) {
-        throw new TaskRunJournalCorruptError('Task run attempt coordinate has conflicting identities')
-      }
-      const previous = [...current].reverse().find((entry) =>
-        entry.type === 'attempt' && entry.attempt.attempt_id === event.attempt.attempt_id)
-      assertAttemptTransition(previous?.type === 'attempt' ? previous.attempt : undefined, event.attempt)
-    } else if (event.type === 'operation' && current.some((entry) =>
-      entry.type === 'operation' && entry.operation.operation_id === event.operation.operation_id)) {
-      throw new TaskRunJournalCorruptError('Task run event identity is duplicated')
-    }
     const directory = await journalDirectory(changeDir, revisionId, true)
     if (directory === null) throw new TaskRunJournalCorruptError('Task run journal directory is missing')
-    const sequence = current.length + 1
-    const line = `${JSON.stringify({ ...event, sequence })}\n`
-    const handle = await open(join(directory, 'events.jsonl'), 'a', 0o600)
+    const path = join(directory, 'events.jsonl')
+    const handle = await openJournalFile(
+      path,
+      constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+      0o600,
+    )
+    if (handle === null) throw new TaskRunJournalCorruptError('Task run journal leaf disappeared')
     try {
-      await handle.writeFile(line, 'utf8')
+      const snapshot = await readEventsFromHandle(path, handle)
+      const current = snapshot.events
+      if (current.length !== expectedRunRevision) {
+        throw new TaskRunRevisionConflictError('Task run expected revision is stale')
+      }
+      if (event.type === 'attempt') {
+        const coordinateConflict = current.find((entry) => entry.type === 'attempt'
+          && entry.attempt.work_item_id === event.attempt.work_item_id
+          && entry.attempt.attempt_number === event.attempt.attempt_number
+          && entry.attempt.attempt_id !== event.attempt.attempt_id)
+        if (coordinateConflict !== undefined) {
+          throw new TaskRunJournalCorruptError('Task run attempt coordinate has conflicting identities')
+        }
+        const previous = [...current].reverse().find((entry) =>
+          entry.type === 'attempt' && entry.attempt.attempt_id === event.attempt.attempt_id)
+        assertAttemptTransition(previous?.type === 'attempt' ? previous.attempt : undefined, event.attempt)
+      } else if (event.type === 'operation' && current.some((entry) =>
+        entry.type === 'operation' && entry.operation.operation_id === event.operation.operation_id)) {
+        throw new TaskRunJournalCorruptError('Task run event identity is duplicated')
+      }
+      const sequence = current.length + 1
+      const line = `${JSON.stringify({ ...event, sequence })}\n`
+      const beforeWrite = assertRegularJournalFile(await handle.stat())
+      if (!sameFileIdentity(beforeWrite, snapshot.identity)) {
+        throw new TaskRunJournalCorruptError('Task run journal changed before append')
+      }
+      await assertJournalPathIdentity(path, beforeWrite)
+      const encodedLine = Buffer.from(line, 'utf8')
+      if (beforeWrite.size + encodedLine.byteLength > MAX_JOURNAL_BYTES) {
+        throw new TaskRunJournalCorruptError('Task run journal would exceed its byte budget')
+      }
+      const { bytesWritten } = await handle.write(encodedLine, 0, encodedLine.byteLength, null)
+      if (bytesWritten !== encodedLine.byteLength) {
+        throw new TaskRunJournalCorruptError('Task run journal append was incomplete')
+      }
       await handle.sync()
+      const afterWrite = assertRegularJournalFile(await handle.stat())
+      if (!sameFileIdentity(afterWrite, {
+        dev: beforeWrite.dev,
+        ino: beforeWrite.ino,
+        size: beforeWrite.size + encodedLine.byteLength,
+      })) {
+        throw new TaskRunJournalCorruptError('Task run journal changed during append')
+      }
+      await assertJournalPathIdentity(path, afterWrite)
+      return sequence
     } finally {
       await handle.close()
     }
-    return sequence
   })
 }
 

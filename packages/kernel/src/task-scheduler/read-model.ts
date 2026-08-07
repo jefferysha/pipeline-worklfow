@@ -170,25 +170,27 @@ export function deriveTaskRunReadModel(input: DeriveTaskRunInput): TaskRunReadMo
           : 'admitted' as const
 
   const operations: TaskRunOperationV1[] = []
-  for (const item of items) {
-    if (item.state === 'failed' || item.state === 'cancelled' || item.state === 'invalidated') {
-      operations.push({
-        operation: 'retry',
-        work_item_id: item.work_item_id,
-        expected_run_revision: input.run_revision,
-        expected_state: item.state,
-      })
-    } else if (item.state === 'running') {
-      operations.push({
-        operation: 'cancel',
-        work_item_id: item.work_item_id,
-        expected_run_revision: input.run_revision,
-        expected_state: item.state,
-      })
+  if (input.admission.status === 'admitted' && input.schedule.valid) {
+    for (const item of items) {
+      if (item.state === 'failed' || item.state === 'cancelled' || item.state === 'invalidated') {
+        operations.push({
+          operation: 'retry',
+          work_item_id: item.work_item_id,
+          expected_run_revision: input.run_revision,
+          expected_state: item.state,
+        })
+      } else if (item.state === 'running') {
+        operations.push({
+          operation: 'cancel',
+          work_item_id: item.work_item_id,
+          expected_run_revision: input.run_revision,
+          expected_state: item.state,
+        })
+      }
     }
-  }
-  if (state === 'cancelled') {
-    operations.push({ operation: 'resume', expected_run_revision: input.run_revision, expected_state: state })
+    if (state === 'cancelled') {
+      operations.push({ operation: 'resume', expected_run_revision: input.run_revision, expected_state: state })
+    }
   }
 
   return {
