@@ -40,8 +40,8 @@
 
 ## 交付
 
-- [ ] 更新契约与生成默认定义，创建 base=PR2 branch 的独立 PR。 (ship)
+- [x] 更新契约与生成默认定义，创建 base=PR2 branch 的独立 PR。 (ship)
 
 ## 归档
 
-- [ ] 归档 Change 并记录策略兼容结论。 (archive)
+- [x] 归档 Change 并记录策略兼容结论：legacy Workflow 安全投影为 off+interactive，V1/V2 只读兼容，V3 继续严格校验。 (archive)
