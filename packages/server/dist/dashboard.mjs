@@ -7909,6 +7909,13 @@ function evaluateWorkflowAction(input) {
       remediation: "repair-authority-binding"
     });
   }
+  if (classificationValid && input.classification === "missing-authorization") {
+    hasMissing = true;
+    denials.push({
+      code: "missing-authorization-hard-blocked",
+      remediation: "repair-authority-binding"
+    });
+  }
   const runtimeLayers = input.layers;
   const layerRecord = typeof runtimeLayers === "object" && runtimeLayers !== null && !Array.isArray(runtimeLayers) ? runtimeLayers : void 0;
   for (const layer of LAYERS) {

@@ -11994,6 +11994,13 @@ function evaluateWorkflowAction(input) {
       remediation: "repair-authority-binding"
     });
   }
+  if (classificationValid && input.classification === "missing-authorization") {
+    hasMissing = true;
+    denials.push({
+      code: "missing-authorization-hard-blocked",
+      remediation: "repair-authority-binding"
+    });
+  }
   const runtimeLayers = input.layers;
   const layerRecord = typeof runtimeLayers === "object" && runtimeLayers !== null && !Array.isArray(runtimeLayers) ? runtimeLayers : void 0;
   for (const layer of LAYERS) {
@@ -41990,9 +41997,10 @@ async function enforceProductionLoopWiring(deps, loopIds, home = homedir10()) {
 async function resolveAfkWorkflowActionAuthority(deps, change, context, run) {
   const state = await deps.store.read(changeDir(deps.cwd, change));
   let project;
+  const trackId = str(state.fields.track);
+  const registry = trackId === "" ? void 0 : await deps.loadRegistry();
   try {
-    const trackId = str(state.fields.track);
-    const allowed = trackId !== "" && requireTrack(deps.loadRegistry(), trackId).policyProfile.automationEligible;
+    const allowed = trackId !== "" && registry !== void 0 && requireTrack(registry, trackId).policyProfile.automationEligible;
     project = { status: "valid", grants: allowed ? ["enter-afk"] : [] };
   } catch {
     project = { status: "malformed", grants: [] };
@@ -42005,11 +42013,9 @@ async function resolveAfkWorkflowActionAuthority(deps, change, context, run) {
       workflowRunId: run.id,
       workflowFingerprint: run.workflowPlanFingerprint
     };
+    const rawSkill = await deps.resolveSkillActionAuthority(query);
     try {
-      skill = parseSkillActionAuthorityContract(
-        await deps.resolveSkillActionAuthority(query),
-        query
-      );
+      skill = parseSkillActionAuthorityContract(rawSkill, query);
     } catch {
       skill = { status: "malformed", grants: [] };
     }

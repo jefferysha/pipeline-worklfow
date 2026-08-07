@@ -216,8 +216,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
   const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
-  const policyDirty = !readonlyWf
-    && def !== null
+  const policyDirty = !readonlyWf && def !== null
     && defBaselineRef.current !== null
     && (JSON.stringify(def.decomposition) !== JSON.stringify(defBaselineRef.current.decomposition)
       || JSON.stringify(def.interaction) !== JSON.stringify(defBaselineRef.current.interaction))
