@@ -182,6 +182,7 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
   let automationPolicy: WorkflowRun['automationPolicy']
   let loopId: string | undefined
   let iterationId: string | undefined
+  let workflowActionAuthority: WorkflowRun['workflowActionAuthority']
   return {
     initChange: async (opts): Promise<{ changeDir: string; run: WorkflowRun }> => {
       const changeDir = await store.init(opts)
@@ -201,6 +202,7 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
         id: 'mock-run', workflowId: 'default', currentStep: '', lifecycle: 'active',
         transitionSequence: sequence, transitionHead: undefined, createdAt: '', updatedAt: '', automationPolicy,
         policyId: automationPolicy?.policy_id, policyVersion: automationPolicy?.policy_version, loopId, iterationId,
+        workflowActionAuthority,
       }
     },
     bindAutomationPolicy: async (changeDir, policy, binding): Promise<WorkflowRun> => {
@@ -226,6 +228,20 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
         policyId: policy.policy_id, policyVersion: policy.policy_version, loopId, iterationId,
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
+        workflowActionAuthority,
+      }
+    },
+    bindWorkflowActionAuthority: async (changeDir, snapshot): Promise<WorkflowRun> => {
+      const state = await store.read(changeDir)
+      workflowActionAuthority = snapshot
+      return {
+        id: state.runMetadata?.runId ?? 'mock-run',
+        workflowId: resolveWorkflowName(state), currentStep: '', lifecycle: 'active',
+        transitionSequence: sequence, transitionHead: undefined, createdAt: '', updatedAt: '', automationPolicy,
+        policyId: automationPolicy?.policy_id, policyVersion: automationPolicy?.policy_version, loopId, iterationId,
+        workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
+        workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
+        workflowActionAuthority,
       }
     },
     transact: async <T,>(changeDir: string, fn: (tx: WorkflowRunTransaction) => Promise<T>): Promise<T> =>
@@ -236,6 +252,7 @@ export function mockWorkflowRunRepository(store: MockStore, clock: () => string 
           id: 'mock-run', workflowId: resolveWorkflowName(state), currentStep: '', lifecycle: 'active',
           transitionSequence: sequence, transitionHead: undefined, createdAt: '', updatedAt: '', automationPolicy,
           policyId: automationPolicy?.policy_id, policyVersion: automationPolicy?.policy_version, loopId, iterationId,
+          workflowActionAuthority,
         }
         const tx: WorkflowRunTransaction = {
           run,

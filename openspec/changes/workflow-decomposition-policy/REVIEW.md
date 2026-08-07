@@ -23,6 +23,7 @@
 | High | A missing-authorization evaluator result could still enter the ordinary review-confirmation path. | Missing authorization is now an unconditional hard block and has a production/irreversible positive-control regression. |
 | High | A require-review receipt trusted an opaque caller-supplied candidate fingerprint. | The kernel now computes a canonical SHA-256 candidate fingerprint over the normalized plan and re-computes it at confirmation time. |
 | High | Workflow authority provider failures were converted into ordinary denials. | Provider calls now sit outside semantic-denial handling so storage or resolver failures propagate as observable state I/O errors. |
+| High | Project/track authority could be revoked after evaluation but before claim, while the effective authorization inputs were neither revision-bound nor durably auditable. | Admission now derives project grants from the locked canonical Track Registry, persists an immutable closed five-layer authorization snapshot per attempt, rebinds it before claim, and atomically re-resolves exact track revision/identity and Run coordinates under the same registry lock. Provider failures close the reservation with zero charge; optional legacy/custom admission capability is preflighted before reserve and has no bare-claim fallback. |
 | Medium | Cancelling policy edits discarded unrelated stage/guard drafts. | Policy cancel and Escape now restore only decomposition/interaction fields and preserve unrelated drafts. |
 
 Open tracked Critical/High/Medium findings: **0** after the recorded fixes; exact-HEAD independent
@@ -30,16 +31,20 @@ read-only re-review remains a Build exit gate.
 
 ## Build gates
 
-- Root suite: 364 files, 6367 passed, 26 honest environment skips, 0 failed
+- Root suite: 365 files, 6396 passed, 14 honest environment skips, 0 failed
   (`npm test -- --minWorkers=4 --maxWorkers=4`, exit 0).
 - Dashboard suite: 90 files, 1654 passed, 0 failed
   (`npm run test:web -- --minWorkers=4 --maxWorkers=4`, exit 0).
 - TypeScript, production build, OpenSpec 39/39, repository identity, default-workflow
   freshness, repository hygiene, Skill bundle verification (66 references / 62 directories),
-  architecture (782 production files), comment honesty and `git diff --check`: PASS.
-- Focused policy/admission/AFK/codec/server/Dashboard regressions and the three independent
-  implementation tracks pass. The final exact-HEAD independent review is still pending.
-- Hermetic bundle gate: 28 passed, 0 failed, including the frozen N-1 strict reader.
+  architecture (787 production files), comment honesty, dependency tree, high-severity audit and
+  `git diff --check`: PASS.
+- Focused authorization snapshot/repository/admission/scheduler/claim/SDK/CLI regressions: 8 files,
+  311 passed, including a real Docker lifecycle case. The broader policy/admission/AFK/codec/server/
+  Dashboard regressions and the three independent implementation tracks also pass. The final
+  exact-HEAD independent review is still pending.
+- Hermetic package gate: 39 passed, 0 failed; the frozen N-1 strict reader compatibility gate also
+  remains green.
 
 ## Pending completion evidence
 
