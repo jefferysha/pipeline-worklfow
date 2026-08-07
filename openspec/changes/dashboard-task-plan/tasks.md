@@ -21,8 +21,8 @@
 
 ## 验证
 
-- [ ] 运行 test:web、typecheck:web、build:web 和 API integration。 (verify)
-- [ ] 用唯一长期 browser owner 完成 1024–1920px、键盘、focus、状态与 zh/en 验收。 (verify)
+- [x] 运行 test:web、typecheck:web、build:web 和 API integration。 (verify)
+- [x] 用唯一长期 browser owner 完成 1024–1920px、键盘、focus、状态与 zh/en 验收。 (verify)
 
 ## 交付
 

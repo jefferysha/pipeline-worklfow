@@ -46,3 +46,23 @@
 {"ts":"2026-08-07T21:53:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-08-07T21:53:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"05b1a826-4356-47a7-8ded-ebacff2e062c"}
 {"ts":"2026-08-07T22:02:31Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T22:02:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T22:02:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-07T22:02:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-07T22:02:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-07T22:02:44Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"a7696a85-c26f-4ab9-8055-c3048b76a21c"}
+{"ts":"2026-08-07T22:08:16Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-dashboard-task-plan-verify.md"}
+{"ts":"2026-08-07T22:08:16Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T22:08:16Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion e1c65317-f9c3-4ce8-9930-7ce0316b93e9 6"}
+{"ts":"2026-08-07T22:08:17Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T22:08:17Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify e1c65317-f9c3-4ce8-9930-7ce0316b93e9 6"}
+{"ts":"2026-08-07T22:08:17Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-07T22:08:17Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-07T22:08:18Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-07T22:08:27Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-07T20:17:13Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-07T22:08:28Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"b5270fc4-d610-4e23-bf19-e2a428e8c141"}
