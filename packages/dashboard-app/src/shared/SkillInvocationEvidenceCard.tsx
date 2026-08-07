@@ -13,12 +13,23 @@ import { useT } from '../i18n'
 interface SkillInvocationEvidenceCardProps {
   readonly root: string
   readonly change: string
+  readonly workItemId?: string
+}
+
+interface SkillInvocationScope {
+  readonly root: string
+  readonly change: string
+  readonly workItemId?: string
 }
 
 type LoadState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly value: SkillInvocationList }
-  | { readonly kind: 'error' }
+  | { readonly kind: 'ready'; readonly value: SkillInvocationList; readonly scope: SkillInvocationScope }
+  | { readonly kind: 'error'; readonly scope: SkillInvocationScope }
+
+function sameScope(left: SkillInvocationScope, right: SkillInvocationScope): boolean {
+  return left.root === right.root && left.change === right.change && left.workItemId === right.workItemId
+}
 
 const statusTone: Record<SkillInvocationStatus, string> = {
   completed: 'border-green-b bg-green-t text-green-d',
@@ -165,7 +176,7 @@ function InvocationDetails({ item }: { readonly item: SkillInvocationReadItem })
   )
 }
 
-export function SkillInvocationEvidenceCard({ root, change }: SkillInvocationEvidenceCardProps): JSX.Element {
+export function SkillInvocationEvidenceCard({ root, change, workItemId }: SkillInvocationEvidenceCardProps): JSX.Element {
   const { t } = useT()
   const requestId = useRef(0)
   const [attempt, setAttempt] = useState(0)
@@ -173,16 +184,26 @@ export function SkillInvocationEvidenceCard({ root, change }: SkillInvocationEvi
   useEffect(() => {
     const id = ++requestId.current
     const controller = new AbortController()
+    const scope: SkillInvocationScope = { root, change, workItemId }
     setState({ kind: 'loading' })
     fetchSkillInvocations(root, change, controller.signal)
       .then((value) => {
-        if (requestId.current === id && !controller.signal.aborted) setState({ kind: 'ready', value })
+        if (requestId.current === id && !controller.signal.aborted) setState({ kind: 'ready', value, scope })
       })
       .catch(() => {
-        if (requestId.current === id && !controller.signal.aborted) setState({ kind: 'error' })
+        if (requestId.current === id && !controller.signal.aborted) setState({ kind: 'error', scope })
       })
     return () => controller.abort()
-  }, [attempt, change, root])
+  }, [attempt, change, root, workItemId])
+
+  const currentScope: SkillInvocationScope = { root, change, workItemId }
+  const stateMatchesScope = state.kind === 'loading' || sameScope(state.scope, currentScope)
+  const filteredItems = state.kind === 'ready' && stateMatchesScope
+    ? state.value.items.filter((item) => workItemId === undefined || item.subject.work_item_id === workItemId)
+    : []
+  const emptyText = workItemId === undefined
+    ? t('skillInvocation.empty')
+    : t('skillInvocation.empty_work_item', { id: workItemId })
 
   return (
     <section className="border-b border-border py-[13px] last:border-b-0" aria-label={t('skillInvocation.region')} data-testid="skill-invocation-evidence">
@@ -190,13 +211,13 @@ export function SkillInvocationEvidenceCard({ root, change }: SkillInvocationEvi
         <h3 className="m-0 text-[12.5px] font-bold text-text">{t('skillInvocation.heading')}</h3>
         <p className="mt-0.5 mb-0 text-[11px] text-text-3">{t('skillInvocation.read_only')}</p>
       </div>
-      {state.kind === 'loading' && (
+      {(!stateMatchesScope || state.kind === 'loading') && (
         <div className="flex items-center gap-2 text-xs text-text-3" role="status">
           <RefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           {t('skillInvocation.loading')}
         </div>
       )}
-      {state.kind === 'error' && (
+      {state.kind === 'error' && stateMatchesScope && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-red-b bg-red-t px-3 py-2.5" role="alert">
           <span className="text-xs text-red-d">{t('skillInvocation.error')}</span>
           <button type="button" className="rounded-md border border-red-b bg-card px-2.5 py-1 text-xs font-semibold text-red-d focus-visible:ring-2 focus-visible:ring-(--accent)" onClick={() => setAttempt((value) => value + 1)}>
@@ -204,13 +225,13 @@ export function SkillInvocationEvidenceCard({ root, change }: SkillInvocationEvi
           </button>
         </div>
       )}
-      {state.kind === 'ready' && state.value.items.length === 0 && (
+      {state.kind === 'ready' && stateMatchesScope && filteredItems.length === 0 && (
         <p className="m-0 rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-text-3" role="status">
-          {t('skillInvocation.empty')}
+          {emptyText}
         </p>
       )}
-      {state.kind === 'ready' && state.value.items.length > 0 && (
-        <div className="grid gap-2">{state.value.items.map((item) => <InvocationDetails item={item} key={item.invocation_id} />)}</div>
+      {state.kind === 'ready' && stateMatchesScope && filteredItems.length > 0 && (
+        <div className="grid gap-2">{filteredItems.map((item) => <InvocationDetails item={item} key={item.invocation_id} />)}</div>
       )}
     </section>
   )

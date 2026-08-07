@@ -38,8 +38,8 @@ const run: TaskRunDto = {
   allowed_operations: [{ operation: 'retry', work_item_id: 'wi-1', expected_run_revision: 2, expected_state: 'failed' }],
 }
 
-function renderPanel(): void {
-  render(<I18nProvider><TaskRunPanel root="/repo" change="demo" /></I18nProvider>)
+function renderPanel(readOnly?: boolean): void {
+  render(<I18nProvider><TaskRunPanel root="/repo" change="demo" readOnly={readOnly} /></I18nProvider>)
 }
 
 beforeEach(() => {
@@ -64,6 +64,46 @@ describe('TaskRunPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry Build API' }))
     expect(postTaskRunOperation).toHaveBeenCalledWith('/repo', 'demo', run.allowed_operations[0])
     await waitFor(() => expect(screen.getByTestId('task-run-panel')).toHaveAttribute('data-state', 'running'))
+  })
+
+  it('renders the server snapshot without operation controls or POST calls in read-only mode', async () => {
+    const readOnlySnapshot: TaskRunDto = {
+      ...run,
+      waves: [
+        { index: 1, work_item_ids: ['wi-2'], parallelism: 1 },
+        { index: 0, work_item_ids: ['wi-1'], parallelism: 1 },
+      ],
+      items: [
+        ...run.items,
+        {
+          work_item_id: 'wi-2', title: 'Review API', state: 'ready', depends_on: ['wi-1'],
+          resource_claims: [], latest_attempt: null,
+        },
+      ],
+      invalidations: [{
+        work_item_id: 'wi-2', caused_by_work_item_id: 'wi-1', expected_digest: 'sha256:expected', actual_digest: 'sha256:actual',
+      }],
+      validator_verdicts: [{ validator_id: 'plan-validator', scope: 'run', status: 'pass' }],
+      allowed_operations: [
+        ...run.allowed_operations,
+        { operation: 'cancel', work_item_id: 'wi-1', expected_run_revision: 2, expected_state: 'failed' },
+        { operation: 'resume', expected_run_revision: 2, expected_state: 'blocked' },
+      ],
+    }
+    vi.mocked(fetchTaskRun).mockResolvedValue(readOnlySnapshot)
+    renderPanel(true)
+
+    expect(await screen.findByText('Admission blocked')).toBeVisible()
+    const waveLabels = screen.getAllByText(/^Wave [12]$/)
+    expect(waveLabels.map((label) => label.textContent)).toEqual(['Wave 1', 'Wave 2'])
+    expect(screen.getAllByText('Build API')).toHaveLength(2)
+    expect(screen.getAllByText('Review API')).toHaveLength(2)
+    expect(screen.getByText('wi-1 #1')).toBeVisible()
+    expect(screen.getByText('wi-2 was invalidated by a new output from wi-1')).toBeVisible()
+    expect(screen.getByText('plan-validator · pass')).toBeVisible()
+    expect(screen.getByText('wi-1 writes file:packages/server before wi-2')).toBeVisible()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(postTaskRunOperation).not.toHaveBeenCalled()
   })
 
   it('refreshes the server truth after a stale operation failure', async () => {

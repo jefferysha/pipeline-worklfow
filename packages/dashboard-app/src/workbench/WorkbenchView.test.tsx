@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider, useT } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
 import { invalidateMandatoryConfig } from './mandatorySkills'
-import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { DEFAULT_WORKFLOW_RULES, makeChange, makeProject, makeSnapshot } from '../testkit'
+import type { WorkflowPolicyRulesSnapshot } from '../types'
 import { decodeWorkflowDeleteError, decodeWorkflowDeleteSuccess } from './workbenchApiDecoders'
 import {
   moveSkillInDef,
@@ -1022,6 +1023,46 @@ function lastSaveCall(): { url: string; body: unknown } | null {
 }
 
 describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
+  it('挂载只读运行时策略摘要且不改动 Workflow 草稿', async () => {
+    const runtimePolicy: WorkflowPolicyRulesSnapshot = {
+      schema: 'workflow-policy/v1',
+      configured: {
+        status: 'available',
+        workflowFingerprint: 'a'.repeat(64),
+        decomposition: { version: 'v1', mode: 'off', target: 'work-items', strategy: 'balanced', max_items: 16, max_depth: 2, auto_when: [], ask_when: [] },
+        interaction: { version: 'v1', mode: 'interactive' },
+      },
+      frozen: {
+        workflowFingerprint: 'b'.repeat(64),
+        decomposition: { version: 'v1', mode: 'off', target: 'work-items', strategy: 'balanced', max_items: 16, max_depth: 2, auto_when: [], ask_when: [] },
+        interaction: { version: 'v1', mode: 'interactive' },
+        workflowCeiling: { status: 'valid', grants: [] },
+      },
+      effective: { status: 'available', grants: [], denials: [] },
+      drift: { status: 'current', fingerprintChanged: false, policyChanged: false },
+    }
+    const snapshot = makeSnapshot([makeProject(ROOT, [makeChange('runtime-summary-change', 'build', {
+      fields: { workflow: 'release-train' },
+      updated_at: '2026-08-08T09:00:00Z',
+      workflowRules: { ...DEFAULT_WORKFLOW_RULES, policy: runtimePolicy },
+    })])])
+    const before = JSON.stringify(snapshot)
+
+    renderView({ snapshot })
+    await screen.findByTestId('workflow-policy-runtime-summary')
+    await screen.findByTestId('workflow-policy-editor')
+
+    expect(screen.getByTestId('workflow-policy-runtime-source-change')).toHaveTextContent('runtime-summary-change')
+    expect(screen.getByTestId('workflow-policy-runtime-configured-decomposition')).toHaveTextContent('关闭')
+    expect(screen.getByTestId('workflow-policy-runtime-configured-interaction')).toHaveTextContent('逐项互动')
+    expect(screen.getByTestId('workflow-policy-runtime-frozen-ceiling-empty')).toHaveTextContent('冻结权限上限未授予任何动作')
+    expect(screen.getByLabelText('拆分模式')).toHaveValue('off')
+    expect(screen.getByLabelText('互动模式')).toHaveValue('interactive')
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(lastSaveCall()).toBeNull()
+    expect(JSON.stringify(snapshot)).toBe(before)
+  })
+
   it('加载后未编辑：无「未保存」chip，保存钮 disabled（上轮 minor 收口项）', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')

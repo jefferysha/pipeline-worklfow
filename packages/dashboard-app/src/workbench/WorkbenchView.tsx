@@ -19,6 +19,7 @@ import { useRecentWorkflowHistory } from './useRecentWorkflowHistory'
 import { WorkbenchDialogs } from './WorkbenchDialogs'
 import { WorkbenchHeader } from './WorkbenchHeader'
 import { WorkflowPolicyEditor } from './WorkflowPolicyEditor'
+import { WorkflowPolicyRuntimeSummary } from './WorkflowPolicyRuntimeSummary'
 import { WorkbenchGovernanceDialog } from './WorkbenchGovernanceDialog'
 import { readWorkflowWriteSuccess } from './workbenchWriteResponse'
 import type { WorkbenchViewProps } from './workbenchViewTypes'
@@ -67,10 +68,7 @@ export type {
 gsap.registerPlugin(useGSAP)
 export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyChange }: WorkbenchViewProps): JSX.Element {
   const { t, lang } = useT()
-  const defaultLabels = useMemo(
-    () => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])),
-    [lang, t],
-  )
+  const defaultLabels = useMemo(() => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])), [lang, t])
   const localizedDefaultDef = useMemo(() => buildDefaultDef(defaultLabels), [defaultLabels])
   const [names, setNames] = useState<string[] | null>(null)
   const [namesError, setNamesError] = useState<unknown | null>(null)
@@ -516,6 +514,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
         onCancel={cancelPolicyDraft}
         onRetry={() => setDefinitionReloadNonce((value) => value + 1)}
       />
+      <WorkflowPolicyRuntimeSummary root={root} workflowName={wfName} snapshot={snapshot} />
       {def && (
         <>
           <ExecutionTimelineComposer

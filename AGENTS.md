@@ -41,6 +41,18 @@ Claude Code 使用本文件时，不得用未转义的 `@path` 导入规则文�
 - 最终回复遵循 `.agent-rules/COMMON.md` 的交付要求。
 <!-- create-rule:end -->
 
+## 子代理调度
+
+以下原则适用于 `luna_worker` 以及其他自定义 subagents；主 Agent 始终负责拆解任务、维护主任务目标、整合结果并完成最终验收：
+
+- 主线程独占任务拆解、复杂性判断、风险分级、代码 review、问题定级、验收标准判定以及结果接收或拒绝；不得将这些职责委派给 `luna_worker` 或其他自定义 subagent，也不得采用 worker 的自审结论代替主线程 review。
+- `luna_worker` 以及其他自定义 subagents 只负责实施主线程下发的独立子任务。worker 不得自行进入 review、替主线程给出 review verdict、决定验收通过、调整主任务目标或扩大任务范围；实施完成后应停止并回传变更范围、实现结果和验证证据，等待主线程亲自检查。
+- 对体量较大、边界清晰且相互独立的子任务，优先派发给多个 `luna_worker` 并行处理；后续需要调用子代理时，默认优先选择 `luna_worker`。几分钟内能够完成的轻量任务直接留在主线程，避免不必要的调度开销。
+- 每个 worker 的委派描述必须上下文完整，至少明确目标、相关仓库或 worktree、允许修改的文件范围、任务边界与非目标、预期输出和可执行的验收标准。worker 只执行被委派任务，不得修改主任务目标或自行扩大范围。
+- 只读任务可以并行。涉及文件写入的任务必须为每个 worker 使用独立 worktree；若无法隔离写入环境，则改为串行执行，不得让多个 worker 并发修改同一 checkout。
+- worker 完成后，主线程必须逐项按照委派时的验收标准检查结果。未达标时应结合实际缺口补全上下文并重新派发，不得直接把未验收结果视为完成。
+- 如果多个 worker 无法并行，先检查用户级 `~/.codex/config.toml` 中的 `agents.max_concurrent_threads_per_session` 是否被显式设置为 `1`，再排查其他并发限制；检查配置时不得覆盖或删除无关内容。
+
 <!-- PIPELINE:CODEX:START -->
 ## Tenon Workflow（Codex 静态层）
 

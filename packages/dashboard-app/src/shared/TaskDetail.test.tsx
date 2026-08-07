@@ -115,6 +115,18 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
 }
 
 describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
+  it('在 orchestration graph 之后挂载宿主注入的 evidence slot', async () => {
+    await renderDetail({
+      root: '/workspace',
+      change: makeChange('task-plan-change', 'open', { fields: {} }),
+      evidenceExtra: <div data-testid="task-plan-evidence-section" />,
+    })
+
+    const orchestration = screen.getByTestId('orchestration-graph')
+    const taskPlanEvidence = screen.getByTestId('task-plan-evidence-section')
+    expect(orchestration.compareDocumentPosition(taskPlanEvidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('为所有 Change 挂载独立的相关会话检索入口，且初始不发起检索', async () => {
     await renderDetail({
       change: makeChange('related-session-memory', 'open', { fields: {} }),

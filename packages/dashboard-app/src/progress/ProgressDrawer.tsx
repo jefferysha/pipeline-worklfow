@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { useT } from '../i18n'
 import { TaskDetail } from '../shared/TaskDetail'
 import { VerificationEvidenceComposer } from '../verification/VerificationEvidenceComposer'
+import { TaskPlanEvidenceSection } from './TaskPlanEvidenceSection'
 import { fieldStr, type FlatRow } from './progressViewModel'
 import { ContextBundlePreview } from './ContextBundlePreview'
 import { ReviewHandshakeStatus } from './ReviewHandshakeStatus'
@@ -46,6 +47,7 @@ export function ProgressDrawer({
             rules={row.rules}
             badge={badge}
             actions={actions}
+            evidenceExtra={<TaskPlanEvidenceSection root={row.row.root} change={row.row.change.name} />}
             curStageExtra={(
               <>
                 <ReviewHandshakeStatus change={row.row.change} />
