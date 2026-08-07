@@ -2,19 +2,23 @@
 
 ## 结论
 
-PASS。冻结基线 `bad884a3076886f8a25d6dcad7cdb3a651276b60` 相对 PR3 head
+PASS。当前 canonical `build_sha` `b425405b9276b6787910b22db03cac66516ef381` 相对 PR3 head
 `b5c616f33a3d6806b18ffe0aef85ebab0062653f` 的完整变更已由主线程按 Standards 与 Spec 两轴复核；
 未发现剩余 CRITICAL/HIGH/MEDIUM correctness、security、contract、可访问性或回归问题。
 
 本次遵循项目子代理规则：Luna worker 只实施边界明确的修复；复杂性判断、finding 分级、完整 diff
 review 与最终验收均由主线程完成，没有把 review 派给 worker。
 
-## 冻结基线与完整性
+## 冻结基线、官方回环与完整性
 
-- `build_sha`: `bad884a3076886f8a25d6dcad7cdb3a651276b60`
+- 当前 canonical `build_sha`: `b425405b9276b6787910b22db03cac66516ef381`
+- 首次实现冻结点: `bad884a3076886f8a25d6dcad7cdb3a651276b60`
 - 比较基线: PR3 head `b5c616f33a3d6806b18ffe0aef85ebab0062653f`
+- 首轮 Verify 的报告与治理证据提交使 HEAD 前移，`verify-pass` 的 build SHA 屏障按预期拒绝放行；随后通过
+  `verify-fail` 官方 transition 回到 Build，把既有验证治理基线纳入 `b425405b` 后再次冻结。回环期间没有修改
+  产品实现，也没有重写 canonical state 或 Git 历史。
 - `git diff --quiet bad884a3 -- packages/automation packages/kernel packages/server packages/dashboard-app packages/cli/dist/tenon.mjs`
-  在冻结后定向测试、OpenSpec 演练和浏览器验收前后均 exit 0。
+  在首次冻结后、官方回环后及第二轮 Verify 前后均 exit 0，证明 `b425405b` 相对首次实现冻结点只增加治理证据。
 - 真实 `openspec/specs/**/spec.md` 聚合 digest 在隔离 archive 演练前后均为
   `1eb8d14c716bc10974d237be5d3219ce1cc7dfbf6d14c69516974ce6ac0c8459`。
 
@@ -49,6 +53,10 @@ review 与最终验收均由主线程完成，没有把 review 派给 worker。
 | `npm run test:hooks` | PASS；511 tests |
 
 ## Verify 冻结后证据
+
+首轮 Verify 完成 OpenSpec archive 演练与真实浏览器验收；第二轮 Verify 在 canonical `build_sha`
+`b425405b` 上重新运行定向测试、类型检查、严格 OpenSpec 校验与实现 byte-equivalence 检查。因为产品实现相对
+`bad884a3` 未变化，首轮 runtime/browser 证据仍精确对应当前实现。
 
 | 命令/检查 | 结果 |
 | --- | --- |

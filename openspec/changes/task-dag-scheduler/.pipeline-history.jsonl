@@ -62,3 +62,21 @@
 {"ts":"2026-08-07T19:43:01Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T19:43:01Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build f505c67f-bb52-4c8f-8046-281179216b3e 7"}
 {"ts":"2026-08-07T19:43:02Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T19:43:08Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T19:43:08Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T19:43:08Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"40c9d1cb-dd9c-46aa-8c34-06f51e47be97"}
+{"ts":"2026-08-07T19:45:46Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-task-dag-scheduler-verify.md"}
+{"ts":"2026-08-07T19:45:46Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T19:45:46Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion f505c67f-bb52-4c8f-8046-281179216b3e 8"}
+{"ts":"2026-08-07T19:45:46Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T19:45:46Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify f505c67f-bb52-4c8f-8046-281179216b3e 8"}
+{"ts":"2026-08-07T19:45:57Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-07T19:45:57Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-07T19:45:57Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-07T19:46:03Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-07T19:46:04Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-07T19:27:42Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T19:46:04Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"ba38005f-3ca1-496c-8aea-fc0dc5f74c1a"}
+{"ts":"2026-08-07T19:48:11Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-07T19:48:11Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change f505c67f-bb52-4c8f-8046-281179216b3e 9"}
+{"ts":"2026-08-07T19:48:12Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-07T19:48:12Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship f505c67f-bb52-4c8f-8046-281179216b3e 9"}
