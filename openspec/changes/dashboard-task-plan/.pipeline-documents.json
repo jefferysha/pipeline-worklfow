@@ -49,7 +49,7 @@
         {
           "phase": "ship",
           "sha256": "fa0c06d09378a9ae49404db6395f0b27e57e72f76a9f099baed84ea2c414cdec",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -100,7 +100,7 @@
         {
           "phase": "ship",
           "sha256": "711d94cb7f73a060b311ecce2cd0d832d1490ae1bbb99d402356822c590147ce",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -145,7 +145,7 @@
         {
           "phase": "ship",
           "sha256": "78ec69d0fd310900799f149c7dcf8000fd4eff54ba957f22d131b8432118c2ac",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -184,7 +184,7 @@
         {
           "phase": "ship",
           "sha256": "ffad455995eb5adf5c64cc892cee242605da2905cb3149dc4d80b18634d03b2d",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -223,7 +223,7 @@
         {
           "phase": "ship",
           "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -262,7 +262,7 @@
         {
           "phase": "ship",
           "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -307,7 +307,7 @@
         {
           "phase": "ship",
           "sha256": "5af27e9dae3cb8050218e78d18a5da3b7a42bad23762262d59fd7a8c8edc9d77",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -330,36 +330,7 @@
         {
           "phase": "ship",
           "sha256": "5f3443bb1e4c0af369c48d053a5f47982cb86813553cebec3a443fe288a2d42a",
-          "readAt": "2026-08-07T22:10:32Z",
-          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-task-plan/tasks.md",
-      "sha256": "560c8cff4b3ec6621e08587762736efdd69d93c1677958216b803455effb1a58",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-08-07T22:08:17Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-23cd29f75740d0a6ea819fdd2344ba4179a4b40b1f0c189ec839c1c6251a9ebb",
-        "evidenceScope": "verify",
-        "stepVisit": {
-          "runId": "e1c65317-f9c3-4ce8-9930-7ce0316b93e9",
-          "transitionSequence": 6
-        }
-      },
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "560c8cff4b3ec6621e08587762736efdd69d93c1677958216b803455effb1a58",
-          "readAt": "2026-08-07T22:08:17Z",
-          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
-        },
-        {
-          "phase": "ship",
-          "sha256": "560c8cff4b3ec6621e08587762736efdd69d93c1677958216b803455effb1a58",
-          "readAt": "2026-08-07T22:10:32Z",
+          "readAt": "2026-08-07T22:11:22Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
@@ -379,6 +350,29 @@
         }
       },
       "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-task-plan/tasks.md",
+      "sha256": "b5cbd3cb370bbc56bbdcce1b6bc404458e2ef303646f7c29cc1ec3196ca664af",
+      "producer": "tenon-ship",
+      "recordedAt": "2026-08-07T22:11:21Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-ba5f0c0db96d0bf641ab09836f5d96475abf8430580559a91106389b66de2ffc",
+        "evidenceScope": "ship",
+        "stepVisit": {
+          "runId": "e1c65317-f9c3-4ce8-9930-7ce0316b93e9",
+          "transitionSequence": 7
+        }
+      },
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "b5cbd3cb370bbc56bbdcce1b6bc404458e2ef303646f7c29cc1ec3196ca664af",
+          "readAt": "2026-08-07T22:11:22Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
+        }
+      ]
     }
   ]
 }

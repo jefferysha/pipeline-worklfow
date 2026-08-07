@@ -26,7 +26,7 @@
 
 ## 交付
 
-- [ ] 保存浏览器证据并创建 base=PR4 branch 的独立 PR。 (ship)
+- [x] 保存浏览器证据并创建 base=PR4 branch 的独立 PR。 (ship)
 
 ## 归档
 
