@@ -21,8 +21,8 @@
 
 ## 验证
 
-- [ ] 运行定向测试、全量 build、架构/格式门禁与受限 worker 全量测试。 (verify)
-- [ ] 审查相对 origin/main 的安全、正确性、契约和回归风险。 (verify)
+- [x] 运行定向测试、全量 build、架构/格式门禁与受限 worker 全量测试。 (verify)
+- [x] 审查相对 origin/main 的安全、正确性、契约和回归风险。 (verify)
 
 ## 交付
 

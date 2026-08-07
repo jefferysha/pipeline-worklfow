@@ -42,3 +42,20 @@
 {"ts":"2026-08-07T11:15:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T11:15:57Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build bc806ace-bc14-4d9b-9172-a28433746db5 3"}
 {"ts":"2026-08-07T11:16:14Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T11:16:29Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T11:16:29Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T11:16:29Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"14fbaddf-969b-43da-91b1-7df81a0a4e39"}
+{"ts":"2026-08-07T11:24:18Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-skill-invocation-fd-anchor-linux-verify.md"}
+{"ts":"2026-08-07T11:24:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T11:24:18Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion bc806ace-bc14-4d9b-9172-a28433746db5 4"}
+{"ts":"2026-08-07T11:24:18Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T11:24:18Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify bc806ace-bc14-4d9b-9172-a28433746db5 4"}
+{"ts":"2026-08-07T11:24:19Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-07T11:24:19Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-07T11:24:19Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-07T11:24:26Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-07T11:24:26Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-07T10:59:02Z authority_host_session=019fdbde-eaac-7f23-befd-fe9d339c96d1"}
+{"ts":"2026-08-07T11:24:26Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"d633c706-c37d-448a-81b9-a8248d7ee1d9"}
+{"ts":"2026-08-07T11:25:58Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-07T11:25:58Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change bc806ace-bc14-4d9b-9172-a28433746db5 5"}
+{"ts":"2026-08-07T11:26:46Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/34"}

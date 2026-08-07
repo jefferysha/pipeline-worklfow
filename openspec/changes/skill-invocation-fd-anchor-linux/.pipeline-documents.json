@@ -27,6 +27,18 @@
           "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -54,6 +66,18 @@
           "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -75,6 +99,18 @@
           "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -90,6 +126,18 @@
           "sha256": "abeed6fcc6269a4a0088c5b708008bbb87bc9f564294b661ad1616c2e5fb5236",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "abeed6fcc6269a4a0088c5b708008bbb87bc9f564294b661ad1616c2e5fb5236",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "abeed6fcc6269a4a0088c5b708008bbb87bc9f564294b661ad1616c2e5fb5236",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -105,6 +153,18 @@
           "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -120,6 +180,18 @@
           "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
@@ -141,31 +213,88 @@
           "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
           "readAt": "2026-08-07T11:06:16Z",
           "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-07-skill-invocation-fd-anchor-linux-verify.md",
+      "sha256": "abc0b4fd82ca71d50e17fd3f0645ccc4e62ddfd81200268a12552dc11d617690",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-07T11:24:18Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-594b29b8327081f6c72126b0c0c0c5da49792986ae388bc1ac00e6f00bc31d8c",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "bc806ace-bc14-4d9b-9172-a28433746db5",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "abc0b4fd82ca71d50e17fd3f0645ccc4e62ddfd81200268a12552dc11d617690",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/skill-invocation-fd-anchor-linux/tasks.md",
-      "sha256": "ddf8937beaa6a742190775a406e16deb6ac8050b65fa30f8c822845e192a3fea",
-      "producer": "tenon-build",
-      "recordedAt": "2026-08-07T11:15:57Z",
+      "sha256": "381ef556a390ebd66be5089be58f30a8e54143e84f92c20dc0a96e866d998701",
+      "producer": "tenon-verify",
+      "recordedAt": "2026-08-07T11:24:18Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-96da8e119afa2b4c0a0be1fc261fbe9b47032b70f2ae3d0ed1bc9437539e3dff",
-        "evidenceScope": "build",
+        "confirmationInvocationId": "invocation-609315513182e8a6b8af3ac785c0241d06a8fb511c96021a88ad8154528c9034",
+        "evidenceScope": "verify",
         "stepVisit": {
           "runId": "bc806ace-bc14-4d9b-9172-a28433746db5",
-          "transitionSequence": 3
+          "transitionSequence": 4
         }
       },
       "reads": [
         {
-          "phase": "build",
-          "sha256": "ddf8937beaa6a742190775a406e16deb6ac8050b65fa30f8c822845e192a3fea",
-          "readAt": "2026-08-07T11:15:57Z",
-          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+          "phase": "verify",
+          "sha256": "381ef556a390ebd66be5089be58f30a8e54143e84f92c20dc0a96e866d998701",
+          "readAt": "2026-08-07T11:24:19Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "381ef556a390ebd66be5089be58f30a8e54143e84f92c20dc0a96e866d998701",
+          "readAt": "2026-08-07T11:25:59Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",5]"
         }
       ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/skill-invocation-fd-anchor-linux/applied-spec.md",
+      "sha256": "fc6cc3351ec614ed0af5897d4d3696808cf2d361ccf1cfe3d24465ce50dd95e6",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-08-07T11:25:58Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-1090182e011fad9ed419126e4811ad9c9bf4a29fed372e632bcc40ec305c1405",
+        "evidenceScope": "ship",
+        "stepVisit": {
+          "runId": "bc806ace-bc14-4d9b-9172-a28433746db5",
+          "transitionSequence": 5
+        }
+      },
+      "reads": []
     }
   ]
 }
