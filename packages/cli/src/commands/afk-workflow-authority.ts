@@ -22,9 +22,11 @@ export async function resolveAfkWorkflowActionAuthority(
 ) {
   const state = await deps.store.read(changeDir(deps.cwd, change))
   let project: { status: 'valid' | 'malformed'; grants: readonly ['enter-afk'] | readonly [] }
+  const trackId = str(state.fields.track)
+  const registry = trackId === '' ? undefined : await deps.loadRegistry()
   try {
-    const trackId = str(state.fields.track)
-    const allowed = trackId !== '' && requireTrack(deps.loadRegistry(), trackId).policyProfile.automationEligible
+    const allowed = trackId !== '' && registry !== undefined
+      && requireTrack(registry, trackId).policyProfile.automationEligible
     project = { status: 'valid', grants: allowed ? ['enter-afk'] : [] }
   } catch {
     project = { status: 'malformed', grants: [] }
@@ -39,11 +41,9 @@ export async function resolveAfkWorkflowActionAuthority(
       workflowRunId: run.id,
       workflowFingerprint: run.workflowPlanFingerprint,
     }
+    const rawSkill = await deps.resolveSkillActionAuthority(query)
     try {
-      skill = parseSkillActionAuthorityContract(
-        await deps.resolveSkillActionAuthority(query),
-        query,
-      )
+      skill = parseSkillActionAuthorityContract(rawSkill, query)
     } catch {
       skill = { status: 'malformed', grants: [] }
     }

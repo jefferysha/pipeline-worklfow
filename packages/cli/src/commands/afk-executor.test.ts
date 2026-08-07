@@ -384,6 +384,69 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
     })
   })
 
+  it('propagates a registry provider failure instead of converting it into malformed project policy', async () => {
+    const providerError = new Error('tracks registry EIO')
+    const deps = makeDeps({
+      cwd: '/repo',
+      state: mockState({ track: 'backend', automation: 'queued' }),
+    })
+    deps.loadRegistry = () => { throw providerError }
+
+    await expect(resolveAfkWorkflowActionAuthority(
+      deps,
+      'ready-a',
+      { skill_bundle_id: null, loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )).rejects.toBe(providerError)
+  })
+
+  it('keeps an unknown track as the deterministic malformed project-policy denial', async () => {
+    const facts = await resolveAfkWorkflowActionAuthority(
+      makeDeps({
+        cwd: '/repo',
+        state: mockState({ track: 'unknown-track', automation: 'queued' }),
+      }),
+      'ready-a',
+      { skill_bundle_id: null, loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts.project).toEqual({ status: 'malformed', grants: [] })
+  })
+
+  it('propagates a Skill authority provider failure instead of converting it into malformed skill policy', async () => {
+    const providerError = new Error('skill authority EIO')
+    const deps = makeDeps({
+      cwd: '/repo',
+      state: mockState({ track: 'backend', automation: 'queued' }),
+    })
+    deps.resolveSkillActionAuthority = async () => { throw providerError }
+
+    await expect(resolveAfkWorkflowActionAuthority(
+      deps,
+      'ready-a',
+      { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )).rejects.toBe(providerError)
+  })
+
+  it('keeps a malformed Skill authority payload as the deterministic malformed skill-policy denial', async () => {
+    const deps = makeDeps({
+      cwd: '/repo',
+      state: mockState({ track: 'backend', automation: 'queued' }),
+    })
+    deps.resolveSkillActionAuthority = async () => ({ malformed: true })
+
+    const facts = await resolveAfkWorkflowActionAuthority(
+      deps,
+      'ready-a',
+      { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
+      exactRun,
+    )
+
+    expect(facts.skill).toEqual({ status: 'malformed', grants: [] })
+  })
+
   it('denies an archived exact Run even when automation remains queued', async () => {
     const state = {
       ...mockState({ track: 'backend', automation: 'queued', archived: 'true' }),
