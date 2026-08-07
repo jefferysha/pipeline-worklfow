@@ -26,9 +26,9 @@
 
 ## 交付
 
-- [ ] 应用 OpenSpec、提交并推送现有分支，等待 PR #34 当前 head CI。 (ship)
-- [ ] 核对 PR base/head、draft、mergeability、reviews/comments/threads，不合并。 (ship)
+- [x] 应用 OpenSpec、提交并推送现有分支，等待 PR #34 当前 head CI。 (ship)
+- [x] 核对 PR base/head、draft、mergeability、reviews/comments/threads，不合并。 (ship)
 
 ## 归档
 
-- [ ] 完成文档读取门禁并归档本 Change，保留原归档 Change 不变。 (archive)
+- [x] 完成文档读取门禁并归档本 Change，保留原归档 Change 不变。 (archive)
