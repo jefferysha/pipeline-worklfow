@@ -66,3 +66,5 @@
 {"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
 {"ts":"2026-08-07T22:08:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-08-07T22:08:28Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"b5270fc4-d610-4e23-bf19-e2a428e8c141"}
+{"ts":"2026-08-07T22:10:31Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-07T22:10:31Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change e1c65317-f9c3-4ce8-9930-7ce0316b93e9 7"}

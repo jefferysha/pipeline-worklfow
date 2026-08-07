@@ -45,6 +45,12 @@
           "sha256": "fa0c06d09378a9ae49404db6395f0b27e57e72f76a9f099baed84ea2c414cdec",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "fa0c06d09378a9ae49404db6395f0b27e57e72f76a9f099baed84ea2c414cdec",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -90,6 +96,12 @@
           "sha256": "711d94cb7f73a060b311ecce2cd0d832d1490ae1bbb99d402356822c590147ce",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "711d94cb7f73a060b311ecce2cd0d832d1490ae1bbb99d402356822c590147ce",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -129,6 +141,12 @@
           "sha256": "78ec69d0fd310900799f149c7dcf8000fd4eff54ba957f22d131b8432118c2ac",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "78ec69d0fd310900799f149c7dcf8000fd4eff54ba957f22d131b8432118c2ac",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -162,6 +180,12 @@
           "sha256": "ffad455995eb5adf5c64cc892cee242605da2905cb3149dc4d80b18634d03b2d",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "ffad455995eb5adf5c64cc892cee242605da2905cb3149dc4d80b18634d03b2d",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -195,6 +219,12 @@
           "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -228,6 +258,12 @@
           "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "eaed029ac02e9c696a62665cb1e8f107254a877f164d849f4bbdeaf7f70a2b58",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -267,6 +303,12 @@
           "sha256": "5af27e9dae3cb8050218e78d18a5da3b7a42bad23762262d59fd7a8c8edc9d77",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "5af27e9dae3cb8050218e78d18a5da3b7a42bad23762262d59fd7a8c8edc9d77",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
     },
@@ -284,7 +326,14 @@
           "transitionSequence": 6
         }
       },
-      "reads": []
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "5f3443bb1e4c0af369c48d053a5f47982cb86813553cebec3a443fe288a2d42a",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
+        }
+      ]
     },
     {
       "kind": "tasks",
@@ -306,8 +355,30 @@
           "sha256": "560c8cff4b3ec6621e08587762736efdd69d93c1677958216b803455effb1a58",
           "readAt": "2026-08-07T22:08:17Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "560c8cff4b3ec6621e08587762736efdd69d93c1677958216b803455effb1a58",
+          "readAt": "2026-08-07T22:10:32Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",7]"
         }
       ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/dashboard-task-plan/applied-spec.md",
+      "sha256": "285361e4e40fb9e4db34c37a738a4336559358576be43e28785e317ff8eaba7e",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-08-07T22:10:31Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-e8945b5cde80647e4fd6fe581fb8ae88f06bbeb8e1031b61a2ead7812023d77a",
+        "evidenceScope": "ship",
+        "stepVisit": {
+          "runId": "e1c65317-f9c3-4ce8-9930-7ce0316b93e9",
+          "transitionSequence": 7
+        }
+      },
+      "reads": []
     }
   ]
 }
