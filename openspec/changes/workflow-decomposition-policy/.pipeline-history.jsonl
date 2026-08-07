@@ -78,3 +78,6 @@
 {"ts":"2026-08-07T12:37:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T12:37:36Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 7"}
 {"ts":"2026-08-07T12:43:50Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T12:44:56Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T12:44:56Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T12:44:56Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"c43b8fe2-e5a4-45f4-914e-a868c1f7a54d"}
