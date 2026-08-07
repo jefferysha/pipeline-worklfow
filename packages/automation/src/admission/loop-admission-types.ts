@@ -23,6 +23,7 @@ import type {
   SkillBundleResolutionInput,
   TrackRegistry,
   WorkflowActionEvaluation,
+  WorkflowActionAuthoritySnapshotV1,
   WorkflowPlanSnapshot,
 } from '@tenon/kernel'
 import {
@@ -201,10 +202,12 @@ export interface LoopAdmission {
     expectedAutonomyLevel?: AutomationLevel | null
   }): Promise<ReserveResult>
   /** Final authoritative authority re-read and queued→scheduled claim under one TrackRegistry lock. */
-  claimWithFreshWorkflowAuthority(
+  claimWithFreshWorkflowAuthority?(
     ctx: ExecutionContext,
     claim: (expectedTrackId: string) => Promise<boolean>,
   ): Promise<ClaimAuthorizationResult>
+  /** Versioned scheduler capability. Its absence is preflighted before reserve, never after it. */
+  readonly workflowAuthorityClaim?: WorkflowAuthorityClaimCapabilityV1
   /** claim 成功后 ledger 锁内验证 reservation 未关闭且未过 expires_at → append reservation-activated。
    *  已关闭或 TTL 已过期并在锁内幂等关闭 → already-terminal（不追加晚到 activation）；ledger I/O
    *  故障 → throw（调用方 fail-loud，不进 running）。 */
@@ -221,6 +224,22 @@ export interface LoopAdmission {
   recordMergeLanded(input: MergeLandedJournalInput): Promise<void>
   /** kill-switch 重查：loop 此刻是否仍 active（claim 后 running 前 / terminal settle 前调）。仅展示/保守终态修正，不用于「检查后行动」。 */
   isActive(loopId: string): Promise<boolean>
+}
+
+export interface WorkflowAuthorityClaimCapabilityV1 {
+  readonly version: 'v1'
+  claim(
+    ctx: ExecutionContext,
+    claimState: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+}
+
+export interface ConfiguredLoopAdmission extends LoopAdmission {
+  claimWithFreshWorkflowAuthority(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+  readonly workflowAuthorityClaim: WorkflowAuthorityClaimCapabilityV1
 }
 
 export interface LoopAdmissionDeps {
@@ -288,6 +307,18 @@ export interface LoopAdmissionDeps {
     readonly workflowId?: string
     readonly workflowPlanFingerprint?: string
     readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
+  }>
+  /** Kernel-owned durable per-attempt authority binding; required before the state claim. */
+  readonly bindWorkflowActionAuthority?: (
+    change: string,
+    snapshot: WorkflowActionAuthoritySnapshotV1,
+  ) => Promise<{
+    readonly id: string
+    readonly workflowId?: string
+    readonly workflowPlanFingerprint?: string
+    readonly loopId?: string
+    readonly iterationId?: string
+    readonly workflowActionAuthority?: WorkflowActionAuthoritySnapshotV1
   }>
   /** Holds the canonical TrackRegistry read lock through fresh resolution and the state claim. */
   readonly withWorkflowActionAuthorityLock?: <T>(

@@ -93,6 +93,8 @@ export interface AutomationDeps {
   readonly admission?: LoopAdmission
   /** Canonical WorkflowRun policy binding used only by the default admission wiring. */
   readonly bindAutomationPolicy?: LoopAdmissionDeps['bindAutomationPolicy']
+  /** Kernel-owned immutable effective authority snapshot binding used by default admission. */
+  readonly bindWorkflowActionAuthority?: LoopAdmissionDeps['bindWorkflowActionAuthority']
   /** Holds the exact TrackRegistry snapshot through final authority resolution and state claim. */
   readonly withWorkflowActionAuthorityLock?: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
   /** Fresh non-Workflow permission layers used only by the default admission wiring. */
@@ -216,6 +218,7 @@ export function createAutomation(deps: AutomationDeps): Automation {
     image: deps.image,
     getAutomation: (change) => getAutomation(store, changeDir(change)),
     bindAutomationPolicy: deps.bindAutomationPolicy,
+    bindWorkflowActionAuthority: deps.bindWorkflowActionAuthority,
     withWorkflowActionAuthorityLock: deps.withWorkflowActionAuthorityLock,
     workflowActionAuthority: deps.workflowActionAuthority,
   })

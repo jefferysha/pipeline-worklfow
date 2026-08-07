@@ -184,6 +184,19 @@ export type {
   CommitResult, StateFieldEffect, TransitionDraft, TransitionRecord, WorkflowRun,
   WorkflowRunRepository, WorkflowRunTransaction,
 } from './workflow/run-types.js'
+export {
+  createWorkflowActionAuthoritySnapshot,
+  parseWorkflowActionAuthoritySnapshot,
+  sameWorkflowActionAuthoritySnapshot,
+  workflowActionAuthoritySnapshotContent,
+} from './state/workflow-action-authority-snapshot.js'
+export type {
+  CreateWorkflowActionAuthoritySnapshotInput,
+  WorkflowActionAuthorityLayerSnapshotV1,
+  WorkflowActionAuthorityProvenanceKind,
+  WorkflowActionAuthorityProvenanceV1,
+  WorkflowActionAuthoritySnapshotV1,
+} from './workflow/action-authority-types.js'
 // 唯一 TransitionApplication 用例（G1 支点，2026-07-17）：CLI 与 server 共用同一份转换编排，
 // 消灭此前 cli/commands/transition.ts 与 server/transition.ts 两处复制。
 export { createTransitionApplication } from './workflow/transition-application.js'

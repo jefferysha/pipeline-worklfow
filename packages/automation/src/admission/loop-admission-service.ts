@@ -30,7 +30,7 @@ import {
   terminalToResult,
   type ActivateResult,
   type ExecutionLiveness,
-  type LoopAdmission,
+  type ConfiguredLoopAdmission,
   type LoopAdmissionDeps,
   type MergeIntentJournalInput,
   type MergeLandedJournalInput,
@@ -47,10 +47,11 @@ import {
   compensateWorkflowBindingFailure,
   evaluateMissingAfkWorkflowAdmission,
 } from './workflow-action-admission.js'
-export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
+export function createLoopAdmission(deps: LoopAdmissionDeps): ConfiguredLoopAdmission {
   const {
     repoRoot, ledger, loadRegistry, clock, level, image, getAutomation, isSkillProfileKnown,
-    bindAutomationPolicy, withWorkflowActionAuthorityLock, workflowActionAuthority,
+    bindAutomationPolicy, bindWorkflowActionAuthority,
+    withWorkflowActionAuthorityLock, workflowActionAuthority,
   } = deps
   const ttlMs = deps.reservationTtlMs ?? DEFAULT_TTL_MS
   const newId = deps.newId ?? makeIdGen()
@@ -185,7 +186,7 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
       const outcome = await withRegistryGovernanceLock(repoRoot, () => reserveOnce(change, opts))
       if ('retry' in outcome) continue
       if (!outcome.ok) return outcome
-      if (bindAutomationPolicy === undefined) {
+      if (bindAutomationPolicy === undefined || bindWorkflowActionAuthority === undefined) {
         return closeWorkflowAuthorizationDenial({
           context: outcome.context,
           authorization: evaluateMissingAfkWorkflowAdmission(),
@@ -197,6 +198,7 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
           change,
           context: outcome.context,
           bindAutomationPolicy,
+          bindWorkflowActionAuthority,
           withWorkflowActionAuthorityLock,
           workflowActionAuthority,
         })
@@ -454,11 +456,9 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
         buildTerminal(ctx, reservation, s, usageAccountingFor(read.records, reservation)))
     })
   }
-
   const settleLost = async (ctx: ExecutionContext): Promise<void> => {
     await settleWon(ctx, { result: 'skipped', reason: 'claim-lost', charge: 'none' })
   }
-
   const isActive = async (loopId: string): Promise<boolean> => {
     // kill-switch 重查是「保守终态修正」用途：registry 消失/坏/I/O 故障一律 fail-closed（视为不 active），
     // 绝不因读故障放行。故此处 catch loadRegistry 的 I/O throw（与 reserve 的 fail-loud 相反：reserve 要
@@ -473,18 +473,19 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
     const loop = reg.data.loops.find((l) => l.id === loopId)
     return loop !== undefined && loop.status === 'active'
   }
-
+  const claimWithFreshWorkflowAuthority: ConfiguredLoopAdmission['claimWithFreshWorkflowAuthority'] =
+    (context, claim) => claimWithFreshAfkWorkflowAuthority({
+      context, bindAutomationPolicy, bindWorkflowActionAuthority, withWorkflowActionAuthorityLock,
+      workflowActionAuthority, claim, clock, close, closeRecord,
+    })
   return {
     reserve,
-    claimWithFreshWorkflowAuthority: (context, claim) => claimWithFreshAfkWorkflowAuthority({
-      context, bindAutomationPolicy, withWorkflowActionAuthorityLock, workflowActionAuthority,
-      claim, clock, close, closeRecord,
-    }),
+    claimWithFreshWorkflowAuthority,
+    workflowAuthorityClaim: { version: 'v1', claim: claimWithFreshWorkflowAuthority },
     activate, recordProviderUsage, settleWon, settleLost,
     recordMergeIntent, recordMergeLanded, isActive,
   }
 }
-
 // H10 §3/§8任务5：prepareSkillBundle 编排——claim 成功（queued→scheduled）之后、activate
 // （reservation-activated）之前调用（设计定稿精确顺序）。实现「解析 effective slots → 按声明顺序
 // 定位内容 → 物化 CAS 快照 → governance→ledger 锁序复核 → 追加 skill-bundle-snapshot 事件」全部

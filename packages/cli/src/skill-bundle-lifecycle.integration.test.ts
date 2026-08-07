@@ -296,6 +296,8 @@ function buildAdmission(rig: Rig): LoopAdmission {
     isSkillProfileKnown: (id) => id === PROFILE,
     bindAutomationPolicy: (change, policy, binding) =>
       rig.runRepo.bindAutomationPolicy(changeDir(rig.repoRoot, change), policy, binding),
+    bindWorkflowActionAuthority: (change, snapshot) =>
+      rig.runRepo.bindWorkflowActionAuthority(changeDir(rig.repoRoot, change), snapshot),
     withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
     workflowActionAuthority: exactWorkflowActionAuthority(rig.store, rig.repoRoot),
   })
@@ -727,6 +729,8 @@ describe('旧 ledger JSONL fixture 回归 —— 手写历史行与新真实 res
       getAutomation: (c) => getAutomation(store, changeDir(repoRoot, c)), isSkillProfileKnown: (id) => id === PROFILE,
       bindAutomationPolicy: (name, policy, binding) =>
         runRepo.bindAutomationPolicy(changeDir(repoRoot, name), policy, binding),
+      bindWorkflowActionAuthority: (name, snapshot) =>
+        runRepo.bindWorkflowActionAuthority(changeDir(repoRoot, name), snapshot),
       withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
       workflowActionAuthority: exactWorkflowActionAuthority(store, repoRoot),
     })

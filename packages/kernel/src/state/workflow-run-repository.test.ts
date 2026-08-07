@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
@@ -13,6 +13,11 @@ import {
   compileEffectiveWorkflowPlan,
   effectiveWorkflowPlanBinding,
 } from '../workflow/effective-plan.js'
+import { createWorkflowActionAuthoritySnapshot } from './workflow-action-authority-snapshot.js'
+import {
+  readWorkflowActionAuthorityRecord,
+  workflowActionAuthorityRecordPath,
+} from './workflow-action-authority-record.js'
 
 const governedPolicy = compileAutomationPolicySnapshot({
   id: 'loop-a', name: 'Loop A', kind: 'executor', goal: 'Keep green', cadence: 'manual', risk: 'low',
@@ -20,6 +25,43 @@ const governedPolicy = compileAutomationPolicySnapshot({
   status: 'active', budget: { max_runs_per_day: 1, max_in_flight: 1, on_exceed: 'skip-run' },
   kill_criteria: [], autonomy_level: 'L1', allowlist: ['**'], denylist: [], skill_bundle_id: '_all',
 } satisfies LoopEntry, { capturedAt: '2026-07-19T00:00:00Z' })
+
+const authoritySnapshot = (over: {
+  attemptId?: string
+  reservationId?: string
+  runId?: string
+} = {}) => {
+  const workflow = compileEffectiveWorkflowPlan('default')
+  const attemptId = over.attemptId ?? 'att-1'
+  const iterationId = `iteration-${attemptId}`
+  return createWorkflowActionAuthoritySnapshot({
+    action: 'enter-afk',
+    workflowRunId: over.runId ?? 'id-1',
+    workflowId: workflow.id,
+    workflowFingerprint: workflow.workflowFingerprint,
+    loopId: governedPolicy.loop_id,
+    iterationId,
+    attemptId,
+    reservationId: over.reservationId ?? 'res-1',
+    skillBundleId: '_all',
+    trackId: 'backend',
+    trackRegistryRevision: '0123456789abcdef',
+    layers: {
+      platform: { status: 'valid', grants: ['enter-afk'] },
+      skill: { status: 'valid', grants: ['enter-afk'] },
+      project: { status: 'valid', grants: ['enter-afk'] },
+      workflow: { status: 'valid', grants: ['enter-afk'] },
+      run: { status: 'valid', grants: ['enter-afk'] },
+    },
+    provenance: {
+      platform: { kind: 'platform-policy', identity: 'tenon-afk', revision: 'v1' },
+      skill: { kind: 'skill-contract', identity: '_all', revision: workflow.workflowFingerprint },
+      project: { kind: 'track-registry', identity: 'backend', revision: '0123456789abcdef' },
+      workflow: { kind: 'workflow-plan', identity: workflow.id, revision: workflow.workflowFingerprint },
+      run: { kind: 'workflow-run', identity: over.runId ?? 'id-1', revision: iterationId },
+    },
+  })
+}
 
 /** 测试专用：只改 phase，其余 fields 原样带过——commit() 只收 nextFields（不是完整
  * PipelineState，opaqueTail/runMetadata 由 repository 自己处理，调用方结构上传不进去）。 */
@@ -409,6 +451,86 @@ describe('WorkflowRunRepository.bindAutomationPolicy · H4 immutable policy snap
 
     await expect(repo.bindAutomationPolicy(dir, forged)).rejects.toThrow(/content digest mismatch/)
     expect((await store.read(dir)).runMetadata?.automationPolicy).toEqual(governedPolicy)
+  })
+})
+
+describe('WorkflowRunRepository.bindWorkflowActionAuthority · immutable per-attempt audit binding', () => {
+  test('legacy run with no sidecar remains readable; exact bind is durable, visible, and idempotent', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await initChange(store, root)
+    await repo.establishRun(dir)
+    await repo.bindAutomationPolicy(dir, governedPolicy, {
+      loopId: governedPolicy.loop_id,
+      iterationId: 'iteration-att-1',
+    })
+    await repo.transact(dir, async (tx) => {
+      expect(tx.run.workflowActionAuthority).toBeUndefined()
+    })
+
+    const metadataBefore = (await store.read(dir)).runMetadata
+    const snapshot = authoritySnapshot()
+    const first = await repo.bindWorkflowActionAuthority(dir, snapshot)
+    const rebound = await repo.bindWorkflowActionAuthority(dir, snapshot)
+
+    expect(first.workflowActionAuthority).toEqual(snapshot)
+    expect(rebound.workflowActionAuthority).toEqual(snapshot)
+    const metadataAfter = (await store.read(dir)).runMetadata
+    expect(metadataAfter).toEqual(metadataBefore)
+    expect(metadataAfter).not.toHaveProperty('workflowActionAuthority')
+    await repo.transact(dir, async (tx) => {
+      expect(tx.run.workflowActionAuthority).toEqual(snapshot)
+      const committed = await tx.commit(withPhase(tx.state, 'explore'), {
+        event: 'open-complete', from: 'open', to: 'explore',
+      })
+      expect(committed.run.workflowActionAuthority).toEqual(snapshot)
+    })
+  })
+
+  test('rejects identity mismatch, conflicting valid rebind, and tampered durable bytes', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await initChange(store, root)
+    await repo.establishRun(dir)
+    await repo.bindAutomationPolicy(dir, governedPolicy, {
+      loopId: governedPolicy.loop_id,
+      iterationId: 'iteration-att-1',
+    })
+
+    await expect(repo.bindWorkflowActionAuthority(dir, authoritySnapshot({ runId: 'other-run' })))
+      .rejects.toThrow(/run/i)
+    const snapshot = authoritySnapshot()
+    await repo.bindWorkflowActionAuthority(dir, snapshot)
+    await expect(repo.bindWorkflowActionAuthority(dir, authoritySnapshot({ reservationId: 'res-2' })))
+      .rejects.toThrow(/immutable|different|不同/i)
+
+    const path = workflowActionAuthorityRecordPath(dir, snapshot.iteration_id)
+    await writeFile(path, JSON.stringify({ ...snapshot, reservation_id: 'forged' }))
+    await expect(repo.bindWorkflowActionAuthority(dir, snapshot)).rejects.toThrow(/fingerprint|digest/i)
+  })
+
+  test('advancing to a later attempt retains the prior immutable audit record', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await initChange(store, root)
+    await repo.establishRun(dir)
+    await repo.bindAutomationPolicy(dir, governedPolicy, {
+      loopId: governedPolicy.loop_id,
+      iterationId: 'iteration-att-1',
+    })
+    const first = authoritySnapshot()
+    await repo.bindWorkflowActionAuthority(dir, first)
+
+    await repo.bindAutomationPolicy(dir, governedPolicy, {
+      loopId: governedPolicy.loop_id,
+      iterationId: 'iteration-att-2',
+    })
+    const second = authoritySnapshot({ attemptId: 'att-2', reservationId: 'res-2' })
+    const rebound = await repo.bindWorkflowActionAuthority(dir, second)
+
+    expect(rebound.workflowActionAuthority).toEqual(second)
+    expect(await readWorkflowActionAuthorityRecord(dir, first.iteration_id)).toEqual(first)
+    expect(await readWorkflowActionAuthorityRecord(dir, second.iteration_id)).toEqual(second)
   })
 })
 

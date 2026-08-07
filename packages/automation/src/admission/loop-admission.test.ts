@@ -109,6 +109,14 @@ const admission = (over: Partial<LoopAdmissionDeps> & { loops?: LoopEntry[] } = 
       workflowPlanFingerprint: AFK_PLAN.workflowFingerprint,
       workflowPlanSnapshot: AFK_PLAN,
     })),
+    bindWorkflowActionAuthority: over.bindWorkflowActionAuthority ?? (async (_change, snapshot) => ({
+      id: snapshot.workflow_run_id,
+      workflowId: snapshot.workflow_id,
+      workflowPlanFingerprint: snapshot.workflow_fingerprint,
+      loopId: snapshot.loop_id,
+      iterationId: snapshot.iteration_id,
+      workflowActionAuthority: snapshot,
+    })),
     withWorkflowActionAuthorityLock: over.withWorkflowActionAuthorityLock
       ?? (async (use) => use(TRACK_REGISTRY)),
     workflowActionAuthority: over.workflowActionAuthority ?? (async () => AUTHORIZED_AFK_LAYERS),
@@ -127,7 +135,7 @@ describe('reserve · 原子 preflight 放行', () => {
     if (!result.ok) return
     expect(result.context).toMatchObject({
       workflow_action_authority: {
-        version: 'v1',
+        version: 1,
         action: 'enter-afk',
         track_id: 'backend',
         track_registry_revision: '0123456789abcdef',
@@ -139,7 +147,20 @@ describe('reserve · 原子 preflight 放行', () => {
   })
 
   it('PR3：stable authority 在最终复核后只调用一次 claim', async () => {
-    const adm = admission()
+    const order: string[] = []
+    const adm = admission({
+      bindWorkflowActionAuthority: async (_change, snapshot) => {
+        order.push('bind-authority')
+        return {
+          id: snapshot.workflow_run_id,
+          workflowId: snapshot.workflow_id,
+          workflowPlanFingerprint: snapshot.workflow_fingerprint,
+          loopId: snapshot.loop_id,
+          iterationId: snapshot.iteration_id,
+          workflowActionAuthority: snapshot,
+        }
+      },
+    })
     const reserved = await adm.reserve('lp-x')
     expect(reserved.ok).toBe(true)
     if (!reserved.ok) return
@@ -147,12 +168,48 @@ describe('reserve · 原子 preflight 放行', () => {
 
     const result = await adm.claimWithFreshWorkflowAuthority(reserved.context, async (trackId) => {
       claims++
+      order.push('claim-state')
       expect(trackId).toBe('backend')
       return true
     })
 
     expect(result).toMatchObject({ ok: true, claimed: true })
     expect(claims).toBe(1)
+    expect(order).toEqual(['bind-authority', 'bind-authority', 'claim-state'])
+  })
+
+  it('PR3：最终 durable authority rebind 失败时零 claim、零扣费', async () => {
+    let binds = 0
+    const adm = admission({
+      bindWorkflowActionAuthority: async (_change, snapshot) => {
+        if (binds++ > 0) throw new Error('authority bind EIO')
+        return {
+          id: snapshot.workflow_run_id,
+          workflowId: snapshot.workflow_id,
+          workflowPlanFingerprint: snapshot.workflow_fingerprint,
+          loopId: snapshot.loop_id,
+          iterationId: snapshot.iteration_id,
+          workflowActionAuthority: snapshot,
+        }
+      },
+    })
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    await expect(adm.claimWithFreshWorkflowAuthority(reserved.context, async () => {
+      claims++
+      return true
+    })).rejects.toThrow('authority bind EIO')
+
+    expect(claims).toBe(0)
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.openReservations).toHaveLength(0)
+    expect(win.runs[0]).toMatchObject({
+      result: 'failed', reason: 'infrastructure-error',
+      accounting: { charged_tokens: 0, charge_source: 'none' },
+    })
   })
 
   it('PR3：TrackRegistry revision 漂移在 claim 前拒绝，零 claim、零扣费', async () => {
@@ -194,13 +251,26 @@ describe('reserve · 原子 preflight 放行', () => {
   })
 
   it('PR3：project grant 在 reserve 后撤销时零 claim、零扣费', async () => {
-    let resolutions = 0
+    let lockReads = 0
     const adm = admission({
-      workflowActionAuthority: async () => ({
+      withWorkflowActionAuthorityLock: async (use) => {
+        const eligible = lockReads++ === 0
+        const ordered = TRACK_REGISTRY.ordered.map((track) => track.id === 'backend'
+          ? { ...track, policyProfile: { ...track.policyProfile, automationEligible: eligible } }
+          : track)
+        return use({
+          ...TRACK_REGISTRY,
+          ordered,
+          byId: new Map(ordered.map((track) => [track.id, track])),
+          revision: eligible ? TRACK_REGISTRY.revision : 'fedcba9876543210',
+        })
+      },
+      workflowActionAuthority: async ({ registry: exactRegistry }) => ({
         ...AUTHORIZED_AFK_LAYERS,
-        project: resolutions++ === 0
-          ? AUTHORIZED_AFK_LAYERS.project
-          : { status: 'valid', grants: [] },
+        project: AUTHORIZED_AFK_LAYERS.project,
+        projectAuthority: {
+          version: 'v1', track_id: 'backend', track_registry_revision: exactRegistry.revision,
+        },
       }),
     })
     const reserved = await adm.reserve('lp-x')

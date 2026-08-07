@@ -32,12 +32,17 @@ import { resolveWorkflowName } from '../workflow/engine.js'
 import type {
   TransitionDraft, WorkflowRun, WorkflowRunRepository, WorkflowRunTransaction,
 } from '../workflow/run-types.js'
+import type { WorkflowActionAuthoritySnapshotV1 } from '../workflow/action-authority-types.js'
 import { diffWireFieldsToEffects } from './run-metadata.js'
 import type { TransitionRecordStore } from './transition-record-store.js'
 import { defaultOpenSpecScaffoldFiles } from './default-openspec-scaffold.js'
 import { DOCUMENT_LEDGER_FILE, initialDocumentLedgerContent } from './document-ledger.js'
 import { required } from '../required.js'
 import { ensureWorkflowGovernanceBinding } from './workflow-governance-binding.js'
+import {
+  ensureWorkflowActionAuthorityRecord,
+  readWorkflowActionAuthorityRecord,
+} from './workflow-action-authority-record.js'
 import {
   compileEffectiveWorkflowPlan,
   effectiveWorkflowPlanFromSnapshot,
@@ -56,7 +61,11 @@ export interface WorkflowRunRepositoryDeps {
   newId?: () => string
 }
 
-function deriveRun(fields: Record<FieldName, string | string[]>, metadata: RunMetadata): WorkflowRun {
+function deriveRun(
+  fields: Record<FieldName, string | string[]>,
+  metadata: RunMetadata,
+  workflowActionAuthority?: WorkflowActionAuthoritySnapshotV1,
+): WorkflowRun {
   const str = (v: string | string[] | undefined): string => (Array.isArray(v) ? v.join(',') : (v ?? ''))
   return {
     id: metadata.runId,
@@ -76,7 +85,16 @@ function deriveRun(fields: Record<FieldName, string | string[]>, metadata: RunMe
     policyVersion: metadata.automationPolicy?.policy_version,
     loopId: metadata.loopId,
     iterationId: metadata.iterationId,
+    workflowActionAuthority,
   }
+}
+
+async function authorityForCurrentIteration(
+  changeDir: string,
+  metadata: RunMetadata,
+): Promise<WorkflowActionAuthoritySnapshotV1 | undefined> {
+  if (metadata.iterationId === undefined) return undefined
+  return readWorkflowActionAuthorityRecord(changeDir, metadata.iterationId)
 }
 
 class FsWorkflowRunRepository implements WorkflowRunRepository {
@@ -218,7 +236,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
           // preserves the effective governance identity for the current release.
           await ensureWorkflowGovernanceBinding(changeDir, metadata)
         }
-        return deriveRun(state.fields, metadata)
+        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata))
       }
       const metadata: RunMetadata = {
         runId: newId(),
@@ -236,7 +254,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
         await ensureWorkflowGovernanceBinding(changeDir, metadata)
       }
       await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
-      return deriveRun(state.fields, metadata)
+      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata))
     })
   }
 
@@ -275,14 +293,41 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
         metadata.iterationId = binding.iterationId
       }
       if (existing === undefined) metadata.automationPolicy = canonicalPolicy
-      if (existing !== undefined && binding === undefined) return deriveRun(state.fields, metadata)
+      if (existing !== undefined && binding === undefined) {
+        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata))
+      }
       if (existing !== undefined && binding !== undefined
         && state.runMetadata?.loopId === binding.loopId
         && state.runMetadata.iterationId === binding.iterationId) {
-        return deriveRun(state.fields, metadata)
+        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata))
       }
       await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
-      return deriveRun(state.fields, metadata)
+      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata))
+    })
+  }
+
+  async bindWorkflowActionAuthority(
+    changeDir: string,
+    snapshot: WorkflowActionAuthoritySnapshotV1,
+  ): Promise<WorkflowRun> {
+    const { store } = this.deps
+    return store.withLock(changeDir, async () => {
+      const state = await store.read(changeDir)
+      const metadata = required(state.runMetadata)
+      const workflowId = resolveWorkflowName(state)
+      const track = state.fields.track
+      const trackId = Array.isArray(track) ? track.join(',') : (track ?? '')
+      if (snapshot.workflow_run_id !== metadata.runId
+        || snapshot.workflow_id !== workflowId
+        || snapshot.workflow_fingerprint !== metadata.workflowPlanFingerprint
+        || snapshot.loop_id !== metadata.loopId
+        || snapshot.iteration_id !== metadata.iterationId
+        || snapshot.skill_bundle_id !== metadata.automationPolicy?.skill_bundle_id
+        || snapshot.track_id !== trackId) {
+        throw new Error('Workflow action authority snapshot does not match canonical WorkflowRun identity')
+      }
+      const bound = await ensureWorkflowActionAuthorityRecord(changeDir, snapshot)
+      return deriveRun(state.fields, metadata, bound)
     })
   }
 
@@ -302,7 +347,8 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
       const metadata: RunMetadata = state.runMetadata
         ? structuredClone(state.runMetadata)
         : { runId: newId(), transitionSequence: 0, transitionHead: undefined }
-      const run = deriveRun(state.fields, metadata)
+      const authority = await authorityForCurrentIteration(changeDir, metadata)
+      const run = deriveRun(state.fields, metadata, authority)
       let committed = false
 
       const tx: WorkflowRunTransaction = {
@@ -360,7 +406,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
             kind: 'transition',
             transitionRecordId: recordId,
           })
-          const newRun = deriveRun(nextFields, newMetadata)
+          const newRun = deriveRun(nextFields, newMetadata, authority)
           return { run: newRun, record, projection: writeResult.projection }
         },
       }

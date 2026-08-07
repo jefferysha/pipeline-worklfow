@@ -74,6 +74,18 @@ export type { TransitionRecordStore } from './transition-record-store.js'
 export { createWorkflowRunRepository } from './workflow-run-repository.js'
 export type { WorkflowRunRepositoryDeps } from './workflow-run-repository.js'
 export {
+  createWorkflowActionAuthoritySnapshot,
+  parseWorkflowActionAuthoritySnapshot,
+  sameWorkflowActionAuthoritySnapshot,
+  workflowActionAuthoritySnapshotContent,
+} from './workflow-action-authority-snapshot.js'
+export {
+  ensureWorkflowActionAuthorityRecord,
+  readWorkflowActionAuthorityRecord,
+  workflowActionAuthorityRecordPath,
+  WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX,
+} from './workflow-action-authority-record.js'
+export {
   projectionMetadataFor, readCurrentRunRevision, readCurrentRunRevisionFromSync,
   readCurrentRunRevisionSync, readImmutableRunRevision,
   RUN_STATE_SCHEMA_VERSION, RunStateCorruptError, UnsupportedRunStateVersionError,

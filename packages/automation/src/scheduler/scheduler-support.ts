@@ -48,6 +48,7 @@ import type {
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
 import type {
   ActivateResult, AdmissionDenial, ClaimAuthorizationResult, ReserveResult, RunSettlement,
+  WorkflowAuthorityClaimCapabilityV1,
 } from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
@@ -85,7 +86,6 @@ const safeFailureProperty = (error: unknown, key: string): unknown => {
     return undefined
   }
 }
-
 /**
  * G² 子问题1：base 被第三方推进（lifecycle BaseAdvancedError 携 baseAdvanced=true）——这不是普通 per-change
  * 冲突，是并发异常。除了照 classify 落 conflict 留现场外，另记一条 round failure 使 ok=false（fail-loud：
@@ -113,10 +113,11 @@ export interface AdmissionPort {
     readonly expectedLoopId?: string
     readonly expectedAutonomyLevel?: AutomationConfig['level'] | null
   }): Promise<ReserveResult>
-  claimWithFreshWorkflowAuthority(
+  claimWithFreshWorkflowAuthority?(
     ctx: ExecutionContext,
     claim: (expectedTrackId: string) => Promise<boolean>,
   ): Promise<ClaimAuthorizationResult>
+  readonly workflowAuthorityClaim?: WorkflowAuthorityClaimCapabilityV1
   activate(ctx: ExecutionContext): Promise<ActivateResult>
   settleWon(ctx: ExecutionContext, settlement: RunSettlement): Promise<void>
   settleLost(ctx: ExecutionContext): Promise<void>

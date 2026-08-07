@@ -3,7 +3,9 @@ import type {
   ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
-import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type {
+  ActivateResult, AdmissionDenial, ReserveResult, RunSettlement, WorkflowAuthorityClaimCapabilityV1,
+} from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -97,6 +99,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
     preparation: ExecutionPreparationPort,
     expectedLoopId: string | undefined,
     expectedAutonomyLevel: AutomationConfig['level'] | null | undefined,
+    authorityClaim: WorkflowAuthorityClaimCapabilityV1,
   ): Promise<HandleResult> => {
     await semaphore.acquire()
     let phase: RoundFailure['phase'] = 'admission'
@@ -154,7 +157,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
 
       // ── fresh authority + claim：同一 TrackRegistry 锁内重验后才 queued→scheduled ──
       phase = 'claim'
-      const claimResult = await admission.claimWithFreshWorkflowAuthority(
+      const claimResult = await authorityClaim.claim(
         ctx,
         (expectedTrackId) => {
           const authority = ctx.workflow_action_authority

@@ -20,9 +20,13 @@
  * 详见下方 `PREPARED_EXECUTION_BRAND`/`markLoopPrepared`/`markNonLoopPrepared` 头注。
  */
 import { randomBytes } from 'node:crypto'
-import type { AttemptContextLedgerSnapshot, AutomationPolicySnapshot, StepIR } from '@tenon/kernel'
+import type {
+  AttemptContextLedgerSnapshot,
+  AutomationPolicySnapshot,
+  StepIR,
+  WorkflowActionAuthoritySnapshotV1,
+} from '@tenon/kernel'
 import type { AutomationLevel } from '../types.js'
-import type { AfkWorkflowActionAuthorityBindingV1 } from './workflow-action-authority-binding.js'
 
 export interface ExecutionContext {
   readonly attempt_id: string
@@ -47,7 +51,7 @@ export interface ExecutionContext {
   /** 已有 runMetadata 时诚实携带；本增量不主动建立 WorkflowRun（第 2 节 / H9 边界）。 */
   readonly workflow_run_id?: string
   /** Exact per-action authority overlay frozen after initial admission and rechecked before claim. */
-  readonly workflow_action_authority?: AfkWorkflowActionAuthorityBindingV1
+  readonly workflow_action_authority?: WorkflowActionAuthoritySnapshotV1
   /** H9：本次 loop iteration 的 durable identity；governed admission 路径恒存在。 */
   readonly iteration_id?: string
 
