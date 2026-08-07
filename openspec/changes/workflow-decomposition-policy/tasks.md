@@ -13,6 +13,7 @@
 - [x] 冻结 decomposition/interaction schema、权限交集、缺省与兼容语义。 (spec)
 - [x] 按 requirements-changed 纳入 Dashboard 配置闭环。 (spec)
 - [x] 按 ownership change 将 stable receipt bridge 修复移交 PR2 基线并移除 PR3 重复范围。 (spec)
+- [x] 按归档演练修正 delta operation 分类：新 `workflow-definition` capability 与新增 receipt requirement 使用 `ADDED`。 (spec)
 
 ## 实现
 

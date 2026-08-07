@@ -14,9 +14,9 @@ Skill 是否自主拆分、何时询问用户、是否进入 AFK/全默认推荐
 
 `workflow-decomposition-policy`
 
-### Modified Capabilities
-
 `workflow-definition`
+
+### Modified Capabilities
 
 `codex-skill-receipt-current-turn`（产品行为由 PR2 基线实现，本 Change 只保留已登记的规范约束，不重复源码或测试）
 

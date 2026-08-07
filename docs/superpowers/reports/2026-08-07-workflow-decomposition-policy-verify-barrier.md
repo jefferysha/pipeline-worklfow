@@ -50,3 +50,22 @@ server effective snapshot 的 generic projection 没有 candidate 时显示 unco
 - 四项 Verify task 保持未完成并重新登记。
 
 之后只在 Build 修复上述 A/B、补齐定向与回归证据并提交修复 commit 后重新 `build-complete`；不得在 Verify 中提交产品代码，不进入 PR4/PR5。没有新的 Build freeze 前，本报告不声明 Verify 通过。
+
+## 第二次 Verify：OpenSpec 归档演练失败
+
+修复 A/B 后的新冻结 HEAD 为 `b64751fefbf09f7bacaa352f192c0b31bd4133c9`。产品与回归证据已收敛：全仓 `364` 个文件通过、`6,352 passed`、`26` 个环境相关用例 honest skipped；独立隔离 worktree 的定向矩阵 `301/301` 通过，kernel、automation 与 web typecheck 均通过，且冻结 SHA 与 tracked/non-ignored untracked 状态无漂移。
+
+但是 OpenSpec `1.6.0` 的隔离归档演练在 `/tmp/tenon-pr3-archive.0S5UkI/repo` 先后发现两处 delta operation 类型错误，因此第二次 Verify 的总体结论仍为 **FAIL**：
+
+1. `specs/codex-skill-receipt-current-turn/spec.md` 把主规格中尚不存在的 requirement 标为 `MODIFIED`，归档报 `not found`；
+2. `specs/workflow-definition/spec.md` 对尚不存在的 target spec 使用 `MODIFIED`，归档报仅允许新规格包含 `ADDED` requirements。
+
+这两项不改变需求正文或产品行为，只修正 OpenSpec operation 分类。主 worktree 的 `openspec/specs/**` 在失败演练前后 aggregate digest 均为 `08a6648a747ba939f4e47d42b8684bc9ef0224689e42d49272af171e78baf748`，没有被演练污染。
+
+在隔离副本中仅把上述两个标题从 `MODIFIED Requirements` 改为 `ADDED Requirements` 后，以下演练完整通过：
+
+- `openspec validate workflow-decomposition-policy --strict`：PASS；
+- `openspec archive workflow-decomposition-policy --yes --json`：PASS，`13 added / 0 modified / 0 removed / 0 renamed`；
+- `openspec validate --all --strict`：PASS，`40 passed / 0 failed`。
+
+因此必须再次走官方 `verify-fail` 回 Build，并通过受控规格返工路径修复这两个 delta 标题、重新登记/复核规格证据，再生成新的 Build freeze。不得直接在 Verify 修改 delta spec，也不得把隔离副本的归档结果复制回主 worktree。

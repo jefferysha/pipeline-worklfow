@@ -1,6 +1,6 @@
 # OpenSpec 增量规格
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Workflow definition 闭集 codec
 

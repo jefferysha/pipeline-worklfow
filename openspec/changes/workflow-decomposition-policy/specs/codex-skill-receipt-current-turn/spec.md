@@ -1,6 +1,6 @@
 # OpenSpec 增量规格
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: stable runtime 保留可信 Codex cache provenance
 
