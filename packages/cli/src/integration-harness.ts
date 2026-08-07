@@ -45,6 +45,7 @@ import {
   recordCanonicalDocumentSkillInvocation,
   recordNativeDocumentSkillConfirmation,
 } from './test-support.js'
+import { createManifestSkillActionAuthorityResolver } from './skill-action-authority-provider.js'
 
 /** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
 function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
@@ -286,6 +287,10 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     // H10 §1/§8任务7：与 main.ts 同款装配——复用 trackCtx.skillProfiles（T 线现有 profile 校验器，
     // 见 deps.ts 头注），harness 镜像生产装配、不另造一套判定。
     isSkillProfileKnown: (id) => trackCtx.skillProfiles.has(id),
+    resolveSkillActionAuthority: createManifestSkillActionAuthorityResolver(
+      manifest,
+      (profile) => trackCtx.skillProfiles.has(profile),
+    ),
     store,
     runRepo: createWorkflowRunRepository({ store, recordStore: createTransitionRecordStore(), clock: () => FIXED_CLOCK }),
     loadRegistry: () => loadTrackRegistry(cwd, trackCtx),

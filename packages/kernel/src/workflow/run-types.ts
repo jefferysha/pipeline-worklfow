@@ -17,6 +17,7 @@ import type {
 } from '../types.js'
 import type { AutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { WorkflowPlanSnapshot } from './effective-plan.js'
+import type { WorkflowActionAuthoritySnapshotV1 } from './action-authority-types.js'
 
 export interface WorkflowRun {
   /** 稳定 run 身份：新 change 在 init 时生成；已存在但缺身份的老 change 在首次经
@@ -46,6 +47,8 @@ export interface WorkflowRun {
   readonly policyVersion?: string
   readonly loopId?: string
   readonly iterationId?: string
+  /** Current iteration's immutable effective authorization; absent on legacy or not-yet-admitted runs. */
+  readonly workflowActionAuthority?: WorkflowActionAuthoritySnapshotV1
 }
 
 /** 一次 transition 对 PipelineState.fields 造成的真实字段级改动（diff 出来的，不是猜的）。 */
@@ -148,5 +151,10 @@ export interface WorkflowRunRepository {
     changeDir: string,
     policy: AutomationPolicySnapshot,
     binding?: { readonly loopId: string; readonly iterationId: string },
+  ): Promise<WorkflowRun>
+  /** Persist an exact per-attempt authority snapshot before state claim; exact replay is idempotent. */
+  bindWorkflowActionAuthority(
+    changeDir: string,
+    snapshot: WorkflowActionAuthoritySnapshotV1,
   ): Promise<WorkflowRun>
 }

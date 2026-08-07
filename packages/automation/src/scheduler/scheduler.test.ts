@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { validateVerificationResult, type VerificationIssuer, type VerificationResult } from '@tenon/kernel'
 import type { RunOutcome } from '../types.js'
 import {
@@ -136,6 +136,7 @@ const fakePreparation = (over: FakePreparationOver = {}) => {
 
 interface FakeAdmissionOver {
   reserve?: (change: string) => Promise<ReserveResult>
+  claimWithFreshWorkflowAuthority?: AdmissionPort['claimWithFreshWorkflowAuthority']
   activate?: (ctx: ExecutionContext) => Promise<ActivateResult>
   settleWon?: (ctx: ExecutionContext, s: RunSettlement) => Promise<void>
   settleLost?: (ctx: ExecutionContext) => Promise<void>
@@ -144,9 +145,15 @@ interface FakeAdmissionOver {
 
 /** 极小 admission fake（缺省全放行）：记录调用序，供断言编排。 */
 const fakeAdmission = (over: FakeAdmissionOver = {}) => {
-  const calls = { reserve: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
+  const calls = { reserve: [] as string[], authorityClaim: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
+  const claimWithFreshWorkflowAuthority = over.claimWithFreshWorkflowAuthority ?? (async (ctx, claim) => {
+    calls.authorityClaim.push(ctx.change)
+    return { ok: true as const, context: ctx, claimed: await claim('backend') }
+  })
   const admission: AdmissionPort = {
     reserve: over.reserve ?? (async (change) => { calls.reserve.push(change); return { ok: true, context: ctxFor(change) } }),
+    claimWithFreshWorkflowAuthority,
+    workflowAuthorityClaim: { version: 'v1', claim: claimWithFreshWorkflowAuthority },
     activate: over.activate ?? (async (ctx): Promise<ActivateResult> => { calls.activate.push(ctx.change); return { status: 'activated' } }),
     settleWon: over.settleWon ?? (async (ctx, s) => { calls.settleWon.push({ change: ctx.change, s }) }),
     settleLost: over.settleLost ?? (async (ctx) => { calls.settleLost.push(ctx.change) }),
@@ -200,6 +207,39 @@ const deps = (over: Partial<SchedulerDeps> & { state: StateWriter }): SchedulerD
 })
 
 describe('scheduler round（admission 闸门 + 真状态机写回 + 分级放权）', () => {
+  it('legacy custom admission 缺少 versioned Workflow authority claim capability 时在 reserve 前整轮 fail-closed', async () => {
+    const { state, auto } = makeState({ c: 'queued' })
+    const reserve = vi.fn(async (change: string): Promise<ReserveResult> => ({
+      ok: true,
+      context: ctxFor(change),
+    }))
+    const legacyAdmission: AdmissionPort = {
+      reserve,
+      activate: async () => ({ status: 'activated' }),
+      settleWon: async () => {},
+      settleLost: async () => {},
+      isActive: async () => true,
+    }
+    const runChange = vi.fn(async () => outcome())
+
+    const report = await createScheduler(deps({
+      state,
+      admission: legacyAdmission,
+      runChange,
+    })).runRoundOnce(['c'])
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: false })
+    expect(report.failures).toEqual([expect.objectContaining({
+      change: '(config)',
+      phase: 'admission',
+      kind: 'config',
+      message: expect.stringMatching(/Workflow authority claim capability.*v1/i),
+    })])
+    expect(reserve).not.toHaveBeenCalled()
+    expect(runChange).not.toHaveBeenCalled()
+    expect(auto.get('c')).toBe('queued')
+  })
+
   it('H11 r4：伪造 null bundle 的 loop context 缺 execution validator → config failure，绝不 claim/run', async () => {
     const { state, auto } = makeState({ c: 'queued' })
     const fa = fakeAdmission({
@@ -1175,6 +1215,13 @@ describe('H10 §3/§8任务5：prepareSkillBundle 编排（claim 之后、activa
     const order: string[] = []
     const admission: AdmissionPort = {
       reserve: async (change) => ({ ok: true, context: ctxFor(change) }),
+      claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+        ok: true, context: ctx, claimed: await claim('backend'),
+      }),
+      workflowAuthorityClaim: {
+        version: 'v1',
+        claim: async (ctx, claim) => ({ ok: true, context: ctx, claimed: await claim('backend') }),
+      },
       activate: async () => { order.push('activate'); return { status: 'activated' } },
       settleWon: async () => { order.push('settleWon') },
       settleLost: async () => {},

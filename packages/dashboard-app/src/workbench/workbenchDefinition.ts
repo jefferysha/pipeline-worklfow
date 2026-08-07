@@ -11,6 +11,10 @@ import type {
   WbStepDef,
   WbWorkflowDef,
 } from '../api/governanceTypes'
+import {
+  DEFAULT_WB_DECOMPOSITION_POLICY,
+  DEFAULT_WB_INTERACTION_POLICY,
+} from '../api/governanceTypes'
 import type { LanePatch } from './orchestrationBoardModel'
 export type {
   WbActionConfig,
@@ -23,6 +27,14 @@ export type {
   WbTrackPredicate,
   WbTransition,
   WbWorkflowDef,
+  WbDecompositionAskWhen,
+  WbDecompositionAutoWhen,
+  WbDecompositionMode,
+  WbDecompositionPolicy,
+  WbDecompositionStrategy,
+  WbDecompositionTarget,
+  WbInteractionMode,
+  WbInteractionPolicy,
 } from '../api/governanceTypes'
 
 export function editLaneInDef(
@@ -102,6 +114,12 @@ export function buildDefaultDef(labels: Partial<Record<(typeof PHASES)[number], 
   return {
     name: 'default',
     openspecContract: 'required',
+    decomposition: {
+      ...DEFAULT_WB_DECOMPOSITION_POLICY,
+      auto_when: [],
+      ask_when: [],
+    },
+    interaction: { ...DEFAULT_WB_INTERACTION_POLICY },
     steps: PHASES.map((phase) => ({
       id: phase,
       ...shape[phase],
@@ -335,6 +353,12 @@ export function cloneWorkflowDef(def: WbWorkflowDef, name: string): WbWorkflowDe
   return {
     ...def,
     name,
+    decomposition: def.decomposition === undefined ? undefined : {
+      ...def.decomposition,
+      auto_when: [...def.decomposition.auto_when],
+      ask_when: [...def.decomposition.ask_when],
+    },
+    interaction: def.interaction === undefined ? undefined : { ...def.interaction },
     steps: def.steps.map((step) => ({
       ...step,
       skills: step.skills.map((skill) => ({

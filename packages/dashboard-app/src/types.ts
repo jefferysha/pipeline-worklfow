@@ -84,6 +84,60 @@ export interface WorkflowRulesSnapshot {
   gateByStep: Record<string, 'review' | 'confirm' | null>
   labelByStep: Record<string, string>
   outputsByStep: Record<string, string[]>
+  /** Present on policy-aware servers; omitted only during the rolling compatibility window. */
+  policy?: WorkflowPolicyRulesSnapshot
+}
+
+export type WorkflowPolicyAction =
+  | 'suggest-decomposition' | 'materialize-work-items' | 'create-child-pipeline'
+  | 'apply-recommended-default' | 'enter-afk' | 'write-filesystem' | 'create-branch'
+  | 'create-pull-request' | 'merge-pull-request' | 'call-external-api' | 'publish-external'
+  | 'operate-production' | 'incur-cost' | 'access-credentials' | 'perform-irreversible-action'
+
+export interface WorkflowPolicyRulesSnapshot {
+  schema: 'workflow-policy/v1'
+  configured:
+    | {
+        status: 'available'
+        workflowFingerprint: string
+        decomposition: WorkflowDecompositionPolicySnapshot
+        interaction: WorkflowInteractionPolicySnapshot
+      }
+    | { status: 'missing' | 'invalid' | 'unavailable' }
+  frozen: {
+    workflowFingerprint: string
+    decomposition: WorkflowDecompositionPolicySnapshot
+    interaction: WorkflowInteractionPolicySnapshot
+    workflowCeiling: { status: 'valid'; grants: WorkflowPolicyAction[] }
+  }
+  effective:
+    | { status: 'unavailable'; reason: 'authority-input-unavailable' }
+    | {
+        status: 'available'
+        grants: WorkflowPolicyAction[]
+        denials: Array<{ action: WorkflowPolicyAction; layer?: string; code: string; remediation: string }>
+      }
+  drift: {
+    status: 'current' | 'changed' | 'missing' | 'invalid' | 'unavailable'
+    fingerprintChanged: boolean | null
+    policyChanged: boolean | null
+  }
+}
+
+export interface WorkflowDecompositionPolicySnapshot {
+  version: 'v1'
+  mode: 'off' | 'suggest' | 'auto-safe' | 'require-review'
+  target: 'work-items' | 'child-pipelines'
+  strategy: 'balanced' | 'breadth-first' | 'depth-first'
+  max_items: number
+  max_depth: number
+  auto_when: Array<'independent-work-items' | 'cross-component-boundary' | 'context-budget-risk'>
+  ask_when: Array<'ambiguous-requirements' | 'hard-boundary' | 'missing-authorization' | 'limit-exceeded'>
+}
+
+export interface WorkflowInteractionPolicySnapshot {
+  version: 'v1'
+  mode: 'interactive' | 'recommended-defaults' | 'afk'
 }
 
 export interface WorkflowExecutionSnapshot {

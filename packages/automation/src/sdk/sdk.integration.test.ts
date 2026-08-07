@@ -2,17 +2,30 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  BUILTIN_TRACK_DEFINITIONS,
+  compileEffectiveWorkflowPlan,
   createLoopLedgerStore,
   createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
   latestChangeLoopBinding,
+  loadRegistry,
+  workflowPlanSnapshot,
   type LoopEntry,
   type TrackPolicyProfile,
+  type TrackRegistry,
   type VerificationResult,
 } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunOutcome } from '../types.js'
 import type { ExecutionContext } from '../admission/execution-context.js'
-import { createLoopAdmission, type ActivateResult, type LoopAdmission } from '../admission/loop-admission.js'
+import {
+  createExecutionPreparation,
+  createLoopAdmission,
+  type ActivateResult,
+  type LoopAdmission,
+  type LoopAdmissionDeps,
+} from '../admission/loop-admission.js'
 import { type LifecyclePorts, runChangeInSandbox } from '../lifecycle/lifecycle.js'
 import type { VerifierInput } from '../verifier/verifier.js'
 import { createAutomation, storeWriter } from './sdk.js'
@@ -22,6 +35,69 @@ const BASE_SHA = 'b'.repeat(40)
 const TEST_VERIFIER_IDENTITY = {
   kind: 'host-verifier', verifier: 'test-verifier', version: '1',
 } as const
+const AFK_WORKFLOW_PLAN = compileEffectiveWorkflowPlan('sdk-afk', {
+  name: 'sdk-afk',
+  interaction: { version: 'v1', mode: 'afk' },
+  steps: [{
+    id: 'run', label: 'Run', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+  }],
+})
+const AFK_WORKFLOW_SNAPSHOT = workflowPlanSnapshot(AFK_WORKFLOW_PLAN)
+const AFK_GRANT = { status: 'valid', grants: ['enter-afk'] } as const
+const AUTH_TRACK_REGISTRY: TrackRegistry = {
+  ordered: BUILTIN_TRACK_DEFINITIONS,
+  byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+  revision: '0123456789abcdef',
+  source: 'builtin-only',
+}
+
+const INELIGIBLE_BACKEND_TRACK_REGISTRY: TrackRegistry = (() => {
+  const ordered = BUILTIN_TRACK_DEFINITIONS.map((track) => track.id === 'backend'
+    ? {
+        ...track,
+        policyProfile: { ...track.policyProfile, automationEligible: false },
+      }
+    : track)
+  return {
+    ordered,
+    byId: new Map(ordered.map((track) => [track.id, track])),
+    revision: 'fedcba9876543210',
+    source: 'project-file',
+  }
+})()
+
+const authorizedWorkflowPorts = (
+  repoRoot: string,
+  store: ReturnType<typeof createStateStore>,
+  registry: TrackRegistry = AUTH_TRACK_REGISTRY,
+): Pick<
+  LoopAdmissionDeps,
+  'bindAutomationPolicy' | 'bindWorkflowActionAuthority' |
+  'withWorkflowActionAuthorityLock' | 'workflowActionAuthority'
+> => {
+  const runRepo = createWorkflowRunRepository({
+    store,
+    recordStore: createTransitionRecordStore(),
+    clock: () => '2026-07-07T00:00:00Z',
+    newId: () => 'workflow-run-sdk',
+  })
+  return {
+    bindAutomationPolicy: (change, automationPolicy, binding) =>
+      runRepo.bindAutomationPolicy(join(repoRoot, 'openspec', 'changes', change), automationPolicy, binding),
+    bindWorkflowActionAuthority: (change, snapshot) =>
+      runRepo.bindWorkflowActionAuthority(join(repoRoot, 'openspec', 'changes', change), snapshot),
+    withWorkflowActionAuthorityLock: async (use) => use(registry),
+    workflowActionAuthority: async ({ registry }) => ({
+      platform: AFK_GRANT,
+      skill: AFK_GRANT,
+      project: AFK_GRANT,
+      run: AFK_GRANT,
+      projectAuthority: {
+        version: 'v1', track_id: 'backend', track_registry_revision: registry.revision,
+      },
+    }),
+  }
+}
 
 /** H7 verifier Phase 2：trusted passed，SHA 对齐下方 fake runChange 的 buildSha——scheduler 的
  *  verification gate（fail-closed）要求 L3 merged 必须有 trusted+SHA 相符的结构化 verdict，光
@@ -76,6 +152,13 @@ const passAdmission = (level: 'L1' | 'L2' | 'L3' = 'L1'): LoopAdmission => ({
     ok: true,
     context: passAdmissionContext(level, change),
   }),
+  claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+    ok: true, context: ctx, claimed: await claim('backend'),
+  }),
+  workflowAuthorityClaim: {
+    version: 'v1',
+    claim: async (ctx, claim) => ({ ok: true, context: ctx, claimed: await claim('backend') }),
+  },
   activate: async (): Promise<ActivateResult> => ({ status: 'activated' }),
   settleWon: async () => {},
   settleLost: async () => {},
@@ -121,6 +204,70 @@ describe('createAutomation SDK', () => {
   })
   const eligiblePolicy = (_trackId: string): TrackPolicyProfile => policy(true)
 
+  const seedDefaultAdmissionLoop = async (changePrefix: string): Promise<void> => {
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'loops.yaml'), `version: 1
+loops:
+  - id: sdk-default
+    name: sdk-default
+    kind: executor
+    goal: SDK default admission test
+    cadence: continuous
+    risk: low
+    runner: codex
+    change_prefix: ${changePrefix}
+    phases:
+      - implement
+      - verify
+    human_gates:
+      - before-merge
+    design_doc: GOAL.md
+    status: active
+    budget:
+      max_runs_per_day: 10
+      max_in_flight: 1
+      on_exceed: skip-run
+    kill_criteria:
+      - stop-on-policy-change
+    autonomy_level: L1
+    allowlist: []
+    denylist: []
+    skill_bundle_id: _all
+`, 'utf8')
+  }
+
+  const createEmptyBundlePreparation = () => createExecutionPreparation({
+    repoRoot: root,
+    ledger: createLoopLedgerStore(),
+    loadRegistry,
+    clock,
+    coordinates: {
+      capture: async (context) => ({
+        resolution: { kind: 'default' as const, stepId: 'build' },
+        workflow: AFK_WORKFLOW_PLAN.id,
+        track: 'backend',
+        inputsDigest: 'f'.repeat(64),
+        workflowRunId: context.workflow_run_id,
+      }),
+      readCurrentInputsDigest: async () => 'f'.repeat(64),
+    },
+    resolver: {
+      resolveDefaultMandatory: () => [],
+      resolveDefault: () => [],
+      resolveDefaultProfile: () => [],
+      resolveCustom: () => [],
+    },
+    locator: {
+      locate: async () => { throw new Error('empty bundle must not locate skills') },
+    },
+    materialize: async () => ({
+      digest: 'e'.repeat(64),
+      casDir: join(root, '.pipeline', 'loops', 'skill-snapshots', 'sha256', 'e'.repeat(64)),
+      manifests: [],
+      reused: false,
+    }),
+  })
+
   it('enqueue 按调用者解析的 effective policy 判定，动态 track id 本身不参与能力判断', async () => {
     const blocked = await store.init({
       repoRoot: root, name: 'blocked', track: 'data-no-auto', reviewSeed: 'pending', preset: 'full', clock,
@@ -153,6 +300,206 @@ describe('createAutomation SDK', () => {
     const afk = createAutomation({ repoRoot: root, store, clock, config: { level: 'L1' } })
     await afk.enqueue('x', eligiblePolicy)
     expect(await afk.scanReady()).toEqual(['x'])
+  })
+
+  it('default admission omits Workflow authority ports fail-closed with a structured denial and zero run', async () => {
+    const dir = await initBuild('sdk-missing-ports')
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
+    }))
+    const afk = createAutomation({ repoRoot: root, store, clock, config: { level: 'L1' } })
+    await afk.enqueue('sdk-missing-ports', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: true })
+    expect(report.entries).toContainEqual({
+      change: 'sdk-missing-ports',
+      loopId: 'sdk-default',
+      disposition: 'denied',
+      reason: 'workflow-action-hard-blocked',
+    })
+    expect(runChange).not.toHaveBeenCalled()
+    expect(await store.get(dir, 'automation')).toBe('queued')
+  })
+
+  it('default admission surfaces Workflow authority provider failures as a failed round with zero charge', async () => {
+    const dir = await initBuild('sdk-authority-read-error')
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
+    }))
+    const {
+      bindAutomationPolicy,
+      bindWorkflowActionAuthority,
+      withWorkflowActionAuthorityLock,
+    } = authorizedWorkflowPorts(root, store)
+    const afk = createAutomation({
+      repoRoot: root,
+      store,
+      clock,
+      config: { level: 'L1' },
+      bindAutomationPolicy,
+      bindWorkflowActionAuthority,
+      withWorkflowActionAuthorityLock,
+      workflowActionAuthority: async () => { throw new Error('authority read EIO') },
+    })
+    await afk.enqueue('sdk-authority-read-error', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: false })
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      change: 'sdk-authority-read-error',
+      phase: 'admission',
+      kind: 'state-io',
+      message: expect.stringContaining('authority read EIO'),
+    }))
+    expect(runChange).not.toHaveBeenCalled()
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    const window = await createLoopLedgerStore().readRunWindow(root, { limit: 10 })
+    expect(window.openReservations).toHaveLength(0)
+    expect(window.runs).toContainEqual(expect.objectContaining({
+      change: 'sdk-authority-read-error',
+      result: 'failed',
+      reason: 'infrastructure-error',
+      accounting: expect.objectContaining({ charged_tokens: 0, charge_source: 'none' }),
+      error: expect.objectContaining({
+        cause: 'workflow-action-authority-failed',
+        message: expect.stringContaining('authority read EIO'),
+      }),
+    }))
+  })
+
+  it('default admission forwards explicit Workflow authority ports and runs after explicit bundle preparation', async () => {
+    const dir = await store.init({
+      repoRoot: root,
+      name: 'sdk-authorized',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock,
+      runId: 'workflow-run-sdk',
+      initialWorkflow: {
+        workflow: AFK_WORKFLOW_PLAN.id,
+        phase: 'build',
+        workflowPlanFingerprint: AFK_WORKFLOW_PLAN.workflowFingerprint,
+        workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
+      },
+    })
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [{ sha: SHA }], verifyResult: 'pass', buildSha: SHA, phaseEvent: 'verify-pass',
+    }))
+    const afk = createAutomation({
+      repoRoot: root,
+      store,
+      clock,
+      config: { level: 'L1' },
+      ...authorizedWorkflowPorts(root, store),
+      preparation: createEmptyBundlePreparation(),
+      validateExecutionWiring: trustTestAdmissionWiring,
+      interactionReceipts: { verifiedReceiptsFor: async () => [] },
+    })
+    await afk.enqueue('sdk-authorized', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 1, ok: true })
+    expect(runChange).toHaveBeenCalledOnce()
+    expect(await store.get(dir, 'automation')).toBe('paused')
+  })
+
+  it('default admission derives project authority from the locked registry and rejects an ineligible track despite provider allow', async () => {
+    const dir = await store.init({
+      repoRoot: root,
+      name: 'sdk-ineligible-canonical-track',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock,
+      runId: 'workflow-run-sdk',
+      initialWorkflow: {
+        workflow: AFK_WORKFLOW_PLAN.id,
+        phase: 'build',
+        workflowPlanFingerprint: AFK_WORKFLOW_PLAN.workflowFingerprint,
+        workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
+      },
+    })
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
+    }))
+    const afk = createAutomation({
+      repoRoot: root,
+      store,
+      clock,
+      config: { level: 'L1' },
+      ...authorizedWorkflowPorts(root, store, INELIGIBLE_BACKEND_TRACK_REGISTRY),
+      preparation: createEmptyBundlePreparation(),
+      validateExecutionWiring: trustTestAdmissionWiring,
+    })
+    await afk.enqueue('sdk-ineligible-canonical-track', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: true })
+    expect(report.entries).toContainEqual(expect.objectContaining({
+      change: 'sdk-ineligible-canonical-track',
+      disposition: 'denied',
+      reason: 'workflow-action-denied',
+    }))
+    expect(runChange).not.toHaveBeenCalled()
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    const window = await createLoopLedgerStore().readRunWindow(root, { limit: 10 })
+    expect(window.openReservations).toHaveLength(0)
+    expect(window.runs).toContainEqual(expect.objectContaining({
+      change: 'sdk-ineligible-canonical-track',
+      result: 'skipped',
+      reason: 'admission-denied',
+      accounting: expect.objectContaining({ charged_tokens: 0, charge_source: 'none' }),
+    }))
+  })
+
+  it('default admission keeps bundle-bound execution blocked without explicit preparation', async () => {
+    const dir = await store.init({
+      repoRoot: root,
+      name: 'sdk-no-preparation',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock,
+      runId: 'workflow-run-sdk',
+      initialWorkflow: {
+        workflow: AFK_WORKFLOW_PLAN.id,
+        phase: 'build',
+        workflowPlanFingerprint: AFK_WORKFLOW_PLAN.workflowFingerprint,
+        workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
+      },
+    })
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
+    }))
+    const afk = createAutomation({
+      repoRoot: root,
+      store,
+      clock,
+      config: { level: 'L1' },
+      ...authorizedWorkflowPorts(root, store),
+      validateExecutionWiring: trustTestAdmissionWiring,
+    })
+    await afk.enqueue('sdk-no-preparation', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 1, ok: false })
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      change: 'sdk-no-preparation', phase: 'preparation', kind: 'config',
+    }))
+    expect(runChange).not.toHaveBeenCalled()
+    expect(await store.get(dir, 'automation')).toBe('queued')
   })
 
   it('H11：SDK 把 execution wiring validator 真路由到 scheduler，invalid 时零 runChange', async () => {

@@ -7,6 +7,10 @@ import {
 } from '../workflow/effective-plan.js'
 import type { DocumentGovernancePolicy } from '../workflow/document-contract.js'
 import type { WorkflowIR } from '../workflow/ir.js'
+import type {
+  WorkflowDecompositionPolicyV1,
+  WorkflowInteractionPolicyV1,
+} from '../workflow/types.js'
 import { atomicLinkPublish } from './atomic-publish.js'
 
 export const WORKFLOW_PLAN_SNAPSHOT_FILE = '.pipeline-workflow-plan.json'
@@ -45,9 +49,14 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
   const envelope = ownRecord(value)
   const plan = ownRecord(envelope?.plan)
   const planVersion = plan?.version
-  const allowedPlanKeys = planVersion === 2
-    ? ['version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy', 'workflowFingerprint']
-    : ['version', 'workflowId', 'executionModel', 'workflow', 'workflowFingerprint']
+  const allowedPlanKeys = planVersion === 3
+    ? [
+        'version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy',
+        'decomposition', 'interaction', 'workflowFingerprint',
+      ]
+    : planVersion === 2
+      ? ['version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy', 'workflowFingerprint']
+      : ['version', 'workflowId', 'executionModel', 'workflow', 'workflowFingerprint']
   const documentPolicy = plan?.documentPolicy
   if (!envelope
     || Object.keys(envelope).some((key) => !['version', 'run_id', 'plan'].includes(key))
@@ -56,12 +65,14 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
     || envelope.run_id === ''
     || !plan
     || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key))
-    || (planVersion !== 1 && planVersion !== 2)
+    || (planVersion !== 1 && planVersion !== 2 && planVersion !== 3)
     || typeof plan.workflowId !== 'string'
     || (plan.executionModel !== 'phase-manifest' && plan.executionModel !== 'step-graph')
-    || (planVersion === 2
+    || ((planVersion === 2 || planVersion === 3)
       && documentPolicy !== null
       && ownRecord(documentPolicy) === undefined)
+    || (planVersion === 3
+      && (ownRecord(plan.decomposition) === undefined || ownRecord(plan.interaction) === undefined))
     || typeof plan.workflowFingerprint !== 'string'
     || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint)
     || !isWorkflowIr(plan.workflow)) {
@@ -75,7 +86,7 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
         workflow: plan.workflow,
         workflowFingerprint: plan.workflowFingerprint,
       }
-    : {
+    : planVersion === 2 ? {
         version: 2,
         workflowId: plan.workflowId,
         executionModel: plan.executionModel,
@@ -83,6 +94,16 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
         documentPolicy: documentPolicy as DocumentGovernancePolicy | null,
         workflowFingerprint: plan.workflowFingerprint,
       }
+      : {
+          version: 3,
+          workflowId: plan.workflowId,
+          executionModel: plan.executionModel,
+          workflow: plan.workflow,
+          documentPolicy: documentPolicy as DocumentGovernancePolicy | null,
+          decomposition: plan.decomposition as WorkflowDecompositionPolicyV1,
+          interaction: plan.interaction as WorkflowInteractionPolicyV1,
+          workflowFingerprint: plan.workflowFingerprint,
+        }
   effectiveWorkflowPlanFromSnapshot(snapshot)
   return { version: 1, run_id: envelope.run_id, plan: snapshot }
 }

@@ -14,7 +14,18 @@
  * reservation，不可能同时读到旧预算都通过。reservation 的 ledger 写入**严格早于** queued→scheduled
  * CAS（reserve 在 claim 之前）。
  */
-import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@tenon/kernel'
+import type {
+  AutomationPolicySnapshot,
+  EffectiveSkillResolver,
+  LoopEntry,
+  LoopLedgerStore,
+  LoopRegistry,
+  SkillBundleResolutionInput,
+  TrackRegistry,
+  WorkflowActionEvaluation,
+  WorkflowActionAuthoritySnapshotV1,
+  WorkflowPlanSnapshot,
+} from '@tenon/kernel'
 import {
   admissionDecision, budgetDayOf, buildAttemptContext, compileAutomationPolicySnapshot, compileConstraintPolicy, evaluateConstraintPolicy,
   indexMergeFactsByAttempt, LedgerDegradedError, loopMaterialUnchanged,
@@ -35,6 +46,7 @@ import {
   type ExecutionPreparationPort, type PrepareOutcome, type PreparationFailureReason,
   type PreparedExecutionContext, type PreparedSkillSlot,
 } from './execution-context.js'
+import type { WorkflowActionAuthorityFacts } from './workflow-action-authority-binding.js'
 
 export const errText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -98,9 +110,14 @@ export interface AdmissionDenial {
   /** loop_id 已解析出时携带（status/额度类拒绝）；binding 失败时可能无。 */
   readonly loopId?: string
   readonly block?: AdmissionBlock
+  /** Exact five-layer result when the frozen Workflow policy blocks execution before claim. */
+  readonly authorization?: WorkflowActionEvaluation
 }
 
 export type ReserveResult = { readonly ok: true; readonly context: ExecutionContext } | AdmissionDenial
+export type ClaimAuthorizationResult =
+  | { readonly ok: true; readonly context: ExecutionContext; readonly claimed: boolean }
+  | AdmissionDenial
 
 /** reserveOnce 的内部结果：正常 ReserveResult 或「epoch 变、须整轮重试」哨兵（#4）。 */
 export type ReserveOutcome = ReserveResult | { readonly retry: true }
@@ -184,6 +201,13 @@ export interface LoopAdmission {
     /** null=调用方显式覆盖 level；L1/L2/L3=selector 观察到的 loop 默认值，锁内必须仍相等。 */
     expectedAutonomyLevel?: AutomationLevel | null
   }): Promise<ReserveResult>
+  /** Final authoritative authority re-read and queued→scheduled claim under one TrackRegistry lock. */
+  claimWithFreshWorkflowAuthority?(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+  /** Versioned scheduler capability. Its absence is preflighted before reserve, never after it. */
+  readonly workflowAuthorityClaim?: WorkflowAuthorityClaimCapabilityV1
   /** claim 成功后 ledger 锁内验证 reservation 未关闭且未过 expires_at → append reservation-activated。
    *  已关闭或 TTL 已过期并在锁内幂等关闭 → already-terminal（不追加晚到 activation）；ledger I/O
    *  故障 → throw（调用方 fail-loud，不进 running）。 */
@@ -200,6 +224,22 @@ export interface LoopAdmission {
   recordMergeLanded(input: MergeLandedJournalInput): Promise<void>
   /** kill-switch 重查：loop 此刻是否仍 active（claim 后 running 前 / terminal settle 前调）。仅展示/保守终态修正，不用于「检查后行动」。 */
   isActive(loopId: string): Promise<boolean>
+}
+
+export interface WorkflowAuthorityClaimCapabilityV1 {
+  readonly version: 'v1'
+  claim(
+    ctx: ExecutionContext,
+    claimState: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+}
+
+export interface ConfiguredLoopAdmission extends LoopAdmission {
+  claimWithFreshWorkflowAuthority(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
+  readonly workflowAuthorityClaim: WorkflowAuthorityClaimCapabilityV1
 }
 
 export interface LoopAdmissionDeps {
@@ -264,7 +304,43 @@ export interface LoopAdmissionDeps {
   ) => Promise<{
     readonly id: string; readonly automationPolicy?: AutomationPolicySnapshot
     readonly loopId?: string; readonly iterationId?: string
+    readonly workflowId?: string
+    readonly workflowPlanFingerprint?: string
+    readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
   }>
+  /** Kernel-owned durable per-attempt authority binding; required before the state claim. */
+  readonly bindWorkflowActionAuthority?: (
+    change: string,
+    snapshot: WorkflowActionAuthoritySnapshotV1,
+  ) => Promise<{
+    readonly id: string
+    readonly workflowId?: string
+    readonly workflowPlanFingerprint?: string
+    readonly loopId?: string
+    readonly iterationId?: string
+    readonly workflowActionAuthority?: WorkflowActionAuthoritySnapshotV1
+  }>
+  /** Holds the canonical TrackRegistry read lock through fresh resolution and the state claim. */
+  readonly withWorkflowActionAuthorityLock?: <T>(
+    use: (registry: TrackRegistry) => Promise<T>,
+  ) => Promise<T>
+  /**
+   * Fresh non-Workflow authorization facts. The service derives the Workflow layer only from the
+   * immutable WorkflowRun snapshot, so callers cannot replace the frozen ceiling through this port.
+   */
+  readonly workflowActionAuthority?: (input: {
+    readonly change: string
+    readonly context: ExecutionContext
+    readonly run: {
+      readonly id: string
+      readonly workflowId?: string
+      readonly workflowPlanFingerprint?: string
+      readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
+      readonly loopId?: string
+      readonly iterationId?: string
+    }
+    readonly registry: TrackRegistry
+  }) => Promise<WorkflowActionAuthorityFacts>
 }
 
 /** 运行存活（#5）：'dead' 才可 reconcile 关闭 orphan；'alive'/'unknown' 一律保守保留占 in-flight。 */

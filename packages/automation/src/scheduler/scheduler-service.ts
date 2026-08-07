@@ -4,6 +4,7 @@ import type {
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
 import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type { WorkflowAuthorityClaimCapabilityV1 } from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -150,6 +151,34 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       candidates: candidates.length, admitted: 0, entries: [], failures: [], ledgerFailures: [],
       halted: false, ledgerDegraded: false, pausePending: [],
     }
+    let authorityClaim: WorkflowAuthorityClaimCapabilityV1 | undefined
+    try {
+      const candidate: unknown = admission.workflowAuthorityClaim
+      if (typeof candidate === 'object' && candidate !== null) {
+        const version = Reflect.get(candidate, 'version')
+        const claim: unknown = Reflect.get(candidate, 'claim')
+        if (version === 'v1' && typeof claim === 'function') {
+          // Capture the method before reserve. A mutable JS object/getter cannot remove it in the
+          // reserve→claim window and turn a configuration fault into an open reservation.
+          authorityClaim = {
+            version: 'v1',
+            claim: (context, claimState) => Reflect.apply(claim, candidate, [context, claimState]),
+          }
+        }
+      }
+    } catch {
+      authorityClaim = undefined
+    }
+    if (authorityClaim === undefined) {
+      return {
+        candidates: candidates.length, admitted: 0, entries: [],
+        failures: [{
+          change: '(config)', phase: 'admission', kind: 'config',
+          message: 'Workflow authority claim capability v1 未装配——本轮在 reserve 前 fail-closed',
+        }],
+        ledgerFailures: [], halted: false, ledgerDegraded: false, ok: false,
+      }
+    }
     // H10 §3/§8任务5：直接 createScheduler 时 ExecutionPreparationPort 在类型上可选。缺席时整轮
     // 在处理任何候选**之前**就短路成一条 config 类
     // RoundFailure：零 admission/claim/runChange，不悄悄 pass-through 冒充「已 prepare」、也不假装
@@ -172,6 +201,7 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       preparation,
       options.expectedLoopIdByChange?.get(name),
       options.expectedAutonomyLevelByChange?.get(name),
+      authorityClaim,
     )))
     // Stage B 返工 #2：allSettled 逐项检查——rejected（handleOne 顶层 catch 外的意外）与 !value.ok 都归 failures，
     // 绝不再被 allSettled 吞成 ok=true。primary failure 单点在此落表（handleOne 只落 secondary/ledger-compat），不双计。

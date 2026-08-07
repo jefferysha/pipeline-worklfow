@@ -61,6 +61,13 @@ const passAdmission = (level: 'L1' | 'L3'): LoopAdmission => ({
       policy_epoch: 'epoch-it-mock', skill_bundle_id: null,
     },
   }),
+  claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+    ok: true, context: ctx, claimed: await claim('backend'),
+  }),
+  workflowAuthorityClaim: {
+    version: 'v1',
+    claim: async (ctx, claim) => ({ ok: true, context: ctx, claimed: await claim('backend') }),
+  },
   activate: async (): Promise<ActivateResult> => ({ status: 'activated' }),
   settleWon: async () => {},
   settleLost: async () => {},

@@ -11,7 +11,8 @@
  */
 import type {
   FieldRef, SkillRef, StepDef, StepTransition, WorkflowActionConfig, WorkflowArtifactConfig, WorkflowDef,
-  WorkflowDocumentContractV1, WorkflowGuardConfig,
+  WorkflowDecompositionPolicyV1, WorkflowDocumentContractV1, WorkflowGuardConfig,
+  WorkflowInteractionPolicyV1,
 } from './types.js'
 import type { TrackPredicate } from './predicates.js'
 
@@ -21,6 +22,32 @@ function serializeSkill(s: SkillRef): string[] {
     lines.push(`        depends_on: [${s.depends_on.join(', ')}]`)
   }
   return lines
+}
+
+function serializeDecomposition(
+  policy: Omit<Partial<WorkflowDecompositionPolicyV1>, 'version'> & { readonly version: 'v1' },
+): string[] {
+  return [
+    'decomposition:',
+    `  version: ${policy.version}`,
+    ...(policy.mode === undefined ? [] : [`  mode: ${policy.mode}`]),
+    ...(policy.target === undefined ? [] : [`  target: ${policy.target}`]),
+    ...(policy.strategy === undefined ? [] : [`  strategy: ${policy.strategy}`]),
+    ...(policy.max_items === undefined ? [] : [`  max_items: ${policy.max_items}`]),
+    ...(policy.max_depth === undefined ? [] : [`  max_depth: ${policy.max_depth}`]),
+    ...(policy.auto_when === undefined ? [] : [`  auto_when: [${policy.auto_when.join(', ')}]`]),
+    ...(policy.ask_when === undefined ? [] : [`  ask_when: [${policy.ask_when.join(', ')}]`]),
+  ]
+}
+
+function serializeInteraction(
+  policy: Omit<Partial<WorkflowInteractionPolicyV1>, 'version'> & { readonly version: 'v1' },
+): string[] {
+  return [
+    'interaction:',
+    `  version: ${policy.version}`,
+    ...(policy.mode === undefined ? [] : [`  mode: ${policy.mode}`]),
+  ]
 }
 
 function serializeFieldRef(r: FieldRef): string[] {
@@ -153,6 +180,8 @@ export function serializeWorkflow(wf: WorkflowDef): string {
   }
   const lines = [
     `name: ${wf.name}`,
+    ...(wf.decomposition === undefined ? [] : serializeDecomposition(wf.decomposition)),
+    ...(wf.interaction === undefined ? [] : serializeInteraction(wf.interaction)),
     ...(wf.openspecContract === undefined ? [] : [`openspec_contract: ${wf.openspecContract}`]),
     ...(wf.documentContract === undefined ? [] : serializeDocumentContract(wf.documentContract)),
     'steps:',

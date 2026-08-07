@@ -49,6 +49,16 @@ transitions:
 # hook marker（receipt 同时绑定离开的 exact event），进入相位本身不写 marker，因而不会锁住该相位的调研/规格/验证工作。
 review_phases: [explore, spec, verify]
 
+# Skill contract 的显式动作授权。该版本化 closed list 是 AFK admission 的唯一 Skill 层来源；
+# 不从 mandatory_skills / recommended_skills 的 slot 或任何 prose 推断权限。
+skill_action_authority:
+  version: v1
+  _all: [enter-afk]
+  pm: [enter-afk]
+  frontend: [enter-afk]
+  backend: [enter-afk]
+  free: []
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 全派生面数据节（BACKLOG #18 / GOAL A1）——全部经 kernel loadManifest 真派生，零硬编码。
 # 蒸馏来源：老仓 skills/pipeline/manifest.yaml + scripts/manifest.py（严格只读参考）。

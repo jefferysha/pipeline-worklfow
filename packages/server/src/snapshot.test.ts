@@ -19,6 +19,7 @@ import {
   workflowPlanSnapshot,
 } from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
+import { snapshotWorkflowRules } from './workflowSnapshot.js'
 import { readTasksMarkdown } from './snapshotTasks.js'
 import {
   MAX_TASKS_MARKDOWN_BYTES,
@@ -47,6 +48,92 @@ describe('readRegistry', () => {
     const p = join(home, 'pipeline-projects.json')
     await writeFile(p, '{ not json', 'utf8')
     expect(readRegistry(p)).toEqual([])
+  })
+})
+
+describe('snapshotWorkflowRules policy diagnostics', () => {
+  it('separates configured, frozen, and fail-closed effective authority', () => {
+    const plan = compileEffectiveWorkflowPlan('default')
+    const rules = snapshotWorkflowRules(plan, {
+      status: 'available',
+      workflowFingerprint: plan.workflowFingerprint,
+      decomposition: plan.decomposition,
+      interaction: plan.interaction,
+    })
+
+    expect(rules.policy).toMatchObject({
+      schema: 'workflow-policy/v1',
+      configured: {
+        status: 'available',
+        workflowFingerprint: plan.workflowFingerprint,
+        decomposition: { mode: 'off' },
+        interaction: { mode: 'interactive' },
+      },
+      frozen: {
+        workflowFingerprint: plan.workflowFingerprint,
+        decomposition: { mode: 'off' },
+        interaction: { mode: 'interactive' },
+        workflowCeiling: { status: 'valid', grants: [] },
+      },
+      effective: {
+        status: 'unavailable',
+        reason: 'authority-input-unavailable',
+      },
+      drift: { status: 'current', fingerprintChanged: false, policyChanged: false },
+    })
+  })
+
+  it('reports current-definition drift without replacing frozen run policy', () => {
+    const plan = compileEffectiveWorkflowPlan('default')
+    const rules = snapshotWorkflowRules(plan, {
+      status: 'available',
+      workflowFingerprint: 'changed-definition-fingerprint',
+      decomposition: { ...plan.decomposition, mode: 'suggest' },
+      interaction: plan.interaction,
+    })
+
+    expect(rules.policy.configured).toMatchObject({
+      status: 'available',
+      workflowFingerprint: 'changed-definition-fingerprint',
+      decomposition: { mode: 'suggest' },
+    })
+    expect(rules.policy.frozen).toMatchObject({
+      workflowFingerprint: plan.workflowFingerprint,
+      decomposition: { mode: 'off' },
+    })
+    expect(rules.policy.drift).toEqual({
+      status: 'changed', fingerprintChanged: true, policyChanged: true,
+    })
+  })
+
+  it('keeps missing configured state distinct from permission grants', () => {
+    const rules = snapshotWorkflowRules(compileEffectiveWorkflowPlan('default'), { status: 'missing' })
+
+    expect(rules.policy.configured).toEqual({ status: 'missing' })
+    expect(rules.policy.drift).toEqual({
+      status: 'missing', fingerprintChanged: null, policyChanged: null,
+    })
+    expect(rules.policy.effective).toEqual({
+      status: 'unavailable', reason: 'authority-input-unavailable',
+    })
+  })
+
+  it('projects actual grants only when all dynamic authority layers are supplied', () => {
+    const plan = compileEffectiveWorkflowPlan('authority-policy', {
+      name: 'authority-policy',
+      interaction: { version: 'v1', mode: 'afk' },
+      steps: [{
+        id: 'run', label: 'Run', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    })
+    const grant = { status: 'valid', grants: ['enter-afk'] } as const
+    const rules = snapshotWorkflowRules(plan, { status: 'unavailable' }, {
+      layers: { platform: grant, skill: grant, project: grant, run: grant },
+    })
+
+    expect(rules.policy.effective).toMatchObject({
+      status: 'available', grants: ['enter-afk'],
+    })
   })
 })
 
@@ -989,6 +1076,21 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(beta.workflowRules).toMatchObject({
       steps: ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'],
       gateByStep: { explore: 'review', spec: 'review', verify: 'review' },
+      policy: {
+        schema: 'workflow-policy/v1',
+        configured: {
+          status: 'available',
+          decomposition: { mode: 'off' },
+          interaction: { mode: 'interactive' },
+        },
+        frozen: {
+          decomposition: { mode: 'off' },
+          interaction: { mode: 'interactive' },
+          workflowCeiling: { status: 'valid', grants: [] },
+        },
+        effective: { status: 'unavailable', reason: 'authority-input-unavailable' },
+        drift: { status: 'current', fingerprintChanged: false, policyChanged: false },
+      },
     })
     expect(Object.keys(beta.workflowExecution.readinessByTransition)).toEqual(['open'])
     expect(beta.workflowExecution.readinessByTransition.open).toEqual({
@@ -1673,9 +1775,10 @@ steps:
     const store = newStore()
     const root = await makeProject()
     const currentWorkflow = compileEffectiveWorkflowPlan('default').workflow
+    const { decomposition: _decomposition, interaction: _interaction, ...legacyBase } = currentWorkflow
     const legacyWorkflow = {
-      ...currentWorkflow,
-      steps: currentWorkflow.steps.map((step) => ({
+      ...legacyBase,
+      steps: legacyBase.steps.map((step) => ({
         ...step,
         guards: step.id === 'build'
           ? step.guards.filter((guard) =>

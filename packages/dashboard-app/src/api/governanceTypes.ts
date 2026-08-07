@@ -102,10 +102,61 @@ export interface WbDocumentContract {
   reads: Array<{ step: string; kinds: string[] }>
 }
 
+export type WbDecompositionMode = 'off' | 'suggest' | 'auto-safe' | 'require-review'
+export type WbDecompositionTarget = 'work-items' | 'child-pipelines'
+export type WbDecompositionStrategy = 'balanced' | 'breadth-first' | 'depth-first'
+export type WbDecompositionAutoWhen =
+  | 'independent-work-items'
+  | 'cross-component-boundary'
+  | 'context-budget-risk'
+export type WbDecompositionAskWhen =
+  | 'ambiguous-requirements'
+  | 'hard-boundary'
+  | 'missing-authorization'
+  | 'limit-exceeded'
+
+export interface WbDecompositionPolicy {
+  version: 'v1'
+  mode: WbDecompositionMode
+  target: WbDecompositionTarget
+  strategy: WbDecompositionStrategy
+  max_items: number
+  max_depth: number
+  auto_when: WbDecompositionAutoWhen[]
+  ask_when: WbDecompositionAskWhen[]
+}
+
+export type WbInteractionMode = 'interactive' | 'recommended-defaults' | 'afk'
+
+export interface WbInteractionPolicy {
+  version: 'v1'
+  mode: WbInteractionMode
+}
+
+export const DEFAULT_WB_DECOMPOSITION_POLICY: WbDecompositionPolicy = {
+  version: 'v1',
+  mode: 'off',
+  target: 'work-items',
+  strategy: 'balanced',
+  max_items: 16,
+  max_depth: 2,
+  auto_when: [],
+  ask_when: [],
+}
+
+export const DEFAULT_WB_INTERACTION_POLICY: WbInteractionPolicy = {
+  version: 'v1',
+  mode: 'interactive',
+}
+
 export interface WbWorkflowDef {
   name: string
   openspecContract?: 'required'
   documentContract?: WbDocumentContract
+  /** Omitted only by pre-policy in-memory fixtures; HTTP decoding always projects safe v1 defaults. */
+  decomposition?: WbDecompositionPolicy
+  /** Omitted only by pre-policy in-memory fixtures; HTTP decoding always projects safe v1 defaults. */
+  interaction?: WbInteractionPolicy
   steps: WbStepDef[]
 }
 

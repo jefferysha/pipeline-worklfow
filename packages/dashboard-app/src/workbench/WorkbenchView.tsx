@@ -18,6 +18,7 @@ import { readSaveErrors, readWorkflowDeleteResponse } from './workbenchApiDecode
 import { useRecentWorkflowHistory } from './useRecentWorkflowHistory'
 import { WorkbenchDialogs } from './WorkbenchDialogs'
 import { WorkbenchHeader } from './WorkbenchHeader'
+import { WorkflowPolicyEditor } from './WorkflowPolicyEditor'
 import { WorkbenchGovernanceDialog } from './WorkbenchGovernanceDialog'
 import { readWorkflowWriteSuccess } from './workbenchWriteResponse'
 import type { WorkbenchViewProps } from './workbenchViewTypes'
@@ -76,6 +77,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const [wfName, setWfName] = useState<string | null>(null)
   const [def, setDef] = useState<WbWorkflowDef | null>(null)
   const [defError, setDefError] = useState<unknown | null>(null)
+  const [definitionReloadNonce, setDefinitionReloadNonce] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false); const [stageId, setStageId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' } | { kind: 'error'; errors: string[] }>({ kind: 'idle' })
   const [saving, setSaving] = useState(false)
@@ -106,6 +108,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const [advancedOpen, setAdvancedOpen] = useState(false); const [skillEditorOpen, setSkillEditorOpen] = useState(false)
   const [promptSkipDirty, setPromptSkipDirty] = useState(false)
   const defSnapshotRef = useRef<string | null>(null)
+  const defBaselineRef = useRef<WbWorkflowDef | null>(null)
   const {
     addStageOpen, setAddStageOpen, stageDraftName, setStageDraftName, stageDraftId, setStageDraftId,
     stageIdTouched, setStageIdTouched, addStageNameRef, stageIdError, canSubmitStage,
@@ -131,6 +134,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     setWfName(null)
     setDef(null)
     setDefError(null)
+    setDefinitionReloadNonce(0)
     setMenuOpen(false)
     setSaving(false)
     setPendingSwitch(null)
@@ -147,6 +151,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     setSkillEditorOpen(false)
     setPromptSkipDirty(false)
     defSnapshotRef.current = null
+    defBaselineRef.current = null
     let cancelled = false
     fetchWorkflowNames(targetRoot)
       .then((names) => {
@@ -176,18 +181,21 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
       setDef(localizedDefaultDef)
       setDefError(null)
       defSnapshotRef.current = null // default 只读态：永不参与 dirty 判定
+      defBaselineRef.current = localizedDefaultDef
       return
     }
     let cancelled = false
     setDef(null)
     setDefError(null)
     defSnapshotRef.current = null
+    defBaselineRef.current = null
     fetchWorkflow(wfName, root)
       .then((body) => {
         if (cancelled) return
         setDef(body)
         setDefError(null)
         defSnapshotRef.current = JSON.stringify(body)
+        defBaselineRef.current = body
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -196,7 +204,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     return () => {
       cancelled = true
     }
-  }, [root, wfName])
+  }, [root, wfName, definitionReloadNonce])
   useEffect(() => {
     if (wfName === 'default') setDef(localizedDefaultDef)
   }, [localizedDefaultDef, wfName])
@@ -208,6 +216,10 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
   const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
+  const policyDirty = !readonlyWf && def !== null
+    && defBaselineRef.current !== null
+    && (JSON.stringify(def.decomposition) !== JSON.stringify(defBaselineRef.current.decomposition)
+      || JSON.stringify(def.interaction) !== JSON.stringify(defBaselineRef.current.interaction))
   const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
   const { setSourceDirty } = useWorkbenchDirtyState({
     localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
@@ -261,6 +273,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
       if (!validSuccess) { setSaveStatus({ kind: 'error', errors: [localeIdentity.current.t('common.invalid_response')] }); return }
       invalidateWorkflowRules(targetRoot, targetWorkflow)
       defSnapshotRef.current = JSON.stringify(def)
+      defBaselineRef.current = def
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
       if (generation === saveGeneration.current && rootIdentity.current === targetRoot && workflowIdentity.current === targetWorkflow) {
@@ -280,6 +293,22 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
     setWfName(name)
     setDef(name === 'default' ? localizedDefaultDef : null)
     setDefError(null)
+    defBaselineRef.current = name === 'default' ? localizedDefaultDef : null
+  }
+
+  function cancelPolicyDraft(): void {
+    if (readonlyWf || saving || !policyDirty || defBaselineRef.current === null) return
+    const baseline = defBaselineRef.current
+    setDef((current) => {
+      if (current === null) return current
+      const next = { ...current }
+      if (baseline.decomposition === undefined) delete next.decomposition
+      else next.decomposition = baseline.decomposition
+      if (baseline.interaction === undefined) delete next.interaction
+      else next.interaction = baseline.interaction
+      return next
+    })
+    setSaveStatus({ kind: 'idle' })
   }
   function requestSwitch(name: string): void {
     setMenuOpen(false)
@@ -465,7 +494,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
         saving={saving}
         saveStatus={saveStatus}
         namesError={namesErrorText}
-        defError={defErrorText}
+        defError={null}
         onMenuOpen={setMenuOpen}
         onSwitch={requestSwitch}
         onCreate={openWorkflowCreate}
@@ -473,6 +502,19 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
         onGovernance={() => setAdvancedOpen(true)}
         onSave={() => void save()}
         trackControls={<TrackSelector state={mandatory} onDirtyChange={reportTrackDirty} />}
+      />
+      <WorkflowPolicyEditor
+        definition={def}
+        readonly={readonlyWf}
+        loading={def === null && defError === null}
+        error={defErrorText}
+        dirty={policyDirty}
+        saving={saving}
+        saveStatus={saveStatus.kind === 'ok' ? 'success' : 'idle'}
+        onChange={setDef}
+        onSave={() => void save()}
+        onCancel={cancelPolicyDraft}
+        onRetry={() => setDefinitionReloadNonce((value) => value + 1)}
       />
       {def && (
         <>
@@ -505,7 +547,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
           />
         </>
       )}
-      {!def && !defError && <p className="p-5 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
       {advancedOpen && <WorkbenchGovernanceDialog root={root} loops={loops} summary={summary} recent={recent} recentSilent={recentSilent} onClose={() => setAdvancedOpen(false)} onDirtyChange={setSourceDirty} />}
       {skillEditorOpen && selectedLane && (
         <SkillOrchestrationDialog
