@@ -157,3 +157,5 @@
 {"ts":"2026-08-07T14:43:56Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"e36e7b39-fb67-44c7-b22e-150ac5c0681e"}
 {"ts":"2026-08-07T14:46:26Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T14:46:26Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 17"}
+{"ts":"2026-08-07T15:28:28Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T15:28:28Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 17"}

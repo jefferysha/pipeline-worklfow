@@ -601,11 +601,11 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/workflow-decomposition-policy/tasks.md",
-      "sha256": "62c08ce8935c88437e089120e013699d8c8df3c7abdea09ab26a4d92be02832b",
+      "sha256": "41d2ec62dcfcce98c9bf4aaa2a3b3091f6457944fb6747f29cb77c47fa3c5b2f",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-07T14:46:26Z",
+      "recordedAt": "2026-08-07T15:28:28Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-4e49eae3d0097133550774758fe53637235d48854b35527392f5f60e3c015185",
+        "confirmationInvocationId": "invocation-7c75cf55efb0e445781079ddcb0c585ac6c70a2e50094abccca53fcc62d41bbc",
         "evidenceScope": "build",
         "stepVisit": {
           "runId": "9e508e63-6ed1-4e0d-b226-30cf216621b4",
@@ -615,8 +615,8 @@
       "reads": [
         {
           "phase": "build",
-          "sha256": "62c08ce8935c88437e089120e013699d8c8df3c7abdea09ab26a4d92be02832b",
-          "readAt": "2026-08-07T14:46:26Z",
+          "sha256": "41d2ec62dcfcce98c9bf4aaa2a3b3091f6457944fb6747f29cb77c47fa3c5b2f",
+          "readAt": "2026-08-07T15:28:28Z",
           "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",17]"
         }
       ]

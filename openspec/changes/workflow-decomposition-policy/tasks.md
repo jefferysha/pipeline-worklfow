@@ -25,6 +25,9 @@
 - [x] 为公共 createAutomation 默认 admission 补齐显式 authority/binding 端口，保持缺省失败关闭与 bundle preparation 硬门。 (build)
 - [x] 将 Workflow authority provider 异常升级为可观测的 state I/O 失败，并以零扣费终态关闭 reservation，避免普通拒绝路径伪报 round 成功。 (build)
 - [x] 将 Codex review 固定到独立 clone 执行，并以前后状态核对保护 Verify 的冻结 worktree 零输出屏障。 (build)
+- [x] 将 require-review receipt 绑定到规范化候选计划 fingerprint，阻止缺失授权被普通确认绕过。 (build)
+- [x] 将 Dashboard 取消与 Escape 收敛为 policy-only 回滚，保留未提交的 stage/guard 草稿。 (build)
+- [x] 刷新生产构建产物并通过架构、类型、OpenSpec、bundle 与全量回归门。 (build)
 
 ## 验证
 
