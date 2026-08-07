@@ -54,3 +54,11 @@
 {"ts":"2026-08-07T19:41:02Z","kind":"set","field":"branch_status","to":"handled"}
 {"ts":"2026-08-07T19:41:38Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-08-07T19:41:38Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion f505c67f-bb52-4c8f-8046-281179216b3e 6"}
+{"ts":"2026-08-07T19:41:51Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-07T19:41:51Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-07T19:27:42Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T19:42:23Z","kind":"tool","raw":"review:request phase=verify event=verify-fail replaced=true"}
+{"ts":"2026-08-07T19:42:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-07T19:27:42Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T19:42:24Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"3a22b15f-504f-4192-8e54-d31459249c9f"}
+{"ts":"2026-08-07T19:43:01Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T19:43:01Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build f505c67f-bb52-4c8f-8046-281179216b3e 7"}
+{"ts":"2026-08-07T19:43:02Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
