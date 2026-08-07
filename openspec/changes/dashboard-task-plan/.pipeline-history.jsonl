@@ -27,3 +27,5 @@
 {"ts":"2026-08-07T20:17:13Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
 {"ts":"2026-08-07T20:17:26Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
 {"ts":"2026-08-07T20:17:26Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-07T21:41:34Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T21:41:34Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build e1c65317-f9c3-4ce8-9930-7ce0316b93e9 3"}

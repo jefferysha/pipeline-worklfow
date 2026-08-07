@@ -124,27 +124,6 @@
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/dashboard-task-plan/tasks.md",
-      "sha256": "b007497a7fa7a01472018230104ee4853e51a41d5583495ed3df22167276e8a6",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-08-03T10:04:47Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "b007497a7fa7a01472018230104ee4853e51a41d5583495ed3df22167276e8a6",
-          "readAt": "2026-08-03T10:04:47Z",
-          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "b007497a7fa7a01472018230104ee4853e51a41d5583495ed3df22167276e8a6",
-          "readAt": "2026-08-07T20:17:16Z",
-          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",3]"
-        }
-      ]
-    },
-    {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/2026-08-03-dashboard-task-plan-design.md",
       "sha256": "5af27e9dae3cb8050218e78d18a5da3b7a42bad23762262d59fd7a8c8edc9d77",
@@ -161,6 +140,29 @@
           "phase": "build",
           "sha256": "5af27e9dae3cb8050218e78d18a5da3b7a42bad23762262d59fd7a8c8edc9d77",
           "readAt": "2026-08-07T20:17:16Z",
+          "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/dashboard-task-plan/tasks.md",
+      "sha256": "10cec1ca5246e486bb0a4159072035935f9c32b428207c424132de9a3e264e45",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-07T21:41:34Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-5f058a9bcd6bfc202f2686bc2439c5f57354ef121c114c400c3eb83409680c3a",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "e1c65317-f9c3-4ce8-9930-7ce0316b93e9",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "10cec1ca5246e486bb0a4159072035935f9c32b428207c424132de9a3e264e45",
+          "readAt": "2026-08-07T21:41:35Z",
           "visitId": "[\"e1c65317-f9c3-4ce8-9930-7ce0316b93e9\",3]"
         }
       ]

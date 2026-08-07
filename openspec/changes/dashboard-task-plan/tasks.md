@@ -14,10 +14,10 @@
 
 ## 实现
 
-- [ ] 以 tracer bullet 打通 API decoder、TaskPlan list/detail 和真实数据渲染。 (build)
-- [ ] 实现覆盖矩阵、有界波次、资源冲突、Skill/Question/Decision/artifact/validator 详情。 (build)
-- [ ] 实现 Workbench 策略编辑和 AFK admission/runtime/retry/cancel/resume。 (build)
-- [ ] 实现 loading/error/empty/stale/unknown/retry、zh/en、键盘与焦点。 (build)
+- [x] 以 tracer bullet 打通 API decoder、TaskPlan list/detail 和真实数据渲染。 (build)
+- [x] 实现覆盖矩阵、有界波次、资源冲突、Skill/Question/Decision/artifact/validator 详情。 (build)
+- [x] 实现 Workbench 策略编辑和 AFK admission/runtime/retry/cancel/resume。 (build)
+- [x] 实现 loading/error/empty/stale/unknown/retry、zh/en、键盘与焦点。 (build)
 
 ## 验证
 
