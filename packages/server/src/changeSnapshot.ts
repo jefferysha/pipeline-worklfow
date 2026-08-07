@@ -24,6 +24,7 @@ import {
 import type { ChangeSnapshot } from './types.js'
 import { projectWorkflowDefinitionStatus } from './workflowDefinitionStatus.js'
 import { projectReviewHandshake } from './reviewHandshake.js'
+import { readWorkflowSnapshotAuthority } from './workflowSnapshotAuthority.js'
 import {
   resolveSnapshotEffectivePlan,
   resolveConfiguredWorkflowPolicySafely,
@@ -69,7 +70,6 @@ import {
   captureStableFileVersion,
   matchesStableFileVersion,
 } from './stableFileMetadata.js'
-
 export { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
 export interface AnchoredChangeState {
   readonly changeDir: string
@@ -350,7 +350,7 @@ export async function readChangeSnapshot(
         ? {}
         : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }),
     }
-    const [documents, terminalActivity, tasksProjection, workflowExecution] = await Promise.all([
+    const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
       readAnchoredTasksProjection(
@@ -363,6 +363,7 @@ export async function readChangeSnapshot(
         anchor,
       ),
       snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps),
+      readWorkflowSnapshotAuthority(changeDir, state, plan),
     ])
     assertWorkflowRootAnchor(anchor)
     assertChangePathAnchor(anchored.changeAnchor)
@@ -385,7 +386,7 @@ export async function readChangeSnapshot(
       fields,
       workflowPlanFingerprint: plan.workflowFingerprint,
       workflowDefinition,
-      workflowRules: snapshotWorkflowRules(plan, configuredPolicy),
+      workflowRules: snapshotWorkflowRules(plan, configuredPolicy, authority),
       workflowExecution,
       reviewHandshake: projectReviewHandshake(state, plan, phase),
       todo,

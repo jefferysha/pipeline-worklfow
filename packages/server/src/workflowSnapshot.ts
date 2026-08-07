@@ -210,10 +210,12 @@ export function snapshotWorkflowRulesAtRoot(
   plan: EffectiveWorkflowPlan,
   root: string,
   workflowName: string,
+  authority?: WorkflowSnapshotAuthorityInput,
 ): WorkflowRulesSnapshot {
   return snapshotWorkflowRules(
     plan,
     resolveConfiguredWorkflowPolicySafely(workflowName, (name) => loadWorkflow(root, name)),
+    authority,
   )
 }
 

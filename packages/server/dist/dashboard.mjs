@@ -21981,6 +21981,55 @@ function projectReviewHandshake(state, plan, phase) {
   };
 }
 
+// packages/server/src/workflowSnapshotAuthority.ts
+function snapshotAuthorityStringField(value) {
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function sameGrants(left, right) {
+  return left.length === right.length && left.every((grant, index) => right[index] === grant);
+}
+function projectLayer(snapshot, name) {
+  const layer = snapshot.layers.find((candidate) => candidate.layer === name);
+  return layer === void 0 ? void 0 : { status: layer.status, grants: [...layer.grants] };
+}
+async function readWorkflowSnapshotAuthority(changeDir, state, plan) {
+  const iterationId = state.runMetadata?.iterationId;
+  if (iterationId === void 0) return void 0;
+  let snapshot;
+  try {
+    snapshot = await readWorkflowActionAuthorityRecord(changeDir, iterationId);
+  } catch {
+    return void 0;
+  }
+  return projectWorkflowSnapshotAuthority(snapshot, state, plan);
+}
+function projectWorkflowSnapshotAuthority(snapshot, state, plan) {
+  const metadata = state.runMetadata;
+  const frozenPlan = metadata?.workflowPlanSnapshot;
+  const iterationId = metadata?.iterationId;
+  if (metadata === void 0 || frozenPlan === void 0 || iterationId === void 0) return void 0;
+  const workflowId = snapshotAuthorityStringField(state.fields.workflow) || "default";
+  const trackId = snapshotAuthorityStringField(state.fields.track);
+  const skillBundleId = metadata.automationPolicy?.skill_bundle_id;
+  if (snapshot === void 0 || snapshot.workflow_run_id !== metadata.runId || snapshot.workflow_id !== workflowId || snapshot.workflow_id !== frozenPlan.workflowId || snapshot.workflow_id !== plan.id || snapshot.workflow_fingerprint !== metadata.workflowPlanFingerprint || snapshot.workflow_fingerprint !== frozenPlan.workflowFingerprint || snapshot.workflow_fingerprint !== plan.workflowFingerprint || snapshot.loop_id !== metadata.loopId || snapshot.iteration_id !== iterationId || snapshot.skill_bundle_id !== skillBundleId || snapshot.track_id !== trackId) return void 0;
+  const platform = projectLayer(snapshot, "platform");
+  const skill = projectLayer(snapshot, "skill");
+  const project = projectLayer(snapshot, "project");
+  const workflow = projectLayer(snapshot, "workflow");
+  const run = projectLayer(snapshot, "run");
+  if (platform === void 0 || skill === void 0 || project === void 0 || workflow === void 0 || run === void 0) return void 0;
+  const frozenWorkflowLayer = workflowPolicyPermissionLayer(plan);
+  if (workflow.status !== frozenWorkflowLayer.status || !sameGrants(workflow.grants, frozenWorkflowLayer.grants)) return void 0;
+  return {
+    layers: { platform, skill, project, run },
+    authority: {
+      authority_id: snapshot.authorization_fingerprint,
+      workflow_run_id: snapshot.workflow_run_id,
+      workflow_fingerprint: snapshot.workflow_fingerprint
+    }
+  };
+}
+
 // packages/server/src/projectCapabilities.ts
 import { statSync as statSync3 } from "node:fs";
 import { join as join36 } from "node:path";
@@ -22111,10 +22160,11 @@ function snapshotWorkflowRules(plan, configured = { status: "unavailable" }, aut
     }
   };
 }
-function snapshotWorkflowRulesAtRoot(plan, root, workflowName) {
+function snapshotWorkflowRulesAtRoot(plan, root, workflowName, authority) {
   return snapshotWorkflowRules(
     plan,
-    resolveConfiguredWorkflowPolicySafely(workflowName, (name) => loadWorkflow(root, name))
+    resolveConfiguredWorkflowPolicySafely(workflowName, (name) => loadWorkflow(root, name)),
+    authority
   );
 }
 function legacySnapshotWorkflowRules(plan) {
@@ -22728,8 +22778,7 @@ function snapshotDepsFactory(base) {
   return (nowMs) => ({ ...base, ...nowMs === void 0 ? {} : { now: () => nowMs } });
 }
 function str(v) {
-  if (Array.isArray(v)) return v.join(",");
-  return v ?? "";
+  return Array.isArray(v) ? v.join(",") : v ?? "";
 }
 async function readTerminalActivity(changeDir, changeName, nowMs) {
   const target = join41(changeDir, TERMINAL_ACTIVITY_FILE);
@@ -22877,9 +22926,10 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot
       });
       legacyWorkflowRules[workflowName] ??= legacySnapshotWorkflowRules(plan);
-      const [documents, terminalActivity] = await Promise.all([
+      const [documents, terminalActivity, authority] = await Promise.all([
         documentEvidence(readRoot, changeDir, plan, phase),
-        readTerminalActivity(changeDir, e.name, nowMs)
+        readTerminalActivity(changeDir, e.name, nowMs),
+        readWorkflowSnapshotAuthority(changeDir, state, plan)
       ]);
       const tasksProjection = await readTasksProjection(changeDir, {}, anchor);
       const todo = projectPipelineTodo({
@@ -22900,7 +22950,7 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
         updated_at: str(f.updated_at),
         fields: f,
         workflowPlanFingerprint: plan.workflowFingerprint,
-        workflowRules: snapshotWorkflowRulesAtRoot(plan, readRoot, workflowName),
+        workflowRules: snapshotWorkflowRulesAtRoot(plan, readRoot, workflowName, authority),
         workflowExecution: await snapshotWorkflowExecution(
           plan,
           state,
@@ -26753,7 +26803,7 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
       ...gitHeadSha2 === void 0 ? {} : { gitHeadSha: () => gitHeadSha2(rootPath) },
       ...workspaceFingerprint === void 0 ? {} : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }
     };
-    const [documents, terminalActivity, tasksProjection, workflowExecution] = await Promise.all([
+    const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
       readAnchoredTasksProjection(
@@ -26765,7 +26815,8 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
         ),
         anchor
       ),
-      snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps)
+      snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps),
+      readWorkflowSnapshotAuthority(changeDir, state, plan)
     ]);
     assertWorkflowRootAnchor(anchor);
     assertChangePathAnchor(anchored.changeAnchor);
@@ -26788,7 +26839,7 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
       fields,
       workflowPlanFingerprint: plan.workflowFingerprint,
       workflowDefinition,
-      workflowRules: snapshotWorkflowRules(plan, configuredPolicy),
+      workflowRules: snapshotWorkflowRules(plan, configuredPolicy, authority),
       workflowExecution,
       reviewHandshake: projectReviewHandshake(state, plan, phase),
       todo,
