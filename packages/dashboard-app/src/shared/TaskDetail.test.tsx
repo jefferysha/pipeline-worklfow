@@ -24,6 +24,12 @@ import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
 import { makeChange } from '../testkit'
 import type { ChangeHistoryEntry } from '../api/client'
 
+vi.mock('./TaskPlanEvidenceSection', () => ({
+  TaskPlanEvidenceSection: ({ root, change }: { root: string; change: string }): JSX.Element => (
+    <div data-testid="task-plan-evidence-section" data-root={root} data-change={change} />
+  ),
+}))
+
 /** 可控 matchMedia 桩（同 WorkbenchView.test.tsx 既有先例）：驱动 gsap.matchMedia 的 reduced-motion 分支。 */
 function stubMatchMedia(reduceMatches: boolean): void {
   vi.stubGlobal(
@@ -115,6 +121,19 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
 }
 
 describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
+  it('在 orchestration graph 之后挂载 TaskPlanEvidenceSection，并传入 root/change', async () => {
+    await renderDetail({
+      root: '/workspace',
+      change: makeChange('task-plan-change', 'open', { fields: {} }),
+    })
+
+    const orchestration = screen.getByTestId('orchestration-graph')
+    const taskPlanEvidence = screen.getByTestId('task-plan-evidence-section')
+    expect(orchestration.compareDocumentPosition(taskPlanEvidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(taskPlanEvidence).toHaveAttribute('data-root', '/workspace')
+    expect(taskPlanEvidence).toHaveAttribute('data-change', 'task-plan-change')
+  })
+
   it('为所有 Change 挂载独立的相关会话检索入口，且初始不发起检索', async () => {
     await renderDetail({
       change: makeChange('related-session-memory', 'open', { fields: {} }),
