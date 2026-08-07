@@ -42,7 +42,7 @@ vi.mock('../taskPlan/TaskPlanPanel', () => ({
   },
 }))
 
-vi.mock('./SkillInvocationEvidenceCard', () => ({
+vi.mock('../shared/SkillInvocationEvidenceCard', () => ({
   SkillInvocationEvidenceCard: (props: SkillInvocationEvidenceCardMockProps): JSX.Element => {
     mocks.skillInvocationEvidenceCard(props)
     return <div data-testid="skill-invocation-evidence" />

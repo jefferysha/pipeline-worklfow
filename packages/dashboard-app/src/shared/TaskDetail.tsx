@@ -22,7 +22,6 @@ import { TaskDetailIntro } from './TaskDetailIntro'
 import { TaskDocumentsSection } from './TaskDocumentsSection'
 import { RelatedSessionsSection } from './RelatedSessionsSection'
 import { OrchestrationGraphCard } from './OrchestrationGraphCard'
-import { TaskPlanEvidenceSection } from './TaskPlanEvidenceSection'
 gsap.registerPlugin(useGSAP)
 export interface TaskDetailProps {
   root: string
@@ -32,6 +31,7 @@ export interface TaskDetailProps {
   badge?: ReactNode
   actions?: ReactNode
   curStageExtra?: ReactNode
+  evidenceExtra?: ReactNode
   documentsExtra?: ReactNode
   collapseTechnical?: boolean
   onClose?: () => void
@@ -73,6 +73,7 @@ export function TaskDetail({
   badge,
   actions,
   curStageExtra,
+  evidenceExtra,
   documentsExtra,
   collapseTechnical = false,
   onClose,
@@ -358,7 +359,7 @@ export function TaskDetail({
         )}
       </div>
       <OrchestrationGraphCard root={root} change={change.name} />
-      <TaskPlanEvidenceSection root={root} change={change.name} />
+      {evidenceExtra}
       {change.documents?.governed ? (
         <TaskDocumentsSection
           documents={change.documents}

@@ -68,10 +68,7 @@ export type {
 gsap.registerPlugin(useGSAP)
 export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyChange }: WorkbenchViewProps): JSX.Element {
   const { t, lang } = useT()
-  const defaultLabels = useMemo(
-    () => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])),
-    [lang, t],
-  )
+  const defaultLabels = useMemo(() => Object.fromEntries(PHASES.map((phase) => [phase, t(`phases.${phase}`)])), [lang, t])
   const localizedDefaultDef = useMemo(() => buildDefaultDef(defaultLabels), [defaultLabels])
   const [names, setNames] = useState<string[] | null>(null)
   const [namesError, setNamesError] = useState<unknown | null>(null)

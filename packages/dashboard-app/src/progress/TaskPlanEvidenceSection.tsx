@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TaskRunPanel } from '../afk/TaskRunPanel'
 import { TaskPlanPanel } from '../taskPlan/TaskPlanPanel'
-import { SkillInvocationEvidenceCard } from './SkillInvocationEvidenceCard'
+import { SkillInvocationEvidenceCard } from '../shared/SkillInvocationEvidenceCard'
 
 export interface TaskPlanEvidenceSectionProps {
   readonly root: string
