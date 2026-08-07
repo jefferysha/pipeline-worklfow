@@ -29,3 +29,19 @@
 {"ts":"2026-08-07T20:17:26Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-08-07T21:41:34Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T21:41:34Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build e1c65317-f9c3-4ce8-9930-7ce0316b93e9 3"}
+{"ts":"2026-08-07T21:42:21Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T21:42:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T21:42:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-07T21:42:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-07T21:42:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-07T21:42:44Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"2447a743-8654-40ec-9cf6-f89c9dd30b28"}
+{"ts":"2026-08-07T21:53:10Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-dashboard-task-plan-verify-fail-1.md"}
+{"ts":"2026-08-07T21:53:10Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T21:53:10Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion e1c65317-f9c3-4ce8-9930-7ce0316b93e9 4"}
+{"ts":"2026-08-07T21:53:16Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-07T21:53:16Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-07T20:17:13Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T21:53:16Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-07T21:53:16Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-07T21:53:28Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-07T21:53:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-07T21:53:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"05b1a826-4356-47a7-8ded-ebacff2e062c"}
