@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { TaskRunPanel } from './TaskRunPanel'
 import { fetchTaskRun, postTaskRunOperation, type TaskRunDto } from '../api/taskRunClient'
+import { ApiError } from '../api/transport'
 
 vi.mock('../api/taskRunClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/taskRunClient')>()
@@ -91,5 +92,26 @@ describe('TaskRunPanel', () => {
     vi.mocked(fetchTaskRun).mockResolvedValue({ ...run, items: [], waves: [], blockers: [], allowed_operations: [] })
     renderPanel()
     expect(await screen.findByText('No work items are available for this task run.')).toBeVisible()
+  })
+
+  it('renders an intentional empty state when the selected change has no task run', async () => {
+    vi.mocked(fetchTaskRun).mockRejectedValueOnce(new ApiError('TASK_RUN_NOT_FOUND', 404))
+    renderPanel()
+    expect(await screen.findByText('No work items are available for this task run.')).toBeVisible()
+    expect(screen.queryByText('The task run could not be loaded.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry loading task run' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['network failure', new ApiError('网络错误：offline')],
+    ['malformed response', new ApiError('Task Run response is invalid')],
+    ['conflict response', new ApiError('conflict', 409)],
+    ['server failure', new ApiError('server error', 500)],
+    ['other failure', new Error('unexpected')],
+  ])('keeps a %s in the load-error state', async (_kind, error) => {
+    vi.mocked(fetchTaskRun).mockRejectedValueOnce(error)
+    renderPanel()
+    expect(await screen.findByText('The task run could not be loaded.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Retry loading task run' })).toBeVisible()
   })
 })

@@ -7,6 +7,7 @@ import {
   type TaskRunDto,
   type TaskRunOperation,
 } from '../api/taskRunClient'
+import { ApiError } from '../api/transport'
 import { taskRunPresentation } from './taskRunModel'
 
 interface TaskRunPanelProps {
@@ -39,7 +40,7 @@ export function TaskRunPanel({ root, change }: TaskRunPanelProps): JSX.Element {
       .catch((error: unknown) => {
         if (request === generation.current && !(error instanceof DOMException && error.name === 'AbortError')) {
           setRun(null)
-          setLoadError(true)
+          setLoadError(!(error instanceof ApiError && error.status === 404))
         }
       })
       .finally(() => {
