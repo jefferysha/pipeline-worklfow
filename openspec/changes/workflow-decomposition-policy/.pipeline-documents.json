@@ -462,35 +462,6 @@
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/workflow-decomposition-policy/tasks.md",
-      "sha256": "cb49dc2cf207f909b388804ef863a8f8ed0ee9946e8cf8b2da30dc2df8dbd9d4",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-08-07T14:00:24Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-db47726c1a63762c9565cd3473a59a152d5178e39b897bb3385ff96ce29e9d1f",
-        "evidenceScope": "spec",
-        "stepVisit": {
-          "runId": "9e508e63-6ed1-4e0d-b226-30cf216621b4",
-          "transitionSequence": 14
-        }
-      },
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "cb49dc2cf207f909b388804ef863a8f8ed0ee9946e8cf8b2da30dc2df8dbd9d4",
-          "readAt": "2026-08-07T14:00:33Z",
-          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",14]"
-        },
-        {
-          "phase": "build",
-          "sha256": "cb49dc2cf207f909b388804ef863a8f8ed0ee9946e8cf8b2da30dc2df8dbd9d4",
-          "readAt": "2026-08-07T14:02:35Z",
-          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",15]"
-        }
-      ]
-    },
-    {
       "kind": "proposal",
       "path": "openspec/changes/workflow-decomposition-policy/proposal.md",
       "sha256": "d8f93ddcd03a6c5110f8679a7e07492ba0567428fca502d94dfe6e13efa5db18",
@@ -515,6 +486,29 @@
           "phase": "build",
           "sha256": "d8f93ddcd03a6c5110f8679a7e07492ba0567428fca502d94dfe6e13efa5db18",
           "readAt": "2026-08-07T14:02:35Z",
+          "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",15]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/workflow-decomposition-policy/tasks.md",
+      "sha256": "6edb43c9ad3e1df7ecdd06b3212cfd00277c8672399dfc4ff49b359db749cc44",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-07T14:10:00Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-525fb05d0a0bcb16df6059a26c64151bbc7ef815d1c610118f175c22bda83613",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "9e508e63-6ed1-4e0d-b226-30cf216621b4",
+          "transitionSequence": 15
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "6edb43c9ad3e1df7ecdd06b3212cfd00277c8672399dfc4ff49b359db749cc44",
+          "readAt": "2026-08-07T14:10:00Z",
           "visitId": "[\"9e508e63-6ed1-4e0d-b226-30cf216621b4\",15]"
         }
       ]

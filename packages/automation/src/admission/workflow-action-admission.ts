@@ -51,6 +51,18 @@ export function evaluateMissingAfkWorkflowAdmission(): WorkflowActionEvaluation 
 
 type BoundWorkflowRun = Awaited<ReturnType<NonNullable<LoopAdmissionDeps['bindAutomationPolicy']>>>
 
+/** Authority facts are dynamic infrastructure; provider exceptions are not ordinary denials. */
+export class WorkflowActionAuthorityResolutionError extends Error {
+  override readonly name = 'WorkflowActionAuthorityResolutionError'
+  readonly _tag = 'WorkflowActionAuthorityResolutionError'
+
+  constructor(readonly authorityError: unknown) {
+    super(`Workflow action authority resolution failed: ${errText(authorityError)}`, {
+      cause: authorityError,
+    })
+  }
+}
+
 /**
  * Production admission adapter for decomposition execution. It restores only the immutable Run
  * snapshot and downgrades the exact Run layer on any run/fingerprint mismatch before delegating to
@@ -131,9 +143,8 @@ export async function evaluateBoundAfkWorkflowAdmission(input: {
   } else {
     try {
       dynamic = await input.workflowActionAuthority(input)
-    } catch {
-      const malformed = unavailableLayer('malformed')
-      dynamic = { platform: malformed, skill: malformed, project: malformed, run: malformed }
+    } catch (error) {
+      throw new WorkflowActionAuthorityResolutionError(error)
     }
   }
   return evaluateAfkWorkflowAdmission({ interactionMode, layers: { ...dynamic, workflow } })
@@ -206,7 +217,7 @@ export async function closeWorkflowAuthorizationDenial(input: {
   }
 }
 
-/** Zero-charge compensation for a failed canonical WorkflowRun binding; always rethrows. */
+/** Zero-charge compensation for a failed canonical binding or authority resolution; always rethrows. */
 export async function compensateWorkflowBindingFailure(input: {
   readonly context: ExecutionContext
   readonly bindingError: unknown
@@ -214,14 +225,17 @@ export async function compensateWorkflowBindingFailure(input: {
   readonly close: AdmissionJournal['close']
   readonly closeRecord: AdmissionJournal['closeRecord']
 }): Promise<never> {
+  const authorityFailure = input.bindingError instanceof WorkflowActionAuthorityResolutionError
+  const reason = authorityFailure ? 'infrastructure-error' : 'automation-policy-bind-failed'
+  const cause = authorityFailure ? 'workflow-action-authority-failed' : 'automation-policy-bind-failed'
   try {
     await input.close(input.context.reservation_id, (reservation: BudgetReservationRecord): RunRecord => ({
       ...input.closeRecord(reservation, {
-        result: 'failed', reason: 'automation-policy-bind-failed', charge: 'none',
+        result: 'failed', reason, charge: 'none',
         now: input.clock(), runner: input.context.runner,
       }),
       admitted_at: input.context.admitted_at,
-      error: { cause: 'automation-policy-bind-failed', message: errText(input.bindingError) },
+      error: { cause, message: errText(input.bindingError) },
     }))
   } catch (settlementError) {
     throw new Error(

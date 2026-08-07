@@ -28991,6 +28991,7 @@ var CONFIG_ERROR_TAGS = /* @__PURE__ */ new Set([
   "PathPolicyResolverUnconfiguredError",
   "PathPolicyUnconfiguredError"
 ]);
+var AUTHORITY_ERROR_TAGS = /* @__PURE__ */ new Set(["WorkflowActionAuthorityResolutionError"]);
 var safeFailureProperty = (error2, key) => {
   if (typeof error2 !== "object" || error2 === null)
     return void 0;
@@ -29032,6 +29033,8 @@ var classifyRoundFailure = (change, phase, error2) => {
     kind = "ledger-io";
   } else if (tag2 !== void 0 && CONFIG_ERROR_TAGS.has(tag2)) {
     kind = "config";
+  } else if (tag2 !== void 0 && AUTHORITY_ERROR_TAGS.has(tag2)) {
+    kind = "state-io";
   } else {
     switch (phase) {
       case "admission":
@@ -30376,6 +30379,17 @@ function evaluateMissingAfkWorkflowAdmission() {
     layers: { platform: missing3, skill: missing3, project: missing3, workflow: missing3, run: missing3 }
   });
 }
+var WorkflowActionAuthorityResolutionError = class extends Error {
+  authorityError;
+  name = "WorkflowActionAuthorityResolutionError";
+  _tag = "WorkflowActionAuthorityResolutionError";
+  constructor(authorityError) {
+    super(`Workflow action authority resolution failed: ${errText2(authorityError)}`, {
+      cause: authorityError
+    });
+    this.authorityError = authorityError;
+  }
+};
 async function evaluateBoundAfkWorkflowAdmission(input) {
   const missing3 = unavailableLayer("missing");
   let interactionMode = "interactive";
@@ -30399,9 +30413,8 @@ async function evaluateBoundAfkWorkflowAdmission(input) {
   } else {
     try {
       dynamic = await input.workflowActionAuthority(input);
-    } catch {
-      const malformed = unavailableLayer("malformed");
-      dynamic = { platform: malformed, skill: malformed, project: malformed, run: malformed };
+    } catch (error2) {
+      throw new WorkflowActionAuthorityResolutionError(error2);
     }
   }
   return evaluateAfkWorkflowAdmission({ interactionMode, layers: { ...dynamic, workflow } });
@@ -30457,17 +30470,20 @@ async function closeWorkflowAuthorizationDenial(input) {
   };
 }
 async function compensateWorkflowBindingFailure(input) {
+  const authorityFailure = input.bindingError instanceof WorkflowActionAuthorityResolutionError;
+  const reason = authorityFailure ? "infrastructure-error" : "automation-policy-bind-failed";
+  const cause = authorityFailure ? "workflow-action-authority-failed" : "automation-policy-bind-failed";
   try {
     await input.close(input.context.reservation_id, (reservation) => ({
       ...input.closeRecord(reservation, {
         result: "failed",
-        reason: "automation-policy-bind-failed",
+        reason,
         charge: "none",
         now: input.clock(),
         runner: input.context.runner
       }),
       admitted_at: input.context.admitted_at,
-      error: { cause: "automation-policy-bind-failed", message: errText2(input.bindingError) }
+      error: { cause, message: errText2(input.bindingError) }
     }));
   } catch (settlementError) {
     throw new Error(`AutomationPolicy binding failed (${errText2(input.bindingError)}) and reservation compensation failed (${errText2(settlementError)})`, { cause: input.bindingError });

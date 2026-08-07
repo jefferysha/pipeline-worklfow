@@ -70,6 +70,8 @@ const CONFIG_ERROR_TAGS = new Set([
   'PathPolicyResolverUnconfiguredError',
   'PathPolicyUnconfiguredError',
 ])
+/** Dynamic Workflow authority providers read canonical state/contracts; failures are state I/O, not denials. */
+const AUTHORITY_ERROR_TAGS = new Set(['WorkflowActionAuthorityResolutionError'])
 
 const safeFailureProperty = (error: unknown, key: string): unknown => {
   if (typeof error !== 'object' || error === null) return undefined
@@ -298,6 +300,8 @@ export const classifyRoundFailure = (change: string, phase: RoundFailure['phase'
     kind = 'ledger-io'
   } else if (tag !== undefined && CONFIG_ERROR_TAGS.has(tag)) {
     kind = 'config' // H10 §1：必要协作方/校验器未装配（如 SkillProfileValidatorUnconfiguredError）
+  } else if (tag !== undefined && AUTHORITY_ERROR_TAGS.has(tag)) {
+    kind = 'state-io'
   } else {
     switch (phase) {
       case 'admission':

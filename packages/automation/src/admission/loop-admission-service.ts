@@ -212,8 +212,9 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
         })
       } catch (bindingError) {
         // reservation 已在 reserveOnce 的 ledger 临界区 durable 落盘；WorkflowRun 绑定位于锁外，
-        // 因此同步失败必须以零扣费 terminal 补偿关闭，不能把 in-flight 额度泄漏到 TTL recovery。
-        // 原绑定错误仍原样上抛；若补偿本身也失败，则把两项事实都带给上层，且保留 open reservation
+        // 因此绑定或动态 authority provider 失败都必须以零扣费 terminal 补偿关闭，不能把
+        // in-flight 额度泄漏到 TTL recovery，也不能降级成普通 authorization denial 让 round 假成功。
+        // 原错误仍原样上抛；若补偿本身也失败，则把两项事实都带给上层，且保留 open reservation
         // 供既有 recovery 处理（绝不谎报已关闭）。
         return compensateWorkflowBindingFailure({
           context: outcome.context, bindingError,

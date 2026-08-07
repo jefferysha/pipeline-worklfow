@@ -280,6 +280,48 @@ loops:
     expect(await store.get(dir, 'automation')).toBe('queued')
   })
 
+  it('default admission surfaces Workflow authority provider failures as a failed round with zero charge', async () => {
+    const dir = await initBuild('sdk-authority-read-error')
+    await seedDefaultAdmissionLoop('sdk-')
+    const runChange = vi.fn(async (): Promise<RunOutcome> => ({
+      commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
+    }))
+    const { bindAutomationPolicy } = authorizedWorkflowPorts()
+    const afk = createAutomation({
+      repoRoot: root,
+      store,
+      clock,
+      config: { level: 'L1' },
+      bindAutomationPolicy,
+      workflowActionAuthority: async () => { throw new Error('authority read EIO') },
+    })
+    await afk.enqueue('sdk-authority-read-error', eligiblePolicy)
+
+    const report = await afk.runRound(runChange)
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: false })
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      change: 'sdk-authority-read-error',
+      phase: 'admission',
+      kind: 'state-io',
+      message: expect.stringContaining('authority read EIO'),
+    }))
+    expect(runChange).not.toHaveBeenCalled()
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    const window = await createLoopLedgerStore().readRunWindow(root, { limit: 10 })
+    expect(window.openReservations).toHaveLength(0)
+    expect(window.runs).toContainEqual(expect.objectContaining({
+      change: 'sdk-authority-read-error',
+      result: 'failed',
+      reason: 'infrastructure-error',
+      accounting: expect.objectContaining({ charged_tokens: 0, charge_source: 'none' }),
+      error: expect.objectContaining({
+        cause: 'workflow-action-authority-failed',
+        message: expect.stringContaining('authority read EIO'),
+      }),
+    }))
+  })
+
   it('default admission forwards explicit Workflow authority ports and runs after explicit bundle preparation', async () => {
     const dir = await store.init({
       repoRoot: root,

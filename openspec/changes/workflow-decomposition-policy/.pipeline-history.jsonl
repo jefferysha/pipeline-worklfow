@@ -141,3 +141,7 @@
 {"ts":"2026-08-07T14:00:49Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
 {"ts":"2026-08-07T14:00:49Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-07T13:19:15Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
 {"ts":"2026-08-07T14:00:49Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"6b920513-98fd-4a4e-86f4-62ed197e32bc"}
+{"ts":"2026-08-07T14:03:26Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T14:03:26Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 15"}
+{"ts":"2026-08-07T14:10:00Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T14:10:00Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 15"}
