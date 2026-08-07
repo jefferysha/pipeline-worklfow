@@ -14,11 +14,16 @@ import {
   isDocumentPolicyStep,
   migrateLegacyDeltaDocument,
   recordDocument,
+  currentDocumentSkillConfirmation,
   recordDocumentReads,
   renderDocumentTemplate,
   documentPathForKind,
   documentTemplateIdForKind,
 } from '@tenon/kernel'
+import {
+  recordCanonicalDocumentSkillInvocation,
+  withSkillInvocationChangeLock,
+} from '../../../kernel/dist/skill-invocation/producer-internal.js'
 import type {
   DocumentContractPhase,
   DocumentEvidenceReport,
@@ -212,22 +217,34 @@ export async function cmdDocumentRecord(
   if (producer === '') return reject(deps, '--producer 不得为空')
   if (producer.includes('|')) return reject(deps, `--producer '${producer}' 必须是单个具体 skill id`)
   try {
-    await deps.store.withLock(dir, async () => {
-      const context = governedDocumentContext(deps, await deps.store.read(dir))
+    const recordedAt = deps.clock()
+    await withSkillInvocationChangeLock(dir, async (lock) => {
+      const state = await deps.store.read(dir)
+      const context = governedDocumentContext(deps, state)
       const { phase, policy } = assertGoverned(context)
-      // Native PostToolUse remains the fast path.  On Codex hosts that omit that callback for a
-      // completed `exec` tool call, reconcile the earlier PreToolUse receipt against the
-      // host-owned transcript *inside this same change lock* before the kernel inspects history.
-      // A receipt alone cannot pass this point.
+      const runMetadata = state.runMetadata
+      if (runMetadata === undefined) throw new Error('canonical WorkflowRun StepVisit identity is missing')
+      // Both adapters land one host-neutral confirmation derived from this canonical StepVisit.
+      // Native Skill PostToolUse history is the fast path; Codex may instead reconcile a pending
+      // receipt against its host-owned completed transcript. Neither path can accept a caller-
+      // supplied run/sequence binding, and a receipt or old history row alone cannot pass.
       await reconcileCodexSkillEvidence({
         repoRoot: deps.cwd,
         changeDir: dir,
         producer,
-        recordedAt: deps.clock(),
+        recordedAt,
         history: deps.history,
         evidenceScope: phase,
+        stepVisit: {
+          runId: runMetadata.runId,
+          transitionSequence: runMetadata.transitionSequence,
+        },
+        applicationKey: `${kind}\0${path}`,
       })
-      await recordDocument({
+      if (await currentDocumentSkillConfirmation(dir, producer, phase, recordedAt) === undefined) {
+        throw new Error(`current StepVisit lacks exact host confirmation for document producer '${producer}'`)
+      }
+      const ledger = await recordDocument({
         repoRoot: deps.cwd,
         changeDir: dir,
         phase,
@@ -235,9 +252,25 @@ export async function cmdDocumentRecord(
         kind: kind as DocumentKind,
         path,
         producer,
-        recordedAt: deps.clock(),
+        recordedAt,
         allowBackfill: backfill,
       })
+      const requestedPath = relative(resolve(deps.cwd), resolve(deps.cwd, path))
+      const canonicalRecords = ledger.records.filter((record) =>
+        record.kind === kind
+        && record.producer === producer
+        && record.recordedAt === recordedAt
+        && record.path === requestedPath)
+      if (canonicalRecords.length !== 1) {
+        throw new Error('canonical document record is missing or ambiguous after registration')
+      }
+      const canonicalRecord = canonicalRecords[0]!
+      const invocation = await recordCanonicalDocumentSkillInvocation(
+        dir, kind as DocumentKind, recordedAt, { lock, record: canonicalRecord },
+      )
+      if (invocation === undefined) {
+        throw new Error('canonical document record lacks exact current-StepVisit invocation evidence')
+      }
     })
     return 0
   } catch (error) {

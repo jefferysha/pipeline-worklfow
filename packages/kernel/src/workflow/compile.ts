@@ -46,6 +46,7 @@ import type {
   WorkflowDocumentContractV1, WorkflowDocumentRead, WorkflowDocumentSlot,
 } from './types.js'
 import { compileGuards, compileStepGuards, compileWhen } from './compile-guards.js'
+import { compileWorkflowDecompositionPolicy, compileWorkflowInteractionPolicy } from './policy.js'
 import type {
   ActionConfig,
   ArtifactDeclaration,
@@ -74,7 +75,9 @@ const PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>([
 //     effective-step-skills）。default 运行时 artifact 走 P4 codegen 表，本入口只服务生成校验/内部测试。
 const CUSTOM_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills'])
 const DEFAULT_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills', 'effective-phase-skills'])
-const WORKFLOW_KEYS: ReadonlySet<string> = new Set(['name', 'openspecContract', 'documentContract', 'steps'])
+const WORKFLOW_KEYS: ReadonlySet<string> = new Set([
+  'name', 'decomposition', 'interaction', 'openspecContract', 'documentContract', 'steps',
+])
 const STEP_KEYS: ReadonlySet<string> = new Set([
   'id', 'label', 'gate', 'prompt', 'skills', 'inputs', 'outputs', 'artifacts', 'guards', 'transitions',
 ])
@@ -364,6 +367,8 @@ function compileWith(def: unknown, allowedPolicies: ReadonlySet<string>): Workfl
   const rec = asRecord(def, 'workflow')
   rejectExtraKeys(rec, WORKFLOW_KEYS, 'workflow')
   const name = nonemptyString(rec.name, 'name')
+  const decomposition = compileWorkflowDecompositionPolicy(rec.decomposition)
+  const interaction = compileWorkflowInteractionPolicy(rec.interaction)
   const openspecContract = rec.openspecContract
   if (openspecContract !== undefined && openspecContract !== 'required') {
     compileError('openspecContract', `必须是 'required'（实际 ${JSON.stringify(openspecContract)}）`)
@@ -375,6 +380,8 @@ function compileWith(def: unknown, allowedPolicies: ReadonlySet<string>): Workfl
   const steps = asArray(rec.steps, 'steps').map((s, i) => compileStep(s, i, allowedPolicies))
   return deepFreeze({
     name,
+    decomposition,
+    interaction,
     ...(openspecContract === undefined ? {} : { openspecContract }),
     ...(documentContract === undefined ? {} : { documentContract }),
     steps,

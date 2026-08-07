@@ -2,6 +2,10 @@
   "name": "@tenon/cli",
   "version": "1.0.1",
   "type": "module",
+  "exports": {},
+  "files": [
+    "dist/tenon.mjs"
+  ],
   "bin": {
     "tenon": "dist/tenon.mjs"
   },

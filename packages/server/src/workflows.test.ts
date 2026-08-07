@@ -245,6 +245,39 @@ function workflowWithTrackReferences(
 }
 
 describe('writeWorkflowForApi', () => {
+  it('安全完整 definition API 原子往返 decomposition/interaction', async () => {
+    const root = await tempRoot()
+    const policyDefinition: WorkflowDef = {
+      ...VALID_DEF,
+      decomposition: {
+        version: 'v1', mode: 'auto-safe', target: 'child-pipelines', strategy: 'depth-first',
+        max_items: 6, max_depth: 3,
+        auto_when: ['independent-work-items', 'context-budget-risk'],
+        ask_when: ['hard-boundary', 'missing-authorization'],
+      },
+      interaction: { version: 'v1', mode: 'recommended-defaults' },
+    }
+
+    expect(writeWorkflowForApi(root, 'onboarding', policyDefinition)).toEqual({ ok: true })
+    expect(readWorkflowForApi(root, 'onboarding')).toEqual(policyDefinition)
+  })
+
+  it('非法 policy 拒绝且现有 definition 字节不变', async () => {
+    const root = await tempRoot()
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+    const target = join(root, '.pipeline', 'workflows', 'onboarding.yaml')
+    const before = await readFile(target, 'utf8')
+    const invalid = {
+      ...VALID_DEF,
+      decomposition: { version: 'v1', mode: 'auto-safe', max_items: 99, surprise: true },
+    } as unknown as WorkflowDef
+
+    const result = writeWorkflowForApi(root, 'onboarding', invalid)
+
+    expect(result).toMatchObject({ ok: false })
+    expect(await readFile(target, 'utf8')).toBe(before)
+  })
+
   it('T-R7 create：step guard、edge guard、artifact requiredWhen 引用未知动态 track → 聚合拒写', async () => {
     const root = await tempRoot()
     const result = writeWorkflowForApi(

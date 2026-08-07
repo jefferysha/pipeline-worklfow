@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { validateVerificationResult, type VerificationIssuer, type VerificationResult } from '@tenon/kernel'
 import type { RunOutcome } from '../types.js'
 import {
@@ -136,6 +136,7 @@ const fakePreparation = (over: FakePreparationOver = {}) => {
 
 interface FakeAdmissionOver {
   reserve?: (change: string) => Promise<ReserveResult>
+  claimWithFreshWorkflowAuthority?: AdmissionPort['claimWithFreshWorkflowAuthority']
   activate?: (ctx: ExecutionContext) => Promise<ActivateResult>
   settleWon?: (ctx: ExecutionContext, s: RunSettlement) => Promise<void>
   settleLost?: (ctx: ExecutionContext) => Promise<void>
@@ -144,9 +145,15 @@ interface FakeAdmissionOver {
 
 /** 极小 admission fake（缺省全放行）：记录调用序，供断言编排。 */
 const fakeAdmission = (over: FakeAdmissionOver = {}) => {
-  const calls = { reserve: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
+  const calls = { reserve: [] as string[], authorityClaim: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
+  const claimWithFreshWorkflowAuthority = over.claimWithFreshWorkflowAuthority ?? (async (ctx, claim) => {
+    calls.authorityClaim.push(ctx.change)
+    return { ok: true as const, context: ctx, claimed: await claim('backend') }
+  })
   const admission: AdmissionPort = {
     reserve: over.reserve ?? (async (change) => { calls.reserve.push(change); return { ok: true, context: ctxFor(change) } }),
+    claimWithFreshWorkflowAuthority,
+    workflowAuthorityClaim: { version: 'v1', claim: claimWithFreshWorkflowAuthority },
     activate: over.activate ?? (async (ctx): Promise<ActivateResult> => { calls.activate.push(ctx.change); return { status: 'activated' } }),
     settleWon: over.settleWon ?? (async (ctx, s) => { calls.settleWon.push({ change: ctx.change, s }) }),
     settleLost: over.settleLost ?? (async (ctx) => { calls.settleLost.push(ctx.change) }),
@@ -200,6 +207,39 @@ const deps = (over: Partial<SchedulerDeps> & { state: StateWriter }): SchedulerD
 })
 
 describe('scheduler round（admission 闸门 + 真状态机写回 + 分级放权）', () => {
+  it('legacy custom admission 缺少 versioned Workflow authority claim capability 时在 reserve 前整轮 fail-closed', async () => {
+    const { state, auto } = makeState({ c: 'queued' })
+    const reserve = vi.fn(async (change: string): Promise<ReserveResult> => ({
+      ok: true,
+      context: ctxFor(change),
+    }))
+    const legacyAdmission: AdmissionPort = {
+      reserve,
+      activate: async () => ({ status: 'activated' }),
+      settleWon: async () => {},
+      settleLost: async () => {},
+      isActive: async () => true,
+    }
+    const runChange = vi.fn(async () => outcome())
+
+    const report = await createScheduler(deps({
+      state,
+      admission: legacyAdmission,
+      runChange,
+    })).runRoundOnce(['c'])
+
+    expect(report).toMatchObject({ candidates: 1, admitted: 0, ok: false })
+    expect(report.failures).toEqual([expect.objectContaining({
+      change: '(config)',
+      phase: 'admission',
+      kind: 'config',
+      message: expect.stringMatching(/Workflow authority claim capability.*v1/i),
+    })])
+    expect(reserve).not.toHaveBeenCalled()
+    expect(runChange).not.toHaveBeenCalled()
+    expect(auto.get('c')).toBe('queued')
+  })
+
   it('H11 r4：伪造 null bundle 的 loop context 缺 execution validator → config failure，绝不 claim/run', async () => {
     const { state, auto } = makeState({ c: 'queued' })
     const fa = fakeAdmission({
@@ -635,9 +675,121 @@ describe('scheduler round（admission 闸门 + 真状态机写回 + 分级放权
 
   it('shutdown teardown 把 in-flight change 同步标 failed', async () => {
     const { state, failedSync } = makeState({ c: 'queued' })
-    let teardown: (() => void) | undefined
-    await createScheduler(deps({ state, config: { maxParallel: 1, maxRetries: 1, level: 'L3' }, registerShutdown: (fn) => { teardown = fn; return () => {} }, runChange: async () => { teardown?.(); return outcome() } })).runRoundOnce(['c'])
+    let teardown: (() => void | Promise<void>) | undefined
+    await createScheduler(deps({ state, config: { maxParallel: 1, maxRetries: 1, level: 'L3' }, registerShutdown: (fn) => { teardown = fn; return () => {} }, runChange: async () => { void teardown?.(); return outcome() } })).runRoundOnce(['c'])
     expect(failedSync).toContain('c')
+  })
+
+  it('shutdown teardown waits for interrupted invocation evidence before the round returns', async () => {
+    const { state } = makeState({ c: 'queued' })
+    let teardown: (() => void | Promise<void>) | undefined
+    let releaseInterrupt: (() => void) | undefined
+    let interrupted = false
+    let aborted = false
+    let shutdown: Promise<void> | undefined
+    const interruptGate = new Promise<void>((resolve) => { releaseInterrupt = resolve })
+    const handle = Object.freeze({})
+    const round = createScheduler(deps({
+      state,
+      registerShutdown: (fn) => { teardown = fn; return () => {} },
+      skillInvocations: {
+        start: async () => [handle] as never,
+        finish: async () => { await interruptGate; interrupted = true },
+      },
+      runChange: async (_context, signal) => {
+        shutdown = Promise.resolve(teardown?.())
+        await Promise.resolve()
+        aborted = signal.aborted
+        expect(interrupted).toBe(false)
+        releaseInterrupt?.()
+        return outcome()
+      },
+    })).runRoundOnce(['c'])
+    const report = await round
+    await shutdown
+    expect(interrupted).toBe(true)
+    expect(aborted).toBe(true)
+    expect(report.ok).toBe(false)
+    expect(report.failures.some((failure) => failure.message.includes('scheduler interrupted'))).toBe(true)
+  })
+
+  it('shutdown normalizes an abort-aware runner rejection before durable settlement and invocation finish', async () => {
+    const { state } = makeState({ c: 'queued' })
+    const fa = fakeAdmission()
+    let teardown: (() => void | Promise<void>) | undefined
+    let shutdown: Promise<void> | undefined
+    let finishEntered: (() => void) | undefined
+    let releaseFinish: (() => void) | undefined
+    let shutdownSettled = false
+    let invocationInterrupted = false
+    const finishStarted = new Promise<void>((resolve) => { finishEntered = resolve })
+    const finishGate = new Promise<void>((resolve) => { releaseFinish = resolve })
+    const handle = Object.freeze({})
+    const round = createScheduler(deps({
+      state,
+      admission: fa.admission,
+      registerShutdown: (fn) => { teardown = fn; return () => {} },
+      skillInvocations: {
+        start: async () => [handle] as never,
+        finish: async () => {
+          finishEntered?.()
+          await finishGate
+          invocationInterrupted = fa.calls.settleWon[0]?.s.error?.cause === 'scheduler-interrupted'
+        },
+      },
+      runChange: async (_context, signal) => {
+        shutdown = Promise.resolve(teardown?.())
+        await Promise.resolve()
+        expect(signal.aborted).toBe(true)
+        throw new Error('runner rejected after abort')
+      },
+    })).runRoundOnce(['c'])
+
+    await finishStarted
+    void shutdown?.then(() => { shutdownSettled = true })
+    await Promise.resolve()
+    expect(shutdownSettled).toBe(false)
+    releaseFinish?.()
+
+    const report = await round
+    await shutdown
+    expect(fa.calls.settleWon[0]?.s.error).toEqual(expect.objectContaining({ cause: 'scheduler-interrupted' }))
+    expect(invocationInterrupted).toBe(true)
+    expect(shutdownSettled).toBe(true)
+    expect(report.ok).toBe(false)
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      phase: 'execution',
+      message: expect.stringContaining('scheduler interrupted'),
+    }))
+  })
+
+  it('shutdown during invocation start aborts and interrupts newly issued handles before runner execution', async () => {
+    const { state } = makeState({ c: 'queued' })
+    let teardown: (() => void | Promise<void>) | undefined
+    let releaseStart: (() => void) | undefined
+    let announceStart: (() => void) | undefined
+    const startEntered = new Promise<void>((resolve) => { announceStart = resolve })
+    const startGate = new Promise<void>((resolve) => { releaseStart = resolve })
+    let interrupted = false
+    let ran = false
+    const handle = Object.freeze({})
+    const round = createScheduler(deps({
+      state,
+      registerShutdown: (fn) => { teardown = fn; return () => {} },
+      skillInvocations: {
+        start: async () => { announceStart?.(); await startGate; return [handle] as never },
+        finish: async () => { interrupted = true },
+      },
+      runChange: async () => { ran = true; return outcome() },
+    })).runRoundOnce(['c'])
+    await startEntered
+    const shutdown = Promise.resolve(teardown?.())
+    releaseStart?.()
+    const report = await round
+    await shutdown
+    expect(ran).toBe(false)
+    expect(interrupted).toBe(true)
+    expect(report.ok).toBe(false)
   })
 
   it('B2 · noop 空跑在 L3 不落 merged → paused + cause=no-op；settleWon reason=no-op', async () => {
@@ -1063,6 +1215,13 @@ describe('H10 §3/§8任务5：prepareSkillBundle 编排（claim 之后、activa
     const order: string[] = []
     const admission: AdmissionPort = {
       reserve: async (change) => ({ ok: true, context: ctxFor(change) }),
+      claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+        ok: true, context: ctx, claimed: await claim('backend'),
+      }),
+      workflowAuthorityClaim: {
+        version: 'v1',
+        claim: async (ctx, claim) => ({ ok: true, context: ctx, claimed: await claim('backend') }),
+      },
       activate: async () => { order.push('activate'); return { status: 'activated' } },
       settleWon: async () => { order.push('settleWon') },
       settleLost: async () => {},

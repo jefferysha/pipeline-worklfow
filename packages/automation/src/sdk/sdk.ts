@@ -15,7 +15,11 @@ import {
   type TrackPolicyProfile,
 } from '@tenon/kernel'
 import { readAutomationJson, type AutomationJsonFs } from '../config/automationJson.js'
-import { createLoopAdmission, type LoopAdmission } from '../admission/loop-admission.js'
+import {
+  createLoopAdmission,
+  type LoopAdmission,
+  type LoopAdmissionDeps,
+} from '../admission/loop-admission.js'
 import { markNonLoopPrepared, type ExecutionContext, type ExecutionPreparationPort, type PrepareOutcome } from '../admission/execution-context.js'
 import { claim, commitFailureOwned, getAutomation, markQueued, setAutomationOwned, setAutomationOwnedWithFields } from '../queue/claim.js'
 import { shouldEnqueueOnSpecComplete } from '../queue/gate.js'
@@ -23,11 +27,16 @@ import { scanReadyFromFs } from '../queue/scan.js'
 import {
   createScheduler,
   type ExecutionWiringValidationResult,
+  type RegisterShutdown,
   type RoundReport,
   type RunChange,
   type StateWriter,
 } from '../scheduler/scheduler.js'
 import { type AutomationConfig, DEFAULT_CONFIG } from '../types.js'
+import {
+  createAfkSkillInvocationLifecycle,
+  type AfkInteractionReceiptPort,
+} from '../skillInvocationAfkLifecycle.js'
 
 /**
  * 二次任务（queued 卡死回归修复）：createAutomation 未显式注入 `deps.preparation` 时的缺省
@@ -82,6 +91,14 @@ export interface AutomationDeps {
    * + kernel loadRegistry 装配）。测试注入 fake 断言编排；afk.ts 注入携带 image/自定义时钟的实例。
    */
   readonly admission?: LoopAdmission
+  /** Canonical WorkflowRun policy binding used only by the default admission wiring. */
+  readonly bindAutomationPolicy?: LoopAdmissionDeps['bindAutomationPolicy']
+  /** Kernel-owned immutable effective authority snapshot binding used by default admission. */
+  readonly bindWorkflowActionAuthority?: LoopAdmissionDeps['bindWorkflowActionAuthority']
+  /** Holds the exact TrackRegistry snapshot through final authority resolution and state claim. */
+  readonly withWorkflowActionAuthorityLock?: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
+  /** Fresh non-Workflow permission layers used only by the default admission wiring. */
+  readonly workflowActionAuthority?: LoopAdmissionDeps['workflowActionAuthority']
   /** ExecutionContext.image（写进 reservation 快照的沙箱镜像）；缺省 admission 装配点透传。 */
   readonly image?: string
   /** on_exceed=pause-loop 时把 loop status 改 paused（缺省无 → 降级 skip-run + 记 report）。 */
@@ -96,6 +113,30 @@ export interface AutomationDeps {
    * 在此注入替换；测试可注入 fake 断言编排（同 deps.admission 既有惯例）。
    */
   readonly preparation?: ExecutionPreparationPort
+  /** Process/runtime shutdown registration. Production defaults to SIGINT/SIGTERM with async drain. */
+  readonly registerShutdown?: RegisterShutdown
+  /** Verified PR3 InteractionPolicy receipts; absence means AFK records no synthetic default. */
+  readonly interactionReceipts?: AfkInteractionReceiptPort
+}
+
+const registerProcessShutdown: RegisterShutdown = (teardown) => {
+  let active = true
+  const handle = (): void => {
+    if (!active) return
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+    void Promise.resolve(teardown()).catch(() => {
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', handle)
+  process.once('SIGTERM', handle)
+  return () => {
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+  }
 }
 
 /**
@@ -139,7 +180,8 @@ const scalar = (v: string | string[] | undefined): string => (typeof v === 'stri
 
 /** 把 kernel StateStore 适配成 scheduler 的 StateWriter port（每个方法定位到 changeDir(name)）。 */
 export const storeWriter = (store: StateStore, changeDir: (name: string) => string): StateWriter => ({
-  claim: (name) => claim(store, changeDir(name)),
+  claim: (name, expectedTrackId, expectedRun) =>
+    claim(store, changeDir(name), expectedTrackId, expectedRun),
   setAutomation: (name, s) => store.set(changeDir(name), 'automation', s),
   setField: (name, field, value) => store.set(changeDir(name), field as never, value),
   commitFailureOwned: (name, input) => commitFailureOwned(store, changeDir(name), input),
@@ -175,20 +217,26 @@ export function createAutomation(deps: AutomationDeps): Automation {
     level: config.level,
     image: deps.image,
     getAutomation: (change) => getAutomation(store, changeDir(change)),
+    bindAutomationPolicy: deps.bindAutomationPolicy,
+    bindWorkflowActionAuthority: deps.bindWorkflowActionAuthority,
+    withWorkflowActionAuthorityLock: deps.withWorkflowActionAuthorityLock,
+    workflowActionAuthority: deps.workflowActionAuthority,
   })
   // 二次任务（queued 卡死回归修复）：路由 SchedulerDeps.preparation——缺省 createDefaultExecutionPreparation()
   // （none-bundle 直通 + bundle 绑定 fail-loud，见其头注），不再让 runRound 因 preparation 缺席整轮短路成
   // config RoundFailure；显式 production preparation 与安全缺省都经同一字段传给 createScheduler。
   const preparation: ExecutionPreparationPort = deps.preparation ?? createDefaultExecutionPreparation()
+  const skillInvocations = createAfkSkillInvocationLifecycle(changeDir, deps.interactionReceipts)
   const schedulerFor = (runChange: RunChange) => createScheduler({
     state: storeWriter(store, changeDir),
     runChange,
-    registerShutdown: () => () => {},
+    registerShutdown: deps.registerShutdown ?? registerProcessShutdown,
     config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level },
     admission,
     preparation,
     pauseLoop: deps.pauseLoop,
     validateExecutionWiring: deps.validateExecutionWiring,
+    skillInvocations,
   })
 
   return {

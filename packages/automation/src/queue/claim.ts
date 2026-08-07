@@ -17,7 +17,7 @@
  *     所有权已丢失时零写入，避免先耗 retry budget 再发现终态不能提交。
  *   - incrAttempts：保留给低层兼容调用；scheduler 失败终态不得单独调用它。
  */
-import type { StateStore } from '@tenon/kernel'
+import { resolveWorkflowName, type StateStore } from '@tenon/kernel'
 import { settleFailure } from './state-machine.js'
 
 /** daemon 拥有的两个态：只有它们能被 setAutomationOwned 翻成终态。 */
@@ -33,6 +33,15 @@ export type FailureCommitResult =
   | { readonly status: 'committed'; readonly automation: 'conflict' | 'queued' | 'failed'; readonly attempts?: number }
   | { readonly status: 'ownership-lost'; readonly observed: string }
 
+/** Frozen WorkflowRun identity rechecked atomically with queued→scheduled. */
+export interface WorkflowClaimRunIdentity {
+  readonly workflowRunId: string
+  readonly workflowId: string
+  readonly workflowFingerprint: string
+  readonly loopId: string
+  readonly iterationId: string
+}
+
 /**
  * 挂队：写 automation=queued + automation_queued_at（原子 setMany，经 kernel 四闸 + 锁）。
  * 幂等安全：重复调只是刷新 queued_at。返回是否写入（当前 automation 已是终态时也照写——
@@ -43,11 +52,37 @@ export async function markQueued(store: StateStore, changeDir: string, clock: ()
 }
 
 /**
- * 原子认领：queued→scheduled。返回 true=本 caller 赢得认领；false=已被他人认领（TOCTOU-safe）。
- * 老仓 StateWriter.claim（scheduler/types.ts:99-105）。
+ * 原子认领：queued→scheduled。传入 expectedTrackId 时，在同一 change lock 内同时验证当前
+ * canonical track，防止 fresh authority resolution 与 claim 之间发生 track 漂移。
  */
-export function claim(store: StateStore, changeDir: string): Promise<boolean> {
-  return store.cas(changeDir, 'automation', 'queued', 'scheduled')
+export function claim(
+  store: StateStore,
+  changeDir: string,
+  expectedTrackId?: string,
+  expectedRun?: WorkflowClaimRunIdentity,
+): Promise<boolean> {
+  if (expectedTrackId === undefined && expectedRun === undefined) {
+    return store.cas(changeDir, 'automation', 'queued', 'scheduled')
+  }
+  return store.withLock(changeDir, async () => {
+    const state = await store.read(changeDir)
+    if (state.fields.automation !== 'queued'
+      || (expectedTrackId !== undefined && state.fields.track !== expectedTrackId)) return false
+    if (expectedRun !== undefined) {
+      const metadata = state.runMetadata
+      const exactRun = metadata !== undefined
+        && metadata.runId === expectedRun.workflowRunId
+        && resolveWorkflowName(state) === expectedRun.workflowId
+        && metadata.workflowPlanFingerprint === expectedRun.workflowFingerprint
+        && metadata.loopId === expectedRun.loopId
+        && metadata.iterationId === expectedRun.iterationId
+        && state.fields.archived !== 'true'
+      if (!exactRun) return false
+    }
+    state.fields.automation = 'scheduled'
+    await store.writeUnderLock(changeDir, state, { kind: 'automation' })
+    return true
+  })
 }
 
 /**

@@ -11,7 +11,7 @@ import {
   migrateLegacyDeltaDocument,
   parseDocumentLedger,
   readDocumentLedger,
-  recordDocument,
+  recordDocument as recordDocumentState,
   recordDocumentReads,
 } from './document-ledger.js'
 import { evaluateDocumentEvidence } from './document-evidence.js'
@@ -29,9 +29,32 @@ import {
 } from './run-revision-store.js'
 import { createTransitionRecordStore } from './transition-record-store.js'
 import type { TransitionRecord } from '../workflow/run-types.js'
+import { recordNativeDocumentSkillConfirmation } from '../skill-invocation/document-confirmation.js'
+import { recordCanonicalDocumentSkillInvocation } from '../skill-invocation/document-producer.js'
 
 const NOW = '2026-07-23T00:00:00Z'
 const dirs: string[] = []
+let nativeReceiptSequence = 0
+const declaredSkills = new Map<string, Set<string>>()
+
+const recordDocument: typeof recordDocumentState = async (input) => {
+  if (input.allowBackfill !== true && declaredSkills.get(input.changeDir)?.has(input.producer)) {
+    await confirmFixtureSkill(input.changeDir, input.phase, input.producer)
+  }
+  const ledger = await recordDocumentState(input)
+  if (input.allowBackfill !== true) {
+    const canonicalRecord = [...ledger.records].reverse().find((record) =>
+      record.kind === input.kind
+      && record.producer === input.producer
+      && record.recordedAt === input.recordedAt)
+    if (canonicalRecord === undefined) throw new Error('fixture canonical document record missing')
+    const invocation = await recordCanonicalDocumentSkillInvocation(
+      input.changeDir, input.kind, input.recordedAt, { record: canonicalRecord },
+    )
+    if (invocation === undefined) throw new Error('fixture canonical document invocation missing')
+  }
+  return ledger
+}
 
 async function fixture(): Promise<{ root: string; changeDir: string; name: string }> {
   const root = await mkdtemp(join(tmpdir(), 'pl-document-ledger-'))
@@ -52,6 +75,9 @@ async function fixture(): Promise<{ root: string; changeDir: string; name: strin
     opaqueTail: '',
   }, NOW)
   await ensureDocumentLedger(changeDir, NOW)
+  await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+    ts: NOW, kind: 'init', raw: 'init',
+  })}\n`, 'utf8')
   return { root, changeDir, name }
 }
 
@@ -88,7 +114,7 @@ test('document record 在 digest 前拒绝超过单文档硬上限的来源', as
   const { root, changeDir } = await fixture()
   const relativePath = 'docs/oversized.md'
   await writeDoc(root, relativePath, 'x'.repeat(MAX_DOCUMENT_SOURCE_BYTES + 1))
-  await expect(recordDocument({
+  await expect(recordDocumentState({
     repoRoot: root,
     changeDir,
     phase: 'open',
@@ -119,9 +145,55 @@ test('document source 在 fstat 后增长时仍由 max + 1 fd 读取拒绝', asy
   })).rejects.toThrow(/bytes 上限|读取期间变化/)
 })
 
+test('normal document record rejects bare current-visit Skill history when confirmation bridge is missing', async () => {
+  const { root, changeDir, name } = await fixture()
+  const proposal = `openspec/changes/${name}/proposal.md`
+  await writeDoc(root, proposal)
+  await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+    ts: NOW, kind: 'tool', raw: 'Skill: openspec-propose',
+  })}\n`)
+  await expect(recordDocumentState({
+    repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: proposal,
+    producer: 'openspec-propose', recordedAt: NOW,
+  })).rejects.toThrow(/exact host confirmation/u)
+})
+
 async function appendSkillHistory(changeDir: string, ...skills: string[]): Promise<void> {
-  const jsonl = skills.map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
+  const declared = declaredSkills.get(changeDir) ?? new Set<string>()
+  skills.forEach((skill) => declared.add(skill))
+  declaredSkills.set(changeDir, declared)
+  const jsonl = skills.map((skill) => JSON.stringify({ ts: NOW, kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
   await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${jsonl}\n`, 'utf8')
+}
+
+async function confirmFixtureSkill(changeDir: string, phase: string, skill: string): Promise<void> {
+  let current = await readCurrentRunRevision(changeDir)
+  if (!current?.state.runMetadata) throw new Error('fixture canonical run identity missing')
+  if (current.state.fields.phase !== phase) {
+    await publishRunRevision(changeDir, current, {
+      ...current.state,
+      fields: { ...current.state.fields, phase },
+      runMetadata: {
+        ...current.state.runMetadata,
+        transitionSequence: 0,
+        transitionHead: undefined,
+      },
+    }, { kind: 'set', observedAt: NOW })
+    await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+      ts: NOW, kind: 'init', raw: `fixture visit ${phase}`,
+    })}\n`, 'utf8')
+    current = await readCurrentRunRevision(changeDir)
+  }
+  nativeReceiptSequence += 1
+  await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+    ts: NOW, kind: 'tool', raw: `Skill: ${skill}`,
+  })}\n`, 'utf8')
+  const confirmed = await recordNativeDocumentSkillConfirmation(changeDir, skill, phase, {
+    sessionId: `document-ledger-session-${nativeReceiptSequence}`,
+    toolUseId: `document-ledger-tool-${nativeReceiptSequence}`,
+    observedAt: NOW,
+  })
+  if (!confirmed) throw new Error(`fixture native confirmation rejected for ${skill}`)
 }
 
 async function enterVisit(changeDir: string, phase: string, transitionSequence: number): Promise<void> {
@@ -180,9 +252,18 @@ async function commitCanonicalTransition(
     transitionRecordId: id,
     observedAt: NOW,
   })
+  await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+    ts: NOW,
+    kind: 'transition',
+    from,
+    to,
+    event,
+    transitionRecordId: id,
+  })}\n`, 'utf8')
 }
 
 afterEach(async () => {
+  declaredSkills.clear()
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -432,7 +513,7 @@ describe('OpenSpec document ledger', () => {
       repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: alpha,
       producer: 'openspec-propose', recordedAt: NOW,
     })
-    await expect(recordDocument({
+    await expect(recordDocumentState({
       repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: invalid,
       producer: 'openspec-propose', recordedAt: NOW,
     })).rejects.toThrow(/canonical capability 路径/)
@@ -618,7 +699,7 @@ describe('OpenSpec document ledger', () => {
     expect(await readFile(ledgerPath, 'utf8')).toBe(mergedBytes)
   })
 
-  test('Codex 对已打包 SKILL.md 的宿主可观察读取也能作为 producer 证据', async () => {
+  test('裸 CodexSkillRead 没有 v2 confirmation 时不能作为 producer 证据', async () => {
     const { root, changeDir, name } = await fixture()
     const proposal = `openspec/changes/${name}/proposal.md`
     await writeDoc(root, proposal)
@@ -628,10 +709,10 @@ describe('OpenSpec document ledger', () => {
       'utf8',
     )
 
-    await expect(recordDocument({
+    await expect(recordDocumentState({
       repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: proposal,
       producer: 'openspec-propose', recordedAt: NOW,
-    })).resolves.toMatchObject({ records: [expect.objectContaining({ kind: 'proposal', producer: 'openspec-propose' })] })
+    })).rejects.toThrow(/exact host confirmation/u)
   })
 
   test('旧 Change 可显式 backfill 已存在的前序文档，但不能补登记未来 phase', async () => {
@@ -676,7 +757,7 @@ describe('OpenSpec document ledger', () => {
 
     await writeDoc(root, tasks, '# spec tasks\n')
     await writeDoc(root, design, '# spec design with coverage\n')
-    await expect(recordDocument({
+    await expect(recordDocumentState({
       repoRoot: root, changeDir, phase: 'spec', kind: 'tasks', path: tasks,
       producer: 'openspec-propose', recordedAt: NOW, allowBackfill: true,
     })).rejects.toThrow(/--backfill 只能首次登记历史 document/)
@@ -770,7 +851,7 @@ describe('OpenSpec document ledger', () => {
       `${JSON.stringify({ kind: 'transition', from: 'explore', to: 'spec' })}\n`,
       'utf8',
     )
-    await expect(recordDocument({
+    await expect(recordDocumentState({
       repoRoot: root, changeDir, phase: 'spec', kind: 'tasks', path: tasks,
       producer: 'tenon-spec', recordedAt: NOW,
     })).rejects.toThrow(/缺少 Skill 调用证据（当前 phase）/)

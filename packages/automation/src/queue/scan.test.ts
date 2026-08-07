@@ -7,6 +7,7 @@ const resolver = (satisfied: string[]) => ({ satisfied: (dep: string) => satisfi
 const entry = (over: Partial<ChangeQueueEntry> & { name: string }): ChangeQueueEntry => ({
   phase: 'build',
   automation: 'queued',
+  archived: 'false',
   automationQueuedAt: '',
   dependsOn: [],
   ...over,
@@ -19,6 +20,7 @@ describe('挂起队列扫描 + 拓扑/FIFO 排序（老仓 automation-queue.sh:1
       entry({ name: 'b', phase: 'verify', automationQueuedAt: '2026-01-01T00:00:01Z' }), // 相位不符
       entry({ name: 'c', automation: 'scheduled', automationQueuedAt: '2026-01-01T00:00:02Z' }), // 已被认领
       entry({ name: 'd', automation: 'off', automationQueuedAt: '2026-01-01T00:00:03Z' }),
+      entry({ name: 'archived', archived: 'true', automationQueuedAt: '2026-01-01T00:00:04Z' }),
     ]
     expect(readyCandidates(entries, resolver([]))).toEqual(['a'])
   })

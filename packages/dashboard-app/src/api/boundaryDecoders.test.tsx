@@ -5,6 +5,7 @@ import { decodeLoopsSnapshot } from './loopDecoder'
 import { decodeSnapshot } from './snapshotDecoder'
 import { selectProgress } from '../model/progressModel'
 import { workflowRulesFromSnapshot } from '../model/workflowModel'
+import type { WorkflowDecompositionPolicySnapshot, WorkflowPolicyRulesSnapshot } from '../types'
 
 describe('API bounded-context response decoders', () => {
   const validTraceTimeline = () => {
@@ -122,6 +123,40 @@ describe('API bounded-context response decoders', () => {
         },
       }],
     }],
+  })
+
+  it('preserves configured/frozen/effective/drift workflow policy diagnostics', () => {
+    const snapshot = validSnapshot()
+    const decomposition: WorkflowDecompositionPolicySnapshot = {
+      version: 'v1', mode: 'off', target: 'work-items', strategy: 'balanced',
+      max_items: 16, max_depth: 2, auto_when: [], ask_when: [],
+    }
+    const policy: WorkflowPolicyRulesSnapshot = {
+      schema: 'workflow-policy/v1',
+      configured: {
+        status: 'available', workflowFingerprint: 'a'.repeat(64),
+        decomposition, interaction: { version: 'v1', mode: 'interactive' },
+      },
+      frozen: {
+        workflowFingerprint: 'a'.repeat(64), decomposition,
+        interaction: { version: 'v1', mode: 'interactive' },
+        workflowCeiling: { status: 'valid', grants: [] },
+      },
+      effective: { status: 'unavailable', reason: 'authority-input-unavailable' },
+      drift: { status: 'current', fingerprintChanged: false, policyChanged: false },
+    }
+    const workflowRules = snapshot.projects[0].changes[0].workflowRules as
+      typeof snapshot.projects[0]['changes'][number]['workflowRules'] & {
+        policy?: WorkflowPolicyRulesSnapshot
+      }
+    workflowRules.policy = policy
+
+    expect(decodeSnapshot(snapshot)?.projects[0]?.changes[0]?.workflowRules.policy)
+      .toEqual(policy)
+    policy.effective = {
+      status: 'hard-blocked', grants: [], denials: [],
+    } as never
+    expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
   it('rejects Hook config keyword strings outside the shared empty-or-ASCII-token contract', () => {

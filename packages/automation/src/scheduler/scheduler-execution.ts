@@ -3,7 +3,9 @@ import type {
   ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
-import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type {
+  ActivateResult, AdmissionDenial, ReserveResult, RunSettlement, WorkflowAuthorityClaimCapabilityV1,
+} from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -41,11 +43,19 @@ import {
 } from './scheduler-support.js'
 import type { MutableReport } from './scheduler-support.js'
 import { createSchedulerOutcomes, type TryLedger } from './scheduler-outcomes.js'
+import type { AfkSkillInvocationHandle } from '../skillInvocationAfkLifecycle.js'
+
+class SchedulerInterruptedError extends Error {
+  readonly _tag = 'SchedulerInterruptedError'
+}
 
 export interface SchedulerExecutionDeps {
   readonly scheduler: SchedulerDeps
   readonly semaphore: ReturnType<typeof createSemaphore>
   readonly inFlight: Set<string>
+  readonly abortControllers: Map<string, AbortController>
+  readonly shutdownCompletions: Map<string, { readonly promise: Promise<void>; readonly resolve: () => void }>
+  readonly activeSkillInvocations: Map<string, readonly AfkSkillInvocationHandle[]>
   readonly validateExecutionWiring: NonNullable<SchedulerDeps['validateExecutionWiring']>
   readonly outcomes: ReturnType<typeof createSchedulerOutcomes>
   readonly applyDenial: (report: MutableReport, change: string, denial: AdmissionDenial) => void
@@ -68,6 +78,9 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
     scheduler: deps,
     semaphore,
     inFlight,
+    abortControllers,
+    shutdownCompletions,
+    activeSkillInvocations,
     validateExecutionWiring,
     outcomes,
     applyDenial,
@@ -86,6 +99,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
     preparation: ExecutionPreparationPort,
     expectedLoopId: string | undefined,
     expectedAutonomyLevel: AutomationConfig['level'] | null | undefined,
+    authorityClaim: WorkflowAuthorityClaimCapabilityV1,
   ): Promise<HandleResult> => {
     await semaphore.acquire()
     let phase: RoundFailure['phase'] = 'admission'
@@ -102,7 +116,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         applyDenial(report, name, res) // denial 是治理常态，不进 failures、不改 ok
         return { ok: true, change: name }
       }
-      const ctx = res.context
+      let ctx = res.context
       report.admitted++
 
       // H11：命令层 scan 前检查不能替代此处——registry/skill 文件可能在两者间变化，且 SDK/AFK
@@ -141,9 +155,27 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         }
       }
 
-      // ── claim queued→scheduled（reservation 已早于此 CAS 落盘）──
+      // ── fresh authority + claim：同一 TrackRegistry 锁内重验后才 queued→scheduled ──
       phase = 'claim'
-      const won = await state.claim(name)
+      const claimResult = await authorityClaim.claim(
+        ctx,
+        (expectedTrackId) => {
+          const authority = ctx.workflow_action_authority
+          return state.claim(name, expectedTrackId, authority === undefined ? undefined : {
+            workflowRunId: authority.workflow_run_id,
+            workflowId: authority.workflow_id,
+            workflowFingerprint: authority.workflow_fingerprint,
+            loopId: authority.loop_id,
+            iterationId: authority.iteration_id,
+          })
+        },
+      )
+      if (!claimResult.ok) {
+        applyDenial(report, name, claimResult)
+        return { ok: true, change: name }
+      }
+      ctx = claimResult.context
+      const won = claimResult.claimed
       if (!won) {
         phase = 'settlement'
         await tryLedger(report, name, 'settlement', () => admission.settleLost(ctx)) // 幂等关闭扣 0
@@ -277,10 +309,23 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
       emit(name, 'running')
       inFlight.add(name)
       const controller = new AbortController()
+      abortControllers.set(name, controller)
+      let resolveShutdownCompletion: (() => void) | undefined
+      const shutdownCompletion = new Promise<void>((resolve) => { resolveShutdownCompletion = resolve })
+      shutdownCompletions.set(name, { promise: shutdownCompletion, resolve: () => resolveShutdownCompletion?.() })
       let executedOutcome: RunOutcome | undefined
+      let invocationHandles: readonly AfkSkillInvocationHandle[] = []
       try {
         phase = 'execution'
+        invocationHandles = await deps.skillInvocations?.start(preparedCtx, new Date().toISOString()) ?? []
+        if (controller.signal.aborted) {
+          throw new SchedulerInterruptedError('scheduler interrupted while AFK invocation start was in flight')
+        }
+        if (invocationHandles.length > 0) activeSkillInvocations.set(name, invocationHandles)
         let outcome = canonicalizeRunOutcome(await runChange(preparedCtx, controller.signal), preparedCtx)
+        if (controller.signal.aborted) {
+          throw new SchedulerInterruptedError('scheduler interrupted while AFK execution was in flight')
+        }
         executedOutcome = outcome
         // ── ④ terminal settle 前重查：停用 → 强落 paused（防成功态被写成 merged）──
         // 已发生的物理 merge 是不可逆事实；terminal 重查只能阻止尚未 landed 的 run，不能把已合入
@@ -327,6 +372,11 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         const settled = terminalCommit.terminal
         phase = 'settlement'
         await settleTerminal(report, preparedCtx, settled, { outcome, ran: true })
+        if (invocationHandles.length > 0) {
+          await deps.skillInvocations?.finish(invocationHandles)
+          activeSkillInvocations.delete(name)
+          invocationHandles = []
+        }
         if (outcome.mergeJournalPending === true) {
           report.failures.push({
             change: name, phase: 'settlement', kind: 'ledger-io',
@@ -353,9 +403,12 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
           })
           return { ok: false, change: name, failure }
         }
+        const executionError = controller.signal.aborted
+          ? new SchedulerInterruptedError('scheduler interrupted while AFK execution was in flight')
+          : err
         // 执行/结算异常：分类落态 + 关闭 reservation（业务失败路，非 round 基础设施故障——settle I/O 失败另经 tryLedger 记）。
-        const failureClassification = classifyFailure(err)
-        const terminalCommit = await applyFailure(name, err, failureClassification)
+        const failureClassification = classifyFailure(executionError)
+        const terminalCommit = await applyFailure(name, executionError, failureClassification)
         if (terminalCommit.status === 'recovery-pending') {
           const detail = terminalCommit.error !== undefined
             ? errText(terminalCommit.error)
@@ -378,10 +431,16 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         }
         const settled = terminalCommit.terminal
         phase = 'settlement'
-        await settleTerminal(report, preparedCtx, settled, { err, classification: failureClassification, ran: true })
+        await settleTerminal(report, preparedCtx, settled, { err: executionError, classification: failureClassification, ran: true })
+        if (invocationHandles.length > 0) {
+          await deps.skillInvocations?.finish(invocationHandles)
+          activeSkillInvocations.delete(name)
+          invocationHandles = []
+        }
         emitTerminal(name, settled)
-        const baseAdvanced = isBaseAdvancedFailure(err)
+        const baseAdvanced = isBaseAdvancedFailure(executionError)
         const cleanupFailed = failureClassification.cause === 'container-cleanup'
+        const schedulerInterrupted = failureClassification.cause === 'scheduler-interrupted'
         report.entries.push({
           change: name,
           loopId: preparedCtx.loop_id,
@@ -392,9 +451,15 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         // G² 子问题1：base 被第三方推进不是普通 per-change 冲突，是并发异常——settle 为 conflict 留现场之外，
         // 另记一条 round failure 使 ok=false（CLI 非零、不打印跑完一轮）。H14 r3 同样要求容器清理失败
         // fail-loud：即便已按 conflict 安全落态，也不能让 round/CLI 报成功。普通 content-conflict 不进此表。
-        if (baseAdvanced || cleanupFailed) report.failures.push(classifyRoundFailure(name, 'execution', err))
+        if (baseAdvanced || cleanupFailed || schedulerInterrupted) {
+          report.failures.push(classifyRoundFailure(name, 'execution', executionError))
+        }
       } finally {
         inFlight.delete(name)
+        abortControllers.delete(name)
+        activeSkillInvocations.delete(name)
+        shutdownCompletions.get(name)?.resolve()
+        shutdownCompletions.delete(name)
       }
       return { ok: true, change: name }
     } catch (error) {

@@ -32,13 +32,29 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLoopLedgerStore, loadRegistry } from '@tenon/kernel'
-import { makeDeps, mockState } from '../test-support.js'
+import { skillActionAuthorityContract } from '@tenon/automation'
+import { createLoopLedgerStore, emptyFields, loadRegistry } from '@tenon/kernel'
+import { publishInitialRunRevision } from '../../../kernel/src/state/run-revision-store.js'
+import { makeDeps, mockAfkState, mockState } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
 import { cmdAfk, probeGitCommitAncestry } from './afk.js'
 
 const execFileAsync = promisify(execFile)
 const SHA = 'a'.repeat(40)
+
+async function initializeCanonicalStepVisit(cwd: string, change = 'w'): Promise<void> {
+  const fields = emptyFields()
+  fields.phase = 'build'
+  // Keep the on-disk canonical StepVisit aligned with mockAfkState's frozen WorkflowRun.
+  // The production lifecycle binds evidence to both identities.
+  fields.workflow = 'default'
+  fields.track = 'backend'
+  await publishInitialRunRevision(join(cwd, 'openspec', 'changes', change), {
+    fields,
+    runMetadata: { runId: 'mock-run', transitionSequence: 0, transitionHead: undefined },
+    opaqueTail: '',
+  }, '2026-08-04T00:00:00.000Z')
+}
 
 /** fake exec 的 argv 记录（vi.mock 工厂被 hoist，必须用 vi.hoisted 共享可变引用）。 */
 const h = vi.hoisted(() => ({ calls: [] as string[][], executorCalls: 0, dockerAvailable: true }))
@@ -133,6 +149,12 @@ async function runCli(deps: ReturnType<typeof makeDeps>, args: string[]): Promis
   }
 }
 
+function withEnterAfkSkillAuthority(deps: ReturnType<typeof makeDeps>) {
+  deps.resolveSkillActionAuthority = async (query) =>
+    skillActionAuthorityContract(query, ['enter-afk'])
+  return deps
+}
+
 /**
  * GOAL H · Stage C：run 路径现经 admission 权威闸门——change 必须归属到一个 active loop 才被 admit
  * （无 loop 语境 fail-closed，不再静默跑）。本 loops.yaml 让 change 'w'（change_prefix 'w' 命中）
@@ -182,6 +204,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
     cwd = await mkdtemp(join(tmpdir(), 'afk-docker-unavailable-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -192,7 +215,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('文本模式真实 CLI 分派：ready 非空但 Docker 不可用 → exit 1，诚实文案不能伪装成功', async () => {
     const d = deps()
@@ -236,6 +259,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
     await execFileAsync('git', ['init', '-q'], { cwd })
     // scanReadyFromFs 真 readdir openspec/changes/*；字段值由 makeDeps 的 mockStore 供给
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -244,7 +268,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('第二段（评审缺口）：无 --image 时 .pipeline/automation.json 的 image 真进 docker run argv', async () => {
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
@@ -302,6 +326,7 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
     cwd = await mkdtemp(join(tmpdir(), 'afk-cred-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -311,7 +336,7 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
   })
 
   const deps = () =>
-    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('secrets 文件有 token 而宿主 env 无(空串) → 文件值补位,docker run 注入 -e', async () => {
     vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
@@ -362,7 +387,7 @@ describe("cmdAfk('run') · registry 真实 I/O 故障 → round failure（非零
   })
   afterEach(async () => { await rm(cwd, { recursive: true, force: true }) })
 
-  const deps = () => makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+  const deps = () => withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('loops.yaml 是目录（EISDIR）→ exit 1、stderr 报 registry-io 故障、stdout 不含「跑完一轮」', async () => {
     const d = deps()
@@ -416,12 +441,13 @@ loops:
     cwd = await mkdtemp(join(tmpdir(), 'afk-skillbundle-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'v'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd, 'v')
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), V_LOOPS_YAML)
   })
   afterEach(async () => { await rm(cwd, { recursive: true, force: true }) })
 
-  const deps = () => makeDeps({ cwd, states: { v: mockState({ phase: 'build', automation: 'queued' }) } })
+  const deps = () => withEnterAfkSkillAuthority(makeDeps({ cwd, states: { v: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('具名 profile 已知（isSkillProfileKnown 命中）→ 真 prepare 成功：docker 真跑 + ledger 落 skill-bundle-snapshot 事件', async () => {
     const d = deps()

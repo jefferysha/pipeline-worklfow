@@ -43,6 +43,10 @@ import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
 import { readAnchoredChange, readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
 import { readTaskRunForChange, resolveTaskRunRoute } from './serverTaskRunRoutes.js'
+import {
+  readAnchoredSkillInvocationEvidence,
+  resolveSkillInvocationRoute,
+} from './serverSkillInvocationRoutes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -122,6 +126,11 @@ export async function handleGet(
     readRun: (anchor, change) => readAnchoredChange(anchor, change, readTaskRunForChange),
   })
   if (taskRun !== null) return sendJson(res, taskRun.status, taskRun.body)
+  const skillInvocations = await resolveSkillInvocationRoute(req.url ?? '/', path, {
+    workflowRootForRequest,
+    readEvidence: readAnchoredSkillInvocationEvidence,
+  })
+  if (skillInvocations !== null) return sendJson(res, skillInvocations.status, skillInvocations.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
       try {

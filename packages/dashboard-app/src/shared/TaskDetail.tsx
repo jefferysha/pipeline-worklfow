@@ -22,6 +22,7 @@ import { TaskDetailIntro } from './TaskDetailIntro'
 import { TaskDocumentsSection } from './TaskDocumentsSection'
 import { RelatedSessionsSection } from './RelatedSessionsSection'
 import { OrchestrationGraphCard } from './OrchestrationGraphCard'
+import { SkillInvocationEvidenceCard } from './SkillInvocationEvidenceCard'
 gsap.registerPlugin(useGSAP)
 export interface TaskDetailProps {
   root: string
@@ -357,6 +358,7 @@ export function TaskDetail({
         )}
       </div>
       <OrchestrationGraphCard root={root} change={change.name} />
+      <SkillInvocationEvidenceCard root={root} change={change.name} />
       {change.documents?.governed ? (
         <TaskDocumentsSection
           documents={change.documents}

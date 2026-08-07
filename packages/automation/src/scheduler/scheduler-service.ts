@@ -4,6 +4,7 @@ import type {
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
 import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type { WorkflowAuthorityClaimCapabilityV1 } from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -42,6 +43,7 @@ import {
 } from './scheduler-support.js'
 import { createSchedulerExecution } from './scheduler-execution.js'
 import { createSchedulerOutcomes } from './scheduler-outcomes.js'
+import type { AfkSkillInvocationHandle } from '../skillInvocationAfkLifecycle.js'
 
 export const createScheduler = (deps: SchedulerDeps): Scheduler => {
   const validateExecutionWiring = deps.validateExecutionWiring ?? (async (context: ExecutionContext) => {
@@ -51,16 +53,29 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
   const observer = deps.observer
   const semaphore = createSemaphore(config.maxParallel)
   const inFlight = new Set<string>()
+  const abortControllers = new Map<string, AbortController>()
+  const shutdownCompletions = new Map<string, { readonly promise: Promise<void>; readonly resolve: () => void }>()
+  const activeSkillInvocations = new Map<string, readonly AfkSkillInvocationHandle[]>()
+  let shutdownBarrier: Promise<void> = Promise.resolve()
+  let shutdownStarted = false
 
-  registerShutdown(() => {
+  const interruptInFlight = (): Promise<void> => {
+    if (shutdownStarted) return shutdownBarrier
+    shutdownStarted = true
+    const interrupts: Promise<void>[] = []
     for (const name of inFlight) {
+      abortControllers.get(name)?.abort(new Error('scheduler interrupted'))
+      const completion = shutdownCompletions.get(name)
+      if (completion !== undefined) interrupts.push(completion.promise)
       try {
         state.markFailedSync(name, 'scheduler interrupted')
       } catch {
         // best-effort
       }
     }
-  })
+    shutdownBarrier = Promise.all(interrupts).then(() => undefined)
+    return shutdownBarrier
+  }
   const tryLedger = async (
     report: MutableReport,
     change: string,
@@ -118,6 +133,9 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     scheduler: deps,
     semaphore,
     inFlight,
+    abortControllers,
+    shutdownCompletions,
+    activeSkillInvocations,
     validateExecutionWiring,
     outcomes,
     applyDenial,
@@ -125,13 +143,41 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     settleTerminal,
   })
 
-  const runRoundOnce = async (
+  const runRoundOnceRegistered = async (
     candidates: readonly string[],
     options: RunRoundOptions = {},
   ): Promise<RoundReport> => {
     const report: MutableReport = {
       candidates: candidates.length, admitted: 0, entries: [], failures: [], ledgerFailures: [],
       halted: false, ledgerDegraded: false, pausePending: [],
+    }
+    let authorityClaim: WorkflowAuthorityClaimCapabilityV1 | undefined
+    try {
+      const candidate: unknown = admission.workflowAuthorityClaim
+      if (typeof candidate === 'object' && candidate !== null) {
+        const version = Reflect.get(candidate, 'version')
+        const claim: unknown = Reflect.get(candidate, 'claim')
+        if (version === 'v1' && typeof claim === 'function') {
+          // Capture the method before reserve. A mutable JS object/getter cannot remove it in the
+          // reserve→claim window and turn a configuration fault into an open reservation.
+          authorityClaim = {
+            version: 'v1',
+            claim: (context, claimState) => Reflect.apply(claim, candidate, [context, claimState]),
+          }
+        }
+      }
+    } catch {
+      authorityClaim = undefined
+    }
+    if (authorityClaim === undefined) {
+      return {
+        candidates: candidates.length, admitted: 0, entries: [],
+        failures: [{
+          change: '(config)', phase: 'admission', kind: 'config',
+          message: 'Workflow authority claim capability v1 未装配——本轮在 reserve 前 fail-closed',
+        }],
+        ledgerFailures: [], halted: false, ledgerDegraded: false, ok: false,
+      }
     }
     // H10 §3/§8任务5：直接 createScheduler 时 ExecutionPreparationPort 在类型上可选。缺席时整轮
     // 在处理任何候选**之前**就短路成一条 config 类
@@ -155,6 +201,7 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       preparation,
       options.expectedLoopIdByChange?.get(name),
       options.expectedAutonomyLevelByChange?.get(name),
+      authorityClaim,
     )))
     // Stage B 返工 #2：allSettled 逐项检查——rejected（handleOne 顶层 catch 外的意外）与 !value.ok 都归 failures，
     // 绝不再被 allSettled 吞成 ok=true。primary failure 单点在此落表（handleOne 只落 secondary/ledger-compat），不双计。
@@ -187,6 +234,22 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       failures: report.failures, ledgerFailures: report.ledgerFailures, halted: report.halted,
       ledgerDegraded: report.ledgerDegraded,
       ok: report.failures.length === 0 && report.ledgerFailures.length === 0 && !report.ledgerDegraded,
+    }
+  }
+
+  const runRoundOnce = async (
+    candidates: readonly string[],
+    options: RunRoundOptions = {},
+  ): Promise<RoundReport> => {
+    const unregisterShutdown = registerShutdown(interruptInFlight)
+    try {
+      return await runRoundOnceRegistered(candidates, options)
+    } finally {
+      try {
+        await shutdownBarrier
+      } finally {
+        unregisterShutdown()
+      }
     }
   }
 

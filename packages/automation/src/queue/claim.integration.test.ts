@@ -1,7 +1,13 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createStateStore } from '@tenon/kernel'
+import {
+  compileAutomationPolicySnapshot,
+  createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
+  type LoopEntry,
+} from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claim, commitFailureOwned, incrAttempts, markQueued, setAutomationOwned } from './claim.js'
 
@@ -37,6 +43,53 @@ describe('cas 并发闸（真 kernel cas 写 automation 字段）', () => {
     expect(await store.get(dir, 'automation')).toBe('scheduled') // 真落盘
     // 已被认领 → 二次 claim 必落空
     expect(await claim(store, dir)).toBe(false)
+    expect(await store.get(dir, 'automation')).toBe('scheduled')
+  })
+
+  it('claim：expected track 与 queued 在同一 change lock 内复核，身份漂移时零写入', async () => {
+    const dir = await initChange('track-bound')
+    await markQueued(store, dir, fixedClock)
+
+    expect(await claim(store, dir, 'pm')).toBe(false)
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    expect(await claim(store, dir, 'backend')).toBe(true)
+    expect(await store.get(dir, 'automation')).toBe('scheduled')
+  })
+
+  it('claim：WorkflowRun identity 漂移与 queued 在同一 change lock 内复核', async () => {
+    const dir = await initChange('run-bound')
+    const runRepo = createWorkflowRunRepository({
+      store,
+      recordStore: createTransitionRecordStore(),
+      clock: fixedClock,
+      newId: () => 'run-current',
+    })
+    const policy = compileAutomationPolicySnapshot({
+      id: 'lp', name: 'lp', kind: 'executor', goal: 'test claim identity', cadence: 'manual', risk: 'low',
+      runner: 'codex', change_prefix: 'run-', phases: [], human_gates: [], state: 'state', design_doc: 'design',
+      status: 'active', budget: { max_runs_per_day: 1, max_in_flight: 1, on_exceed: 'skip-run' },
+      kill_criteria: [], autonomy_level: 'L1', allowlist: [], denylist: [], skill_bundle_id: '_all',
+    } satisfies LoopEntry, { capturedAt: fixedClock() })
+    const bound = await runRepo.bindAutomationPolicy(dir, policy, {
+      loopId: 'lp', iterationId: 'iteration-current',
+    })
+    await markQueued(store, dir, fixedClock)
+
+    expect(await claim(store, dir, 'backend', {
+      workflowRunId: 'run-stale',
+      workflowId: bound.workflowId,
+      workflowFingerprint: bound.workflowPlanFingerprint!,
+      loopId: 'lp',
+      iterationId: 'iteration-current',
+    })).toBe(false)
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    expect(await claim(store, dir, 'backend', {
+      workflowRunId: bound.id,
+      workflowId: bound.workflowId,
+      workflowFingerprint: bound.workflowPlanFingerprint!,
+      loopId: 'lp',
+      iterationId: 'iteration-current',
+    })).toBe(true)
     expect(await store.get(dir, 'automation')).toBe('scheduled')
   })
 

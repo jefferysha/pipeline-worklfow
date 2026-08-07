@@ -148,9 +148,20 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       transitionSequence: 0,
       workflowPlanFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
       workflowPlanSnapshot: {
-        version: 2,
+        version: 3,
         workflowId: 'incident-response',
         workflowFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+        decomposition: {
+          version: 'v1',
+          mode: 'off',
+          target: 'work-items',
+          strategy: 'balanced',
+          max_items: 16,
+          max_depth: 2,
+          auto_when: [],
+          ask_when: [],
+        },
+        interaction: { version: 'v1', mode: 'interactive' },
       },
     })
     await expect(readFile(

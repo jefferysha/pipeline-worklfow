@@ -5,18 +5,32 @@ import type { CoverageProfile, TrackDefinition } from '../tracks/types.js'
 import { builtinWorkflow } from './builtin-workflows.js'
 import { compileDefaultWorkflow, compileWorkflow } from './compile.js'
 import { documentGovernancePolicy, type DocumentGovernancePolicy } from './document-contract.js'
-import { preTenonV1DocumentPolicy } from './migrations/pre-tenon-v1-document-policy.js'
 import { loadWorkflow } from './loadWorkflow.js'
 import type { WorkflowIR } from './ir.js'
 import { parseWorkflow } from './parse.js'
-import type { WorkflowDef } from './types.js'
+import { restoreLegacyWorkflowPlan, validateV3WorkflowPolicies } from './effective-plan-snapshot-compat.js'
+import type {
+  WorkflowDecompositionPolicyV1,
+  WorkflowDef,
+  WorkflowInteractionPolicyV1,
+} from './types.js'
 import { validateWorkflow } from './validate.js'
+import type { WorkflowPlanSnapshot } from './workflow-plan-snapshot-types.js'
+export type {
+  LegacyWorkflowIR,
+  WorkflowPlanSnapshot,
+  WorkflowPlanSnapshotV1,
+  WorkflowPlanSnapshotV2,
+  WorkflowPlanSnapshotV3,
+} from './workflow-plan-snapshot-types.js'
 
 export interface EffectiveWorkflowPlan {
   readonly id: string
   /** Transition/check execution capability; consumers never infer this from the workflow id. */
   readonly executionModel: 'phase-manifest' | 'step-graph'
   readonly workflow: WorkflowIR
+  readonly decomposition: WorkflowDecompositionPolicyV1
+  readonly interaction: WorkflowInteractionPolicyV1
   readonly documentPolicy?: DocumentGovernancePolicy
   readonly skillPolicy: 'manifest-overlay' | 'step-declared'
   readonly reviewSteps: readonly string[]
@@ -65,32 +79,6 @@ export interface EffectiveWorkflowPlan {
   }
 }
 
-/**
- * Immutable, data-only execution snapshot bound to one WorkflowRun.
- *
- * A fingerprint alone detects drift but cannot keep an in-flight run executable after a plugin
- * upgrade. Persisting the compiled IR lets old runs continue with their original semantics while
- * newly initialized runs adopt the new workflow definition.
- */
-export interface WorkflowPlanSnapshotV1 {
-  readonly version: 1
-  readonly workflowId: string
-  readonly executionModel: EffectiveWorkflowPlan['executionModel']
-  readonly workflow: WorkflowIR
-  readonly workflowFingerprint: string
-}
-
-export interface WorkflowPlanSnapshotV2 {
-  readonly version: 2
-  readonly workflowId: string
-  readonly executionModel: EffectiveWorkflowPlan['executionModel']
-  readonly workflow: WorkflowIR
-  readonly documentPolicy: DocumentGovernancePolicy | null
-  readonly workflowFingerprint: string
-}
-
-export type WorkflowPlanSnapshot = WorkflowPlanSnapshotV1 | WorkflowPlanSnapshotV2
-
 export interface PersistedDocumentGovernanceBinding {
   readonly documentProfile?: DocumentProfileId
   readonly documentGovernanceFingerprint?: string
@@ -117,7 +105,6 @@ function canonicalRequirement(requirement: {
   }
 }
 
-/** Stable content identity for the complete policy enforced by ledger admission and reads. */
 export function documentGovernanceFingerprint(policy: DocumentGovernancePolicy): string {
   const canonical = {
     id: policy.id,
@@ -161,6 +148,7 @@ function planFromIr(
   workflow: WorkflowIR,
   track?: TrackDefinition,
   frozenDocumentPolicy?: DocumentGovernancePolicy | null,
+  frozenWorkflowFingerprint?: string,
 ): EffectiveWorkflowPlan {
   const documentPolicy = frozenDocumentPolicy === undefined
     ? documentGovernancePolicy(id, workflow)
@@ -169,11 +157,13 @@ function planFromIr(
   const reviewSteps = workflow.steps.filter((step) => step.gate === 'review').map((step) => step.id)
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }))
   const stepLabelSource = executionModel === 'phase-manifest' ? 'localized-builtin' : 'workflow-defined'
-  const workflowFingerprint = sha256Hex(JSON.stringify({
-    schema: 'effective-workflow-plan-v1',
+  const workflowFingerprint = frozenWorkflowFingerprint ?? sha256Hex(JSON.stringify({
+    schema: 'effective-workflow-plan-v2',
     id,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     documentPolicy: documentPolicy === undefined
       ? null
       : {
@@ -190,6 +180,8 @@ function planFromIr(
     id,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     ...(documentPolicy === undefined ? {} : { documentPolicy }),
     skillPolicy,
     reviewSteps,
@@ -235,12 +227,32 @@ function planFromIr(
 }
 
 export function workflowPlanSnapshot(plan: EffectiveWorkflowPlan): WorkflowPlanSnapshot {
+  const current = planFromIr(
+    plan.id,
+    plan.executionModel,
+    plan.workflow,
+    undefined,
+    plan.documentPolicy ?? null,
+  )
+  if (current.workflowFingerprint !== plan.workflowFingerprint) {
+    const { decomposition: _decomposition, interaction: _interaction, ...legacyWorkflow } = plan.workflow
+    return freeze({
+      version: 2,
+      workflowId: plan.id,
+      executionModel: plan.executionModel,
+      workflow: structuredClone(legacyWorkflow),
+      documentPolicy: structuredClone(plan.documentPolicy ?? null),
+      workflowFingerprint: plan.workflowFingerprint,
+    })
+  }
   return freeze({
-    version: 2,
+    version: 3,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
     documentPolicy: structuredClone(plan.documentPolicy ?? null),
+    decomposition: structuredClone(plan.decomposition),
+    interaction: structuredClone(plan.interaction),
     workflowFingerprint: plan.workflowFingerprint,
   })
 }
@@ -249,48 +261,47 @@ export function effectiveWorkflowPlanFromSnapshot(
   snapshot: WorkflowPlanSnapshot,
   track?: TrackDefinition,
 ): EffectiveWorkflowPlan {
-  if ((snapshot.version !== 1 && snapshot.version !== 2)
+  if ((snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3)
     || snapshot.workflowId === ''
     || (snapshot.executionModel !== 'phase-manifest' && snapshot.executionModel !== 'step-graph')
     || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
     throw new DocumentGovernanceBindingError('workflow plan snapshot 形状非法')
   }
+  if (snapshot.version === 1 || snapshot.version === 2) {
+    return restoreLegacyWorkflowPlan(
+      snapshot,
+      track,
+      documentGovernanceFingerprint,
+      (workflow, policy, fingerprint, frozenTrack) => planFromIr(
+        snapshot.workflowId,
+        snapshot.executionModel,
+        workflow,
+        frozenTrack,
+        policy,
+        fingerprint,
+      ),
+      (message) => { throw new DocumentGovernanceBindingError(message) },
+    )
+  }
+  validateV3WorkflowPolicies(
+    snapshot,
+    (message) => { throw new DocumentGovernanceBindingError(message) },
+  )
   const plan = planFromIr(
     snapshot.workflowId,
     snapshot.executionModel,
     structuredClone(snapshot.workflow),
     track,
-    snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : undefined,
+    structuredClone(snapshot.documentPolicy),
   )
   if (plan.workflowFingerprint === snapshot.workflowFingerprint) return plan
 
-  let legacyFingerprint: string | undefined
-  if (snapshot.version === 1) {
-    const legacyPolicy = preTenonV1DocumentPolicy(
-      snapshot.workflowId,
-      snapshot.workflowFingerprint,
-    )
-    if (legacyPolicy !== undefined) {
-      const legacyPlan = planFromIr(
-        snapshot.workflowId,
-        snapshot.executionModel,
-        structuredClone(snapshot.workflow),
-        track,
-        legacyPolicy,
-      )
-      legacyFingerprint = legacyPlan.workflowFingerprint
-      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint) return legacyPlan
-    }
-  }
-
   throw new DocumentGovernanceBindingError(
     `workflow plan snapshot 内容与 fingerprint 不一致`
-    + `（expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}`
-    + `${legacyFingerprint === undefined ? '' : `, legacy=${legacyFingerprint}`}）`,
+    + `（expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}）`,
   )
 }
 
-/** Compile a built-in or project Workflow into the single runtime capability model. */
 export function compileEffectiveWorkflowPlan(
   id: string,
   provided?: WorkflowDef,
@@ -307,7 +318,6 @@ export function compileEffectiveWorkflowPlan(
   return planFromIr(id, 'step-graph', compileWorkflow(definition), track)
 }
 
-/** Project-aware compatibility loader. Identity branching is contained here, never in adapters. */
 export function loadEffectiveWorkflowPlan(
   repoRoot: string,
   id: string,
@@ -317,7 +327,6 @@ export function loadEffectiveWorkflowPlan(
   return compileEffectiveWorkflowPlan(id, definition, track)
 }
 
-/** Adapter for callers that already loaded and compiled a project definition under a lock. */
 export function effectiveWorkflowPlanFromIr(
   id: string,
   workflow: WorkflowIR,
@@ -326,7 +335,6 @@ export function effectiveWorkflowPlanFromIr(
   return planFromIr(id, 'step-graph', workflow, track)
 }
 
-/** Central compatibility resolver; consumers branch on plan capabilities, never on the identity. */
 export function resolveEffectiveWorkflowPlan(
   id: string,
   loadCompiled: (name: string) => WorkflowIR | null,
@@ -351,11 +359,6 @@ export function effectiveWorkflowPlanBinding(
   }
 }
 
-/**
- * Resolve the mutable workflow definition under the immutable document-governance identity bound
- * when the run was created. Runs predating this binding remain readable; once a profile exists it
- * can never be removed or changed, and current writers also pin the exact canonical policy hash.
- */
 export function resolveBoundEffectiveWorkflowPlan(
   id: string,
   binding: PersistedDocumentGovernanceBinding,

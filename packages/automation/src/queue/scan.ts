@@ -21,6 +21,7 @@ export interface ChangeQueueEntry {
   readonly name: string
   readonly phase: string
   readonly automation: string
+  readonly archived: string
   readonly automationQueuedAt: string
   readonly dependsOn: string[]
 }
@@ -43,7 +44,7 @@ const depsAllSatisfied = (deps: string[], resolver: DepResolver): boolean => {
  */
 export function readyCandidates(entries: readonly ChangeQueueEntry[], resolver: DepResolver): string[] {
   const ready = entries
-    .filter((e) => e.phase === 'build' && e.automation === 'queued')
+    .filter((e) => e.phase === 'build' && e.automation === 'queued' && e.archived !== 'true')
     .filter((e) => depsAllSatisfied(e.dependsOn, resolver))
   const key = (e: ChangeQueueEntry): string => (e.automationQueuedAt === '' || e.automationQueuedAt === 'null' ? QUEUED_AT_LAST : e.automationQueuedAt)
   return ready
@@ -91,6 +92,7 @@ export async function scanReadyFromFs(changesDir: string, store: StateStore): Pr
       name,
       phase: scalar(state.fields.phase),
       automation,
+      archived: scalar(state.fields.archived),
       automationQueuedAt: scalar(state.fields.automation_queued_at),
       dependsOn: normalizeDeps(state.fields.depends_on),
     })

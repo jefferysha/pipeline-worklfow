@@ -21,7 +21,8 @@
 import type { FieldName } from '../types.js'
 import type {
   ArtifactProducerPolicy, FieldRef, GateKind, SkillRef, WorkflowActionConfig, WorkflowConditional,
-  WorkflowDocumentContractV1, WorkflowGuardConfig,
+  WorkflowDecompositionPolicyV1, WorkflowDocumentContractV1, WorkflowGuardConfig,
+  WorkflowInteractionPolicyV1,
 } from './types.js'
 import type { TrackPredicate } from './predicates.js'
 
@@ -159,6 +160,8 @@ export interface StepIR {
 /** 编译产物：compileWorkflow 全量新建对象并深冻结（Object.isFrozen 对任意嵌套层成立）。 */
 export interface WorkflowIR {
   readonly name: string
+  readonly decomposition: WorkflowDecompositionPolicyV1
+  readonly interaction: WorkflowInteractionPolicyV1
   /** Preserved from WorkflowDef after compile-time validation; absent means an ordinary custom workflow. */
   readonly openspecContract?: 'required'
   readonly documentContract?: WorkflowDocumentContractV1
