@@ -2,9 +2,11 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  compileEffectiveWorkflowPlan, createLoopLedgerStore, loadRegistry, nodeLoopIoStrict, registryContentEpoch,
+  BUILTIN_TRACK_DEFINITIONS, compileEffectiveWorkflowPlan, createLoopLedgerStore, loadRegistry,
+  nodeLoopIoStrict, registryContentEpoch,
   workflowPlanSnapshot,
-  type EffectiveSkillResolver, type LoopEntry, type LoopLedgerStore, type LoopRegistry, type StepIR, type VerificationResult,
+  type EffectiveSkillResolver, type LoopEntry, type LoopLedgerStore, type LoopRegistry, type StepIR,
+  type TrackRegistry, type VerificationResult,
 } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createFsSkillContentLocator, SkillContentInvalidError } from '../skills/content-locator.js'
@@ -76,7 +78,16 @@ const AUTHORIZED_AFK_LAYERS = {
   skill: { status: 'valid', grants: ['enter-afk'] },
   project: { status: 'valid', grants: ['enter-afk'] },
   run: { status: 'valid', grants: ['enter-afk'] },
+  projectAuthority: {
+    version: 'v1', track_id: 'backend', track_registry_revision: '0123456789abcdef',
+  },
 } as const
+const TRACK_REGISTRY: TrackRegistry = {
+  ordered: BUILTIN_TRACK_DEFINITIONS,
+  byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+  revision: AUTHORIZED_AFK_LAYERS.projectAuthority.track_registry_revision,
+  source: 'builtin-only',
+}
 
 let dir: string
 let idc = 0
@@ -98,6 +109,8 @@ const admission = (over: Partial<LoopAdmissionDeps> & { loops?: LoopEntry[] } = 
       workflowPlanFingerprint: AFK_PLAN.workflowFingerprint,
       workflowPlanSnapshot: AFK_PLAN,
     })),
+    withWorkflowActionAuthorityLock: over.withWorkflowActionAuthorityLock
+      ?? (async (use) => use(TRACK_REGISTRY)),
     workflowActionAuthority: over.workflowActionAuthority ?? (async () => AUTHORIZED_AFK_LAYERS),
     ...over,
   })
@@ -107,6 +120,194 @@ beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'loop-adm-')) })
 afterEach(async () => { await rm(dir, { recursive: true, force: true }) })
 
 describe('reserve · 原子 preflight 放行', () => {
+  it('PR3：allowed attempt 冻结 exact TrackRegistry authority binding 供 claim 前复核', async () => {
+    const result = await admission().reserve('lp-x')
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.context).toMatchObject({
+      workflow_action_authority: {
+        version: 'v1',
+        action: 'enter-afk',
+        track_id: 'backend',
+        track_registry_revision: '0123456789abcdef',
+        workflow_run_id: result.context.workflow_run_id,
+        workflow_id: AFK_PLAN.workflowId,
+        workflow_fingerprint: AFK_PLAN.workflowFingerprint,
+      },
+    })
+  })
+
+  it('PR3：stable authority 在最终复核后只调用一次 claim', async () => {
+    const adm = admission()
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    const result = await adm.claimWithFreshWorkflowAuthority(reserved.context, async (trackId) => {
+      claims++
+      expect(trackId).toBe('backend')
+      return true
+    })
+
+    expect(result).toMatchObject({ ok: true, claimed: true })
+    expect(claims).toBe(1)
+  })
+
+  it('PR3：TrackRegistry revision 漂移在 claim 前拒绝，零 claim、零扣费', async () => {
+    let lockReads = 0
+    const adm = admission({
+      withWorkflowActionAuthorityLock: async (use) => use({
+        ...TRACK_REGISTRY,
+        revision: lockReads++ === 0 ? '0123456789abcdef' : 'fedcba9876543210',
+      }),
+      workflowActionAuthority: async ({ registry: exactRegistry }) => ({
+        ...AUTHORIZED_AFK_LAYERS,
+        projectAuthority: {
+          version: 'v1', track_id: 'backend', track_registry_revision: exactRegistry.revision,
+        },
+      }),
+    })
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    const result = await adm.claimWithFreshWorkflowAuthority(reserved.context, async () => {
+      claims++
+      return true
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-stale',
+      authorization: { status: 'stale' },
+    })
+    expect(claims).toBe(0)
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.openReservations).toHaveLength(0)
+    expect(win.runs[0]).toMatchObject({
+      result: 'skipped', reason: 'admission-denied',
+      accounting: { charged_tokens: 0, charge_source: 'none' },
+    })
+  })
+
+  it('PR3：project grant 在 reserve 后撤销时零 claim、零扣费', async () => {
+    let resolutions = 0
+    const adm = admission({
+      workflowActionAuthority: async () => ({
+        ...AUTHORIZED_AFK_LAYERS,
+        project: resolutions++ === 0
+          ? AUTHORIZED_AFK_LAYERS.project
+          : { status: 'valid', grants: [] },
+      }),
+    })
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    const result = await adm.claimWithFreshWorkflowAuthority(reserved.context, async () => {
+      claims++
+      return true
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-denied',
+      authorization: { status: 'denied' },
+    })
+    expect(claims).toBe(0)
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.runs[0]?.accounting).toMatchObject({ charged_tokens: 0, charge_source: 'none' })
+  })
+
+  it('PR3：project track identity 改绑时以 stale 拒绝且不 claim', async () => {
+    let resolutions = 0
+    const adm = admission({
+      workflowActionAuthority: async () => ({
+        ...AUTHORIZED_AFK_LAYERS,
+        projectAuthority: {
+          ...AUTHORIZED_AFK_LAYERS.projectAuthority,
+          track_id: resolutions++ === 0 ? 'backend' : 'frontend',
+        },
+      }),
+    })
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    const result = await adm.claimWithFreshWorkflowAuthority(reserved.context, async () => {
+      claims++
+      return true
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-stale',
+      authorization: { status: 'stale' },
+    })
+    if (!result.ok) {
+      expect(result.authorization?.denials).toContainEqual(expect.objectContaining({
+        layer: 'project', code: 'project-identity-mismatch',
+      }))
+    }
+    expect(claims).toBe(0)
+  })
+
+  it('PR3：最终 authority provider 失败时 fail-loud、零 claim、零扣费', async () => {
+    let resolutions = 0
+    const adm = admission({
+      workflowActionAuthority: async () => {
+        if (resolutions++ > 0) throw new Error('authority EIO')
+        return AUTHORIZED_AFK_LAYERS
+      },
+    })
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    let claims = 0
+
+    await expect(adm.claimWithFreshWorkflowAuthority(reserved.context, async () => {
+      claims++
+      return true
+    })).rejects.toThrow('authority EIO')
+
+    expect(claims).toBe(0)
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.openReservations).toHaveLength(0)
+    expect(win.runs[0]).toMatchObject({
+      result: 'failed', reason: 'infrastructure-error',
+      accounting: { charged_tokens: 0, charge_source: 'none' },
+      error: { cause: 'workflow-action-authority-failed' },
+    })
+  })
+
+  it('PR3：缺失冻结 authority binding 时 fail-closed 且不调用 claim', async () => {
+    const adm = admission()
+    const reserved = await adm.reserve('lp-x')
+    expect(reserved.ok).toBe(true)
+    if (!reserved.ok) return
+    const { workflow_action_authority: _missing, ...unbound } = reserved.context
+    let claims = 0
+
+    const result = await adm.claimWithFreshWorkflowAuthority(unbound, async () => {
+      claims++
+      return true
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'workflow-action-hard-blocked',
+      authorization: { status: 'hard-blocked' },
+    })
+    expect(claims).toBe(0)
+    const win = await createLoopLedgerStore().readRunWindow(dir, { limit: 10 })
+    expect(win.runs[0]?.accounting).toMatchObject({ charged_tokens: 0, charge_source: 'none' })
+  })
+
   it('空账本 + active loop → ok，context 带 loop_id/tokens/basis，且落一条 reservation', async () => {
     const adm = admission({ loops: [loop({ id: 'lp', change_prefix: 'lp-' })] })
     const r = await adm.reserve('lp-x')

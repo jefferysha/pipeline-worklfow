@@ -36,7 +36,9 @@
  * outcome.requireWorkflowBinding（lifecycle 按 cfg.workflowKind 判定后透传）。两处消费点共用同一个
  * verificationGateFor 辅助函数构造 gate 输入，结构上不可能各写一份漂移。
  */
-import { isSettled, type FailureCommitInput, type FailureCommitResult } from '../queue/claim.js'
+import {
+  isSettled, type FailureCommitInput, type FailureCommitResult, type WorkflowClaimRunIdentity,
+} from '../queue/claim.js'
 import { settleSuccess } from '../queue/state-machine.js'
 import { type AutomationConfig, type AutomationState, type RunOutcome } from '../types.js'
 import type { AfkSkillInvocationHandle, AfkSkillInvocationLifecycle } from '../skillInvocationAfkLifecycle.js'
@@ -44,7 +46,9 @@ import type {
   ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
 } from '../admission/execution-context.js'
 import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
-import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
+import type {
+  ActivateResult, AdmissionDenial, ClaimAuthorizationResult, ReserveResult, RunSettlement,
+} from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
@@ -90,7 +94,7 @@ export const isBaseAdvancedFailure = (err: unknown): boolean => safeFailurePrope
 
 /** 写回 port（由 fs StateStore 适配，见 sdk.ts::storeWriter）。全部经 kernel 锁串行。 */
 export interface StateWriter {
-  claim(name: string): Promise<boolean>
+  claim(name: string, expectedTrackId?: string, expectedRun?: WorkflowClaimRunIdentity): Promise<boolean>
   setAutomation(name: string, state: AutomationState): Promise<void>
   setField(name: string, field: string, value: string): Promise<void>
   getAutomation(name: string): Promise<string>
@@ -109,6 +113,10 @@ export interface AdmissionPort {
     readonly expectedLoopId?: string
     readonly expectedAutonomyLevel?: AutomationConfig['level'] | null
   }): Promise<ReserveResult>
+  claimWithFreshWorkflowAuthority(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
   activate(ctx: ExecutionContext): Promise<ActivateResult>
   settleWon(ctx: ExecutionContext, settlement: RunSettlement): Promise<void>
   settleLost(ctx: ExecutionContext): Promise<void>

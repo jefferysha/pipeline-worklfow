@@ -6,6 +6,7 @@ import {
   workflowPolicyPermissionLayer,
   type BudgetReservationRecord,
   type RunRecord,
+  type TrackRegistry,
   type WorkflowActionEvaluation,
   type WorkflowAuthorityBinding,
   type WorkflowDecompositionCandidate,
@@ -17,7 +18,19 @@ import {
 } from '@tenon/kernel'
 import type { ExecutionContext } from './execution-context.js'
 import type { createAdmissionJournal } from './loop-admission-journal.js'
-import { errText, type LoopAdmissionDeps, type ReserveResult } from './loop-admission-types.js'
+import {
+  buildAfkWorkflowActionAuthorityBinding,
+  isWorkflowProjectAuthorityIdentityV1,
+  sameAfkWorkflowActionAuthorityBinding,
+  type AfkWorkflowActionAuthorityBindingV1,
+  type WorkflowActionAuthorityFacts,
+} from './workflow-action-authority-binding.js'
+import {
+  errText,
+  type AdmissionDenial,
+  type ClaimAuthorizationResult,
+  type LoopAdmissionDeps,
+} from './loop-admission-types.js'
 
 /**
  * The AFK transport is a named permission, not an autonomy level. Keeping this adapter tiny makes
@@ -109,24 +122,19 @@ export function evaluateBoundWorkflowDecompositionMaterialization(input: {
   })
 }
 
-/**
- * Resolves the Workflow ceiling solely from the immutable WorkflowRun snapshot, then intersects it
- * with fresh non-Workflow facts supplied by the host. Snapshot absence or tampering fails closed.
- */
-export async function evaluateBoundAfkWorkflowAdmission(input: {
-  readonly change: string
-  readonly context: ExecutionContext
-  readonly run: BoundWorkflowRun
-  readonly workflowActionAuthority: LoopAdmissionDeps['workflowActionAuthority']
-}): Promise<WorkflowActionEvaluation> {
+/** Derives the frozen Workflow ceiling and intersects it with already-resolved dynamic facts. */
+function evaluateAfkAgainstBoundRun(
+  run: BoundWorkflowRun,
+  dynamic: Pick<WorkflowActionAuthorityFacts, 'platform' | 'skill' | 'project' | 'run'>,
+): WorkflowActionEvaluation {
   const missing = unavailableLayer('missing')
   let interactionMode: WorkflowInteractionMode = 'interactive'
   let workflow: WorkflowPermissionLayerInput = missing
-  if (input.run.workflowPlanSnapshot !== undefined) {
+  if (run.workflowPlanSnapshot !== undefined) {
     try {
-      const frozenPlan = effectiveWorkflowPlanFromSnapshot(input.run.workflowPlanSnapshot)
-      if (input.run.workflowPlanFingerprint !== frozenPlan.workflowFingerprint
-        || input.run.workflowId !== frozenPlan.id) {
+      const frozenPlan = effectiveWorkflowPlanFromSnapshot(run.workflowPlanSnapshot)
+      if (run.workflowPlanFingerprint !== frozenPlan.workflowFingerprint
+        || run.workflowId !== frozenPlan.id) {
         workflow = { status: 'fingerprint-mismatch', grants: [] }
       } else {
         interactionMode = frozenPlan.workflow.interaction.mode
@@ -136,31 +144,93 @@ export async function evaluateBoundAfkWorkflowAdmission(input: {
       workflow = { status: 'fingerprint-mismatch', grants: [] }
     }
   }
-
-  let dynamic: Omit<WorkflowPermissionLayers, 'workflow'>
-  if (input.workflowActionAuthority === undefined) {
-    dynamic = { platform: missing, skill: missing, project: missing, run: missing }
-  } else {
-    try {
-      dynamic = await input.workflowActionAuthority(input)
-    } catch (error) {
-      throw new WorkflowActionAuthorityResolutionError(error)
-    }
-  }
-  return evaluateAfkWorkflowAdmission({ interactionMode, layers: { ...dynamic, workflow } })
+  return evaluateAfkWorkflowAdmission({
+    interactionMode,
+    layers: {
+      platform: dynamic.platform,
+      skill: dynamic.skill,
+      project: dynamic.project,
+      workflow,
+      run: dynamic.run,
+    },
+  })
 }
 
-/** Binds the reservation to its canonical frozen run and evaluates AFK entry against that run. */
-export async function bindAndEvaluateAfkWorkflowRun(input: {
+const missingDynamicAuthority = (): WorkflowActionAuthorityFacts => {
+  const missing = unavailableLayer('missing')
+  return { platform: missing, skill: missing, project: missing, run: missing }
+}
+
+interface BoundAfkAuthorityEvaluation {
+  readonly authorization: WorkflowActionEvaluation
+  readonly binding?: AfkWorkflowActionAuthorityBindingV1
+}
+
+/**
+ * Resolves fresh non-Workflow facts against the exact TrackRegistry snapshot held by the caller.
+ * The Workflow ceiling still comes only from the immutable WorkflowRun snapshot.
+ */
+export async function evaluateBoundAfkWorkflowAdmission(input: {
+  readonly change: string
+  readonly context: ExecutionContext
+  readonly run: BoundWorkflowRun
+  readonly registry: TrackRegistry
+  readonly workflowActionAuthority: NonNullable<LoopAdmissionDeps['workflowActionAuthority']>
+  readonly expectedAuthority?: AfkWorkflowActionAuthorityBindingV1
+}): Promise<BoundAfkAuthorityEvaluation> {
+  let dynamic: WorkflowActionAuthorityFacts
+  try {
+    dynamic = await input.workflowActionAuthority(input)
+  } catch (error) {
+    throw new WorkflowActionAuthorityResolutionError(error)
+  }
+
+  const identity = dynamic.projectAuthority
+  const identityMatchesRegistry = isWorkflowProjectAuthorityIdentityV1(identity)
+    && identity.track_registry_revision === input.registry.revision
+    && input.registry.byId.has(identity.track_id)
+  const trustedDynamic = identityMatchesRegistry
+    ? dynamic
+    : { ...dynamic, project: unavailableLayer('malformed') }
+  const authorization = evaluateAfkAgainstBoundRun(input.run, trustedDynamic)
+  if (!authorization.allowed) return { authorization }
+
+  const binding = buildAfkWorkflowActionAuthorityBinding({
+    workflowRunId: input.run.id,
+    workflowId: input.run.workflowId ?? '',
+    workflowFingerprint: input.run.workflowPlanFingerprint ?? '',
+    loopId: input.context.loop_id,
+    iterationId: input.context.iteration_id ?? '',
+    skillBundleId: input.context.skill_bundle_id ?? '',
+    projectAuthority: identityMatchesRegistry ? identity : undefined,
+    authorization,
+  })
+  if (binding === undefined) {
+    return {
+      authorization: evaluateAfkAgainstBoundRun(input.run, {
+        ...trustedDynamic,
+        run: unavailableLayer('malformed'),
+      }),
+    }
+  }
+  if (input.expectedAuthority !== undefined
+    && !sameAfkWorkflowActionAuthorityBinding(input.expectedAuthority, binding)) {
+    return {
+      authorization: evaluateAfkAgainstBoundRun(input.run, {
+        ...trustedDynamic,
+        project: { status: 'identity-mismatch', grants: [] },
+      }),
+    }
+  }
+  return { authorization, binding }
+}
+
+/** Binds an admitted reservation to the canonical frozen WorkflowRun. */
+async function bindAfkWorkflowRun(input: {
   readonly change: string
   readonly context: ExecutionContext
   readonly bindAutomationPolicy: NonNullable<LoopAdmissionDeps['bindAutomationPolicy']>
-  readonly workflowActionAuthority: LoopAdmissionDeps['workflowActionAuthority']
-}): Promise<{
-  readonly context: ExecutionContext
-  readonly run: BoundWorkflowRun
-  readonly authorization: WorkflowActionEvaluation
-}> {
+}): Promise<BoundWorkflowRun> {
   const policy = input.context.automation_policy
   if (policy === undefined) throw new Error('loop admission produced no AutomationPolicy snapshot')
   const iterationId = input.context.iteration_id
@@ -175,17 +245,146 @@ export async function bindAndEvaluateAfkWorkflowRun(input: {
   if (run.loopId !== input.context.loop_id || run.iterationId !== iterationId) {
     throw new Error('WorkflowRun did not persist the admitted loop/iteration identity')
   }
-  const context = Object.freeze({ ...input.context, workflow_run_id: run.id })
-  const authorization = await evaluateBoundAfkWorkflowAdmission({
-    change: input.change,
-    context,
-    run,
-    workflowActionAuthority: input.workflowActionAuthority,
-  })
-  return { context, run, authorization }
+  return run
+}
+
+/** Binds the run and freezes the exact initial authority identity into ExecutionContext. */
+export async function bindAndEvaluateAfkWorkflowRun(input: {
+  readonly change: string
+  readonly context: ExecutionContext
+  readonly bindAutomationPolicy: NonNullable<LoopAdmissionDeps['bindAutomationPolicy']>
+  readonly withWorkflowActionAuthorityLock: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
+  readonly workflowActionAuthority: LoopAdmissionDeps['workflowActionAuthority']
+}): Promise<{
+  readonly context: ExecutionContext
+  readonly run: BoundWorkflowRun
+  readonly authorization: WorkflowActionEvaluation
+}> {
+  const run = await bindAfkWorkflowRun(input)
+  const boundContext = Object.freeze({ ...input.context, workflow_run_id: run.id })
+  const authorityLock = input.withWorkflowActionAuthorityLock
+  const authorityResolver = input.workflowActionAuthority
+  if (authorityLock === undefined || authorityResolver === undefined) {
+    return {
+      context: boundContext,
+      run,
+      authorization: evaluateAfkAgainstBoundRun(run, missingDynamicAuthority()),
+    }
+  }
+  let evaluated: BoundAfkAuthorityEvaluation
+  try {
+    evaluated = await authorityLock((registry) =>
+      evaluateBoundAfkWorkflowAdmission({
+        change: input.change,
+        context: boundContext,
+        run,
+        registry,
+        workflowActionAuthority: authorityResolver,
+      }))
+  } catch (error) {
+    if (error instanceof WorkflowActionAuthorityResolutionError) throw error
+    throw new WorkflowActionAuthorityResolutionError(error)
+  }
+  const context = evaluated.binding === undefined
+    ? boundContext
+    : Object.freeze({ ...boundContext, workflow_action_authority: evaluated.binding })
+  return { context, run, authorization: evaluated.authorization }
 }
 
 type AdmissionJournal = ReturnType<typeof createAdmissionJournal>
+
+/**
+ * Re-resolves authority and performs the queued→scheduled claim before releasing the same
+ * TrackRegistry lock. Any drift/revocation therefore closes the reservation with zero charge
+ * without invoking the claim callback.
+ */
+export async function claimWithFreshAfkWorkflowAuthority(input: {
+  readonly context: ExecutionContext
+  readonly bindAutomationPolicy: LoopAdmissionDeps['bindAutomationPolicy']
+  readonly withWorkflowActionAuthorityLock: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
+  readonly workflowActionAuthority: LoopAdmissionDeps['workflowActionAuthority']
+  readonly claim: (expectedTrackId: string) => Promise<boolean>
+  readonly clock: () => string
+  readonly close: AdmissionJournal['close']
+  readonly closeRecord: AdmissionJournal['closeRecord']
+}): Promise<ClaimAuthorizationResult> {
+  const expected = input.context.workflow_action_authority
+  const bindAutomationPolicy = input.bindAutomationPolicy
+  const authorityLock = input.withWorkflowActionAuthorityLock
+  const authorityResolver = input.workflowActionAuthority
+  if (expected === undefined
+    || bindAutomationPolicy === undefined
+    || authorityLock === undefined
+    || authorityResolver === undefined) {
+    return closeWorkflowAuthorizationDenial({
+      context: input.context,
+      authorization: evaluateMissingAfkWorkflowAdmission(),
+      workflowRunId: input.context.workflow_run_id,
+      clock: input.clock,
+      close: input.close,
+      closeRecord: input.closeRecord,
+    })
+  }
+
+  let run: BoundWorkflowRun
+  try {
+    run = await bindAfkWorkflowRun({
+      change: input.context.change,
+      context: input.context,
+      bindAutomationPolicy,
+    })
+  } catch (bindingError) {
+    return compensateWorkflowBindingFailure({
+      context: input.context,
+      bindingError,
+      clock: input.clock,
+      close: input.close,
+      closeRecord: input.closeRecord,
+    })
+  }
+
+  let claimStarted = false
+  let fresh: BoundAfkAuthorityEvaluation & { readonly claimed?: boolean }
+  try {
+    fresh = await authorityLock(async (registry) => {
+      const evaluated = await evaluateBoundAfkWorkflowAdmission({
+        change: input.context.change,
+        context: input.context,
+        run,
+        registry,
+        workflowActionAuthority: authorityResolver,
+        expectedAuthority: expected,
+      })
+      if (!evaluated.authorization.allowed) return evaluated
+      claimStarted = true
+      return { ...evaluated, claimed: await input.claim(expected.track_id) }
+    })
+  } catch (error) {
+    if (claimStarted) throw error
+    const bindingError = error instanceof WorkflowActionAuthorityResolutionError
+      ? error
+      : new WorkflowActionAuthorityResolutionError(error)
+    return compensateWorkflowBindingFailure({
+      context: input.context,
+      bindingError,
+      clock: input.clock,
+      close: input.close,
+      closeRecord: input.closeRecord,
+    })
+  }
+
+  if (!fresh.authorization.allowed) {
+    return closeWorkflowAuthorizationDenial({
+      context: input.context,
+      authorization: fresh.authorization,
+      workflowRunId: run.id,
+      clock: input.clock,
+      close: input.close,
+      closeRecord: input.closeRecord,
+    })
+  }
+  return { ok: true, context: input.context, claimed: fresh.claimed ?? false }
+}
 
 /** Closes a policy-denied reservation without charging it and returns the structured denial. */
 export async function closeWorkflowAuthorizationDenial(input: {
@@ -195,7 +394,7 @@ export async function closeWorkflowAuthorizationDenial(input: {
   readonly clock: () => string
   readonly close: AdmissionJournal['close']
   readonly closeRecord: AdmissionJournal['closeRecord']
-}): Promise<ReserveResult> {
+}): Promise<AdmissionDenial> {
   const { context, authorization } = input
   const detail = authorization.denials.map((denial) => denial.code).join(',')
   await input.close(context.reservation_id, (reservation: BudgetReservationRecord): RunRecord => ({

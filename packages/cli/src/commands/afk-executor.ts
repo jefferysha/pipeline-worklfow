@@ -189,8 +189,10 @@ export async function runAfkRound(
     isSkillProfileKnown: deps.isSkillProfileKnown,
     bindAutomationPolicy: (change, policy, binding) =>
       deps.runRepo.bindAutomationPolicy(changeDir(deps.cwd, change), policy, binding),
-    workflowActionAuthority: ({ change, context, run }) =>
-      resolveAfkWorkflowActionAuthority(deps, change, context, run),
+    withWorkflowActionAuthorityLock: (use) =>
+      deps.withRegistryLock(({ registry }) => use(registry)),
+    workflowActionAuthority: ({ change, context, run, registry }) =>
+      resolveAfkWorkflowActionAuthority(deps, change, context, run, registry),
   })
 
   const preparation: ExecutionPreparationPort = createExecutionPreparation({

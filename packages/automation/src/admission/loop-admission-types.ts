@@ -21,8 +21,8 @@ import type {
   LoopLedgerStore,
   LoopRegistry,
   SkillBundleResolutionInput,
+  TrackRegistry,
   WorkflowActionEvaluation,
-  WorkflowPermissionLayerInput,
   WorkflowPlanSnapshot,
 } from '@tenon/kernel'
 import {
@@ -45,6 +45,7 @@ import {
   type ExecutionPreparationPort, type PrepareOutcome, type PreparationFailureReason,
   type PreparedExecutionContext, type PreparedSkillSlot,
 } from './execution-context.js'
+import type { WorkflowActionAuthorityFacts } from './workflow-action-authority-binding.js'
 
 export const errText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -113,6 +114,9 @@ export interface AdmissionDenial {
 }
 
 export type ReserveResult = { readonly ok: true; readonly context: ExecutionContext } | AdmissionDenial
+export type ClaimAuthorizationResult =
+  | { readonly ok: true; readonly context: ExecutionContext; readonly claimed: boolean }
+  | AdmissionDenial
 
 /** reserveOnce 的内部结果：正常 ReserveResult 或「epoch 变、须整轮重试」哨兵（#4）。 */
 export type ReserveOutcome = ReserveResult | { readonly retry: true }
@@ -196,6 +200,11 @@ export interface LoopAdmission {
     /** null=调用方显式覆盖 level；L1/L2/L3=selector 观察到的 loop 默认值，锁内必须仍相等。 */
     expectedAutonomyLevel?: AutomationLevel | null
   }): Promise<ReserveResult>
+  /** Final authoritative authority re-read and queued→scheduled claim under one TrackRegistry lock. */
+  claimWithFreshWorkflowAuthority(
+    ctx: ExecutionContext,
+    claim: (expectedTrackId: string) => Promise<boolean>,
+  ): Promise<ClaimAuthorizationResult>
   /** claim 成功后 ledger 锁内验证 reservation 未关闭且未过 expires_at → append reservation-activated。
    *  已关闭或 TTL 已过期并在锁内幂等关闭 → already-terminal（不追加晚到 activation）；ledger I/O
    *  故障 → throw（调用方 fail-loud，不进 running）。 */
@@ -280,6 +289,10 @@ export interface LoopAdmissionDeps {
     readonly workflowPlanFingerprint?: string
     readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
   }>
+  /** Holds the canonical TrackRegistry read lock through fresh resolution and the state claim. */
+  readonly withWorkflowActionAuthorityLock?: <T>(
+    use: (registry: TrackRegistry) => Promise<T>,
+  ) => Promise<T>
   /**
    * Fresh non-Workflow authorization facts. The service derives the Workflow layer only from the
    * immutable WorkflowRun snapshot, so callers cannot replace the frozen ceiling through this port.
@@ -295,12 +308,8 @@ export interface LoopAdmissionDeps {
       readonly loopId?: string
       readonly iterationId?: string
     }
-  }) => Promise<{
-    readonly platform: WorkflowPermissionLayerInput
-    readonly skill: WorkflowPermissionLayerInput
-    readonly project: WorkflowPermissionLayerInput
-    readonly run: WorkflowPermissionLayerInput
-  }>
+    readonly registry: TrackRegistry
+  }) => Promise<WorkflowActionAuthorityFacts>
 }
 
 /** 运行存活（#5）：'dead' 才可 reconcile 关闭 orphan；'alive'/'unknown' 一律保守保留占 in-flight。 */

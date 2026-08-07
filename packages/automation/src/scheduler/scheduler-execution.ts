@@ -113,7 +113,7 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         applyDenial(report, name, res) // denial 是治理常态，不进 failures、不改 ok
         return { ok: true, change: name }
       }
-      const ctx = res.context
+      let ctx = res.context
       report.admitted++
 
       // H11：命令层 scan 前检查不能替代此处——registry/skill 文件可能在两者间变化，且 SDK/AFK
@@ -152,9 +152,27 @@ export function createSchedulerExecution(input: SchedulerExecutionDeps) {
         }
       }
 
-      // ── claim queued→scheduled（reservation 已早于此 CAS 落盘）──
+      // ── fresh authority + claim：同一 TrackRegistry 锁内重验后才 queued→scheduled ──
       phase = 'claim'
-      const won = await state.claim(name)
+      const claimResult = await admission.claimWithFreshWorkflowAuthority(
+        ctx,
+        (expectedTrackId) => {
+          const authority = ctx.workflow_action_authority
+          return state.claim(name, expectedTrackId, authority === undefined ? undefined : {
+            workflowRunId: authority.workflow_run_id,
+            workflowId: authority.workflow_id,
+            workflowFingerprint: authority.workflow_fingerprint,
+            loopId: authority.loop_id,
+            iterationId: authority.iteration_id,
+          })
+        },
+      )
+      if (!claimResult.ok) {
+        applyDenial(report, name, claimResult)
+        return { ok: true, change: name }
+      }
+      ctx = claimResult.context
+      const won = claimResult.claimed
       if (!won) {
         phase = 'settlement'
         await tryLedger(report, name, 'settlement', () => admission.settleLost(ctx)) // 幂等关闭扣 0

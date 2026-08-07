@@ -2,14 +2,19 @@ import {
   parseSkillActionAuthorityContract,
   type ExecutionContext,
 } from '@tenon/automation'
-import { requireTrack, resolveWorkflowName, type WorkflowPermissionLayerInput } from '@tenon/kernel'
+import {
+  requireTrack,
+  resolveWorkflowName,
+  type TrackRegistry,
+  type WorkflowPermissionLayerInput,
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
 import { str } from '../render.js'
 
 /** Fresh non-Workflow facts consumed by the authoritative pre-claim five-layer evaluator. */
 export async function resolveAfkWorkflowActionAuthority(
-  deps: Pick<CliDeps, 'cwd' | 'store' | 'loadRegistry' | 'resolveSkillActionAuthority'>,
+  deps: Pick<CliDeps, 'cwd' | 'store' | 'resolveSkillActionAuthority'>,
   change: string,
   context: Pick<ExecutionContext, 'skill_bundle_id' | 'loop_id' | 'iteration_id'>,
   run: {
@@ -19,15 +24,25 @@ export async function resolveAfkWorkflowActionAuthority(
     readonly loopId?: string
     readonly iterationId?: string
   },
+  registry: TrackRegistry,
 ) {
   const state = await deps.store.read(changeDir(deps.cwd, change))
   let project: { status: 'valid' | 'malformed'; grants: readonly ['enter-afk'] | readonly [] }
+  let projectAuthority: {
+    readonly version: 'v1'
+    readonly track_id: string
+    readonly track_registry_revision: string
+  } | undefined
   const trackId = str(state.fields.track)
-  const registry = trackId === '' ? undefined : await deps.loadRegistry()
   try {
-    const allowed = trackId !== '' && registry !== undefined
-      && requireTrack(registry, trackId).policyProfile.automationEligible
+    const track = requireTrack(registry, trackId)
+    const allowed = track.policyProfile.automationEligible
     project = { status: 'valid', grants: allowed ? ['enter-afk'] : [] }
+    projectAuthority = {
+      version: 'v1',
+      track_id: track.id,
+      track_registry_revision: registry.revision,
+    }
   } catch {
     project = { status: 'malformed', grants: [] }
   }
@@ -70,5 +85,6 @@ export async function resolveAfkWorkflowActionAuthority(
     skill,
     project,
     run: runLayer,
+    ...(projectAuthority === undefined ? {} : { projectAuthority }),
   }
 }

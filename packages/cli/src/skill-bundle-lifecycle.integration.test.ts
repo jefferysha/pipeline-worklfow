@@ -31,12 +31,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
+  BUILTIN_TRACK_DEFINITIONS,
   compileEffectiveWorkflowPlan, createEffectiveSkillResolver, createLoopLedgerStore, createLoopsYamlText,
   createStateStore, createTransitionRecordStore, createWorkflowRunRepository,
   ledgerDirPath, ledgerFilePath, loadManifest, loadRegistry, nodeLoopIoStrict,
   readRegistrySnapshot, updateLoopInYaml, writeRegistryWithGovernance,
   workflowPlanSnapshot,
-  type ExtendedManifestData, type LoopLedgerStore, type NewLoopEntryInput, type StateStore,
+  type ExtendedManifestData, type LoopLedgerStore, type NewLoopEntryInput, type StateStore, type TrackRegistry,
   type VerificationResult, type WorkflowRunRepository,
 } from '@tenon/kernel'
 import {
@@ -54,6 +55,12 @@ import { createExecutionCoordinatePort } from './skillBundleAssembly.js'
 const PROFILE = 'backend' // 具名 profile（词法与存在性都合法，见 registry.ts::SKILL_BUNDLE_ID_RE + 下方 isSkillProfileKnown）
 const SKILL_ID = 'demo-skill'
 const FIXED_CLOCK = '2026-07-18T00:00:00.000Z'
+const TEST_TRACK_REGISTRY: TrackRegistry = {
+  ordered: BUILTIN_TRACK_DEFINITIONS,
+  byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+  revision: '0123456789abcdef',
+  source: 'builtin-only',
+}
 const AFK_WORKFLOW = compileEffectiveWorkflowPlan('skill-bundle-afk', {
   name: 'skill-bundle-afk',
   interaction: { version: 'v1', mode: 'afk' },
@@ -194,6 +201,7 @@ function exactWorkflowActionAuthority(store: StateStore, repoRoot: string) {
       id: string; workflowId?: string; workflowPlanFingerprint?: string
       loopId?: string; iterationId?: string
     }
+    registry: TrackRegistry
   }) => {
     const state = await store.read(changeDir(repoRoot, input.change))
     const metadata = state.runMetadata
@@ -222,6 +230,11 @@ function exactWorkflowActionAuthority(store: StateStore, repoRoot: string) {
       run: exact
         ? { status: 'valid' as const, grants: ['enter-afk' as const] }
         : { status: 'fingerprint-mismatch' as const, grants: [] },
+      projectAuthority: {
+        version: 'v1' as const,
+        track_id: 'backend',
+        track_registry_revision: input.registry.revision,
+      },
     }
   }
 }
@@ -283,6 +296,7 @@ function buildAdmission(rig: Rig): LoopAdmission {
     isSkillProfileKnown: (id) => id === PROFILE,
     bindAutomationPolicy: (change, policy, binding) =>
       rig.runRepo.bindAutomationPolicy(changeDir(rig.repoRoot, change), policy, binding),
+    withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
     workflowActionAuthority: exactWorkflowActionAuthority(rig.store, rig.repoRoot),
   })
 }
@@ -713,6 +727,7 @@ describe('旧 ledger JSONL fixture 回归 —— 手写历史行与新真实 res
       getAutomation: (c) => getAutomation(store, changeDir(repoRoot, c)), isSkillProfileKnown: (id) => id === PROFILE,
       bindAutomationPolicy: (name, policy, binding) =>
         runRepo.bindAutomationPolicy(changeDir(repoRoot, name), policy, binding),
+      withWorkflowActionAuthorityLock: async (use) => use(TEST_TRACK_REGISTRY),
       workflowActionAuthority: exactWorkflowActionAuthority(store, repoRoot),
     })
     const result = await admission.reserve(change)

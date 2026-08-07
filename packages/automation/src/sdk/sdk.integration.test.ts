@@ -2,14 +2,18 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  BUILTIN_TRACK_DEFINITIONS,
   compileEffectiveWorkflowPlan,
   createLoopLedgerStore,
   createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
   latestChangeLoopBinding,
   loadRegistry,
   workflowPlanSnapshot,
   type LoopEntry,
   type TrackPolicyProfile,
+  type TrackRegistry,
   type VerificationResult,
 } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -40,27 +44,41 @@ const AFK_WORKFLOW_PLAN = compileEffectiveWorkflowPlan('sdk-afk', {
 })
 const AFK_WORKFLOW_SNAPSHOT = workflowPlanSnapshot(AFK_WORKFLOW_PLAN)
 const AFK_GRANT = { status: 'valid', grants: ['enter-afk'] } as const
+const AUTH_TRACK_REGISTRY: TrackRegistry = {
+  ordered: BUILTIN_TRACK_DEFINITIONS,
+  byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+  revision: '0123456789abcdef',
+  source: 'builtin-only',
+}
 
-const authorizedWorkflowPorts = (): Pick<
+const authorizedWorkflowPorts = (
+  repoRoot: string,
+  store: ReturnType<typeof createStateStore>,
+): Pick<
   LoopAdmissionDeps,
-  'bindAutomationPolicy' | 'workflowActionAuthority'
-> => ({
-  bindAutomationPolicy: async (_change, automationPolicy, binding) => ({
-    id: 'workflow-run-sdk',
-    automationPolicy,
-    loopId: binding.loopId,
-    iterationId: binding.iterationId,
-    workflowId: AFK_WORKFLOW_PLAN.id,
-    workflowPlanFingerprint: AFK_WORKFLOW_PLAN.workflowFingerprint,
-    workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
-  }),
-  workflowActionAuthority: async () => ({
-    platform: AFK_GRANT,
-    skill: AFK_GRANT,
-    project: AFK_GRANT,
-    run: AFK_GRANT,
-  }),
-})
+  'bindAutomationPolicy' | 'withWorkflowActionAuthorityLock' | 'workflowActionAuthority'
+> => {
+  const runRepo = createWorkflowRunRepository({
+    store,
+    recordStore: createTransitionRecordStore(),
+    clock: () => '2026-07-07T00:00:00Z',
+    newId: () => 'workflow-run-sdk',
+  })
+  return {
+    bindAutomationPolicy: (change, automationPolicy, binding) =>
+      runRepo.bindAutomationPolicy(join(repoRoot, 'openspec', 'changes', change), automationPolicy, binding),
+    withWorkflowActionAuthorityLock: async (use) => use(AUTH_TRACK_REGISTRY),
+    workflowActionAuthority: async ({ registry }) => ({
+      platform: AFK_GRANT,
+      skill: AFK_GRANT,
+      project: AFK_GRANT,
+      run: AFK_GRANT,
+      projectAuthority: {
+        version: 'v1', track_id: 'backend', track_registry_revision: registry.revision,
+      },
+    }),
+  }
+}
 
 /** H7 verifier Phase 2：trusted passed，SHA 对齐下方 fake runChange 的 buildSha——scheduler 的
  *  verification gate（fail-closed）要求 L3 merged 必须有 trusted+SHA 相符的结构化 verdict，光
@@ -114,6 +132,9 @@ const passAdmission = (level: 'L1' | 'L2' | 'L3' = 'L1'): LoopAdmission => ({
   reserve: async (change): Promise<{ ok: true; context: ExecutionContext }> => ({
     ok: true,
     context: passAdmissionContext(level, change),
+  }),
+  claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+    ok: true, context: ctx, claimed: await claim('backend'),
   }),
   activate: async (): Promise<ActivateResult> => ({ status: 'activated' }),
   settleWon: async () => {},
@@ -286,13 +307,14 @@ loops:
     const runChange = vi.fn(async (): Promise<RunOutcome> => ({
       commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
     }))
-    const { bindAutomationPolicy } = authorizedWorkflowPorts()
+    const { bindAutomationPolicy, withWorkflowActionAuthorityLock } = authorizedWorkflowPorts(root, store)
     const afk = createAutomation({
       repoRoot: root,
       store,
       clock,
       config: { level: 'L1' },
       bindAutomationPolicy,
+      withWorkflowActionAuthorityLock,
       workflowActionAuthority: async () => { throw new Error('authority read EIO') },
     })
     await afk.enqueue('sdk-authority-read-error', eligiblePolicy)
@@ -347,7 +369,7 @@ loops:
       store,
       clock,
       config: { level: 'L1' },
-      ...authorizedWorkflowPorts(),
+      ...authorizedWorkflowPorts(root, store),
       preparation: createEmptyBundlePreparation(),
       validateExecutionWiring: trustTestAdmissionWiring,
       interactionReceipts: { verifiedReceiptsFor: async () => [] },
@@ -362,7 +384,21 @@ loops:
   })
 
   it('default admission keeps bundle-bound execution blocked without explicit preparation', async () => {
-    const dir = await initBuild('sdk-no-preparation')
+    const dir = await store.init({
+      repoRoot: root,
+      name: 'sdk-no-preparation',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock,
+      runId: 'workflow-run-sdk',
+      initialWorkflow: {
+        workflow: AFK_WORKFLOW_PLAN.id,
+        phase: 'build',
+        workflowPlanFingerprint: AFK_WORKFLOW_PLAN.workflowFingerprint,
+        workflowPlanSnapshot: AFK_WORKFLOW_SNAPSHOT,
+      },
+    })
     await seedDefaultAdmissionLoop('sdk-')
     const runChange = vi.fn(async (): Promise<RunOutcome> => ({
       commits: [], verifyResult: 'pass', phaseEvent: 'verify-pass',
@@ -372,7 +408,7 @@ loops:
       store,
       clock,
       config: { level: 'L1' },
-      ...authorizedWorkflowPorts(),
+      ...authorizedWorkflowPorts(root, store),
       validateExecutionWiring: trustTestAdmissionWiring,
     })
     await afk.enqueue('sdk-no-preparation', eligiblePolicy)

@@ -93,6 +93,8 @@ export interface AutomationDeps {
   readonly admission?: LoopAdmission
   /** Canonical WorkflowRun policy binding used only by the default admission wiring. */
   readonly bindAutomationPolicy?: LoopAdmissionDeps['bindAutomationPolicy']
+  /** Holds the exact TrackRegistry snapshot through final authority resolution and state claim. */
+  readonly withWorkflowActionAuthorityLock?: LoopAdmissionDeps['withWorkflowActionAuthorityLock']
   /** Fresh non-Workflow permission layers used only by the default admission wiring. */
   readonly workflowActionAuthority?: LoopAdmissionDeps['workflowActionAuthority']
   /** ExecutionContext.image（写进 reservation 快照的沙箱镜像）；缺省 admission 装配点透传。 */
@@ -176,7 +178,8 @@ const scalar = (v: string | string[] | undefined): string => (typeof v === 'stri
 
 /** 把 kernel StateStore 适配成 scheduler 的 StateWriter port（每个方法定位到 changeDir(name)）。 */
 export const storeWriter = (store: StateStore, changeDir: (name: string) => string): StateWriter => ({
-  claim: (name) => claim(store, changeDir(name)),
+  claim: (name, expectedTrackId, expectedRun) =>
+    claim(store, changeDir(name), expectedTrackId, expectedRun),
   setAutomation: (name, s) => store.set(changeDir(name), 'automation', s),
   setField: (name, field, value) => store.set(changeDir(name), field as never, value),
   commitFailureOwned: (name, input) => commitFailureOwned(store, changeDir(name), input),
@@ -213,6 +216,7 @@ export function createAutomation(deps: AutomationDeps): Automation {
     image: deps.image,
     getAutomation: (change) => getAutomation(store, changeDir(change)),
     bindAutomationPolicy: deps.bindAutomationPolicy,
+    withWorkflowActionAuthorityLock: deps.withWorkflowActionAuthorityLock,
     workflowActionAuthority: deps.workflowActionAuthority,
   })
   // 二次任务（queued 卡死回归修复）：路由 SchedulerDeps.preparation——缺省 createDefaultExecutionPreparation()

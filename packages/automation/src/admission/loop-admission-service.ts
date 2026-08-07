@@ -42,6 +42,7 @@ import {
 import { createAdmissionJournal } from './loop-admission-journal.js'
 import {
   bindAndEvaluateAfkWorkflowRun,
+  claimWithFreshAfkWorkflowAuthority,
   closeWorkflowAuthorizationDenial,
   compensateWorkflowBindingFailure,
   evaluateMissingAfkWorkflowAdmission,
@@ -49,7 +50,7 @@ import {
 export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
   const {
     repoRoot, ledger, loadRegistry, clock, level, image, getAutomation, isSkillProfileKnown,
-    bindAutomationPolicy, workflowActionAuthority,
+    bindAutomationPolicy, withWorkflowActionAuthorityLock, workflowActionAuthority,
   } = deps
   const ttlMs = deps.reservationTtlMs ?? DEFAULT_TTL_MS
   const newId = deps.newId ?? makeIdGen()
@@ -99,14 +100,8 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
     }
   }
 
-  /**
-   * orphan 最小 reconcile（Stage B 返工 #5，不加 heartbeat/lease/CLI）——**在任何 ledger 锁
-   * 之外调用**（reserve 主临界区前的 pre-phase）：锁序铁律 `governance→ledger` 内禁 change lock，故
-   * change CAS 与 ledger close 各自独立临界区、绝不同持。未 activate 且 TTL 已过时：queued 可直接
-   * close；scheduled 必须先 owner CAS→queued，成功后才 close。CAS false/throw 保留 open；若 CAS 已
-   * 落盘但进程在 close 前崩溃，下轮看到 queued 再直接 close。activated orphan 仅当存活证据明确
-   * 「dead」才恢复；alive/unknown 保守保留占 in-flight（不猜关闭，宁堵不误杀真长任务）。
-   */
+  /** Orphan reconcile runs outside ledger locks: change CAS and ledger close are independent.
+   *  Unknown/alive executions stay open; only explicit dead evidence permits activated recovery. */
   const reconcileOrphans = async (): Promise<void> => {
     const read = await ledger.read(repoRoot).catch(() => null)
     if (read === null || read.rejected.length > 0) return // 读失败/坏行 → 本轮不 reconcile（不猜）
@@ -202,6 +197,7 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
           change,
           context: outcome.context,
           bindAutomationPolicy,
+          withWorkflowActionAuthorityLock,
           workflowActionAuthority,
         })
         if (authorization.allowed) return { ok: true, context }
@@ -290,13 +286,8 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
       if (!admissionConstraint.allowed) {
         return { ok: false, action: 'skip-run', reason: 'loop-inactive', detail: `loop「${loop1.id}」status=${loop1.status}（非 active，硬拒）`, loopId: loop1.id }
       }
-      // H10 §1/§5：skill bundle wiring 硬闸——字段缺失/null（unwired）或具名 profile 经真校验器判定
-      // 不存在都是持久 wiring 错误：admission 拒绝、绝不创建 reservation，治理入口暂停 loop（否则
-      // 一个从未接线/接错线的 loop 会被无人确认地放行 real-run）。只需在 loop1 上判定一次——
-      // loop2 若 skill_bundle_id 有变化，下方 loopMaterialUnchanged(loop1, loop2)（已纳入
-      // skill_bundle_id 比较，见 governance.ts）会使整轮 { retry: true } 重新走一遍本判定，
-      // 不会绕过。校验能力尚未装配（未注入 isSkillProfileKnown 且非 '_all'）不是「不存在」，
-      // throw 而非返回业务 denial（见 SkillProfileValidatorUnconfiguredError 头注）。
+      // H10 §1/§5：缺失或未知 bundle 是持久 wiring 错误；不建 reservation 并暂停 loop。
+      // loopMaterialUnchanged 会捕获复验期间的 bundle 变化；未装配校验器则 fail-loud。
       const bundleId1 = loop1.skill_bundle_id
       if (bundleId1 === null || bundleId1 === undefined) {
         return { ok: false, action: 'pause-loop', reason: 'skill-bundle-unwired', detail: `loop「${loop1.id}」skill_bundle_id 未接线（缺省/null）——fail-closed 拒绝 real-run`, loopId: loop1.id }
@@ -483,7 +474,15 @@ export function createLoopAdmission(deps: LoopAdmissionDeps): LoopAdmission {
     return loop !== undefined && loop.status === 'active'
   }
 
-  return { reserve, activate, recordProviderUsage, settleWon, settleLost, recordMergeIntent, recordMergeLanded, isActive }
+  return {
+    reserve,
+    claimWithFreshWorkflowAuthority: (context, claim) => claimWithFreshAfkWorkflowAuthority({
+      context, bindAutomationPolicy, withWorkflowActionAuthorityLock, workflowActionAuthority,
+      claim, clock, close, closeRecord,
+    }),
+    activate, recordProviderUsage, settleWon, settleLost,
+    recordMergeIntent, recordMergeLanded, isActive,
+  }
 }
 
 // H10 §3/§8任务5：prepareSkillBundle 编排——claim 成功（queued→scheduled）之后、activate

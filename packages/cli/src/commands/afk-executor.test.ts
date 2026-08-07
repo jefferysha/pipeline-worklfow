@@ -45,6 +45,16 @@ function withEnterAfkSkillAuthority(deps: ReturnType<typeof makeDeps>) {
   return deps
 }
 
+async function resolveTestAfkWorkflowActionAuthority(
+  deps: ReturnType<typeof makeDeps>,
+  change: string,
+  context: Parameters<typeof resolveAfkWorkflowActionAuthority>[2],
+  run: Parameters<typeof resolveAfkWorkflowActionAuthority>[3],
+) {
+  const registry = deps.loadRegistry()
+  return resolveAfkWorkflowActionAuthority(deps, change, context, run, registry)
+}
+
 const report = (over: Partial<RoundReport> = {}): RoundReport => ({
   candidates: 1,
   admitted: 1,
@@ -315,7 +325,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
       },
     }
 
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       makeDeps({ cwd: '/repo', state }),
       'ready-a',
       { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -337,7 +347,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
       },
     }
 
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       makeDeps({ cwd: '/repo', state }),
       'ready-a',
       { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -365,7 +375,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
     const resolver = vi.fn(async (query) => skillActionAuthorityContract(query, ['enter-afk']))
     deps.resolveSkillActionAuthority = resolver
 
-    await expect(resolveAfkWorkflowActionAuthority(deps, 'ready-a', {
+    await expect(resolveTestAfkWorkflowActionAuthority(deps, 'ready-a', {
       skill_bundle_id: '_all',
       loop_id: 'lp',
       iteration_id: 'iteration-current',
@@ -374,6 +384,11 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
       skill: { status: 'valid', grants: ['enter-afk'] },
       project: { status: 'valid', grants: ['enter-afk'] },
       run: { status: 'valid', grants: ['enter-afk'] },
+      projectAuthority: {
+        version: 'v1',
+        track_id: 'backend',
+        track_registry_revision: deps.loadRegistry().revision,
+      },
     })
     expect(resolver).toHaveBeenCalledOnce()
     expect(resolver).toHaveBeenCalledWith({
@@ -392,7 +407,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
     })
     deps.loadRegistry = () => { throw providerError }
 
-    await expect(resolveAfkWorkflowActionAuthority(
+    await expect(resolveTestAfkWorkflowActionAuthority(
       deps,
       'ready-a',
       { skill_bundle_id: null, loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -401,7 +416,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
   })
 
   it('keeps an unknown track as the deterministic malformed project-policy denial', async () => {
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       makeDeps({
         cwd: '/repo',
         state: mockState({ track: 'unknown-track', automation: 'queued' }),
@@ -422,7 +437,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
     })
     deps.resolveSkillActionAuthority = async () => { throw providerError }
 
-    await expect(resolveAfkWorkflowActionAuthority(
+    await expect(resolveTestAfkWorkflowActionAuthority(
       deps,
       'ready-a',
       { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -437,7 +452,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
     })
     deps.resolveSkillActionAuthority = async () => ({ malformed: true })
 
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       deps,
       'ready-a',
       { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -459,7 +474,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
       },
     }
 
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       withEnterAfkSkillAuthority(makeDeps({ cwd: '/repo', state })),
       'ready-a',
       { skill_bundle_id: '_all', loop_id: 'lp', iteration_id: 'iteration-current' },
@@ -489,7 +504,7 @@ describe('resolveAfkWorkflowActionAuthority · PR3 fresh non-Workflow layers', (
         iterationId: exactRun.iterationId,
       },
     }
-    const facts = await resolveAfkWorkflowActionAuthority(
+    const facts = await resolveTestAfkWorkflowActionAuthority(
       withEnterAfkSkillAuthority(makeDeps({ cwd: '/repo', state })),
       'ready-a',
       { skill_bundle_id: skillBundleId, loop_id: 'lp', iteration_id: 'iteration-current' },

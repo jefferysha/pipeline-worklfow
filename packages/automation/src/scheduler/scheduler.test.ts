@@ -136,6 +136,7 @@ const fakePreparation = (over: FakePreparationOver = {}) => {
 
 interface FakeAdmissionOver {
   reserve?: (change: string) => Promise<ReserveResult>
+  claimWithFreshWorkflowAuthority?: AdmissionPort['claimWithFreshWorkflowAuthority']
   activate?: (ctx: ExecutionContext) => Promise<ActivateResult>
   settleWon?: (ctx: ExecutionContext, s: RunSettlement) => Promise<void>
   settleLost?: (ctx: ExecutionContext) => Promise<void>
@@ -144,9 +145,13 @@ interface FakeAdmissionOver {
 
 /** 极小 admission fake（缺省全放行）：记录调用序，供断言编排。 */
 const fakeAdmission = (over: FakeAdmissionOver = {}) => {
-  const calls = { reserve: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
+  const calls = { reserve: [] as string[], authorityClaim: [] as string[], activate: [] as string[], settleWon: [] as { change: string; s: RunSettlement }[], settleLost: [] as string[], isActive: 0 }
   const admission: AdmissionPort = {
     reserve: over.reserve ?? (async (change) => { calls.reserve.push(change); return { ok: true, context: ctxFor(change) } }),
+    claimWithFreshWorkflowAuthority: over.claimWithFreshWorkflowAuthority ?? (async (ctx, claim) => {
+      calls.authorityClaim.push(ctx.change)
+      return { ok: true, context: ctx, claimed: await claim('backend') }
+    }),
     activate: over.activate ?? (async (ctx): Promise<ActivateResult> => { calls.activate.push(ctx.change); return { status: 'activated' } }),
     settleWon: over.settleWon ?? (async (ctx, s) => { calls.settleWon.push({ change: ctx.change, s }) }),
     settleLost: over.settleLost ?? (async (ctx) => { calls.settleLost.push(ctx.change) }),
@@ -1175,6 +1180,9 @@ describe('H10 §3/§8任务5：prepareSkillBundle 编排（claim 之后、activa
     const order: string[] = []
     const admission: AdmissionPort = {
       reserve: async (change) => ({ ok: true, context: ctxFor(change) }),
+      claimWithFreshWorkflowAuthority: async (ctx, claim) => ({
+        ok: true, context: ctx, claimed: await claim('backend'),
+      }),
       activate: async () => { order.push('activate'); return { status: 'activated' } },
       settleWon: async () => { order.push('settleWon') },
       settleLost: async () => {},
