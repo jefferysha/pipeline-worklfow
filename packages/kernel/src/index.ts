@@ -85,7 +85,10 @@ export {
   WORKFLOW_INTERACTION_MODES,
   workflowPolicyPermissionLayer,
 } from './workflow/policy.js'
-export { evaluateWorkflowDecompositionMaterialization } from './workflow/decomposition-policy-evaluator.js'
+export {
+  evaluateWorkflowDecompositionMaterialization,
+  workflowDecompositionCandidateFingerprint,
+} from './workflow/decomposition-policy-evaluator.js'
 export type {
   EvaluateWorkflowDecompositionMaterializationInput,
   WorkflowDecompositionCandidate,

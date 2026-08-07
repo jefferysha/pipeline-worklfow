@@ -177,6 +177,58 @@ describe('workflow action permission intersection', () => {
     expect(result.denials).toContainEqual(expect.objectContaining({ code: 'hard-confirmation-required' }))
   })
 
+  it('hard-blocks missing authorization even with an exact hard confirmation', () => {
+    const result = evaluateWorkflowAction({
+      action: 'write-filesystem',
+      classification: 'missing-authorization',
+      interactionMode: 'afk',
+      layers: allLayers,
+      authority: {
+        authority_id: 'authority-1',
+        workflow_run_id: 'run-1',
+        workflow_fingerprint: 'a'.repeat(64),
+      },
+      hardConfirmation: {
+        status: 'confirmed',
+        authority_id: 'authority-1',
+        action: 'write-filesystem',
+        workflow_run_id: 'run-1',
+        workflow_fingerprint: 'a'.repeat(64),
+      },
+    })
+
+    expect(result).toMatchObject({ allowed: false, status: 'hard-blocked' })
+    expect(result.denials).toContainEqual(expect.objectContaining({
+      code: 'missing-authorization-hard-blocked',
+    }))
+  })
+
+  it.each(['production', 'irreversible'] as const)(
+    'allows legitimate exact confirmation for %s',
+    (classification) => {
+      const result = evaluateWorkflowAction({
+        action: 'write-filesystem',
+        classification,
+        interactionMode: 'afk',
+        layers: allLayers,
+        authority: {
+          authority_id: 'authority-1',
+          workflow_run_id: 'run-1',
+          workflow_fingerprint: 'a'.repeat(64),
+        },
+        hardConfirmation: {
+          status: 'confirmed',
+          authority_id: 'authority-1',
+          action: 'write-filesystem',
+          workflow_run_id: 'run-1',
+          workflow_fingerprint: 'a'.repeat(64),
+        },
+      })
+
+      expect(result).toMatchObject({ allowed: true, status: 'allowed', denials: [] })
+    },
+  )
+
   it.each([
     ['authority', { authority_id: 'other-authority' }],
     ['action', { action: 'publish-external' }],

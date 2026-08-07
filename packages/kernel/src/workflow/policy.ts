@@ -274,6 +274,15 @@ export function evaluateWorkflowAction(input: EvaluateWorkflowActionInput): Work
       remediation: 'repair-authority-binding',
     })
   }
+  if (classificationValid && input.classification === 'missing-authorization') {
+    // Missing authority is itself an unresolvable hard boundary. A matching confirmation
+    // cannot manufacture the authorization that the classification says is absent.
+    hasMissing = true
+    denials.push({
+      code: 'missing-authorization-hard-blocked',
+      remediation: 'repair-authority-binding',
+    })
+  }
   const runtimeLayers: unknown = input.layers
   const layerRecord = typeof runtimeLayers === 'object' && runtimeLayers !== null && !Array.isArray(runtimeLayers)
     ? runtimeLayers as Record<string, unknown>

@@ -1,14 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateWorkflowDecompositionMaterialization } from './decomposition-policy-evaluator.js'
+import {
+  evaluateWorkflowDecompositionMaterialization,
+  workflowDecompositionCandidateFingerprint,
+} from './decomposition-policy-evaluator.js'
+import type { WorkflowDecompositionCandidate } from './decomposition-policy-evaluator.js'
 import type { WorkflowDecompositionPolicyV1 } from './types.js'
 
 const RUN_FINGERPRINT = 'a'.repeat(64)
-const CANDIDATE_FINGERPRINT = 'c'.repeat(64)
+const EXECUTABLE_PLAN_DIGEST = 'e'.repeat(64)
 const authority = {
   authority_id: 'authority-1',
   workflow_run_id: 'run-1',
   workflow_fingerprint: RUN_FINGERPRINT,
 } as const
+
+type CandidateSemantics = Omit<WorkflowDecompositionCandidate, 'candidate_fingerprint' | 'executable_plan_digest'> & {
+  readonly executable_plan_digest: string
+}
+
+function canonicalCandidateFingerprint(candidate: CandidateSemantics): string {
+  return workflowDecompositionCandidateFingerprint(candidate)
+}
+
+function candidate(overrides: Partial<CandidateSemantics> = {}) {
+  const semantics: CandidateSemantics = {
+    item_count: 2,
+    resulting_depth: 1,
+    matched_auto_when: ['independent-work-items'],
+    triggered_ask_when: [],
+    classification: 'routine-reversible',
+    executable_plan_digest: EXECUTABLE_PLAN_DIGEST,
+    ...overrides,
+  }
+  return { ...semantics, candidate_fingerprint: canonicalCandidateFingerprint(semantics) }
+}
+
+const CANDIDATE_FINGERPRINT = candidate().candidate_fingerprint
 
 function policy(
   overrides: Partial<WorkflowDecompositionPolicyV1> = {},
@@ -33,14 +60,7 @@ function input(overrides: Record<string, unknown> = {}) {
     interactionMode: 'afk' as const,
     authority,
     layers: { platform: grant, skill: grant, project: grant, run: grant },
-    candidate: {
-      item_count: 2,
-      resulting_depth: 1,
-      matched_auto_when: ['independent-work-items'],
-      triggered_ask_when: [],
-      candidate_fingerprint: CANDIDATE_FINGERPRINT,
-      classification: 'routine-reversible',
-    },
+    candidate: candidate(),
     ...overrides,
   }
 }
@@ -186,6 +206,63 @@ describe('authoritative decomposition materialization', () => {
       },
     }))
     expect(result).toMatchObject({ allowed: true, status: 'allowed' })
+  })
+
+  it('rejects require-review when the executable plan identity is absent', () => {
+    const base = input({
+      policy: policy({ mode: 'require-review' }),
+      review: {
+        event_id: 'review-event-7',
+        receipt: {
+          status: 'approved',
+          event_id: 'review-event-7',
+          action: 'materialize-work-items',
+          candidate_fingerprint: CANDIDATE_FINGERPRINT,
+          ...authority,
+        },
+      },
+    })
+    const candidateWithoutPlan = { ...base.candidate, executable_plan_digest: undefined }
+    const result = evaluateWorkflowDecompositionMaterialization({
+      ...base,
+      candidate: candidateWithoutPlan,
+    } as unknown as Parameters<typeof evaluateWorkflowDecompositionMaterialization>[0])
+
+    expect(result).toMatchObject({ allowed: false, status: 'hard-blocked' })
+  })
+
+  it.each([
+    ['item count', { item_count: 3 }],
+    ['resulting depth', { resulting_depth: 2 }],
+    ['matched auto condition', { matched_auto_when: ['context-budget-risk'] }],
+    ['triggered ask condition', { triggered_ask_when: ['ambiguous-requirements'] }],
+    ['classification', { classification: 'irreversible' }],
+    ['executable plan digest', { executable_plan_digest: 'f'.repeat(64) }],
+  ] as const)('rejects a receipt when %s changes under a reused candidate fingerprint', (_label, mutation) => {
+    const result = evaluateWorkflowDecompositionMaterialization(input({
+      policy: policy({ mode: 'require-review' }),
+      candidate: { ...input().candidate, ...mutation },
+      hardConfirmation: {
+        status: 'confirmed',
+        ...authority,
+        action: 'materialize-work-items',
+      },
+      review: {
+        event_id: 'review-event-7',
+        receipt: {
+          status: 'approved',
+          event_id: 'review-event-7',
+          action: 'materialize-work-items',
+          candidate_fingerprint: CANDIDATE_FINGERPRINT,
+          ...authority,
+        },
+      },
+    }))
+
+    expect(result).toMatchObject({ allowed: false, status: 'hard-blocked' })
+    expect(result.denials).toContainEqual(expect.objectContaining({
+      code: 'decomposition-review-receipt-mismatch',
+    }))
   })
 
   it('hard-blocks missing authorization even with an exact require-review receipt', () => {

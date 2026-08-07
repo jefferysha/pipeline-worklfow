@@ -12,6 +12,7 @@ import {
   type WorkflowPermissionDenial,
   type WorkflowPermissionLayers,
 } from './policy.js'
+import { sha256Hex } from '../sha256.js'
 import type {
   WorkflowDecompositionAskCondition,
   WorkflowDecompositionAutoCondition,
@@ -26,6 +27,8 @@ export interface WorkflowDecompositionCandidate {
   readonly triggered_ask_when: readonly WorkflowDecompositionAskCondition[]
   readonly candidate_fingerprint: string
   readonly classification: WorkflowActionClassification
+  /** Required for require-review receipts; optional keeps auto-safe legacy callers compatible. */
+  readonly executable_plan_digest?: string
 }
 
 export type WorkflowDecompositionReviewReceipt =
@@ -66,6 +69,27 @@ function nonEmpty(value: unknown): value is string {
 
 function digest(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+}
+
+/**
+ * Computes the canonical identity of a decomposition decision and the executable plan it names.
+ * Every current semantic candidate field is listed explicitly so receipt verification cannot
+ * silently drift when this contract changes.
+ */
+export function workflowDecompositionCandidateFingerprint(
+  candidate: Omit<WorkflowDecompositionCandidate, 'candidate_fingerprint' | 'executable_plan_digest'> & {
+    readonly executable_plan_digest: string
+  },
+): string {
+  return sha256Hex(JSON.stringify({
+    schema: 'workflow-decomposition-candidate-v1',
+    item_count: candidate.item_count,
+    resulting_depth: candidate.resulting_depth,
+    matched_auto_when: [...candidate.matched_auto_when],
+    triggered_ask_when: [...candidate.triggered_ask_when],
+    classification: candidate.classification,
+    executable_plan_digest: candidate.executable_plan_digest,
+  }))
 }
 
 function closedUniqueList<T extends string>(value: unknown, allowed: readonly T[]): value is readonly T[] {
@@ -122,6 +146,11 @@ function exactReviewReceipt(
   const authority = input.authority
   const review = input.review
   const receipt = review?.receipt
+  const canonicalCandidateFingerprint = digest(input.candidate.executable_plan_digest)
+    ? workflowDecompositionCandidateFingerprint(input.candidate as WorkflowDecompositionCandidate & {
+      readonly executable_plan_digest: string
+    })
+    : undefined
   return receipt?.status === 'approved'
     && nonEmpty(review?.event_id)
     && nonEmpty(authority?.authority_id)
@@ -132,7 +161,9 @@ function exactReviewReceipt(
     && receipt.action === action
     && receipt.workflow_run_id === authority.workflow_run_id
     && receipt.workflow_fingerprint === authority.workflow_fingerprint
-    && receipt.candidate_fingerprint === input.candidate.candidate_fingerprint
+    && canonicalCandidateFingerprint !== undefined
+    && input.candidate.candidate_fingerprint === canonicalCandidateFingerprint
+    && receipt.candidate_fingerprint === canonicalCandidateFingerprint
 }
 
 export function evaluateWorkflowDecompositionMaterialization(
@@ -156,6 +187,9 @@ export function evaluateWorkflowDecompositionMaterialization(
     && closedUniqueList(candidate.triggered_ask_when, WORKFLOW_DECOMPOSITION_ASK_CONDITIONS)
     && ACTION_CLASSIFICATIONS.includes(candidate.classification)
   if (!candidateValid) add(extra, 'decomposition-candidate-malformed', 'revise-decomposition-candidate', true)
+  if (policy.mode === 'require-review' && candidateValid && !digest(candidate.executable_plan_digest)) {
+    add(extra, 'decomposition-candidate-malformed', 'revise-decomposition-candidate', true)
+  }
 
   const hardAsk = candidateValid && candidate.triggered_ask_when.includes('hard-boundary')
   const classification = hardAsk && candidate.classification === 'routine-reversible'
