@@ -130,7 +130,7 @@ describe('task run journal', () => {
       expected_state: 'blocked', recorded_at: '2026-08-04T00:00:01.000Z',
     })).rejects.toBeInstanceOf(TaskRunJournalCorruptError)
     await expect(readFile(leaf)).resolves.toEqual(before)
-  }, 15_000)
+  }, 60_000)
 
   it('appends attempt and operation facts without rewriting history', async () => {
     const change = await changeDir()

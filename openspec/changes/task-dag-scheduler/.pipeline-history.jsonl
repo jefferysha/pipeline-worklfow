@@ -80,3 +80,4 @@
 {"ts":"2026-08-07T19:48:11Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change f505c67f-bb52-4c8f-8046-281179216b3e 9"}
 {"ts":"2026-08-07T19:48:12Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
 {"ts":"2026-08-07T19:48:12Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship f505c67f-bb52-4c8f-8046-281179216b3e 9"}
+{"ts":"2026-08-07T19:49:19Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/36"}
