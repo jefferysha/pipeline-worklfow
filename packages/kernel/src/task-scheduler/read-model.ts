@@ -129,6 +129,30 @@ export function deriveTaskRunReadModel(input: DeriveTaskRunInput): TaskRunReadMo
       latest_attempt: latest.get(workItem.id) ?? null,
     }))
   const itemStates = new Map(items.map((item) => [item.work_item_id, item.state]))
+  const groupsById = new Map(input.plan.groups.map((group) => [group.id, group]))
+  const childGroupIdsByParent = new Map<string, string[]>()
+  for (const group of input.plan.groups) {
+    if (group.parent_id === null) continue
+    const childGroupIds = childGroupIdsByParent.get(group.parent_id) ?? []
+    childGroupIds.push(group.id)
+    childGroupIdsByParent.set(group.parent_id, childGroupIds)
+  }
+  const recursivelyOwnedWorkItemIds = (groupId: string): readonly string[] => {
+    const workItemIds = new Set<string>()
+    const visitedGroupIds = new Set<string>()
+    const visit = (currentGroupId: string): void => {
+      if (visitedGroupIds.has(currentGroupId)) return
+      visitedGroupIds.add(currentGroupId)
+      const group = groupsById.get(currentGroupId)
+      if (group === undefined) return
+      for (const workItemId of group.work_item_ids) workItemIds.add(workItemId)
+      for (const childGroupId of [...(childGroupIdsByParent.get(currentGroupId) ?? [])].sort()) {
+        visit(childGroupId)
+      }
+    }
+    visit(groupId)
+    return [...workItemIds].sort()
+  }
   const runValidators = effectiveValidatorVerdicts.filter((verdict) => verdict.scope === 'run')
   const integrationFailed = runValidators.some((verdict) => verdict.status === 'failed')
   const integrationPending = runValidators.some((verdict) =>
@@ -137,14 +161,15 @@ export function deriveTaskRunReadModel(input: DeriveTaskRunInput): TaskRunReadMo
   const groups = [...input.plan.groups]
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((group) => {
-      const groupStates = group.work_item_ids.map((id) => itemStates.get(id) ?? 'blocked-upstream')
+      const workItemIds = recursivelyOwnedWorkItemIds(group.id)
+      const groupStates = workItemIds.map((id) => itemStates.get(id) ?? 'blocked-upstream')
       const groupValidators = effectiveValidatorVerdicts.filter((verdict) =>
         verdict.scope === 'group' && verdict.target_id === group.id)
       const groupValidatorFailed = groupValidators.some((verdict) => verdict.status === 'failed')
       const groupValidatorPending = groupValidators.some((verdict) =>
         verdict.status !== 'passed' && verdict.status !== 'failed')
-        || (group.work_item_ids.length > 1 && !groupValidators.some((verdict) => verdict.status === 'passed'))
-      const state = integrationFailed || groupValidatorFailed || groupStates.some((candidate) => candidate === 'failed')
+        || (workItemIds.length > 1 && !groupValidators.some((verdict) => verdict.status === 'passed'))
+      const state = groupValidatorFailed || groupStates.some((candidate) => candidate === 'failed')
         ? 'failed' as const
         : groupStates.every((candidate) => candidate === 'succeeded') && !groupValidatorPending
           ? 'succeeded' as const
@@ -153,17 +178,23 @@ export function deriveTaskRunReadModel(input: DeriveTaskRunInput): TaskRunReadMo
             : groupStates.some((candidate) => candidate === 'running' || candidate === 'invalidated')
               ? 'running' as const
               : 'pending' as const
-      return { group_id: group.id, state, work_item_ids: [...group.work_item_ids].sort() }
+      return { group_id: group.id, state, work_item_ids: workItemIds }
     })
 
   const derivedStates = items.map(({ state }) => state)
+  const groupStates = groups.map(({ state: groupState }) => groupState)
   const state = input.admission.status === 'blocked' || !input.schedule.valid
     ? 'blocked' as const
-    : integrationFailed || derivedStates.some((candidate) => candidate === 'failed')
+    : integrationFailed
+        || derivedStates.some((candidate) => candidate === 'failed')
+        || groupStates.some((candidate) => candidate === 'failed')
       ? 'failed' as const
       : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === 'cancelled')
         ? 'cancelled' as const
-      : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === 'succeeded') && !integrationPending
+      : derivedStates.length > 0
+          && derivedStates.every((candidate) => candidate === 'succeeded')
+          && groupStates.every((candidate) => candidate === 'succeeded')
+          && !integrationPending
         ? 'succeeded' as const
         : input.attempts.length > 0 || derivedStates.some((candidate) => candidate === 'invalidated')
           ? 'running' as const

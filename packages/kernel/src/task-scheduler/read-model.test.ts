@@ -4,11 +4,11 @@ import { compileTaskSchedule } from './compiler.js'
 import { deriveTaskRunReadModel } from './read-model.js'
 import type { WorkItemAttemptFact } from './run-types.js'
 
-function item(id: string, dependsOn: readonly string[] = []): WorkItemV1 {
+function item(id: string, dependsOn: readonly string[] = [], groupId = 'root'): WorkItemV1 {
   return {
     id,
     title: id,
-    group_id: 'root',
+    group_id: groupId,
     requirement_refs: ['req'],
     acceptance_refs: ['accept'],
     depends_on: dependsOn,
@@ -31,6 +31,24 @@ function plan(): TaskPlanRevisionV1 & { readonly fingerprint: string } {
     requirements: [{ id: 'req', title: 'Requirement' }],
     acceptance_criteria: [{ id: 'accept', title: 'Acceptance' }],
     groups: [{ id: 'root', title: 'Root', parent_id: null, work_item_ids: workItems.map(({ id }) => id) }],
+    work_items: workItems,
+  }
+}
+
+function nestedPlan(): TaskPlanRevisionV1 & { readonly fingerprint: string } {
+  const base = plan()
+  const workItems = [
+    item('root-item'),
+    item('child-item', ['root-item'], 'child'),
+    item('grandchild-item', ['child-item'], 'grandchild'),
+  ]
+  return {
+    ...base,
+    groups: [
+      { id: 'root', title: 'Root', parent_id: null, work_item_ids: ['root-item'] },
+      { id: 'child', title: 'Child', parent_id: 'root', work_item_ids: ['child-item'] },
+      { id: 'grandchild', title: 'Grandchild', parent_id: 'child', work_item_ids: ['grandchild-item'] },
+    ],
     work_items: workItems,
   }
 }
@@ -150,7 +168,7 @@ describe('deriveTaskRunReadModel', () => {
     expect(model.state).toBe('running')
   })
 
-  it('keeps the parent and run failed when integration validation fails', () => {
+  it('keeps run-only validation failures out of group state', () => {
     const revision = plan()
     const model = deriveTaskRunReadModel({
       plan: revision,
@@ -159,7 +177,31 @@ describe('deriveTaskRunReadModel', () => {
         attempt('a', 1, 'succeeded', 'sha256:a'),
         attempt('b', 1, 'succeeded', 'sha256:b', { a: 'sha256:a' }),
       ],
-      validator_verdicts: [{ validator_id: 'integration', scope: 'run', status: 'failed', code: 'TEST_FAILED' }],
+      validator_verdicts: [
+        { validator_id: 'group-integration', scope: 'group', target_id: 'root', status: 'passed' },
+        { validator_id: 'integration', scope: 'run', status: 'failed', code: 'TEST_FAILED' },
+      ],
+      admission: { status: 'admitted', blockers: [] },
+      run_revision: 5,
+    })
+
+    expect(model.groups).toEqual([{ group_id: 'root', state: 'succeeded', work_item_ids: ['a', 'b'] }])
+    expect(model.state).toBe('failed')
+  })
+
+  it('fails the group and run for a group-scoped validator failure', () => {
+    const revision = plan()
+    const model = deriveTaskRunReadModel({
+      plan: revision,
+      schedule: compileTaskSchedule(revision),
+      attempts: [
+        attempt('a', 1, 'succeeded', 'sha256:a'),
+        attempt('b', 1, 'succeeded', 'sha256:b', { a: 'sha256:a' }),
+      ],
+      validator_verdicts: [
+        { validator_id: 'group-integration', scope: 'group', target_id: 'root', status: 'failed', code: 'TEST_FAILED' },
+        { validator_id: 'run-integration', scope: 'run', status: 'passed' },
+      ],
       admission: { status: 'admitted', blockers: [] },
       run_revision: 5,
     })
@@ -168,7 +210,7 @@ describe('deriveTaskRunReadModel', () => {
     expect(model.state).toBe('failed')
   })
 
-  it('does not complete a parent or run while integration validation is pending', () => {
+  it('does not complete a group or run while its required validator is pending', () => {
     const revision = plan()
     const attempts = [
       attempt('a', 1, 'succeeded', 'sha256:a'),
@@ -180,13 +222,55 @@ describe('deriveTaskRunReadModel', () => {
       attempts,
       validator_verdicts: [
         { validator_id: 'group-integration', scope: 'group', target_id: 'root', status: 'pending' },
-        { validator_id: 'run-integration', scope: 'run', status: 'pending' },
+        { validator_id: 'run-integration', scope: 'run', status: 'passed' },
       ],
       admission: { status: 'admitted', blockers: [] },
       run_revision: 5,
     })
     expect(model.groups[0]?.state).toBe('pending')
     expect(model.state).toBe('running')
+  })
+
+  it('derives nested group ownership and waits for descendant completion', () => {
+    const revision = nestedPlan()
+    const validatorVerdicts = [
+      { validator_id: 'root-integration', scope: 'group' as const, target_id: 'root', status: 'passed' as const },
+      { validator_id: 'child-integration', scope: 'group' as const, target_id: 'child', status: 'passed' as const },
+      { validator_id: 'run-integration', scope: 'run' as const, status: 'passed' as const },
+    ]
+    const input = {
+      plan: revision,
+      schedule: compileTaskSchedule(revision),
+      validator_verdicts: validatorVerdicts,
+      admission: { status: 'admitted' as const, blockers: [] },
+      run_revision: 8,
+    }
+    const incomplete = deriveTaskRunReadModel({
+      ...input,
+      attempts: [
+        attempt('root-item', 1, 'succeeded', 'sha256:root'),
+        attempt('child-item', 1, 'succeeded', 'sha256:child', { 'root-item': 'sha256:root' }),
+      ],
+    })
+
+    expect(incomplete.groups).toEqual([
+      { group_id: 'child', state: 'pending', work_item_ids: ['child-item', 'grandchild-item'] },
+      { group_id: 'grandchild', state: 'pending', work_item_ids: ['grandchild-item'] },
+      { group_id: 'root', state: 'pending', work_item_ids: ['child-item', 'grandchild-item', 'root-item'] },
+    ])
+    expect(incomplete.state).toBe('running')
+
+    const complete = deriveTaskRunReadModel({
+      ...input,
+      attempts: [
+        attempt('root-item', 1, 'succeeded', 'sha256:root'),
+        attempt('child-item', 1, 'succeeded', 'sha256:child', { 'root-item': 'sha256:root' }),
+        attempt('grandchild-item', 1, 'succeeded', 'sha256:grandchild', { 'child-item': 'sha256:child' }),
+      ],
+    })
+
+    expect(complete.groups.every(({ state: groupState }) => groupState === 'succeeded')).toBe(true)
+    expect(complete.state).toBe('succeeded')
   })
 
   it('completes parent and run only after group and run integration validators pass', () => {
