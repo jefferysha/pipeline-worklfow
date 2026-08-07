@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -91,6 +91,21 @@ function started(
 }
 
 describe('SkillInvocationEvidence repository', () => {
+  it('reads through a directory-fd-style alias only when bound to its verified identity', async () => {
+    const { changeDir } = await fixture()
+    const alias = `${changeDir}-alias`
+    await symlink(changeDir, alias, 'dir')
+    const identity = await lstat(changeDir)
+    await expect(readPersistedSkillInvocationEvidence(alias))
+      .rejects.toBeInstanceOf(SkillInvocationEvidenceCorruptError)
+    await expect(readPersistedSkillInvocationEvidence(alias, {
+      anchoredDirectoryIdentity: { dev: identity.dev, ino: identity.ino },
+    })).resolves.toMatchObject({
+      state: 'ready',
+      items: [expect.objectContaining({ skill: { id: 'task-planner', version: 'task-plan/v1' } })],
+    })
+  })
+
   it('records the native Task Planner publication through the production lifecycle', async () => {
     const { changeDir } = await fixture()
     await expect(readPersistedSkillInvocationEvidence(changeDir)).resolves.toMatchObject({

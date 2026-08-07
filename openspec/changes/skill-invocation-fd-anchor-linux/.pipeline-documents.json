@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-07T10:59:02Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/skill-invocation-fd-anchor-linux/proposal.md",
+      "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-07T11:00:59Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+          "readAt": "2026-08-07T11:03:33Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+          "readAt": "2026-08-07T11:05:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c751f9e20815868e3e7cad1cd282031d7a9c97f62e6d005cb0d685aba7467a31",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/skill-invocation-fd-anchor-linux/design.md",
+      "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-07T11:03:32Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+          "readAt": "2026-08-07T11:03:33Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+          "readAt": "2026-08-07T11:05:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9c1d3e079da5420303074a322ac13ab5f6b773a9a42b7e769f518d63df472646",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/skill-invocation-fd-anchor-linux.md",
+      "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-07T11:03:32Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
+          "readAt": "2026-08-07T11:05:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "be418115e23a43cab8d27b3a93e281f7b848f3e0658e2995df5f6169140d7dc0",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/skill-invocation-fd-anchor-linux/specs/skill-invocation-evidence/spec.md",
+      "sha256": "abeed6fcc6269a4a0088c5b708008bbb87bc9f564294b661ad1616c2e5fb5236",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-07T11:05:15Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "abeed6fcc6269a4a0088c5b708008bbb87bc9f564294b661ad1616c2e5fb5236",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/skill-invocation-fd-anchor-linux.md",
+      "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-07T11:05:15Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/skill-invocation-fd-anchor-linux.md",
+      "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-07T11:05:15Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f9470dc28af6adea9945c3fdbf5b7e43f5bfad8f91f5b4a9f2e6d0f9e98ca44e",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/skill-invocation-fd-anchor-linux-design.md",
+      "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-07T11:05:16Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
+          "readAt": "2026-08-07T11:05:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3d41f18862388abc3d2487f31c78eb1835c19c7d167083757376deb11c1aa67f",
+          "readAt": "2026-08-07T11:06:16Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/skill-invocation-fd-anchor-linux/tasks.md",
+      "sha256": "ddf8937beaa6a742190775a406e16deb6ac8050b65fa30f8c822845e192a3fea",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-07T11:15:57Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-96da8e119afa2b4c0a0be1fc261fbe9b47032b70f2ae3d0ed1bc9437539e3dff",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "bc806ace-bc14-4d9b-9172-a28433746db5",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "ddf8937beaa6a742190775a406e16deb6ac8050b65fa30f8c822845e192a3fea",
+          "readAt": "2026-08-07T11:15:57Z",
+          "visitId": "[\"bc806ace-bc14-4d9b-9172-a28433746db5\",3]"
+        }
+      ]
+    }
+  ]
+}

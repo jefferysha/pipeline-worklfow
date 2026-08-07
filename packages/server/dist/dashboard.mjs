@@ -3881,10 +3881,11 @@ async function readBoundedFileHandle(handle, maxBytes) {
   }
   return Buffer.concat(chunks, total);
 }
-async function readBoundedRegularFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
+async function readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource, parentAnchor) {
   const parent = dirname2(path7);
-  const parentBefore = await lstat4(parent, { bigint: true });
-  if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
+  const parentPath = parentAnchor === void 0 ? parent : `${parent}${sep2}.`;
+  const parentBefore = await lstat4(parentPath, { bigint: true });
+  if (!parentBefore.isDirectory() || parentAnchor === void 0 && parentBefore.isSymbolicLink() || parentAnchor !== void 0 && (parentBefore.dev !== BigInt(parentAnchor.dev) || parentBefore.ino !== BigInt(parentAnchor.ino))) {
     throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
   }
   const parentRealBefore = await realpath(parent);
@@ -3895,7 +3896,7 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
       throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path7}`);
     const assertStable = async () => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat4(parent, { bigint: true }),
+        lstat4(parentPath, { bigint: true }),
         realpath(parent),
         lstat4(path7, { bigint: true })
       ]);
@@ -3925,9 +3926,25 @@ async function readBoundedRegularFile(path7, maxBytes, label, readSource = readB
     await handle.close();
   }
 }
+async function readBoundedRegularFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
+  return readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource);
+}
+async function readBoundedRegularFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
+  return readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource, parentAnchor);
+}
 async function readOptionalBoundedRegularTextFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
   try {
     const content = await readBoundedRegularFile(path7, maxBytes, label, readSource);
+    return decodeUtf8Text(content, label);
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+}
+async function readOptionalBoundedRegularTextFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
+  try {
+    const content = await readBoundedRegularFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource);
     return decodeUtf8Text(content, label);
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
@@ -5200,10 +5217,10 @@ var SkillInvocationEvidenceCorruptError = class extends Error {
 function ledgerPath(changeDir) {
   return join13(changeDir, SKILL_INVOCATION_LEDGER_FILE);
 }
-async function readLedgerEvents(changeDir) {
+async function readLedgerEvents(changeDir, options = {}) {
   let raw;
   try {
-    raw = await readOptionalBoundedRegularTextFile(ledgerPath(changeDir), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger");
+    raw = options.anchoredDirectoryIdentity === void 0 ? await readOptionalBoundedRegularTextFile(ledgerPath(changeDir), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger") : await readOptionalBoundedRegularTextFileFromAnchoredDirectory(ledgerPath(changeDir), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger", options.anchoredDirectoryIdentity);
   } catch (cause) {
     throw new SkillInvocationEvidenceCorruptError(`SkillInvocation ledger cannot be read: ${String(cause)}`);
   }
@@ -5274,9 +5291,9 @@ async function readSkillInvocationEventsForApplication(changeDir) {
   validateExistingLedger(events);
   return structuredClone(events);
 }
-async function readSkillInvocationEvidence(changeDir) {
+async function readSkillInvocationEvidence(changeDir, options = {}) {
   const identity = await captureLedgerIdentity(ledgerPath(changeDir));
-  const events = await readLedgerEvents(changeDir);
+  const events = await readLedgerEvents(changeDir, options);
   await assertLedgerIdentity(ledgerPath(changeDir), identity);
   if (events.length === 0)
     return { schema_version: "skill-invocation-list/v1", state: "empty", items: [] };
@@ -26335,7 +26352,10 @@ var anchoredDeps = {
   assertChangeParent: assertChangeParentPathAnchor,
   captureChange: captureChangePathAnchor,
   assertChange: assertChangePathAnchor,
-  readEvidence: readSkillInvocationEvidence
+  readEvidence: (changeDir, anchoredDirectoryIdentity) => readSkillInvocationEvidence(
+    changeDir,
+    anchoredDirectoryIdentity === void 0 ? {} : { anchoredDirectoryIdentity }
+  )
 };
 function assertRoot(anchor, check) {
   try {
@@ -26391,8 +26411,11 @@ async function readAnchoredSkillInvocationEvidence(anchor, change, overrides = {
     if (!opened.isDirectory() || !sameIdentity(opened, identity)) {
       throw new ContextBundlePathError(403, "Skill invocation Change identity changed while anchoring");
     }
-    const anchoredChangeDir = traversableDirectoryFdPath(fd, identity) ?? changeAnchor.changeDir;
-    const result = await deps.readEvidence(anchoredChangeDir);
+    const fdChangeDir = traversableDirectoryFdPath(fd, identity);
+    const result = await deps.readEvidence(
+      fdChangeDir ?? changeAnchor.changeDir,
+      fdChangeDir === void 0 ? void 0 : identity
+    );
     deps.assertChange(changeAnchor);
     assertRoot(anchor, deps.assertRoot);
     assertVersion2(anchor, version);

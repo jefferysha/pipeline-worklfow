@@ -4,7 +4,12 @@ import { lstat, open, realpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { readCurrentRunRevision } from '../state/run-revision-store.js'
 import { readDocumentLedger } from '../state/document-ledger.js'
-import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from '../state/document-path.js'
+import {
+  readBoundedRegularFile,
+  readOptionalBoundedRegularTextFile,
+  readOptionalBoundedRegularTextFileFromAnchoredDirectory,
+  type AnchoredDirectoryIdentity,
+} from '../state/document-path.js'
 import { withLock } from '../state/lock.js'
 import { readTaskPlanForChange } from '../state/task-plan-store.js'
 import { decodeSkillInvocationEventV1, encodeSkillInvocationEventV1 } from './codec.js'
@@ -140,14 +145,28 @@ function ledgerPath(changeDir: string): string {
   return join(changeDir, SKILL_INVOCATION_LEDGER_FILE)
 }
 
-async function readLedgerEvents(changeDir: string): Promise<SkillInvocationEventV1[]> {
+export interface ReadSkillInvocationEvidenceOptions {
+  readonly anchoredDirectoryIdentity?: AnchoredDirectoryIdentity
+}
+
+async function readLedgerEvents(
+  changeDir: string,
+  options: ReadSkillInvocationEvidenceOptions = {},
+): Promise<SkillInvocationEventV1[]> {
   let raw: string | undefined
   try {
-    raw = await readOptionalBoundedRegularTextFile(
-      ledgerPath(changeDir),
-      SKILL_INVOCATION_LIMITS.maxLedgerBytes,
-      'SkillInvocation evidence ledger',
-    )
+    raw = options.anchoredDirectoryIdentity === undefined
+      ? await readOptionalBoundedRegularTextFile(
+        ledgerPath(changeDir),
+        SKILL_INVOCATION_LIMITS.maxLedgerBytes,
+        'SkillInvocation evidence ledger',
+      )
+      : await readOptionalBoundedRegularTextFileFromAnchoredDirectory(
+        ledgerPath(changeDir),
+        SKILL_INVOCATION_LIMITS.maxLedgerBytes,
+        'SkillInvocation evidence ledger',
+        options.anchoredDirectoryIdentity,
+      )
   } catch (cause) {
     throw new SkillInvocationEvidenceCorruptError(`SkillInvocation ledger cannot be read: ${String(cause)}`)
   }
@@ -447,9 +466,12 @@ export async function appendSkillInvocationEventUnderLock(
   return appendSkillInvocationEventWithLockHeld(changeDir, decoded, options)
 }
 
-export async function readSkillInvocationEvidence(changeDir: string): Promise<SkillInvocationListReadModelV1> {
+export async function readSkillInvocationEvidence(
+  changeDir: string,
+  options: ReadSkillInvocationEvidenceOptions = {},
+): Promise<SkillInvocationListReadModelV1> {
   const identity = await captureLedgerIdentity(ledgerPath(changeDir))
-  const events = await readLedgerEvents(changeDir)
+  const events = await readLedgerEvents(changeDir, options)
   await assertLedgerIdentity(ledgerPath(changeDir), identity)
   if (events.length === 0) return { schema_version: 'skill-invocation-list/v1', state: 'empty', items: [] }
   try {
