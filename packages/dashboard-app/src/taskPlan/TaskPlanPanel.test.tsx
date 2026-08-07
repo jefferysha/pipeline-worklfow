@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import {
   fetchTaskPlan,
   TaskPlanApiError,
@@ -127,6 +127,29 @@ const legacy: LegacyTaskPlanReadModelV1 = {
   projection: { state: 'legacy' },
 }
 
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+} {
+  let resolvePromise: ((value: T | PromiseLike<T>) => void) | undefined
+  let rejectPromise: ((reason?: unknown) => void) | undefined
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve
+    rejectPromise = reject
+  })
+  return {
+    promise,
+    resolve: (value) => resolvePromise?.(value),
+    reject: (reason) => rejectPromise?.(reason),
+  }
+}
+
+function LanguageSwitch(): JSX.Element {
+  const { setLang } = useT()
+  return <button type="button" data-testid="task-plan-language-en" onClick={() => setLang('en')}>en</button>
+}
+
 function renderPanel(props: { root?: string; change?: string; onSelectedWorkItemChange?: (id: string | undefined) => void } = {}): void {
   render(
     <I18nProvider>
@@ -233,11 +256,21 @@ describe('TaskPlanPanel', () => {
     expect(await screen.findByText('The task plan response was unknown or malformed.')).toBeVisible()
   })
 
-  it('keeps cached data visible with stale retry after refresh failure', async () => {
-    vi.mocked(fetchTaskPlan).mockResolvedValueOnce(canonical).mockRejectedValueOnce(new Error('offline'))
+  it('keeps cached data visible while refreshing and marks it stale only after failure', async () => {
+    const refresh = deferred<typeof canonical>()
+    vi.mocked(fetchTaskPlan).mockResolvedValueOnce(canonical).mockImplementationOnce(() => refresh.promise)
     renderPanel()
     expect(await screen.findByText('plan-dashboard')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Refresh task plan' }))
+
+    expect(screen.getByText('plan-dashboard')).toBeVisible()
+    expect(screen.getByText('Refreshing task plan…')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh task plan' })).toBeDisabled()
+    expect(screen.getByTestId('task-plan-panel')).toHaveAttribute('data-state', 'ready')
+    expect(screen.queryByText('Showing stale task plan data while the latest refresh is unavailable.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry refreshing task plan' })).not.toBeInTheDocument()
+
+    refresh.reject(new Error('offline'))
     expect(await screen.findByRole('status')).toHaveTextContent('Showing stale task plan data while the latest refresh is unavailable.')
     expect(screen.getByText('plan-dashboard')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Retry refreshing task plan' })).toBeVisible()
@@ -262,21 +295,23 @@ describe('TaskPlanPanel', () => {
   it('renders pending projection and switches all visible copy with the language', async () => {
     const pending = { ...canonical, projection: { state: 'pending' as const, reason: 'Projection awaits publication.' } }
     vi.mocked(fetchTaskPlan).mockResolvedValue(pending)
-    renderPanel()
-    expect(await screen.findByText('Projection pending')).toBeVisible()
-    expect(screen.getByTestId('task-plan-panel')).toHaveTextContent('Projection awaits publication.')
-
-    localStorage.setItem('tenon-dashboard-lang', 'en')
-    vi.mocked(fetchTaskPlan).mockResolvedValue(pending)
-    renderPanel({ change: 'english-change' })
-    expect(await screen.findByText('Task plan')).toBeVisible()
-    expect(screen.getAllByText('Projection pending').length).toBeGreaterThan(0)
-    expect(screen.queryByText('任务计划')).not.toBeInTheDocument()
-
     localStorage.setItem('tenon-dashboard-lang', 'zh')
-    vi.mocked(fetchTaskPlan).mockResolvedValue(pending)
-    renderPanel({ change: 'chinese-change' })
+    render(
+      <I18nProvider>
+        <LanguageSwitch />
+        <TaskPlanPanel root="/repo" change="language-change" />
+      </I18nProvider>,
+    )
     expect(await screen.findByText('任务计划')).toBeVisible()
     expect(screen.getByRole('button', { name: '刷新任务计划' })).toBeVisible()
+    expect(screen.getByText('Projection pending（待发布）')).toBeVisible()
+    expect(screen.getByText('安全原因：Projection awaits publication.')).toBeVisible()
+
+    await userEvent.click(screen.getByTestId('task-plan-language-en'))
+    expect(screen.getByText('Task plan')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh task plan' })).toBeVisible()
+    expect(screen.getByText('Projection pending')).toBeVisible()
+    expect(screen.getByText('Safety reason: Projection awaits publication.')).toBeVisible()
+    expect(screen.queryByText('任务计划')).not.toBeInTheDocument()
   })
 })

@@ -66,7 +66,13 @@ export function TaskPlanPanel({ root, change, onSelectedWorkItemChange }: TaskPl
     controller.current = nextController
     const cached = cache.current?.queryKey === requestQueryKey ? cache.current.plan : null
     if (mode === 'refresh' && cached !== null) {
-      setState({ kind: 'ready', queryKey: requestQueryKey, plan: cached, stale: true, refreshing: true })
+      setState((current) => ({
+        kind: 'ready',
+        queryKey: requestQueryKey,
+        plan: cached,
+        stale: current.kind === 'ready' && current.queryKey === requestQueryKey && current.stale,
+        refreshing: true,
+      }))
     } else {
       setState({ kind: 'loading', queryKey: requestQueryKey })
     }
