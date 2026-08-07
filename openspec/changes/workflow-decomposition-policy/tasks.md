@@ -16,10 +16,10 @@
 
 ## 实现
 
-- [ ] 以 tracer bullet 打通 Workflow codec、V3 frozen snapshot 与真实 API。 (build)
-- [ ] 实现完整 decomposition/interaction 校验和五层 action 权限求交。 (build)
-- [ ] 将 continuous/queue 早检与 AFK pre-claim authoritative admission 接线。 (build)
-- [ ] 通过安全 definition API 实现 Dashboard 策略编辑、状态展示、zh/en 与 loading/empty/error 闭环。 (build)
+- [x] 以 tracer bullet 打通 Workflow codec、V3 frozen snapshot 与真实 API。 (build)
+- [x] 实现完整 decomposition/interaction 校验和五层 action 权限求交。 (build)
+- [x] 将 continuous/queue 早检与 AFK pre-claim authoritative admission 接线。 (build)
+- [x] 通过安全 definition API 实现 Dashboard 策略编辑、状态展示、zh/en 与 loading/empty/error 闭环。 (build)
 
 ## 验证
 

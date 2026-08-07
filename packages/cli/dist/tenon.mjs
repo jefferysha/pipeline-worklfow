@@ -11810,6 +11810,275 @@ function compileGuards(raw, path9, outputs2) {
   return asArray(raw, path9).flatMap((guard, index) => compileGuard(guard, `${path9}[${index}]`, outputs2));
 }
 
+// packages/kernel/dist/workflow/policy.js
+var WORKFLOW_DECOMPOSITION_MODES = Object.freeze([
+  "off",
+  "suggest",
+  "auto-safe",
+  "require-review"
+]);
+var WORKFLOW_DECOMPOSITION_TARGETS = Object.freeze([
+  "work-items",
+  "child-pipelines"
+]);
+var WORKFLOW_DECOMPOSITION_STRATEGIES = Object.freeze([
+  "balanced",
+  "breadth-first",
+  "depth-first"
+]);
+var WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS = Object.freeze([
+  "independent-work-items",
+  "cross-component-boundary",
+  "context-budget-risk"
+]);
+var WORKFLOW_DECOMPOSITION_ASK_CONDITIONS = Object.freeze([
+  "ambiguous-requirements",
+  "hard-boundary",
+  "missing-authorization",
+  "limit-exceeded"
+]);
+var WORKFLOW_INTERACTION_MODES = Object.freeze([
+  "interactive",
+  "recommended-defaults",
+  "afk"
+]);
+var DEFAULT_WORKFLOW_DECOMPOSITION_POLICY = Object.freeze({
+  version: "v1",
+  mode: "off",
+  target: "work-items",
+  strategy: "balanced",
+  max_items: 16,
+  max_depth: 2,
+  auto_when: Object.freeze([]),
+  ask_when: Object.freeze([])
+});
+var DEFAULT_WORKFLOW_INTERACTION_POLICY = Object.freeze({
+  version: "v1",
+  mode: "interactive"
+});
+function policyError(path9, message2) {
+  throw new Error(`compileWorkflow: ${path9}: ${message2}`);
+}
+function ownRecord3(value, path9) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    policyError(path9, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+  }
+  return value;
+}
+function rejectUnknownKeys(record4, keys, path9) {
+  const allowed = new Set(keys);
+  for (const key of Object.keys(record4)) {
+    if (!allowed.has(key))
+      policyError(path9, `\u672A\u77E5\u5B57\u6BB5 '${key}'`);
+  }
+}
+function closedValue(value, allowed, path9, fallback) {
+  const resolved = value === void 0 ? fallback : value;
+  if (typeof resolved !== "string" || !allowed.includes(resolved)) {
+    policyError(path9, `\u5FC5\u987B\u5C5E\u4E8E ${allowed.join("|")}\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+  }
+  return resolved;
+}
+function boundedInteger(value, fallback, min, max, path9) {
+  const resolved = value === void 0 ? fallback : value;
+  if (!Number.isInteger(resolved) || typeof resolved !== "number" || resolved < min || resolved > max) {
+    policyError(path9, `\u5FC5\u987B\u662F ${min}..${max} \u7684\u6574\u6570\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+  }
+  return resolved;
+}
+function closedList(value, allowed, path9) {
+  if (value === void 0)
+    return [];
+  if (!Array.isArray(value))
+    policyError(path9, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+  const result = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (let index = 0; index < value.length; index++) {
+    if (!Object.hasOwn(value, index) || value[index] === void 0) {
+      policyError(`${path9}[${index}]`, "\u6761\u4EF6\u4E0D\u5F97\u4E3A\u7A7A\u6216\u7A00\u758F");
+    }
+    const resolved = closedValue(value[index], allowed, `${path9}[${index}]`, allowed[0]);
+    if (seen.has(resolved))
+      policyError(`${path9}[${index}]`, `\u6761\u4EF6 '${resolved}' \u91CD\u590D`);
+    seen.add(resolved);
+    result.push(resolved);
+  }
+  return result;
+}
+function compileWorkflowDecompositionPolicy(value) {
+  if (value === void 0)
+    return structuredClone(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY);
+  const record4 = ownRecord3(value, "decomposition");
+  rejectUnknownKeys(record4, [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ], "decomposition");
+  if (record4.version !== "v1") {
+    policyError("decomposition.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record4.version)}\uFF09`);
+  }
+  return {
+    version: "v1",
+    mode: closedValue(record4.mode, WORKFLOW_DECOMPOSITION_MODES, "decomposition.mode", "off"),
+    target: closedValue(record4.target, WORKFLOW_DECOMPOSITION_TARGETS, "decomposition.target", "work-items"),
+    strategy: closedValue(record4.strategy, WORKFLOW_DECOMPOSITION_STRATEGIES, "decomposition.strategy", "balanced"),
+    max_items: boundedInteger(record4.max_items, 16, 1, 32, "decomposition.max_items"),
+    max_depth: boundedInteger(record4.max_depth, 2, 0, 4, "decomposition.max_depth"),
+    auto_when: closedList(record4.auto_when, WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS, "decomposition.auto_when"),
+    ask_when: closedList(record4.ask_when, WORKFLOW_DECOMPOSITION_ASK_CONDITIONS, "decomposition.ask_when")
+  };
+}
+function compileWorkflowInteractionPolicy(value) {
+  if (value === void 0)
+    return structuredClone(DEFAULT_WORKFLOW_INTERACTION_POLICY);
+  const record4 = ownRecord3(value, "interaction");
+  rejectUnknownKeys(record4, ["version", "mode"], "interaction");
+  if (record4.version !== "v1") {
+    policyError("interaction.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record4.version)}\uFF09`);
+  }
+  return {
+    version: "v1",
+    mode: closedValue(record4.mode, WORKFLOW_INTERACTION_MODES, "interaction.mode", "interactive")
+  };
+}
+var WORKFLOW_ACTIONS = Object.freeze([
+  "suggest-decomposition",
+  "materialize-work-items",
+  "create-child-pipeline",
+  "apply-recommended-default",
+  "enter-afk",
+  "write-filesystem",
+  "create-branch",
+  "create-pull-request",
+  "merge-pull-request",
+  "call-external-api",
+  "publish-external",
+  "operate-production",
+  "incur-cost",
+  "access-credentials",
+  "perform-irreversible-action"
+]);
+var LAYERS = ["platform", "skill", "project", "workflow", "run"];
+var LAYER_REMEDIATION = {
+  platform: "platform-policy-required",
+  skill: "skill-contract-required",
+  project: "project-policy-required",
+  workflow: "workflow-ceiling-required",
+  run: "run-grant-required"
+};
+var HARD_CLASSIFICATIONS = /* @__PURE__ */ new Set([
+  "safety-sensitive",
+  "cost",
+  "production",
+  "external-side-effect",
+  "publication",
+  "credentials",
+  "irreversible",
+  "missing-authorization"
+]);
+function evaluateWorkflowAction(input) {
+  const contributions = [];
+  const denials = [];
+  let hasStale = false;
+  let hasMissing = false;
+  const classificationValid = input.classification === "routine-reversible" || HARD_CLASSIFICATIONS.has(input.classification);
+  if (!classificationValid) {
+    hasMissing = true;
+    denials.push({
+      code: "action-classification-malformed",
+      remediation: "repair-authority-binding"
+    });
+  }
+  const runtimeLayers = input.layers;
+  const layerRecord = typeof runtimeLayers === "object" && runtimeLayers !== null && !Array.isArray(runtimeLayers) ? runtimeLayers : void 0;
+  for (const layer of LAYERS) {
+    const rawFact = layerRecord?.[layer];
+    const fact = typeof rawFact === "object" && rawFact !== null && !Array.isArray(rawFact) ? rawFact : void 0;
+    const rawStatus = fact?.status;
+    const rawGrants = fact?.grants;
+    const grants = Array.isArray(rawGrants) && rawGrants.every((grant) => typeof grant === "string" && WORKFLOW_ACTIONS.includes(grant)) && new Set(rawGrants).size === rawGrants.length ? rawGrants : void 0;
+    const status = grants !== void 0 && (rawStatus === "valid" || rawStatus === "missing" || rawStatus === "stale" || rawStatus === "malformed" || rawStatus === "identity-mismatch" || rawStatus === "fingerprint-mismatch") ? rawStatus : "malformed";
+    const granted = status === "valid" && grants?.includes(input.action) === true;
+    contributions.push({ layer, status, granted });
+    if (status !== "valid") {
+      hasStale ||= status === "stale" || status === "identity-mismatch" || status === "fingerprint-mismatch";
+      hasMissing ||= status === "missing" || status === "malformed";
+      denials.push({
+        layer,
+        code: `${layer}-${status}`,
+        remediation: status === "stale" ? "refresh-stale-authority" : "repair-authority-binding"
+      });
+    } else if (!granted) {
+      denials.push({ layer, code: `${layer}-denied`, remediation: LAYER_REMEDIATION[layer] });
+    }
+  }
+  if (input.action === "enter-afk" && input.interactionMode !== "afk" || input.action === "apply-recommended-default" && input.interactionMode !== "recommended-defaults") {
+    denials.push({
+      code: "interaction-mode-denied",
+      remediation: "select-compatible-interaction-mode"
+    });
+  }
+  if (input.action === "apply-recommended-default" && !canUseWorkflowRecommendedDefault({ version: "v1", mode: input.interactionMode }, input.recommendedDefaultEvidence?.question ?? {
+    question_id: "",
+    option_ids: [],
+    requiredness: "routine",
+    shown: true
+  }, input.recommendedDefaultEvidence?.decision, input.frozenRecommendedDefaultPolicy)) {
+    denials.push({
+      code: "recommended-default-evidence-required",
+      remediation: "select-compatible-interaction-mode"
+    });
+  }
+  if (classificationValid && HARD_CLASSIFICATIONS.has(input.classification)) {
+    const authority = input.authority;
+    const confirmation = input.hardConfirmation;
+    const bindingValid = confirmation?.status === "confirmed" && nonEmptyString(authority?.authority_id) && nonEmptyString(authority.workflow_run_id) && /^[0-9a-f]{64}$/.test(authority.workflow_fingerprint) && confirmation.authority_id === authority.authority_id && confirmation.action === input.action && confirmation.workflow_run_id === authority.workflow_run_id && confirmation.workflow_fingerprint === authority.workflow_fingerprint;
+    if (!bindingValid) {
+      denials.push({
+        code: confirmation?.status === "confirmed" ? "hard-confirmation-binding-mismatch" : "hard-confirmation-required",
+        remediation: "request-hard-confirmation"
+      });
+    }
+  }
+  if (denials.length === 0) {
+    return { action: input.action, allowed: true, status: "allowed", contributions, denials };
+  }
+  const hardBlocked = hasMissing || denials.some((denial) => denial.code.startsWith("hard-confirmation-"));
+  return {
+    action: input.action,
+    allowed: false,
+    status: hardBlocked ? "hard-blocked" : hasStale ? "stale" : "denied",
+    contributions,
+    denials
+  };
+}
+function workflowPolicyPermissionLayer(policy2) {
+  const grants = [];
+  if (policy2.decomposition.mode !== "off")
+    grants.push("suggest-decomposition");
+  if (policy2.interaction.mode === "recommended-defaults")
+    grants.push("apply-recommended-default");
+  if (policy2.interaction.mode === "afk")
+    grants.push("enter-afk");
+  return { status: "valid", grants };
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function uniqueNonEmptyStrings(value) {
+  return Array.isArray(value) && value.length > 0 && value.every(nonEmptyString) && new Set(value).size === value.length;
+}
+function canUseWorkflowRecommendedDefault(interaction, question, decision, frozenPolicy) {
+  const questionOptions = uniqueNonEmptyStrings(question.option_ids) ? new Set(question.option_ids) : void 0;
+  const selectedOptions = uniqueNonEmptyStrings(decision?.selected_option_ids) ? decision.selected_option_ids : void 0;
+  return interaction.mode === "recommended-defaults" && nonEmptyString(question.question_id) && question.requiredness === "routine" && question.shown === false && decision?.question_id === question.question_id && decision?.mode === "recommended-default" && nonEmptyString(frozenPolicy?.id) && nonEmptyString(frozenPolicy.version) && nonEmptyString(frozenPolicy.rule_id) && decision.policy?.id === frozenPolicy.id && decision.policy.version === frozenPolicy.version && decision.policy.rule_id === frozenPolicy.rule_id && nonEmptyString(decision.rationale_code) && selectedOptions !== void 0 && questionOptions !== void 0 && selectedOptions.every((option) => questionOptions.has(option));
+}
+
 // packages/kernel/dist/workflow/compile.js
 var KNOWN_FIELDS3 = new Set(FIELD_ORDER);
 var FIELD_TYPES = ["string", "file_path", "boolean"];
@@ -11823,7 +12092,14 @@ var ACTION_TYPES = /* @__PURE__ */ new Set([
 var PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills", "effective-phase-skills"]);
 var CUSTOM_PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills"]);
 var DEFAULT_PRODUCER_POLICIES = /* @__PURE__ */ new Set(["effective-step-skills", "effective-phase-skills"]);
-var WORKFLOW_KEYS = /* @__PURE__ */ new Set(["name", "openspecContract", "documentContract", "steps"]);
+var WORKFLOW_KEYS = /* @__PURE__ */ new Set([
+  "name",
+  "decomposition",
+  "interaction",
+  "openspecContract",
+  "documentContract",
+  "steps"
+]);
 var STEP_KEYS = /* @__PURE__ */ new Set([
   "id",
   "label",
@@ -12076,6 +12352,8 @@ function compileWith(def, allowedPolicies) {
   const rec = asRecord2(def, "workflow");
   rejectExtraKeys2(rec, WORKFLOW_KEYS, "workflow");
   const name2 = nonemptyString(rec.name, "name");
+  const decomposition = compileWorkflowDecompositionPolicy(rec.decomposition);
+  const interaction = compileWorkflowInteractionPolicy(rec.interaction);
   const openspecContract = rec.openspecContract;
   if (openspecContract !== void 0 && openspecContract !== "required") {
     compileError2("openspecContract", `\u5FC5\u987B\u662F 'required'\uFF08\u5B9E\u9645 ${JSON.stringify(openspecContract)}\uFF09`);
@@ -12087,6 +12365,8 @@ function compileWith(def, allowedPolicies) {
   const steps = asArray2(rec.steps, "steps").map((s, i) => compileStep(s, i, allowedPolicies));
   return deepFreeze4({
     name: name2,
+    decomposition,
+    interaction,
     ...openspecContract === void 0 ? {} : { openspecContract },
     ...documentContract === void 0 ? {} : { documentContract },
     steps
@@ -12097,123 +12377,6 @@ function compileWorkflow(def) {
 }
 function compileDefaultWorkflow(def) {
   return compileWith(def, DEFAULT_PRODUCER_POLICIES);
-}
-
-// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
-var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
-var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
-var retiredQualifiedSkill = (id2) => `${RETIRED_SKILL_NAMESPACE}:${id2}`;
-var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
-  id: "openspec-v1",
-  steps: STEPS,
-  outputsByStep: {
-    open: [
-      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
-    ],
-    explore: [
-      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
-      {
-        kind: "adr",
-        producerCandidates: [
-          "pipeline-explore",
-          retiredQualifiedSkill("pipeline-explore"),
-          "brainstorming",
-          "superpowers:brainstorming"
-        ]
-      }
-    ],
-    spec: [
-      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
-      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
-      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
-    ],
-    build: [],
-    verify: [{
-      kind: "verification-report",
-      producerCandidates: [
-        "verification-before-completion",
-        "superpowers:verification-before-completion",
-        "pipeline-verify",
-        retiredQualifiedSkill("pipeline-verify")
-      ]
-    }],
-    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
-    archive: []
-  },
-  mutableByStep: {
-    open: [],
-    explore: [
-      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
-      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
-      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
-    ],
-    spec: [
-      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
-      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
-    ],
-    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
-    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
-    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
-    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
-  },
-  readsByStep: {
-    open: [],
-    explore: ["proposal", "openspec-design", "tasks"],
-    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
-    build: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan"
-    ],
-    verify: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan"
-    ],
-    ship: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan",
-      "verification-report"
-    ],
-    archive: [
-      "proposal",
-      "openspec-design",
-      "tasks",
-      "superpower-design",
-      "adr",
-      "delta-spec",
-      "superpower-plan",
-      "plan",
-      "verification-report",
-      "applied-spec"
-    ]
-  }
-};
-var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
-function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
-  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
-    return void 0;
-  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
 }
 
 // packages/kernel/dist/workflow/loadWorkflow.js
@@ -12359,6 +12522,76 @@ function parseDocumentContract(cursor, keyIndent) {
   return { version, slots, reads };
 }
 
+// packages/kernel/dist/workflow/parse-policy.js
+function indentOf2(line) {
+  return line.length - line.trimStart().length;
+}
+function inlineList(raw) {
+  const trimmed = raw.trim();
+  if (trimmed === "[]")
+    return [];
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u671F\u671B [a, b] \u5F62\u6001\u7684\u5355\u884C\u5217\u8868\uFF0C\u5B9E\u9645 '${raw}'`);
+  }
+  const items = trimmed.slice(1, -1).split(",").map((item2) => item2.trim());
+  if (items.some((item2) => item2 === "")) {
+    throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u5355\u884C\u5217\u8868\u4E0D\u5F97\u5305\u542B\u7A7A\u9879\uFF0C\u5B9E\u9645 '${raw}'`);
+  }
+  return items;
+}
+function parsePolicyBlock(cur, key, allowedKeys) {
+  const result = {};
+  while (cur.i < cur.lines.length) {
+    const line = cur.lines[cur.i] ?? "";
+    if (line.trim() === "") {
+      cur.i++;
+      continue;
+    }
+    if (indentOf2(line) === 0)
+      break;
+    const match = /^\s{2}([a-z_]+):\s*(.*?)\s*$/.exec(line);
+    if (!match)
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u51FA\u73B0\u672A\u77E5\u5B57\u6BB5\u884C '${line.trim()}'`);
+    const field2 = match[1] ?? "";
+    const raw = match[2] ?? "";
+    if (!allowedKeys.includes(field2))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u672A\u77E5\u5B57\u6BB5 '${field2}'`);
+    if (Object.hasOwn(result, field2))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u91CD\u590D\u58F0\u660E`);
+    if (raw === "")
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u7F3A\u503C`);
+    if (field2 === "auto_when" || field2 === "ask_when")
+      result[field2] = inlineList(raw);
+    else if (field2 === "max_items" || field2 === "max_depth") {
+      if (!/^-?\d+$/.test(raw))
+        throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u5FC5\u987B\u662F\u6574\u6570`);
+      result[field2] = Number(raw);
+    } else
+      result[field2] = raw;
+    cur.i++;
+  }
+  return result;
+}
+function parseDecompositionPolicy(cur) {
+  const raw = parsePolicyBlock(cur, "decomposition", [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ]);
+  compileWorkflowDecompositionPolicy(raw);
+  return raw;
+}
+function parseInteractionPolicy(cur) {
+  const raw = parsePolicyBlock(cur, "interaction", ["version", "mode"]);
+  compileWorkflowInteractionPolicy(raw);
+  return raw;
+}
+
 // packages/kernel/dist/workflow/parse.js
 function parseInlineList2(raw) {
   const trimmed = raw.trim();
@@ -12369,7 +12602,7 @@ function parseInlineList2(raw) {
   }
   return trimmed.slice(1, -1).split(",").map((s) => s.trim()).filter((s) => s.length > 0);
 }
-function indentOf2(line) {
+function indentOf3(line) {
   return line.length - line.trimStart().length;
 }
 function parsePromptBlock(cur, keyIndent) {
@@ -12379,7 +12612,7 @@ function parsePromptBlock(cur, keyIndent) {
     const line = cur.lines[cur.i] ?? "";
     if (line.trim() === "" && line.length < contentIndent)
       break;
-    if (indentOf2(line) < contentIndent)
+    if (indentOf3(line) < contentIndent)
       break;
     out.push(line.slice(contentIndent));
     cur.i++;
@@ -12396,7 +12629,7 @@ function parseSkillsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(line);
     if (!idMatch)
@@ -12406,7 +12639,7 @@ function parseSkillsBlock(cur, baseIndent) {
     let depends_on;
     const next = cur.lines[cur.i] ?? "";
     const depMatch = /^\s*depends_on:\s*(\[.*\])\s*$/.exec(next);
-    if (depMatch && indentOf2(next) > baseIndent) {
+    if (depMatch && indentOf3(next) > baseIndent) {
       depends_on = parseInlineList2(depMatch[1] ?? "");
       cur.i++;
     }
@@ -12422,7 +12655,7 @@ function parseFieldRefBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const fieldMatch = /^\s*-\s+field:\s*(\S+)\s*$/.exec(line);
     if (!fieldMatch)
@@ -12441,7 +12674,7 @@ function parseWhenBlock(cur, whenIndent) {
   while (cur.i < cur.lines.length && (cur.lines[cur.i] ?? "").trim() === "")
     cur.i++;
   const line = cur.lines[cur.i] ?? "";
-  if (indentOf2(line) <= whenIndent) {
+  if (indentOf3(line) <= whenIndent) {
     throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Awhen \u5757\u7F3A track_in/track_not_in \u8C13\u8BCD\u884C");
   }
   const m = /^\s*(track_in|track_not_in):\s*(\[.*\])\s*$/.exec(line);
@@ -12458,12 +12691,12 @@ function parseArtifactsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const fieldMatch = /^\s*-\s+field:\s*(\S+)\s*$/.exec(line);
     if (!fieldMatch)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     let type;
     let producerPolicy;
@@ -12474,7 +12707,7 @@ function parseArtifactsBlock(cur, baseIndent) {
         cur.i++;
         continue;
       }
-      if (indentOf2(l) <= itemIndent)
+      if (indentOf3(l) <= itemIndent)
         break;
       let m;
       if (m = /^\s*type:\s*(\S+)\s*$/.exec(l)) {
@@ -12490,7 +12723,7 @@ function parseArtifactsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*required_when:\s*$/.test(l)) {
-        const wi = indentOf2(l);
+        const wi = indentOf3(l);
         cur.i++;
         requiredWhen = parseWhenBlock(cur, wi);
         continue;
@@ -12514,7 +12747,7 @@ function parseGuardEntry(cur, type, itemIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) <= itemIndent)
+    if (indentOf3(line) <= itemIndent)
       break;
     let m;
     if (m = /^\s*n:\s*(\d+)\s*$/.exec(line)) {
@@ -12538,7 +12771,7 @@ function parseGuardEntry(cur, type, itemIndent) {
       continue;
     }
     if (/^\s*when:\s*$/.test(line)) {
-      const wi = indentOf2(line);
+      const wi = indentOf3(line);
       cur.i++;
       f.when = parseWhenBlock(cur, wi);
       continue;
@@ -12605,12 +12838,12 @@ function parseGuardsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const m = /^\s*-\s+type:\s*(\S+)\s*$/.exec(line);
     if (!m)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     guards.push(parseGuardEntry(cur, m[1] ?? "", itemIndent));
   }
@@ -12631,7 +12864,7 @@ function parseActionsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const m = /^\s*-\s+type:\s*(\S+)\s*$/.exec(line);
     if (!m)
@@ -12653,12 +12886,12 @@ function parseTransitionsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const eventMatch = /^\s*-\s+event:\s*(\S+)\s*$/.exec(line);
     if (!eventMatch)
       break;
-    const itemIndent = indentOf2(line);
+    const itemIndent = indentOf3(line);
     cur.i++;
     const toLine = cur.lines[cur.i] ?? "";
     const toMatch = /^\s*to:\s*(\S+)\s*$/.exec(toLine);
@@ -12673,7 +12906,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         cur.i++;
         continue;
       }
-      if (indentOf2(l) <= itemIndent)
+      if (indentOf3(l) <= itemIndent)
         break;
       if (/^\s*guards:\s*\[\]\s*$/.test(l)) {
         guards = [];
@@ -12681,7 +12914,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*guards:\s*$/.test(l)) {
-        const gi = indentOf2(l);
+        const gi = indentOf3(l);
         cur.i++;
         guards = parseGuardsBlock(cur, gi);
         continue;
@@ -12692,7 +12925,7 @@ function parseTransitionsBlock(cur, baseIndent) {
         continue;
       }
       if (/^\s*actions:\s*$/.test(l)) {
-        const ai = indentOf2(l);
+        const ai = indentOf3(l);
         cur.i++;
         actions = parseActionsBlock(cur, ai);
         continue;
@@ -12714,7 +12947,7 @@ function parseStep(cur) {
   if (!idMatch)
     throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u671F\u671B '- id: <name>'\uFF0C\u5B9E\u9645 '${idLine}'`);
   const id2 = idMatch[1] ?? "";
-  const baseIndent = indentOf2(idLine) + 2;
+  const baseIndent = indentOf3(idLine) + 2;
   cur.i++;
   let label = "";
   let gate = null;
@@ -12731,7 +12964,7 @@ function parseStep(cur) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent - 2)
+    if (indentOf3(line) < baseIndent - 2)
       break;
     const labelMatch = /^\s*label:\s*(.+)$/.exec(line);
     if (labelMatch) {
@@ -12747,7 +12980,7 @@ function parseStep(cur) {
       continue;
     }
     if (/^\s*prompt:\s*\|-\s*$/.test(line)) {
-      const keyIndent = indentOf2(line);
+      const keyIndent = indentOf3(line);
       cur.i++;
       prompt = parsePromptBlock(cur, keyIndent);
       continue;
@@ -12834,18 +13067,46 @@ function parseWorkflow(content) {
   let stepLine = 1;
   let openspecContract;
   let documentContract;
-  const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(lines[stepLine] ?? "");
-  if (contractLine) {
-    if (contractLine[1] !== "required") {
-      throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u53EA\u652F\u6301 'required'");
+  let decomposition;
+  let interaction;
+  while ((lines[stepLine] ?? "").trim() !== "steps:") {
+    const line = lines[stepLine] ?? "";
+    const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(line);
+    if (contractLine) {
+      if (openspecContract !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u91CD\u590D\u58F0\u660E");
+      if (contractLine[1] !== "required") {
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u53EA\u652F\u6301 'required'");
+      }
+      openspecContract = "required";
+      stepLine++;
+      continue;
     }
-    openspecContract = "required";
-    stepLine++;
-  }
-  if ((lines[stepLine] ?? "").trim() === "document_contract:") {
-    const cur2 = { lines, i: stepLine + 1 };
-    documentContract = parseDocumentContract(cur2, indentOf2(lines[stepLine] ?? ""));
-    stepLine = cur2.i;
+    if (line.trim() === "document_contract:") {
+      if (documentContract !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Adocument_contract \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      documentContract = parseDocumentContract(cur2, indentOf3(line));
+      stepLine = cur2.i;
+      continue;
+    }
+    if (line.trim() === "decomposition:") {
+      if (decomposition !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Adecomposition \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      decomposition = parseDecompositionPolicy(cur2);
+      stepLine = cur2.i;
+      continue;
+    }
+    if (line.trim() === "interaction:") {
+      if (interaction !== void 0)
+        throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Ainteraction \u91CD\u590D\u58F0\u660E");
+      const cur2 = { lines, i: stepLine + 1 };
+      interaction = parseInteractionPolicy(cur2);
+      stepLine = cur2.i;
+      continue;
+    }
+    throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aname \u540E\u5FC5\u987B\u662F 'steps:'\u3001policies\u3001'openspec_contract: required' \u6216 document_contract");
   }
   if (openspecContract && documentContract) {
     throw new Error("workflow \u89E3\u6790\u9519\u8BEF\uFF1Aopenspec_contract \u4E0E document_contract \u4E0D\u5F97\u540C\u65F6\u58F0\u660E");
@@ -12867,6 +13128,8 @@ function parseWorkflow(content) {
   }
   return {
     name: nameMatch[1] ?? "",
+    ...decomposition ? { decomposition } : {},
+    ...interaction ? { interaction } : {},
     ...openspecContract ? { openspecContract } : {},
     ...documentContract ? { documentContract } : {},
     steps
@@ -13012,6 +13275,197 @@ ${errors.map((e) => `  - ${e}`).join("\n")}`);
   return wf;
 }
 
+// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
+var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
+var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
+var retiredQualifiedSkill = (id2) => `${RETIRED_SKILL_NAMESPACE}:${id2}`;
+var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
+  id: "openspec-v1",
+  steps: STEPS,
+  outputsByStep: {
+    open: [
+      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
+    ],
+    explore: [
+      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
+      {
+        kind: "adr",
+        producerCandidates: [
+          "pipeline-explore",
+          retiredQualifiedSkill("pipeline-explore"),
+          "brainstorming",
+          "superpowers:brainstorming"
+        ]
+      }
+    ],
+    spec: [
+      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
+      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
+    ],
+    build: [],
+    verify: [{
+      kind: "verification-report",
+      producerCandidates: [
+        "verification-before-completion",
+        "superpowers:verification-before-completion",
+        "pipeline-verify",
+        retiredQualifiedSkill("pipeline-verify")
+      ]
+    }],
+    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
+    archive: []
+  },
+  mutableByStep: {
+    open: [],
+    explore: [
+      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
+    ],
+    spec: [
+      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
+    ],
+    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
+    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
+    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
+    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
+  },
+  readsByStep: {
+    open: [],
+    explore: ["proposal", "openspec-design", "tasks"],
+    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
+    build: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    verify: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    ship: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report"
+    ],
+    archive: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report",
+      "applied-spec"
+    ]
+  }
+};
+var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
+function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
+  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
+    return void 0;
+  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
+}
+
+// packages/kernel/dist/workflow/effective-plan-snapshot-compat.js
+function historicalWorkflowFingerprint(workflowId, executionModel, workflow, documentPolicy, documentFingerprint) {
+  const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
+  const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
+  const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
+  return sha256Hex(JSON.stringify({
+    schema: "effective-workflow-plan-v1",
+    id: workflowId,
+    executionModel,
+    workflow,
+    documentPolicy: documentPolicy === void 0 ? null : { id: documentPolicy.id, fingerprint: documentFingerprint(documentPolicy) },
+    skillPolicy,
+    reviewSteps,
+    projectionSteps
+  }));
+}
+function restoreLegacyWorkflowPlan(snapshot, track, documentFingerprint, build, fail3) {
+  const legacyWorkflow = structuredClone(snapshot.workflow);
+  if (Object.hasOwn(legacyWorkflow, "decomposition") || Object.hasOwn(legacyWorkflow, "interaction")) {
+    return fail3("legacy workflow plan snapshot \u4E0D\u5F97\u643A\u5E26 V3 policy \u5B57\u6BB5");
+  }
+  const workflow = {
+    ...legacyWorkflow,
+    decomposition: compileWorkflowDecompositionPolicy(void 0),
+    interaction: compileWorkflowInteractionPolicy(void 0)
+  };
+  let documentPolicy = snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) ?? void 0 : documentGovernancePolicy(snapshot.workflowId, workflow);
+  let historical = historicalWorkflowFingerprint(snapshot.workflowId, snapshot.executionModel, legacyWorkflow, documentPolicy, documentFingerprint);
+  if (historical !== snapshot.workflowFingerprint && snapshot.version === 1) {
+    const preTenonPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
+    if (preTenonPolicy !== void 0) {
+      documentPolicy = preTenonPolicy;
+      historical = historicalWorkflowFingerprint(snapshot.workflowId, snapshot.executionModel, legacyWorkflow, documentPolicy, documentFingerprint);
+    }
+  }
+  if (historical !== snapshot.workflowFingerprint) {
+    return fail3(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, historical=${historical}\uFF09`);
+  }
+  return build(workflow, documentPolicy ?? null, snapshot.workflowFingerprint, track);
+}
+function exactPolicyShape(value, normalized2, keys) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && keys.every((key) => Object.hasOwn(value, key)) && JSON.stringify(normalized2) === JSON.stringify(Object.fromEntries(keys.map((key) => [key, Reflect.get(value, key)])));
+}
+function validateV3WorkflowPolicies(snapshot, fail3) {
+  let decomposition;
+  let interaction;
+  let workflowDecomposition;
+  let workflowInteraction;
+  try {
+    decomposition = compileWorkflowDecompositionPolicy(snapshot.decomposition);
+    interaction = compileWorkflowInteractionPolicy(snapshot.interaction);
+    workflowDecomposition = compileWorkflowDecompositionPolicy(snapshot.workflow.decomposition);
+    workflowInteraction = compileWorkflowInteractionPolicy(snapshot.workflow.interaction);
+  } catch (error2) {
+    return fail3(`workflow plan snapshot frozen policy \u65E0\u6548\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+  }
+  const decompositionKeys = [
+    "version",
+    "mode",
+    "target",
+    "strategy",
+    "max_items",
+    "max_depth",
+    "auto_when",
+    "ask_when"
+  ];
+  if (!exactPolicyShape(snapshot.decomposition, decomposition, decompositionKeys) || !exactPolicyShape(snapshot.interaction, interaction, ["version", "mode"]) || !exactPolicyShape(snapshot.workflow.decomposition, workflowDecomposition, decompositionKeys) || !exactPolicyShape(snapshot.workflow.interaction, workflowInteraction, ["version", "mode"]) || JSON.stringify(decomposition) !== JSON.stringify(workflowDecomposition) || JSON.stringify(interaction) !== JSON.stringify(workflowInteraction)) {
+    fail3("workflow plan snapshot frozen policy \u5F62\u72B6\u6216\u7ED1\u5B9A\u975E\u6CD5");
+  }
+}
+
 // packages/kernel/dist/workflow/effective-plan.js
 var DocumentGovernanceBindingError = class extends Error {
   _tag = "DocumentGovernanceBindingError";
@@ -13062,17 +13516,19 @@ function assertValid(definition, origin) {
     throw new Error(`effective workflow \u65E0\u6548\uFF1A
 ${errors.map((error2) => `  - ${error2}`).join("\n")}`);
 }
-function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) {
+function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy, frozenWorkflowFingerprint) {
   const documentPolicy = frozenDocumentPolicy === void 0 ? documentGovernancePolicy(id2, workflow) : frozenDocumentPolicy ?? void 0;
   const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
   const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
   const stepLabelSource = executionModel === "phase-manifest" ? "localized-builtin" : "workflow-defined";
-  const workflowFingerprint = sha256Hex(JSON.stringify({
-    schema: "effective-workflow-plan-v1",
+  const workflowFingerprint = frozenWorkflowFingerprint ?? sha256Hex(JSON.stringify({
+    schema: "effective-workflow-plan-v2",
     id: id2,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     documentPolicy: documentPolicy === void 0 ? null : {
       id: documentPolicy.id,
       fingerprint: documentGovernanceFingerprint(documentPolicy)
@@ -13087,6 +13543,8 @@ function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) 
     id: id2,
     executionModel,
     workflow,
+    decomposition: workflow.decomposition,
+    interaction: workflow.interaction,
     ...documentPolicy === void 0 ? {} : { documentPolicy },
     skillPolicy,
     reviewSteps,
@@ -13131,33 +13589,45 @@ function planFromIr(id2, executionModel, workflow, track, frozenDocumentPolicy) 
   });
 }
 function workflowPlanSnapshot(plan) {
+  const current = planFromIr(plan.id, plan.executionModel, plan.workflow, void 0, plan.documentPolicy ?? null);
+  if (current.workflowFingerprint !== plan.workflowFingerprint) {
+    const { decomposition: _decomposition, interaction: _interaction, ...legacyWorkflow } = plan.workflow;
+    return freeze({
+      version: 2,
+      workflowId: plan.id,
+      executionModel: plan.executionModel,
+      workflow: structuredClone(legacyWorkflow),
+      documentPolicy: structuredClone(plan.documentPolicy ?? null),
+      workflowFingerprint: plan.workflowFingerprint
+    });
+  }
   return freeze({
-    version: 2,
+    version: 3,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
     documentPolicy: structuredClone(plan.documentPolicy ?? null),
+    decomposition: structuredClone(plan.decomposition),
+    interaction: structuredClone(plan.interaction),
     workflowFingerprint: plan.workflowFingerprint
   });
 }
 function effectiveWorkflowPlanFromSnapshot(snapshot, track) {
-  if (snapshot.version !== 1 && snapshot.version !== 2 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
+  if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
     throw new DocumentGovernanceBindingError("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : void 0);
+  if (snapshot.version === 1 || snapshot.version === 2) {
+    return restoreLegacyWorkflowPlan(snapshot, track, documentGovernanceFingerprint, (workflow, policy2, fingerprint, frozenTrack) => planFromIr(snapshot.workflowId, snapshot.executionModel, workflow, frozenTrack, policy2, fingerprint), (message2) => {
+      throw new DocumentGovernanceBindingError(message2);
+    });
+  }
+  validateV3WorkflowPolicies(snapshot, (message2) => {
+    throw new DocumentGovernanceBindingError(message2);
+  });
+  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, structuredClone(snapshot.documentPolicy));
   if (plan.workflowFingerprint === snapshot.workflowFingerprint)
     return plan;
-  let legacyFingerprint;
-  if (snapshot.version === 1) {
-    const legacyPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
-    if (legacyPolicy !== void 0) {
-      const legacyPlan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, legacyPolicy);
-      legacyFingerprint = legacyPlan.workflowFingerprint;
-      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint)
-        return legacyPlan;
-    }
-  }
-  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}${legacyFingerprint === void 0 ? "" : `, legacy=${legacyFingerprint}`}\uFF09`);
+  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}\uFF09`);
 }
 function compileEffectiveWorkflowPlan(id2, provided, track) {
   if (id2 === "default") {
@@ -13437,13 +13907,13 @@ function errorCode4(error2) {
   const value = Reflect.get(error2, "code");
   return typeof value === "string" ? value : void 0;
 }
-function ownRecord3(value) {
+function ownRecord4(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return void 0;
   return Object.fromEntries(Object.entries(value));
 }
 function isWorkflowIr(value) {
-  const record4 = ownRecord3(value);
+  const record4 = ownRecord4(value);
   return record4 !== void 0 && typeof record4.name === "string" && Array.isArray(record4.steps);
 }
 function parseWorkflowPlanSnapshot(raw) {
@@ -13453,12 +13923,21 @@ function parseWorkflowPlanSnapshot(raw) {
   } catch {
     throw new Error("workflow plan snapshot \u4E0D\u662F\u5408\u6CD5 JSON");
   }
-  const envelope = ownRecord3(value);
-  const plan = ownRecord3(envelope?.plan);
+  const envelope = ownRecord4(value);
+  const plan = ownRecord4(envelope?.plan);
   const planVersion = plan?.version;
-  const allowedPlanKeys = planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
+  const allowedPlanKeys = planVersion === 3 ? [
+    "version",
+    "workflowId",
+    "executionModel",
+    "workflow",
+    "documentPolicy",
+    "decomposition",
+    "interaction",
+    "workflowFingerprint"
+  ] : planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
   const documentPolicy = plan?.documentPolicy;
-  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || planVersion === 2 && documentPolicy !== null && ownRecord3(documentPolicy) === void 0 || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
+  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 && planVersion !== 3 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || (planVersion === 2 || planVersion === 3) && documentPolicy !== null && ownRecord4(documentPolicy) === void 0 || planVersion === 3 && (ownRecord4(plan.decomposition) === void 0 || ownRecord4(plan.interaction) === void 0) || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
     throw new Error("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
   const snapshot = planVersion === 1 ? {
@@ -13467,12 +13946,21 @@ function parseWorkflowPlanSnapshot(raw) {
     executionModel: plan.executionModel,
     workflow: plan.workflow,
     workflowFingerprint: plan.workflowFingerprint
-  } : {
+  } : planVersion === 2 ? {
     version: 2,
     workflowId: plan.workflowId,
     executionModel: plan.executionModel,
     workflow: plan.workflow,
     documentPolicy,
+    workflowFingerprint: plan.workflowFingerprint
+  } : {
+    version: 3,
+    workflowId: plan.workflowId,
+    executionModel: plan.executionModel,
+    workflow: plan.workflow,
+    documentPolicy,
+    decomposition: plan.decomposition,
+    interaction: plan.interaction,
     workflowFingerprint: plan.workflowFingerprint
   };
   effectiveWorkflowPlanFromSnapshot(snapshot);
@@ -17332,7 +17820,7 @@ function stripComment(line) {
   const m = line.match(/^(.*?)\s#/);
   return (m ? m[1] : line).trimEnd();
 }
-function indentOf3(line) {
+function indentOf4(line) {
   let n = 0;
   while (n < line.length && line[n] === " ")
     n++;
@@ -17364,6 +17852,42 @@ function parseScalarValue(rest, ctx) {
   }
   const m = s.match(/^(.*?)\s#/);
   return (m ? m[1] : s).trimEnd();
+}
+function parseSkillActionAuthorityBlock(lines, start, path9) {
+  let version;
+  const grants = /* @__PURE__ */ new Map();
+  let i = start;
+  while (i < lines.length) {
+    const line = stripComment(lines[i]);
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+    if (!/^\s/.test(line))
+      break;
+    const entry = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
+    if (!entry)
+      throw new ManifestError(`${path9}:${i + 1} skill_action_authority \u6761\u76EE\u683C\u5F0F\u9519\u8BEF`);
+    const key = entry[1];
+    const raw = entry[2].trim();
+    if (key === "version") {
+      if (version !== void 0 || raw === "")
+        throw new ManifestError(`${path9}:${i + 1} skill_action_authority.version \u91CD\u590D\u6216\u4E3A\u7A7A`);
+      version = parseScalarValue(raw, "skill_action_authority.version");
+    } else {
+      if (grants.has(key))
+        throw new ManifestError(`${path9}:${i + 1} skill_action_authority.${key} \u91CD\u590D`);
+      const list = raw.match(/^\[(.*)\]$/);
+      if (list && list[1].trim() !== "" && list[1].split(",").some((item2) => item2.trim() === "")) {
+        throw new ManifestError(`${path9}:${i + 1} skill_action_authority.${key} \u542B\u7A7A action`);
+      }
+      grants.set(key, parseFlowList(raw, `skill_action_authority.${key}`));
+    }
+    i++;
+  }
+  if (version === void 0)
+    throw new ManifestError(`${path9} skill_action_authority \u7F3A version`);
+  return { value: { version, grants }, next: i };
 }
 function decodeDoubleQuotedYamlKey(token) {
   if (!token.startsWith('"') || !token.endsWith('"'))
@@ -17446,12 +17970,12 @@ function hasDeprecatedRouterKeyAt(lines, index) {
   const current = lines[index];
   if (current.trim() !== "?")
     return false;
-  const parentIndent = indentOf3(current);
+  const parentIndent = indentOf4(current);
   for (let i = index + 1; i < lines.length; i++) {
     const candidate = lines[i];
     if (candidate.trim() === "" || candidate.trimStart().startsWith("#"))
       continue;
-    if (indentOf3(candidate) <= parentIndent)
+    if (indentOf4(candidate) <= parentIndent)
       return false;
     return decodeYamlKey(candidate.trim()) === "router_patterns";
   }
@@ -17489,7 +18013,7 @@ function parseBreadcrumbBlock(lines, start, path9) {
       i++;
       continue;
     }
-    const ind = indentOf3(raw);
+    const ind = indentOf4(raw);
     if (ind === 0)
       break;
     if (raw.trimStart().startsWith("#")) {
@@ -17513,7 +18037,7 @@ function parseBreadcrumbBlock(lines, start, path9) {
           i++;
           continue;
         }
-        if (indentOf3(bl) <= keyIndent)
+        if (indentOf4(bl) <= keyIndent)
           break;
         blk.push(bl);
         i++;
@@ -17521,7 +18045,7 @@ function parseBreadcrumbBlock(lines, start, path9) {
       const firstContent = blk.find((x) => x !== "");
       let value = "";
       if (firstContent !== void 0) {
-        const blockIndent = indentOf3(firstContent);
+        const blockIndent = indentOf4(firstContent);
         value = blk.map((x) => x === "" ? "" : x.slice(blockIndent)).join("\n").replace(/\n+$/, "");
       }
       map.set(key, value);
@@ -17603,6 +18127,14 @@ function scanSections(text4, path9) {
       else
         out.recommended_skills = r.map;
       i = r.next;
+    } else if (key === "skill_action_authority") {
+      if (rest !== "")
+        throw new ManifestError(`${path9}:${i + 1} skill_action_authority \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+      if (out.skill_action_authority !== void 0)
+        throw new ManifestError(`${path9}:${i + 1} skill_action_authority \u5C0F\u8282\u91CD\u590D`);
+      const r = parseSkillActionAuthorityBlock(lines, i + 1, path9);
+      out.skill_action_authority = r.value;
+      i = r.next;
     } else if (key === "breadcrumb") {
       if (rest !== "")
         throw new ManifestError(`${path9}:${i + 1} breadcrumb \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
@@ -17649,6 +18181,24 @@ function deriveSkillTable(raw, declared, section2) {
   }
   return table;
 }
+function deriveSkillActionAuthority(raw) {
+  if (!raw)
+    return null;
+  if (raw.version !== "v1")
+    throw new ManifestError(`skill_action_authority.version '${raw.version}' \u4E0D\u53D7\u652F\u6301\uFF08\u5408\u6CD5\uFF1Av1\uFF09`);
+  const actions = new Set(WORKFLOW_ACTIONS);
+  const grants = {};
+  for (const [profile, values] of raw.grants) {
+    if (!SKILL_TRACK_SET.has(profile)) {
+      throw new ManifestError(`skill_action_authority \u542B\u672A\u77E5 profile '${profile}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/free/_all\uFF09`);
+    }
+    if (new Set(values).size !== values.length || values.some((action) => !actions.has(action))) {
+      throw new ManifestError(`skill_action_authority.${profile} \u542B\u672A\u77E5\u6216\u91CD\u590D action`);
+    }
+    grants[profile] = values;
+  }
+  return { version: "v1", grants };
+}
 function loadManifest(path9) {
   const text4 = readFileSync7(path9, "utf8");
   const raw = scanSections(text4, path9);
@@ -17690,6 +18240,7 @@ function loadManifest(path9) {
   });
   const mandatorySkills = deriveSkillTable(raw.mandatory_skills, declared, "mandatory_skills");
   const recommendedSkills = deriveSkillTable(raw.recommended_skills, declared, "recommended_skills");
+  const skillActionAuthority = deriveSkillActionAuthority(raw.skill_action_authority);
   const breadcrumbs = {};
   if (raw.breadcrumb) {
     for (const [phaseName, prose] of raw.breadcrumb) {
@@ -17699,7 +18250,7 @@ function loadManifest(path9) {
       breadcrumbs[ph] = prose;
     }
   }
-  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, breadcrumbs };
+  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, skillActionAuthority, breadcrumbs };
 }
 
 // packages/kernel/dist/flow/engine.js
@@ -22062,7 +22613,7 @@ function assertLoopRunner(value) {
 }
 
 // packages/kernel/dist/loops/yamlBlock.js
-function indentOf4(line) {
+function indentOf5(line) {
   return line.length - line.replace(/^\s*/, "").length;
 }
 function locateLoop(lines, loopId) {
@@ -22078,7 +22629,7 @@ function locateLoop(lines, loopId) {
       const line = required(lines[j]);
       if (line.trim() === "")
         continue;
-      if (indentOf4(line) <= dashIndent) {
+      if (indentOf5(line) <= dashIndent) {
         end = j;
         break;
       }
@@ -22406,7 +22957,7 @@ function patchBudgetScalar(lines, block, field2, value) {
     const line = required(lines[i]);
     if (line.trim() === "")
       continue;
-    if (indentOf4(line) <= block.fieldIndent) {
+    if (indentOf5(line) <= block.fieldIndent) {
       subEnd = i;
       break;
     }
@@ -22414,7 +22965,7 @@ function patchBudgetScalar(lines, block, field2, value) {
   let childIndent = block.fieldIndent + 2;
   for (let i = budgetAt + 1; i < subEnd; i++) {
     if (required(lines[i]).trim() !== "") {
-      childIndent = indentOf4(required(lines[i]));
+      childIndent = indentOf5(required(lines[i]));
       break;
     }
   }
@@ -22439,7 +22990,7 @@ function patchArray(lines, block, field2, values) {
     const line = required(lines[i]);
     if (line.trim() === "")
       continue;
-    if (indentOf4(line) <= block.fieldIndent) {
+    if (indentOf5(line) <= block.fieldIndent) {
       extentEnd = i;
       break;
     }
@@ -28046,7 +28597,7 @@ var depsAllSatisfied = (deps, resolver) => {
   return true;
 };
 function readyCandidates(entries, resolver) {
-  const ready = entries.filter((e) => e.phase === "build" && e.automation === "queued").filter((e) => depsAllSatisfied(e.dependsOn, resolver));
+  const ready = entries.filter((e) => e.phase === "build" && e.automation === "queued" && e.archived !== "true").filter((e) => depsAllSatisfied(e.dependsOn, resolver));
   const key = (e) => e.automationQueuedAt === "" || e.automationQueuedAt === "null" ? QUEUED_AT_LAST : e.automationQueuedAt;
   return ready.slice().sort((a, b) => {
     const ka = key(a);
@@ -28081,6 +28632,7 @@ async function scanReadyFromFs(changesDir, store2) {
       name: name2,
       phase: scalar5(state.fields.phase),
       automation,
+      archived: scalar5(state.fields.archived),
       automationQueuedAt: scalar5(state.fields.automation_queued_at),
       dependsOn: normalizeDeps(state.fields.depends_on)
     });
@@ -29398,6 +29950,48 @@ function attemptContextFor(records, loopId, change) {
   };
 }
 
+// packages/automation/dist/admission/skill-action-authority.js
+var CONTRACT_KEYS = Object.freeze([
+  "version",
+  "skill_bundle_id",
+  "workflow_run_id",
+  "workflow_fingerprint",
+  "grants"
+]);
+var ACTIONS = new Set(WORKFLOW_ACTIONS);
+function isRecord9(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseSkillActionAuthorityContract(raw, expected) {
+  if (raw === void 0 || raw === null)
+    return { status: "missing", grants: [] };
+  if (!isRecord9(raw))
+    return { status: "malformed", grants: [] };
+  const keys = Object.keys(raw).sort();
+  if (keys.length !== CONTRACT_KEYS.length || !CONTRACT_KEYS.every((key) => keys.includes(key))) {
+    return { status: "malformed", grants: [] };
+  }
+  if (raw.version !== "v1" || typeof raw.skill_bundle_id !== "string" || raw.skill_bundle_id.length === 0 || typeof raw.workflow_run_id !== "string" || raw.workflow_run_id.length === 0 || typeof raw.workflow_fingerprint !== "string" || raw.workflow_fingerprint.length === 0 || !Array.isArray(raw.grants) || Array.from(raw.grants).some((grant) => typeof grant !== "string" || !ACTIONS.has(grant)) || new Set(raw.grants).size !== raw.grants.length) {
+    return { status: "malformed", grants: [] };
+  }
+  if (raw.skill_bundle_id !== expected.skillBundleId || raw.workflow_run_id !== expected.workflowRunId) {
+    return { status: "identity-mismatch", grants: [] };
+  }
+  if (raw.workflow_fingerprint !== expected.workflowFingerprint) {
+    return { status: "fingerprint-mismatch", grants: [] };
+  }
+  return { status: "valid", grants: raw.grants };
+}
+function skillActionAuthorityContract(query, grants) {
+  return {
+    version: "v1",
+    skill_bundle_id: query.skillBundleId,
+    workflow_run_id: query.workflowRunId,
+    workflow_fingerprint: query.workflowFingerprint,
+    grants: [...grants]
+  };
+}
+
 // packages/automation/dist/admission/loop-admission-journal.js
 function createAdmissionJournal(deps) {
   const { repoRoot, ledger, clock, newId, level } = deps;
@@ -29762,9 +30356,128 @@ function createAdmissionJournal(deps) {
   };
 }
 
+// packages/automation/dist/admission/workflow-action-admission.js
+function evaluateAfkWorkflowAdmission(input) {
+  return evaluateWorkflowAction({
+    action: "enter-afk",
+    classification: "routine-reversible",
+    interactionMode: input.interactionMode,
+    layers: input.layers
+  });
+}
+var unavailableLayer = (status) => ({
+  status,
+  grants: []
+});
+function evaluateMissingAfkWorkflowAdmission() {
+  const missing3 = unavailableLayer("missing");
+  return evaluateAfkWorkflowAdmission({
+    interactionMode: "interactive",
+    layers: { platform: missing3, skill: missing3, project: missing3, workflow: missing3, run: missing3 }
+  });
+}
+async function evaluateBoundAfkWorkflowAdmission(input) {
+  const missing3 = unavailableLayer("missing");
+  let interactionMode = "interactive";
+  let workflow = missing3;
+  if (input.run.workflowPlanSnapshot !== void 0) {
+    try {
+      const frozenPlan = effectiveWorkflowPlanFromSnapshot(input.run.workflowPlanSnapshot);
+      if (input.run.workflowPlanFingerprint !== frozenPlan.workflowFingerprint || input.run.workflowId !== frozenPlan.id) {
+        workflow = { status: "fingerprint-mismatch", grants: [] };
+      } else {
+        interactionMode = frozenPlan.workflow.interaction.mode;
+        workflow = workflowPolicyPermissionLayer(frozenPlan.workflow);
+      }
+    } catch {
+      workflow = { status: "fingerprint-mismatch", grants: [] };
+    }
+  }
+  let dynamic;
+  if (input.workflowActionAuthority === void 0) {
+    dynamic = { platform: missing3, skill: missing3, project: missing3, run: missing3 };
+  } else {
+    try {
+      dynamic = await input.workflowActionAuthority(input);
+    } catch {
+      const malformed = unavailableLayer("malformed");
+      dynamic = { platform: malformed, skill: malformed, project: malformed, run: malformed };
+    }
+  }
+  return evaluateAfkWorkflowAdmission({ interactionMode, layers: { ...dynamic, workflow } });
+}
+async function bindAndEvaluateAfkWorkflowRun(input) {
+  const policy2 = input.context.automation_policy;
+  if (policy2 === void 0)
+    throw new Error("loop admission produced no AutomationPolicy snapshot");
+  const iterationId = input.context.iteration_id;
+  if (iterationId === void 0)
+    throw new Error("loop admission produced no iteration identity");
+  const run = await input.bindAutomationPolicy(input.change, policy2, {
+    loopId: input.context.loop_id,
+    iterationId
+  });
+  if (run.automationPolicy?.policy_version !== policy2.policy_version) {
+    throw new Error("WorkflowRun did not persist the admitted AutomationPolicy snapshot");
+  }
+  if (run.loopId !== input.context.loop_id || run.iterationId !== iterationId) {
+    throw new Error("WorkflowRun did not persist the admitted loop/iteration identity");
+  }
+  const context = Object.freeze({ ...input.context, workflow_run_id: run.id });
+  const authorization = await evaluateBoundAfkWorkflowAdmission({
+    change: input.change,
+    context,
+    run,
+    workflowActionAuthority: input.workflowActionAuthority
+  });
+  return { context, run, authorization };
+}
+async function closeWorkflowAuthorizationDenial(input) {
+  const { context, authorization } = input;
+  const detail = authorization.denials.map((denial) => denial.code).join(",");
+  await input.close(context.reservation_id, (reservation) => ({
+    ...input.closeRecord(reservation, {
+      result: "skipped",
+      reason: "admission-denied",
+      charge: "none",
+      now: input.clock(),
+      runner: context.runner
+    }),
+    admitted_at: context.admitted_at,
+    ...input.workflowRunId === void 0 ? {} : { workflow_run_id: input.workflowRunId },
+    error: { cause: `workflow-action-${authorization.status}`, message: detail }
+  }));
+  return {
+    ok: false,
+    action: "skip-run",
+    reason: `workflow-action-${authorization.status}`,
+    detail,
+    loopId: context.loop_id,
+    authorization
+  };
+}
+async function compensateWorkflowBindingFailure(input) {
+  try {
+    await input.close(input.context.reservation_id, (reservation) => ({
+      ...input.closeRecord(reservation, {
+        result: "failed",
+        reason: "automation-policy-bind-failed",
+        charge: "none",
+        now: input.clock(),
+        runner: input.context.runner
+      }),
+      admitted_at: input.context.admitted_at,
+      error: { cause: "automation-policy-bind-failed", message: errText2(input.bindingError) }
+    }));
+  } catch (settlementError) {
+    throw new Error(`AutomationPolicy binding failed (${errText2(input.bindingError)}) and reservation compensation failed (${errText2(settlementError)})`, { cause: input.bindingError });
+  }
+  throw input.bindingError;
+}
+
 // packages/automation/dist/admission/loop-admission-service.js
 function createLoopAdmission(deps) {
-  const { repoRoot, ledger, loadRegistry: loadRegistry2, clock, level, image, getAutomation: getAutomation2, isSkillProfileKnown, bindAutomationPolicy } = deps;
+  const { repoRoot, ledger, loadRegistry: loadRegistry2, clock, level, image, getAutomation: getAutomation2, isSkillProfileKnown, bindAutomationPolicy, workflowActionAuthority } = deps;
   const ttlMs = deps.reservationTtlMs ?? DEFAULT_TTL_MS;
   const newId = deps.newId ?? makeIdGen();
   const getExecutionLiveness = deps.getExecutionLiveness ?? (async () => "unknown");
@@ -29898,40 +30611,42 @@ function createLoopAdmission(deps) {
       const outcome = await withRegistryGovernanceLock(repoRoot, () => reserveOnce(change, opts));
       if ("retry" in outcome)
         continue;
-      if (!outcome.ok || bindAutomationPolicy === void 0)
+      if (!outcome.ok)
         return outcome;
+      if (bindAutomationPolicy === void 0) {
+        return closeWorkflowAuthorizationDenial({
+          context: outcome.context,
+          authorization: evaluateMissingAfkWorkflowAdmission(),
+          clock,
+          close,
+          closeRecord
+        });
+      }
       try {
-        const policy2 = outcome.context.automation_policy;
-        if (policy2 === void 0)
-          throw new Error("loop admission produced no AutomationPolicy snapshot");
-        const iterationId = outcome.context.iteration_id;
-        if (iterationId === void 0)
-          throw new Error("loop admission produced no iteration identity");
-        const run = await bindAutomationPolicy(change, policy2, { loopId: outcome.context.loop_id, iterationId });
-        if (run.automationPolicy?.policy_version !== policy2.policy_version) {
-          throw new Error("WorkflowRun did not persist the admitted AutomationPolicy snapshot");
-        }
-        if (run.loopId !== outcome.context.loop_id || run.iterationId !== iterationId) {
-          throw new Error("WorkflowRun did not persist the admitted loop/iteration identity");
-        }
-        return { ok: true, context: Object.freeze({ ...outcome.context, workflow_run_id: run.id }) };
+        const { context, run, authorization } = await bindAndEvaluateAfkWorkflowRun({
+          change,
+          context: outcome.context,
+          bindAutomationPolicy,
+          workflowActionAuthority
+        });
+        if (authorization.allowed)
+          return { ok: true, context };
+        return closeWorkflowAuthorizationDenial({
+          context,
+          authorization,
+          workflowRunId: run.id,
+          clock,
+          close,
+          closeRecord
+        });
       } catch (bindingError) {
-        try {
-          await close(outcome.context.reservation_id, (reservation) => ({
-            ...closeRecord(reservation, {
-              result: "failed",
-              reason: "automation-policy-bind-failed",
-              charge: "none",
-              now: clock(),
-              runner: outcome.context.runner
-            }),
-            admitted_at: outcome.context.admitted_at,
-            error: { cause: "automation-policy-bind-failed", message: errText2(bindingError) }
-          }));
-        } catch (settlementError) {
-          throw new Error(`AutomationPolicy binding failed (${errText2(bindingError)}) and reservation compensation failed (${errText2(settlementError)})`, { cause: bindingError });
-        }
-        throw bindingError;
+        return compensateWorkflowBindingFailure({
+          context: outcome.context,
+          bindingError,
+          clock,
+          close,
+          closeRecord
+        });
       }
     }
     return { ok: false, action: "skip-run", reason: "registry-concurrent-update", detail: `registry \u8FDE\u7EED ${MAX_RESERVE_RETRIES} \u6B21\u5728 admission \u4E34\u754C\u533A\u5185\u53D8\u5316\uFF0C\u653E\u5F03\u672C\u8F6E\uFF08\u907F\u514D\u6D3B\u9501\uFF09` };
@@ -31068,7 +31783,7 @@ var createAgentExitWatch = (write) => {
 
 // packages/automation/dist/runner/runner.js
 var EXECUTION_MODES = ["agent/codex", "agent/claude-code", "deterministic-test-fallback"];
-var isRecord9 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord10 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var tokenCount = (usage, key) => {
   const value = usage[key];
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -31090,7 +31805,7 @@ var parseCodexJsonlUsage = (jsonl) => {
     } catch (error2) {
       throw new Error(`Codex JSONL line ${index + 1} is invalid: ${String(error2)}`);
     }
-    if (!isRecord9(event))
+    if (!isRecord10(event))
       throw new Error(`Codex JSONL line ${index + 1} is not an object`);
     if (event.type === "thread.started") {
       if (typeof event.thread_id !== "string" || event.thread_id.length === 0) {
@@ -31106,7 +31821,7 @@ var parseCodexJsonlUsage = (jsonl) => {
       continue;
     if (completed !== void 0)
       throw new Error("Codex JSONL contains multiple turn.completed usage events");
-    if (!isRecord9(event.usage))
+    if (!isRecord10(event.usage))
       throw new Error("Codex JSONL turn.completed is missing structured usage");
     const input = tokenCount(event.usage, "input_tokens");
     const cached_input = tokenCount(event.usage, "cached_input_tokens");
@@ -31158,7 +31873,7 @@ var parseSandboxReport = (stdout) => {
   let parsed;
   try {
     const value = JSON.parse(unwrapFences(raw));
-    if (!isRecord9(value))
+    if (!isRecord10(value))
       throw new Error("report must be a JSON object");
     parsed = value;
   } catch (err) {
@@ -31176,7 +31891,7 @@ var parseSandboxReport = (stdout) => {
   if (Object.prototype.hasOwnProperty.call(parsed, "provider_usage")) {
     const candidate = parsed.provider_usage;
     try {
-      if (!isRecord9(candidate) || candidate.provider !== "openai-codex" || !isRecord9(candidate.tokens)) {
+      if (!isRecord10(candidate) || candidate.provider !== "openai-codex" || !isRecord10(candidate.tokens)) {
         throw new Error("provider_usage must be an openai-codex structured usage object");
       }
       const input = tokenCount(candidate.tokens, "input");
@@ -32881,7 +33596,7 @@ var SkillBundleSnapshotMismatchError = class extends Error {
   name = "SkillBundleSnapshotMismatchError";
   _tag = "SkillBundleSnapshotMismatchError";
 };
-var isRecord10 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord11 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var hasClosedKeys = (value, required2, optional = []) => {
   const allowed = /* @__PURE__ */ new Set([...required2, ...optional]);
   return required2.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
@@ -32891,14 +33606,14 @@ function isClosedSkillSnapshotManifest(manifest) {
     return false;
   if (manifest.schemaVersion !== 1 || typeof manifest.digest !== "string")
     return false;
-  if (!Array.isArray(manifest.skills) || !manifest.skills.every((skill) => isRecord10(skill) && hasClosedKeys(skill, ["skillId", "treeSha256", "fileCount"]) && typeof skill.skillId === "string" && typeof skill.treeSha256 === "string" && Number.isSafeInteger(skill.fileCount) && skill.fileCount >= 0))
+  if (!Array.isArray(manifest.skills) || !manifest.skills.every((skill) => isRecord11(skill) && hasClosedKeys(skill, ["skillId", "treeSha256", "fileCount"]) && typeof skill.skillId === "string" && typeof skill.treeSha256 === "string" && Number.isSafeInteger(skill.fileCount) && skill.fileCount >= 0))
     return false;
-  if (!Array.isArray(manifest.files) || !manifest.files.every((file) => isRecord10(file) && hasClosedKeys(file, ["relativePath", "sha256", "executable"]) && typeof file.relativePath === "string" && typeof file.sha256 === "string" && typeof file.executable === "boolean"))
+  if (!Array.isArray(manifest.files) || !manifest.files.every((file) => isRecord11(file) && hasClosedKeys(file, ["relativePath", "sha256", "executable"]) && typeof file.relativePath === "string" && typeof file.sha256 === "string" && typeof file.executable === "boolean"))
     return false;
   if (manifest.provenance === void 0)
     return true;
   const provenance = manifest.provenance;
-  if (!isRecord10(provenance) || !hasClosedKeys(provenance, ["loop_id", "policy_epoch", "skill_bundle_id", "attempt_id", "reservation_id", "workflow", "step", "track", "coordinate_digest", "resolution_source", "slots"], ["workflow_run_id"]))
+  if (!isRecord11(provenance) || !hasClosedKeys(provenance, ["loop_id", "policy_epoch", "skill_bundle_id", "attempt_id", "reservation_id", "workflow", "step", "track", "coordinate_digest", "resolution_source", "slots"], ["workflow_run_id"]))
     return false;
   for (const key of ["loop_id", "policy_epoch", "skill_bundle_id", "attempt_id", "reservation_id", "workflow", "step", "track", "coordinate_digest"]) {
     if (typeof provenance[key] !== "string")
@@ -32908,7 +33623,7 @@ function isClosedSkillSnapshotManifest(manifest) {
     return false;
   if (provenance.resolution_source !== "default" && provenance.resolution_source !== "custom")
     return false;
-  return Array.isArray(provenance.slots) && provenance.slots.every((slot) => isRecord10(slot) && hasClosedKeys(slot, ["alternatives", "concrete_skill_id", "tree_sha256"]) && Array.isArray(slot.alternatives) && slot.alternatives.every((alternative) => typeof alternative === "string") && typeof slot.concrete_skill_id === "string" && typeof slot.tree_sha256 === "string");
+  return Array.isArray(provenance.slots) && provenance.slots.every((slot) => isRecord11(slot) && hasClosedKeys(slot, ["alternatives", "concrete_skill_id", "tree_sha256"]) && Array.isArray(slot.alternatives) && slot.alternatives.every((alternative) => typeof alternative === "string") && typeof slot.concrete_skill_id === "string" && typeof slot.tree_sha256 === "string");
 }
 async function assertNoUndeclaredCasEntries(hostCasDir, descriptorFiles) {
   const expected = /* @__PURE__ */ new Set(["F:manifest.json", `F:${SKILL_SNAPSHOT_COMMIT_MARKER}`]);
@@ -34202,11 +34917,11 @@ import { join as join47, sep as sep9 } from "node:path";
 import { randomUUID as randomUUID8 } from "node:crypto";
 
 // packages/tap/dist/trace-codecs.js
-function isRecord11(value) {
+function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function decodeSessionRow(value) {
-  if (!isRecord11(value))
+  if (!isRecord12(value))
     return null;
   const id2 = typeof value.id === "string" ? value.id : null;
   const startedAt = typeof value.started_at === "string" ? value.started_at : null;
@@ -34215,7 +34930,7 @@ function decodeSessionRow(value) {
   const client = typeof value.client === "string" ? value.client : null;
   const proxyMode = typeof value.proxy_mode === "string" ? value.proxy_mode : null;
   const status = typeof value.status === "string" ? value.status : null;
-  if (id2 === null || startedAt === null || updatedAt === null || dateKey === null || client === null || proxyMode === null || status === null || typeof value.record_count !== "number" || !Number.isSafeInteger(value.record_count) || value.record_count < 0 || value.summary !== null && !isRecord11(value.summary)) {
+  if (id2 === null || startedAt === null || updatedAt === null || dateKey === null || client === null || proxyMode === null || status === null || typeof value.record_count !== "number" || !Number.isSafeInteger(value.record_count) || value.record_count < 0 || value.summary !== null && !isRecord12(value.summary)) {
     return null;
   }
   return {
@@ -34231,7 +34946,7 @@ function decodeSessionRow(value) {
   };
 }
 function decodeTraceRecord(value) {
-  return isRecord11(value) ? value : null;
+  return isRecord12(value) ? value : null;
 }
 
 // packages/tap/dist/trace-store.js
@@ -38599,7 +39314,7 @@ import { readFile as readFile24 } from "node:fs/promises";
 import { isAbsolute as isAbsolute13, relative as relative9, resolve as resolve20, sep as sep11 } from "node:path";
 
 // packages/cli/src/codexTranscriptCompletion.ts
-function isRecord12(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function asString(value) {
@@ -38607,14 +39322,14 @@ function asString(value) {
 }
 function explicitExitCodes(value) {
   if (Array.isArray(value)) return value.flatMap((item2) => explicitExitCodes(item2));
-  if (!isRecord12(value)) return [];
+  if (!isRecord13(value)) return [];
   const nested = Object.entries(value).filter(([key]) => key !== "exit_code").flatMap(([, item2]) => explicitExitCodes(item2));
   return typeof value.exit_code === "number" ? [value.exit_code, ...nested] : nested;
 }
 function outputStrings(value) {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap((item2) => outputStrings(item2));
-  if (!isRecord12(value)) return [];
+  if (!isRecord13(value)) return [];
   return Object.values(value).flatMap((item2) => outputStrings(item2));
 }
 function hostEnvelopeStrings(value) {
@@ -38630,7 +39345,7 @@ function scriptStates(value) {
   );
 }
 function customHostHeaderState(item2) {
-  const text4 = typeof item2 === "string" ? item2 : isRecord12(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
+  const text4 = typeof item2 === "string" ? item2 : isRecord13(item2) && item2.type === "input_text" ? asString(item2.text) : void 0;
   if (text4 === void 0) return void 0;
   const marker = "\nOutput:\n";
   const boundary = text4.indexOf(marker);
@@ -38656,11 +39371,11 @@ function successfulFunctionOutput(value) {
   return exitCodes.length > 0;
 }
 function topLevelExitCode(value) {
-  if (!isRecord12(value)) return void 0;
+  if (!isRecord13(value)) return void 0;
   return typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : void 0;
 }
 function completeResultEnvelopeExitCode(value) {
-  if (!isRecord12(value) || typeof value.chunk_id !== "string" || value.chunk_id.length === 0 || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0 || typeof value.original_token_count !== "number" || !Number.isInteger(value.original_token_count) || value.original_token_count < 0) return void 0;
+  if (!isRecord13(value) || typeof value.chunk_id !== "string" || value.chunk_id.length === 0 || typeof value.output !== "string" || typeof value.wall_time_seconds !== "number" || !Number.isFinite(value.wall_time_seconds) || value.wall_time_seconds < 0 || typeof value.original_token_count !== "number" || !Number.isInteger(value.original_token_count) || value.original_token_count < 0) return void 0;
   return topLevelExitCode(value);
 }
 function topLevelObjectKeys(text4) {
@@ -38710,7 +39425,7 @@ function parsedCompleteResultEnvelope(text4) {
       return void 0;
     }
     const exitCode = completeResultEnvelopeExitCode(value);
-    if (exitCode === void 0 || !isRecord12(value) || typeof value.output !== "string") return void 0;
+    if (exitCode === void 0 || !isRecord13(value) || typeof value.output !== "string") return void 0;
     return { exitCode, output: value.output };
   } catch {
     return void 0;
@@ -38720,12 +39435,12 @@ function parsedCustomCompletion(value) {
   if (!Array.isArray(value) || value.length < 2) return void 0;
   if (customHostHeaderState(value[0]) !== "completed") return void 0;
   const typedResultIndexes = value.flatMap(
-    (item2, index) => isRecord12(item2) && item2.type === "execution_result" ? [index] : []
+    (item2, index) => isRecord13(item2) && item2.type === "execution_result" ? [index] : []
   );
   if (typedResultIndexes.length > 0) {
     const resultIndex = typedResultIndexes[0];
     if (typedResultIndexes.length !== 1 || resultIndex !== value.length - 1 || value.slice(1, resultIndex).some(
-      (item2) => !isRecord12(item2) || item2.type !== "input_text" || typeof item2.text !== "string"
+      (item2) => !isRecord13(item2) || item2.type !== "input_text" || typeof item2.text !== "string"
     )) return void 0;
     const exitCode = topLevelExitCode(value[resultIndex]);
     if (exitCode === void 0) return void 0;
@@ -38736,7 +39451,7 @@ function parsedCustomCompletion(value) {
   }
   if (value.length !== 2) return void 0;
   const payload = value[1];
-  const text4 = typeof payload === "string" ? payload : isRecord12(payload) && payload.type === "input_text" ? asString(payload.text) : void 0;
+  const text4 = typeof payload === "string" ? payload : isRecord13(payload) && payload.type === "input_text" ? asString(payload.text) : void 0;
   if (text4 === void 0) return void 0;
   const envelope = parsedCompleteResultEnvelope(text4);
   return envelope === void 0 ? void 0 : { exitCode: envelope.exitCode, stdout: envelope.output };
@@ -38753,7 +39468,7 @@ function successfulCustomStdout(value) {
 }
 
 // packages/cli/src/codexTrustedSkillRead.ts
-function isRecord13(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function asString2(value) {
@@ -38765,7 +39480,7 @@ function functionExecInvocation(payload) {
   if (!argumentsText) return void 0;
   try {
     const args = JSON.parse(argumentsText);
-    if (!isRecord13(args) || !isCompleteOutputSafeExecArguments(args)) return void 0;
+    if (!isRecord14(args) || !isCompleteOutputSafeExecArguments(args)) return void 0;
     if (args.cmd !== void 0 && args.command !== void 0) return void 0;
     const command2 = asString2(args.cmd) ?? asString2(args.command);
     if (args.workdir !== void 0 && typeof args.workdir !== "string") return void 0;
@@ -38961,7 +39676,7 @@ async function hostTranscriptUnchanged(handle, candidate) {
 
 // packages/cli/src/codexTranscriptEvidence.ts
 var MAX_RECEIPT_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
-function isRecord14(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function asString3(value) {
@@ -38988,7 +39703,7 @@ function responseItemAtOrAfter(event, notBefore) {
 }
 function receiptTurnId(payload) {
   const metadata = payload.internal_chat_message_metadata_passthrough;
-  if (!isRecord14(metadata)) return void 0;
+  if (!isRecord15(metadata)) return void 0;
   return asString3(metadata.turn_id);
 }
 async function settleBoundedStream(stream) {
@@ -39032,10 +39747,10 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       } catch {
         return false;
       }
-      if (!isRecord14(event)) continue;
+      if (!isRecord15(event)) continue;
       if (event.type === "session_meta") {
         const session = event.payload;
-        if (isRecord14(session)) {
+        if (isRecord15(session)) {
           const sessionId = asString3(session.session_id) ?? asString3(session.id);
           matchesSession = sessionId === receipt.sessionId;
           const cwd = asString3(session.cwd);
@@ -39046,7 +39761,7 @@ async function transcriptConfirmsReceipt(receipt, trustRoots, repoRoot, homeDir 
       }
       if (!matchesSession || event.type !== "response_item") continue;
       const payload = event.payload;
-      if (!isRecord14(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
+      if (!isRecord15(payload) || receiptTurnId(payload) !== receipt.turnId) continue;
       const payloadCallId = asString3(payload.call_id);
       if (payloadCallId === receipt.toolUseId && (payload.type === "function_call" || payload.type === "custom_tool_call")) {
         if (targetInvocationSeen) return false;
@@ -39101,9 +39816,9 @@ async function matchingSuccessfulOutput(lines, receipt, outputAbi, readPaths) {
     } catch {
       return false;
     }
-    if (!isRecord14(event) || event.type !== "response_item") continue;
+    if (!isRecord15(event) || event.type !== "response_item") continue;
     const payload = event.payload;
-    if (!isRecord14(payload) || receiptTurnId(payload) !== receipt.turnId || asString3(payload.call_id) !== receipt.toolUseId) continue;
+    if (!isRecord15(payload) || receiptTurnId(payload) !== receipt.turnId || asString3(payload.call_id) !== receipt.toolUseId) continue;
     if (payload.type === "custom_tool_call" || payload.type === "function_call") return false;
     if (payload.type !== "custom_tool_call_output" && payload.type !== "function_call_output") continue;
     if (matchingOutput !== void 0) return false;
@@ -39173,10 +39888,10 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
           confirmedInLatestTurn.clear();
           break;
         }
-        if (!isRecord14(event)) continue;
+        if (!isRecord15(event)) continue;
         if (event.type === "session_meta") {
           const payload2 = event.payload;
-          if (isRecord14(payload2)) {
+          if (isRecord15(payload2)) {
             const cwd = asString3(payload2.cwd);
             sessionRoot = cwd;
             if (cwd) {
@@ -39191,7 +39906,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         }
         if (event.type === "turn_context") {
           const payload2 = event.payload;
-          const turnId = isRecord14(payload2) ? asString3(payload2.turn_id) : void 0;
+          const turnId = isRecord15(payload2) ? asString3(payload2.turn_id) : void 0;
           if (turnId === latestTurnId) continue;
           latestTurnId = turnId;
           readsByCall.clear();
@@ -39202,7 +39917,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, tru
         }
         if (!matchesHostSession || latestTurnId === void 0 || event.type !== "response_item") continue;
         const payload = event.payload;
-        if (!isRecord14(payload)) continue;
+        if (!isRecord15(payload)) continue;
         const eventTurnId = receiptTurnId(payload);
         if (eventTurnId !== void 0 && eventTurnId !== latestTurnId) continue;
         if (payload.type === "function_call" || payload.type === "custom_tool_call") {
@@ -39315,7 +40030,7 @@ var REAL_CODEX_SKILL_RECEIPT_ENV = {
   selectedPluginRoot: () => process.env.TENON_CODEX_PLUGIN_ROOT,
   trustRoots: productionCodexSkillTrustRoots
 };
-function isRecord15(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function asString4(value) {
@@ -39341,7 +40056,7 @@ function isTrustedTranscriptPath2(transcriptPath, homeDir, configured) {
   return isInside4(codexSessionsRoot3(homeDir, configured), resolve22(transcriptPath));
 }
 function parseReceipt2(value) {
-  if (!isRecord15(value) || value.version !== RECEIPT_VERSION) return void 0;
+  if (!isRecord16(value) || value.version !== RECEIPT_VERSION) return void 0;
   const receivedAt = asString4(value.receivedAt);
   const changeName = asString4(value.changeName);
   const skillId = asString4(value.skillId);
@@ -39444,7 +40159,7 @@ function currentVisitEvidence(history, evidenceScope) {
   if (evidenceScope) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const entry = entries[index];
-      if (isRecord15(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
+      if (isRecord16(entry) && entry.kind === "transition" && entry.to === evidenceScope) {
         start = index + 1;
         startedAt = validTimestamp2(entry.ts);
         valid = startedAt !== void 0;
@@ -39452,12 +40167,12 @@ function currentVisitEvidence(history, evidenceScope) {
       }
     }
     const hasAnyTransition = entries.some(
-      (entry) => isRecord15(entry) && entry.kind === "transition"
+      (entry) => isRecord16(entry) && entry.kind === "transition"
     );
     if (!valid && !hasAnyTransition) {
       for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
-        if (isRecord15(entry) && entry.kind === "init") {
+        if (isRecord16(entry) && entry.kind === "init") {
           start = index + 1;
           startedAt = validTimestamp2(entry.ts);
           valid = startedAt !== void 0;
@@ -39468,7 +40183,7 @@ function currentVisitEvidence(history, evidenceScope) {
   }
   const ids2 = /* @__PURE__ */ new Set();
   for (const entry of entries.slice(start)) {
-    if (!isRecord15(entry) || entry.kind !== "tool") continue;
+    if (!isRecord16(entry) || entry.kind !== "tool") continue;
     const raw = asString4(entry.raw);
     const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null;
     if (match?.[1]) ids2.add(match[1]);
@@ -39497,7 +40212,7 @@ async function latestBoundHostSessionId(repoRoot, changeName) {
     if (!await regularFile(path9)) continue;
     try {
       const value = JSON.parse(await readFile25(path9, "utf8"));
-      if (!isRecord15(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString4(value.change) !== changeName) continue;
+      if (!isRecord16(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString4(value.change) !== changeName) continue;
       const sessionId = asString4(value.session_id);
       const boundAt = asString4(value.bound_at);
       if (!sessionId || !boundAt || !isSafeOpaqueId(sessionId) || Number.isNaN(Date.parse(boundAt))) continue;
@@ -41253,6 +41968,45 @@ async function enforceProductionLoopWiring(deps, loopIds, home = homedir10()) {
   });
 }
 
+// packages/cli/src/commands/afk-workflow-authority.ts
+async function resolveAfkWorkflowActionAuthority(deps, change, context, run) {
+  const state = await deps.store.read(changeDir(deps.cwd, change));
+  let project;
+  try {
+    const trackId = str(state.fields.track);
+    const allowed = trackId !== "" && requireTrack(deps.loadRegistry(), trackId).policyProfile.automationEligible;
+    project = { status: "valid", grants: allowed ? ["enter-afk"] : [] };
+  } catch {
+    project = { status: "malformed", grants: [] };
+  }
+  let skill = { status: "missing", grants: [] };
+  if (context.skill_bundle_id !== null && context.skill_bundle_id !== void 0 && run.workflowPlanFingerprint !== void 0 && deps.resolveSkillActionAuthority !== void 0) {
+    const query = {
+      change,
+      skillBundleId: context.skill_bundle_id,
+      workflowRunId: run.id,
+      workflowFingerprint: run.workflowPlanFingerprint
+    };
+    try {
+      skill = parseSkillActionAuthorityContract(
+        await deps.resolveSkillActionAuthority(query),
+        query
+      );
+    } catch {
+      skill = { status: "malformed", grants: [] };
+    }
+  }
+  const metadata = state.runMetadata;
+  const exactRun = metadata !== void 0 && metadata.runId === run.id && run.workflowId !== void 0 && resolveWorkflowName(state) === run.workflowId && run.workflowPlanFingerprint !== void 0 && metadata.workflowPlanFingerprint === run.workflowPlanFingerprint && run.loopId === context.loop_id && metadata.loopId === run.loopId && run.iterationId === context.iteration_id && metadata.iterationId === run.iterationId;
+  const runLayer = metadata === void 0 ? { status: "missing", grants: [] } : !exactRun ? { status: "fingerprint-mismatch", grants: [] } : { status: "valid", grants: str(state.fields.automation) === "queued" && str(state.fields.archived) !== "true" ? ["enter-afk"] : [] };
+  return {
+    platform: { status: "valid", grants: ["enter-afk"] },
+    skill,
+    project,
+    run: runLayer
+  };
+}
+
 // packages/cli/src/commands/afk-executor.ts
 var DEFAULT_SANDCASTLE_IMAGE = "sandcastle:local";
 async function runAfkRound(deps, options, runtime = {}) {
@@ -41347,7 +42101,8 @@ async function runAfkRound(deps, options, runtime = {}) {
       throw new Error(`merge recovery: \u8FDE\u7EED CAS \u5931\u8D25\uFF08${change}\uFF09`);
     },
     isSkillProfileKnown: deps.isSkillProfileKnown,
-    bindAutomationPolicy: (change, policy2, binding) => deps.runRepo.bindAutomationPolicy(changeDir(deps.cwd, change), policy2, binding)
+    bindAutomationPolicy: (change, policy2, binding) => deps.runRepo.bindAutomationPolicy(changeDir(deps.cwd, change), policy2, binding),
+    workflowActionAuthority: ({ change, context, run }) => resolveAfkWorkflowActionAuthority(deps, change, context, run)
   });
   const preparation = createExecutionPreparation({
     repoRoot: deps.cwd,
@@ -48669,7 +49424,7 @@ var visitStrings = (value, emit4) => {
     for (const item2 of Object.values(value)) visitStrings(item2, emit4);
   }
 };
-var isRecord16 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord17 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var diagnosticMessage = (value) => value.replace(/\s+/g, " ").trim().slice(0, 400);
 async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
   if (mode !== "usage" && mode !== "transitions" && mode !== "last-message") {
@@ -48699,7 +49454,7 @@ async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
             if (embeddedLine.startsWith("[TRANSITION] ")) deps.io.out(embeddedLine);
           }
         });
-      } else if (isRecord16(event) && event.type === "item.completed" && isRecord16(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
+      } else if (isRecord17(event) && event.type === "item.completed" && isRecord17(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
         const message2 = diagnosticMessage(event.item.text);
         if (message2.length > 0) lastAgentMessage = message2;
       }
@@ -49741,10 +50496,10 @@ var PAYLOAD_ENTRIES = [
   "tools/verify-skills.sh"
 ];
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
-function isRecord17(value) {
+function isRecord18(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function nonEmptyString(value) {
+function nonEmptyString2(value) {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 function validReleaseId(value) {
@@ -49755,9 +50510,9 @@ function isExistingReleaseCollision(error2) {
   return code === "EEXIST" || code === "ENOTEMPTY";
 }
 function sourceFromUnknown(value) {
-  if (!isRecord17(value)) return null;
+  if (!isRecord18(value)) return null;
   const host = value.host;
-  const pluginVersion = nonEmptyString(value.pluginVersion);
+  const pluginVersion = nonEmptyString2(value.pluginVersion);
   if (host !== "codex" && host !== "claude" && host !== "adapter" && host !== "manual" || pluginVersion === null) {
     return null;
   }
@@ -49770,9 +50525,9 @@ function parseManifest(raw) {
   } catch {
     return null;
   }
-  if (!isRecord17(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
-  const payloadDigest = nonEmptyString(value.payloadDigest);
-  const createdAt = nonEmptyString(value.createdAt);
+  if (!isRecord18(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null;
+  const payloadDigest = nonEmptyString2(value.payloadDigest);
+  const createdAt = nonEmptyString2(value.createdAt);
   const source = sourceFromUnknown(value.source);
   if (payloadDigest === null || !/^[a-f0-9]{64}$/.test(payloadDigest) || createdAt === null || source === null) return null;
   if (value.releaseId !== `sha256-${payloadDigest}`) return null;
@@ -49785,12 +50540,12 @@ function parseSelection(raw) {
   } catch {
     return null;
   }
-  if (!isRecord17(value)) return null;
+  if (!isRecord18(value)) return null;
   const revision = value.revision;
   if (value.version !== 1 || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) return null;
   const activeRelease = value.activeRelease;
   const previousRelease = value.previousRelease;
-  const updatedAt = nonEmptyString(value.updatedAt);
+  const updatedAt = nonEmptyString2(value.updatedAt);
   if (activeRelease !== null && !validReleaseId(activeRelease) || previousRelease !== null && !validReleaseId(previousRelease) || updatedAt === null) return null;
   return { version: 1, revision, activeRelease, previousRelease, updatedAt };
 }
@@ -49801,9 +50556,9 @@ function parseAudit(raw) {
   } catch {
     return null;
   }
-  if (!isRecord17(value) || value.version !== 1) return null;
-  const at = nonEmptyString(value.at);
-  const detail = nonEmptyString(value.detail);
+  if (!isRecord18(value) || value.version !== 1) return null;
+  const at = nonEmptyString2(value.at);
+  const detail = nonEmptyString2(value.detail);
   const kind = value.kind;
   const releaseId = value.releaseId;
   const previousRelease = value.previousRelease;
@@ -49985,7 +50740,7 @@ function hookCommands(value, output) {
     for (const item2 of value) hookCommands(item2, output);
     return;
   }
-  if (!isRecord17(value)) return;
+  if (!isRecord18(value)) return;
   const command2 = value.command;
   if (typeof command2 === "string") output.push(command2);
   for (const item2 of Object.values(value)) hookCommands(item2, output);
@@ -50050,7 +50805,7 @@ async function candidateVersion(candidateRoot) {
   for (const manifest of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
       const parsed = JSON.parse(await readFile36(join78(candidateRoot, manifest), "utf8"));
-      const version = isRecord17(parsed) ? nonEmptyString(parsed.version) : null;
+      const version = isRecord18(parsed) ? nonEmptyString2(parsed.version) : null;
       if (version !== null) return version;
     } catch {
     }
@@ -50306,7 +51061,7 @@ import { lstat as lstat36, mkdir as mkdir27, readFile as readFile37, unlink as u
 import { dirname as dirname19, isAbsolute as isAbsolute25, join as join79, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
-function isRecord18(value) {
+function isRecord19(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys(value, allowed) {
@@ -50319,7 +51074,7 @@ function decodeManagedHostSteps(value) {
   const ids2 = /* @__PURE__ */ new Set();
   const steps = [];
   for (const item2 of value) {
-    if (!isRecord18(item2) || !exactKeys(item2, [
+    if (!isRecord19(item2) || !exactKeys(item2, [
       "id",
       "state",
       "before",
@@ -50346,7 +51101,7 @@ function decodeManagedHostSteps(value) {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 var JOURNAL_FILE = "release-transaction.json";
-function isRecord19(value) {
+function isRecord20(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function exactKeys2(value, required2, optional = []) {
@@ -50357,7 +51112,7 @@ function isSource(value) {
   return value === "codex" || value === "claude" || value === "adapter" || value === "manual";
 }
 function decodeSelection(value) {
-  if (!isRecord19(value) || !exactKeys2(value, [
+  if (!isRecord20(value) || !exactKeys2(value, [
     "version",
     "revision",
     "activeRelease",
@@ -50374,14 +51129,14 @@ function decodeSelection(value) {
   };
 }
 function decodeRelease(value) {
-  if (!isRecord19(value) || !exactKeys2(value, [
+  if (!isRecord20(value) || !exactKeys2(value, [
     "version",
     "releaseId",
     "payloadDigest",
     "createdAt",
     "source"
   ])) return null;
-  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord19(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
+  if (value.version !== 1 || !validReleaseId(value.releaseId) || typeof value.payloadDigest !== "string" || !/^[a-f0-9]{64}$/.test(value.payloadDigest) || value.releaseId !== `sha256-${value.payloadDigest}` || typeof value.createdAt !== "string" || value.createdAt === "" || !isRecord20(value.source) || !exactKeys2(value.source, ["host", "pluginVersion"]) || !isSource(value.source.host) || typeof value.source.pluginVersion !== "string" || value.source.pluginVersion === "") return null;
   return {
     version: 1,
     releaseId: value.releaseId,
@@ -50394,9 +51149,9 @@ function decodeRelease(value) {
   };
 }
 function decodeLauncherFile(value) {
-  if (!isRecord19(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute25(value.path) || normalize(value.path) !== value.path) return null;
+  if (!isRecord20(value) || !exactKeys2(value, ["path", "state"]) || typeof value.path !== "string" || !isAbsolute25(value.path) || normalize(value.path) !== value.path) return null;
   const state = value.state;
-  if (!isRecord19(state) || typeof state.kind !== "string") return null;
+  if (!isRecord20(state) || typeof state.kind !== "string") return null;
   if (state.kind === "missing" && exactKeys2(state, ["kind"])) {
     return { path: value.path, state: { kind: "missing" } };
   }
@@ -50413,13 +51168,13 @@ function decodeLauncherFile(value) {
   return null;
 }
 function decodeLauncherSnapshot(value) {
-  if (!isRecord19(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
+  if (!isRecord20(value) || !exactKeys2(value, ["tenon", "hook"])) return null;
   const tenon = decodeLauncherFile(value.tenon);
   const hook = decodeLauncherFile(value.hook);
   return tenon === null || hook === null ? null : { tenon, hook };
 }
 function decodeActivation(value) {
-  if (!isRecord19(value) || !exactKeys2(
+  if (!isRecord20(value) || !exactKeys2(
     value,
     ["selection", "release", "releaseRoot"],
     ["launcherSnapshot", "launcherCommitted"]
@@ -50439,7 +51194,7 @@ function decodeActivation(value) {
   };
 }
 function decodeActivationCheckpoint(value) {
-  if (!isRecord19(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
+  if (!isRecord20(value) || !exactKeys2(value, ["selection", "launchers"])) return null;
   const selection = decodeSelection(value.selection);
   const launchers = decodeLauncherSnapshot(value.launchers);
   return selection === null || launchers === null ? null : { selection, launchers };
@@ -50449,7 +51204,7 @@ function isOperation(value) {
 }
 function decodeDashboardIdentity(value) {
   if (value === void 0) return void 0;
-  if (!isRecord19(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
+  if (!isRecord20(value) || !exactKeys2(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
   return {
     version: 1,
     port: value.port,
@@ -50461,7 +51216,7 @@ function decodeDashboardIdentity(value) {
 }
 function decodeDashboard(value) {
   if (value === void 0) return void 0;
-  if (!isRecord19(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
+  if (!isRecord20(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
   const identity = decodeDashboardIdentity({
     version: value.version,
     port: value.port,
@@ -50484,7 +51239,7 @@ function decodeJournal(raw, paths) {
   } catch {
     return null;
   }
-  if (!isRecord19(value) || !exactKeys2(
+  if (!isRecord20(value) || !exactKeys2(
     value,
     ["version", "transactionId", "operation", "source", "phase", "startedAt", "updatedAt"],
     [
@@ -52305,7 +53060,7 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
 import { isAbsolute as isAbsolute27, join as join84, normalize as normalize3 } from "node:path";
 
 // packages/cli/src/commands/managed-host-desired-identity.ts
-function isRecord20(value) {
+function isRecord21(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function hasExactKeys(value, keys) {
@@ -52316,7 +53071,7 @@ function isGitOid(value) {
   return typeof value === "string" && GIT_OID.test(value);
 }
 function decodeMarketplaceIdentity(value) {
-  if (!isRecord20(value) || !hasExactKeys(value, ["head", "root", "source", "sourceType"])) {
+  if (!isRecord21(value) || !hasExactKeys(value, ["head", "root", "source", "sourceType"])) {
     return null;
   }
   if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && !isGitOid(value.head)) {
@@ -52336,7 +53091,7 @@ function decodeDesiredIdentity(text4) {
   } catch {
     return null;
   }
-  if (!isRecord20(value) || value.version !== 1 || typeof value.kind !== "string") return null;
+  if (!isRecord21(value) || value.version !== 1 || typeof value.kind !== "string") return null;
   if (value.kind === "marketplace-present") {
     if (!hasExactKeys(value, ["head", "kind", "root", "source", "sourceType", "version"]) || typeof value.source !== "string" || value.root !== null && typeof value.root !== "string" || typeof value.sourceType !== "string" || typeof value.head !== "string") {
       return null;
@@ -54445,7 +55200,7 @@ import { createHash as createHash40, createHmac } from "node:crypto";
 import { closeSync as closeSync7, constants as constants10, fstatSync as fstatSync2, openSync as openSync7, readFileSync as readFileSync26 } from "node:fs";
 var MAX_PAYLOAD_BYTES = 128 * 1024;
 var MAX_TEXT_BYTES = 8 * 1024;
-var isRecord21 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord22 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function text3(value, field2) {
   if (typeof value !== "string" || value.trim() === "" || Buffer.byteLength(value) > MAX_TEXT_BYTES) {
     throw new Error(`${field2} must be a bounded non-empty string`);
@@ -54464,7 +55219,7 @@ function questionKey(candidate, header, prompt) {
   return normalized2 !== "" && normalized2.length <= 160 ? `host.${normalized2}` : `host.${digest8(`${header}\0${prompt}`).slice(0, 32)}`;
 }
 function answers(value) {
-  if (!isRecord21(value)) throw new Error("tool_response.answers must be an object");
+  if (!isRecord22(value)) throw new Error("tool_response.answers must be an object");
   const result = {};
   for (const [key, answer] of Object.entries(value)) {
     if (typeof answer !== "string" || answer.trim() === "") throw new Error(`question '${key}' requires a non-empty answer`);
@@ -54480,7 +55235,7 @@ function decodeHostInteractionPostToolUse(raw, recordedAt) {
   } catch (error2) {
     throw new Error(`host interaction payload is invalid JSON: ${String(error2)}`);
   }
-  if (!isRecord21(decoded) || decoded.tool_name !== "AskUserQuestion" && decoded.tool_name !== "request_user_input" || !isRecord21(decoded.tool_input) || !Array.isArray(decoded.tool_input.questions) || decoded.tool_input.questions.length === 0 || decoded.tool_input.questions.length > 3 || !isRecord21(decoded.tool_response)) {
+  if (!isRecord22(decoded) || decoded.tool_name !== "AskUserQuestion" && decoded.tool_name !== "request_user_input" || !isRecord22(decoded.tool_input) || !Array.isArray(decoded.tool_input.questions) || decoded.tool_input.questions.length === 0 || decoded.tool_input.questions.length > 3 || !isRecord22(decoded.tool_response)) {
     throw new Error("host interaction payload does not contain a supported structured response");
   }
   const answerByHeader = answers(decoded.tool_response.answers);
@@ -54489,13 +55244,13 @@ function decodeHostInteractionPostToolUse(raw, recordedAt) {
   const sessionId = decoded.session_id;
   const hostIdentity = createHash40("sha256").update(`${sessionId}\0${String(decoded.turn_id)}\0${String(decoded.tool_use_id)}`).digest();
   const questions = decoded.tool_input.questions.map((candidate, index) => {
-    if (!isRecord21(candidate)) throw new Error(`question ${index + 1} must be an object`);
+    if (!isRecord22(candidate)) throw new Error(`question ${index + 1} must be an object`);
     const header = text3(candidate.header, `question ${index + 1}.header`);
     const prompt = text3(candidate.question, `question ${index + 1}.question`);
     const rawOptions = candidate.options === void 0 ? [] : candidate.options;
     if (!Array.isArray(rawOptions) || rawOptions.length > 64) throw new Error(`question ${index + 1}.options is invalid`);
     const optionLabels = rawOptions.map((option, optionIndex) => {
-      if (!isRecord21(option)) throw new Error(`question ${index + 1}.option ${optionIndex + 1} must be an object`);
+      if (!isRecord22(option)) throw new Error(`question ${index + 1}.option ${optionIndex + 1} must be an object`);
       return text3(option.label, `question ${index + 1}.option ${optionIndex + 1}.label`);
     });
     const optionIds = optionLabels.map((label) => stableId("option", label));
@@ -54898,6 +55653,17 @@ function createRuntimeScopeResolver(providers) {
   };
 }
 
+// packages/cli/src/skill-action-authority-provider.ts
+function createManifestSkillActionAuthorityResolver(manifest, isKnownProfile) {
+  return async (query) => {
+    const authority = manifest.skillActionAuthority;
+    const known = query.skillBundleId === "_all" || isKnownProfile(query.skillBundleId);
+    if (!authority || !known) return void 0;
+    const grants = authority.grants[query.skillBundleId] ?? authority.grants._all;
+    return grants ? skillActionAuthorityContract(query, grants) : void 0;
+  };
+}
+
 // packages/cli/src/main.ts
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -55179,6 +55945,10 @@ async function main() {
     // afk.ts 的 cmdAfk('run') 装配 createLoopAdmission 时转发本字段；loop-run.ts 的 --dry-run
     // wiring 预览同样消费（见 deps.ts 头注）。
     isSkillProfileKnown: (id2) => trackCtx.skillProfiles.has(id2),
+    resolveSkillActionAuthority: createManifestSkillActionAuthorityResolver(
+      manifest,
+      (profile) => trackCtx.skillProfiles.has(profile)
+    ),
     store: store2,
     runRepo,
     loadRegistry: () => loadTrackRegistry(process.cwd(), trackCtx),

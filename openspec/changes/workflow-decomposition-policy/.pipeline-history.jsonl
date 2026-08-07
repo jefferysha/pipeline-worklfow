@@ -70,3 +70,10 @@
 {"ts":"2026-08-04T06:55:02Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"dc219086-6878-4304-8721-980d04563887"}
 {"ts":"2026-08-04T06:55:50Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
 {"ts":"2026-08-04T06:55:50Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-07T11:56:52Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdc14-0b14-7971-8520-5e089832eecd"}
+{"ts":"2026-08-07T12:01:04Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-08-07T12:01:04Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-07T12:01:04Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-08-07T12:32:25Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdc16-6fbd-7ed1-bbb9-a2746951c2ab"}
+{"ts":"2026-08-07T12:37:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T12:37:36Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 7"}

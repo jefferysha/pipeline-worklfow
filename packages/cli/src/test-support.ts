@@ -73,8 +73,11 @@ export function mockState(fields: Partial<Record<FieldName, string | string[]>> 
   return { fields: { ...all, ...fields }, opaqueTail: '' }
 }
 
-const MOCK_AFK_PLAN = compileEffectiveWorkflowPlan('mock-afk', {
-  name: 'mock-afk',
+// Keep the fixture on the production default Workflow identity while opting its frozen interaction
+// policy into AFK. This lets CLI tests exercise the default-track preparation path and still satisfy
+// the authoritative WorkflowRun/StepVisit identity binding.
+const MOCK_AFK_PLAN = compileEffectiveWorkflowPlan('default', {
+  name: 'default',
   interaction: { version: 'v1', mode: 'afk' },
   steps: [{
     id: 'build', label: 'Build', gate: null,
