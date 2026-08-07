@@ -21,9 +21,9 @@
 
 ## 验证
 
-- [ ] 验证环、冲突、稳定波次、失败/失效、parent validators 与公平性。 (verify)
-- [ ] 验证 AFK/default evidence、hard blockers、并发操作、取消和恢复。 (verify)
-- [ ] 验证 client/server DTO、i18n、状态组件与真实桌面浏览器 retry/cancel/resume 路径。 (verify)
+- [x] 验证环、冲突、稳定波次、失败/失效、parent validators 与公平性。 (verify)
+- [x] 验证 AFK/default evidence、hard blockers、并发操作、取消和恢复。 (verify)
+- [x] 验证 client/server DTO、i18n、状态组件与真实桌面浏览器 retry/cancel/resume 路径。 (verify)
 
 ## 交付
 
