@@ -31,7 +31,7 @@
         {
           "phase": "build",
           "sha256": "1f552b2e149fbaa945d1858bc4b8fa13db997fdd187e852483b47dc75e8b1673",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -52,7 +52,7 @@
         {
           "phase": "build",
           "sha256": "64fef41b7185a2865583d81132bd3da41405bcb51d6a385fcb9c342f6c79f3fb",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -73,28 +73,7 @@
         {
           "phase": "build",
           "sha256": "a1a47991407758d5f63558e7dabfe847cde786242491b78a14bfc080674da820",
-          "readAt": "2026-08-04T03:16:10Z",
-          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/task-dag-scheduler/tasks.md",
-      "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-08-04T03:15:23Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
-          "readAt": "2026-08-04T03:15:30Z",
-          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",4]"
-        },
-        {
-          "phase": "build",
-          "sha256": "4662e40c1ce0e419a6050273c76f5ff5688d517a692294cdb978fe61a789eff2",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -109,7 +88,7 @@
         {
           "phase": "build",
           "sha256": "f9c42b7418f562d8fc7f6f9ef0faec63672a66021898e438fe3972d0e4af4d8e",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -130,7 +109,7 @@
         {
           "phase": "build",
           "sha256": "4fd6406d760b8519b97e07b5b821a118606332fe44fdd6bef1cd40a2af878e35",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -145,7 +124,7 @@
         {
           "phase": "build",
           "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]
@@ -160,7 +139,30 @@
         {
           "phase": "build",
           "sha256": "09dc9c7a639ce295575845ce1d0970742c2e9ccbb18dc9b3f589641f24ac3632",
-          "readAt": "2026-08-04T03:16:10Z",
+          "readAt": "2026-08-07T18:52:36Z",
+          "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/task-dag-scheduler/tasks.md",
+      "sha256": "c4e458dd6a3d658857d56b6700bfcd9efb0e10db6845c15c21d9d78654fecbe3",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-07T19:30:43Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-d3f4bdbe6836df96a83762e346dd5742afdf6eef56f558427ea50d8cf236694d",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "f505c67f-bb52-4c8f-8046-281179216b3e",
+          "transitionSequence": 5
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "c4e458dd6a3d658857d56b6700bfcd9efb0e10db6845c15c21d9d78654fecbe3",
+          "readAt": "2026-08-07T19:30:44Z",
           "visitId": "[\"f505c67f-bb52-4c8f-8046-281179216b3e\",5]"
         }
       ]

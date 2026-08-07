@@ -36,3 +36,9 @@
 {"ts":"2026-08-04T03:16:10Z","kind":"set","field":"isolation","to":"worktree"}
 {"ts":"2026-08-04T03:16:10Z","kind":"set","field":"direct_override","to":"true"}
 {"ts":"2026-08-04T03:16:25Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T18:52:36Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
+{"ts":"2026-08-07T18:52:36Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-07T19:27:42Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T19:30:43Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T19:30:43Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build f505c67f-bb52-4c8f-8046-281179216b3e 5"}
+{"ts":"2026-08-07T19:30:44Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

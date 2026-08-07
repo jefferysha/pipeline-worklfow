@@ -2015,39 +2015,71 @@ function deriveTaskRunReadModel(input) {
     latest_attempt: latest.get(workItem.id) ?? null
   }));
   const itemStates = new Map(items.map((item2) => [item2.work_item_id, item2.state]));
+  const groupsById = new Map(input.plan.groups.map((group) => [group.id, group]));
+  const childGroupIdsByParent = /* @__PURE__ */ new Map();
+  for (const group of input.plan.groups) {
+    if (group.parent_id === null)
+      continue;
+    const childGroupIds = childGroupIdsByParent.get(group.parent_id) ?? [];
+    childGroupIds.push(group.id);
+    childGroupIdsByParent.set(group.parent_id, childGroupIds);
+  }
+  const recursivelyOwnedWorkItemIds = (groupId) => {
+    const workItemIds = /* @__PURE__ */ new Set();
+    const visitedGroupIds = /* @__PURE__ */ new Set();
+    const visit = (currentGroupId) => {
+      if (visitedGroupIds.has(currentGroupId))
+        return;
+      visitedGroupIds.add(currentGroupId);
+      const group = groupsById.get(currentGroupId);
+      if (group === void 0)
+        return;
+      for (const workItemId of group.work_item_ids)
+        workItemIds.add(workItemId);
+      for (const childGroupId of [...childGroupIdsByParent.get(currentGroupId) ?? []].sort()) {
+        visit(childGroupId);
+      }
+    };
+    visit(groupId);
+    return [...workItemIds].sort();
+  };
   const runValidators = effectiveValidatorVerdicts.filter((verdict) => verdict.scope === "run");
   const integrationFailed = runValidators.some((verdict) => verdict.status === "failed");
   const integrationPending = runValidators.some((verdict) => verdict.status !== "passed" && verdict.status !== "failed") || input.plan.work_items.length > 1 && !runValidators.some((verdict) => verdict.status === "passed");
   const groups2 = [...input.plan.groups].sort((left, right) => left.id.localeCompare(right.id)).map((group) => {
-    const groupStates = group.work_item_ids.map((id2) => itemStates.get(id2) ?? "blocked-upstream");
+    const workItemIds = recursivelyOwnedWorkItemIds(group.id);
+    const groupStates2 = workItemIds.map((id2) => itemStates.get(id2) ?? "blocked-upstream");
     const groupValidators = effectiveValidatorVerdicts.filter((verdict) => verdict.scope === "group" && verdict.target_id === group.id);
     const groupValidatorFailed = groupValidators.some((verdict) => verdict.status === "failed");
-    const groupValidatorPending = groupValidators.some((verdict) => verdict.status !== "passed" && verdict.status !== "failed") || group.work_item_ids.length > 1 && !groupValidators.some((verdict) => verdict.status === "passed");
-    const state2 = integrationFailed || groupValidatorFailed || groupStates.some((candidate) => candidate === "failed") ? "failed" : groupStates.every((candidate) => candidate === "succeeded") && !groupValidatorPending ? "succeeded" : groupStates.some((candidate) => candidate === "blocked-upstream") ? "blocked" : groupStates.some((candidate) => candidate === "running" || candidate === "invalidated") ? "running" : "pending";
-    return { group_id: group.id, state: state2, work_item_ids: [...group.work_item_ids].sort() };
+    const groupValidatorPending = groupValidators.some((verdict) => verdict.status !== "passed" && verdict.status !== "failed") || workItemIds.length > 1 && !groupValidators.some((verdict) => verdict.status === "passed");
+    const state2 = groupValidatorFailed || groupStates2.some((candidate) => candidate === "failed") ? "failed" : groupStates2.every((candidate) => candidate === "succeeded") && !groupValidatorPending ? "succeeded" : groupStates2.some((candidate) => candidate === "blocked-upstream") ? "blocked" : groupStates2.some((candidate) => candidate === "running" || candidate === "invalidated") ? "running" : "pending";
+    return { group_id: group.id, state: state2, work_item_ids: workItemIds };
   });
   const derivedStates = items.map(({ state: state2 }) => state2);
-  const state = input.admission.status === "blocked" || !input.schedule.valid ? "blocked" : integrationFailed || derivedStates.some((candidate) => candidate === "failed") ? "failed" : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === "cancelled") ? "cancelled" : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === "succeeded") && !integrationPending ? "succeeded" : input.attempts.length > 0 || derivedStates.some((candidate) => candidate === "invalidated") ? "running" : "admitted";
+  const groupStates = groups2.map(({ state: groupState }) => groupState);
+  const state = input.admission.status === "blocked" || !input.schedule.valid ? "blocked" : integrationFailed || derivedStates.some((candidate) => candidate === "failed") || groupStates.some((candidate) => candidate === "failed") ? "failed" : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === "cancelled") ? "cancelled" : derivedStates.length > 0 && derivedStates.every((candidate) => candidate === "succeeded") && groupStates.every((candidate) => candidate === "succeeded") && !integrationPending ? "succeeded" : input.attempts.length > 0 || derivedStates.some((candidate) => candidate === "invalidated") ? "running" : "admitted";
   const operations = [];
-  for (const item2 of items) {
-    if (item2.state === "failed" || item2.state === "cancelled" || item2.state === "invalidated") {
-      operations.push({
-        operation: "retry",
-        work_item_id: item2.work_item_id,
-        expected_run_revision: input.run_revision,
-        expected_state: item2.state
-      });
-    } else if (item2.state === "running") {
-      operations.push({
-        operation: "cancel",
-        work_item_id: item2.work_item_id,
-        expected_run_revision: input.run_revision,
-        expected_state: item2.state
-      });
+  if (input.admission.status === "admitted" && input.schedule.valid) {
+    for (const item2 of items) {
+      if (item2.state === "failed" || item2.state === "cancelled" || item2.state === "invalidated") {
+        operations.push({
+          operation: "retry",
+          work_item_id: item2.work_item_id,
+          expected_run_revision: input.run_revision,
+          expected_state: item2.state
+        });
+      } else if (item2.state === "running") {
+        operations.push({
+          operation: "cancel",
+          work_item_id: item2.work_item_id,
+          expected_run_revision: input.run_revision,
+          expected_state: item2.state
+        });
+      }
     }
-  }
-  if (state === "cancelled") {
-    operations.push({ operation: "resume", expected_run_revision: input.run_revision, expected_state: state });
+    if (state === "cancelled") {
+      operations.push({ operation: "resume", expected_run_revision: input.run_revision, expected_state: state });
+    }
   }
   return {
     schema_version: TASK_RUN_SCHEMA_VERSION,
@@ -21440,7 +21472,8 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
 }
 
 // packages/automation/dist/task-plan-run/journal.js
-import { lstat as lstat16, mkdir as mkdir15, open as open6, readFile as readFile16 } from "node:fs/promises";
+import { constants as constants4 } from "node:fs";
+import { lstat as lstat16, mkdir as mkdir15, open as open6 } from "node:fs/promises";
 import { join as join35 } from "node:path";
 var JOURNAL_SCHEMA_VERSION = "task-run-event/v1";
 var MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
@@ -21505,6 +21538,89 @@ function parseEvent(value, expectedSequence) {
   }
   throw new TaskRunJournalCorruptError("Task run journal event is invalid");
 }
+function parseEvents(raw) {
+  if (raw !== "" && !raw.endsWith("\n")) {
+    throw new TaskRunJournalCorruptError("Task run journal ends with an incomplete line");
+  }
+  const parsed = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (line === "")
+      continue;
+    let value;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      throw new TaskRunJournalCorruptError("Task run journal contains malformed JSON");
+    }
+    parsed.push(parseEvent(value, parsed.length + 1));
+  }
+  return parsed;
+}
+function fileIdentity(stat5) {
+  return { dev: stat5.dev, ino: stat5.ino, size: stat5.size };
+}
+function sameFileIdentity2(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size;
+}
+function assertRegularJournalFile(stat5) {
+  if (!stat5.isFile()) {
+    throw new TaskRunJournalCorruptError("Task run journal leaf is not a regular file");
+  }
+  return fileIdentity(stat5);
+}
+async function assertJournalPathIdentity(path7, expected) {
+  let current;
+  try {
+    current = await lstat16(path7);
+  } catch {
+    throw new TaskRunJournalCorruptError("Task run journal leaf changed during access");
+  }
+  if (current.isSymbolicLink() || !current.isFile() || !sameFileIdentity2(fileIdentity(current), expected)) {
+    throw new TaskRunJournalCorruptError("Task run journal leaf is not a stable regular file");
+  }
+}
+function journalLeafError(error2) {
+  return isRecord6(error2) && ["ELOOP", "EISDIR", "ENODEV", "ENXIO", "ENOTDIR"].includes(String(error2.code));
+}
+async function openJournalFile(path7, flags, mode) {
+  try {
+    return await open6(path7, flags, mode);
+  } catch (error2) {
+    if (isRecord6(error2) && error2.code === "ENOENT")
+      return null;
+    if (journalLeafError(error2)) {
+      throw new TaskRunJournalCorruptError("Task run journal leaf is not a safe regular file");
+    }
+    throw error2;
+  }
+}
+async function readEventsFromHandle(path7, handle) {
+  const opened = assertRegularJournalFile(await handle.stat());
+  if (opened.size > MAX_JOURNAL_BYTES) {
+    throw new TaskRunJournalCorruptError("Task run journal exceeds its byte budget");
+  }
+  await assertJournalPathIdentity(path7, opened);
+  const bytes = Buffer.allocUnsafe(Math.min(opened.size, MAX_JOURNAL_BYTES) + 1);
+  let total = 0;
+  while (total < bytes.byteLength) {
+    const { bytesRead } = await handle.read(bytes, total, bytes.byteLength - total, total);
+    if (bytesRead === 0)
+      break;
+    total += bytesRead;
+  }
+  if (total > MAX_JOURNAL_BYTES) {
+    throw new TaskRunJournalCorruptError("Task run journal exceeds its byte budget");
+  }
+  const afterRead = assertRegularJournalFile(await handle.stat());
+  if (!sameFileIdentity2(opened, afterRead)) {
+    throw new TaskRunJournalCorruptError("Task run journal changed during read");
+  }
+  await assertJournalPathIdentity(path7, afterRead);
+  return {
+    events: parseEvents(bytes.subarray(0, total).toString("utf8")),
+    identity: afterRead
+  };
+}
 async function ordinaryDirectory2(path7) {
   try {
     const openedDirectoryPath = process.platform === "linux" && /^\/(?:dev\/fd|proc\/self\/fd)\/\d+$/.test(path7) ? `${path7}/.` : path7;
@@ -21547,30 +21663,15 @@ async function events(changeDir, revisionId) {
   const directory = await journalDirectory(changeDir, revisionId, false);
   if (directory === null)
     return [];
-  let raw;
+  const path7 = join35(directory, "events.jsonl");
+  const handle = await openJournalFile(path7, constants4.O_RDONLY | constants4.O_NONBLOCK | constants4.O_NOFOLLOW);
+  if (handle === null)
+    return [];
   try {
-    raw = await readFile16(join35(directory, "events.jsonl"), { encoding: "utf8", flag: "r" });
-  } catch (error2) {
-    if (isRecord6(error2) && error2.code === "ENOENT")
-      return [];
-    throw error2;
+    return (await readEventsFromHandle(path7, handle)).events;
+  } finally {
+    await handle.close();
   }
-  if (Buffer.byteLength(raw) > MAX_JOURNAL_BYTES) {
-    throw new TaskRunJournalCorruptError("Task run journal exceeds its byte budget");
-  }
-  const parsed = [];
-  for (const line of raw.split(/\r?\n/)) {
-    if (line === "")
-      continue;
-    let value;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      throw new TaskRunJournalCorruptError("Task run journal contains malformed JSON");
-    }
-    parsed.push(parseEvent(value, parsed.length + 1));
-  }
-  return parsed;
 }
 async function readTaskRunJournal(changeDir, revisionId) {
   const history = await events(changeDir, revisionId);
@@ -21614,34 +21715,59 @@ async function appendEvent(changeDir, revisionId, expectedRunRevision, event) {
     throw new TypeError("Task run expected revision is invalid");
   }
   return withLock(changeDir, async () => {
-    const current = await events(changeDir, revisionId);
-    if (current.length !== expectedRunRevision) {
-      throw new TaskRunRevisionConflictError("Task run expected revision is stale");
-    }
-    if (event.type === "attempt") {
-      const coordinateConflict = current.find((entry) => entry.type === "attempt" && entry.attempt.work_item_id === event.attempt.work_item_id && entry.attempt.attempt_number === event.attempt.attempt_number && entry.attempt.attempt_id !== event.attempt.attempt_id);
-      if (coordinateConflict !== void 0) {
-        throw new TaskRunJournalCorruptError("Task run attempt coordinate has conflicting identities");
-      }
-      const previous = [...current].reverse().find((entry) => entry.type === "attempt" && entry.attempt.attempt_id === event.attempt.attempt_id);
-      assertAttemptTransition(previous?.type === "attempt" ? previous.attempt : void 0, event.attempt);
-    } else if (event.type === "operation" && current.some((entry) => entry.type === "operation" && entry.operation.operation_id === event.operation.operation_id)) {
-      throw new TaskRunJournalCorruptError("Task run event identity is duplicated");
-    }
     const directory = await journalDirectory(changeDir, revisionId, true);
     if (directory === null)
       throw new TaskRunJournalCorruptError("Task run journal directory is missing");
-    const sequence = current.length + 1;
-    const line = `${JSON.stringify({ ...event, sequence })}
-`;
-    const handle = await open6(join35(directory, "events.jsonl"), "a", 384);
+    const path7 = join35(directory, "events.jsonl");
+    const handle = await openJournalFile(path7, constants4.O_RDWR | constants4.O_APPEND | constants4.O_CREAT | constants4.O_NONBLOCK | constants4.O_NOFOLLOW, 384);
+    if (handle === null)
+      throw new TaskRunJournalCorruptError("Task run journal leaf disappeared");
     try {
-      await handle.writeFile(line, "utf8");
+      const snapshot = await readEventsFromHandle(path7, handle);
+      const current = snapshot.events;
+      if (current.length !== expectedRunRevision) {
+        throw new TaskRunRevisionConflictError("Task run expected revision is stale");
+      }
+      if (event.type === "attempt") {
+        const coordinateConflict = current.find((entry) => entry.type === "attempt" && entry.attempt.work_item_id === event.attempt.work_item_id && entry.attempt.attempt_number === event.attempt.attempt_number && entry.attempt.attempt_id !== event.attempt.attempt_id);
+        if (coordinateConflict !== void 0) {
+          throw new TaskRunJournalCorruptError("Task run attempt coordinate has conflicting identities");
+        }
+        const previous = [...current].reverse().find((entry) => entry.type === "attempt" && entry.attempt.attempt_id === event.attempt.attempt_id);
+        assertAttemptTransition(previous?.type === "attempt" ? previous.attempt : void 0, event.attempt);
+      } else if (event.type === "operation" && current.some((entry) => entry.type === "operation" && entry.operation.operation_id === event.operation.operation_id)) {
+        throw new TaskRunJournalCorruptError("Task run event identity is duplicated");
+      }
+      const sequence = current.length + 1;
+      const line = `${JSON.stringify({ ...event, sequence })}
+`;
+      const beforeWrite = assertRegularJournalFile(await handle.stat());
+      if (!sameFileIdentity2(beforeWrite, snapshot.identity)) {
+        throw new TaskRunJournalCorruptError("Task run journal changed before append");
+      }
+      await assertJournalPathIdentity(path7, beforeWrite);
+      const encodedLine = Buffer.from(line, "utf8");
+      if (beforeWrite.size + encodedLine.byteLength > MAX_JOURNAL_BYTES) {
+        throw new TaskRunJournalCorruptError("Task run journal would exceed its byte budget");
+      }
+      const { bytesWritten } = await handle.write(encodedLine, 0, encodedLine.byteLength, null);
+      if (bytesWritten !== encodedLine.byteLength) {
+        throw new TaskRunJournalCorruptError("Task run journal append was incomplete");
+      }
       await handle.sync();
+      const afterWrite = assertRegularJournalFile(await handle.stat());
+      if (!sameFileIdentity2(afterWrite, {
+        dev: beforeWrite.dev,
+        ino: beforeWrite.ino,
+        size: beforeWrite.size + encodedLine.byteLength
+      })) {
+        throw new TaskRunJournalCorruptError("Task run journal changed during append");
+      }
+      await assertJournalPathIdentity(path7, afterWrite);
+      return sequence;
     } finally {
       await handle.close();
     }
-    return sequence;
   });
 }
 async function appendTaskRunOperation(changeDir, revisionId, operation) {
@@ -21657,7 +21783,7 @@ async function appendTaskRunOperation(changeDir, revisionId, operation) {
 // packages/server/src/workflows.ts
 import { randomUUID as randomUUID6 } from "node:crypto";
 import {
-  constants as constants7,
+  constants as constants8,
   fstatSync as fstatSync5,
   fsyncSync as fsyncSync2,
   lstatSync as lstatSync5,
@@ -21671,7 +21797,7 @@ import {
 
 // packages/server/src/workflowTrustedFs.ts
 import {
-  constants as constants5,
+  constants as constants6,
   fstatSync as fstatSync3,
   lstatSync as lstatSync4,
   mkdirSync as mkdirSync3,
@@ -21684,7 +21810,7 @@ import { isAbsolute as isAbsolute9, join as join36, relative as relative7, sep a
 // packages/server/src/workflowRootAnchor.ts
 import {
   closeSync as closeSync3,
-  constants as constants4,
+  constants as constants5,
   fstatSync as fstatSync2,
   lstatSync as lstatSync3,
   openSync as openSync3,
@@ -21728,7 +21854,7 @@ function captureWorkflowRootAnchor(root) {
   if (lexical.isSymbolicLink() || !lexical.isDirectory()) {
     throw new Error(`registered root \u5FC5\u987B\u662F\u975E symlink \u7684\u771F\u5B9E\u76EE\u5F55: ${path7}`);
   }
-  const fd = openSync3(path7, constants4.O_RDONLY | constants4.O_DIRECTORY | constants4.O_NOFOLLOW);
+  const fd = openSync3(path7, constants5.O_RDONLY | constants5.O_DIRECTORY | constants5.O_NOFOLLOW);
   try {
     const opened = fstatSync2(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, lexical)) {
@@ -21845,7 +21971,7 @@ function openTrustedChildDirectory(root, parent, name, create) {
   if (before.isSymbolicLink() || !before.isDirectory()) {
     throw new Error(`workflow \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${lexicalPath}`);
   }
-  const fd = openSync4(operationPath, constants5.O_RDONLY | constants5.O_DIRECTORY | constants5.O_NOFOLLOW);
+  const fd = openSync4(operationPath, constants6.O_RDONLY | constants6.O_DIRECTORY | constants6.O_NOFOLLOW);
   try {
     const opened = fstatSync3(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, before)) {
@@ -22006,7 +22132,7 @@ function errText3(error2) {
 }
 
 // packages/server/src/workflowReferenceScan.ts
-import { constants as constants6, fstatSync as fstatSync4, openSync as openSync5, readFileSync as readFileSync15, readdirSync as readdirSync5 } from "node:fs";
+import { constants as constants7, fstatSync as fstatSync4, openSync as openSync5, readFileSync as readFileSync15, readdirSync as readdirSync5 } from "node:fs";
 function decodeUtf8Strict(bytes, label) {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -22019,7 +22145,7 @@ function readTrustedRegularFile(directory, root, name, label, missing4) {
   assertDirectoryStillTrusted(directory, root);
   let fd;
   try {
-    fd = openSync5(paths.operation, constants6.O_RDONLY | constants6.O_NOFOLLOW);
+    fd = openSync5(paths.operation, constants7.O_RDONLY | constants7.O_NOFOLLOW);
   } catch (error2) {
     if (error2.code === "ENOENT" && missing4 === "null") return null;
     if (error2.code === "ENOENT") throw new Error(`${label} \u7F3A\u5931: ${paths.lexical}`);
@@ -22301,7 +22427,7 @@ function captureWorkflowDeletePermit(root, name) {
     assertWorkflowDirectoriesStillTrusted(directories);
     let fd;
     try {
-      fd = openSync6(target.operation, constants7.O_RDONLY | constants7.O_NOFOLLOW);
+      fd = openSync6(target.operation, constants8.O_RDONLY | constants8.O_NOFOLLOW);
     } catch (error2) {
       if (error2.code === "ENOENT") return null;
       throw error2;
@@ -22350,7 +22476,7 @@ function readWorkflowForApi(root, name, readSource = readBoundedWorkflowSource) 
         try {
           fd = openSync6(
             paths.operation,
-            constants7.O_RDONLY | constants7.O_NOFOLLOW | constants7.O_NONBLOCK
+            constants8.O_RDONLY | constants8.O_NOFOLLOW | constants8.O_NONBLOCK
           );
         } catch (e) {
           if (e.code === "ENOENT") {
@@ -22437,7 +22563,7 @@ function writeWorkflowForApi(root, name, wf) {
       assertWorkflowDirectoriesStillTrusted(directories);
       tempFd = openSync6(
         temp.operation,
-        constants7.O_WRONLY | constants7.O_CREAT | constants7.O_EXCL | constants7.O_NOFOLLOW,
+        constants8.O_WRONLY | constants8.O_CREAT | constants8.O_EXCL | constants8.O_NOFOLLOW,
         384
       );
       writeFileSync3(tempFd, content, "utf8");
@@ -22475,7 +22601,7 @@ function deleteWorkflowForApi(root, name, permit) {
     assertWorkflowDirectoriesStillTrusted(directories);
     let fd;
     try {
-      fd = openSync6(target.operation, constants7.O_RDONLY | constants7.O_NOFOLLOW);
+      fd = openSync6(target.operation, constants8.O_RDONLY | constants8.O_NOFOLLOW);
     } catch (e) {
       if (e.code === "ENOENT") {
         if (permit) throw new WorkflowDeleteConflictError(`workflow '${name}' \u5728\u5F15\u7528\u626B\u63CF\u671F\u95F4\u6D88\u5931`);
@@ -22502,7 +22628,7 @@ function deleteWorkflowForApi(root, name, permit) {
 }
 
 // packages/server/src/snapshot.ts
-import { closeSync as closeSync5, constants as constants10, fstatSync as fstatSync8, lstatSync as lstatSync7, openSync as openSync9 } from "node:fs";
+import { closeSync as closeSync5, constants as constants11, fstatSync as fstatSync8, lstatSync as lstatSync7, openSync as openSync9 } from "node:fs";
 import { readdir as readdir5 } from "node:fs/promises";
 import { join as join42 } from "node:path";
 
@@ -22752,7 +22878,7 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
 }
 
 // packages/server/src/contextBundleTrustedReader.ts
-import { constants as constants8, fstatSync as fstatSync6, openSync as openSync7, readSync as readSync4 } from "node:fs";
+import { constants as constants9, fstatSync as fstatSync6, openSync as openSync7, readSync as readSync4 } from "node:fs";
 import { dirname as dirname8, posix as posix3 } from "node:path";
 function safeParts(path7) {
   if (path7 === "" || path7.startsWith("/") || path7.includes("\\")) throw new Error("unsafe relative path");
@@ -22813,7 +22939,7 @@ function readTrustedFile(root, relativePath, maxBytes, readLimit, changeIdentity
       try {
         fd = openSync7(
           paths.operation,
-          constants8.O_RDONLY | constants8.O_NOFOLLOW | constants8.O_NONBLOCK
+          constants9.O_RDONLY | constants9.O_NOFOLLOW | constants9.O_NONBLOCK
         );
       } catch (error2) {
         if (isMissing(error2)) {
@@ -23010,7 +23136,7 @@ function dedupeRoots(roots) {
 // packages/server/src/snapshotTasks.ts
 import {
   closeSync as closeSync4,
-  constants as constants9,
+  constants as constants10,
   fstatSync as fstatSync7,
   lstatSync as lstatSync6,
   openSync as openSync8,
@@ -23085,7 +23211,7 @@ async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
     const ancestorVersions = [dirname9(openspecDir), openspecDir, changesDir].map(captureDirectoryMutationVersion);
     changeFd = openSync8(
       changeDir,
-      constants9.O_RDONLY | constants9.O_DIRECTORY | constants9.O_NOFOLLOW
+      constants10.O_RDONLY | constants10.O_DIRECTORY | constants10.O_NOFOLLOW
     );
     const openedChangeDir = fstatSync7(changeFd);
     const anchoredChangeDir = traversableDirectoryFdPath(changeFd, openedDir) ?? changeDir;
@@ -23093,7 +23219,7 @@ async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
     assertTrustContext();
     const target = join38(anchoredChangeDir, "tasks.md");
     hooks.beforeOpen?.();
-    fd = openSync8(target, constants9.O_RDONLY | constants9.O_NOFOLLOW | constants9.O_NONBLOCK);
+    fd = openSync8(target, constants10.O_RDONLY | constants10.O_NOFOLLOW | constants10.O_NONBLOCK);
     const opened = fstatSync7(fd, { bigint: true });
     if (!opened.isFile() || opened.size > BigInt(MAX_TASKS_MARKDOWN_BYTES)) return void 0;
     const openedVersion = captureStableFileVersion(opened);
@@ -23339,7 +23465,7 @@ async function readTerminalActivity(changeDir, changeName, nowMs) {
   const target = join42(changeDir, TERMINAL_ACTIVITY_FILE);
   let fd;
   try {
-    fd = openSync9(target, constants10.O_RDONLY | constants10.O_NOFOLLOW | constants10.O_NONBLOCK);
+    fd = openSync9(target, constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK);
     const opened = fstatSync8(fd);
     if (!opened.isFile() || opened.size > 4096) return void 0;
     const assertStable = () => {
@@ -24342,7 +24468,7 @@ function writeAutomationSettings(root, settings) {
 
 // packages/server/src/config.ts
 import { readFileSync as readFileSync17 } from "node:fs";
-import { readFile as readFile17, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
+import { readFile as readFile16, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
 import { dirname as dirname12 } from "node:path";
 var ConfigError = class extends Error {
   constructor(message) {
@@ -24475,7 +24601,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
   }
   const key = `${phase}.${track}`;
   await withLock(dirname12(manifestPath2), async () => {
-    const original = await readFile17(manifestPath2, "utf8");
+    const original = await readFile16(manifestPath2, "utf8");
     const lines = original.split("\n");
     let sectionStart = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -24549,7 +24675,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
 // packages/server/src/hooksConfig.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 import {
-  constants as constants11,
+  constants as constants12,
   fstatSync as fstatSync9,
   fsyncSync as fsyncSync3,
   openSync as openSync10,
@@ -24582,7 +24708,7 @@ function readBoundedHooksConfig(root, pipeline) {
   try {
     fd = openSync10(
       file.operation,
-      constants11.O_RDONLY | constants11.O_NONBLOCK | constants11.O_NOFOLLOW
+      constants12.O_RDONLY | constants12.O_NONBLOCK | constants12.O_NOFOLLOW
     );
     const stat5 = fstatSync9(fd);
     if (!stat5.isFile() || stat5.size > HOOKS_CONFIG_MAX_BYTES) return null;
@@ -24725,7 +24851,7 @@ function writeHooksConfig(root, pipeline, config) {
   try {
     fd = openSync10(
       tmp.operation,
-      constants11.O_WRONLY | constants11.O_CREAT | constants11.O_EXCL | constants11.O_NOFOLLOW,
+      constants12.O_WRONLY | constants12.O_CREAT | constants12.O_EXCL | constants12.O_NOFOLLOW,
       384
     );
     writeFileSync5(fd, `${JSON.stringify({
@@ -25033,7 +25159,7 @@ async function removeSecret(path7, key) {
 }
 
 // packages/server/src/skillsRegistry.ts
-import { accessSync as accessSync2, constants as constants12, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
+import { accessSync as accessSync2, constants as constants13, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
 import { delimiter, dirname as dirname13, join as join48 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
 function skillDescriptionFrom(path7) {
@@ -25203,7 +25329,7 @@ function executableOnPath(bin) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (dir === "") continue;
     try {
-      accessSync2(join48(dir, bin), constants12.X_OK);
+      accessSync2(join48(dir, bin), constants13.X_OK);
       return true;
     } catch {
     }
@@ -25277,7 +25403,7 @@ import { join as join53, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
 import { execFile as execFile4 } from "node:child_process";
-import { readFile as readFile18, writeFile as writeFile11 } from "node:fs/promises";
+import { readFile as readFile17, writeFile as writeFile11 } from "node:fs/promises";
 import { join as join49 } from "node:path";
 var AFK_LANES = ["queued", "running", "merged", "failed", "conflict", "paused"];
 function isAutomationState(value) {
@@ -25455,7 +25581,7 @@ async function enqueueAfkRun(store, changeDir, clock, eligibility) {
 }
 async function readAfkRunLog(changeDir) {
   try {
-    return await readFile18(join49(changeDir, ".sandcastle-run.log"), "utf8");
+    return await readFile17(join49(changeDir, ".sandcastle-run.log"), "utf8");
   } catch {
     return null;
   }
@@ -25990,11 +26116,11 @@ async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
 }
 
 // packages/server/src/transition.ts
-import { readFile as readFile20 } from "node:fs/promises";
+import { readFile as readFile19 } from "node:fs/promises";
 import { join as join52 } from "node:path";
 
 // packages/server/src/transitionHistory.ts
-import { readFile as readFile19 } from "node:fs/promises";
+import { readFile as readFile18 } from "node:fs/promises";
 import { join as join51 } from "node:path";
 function decodeHistoryEntry(value) {
   if (typeof value !== "object" || value === null) return null;
@@ -26024,7 +26150,7 @@ function decodeHistoryEntry(value) {
 async function readJsonlHistory(changeDir) {
   let text3;
   try {
-    text3 = await readFile19(join51(changeDir, HISTORY_FILE), "utf8");
+    text3 = await readFile18(join51(changeDir, HISTORY_FILE), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT") return [];
     throw error2;
@@ -26206,7 +26332,7 @@ async function performTransition(deps, root, name, event) {
       const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId);
       let historyRaw = "";
       try {
-        historyRaw = await readFile20(join52(targetDir, HISTORY_FILE), "utf8");
+        historyRaw = await readFile19(join52(targetDir, HISTORY_FILE), "utf8");
       } catch (error2) {
         if (error2.code !== "ENOENT") throw error2;
       }
@@ -26535,7 +26661,7 @@ function handleGetTraceRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/hostTargetDetection.ts
-import { closeSync as closeSync6, constants as constants13, fstatSync as fstatSync10, lstatSync as lstatSync9, openSync as openSync11, readSync as readSync6, readdirSync as readdirSync9 } from "node:fs";
+import { closeSync as closeSync6, constants as constants14, fstatSync as fstatSync10, lstatSync as lstatSync9, openSync as openSync11, readSync as readSync6, readdirSync as readdirSync9 } from "node:fs";
 import { join as join55 } from "node:path";
 var MAX_HOST_INVENTORY_BYTES = 256 * 1024;
 function captureDirectoryChain(hostHome, segments) {
@@ -26546,7 +26672,7 @@ function captureDirectoryChain(hostHome, segments) {
     try {
       const descriptor = openSync11(
         candidate,
-        constants13.O_RDONLY | constants13.O_DIRECTORY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK
+        constants14.O_RDONLY | constants14.O_DIRECTORY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
       );
       const metadata = fstatSync10(descriptor);
       if (!metadata.isDirectory()) {
@@ -26609,7 +26735,7 @@ function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments, options
           if (!directoryChainIsStable(namespace) || !directoryChainIsStable(directories)) return false;
           const expected = lstatSync9(marker);
           if (!expected.isFile() || expected.isSymbolicLink()) return false;
-          const flags = constants13.O_RDONLY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK;
+          const flags = constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK;
           descriptor = options.openPluginMarker?.(marker, flags) ?? openSync11(marker, flags);
           const anchored = fstatSync10(descriptor);
           const current = lstatSync9(marker);
@@ -26637,7 +26763,7 @@ function readBoundedHostFile(hostHome, segments) {
   try {
     descriptor = openSync11(
       path7,
-      constants13.O_RDONLY | constants13.O_NOFOLLOW | constants13.O_NONBLOCK
+      constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
     );
     const metadata = fstatSync10(descriptor);
     if (!metadata.isFile() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null;
@@ -27116,7 +27242,7 @@ async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
 // packages/server/src/changeSnapshot.ts
 import {
   closeSync as closeSync7,
-  constants as constants14,
+  constants as constants15,
   fstatSync as fstatSync11,
   lstatSync as lstatSync10,
   openSync as openSync12,
@@ -27190,7 +27316,7 @@ async function readAnchoredTasksProjection(changeAnchor, readSource = readBounde
   try {
     changeFd = openSync12(
       changeAnchor.changeDir,
-      constants14.O_RDONLY | constants14.O_DIRECTORY | constants14.O_NOFOLLOW
+      constants15.O_RDONLY | constants15.O_DIRECTORY | constants15.O_NOFOLLOW
     );
   } catch (cause) {
     throw new ContextBundlePathError(403, "Change tasks directory cannot be anchored", cause);
@@ -27207,7 +27333,7 @@ async function readAnchoredTasksProjection(changeAnchor, readSource = readBounde
   try {
     fd = openSync12(
       target,
-      constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
+      constants15.O_RDONLY | constants15.O_NOFOLLOW | constants15.O_NONBLOCK
     );
   } catch (error2) {
     if (missing3(error2)) {
@@ -27767,7 +27893,7 @@ async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
 }
 
 // packages/server/src/serverTaskPlanRoutes.ts
-import { closeSync as closeSync8, constants as constants15, fstatSync as fstatSync12, openSync as openSync13 } from "node:fs";
+import { closeSync as closeSync8, constants as constants16, fstatSync as fstatSync12, openSync as openSync13 } from "node:fs";
 var defaultAnchoredReaderDeps = {
   assertRoot: assertWorkflowRootAnchor,
   captureChangeParent: captureChangeParentPathAnchor,
@@ -27833,7 +27959,7 @@ async function readAnchoredChangeWithDeps(anchor, change, reader, overrides = {}
   try {
     changeFd = openSync13(
       changeAnchor.changeDir,
-      constants15.O_RDONLY | constants15.O_DIRECTORY | constants15.O_NOFOLLOW
+      constants16.O_RDONLY | constants16.O_DIRECTORY | constants16.O_NOFOLLOW
     );
   } catch (cause) {
     throw new ContextBundlePathError(403, "TaskPlan Change directory cannot be anchored", cause);
@@ -27990,7 +28116,7 @@ async function readTaskRunForChange(changeDir, admission = missingAdmission) {
 }
 
 // packages/server/src/serverSkillInvocationRoutes.ts
-import { closeSync as closeSync9, constants as constants16, fstatSync as fstatSync13, openSync as openSync14 } from "node:fs";
+import { closeSync as closeSync9, constants as constants17, fstatSync as fstatSync13, openSync as openSync14 } from "node:fs";
 var anchoredDeps = {
   assertRoot: assertWorkflowRootAnchor,
   captureChangeParent: captureChangeParentPathAnchor,
@@ -28050,7 +28176,7 @@ async function readAnchoredSkillInvocationEvidence(anchor, change, overrides = {
   deps.assertChange(changeAnchor);
   const identity = changeAnchor.chain.at(-1);
   if (identity === void 0) throw new ContextBundlePathError(403, "Skill invocation Change identity is missing");
-  const fd = openSync14(changeAnchor.changeDir, constants16.O_RDONLY | constants16.O_DIRECTORY | constants16.O_NOFOLLOW);
+  const fd = openSync14(changeAnchor.changeDir, constants17.O_RDONLY | constants17.O_DIRECTORY | constants17.O_NOFOLLOW);
   try {
     const opened = fstatSync13(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, identity)) {
@@ -28624,7 +28750,7 @@ import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { lstat as lstat19, readFile as readFile21, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
+import { lstat as lstat19, readFile as readFile20, rename as rename8, unlink as unlink3, writeFile as writeFile12 } from "node:fs/promises";
 import { join as join58 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
@@ -28703,7 +28829,7 @@ async function activateChangeSession(input) {
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
       return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
     }
-    const activeName = (await readFile21(pointer, "utf8")).trim();
+    const activeName = (await readFile20(pointer, "utf8")).trim();
     return activeName === input.changeName ? { requested: true, active: true, status: "active", exit_code: result.exitCode } : { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
   } catch {
     return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
@@ -29001,6 +29127,9 @@ async function resolveTaskRunOperation(path7, body, deps) {
 async function applyTaskRunOperationForChange(changeDir, operation) {
   const current = await readTaskRunForChange(changeDir);
   if (current === null) throw new TaskRunOperationConflictError("Task Run is missing");
+  if (current.admission.status !== "admitted") {
+    throw new TaskRunOperationConflictError("Task Run admission is not authoritative");
+  }
   const allowed = current.allowed_operations.some((candidate) => candidate.operation === operation.operation && candidate.work_item_id === operation.work_item_id && candidate.expected_run_revision === operation.expected_run_revision && candidate.expected_state === operation.expected_state);
   if (!allowed) throw new TaskRunOperationConflictError("Task Run operation is no longer allowed");
   await appendTaskRunOperation(changeDir, current.plan.revision_id, operation);
@@ -29462,7 +29591,7 @@ import { join as join61 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
-  constants as constants17,
+  constants as constants18,
   fstatSync as fstatSync14,
   openSync as openSync15,
   readFileSync as readFileSync20
@@ -29490,7 +29619,7 @@ function registryReadError(error2) {
   const detail = error2 instanceof Error ? error2.message : String(error2);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile21 = (fd) => readFileSync20(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -29517,7 +29646,7 @@ function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd,
             if (!before.isFile()) throw registryReadError(new Error(`loops registry \u4E0D\u662F\u666E\u901A\u6587\u4EF6: ${paths.lexical}`));
             let fd;
             try {
-              fd = openSync15(paths.operation, constants17.O_RDONLY | constants17.O_NOFOLLOW);
+              fd = openSync15(paths.operation, constants18.O_RDONLY | constants18.O_NOFOLLOW);
             } catch (error2) {
               const code = error2.code;
               if (code === "ELOOP" || code === "ENOENT") {
@@ -29538,7 +29667,7 @@ function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd,
               assertDirectoryStillTrusted(pipeline, anchor);
               let text3;
               try {
-                text3 = readFile22(fd);
+                text3 = readFile21(fd);
               } catch (error2) {
                 throw registryReadError(error2);
               }

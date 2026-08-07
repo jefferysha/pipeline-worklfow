@@ -14,10 +14,10 @@
 
 ## 实现
 
-- [ ] 以 tracer bullet 打通 DAG compiler、subordinate executor 与 task-run API。 (build)
-- [ ] 实现资源序列化、失败/重试失效传播和 parent/integration 完成推导。 (build)
-- [ ] 实现 AFK authoritative admission、attempt journal 与 retry/cancel/resume。 (build)
-- [ ] 完成 Dashboard task-run/v1 消费闭环、zh/en、loading/empty/error/blocked 状态与键盘操作。 (build)
+- [x] 以 tracer bullet 打通 DAG compiler、subordinate executor 与 task-run API。 (build)
+- [x] 实现资源序列化、失败/重试失效传播和 parent/integration 完成推导。 (build)
+- [x] 实现 AFK authoritative admission、attempt journal 与 retry/cancel/resume。 (build)
+- [x] 完成 Dashboard task-run/v1 消费闭环、zh/en、loading/empty/error/blocked 状态与键盘操作。 (build)
 
 ## 验证
 
