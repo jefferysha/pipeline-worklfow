@@ -216,6 +216,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const namesErrorText = namesError === null ? null : t('workbench.names_error', { msg: formatApiError(namesError, t) })
   const defErrorText = defError === null ? null : t('workbench.def_error', { msg: formatApiError(defError, t) })
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
+  const policyDirty = !readonlyWf
+    && def !== null
+    && defBaselineRef.current !== null
+    && (JSON.stringify(def.decomposition) !== JSON.stringify(defBaselineRef.current.decomposition)
+      || JSON.stringify(def.interaction) !== JSON.stringify(defBaselineRef.current.interaction))
   const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
   const { setSourceDirty } = useWorkbenchDirtyState({
     localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
@@ -293,8 +298,17 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   }
 
   function cancelPolicyDraft(): void {
-    if (readonlyWf || saving || defBaselineRef.current === null) return
-    setDef(defBaselineRef.current)
+    if (readonlyWf || saving || !policyDirty || defBaselineRef.current === null) return
+    const baseline = defBaselineRef.current
+    setDef((current) => {
+      if (current === null) return current
+      const next = { ...current }
+      if (baseline.decomposition === undefined) delete next.decomposition
+      else next.decomposition = baseline.decomposition
+      if (baseline.interaction === undefined) delete next.interaction
+      else next.interaction = baseline.interaction
+      return next
+    })
     setSaveStatus({ kind: 'idle' })
   }
   function requestSwitch(name: string): void {
@@ -495,7 +509,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
         readonly={readonlyWf}
         loading={def === null && defError === null}
         error={defErrorText}
-        dirty={dirty}
+        dirty={policyDirty}
         saving={saving}
         saveStatus={saveStatus.kind === 'ok' ? 'success' : 'idle'}
         onChange={setDef}

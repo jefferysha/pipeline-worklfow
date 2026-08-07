@@ -1077,6 +1077,46 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(body.steps).toHaveLength(RELEASE_TRAIN.steps.length)
   })
 
+  it('策略取消只恢复策略字段，并保留其他 Workflow 草稿', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', '未保存阶段')
+    fireEvent.change(screen.getByLabelText('拆分模式'), { target: { value: 'auto-safe' } })
+    fireEvent.change(screen.getByLabelText('互动模式'), { target: { value: 'afk' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消策略修改' }))
+
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('未保存阶段')
+    expect(screen.getByLabelText('拆分模式')).toHaveValue('off')
+    expect(screen.getByLabelText('互动模式')).toHaveValue('interactive')
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+  })
+
+  it('策略 Escape 只恢复策略字段，并保留其他 Workflow 草稿', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', 'Escape 后仍保留')
+    fireEvent.click(screen.getByTestId('wb-lane-gate-sw-draft'))
+    fireEvent.change(screen.getByLabelText('拆分模式'), { target: { value: 'require-review' } })
+    fireEvent.keyDown(screen.getByTestId('workflow-policy-form'), { key: 'Escape' })
+
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('Escape 后仍保留')
+    expect(screen.getByTestId('wb-lane-gate-sw-draft')).toBeChecked()
+    expect(screen.getByLabelText('拆分模式')).toHaveValue('off')
+    expect(screen.getByLabelText('拆分模式')).toHaveFocus()
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+  })
+
+  it('仅有非策略字段未保存时禁用策略取消', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    editLaneName('draft', '阶段草稿')
+
+    expect(screen.getByRole('button', { name: '取消策略修改' })).toBeDisabled()
+  })
+
   it('Workflow 策略读取失败可原地重试，成功后焦点与编辑面恢复', async () => {
     const baseFetch = global.fetch
     let attempts = 0
