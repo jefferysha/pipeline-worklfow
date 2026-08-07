@@ -13,9 +13,10 @@ import { taskRunPresentation } from './taskRunModel'
 interface TaskRunPanelProps {
   readonly root: string
   readonly change: string
+  readonly readOnly?: boolean
 }
 
-export function TaskRunPanel({ root, change }: TaskRunPanelProps): JSX.Element {
+export function TaskRunPanel({ root, change, readOnly = false }: TaskRunPanelProps): JSX.Element {
   const { t } = useT()
   const [run, setRun] = useState<TaskRunDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -62,7 +63,7 @@ export function TaskRunPanel({ root, change }: TaskRunPanelProps): JSX.Element {
 
   async function submit(operation: TaskRunOperation): Promise<void> {
     const key = `${operation.operation}:${operation.work_item_id ?? 'run'}`
-    if (operationBusy !== null) return
+    if (readOnly || operationBusy !== null) return
     const request = ++operationGeneration.current
     setOperationBusy(key)
     setOperationError(false)
@@ -103,7 +104,10 @@ export function TaskRunPanel({ root, change }: TaskRunPanelProps): JSX.Element {
       </section>
     )
   }
-  if (run === null || presentation === null || run.items.length === 0) {
+  if (run === null || run.items.length === 0) {
+    return <section className="mt-5 rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-text-3" role="status">{t('afk.task_run.empty')}</section>
+  }
+  if (presentation === null) {
     return <section className="mt-5 rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-text-3" role="status">{t('afk.task_run.empty')}</section>
   }
 
@@ -163,8 +167,8 @@ export function TaskRunPanel({ root, change }: TaskRunPanelProps): JSX.Element {
       {run.invalidations.length > 0 && <div className="mt-4"><h4 className="text-xs font-semibold text-text">{t('afk.task_run.invalidations')}</h4><ul className="mt-2 space-y-1 text-xs text-text-2">{run.invalidations.map((entry) => <li key={`${entry.work_item_id}:${entry.caused_by_work_item_id}`}>{t('afk.task_run.invalidated_by', { item: entry.work_item_id, upstream: entry.caused_by_work_item_id })}</li>)}</ul></div>}
       {run.validator_verdicts.length > 0 && <div className="mt-4"><h4 className="text-xs font-semibold text-text">{t('afk.task_run.validators')}</h4><ul className="mt-2 flex flex-wrap gap-2">{run.validator_verdicts.map((verdict) => <li key={`${verdict.scope}:${verdict.validator_id}`} className="rounded-md bg-fill px-2 py-1 font-mono text-[10px] text-text-2">{verdict.validator_id} · {verdict.status}</li>)}</ul></div>}
 
-      {operationError && <p className="mt-3 text-xs text-red" role="alert">{t('afk.task_run.operation_error')}</p>}
-      {presentation.operations.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{presentation.operations.map(({ operation, itemTitle }) => {
+      {!readOnly && operationError && <p className="mt-3 text-xs text-red" role="alert">{t('afk.task_run.operation_error')}</p>}
+      {!readOnly && presentation.operations.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{presentation.operations.map(({ operation, itemTitle }) => {
         const key = `${operation.operation}:${operation.work_item_id ?? 'run'}`
         const label = operation.operation === 'resume'
           ? t('afk.task_run.operation_resume')

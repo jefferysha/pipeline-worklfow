@@ -48,8 +48,21 @@ const ready = {
   }],
 }
 
-function renderCard(): void {
-  render(<I18nProvider><SkillInvocationEvidenceCard root="/repo" change="demo" /></I18nProvider>)
+const readyWithTwoItems = {
+  ...ready,
+  items: [
+    ready.items[0],
+    {
+      ...ready.items[0],
+      invocation_id: 'inv-10',
+      skill: { id: 'task-reviewer', version: '1' },
+      subject: { ...ready.items[0].subject, work_item_id: 'item-10' },
+    },
+  ],
+}
+
+function renderCard(workItemId?: string): void {
+  render(<I18nProvider><SkillInvocationEvidenceCard root="/repo" change="demo" workItemId={workItemId} /></I18nProvider>)
 }
 
 afterEach(() => {
@@ -104,5 +117,32 @@ describe('SkillInvocationEvidenceCard', () => {
     const artifactValidators = screen.getByRole('list', { name: 'Artifact validators' })
     expect(within(artifactValidators).getByText(/digest.*Failed.*mismatch/)).toBeInTheDocument()
     expect(within(artifactValidators).getByText(/schema.*Unknown/)).toBeInTheDocument()
+  })
+
+  it('filters exact work item evidence and resets stale data when the selection changes', async () => {
+    fetchMock.mockResolvedValue(readyWithTwoItems)
+    const view = render(<I18nProvider><SkillInvocationEvidenceCard root="/repo" change="demo" workItemId="item-1" /></I18nProvider>)
+
+    expect(await screen.findByTestId('skill-invocation-inv-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('skill-invocation-inv-10')).not.toBeInTheDocument()
+
+    view.rerender(<I18nProvider><SkillInvocationEvidenceCard root="/repo" change="demo" workItemId="item-10" /></I18nProvider>)
+    expect(screen.queryByTestId('skill-invocation-inv-1')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('skill-invocation-inv-10')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['zh', undefined, '这个 Change 暂无结构化 Skill 调用证据。'],
+    ['en', undefined, 'This Change has no structured Skill invocation evidence yet.'],
+    ['zh', 'missing-item', '所选 WorkItem missing-item 无结构化 Skill 调用证据。'],
+    ['en', 'missing-item', 'The selected WorkItem missing-item has no structured Skill invocation evidence.'],
+  ] as const)('renders the %s empty state for the selected scope', async (locale, workItemId, expected) => {
+    localStorage.setItem('tenon-dashboard-lang', locale)
+    fetchMock.mockResolvedValue(workItemId === undefined
+      ? { schema_version: 'skill-invocation-list/v1', state: 'empty', items: [] }
+      : readyWithTwoItems)
+    renderCard(workItemId)
+
+    expect(await screen.findByText(expected)).toHaveAttribute('role', 'status')
   })
 })
