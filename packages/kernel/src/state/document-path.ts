@@ -31,6 +31,16 @@ export type BoundedFileHandleReader = (
   maxBytes: number,
 ) => Promise<Buffer>
 
+/**
+ * Capability supplied by a caller that already holds and has verified an open directory handle.
+ * The path may be an fd alias such as `/proc/self/fd/<n>`; the identity prevents that alias from
+ * being mistaken for an arbitrary symlinked parent.
+ */
+export interface AnchoredDirectoryIdentity {
+  readonly dev: number
+  readonly ino: number
+}
+
 export async function readBoundedFileHandle(
   handle: FileHandle,
   maxBytes: number,
@@ -48,15 +58,24 @@ export async function readBoundedFileHandle(
   return Buffer.concat(chunks, total)
 }
 
-export async function readBoundedRegularFile(
+async function readBoundedRegularFileWithParentAnchor(
   path: string,
   maxBytes: number,
   label: string,
-  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+  readSource: BoundedFileHandleReader,
+  parentAnchor?: AnchoredDirectoryIdentity,
 ): Promise<Buffer> {
   const parent = dirname(path)
-  const parentBefore = await lstat(parent, { bigint: true })
-  if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink()) {
+  const parentPath = parentAnchor === undefined ? parent : `${parent}${sep}.`
+  const parentBefore = await lstat(parentPath, { bigint: true })
+  if (
+    !parentBefore.isDirectory()
+    || (parentAnchor === undefined && parentBefore.isSymbolicLink())
+    || (parentAnchor !== undefined && (
+      parentBefore.dev !== BigInt(parentAnchor.dev)
+      || parentBefore.ino !== BigInt(parentAnchor.ino)
+    ))
+  ) {
     throw new DocumentLedgerError(`${label} 不得通过 symlink 或路径别名读取`)
   }
   const parentRealBefore = await realpath(parent)
@@ -69,7 +88,7 @@ export async function readBoundedRegularFile(
     if (!opened.isFile()) throw new DocumentLedgerError(`${label} 必须是非 symlink 普通文件: ${path}`)
     const assertStable = async (): Promise<void> => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
-        lstat(parent, { bigint: true }),
+        lstat(parentPath, { bigint: true }),
         realpath(parent),
         lstat(path, { bigint: true }),
       ])
@@ -123,6 +142,25 @@ export async function readBoundedRegularFile(
   }
 }
 
+export async function readBoundedRegularFile(
+  path: string,
+  maxBytes: number,
+  label: string,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<Buffer> {
+  return readBoundedRegularFileWithParentAnchor(path, maxBytes, label, readSource)
+}
+
+export async function readBoundedRegularFileFromAnchoredDirectory(
+  path: string,
+  maxBytes: number,
+  label: string,
+  parentAnchor: AnchoredDirectoryIdentity,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<Buffer> {
+  return readBoundedRegularFileWithParentAnchor(path, maxBytes, label, readSource, parentAnchor)
+}
+
 export async function readOptionalBoundedRegularTextFile(
   path: string,
   maxBytes: number,
@@ -131,6 +169,32 @@ export async function readOptionalBoundedRegularTextFile(
 ): Promise<string | undefined> {
   try {
     const content = await readBoundedRegularFile(path, maxBytes, label, readSource)
+    return decodeUtf8Text(content, label)
+  } catch (error) {
+    if (
+      typeof error === 'object'
+      && error !== null
+      && Reflect.get(error, 'code') === 'ENOENT'
+    ) return undefined
+    throw error
+  }
+}
+
+export async function readOptionalBoundedRegularTextFileFromAnchoredDirectory(
+  path: string,
+  maxBytes: number,
+  label: string,
+  parentAnchor: AnchoredDirectoryIdentity,
+  readSource: BoundedFileHandleReader = readBoundedFileHandle,
+): Promise<string | undefined> {
+  try {
+    const content = await readBoundedRegularFileFromAnchoredDirectory(
+      path,
+      maxBytes,
+      label,
+      parentAnchor,
+      readSource,
+    )
     return decodeUtf8Text(content, label)
   } catch (error) {
     if (

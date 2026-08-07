@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   isAcceptedDocumentProducer,
   isRecordedDocumentProducerAllowedThroughPolicyStep,
@@ -10,12 +11,97 @@ import {
   type DocumentGovernancePolicy,
   type DocumentKind,
 } from '../workflow/document-contract.js'
+import { readDocumentSkillConfirmations } from '../skill-invocation/document-confirmation-store.js'
+import { readSkillInvocationEventsForApplication } from '../skill-invocation/repository.js'
+import type { SkillInvocationEventV1 } from '../skill-invocation/types.js'
+import { skillsEquivalent } from './document-record-policy.js'
 import { deltaSpecSlot, resolveDocument } from './document-path.js'
 import {
   currentDocumentStepVisitId,
   readDocumentLedger,
   type DocumentRecord,
 } from './document-ledger.js'
+
+function digest(...values: readonly string[]): string {
+  const hash = createHash('sha256')
+  for (const value of values) hash.update(value).update('\0')
+  return hash.digest('hex')
+}
+
+function confirmationDigest(...values: readonly string[]): string {
+  const hash = createHash('sha256')
+  values.forEach((value, index) => {
+    hash.update(value)
+    if (index < values.length - 1) hash.update('\0')
+  })
+  return hash.digest('hex')
+}
+
+function documentApplicationInvocationId(
+  confirmationInvocationId: string,
+  record: DocumentRecord,
+): string {
+  return `invocation-${digest(
+    'document-application', confirmationInvocationId, record.kind,
+    record.path, record.sha256, record.recordedAt,
+  )}`
+}
+
+function confirmationInvocationId(confirmation: Awaited<ReturnType<typeof readDocumentSkillConfirmations>>[number]): string {
+  const values = confirmation.adapter.kind === 'codex' && confirmation.adapter.application_ref !== undefined
+    ? [
+        'codex-document-skill', confirmation.step_visit.run_id,
+        String(confirmation.step_visit.transition_sequence), confirmation.producer,
+        confirmation.adapter.proof_ref, confirmation.adapter.application_ref,
+      ]
+    : [
+        confirmation.adapter.kind === 'native' ? 'native-document-skill' : 'codex-document-skill',
+        confirmation.step_visit.run_id, String(confirmation.step_visit.transition_sequence),
+        confirmation.producer, confirmation.adapter.proof_ref,
+      ]
+  return `invocation-${confirmationDigest(...values)}`
+}
+
+function hasExactDocumentApplication(
+  events: readonly SkillInvocationEventV1[],
+  confirmation: Awaited<ReturnType<typeof readDocumentSkillConfirmations>>[number],
+  record: DocumentRecord,
+): boolean {
+  if (confirmation.invocation_id !== confirmationInvocationId(confirmation)) return false
+  const allowedInvocationIds = new Set([
+    confirmation.invocation_id,
+    documentApplicationInvocationId(confirmation.invocation_id, record),
+  ])
+  for (const invocationId of allowedInvocationIds) {
+    const invocationEvents = events.filter((event) => event.invocation_id === invocationId)
+    const started = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'invocation-started' }> =>
+      event.type === 'invocation-started')
+    if (started === undefined
+      || !skillsEquivalent(started.payload.skill.id, record.producer)
+      || started.subject.step_id !== confirmation.evidence_scope
+      || started.subject.workflow_run_id !== confirmation.step_visit.run_id
+      || started.subject.step_visit.run_id !== confirmation.step_visit.run_id
+      || started.subject.step_visit.transition_sequence !== confirmation.step_visit.transition_sequence
+      || !invocationEvents.some((event) => event.type === 'invocation-completed')) continue
+    const intent = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'artifact-binding-intent' }> =>
+      event.type === 'artifact-binding-intent'
+      && event.payload.output_id === 'document_record'
+      && event.payload.artifact.kind === 'document'
+      && event.payload.artifact.ref === record.path
+      && event.payload.artifact.digest === `sha256:${record.sha256}`
+      && event.payload.artifact.document?.kind === record.kind
+      && event.payload.artifact.document.recorded_at === record.recordedAt
+      && event.payload.validator_ids.length > 0)
+    if (intent === undefined) continue
+    const bound = invocationEvents.find((event): event is Extract<SkillInvocationEventV1, { type: 'artifact-bound' }> =>
+      event.type === 'artifact-bound' && event.payload.binding_id === intent.payload.binding_id)
+    if (bound !== undefined
+      && bound.payload.artifact_digest === `sha256:${record.sha256}`
+      && bound.payload.validators.length > 0
+      && bound.payload.validators.every((validator) => validator.status === 'pass')) return true
+  }
+  return false
+}
 
 export type DocumentEvidenceItemStatus = 'recorded' | 'missing' | 'stale' | 'unread'
 
@@ -128,6 +214,16 @@ export async function evaluateDocumentEvidence(
   const kinds = new Set<DocumentKind>([...recordKinds, ...readRequirements])
   const blockers: string[] = []
   const items: DocumentEvidenceItem[] = []
+  let confirmations
+  let invocationEvents: readonly SkillInvocationEventV1[]
+  try {
+    confirmations = await readDocumentSkillConfirmations(changeDir)
+    invocationEvents = await readSkillInvocationEventsForApplication(changeDir)
+  } catch (error) {
+    blockers.push(`document producer invocation evidence 不可验证: ${error instanceof Error ? error.message : String(error)}`)
+    confirmations = []
+    invocationEvents = []
+  }
   let currentVisitId: string | undefined
   if (readRequirements.size > 0) {
     try {
@@ -172,6 +268,32 @@ export async function evaluateDocumentEvidence(
     }
     if (records.some((record, index) => digests[index] !== record.sha256)) {
       blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 tenon document record 后再继续`)
+      items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
+      continue
+    }
+    const incompleteProducer = records.find((record) => {
+      const applicableConfirmations = confirmations.filter((confirmation) => {
+        if (!skillsEquivalent(confirmation.producer, record.producer)
+          || Date.parse(confirmation.confirmed_at) > Date.parse(record.recordedAt)) return false
+        const anchor = record.producerInvocation
+        return anchor === undefined || (
+          confirmation.invocation_id === anchor.confirmationInvocationId
+          && confirmation.evidence_scope === anchor.evidenceScope
+          && confirmation.step_visit.run_id === anchor.stepVisit.runId
+          && confirmation.step_visit.transition_sequence === anchor.stepVisit.transitionSequence
+        )
+      })
+      // Records that predate the host-neutral confirmation ledger retain explicit legacy
+      // compatibility. Once a sealed confirmation exists before a write, the exact raw
+      // invocation subject and digest-bound artifact events are mandatory.
+      if (record.producerInvocation === undefined && applicableConfirmations.length === 0) return false
+      return !applicableConfirmations.some((confirmation) =>
+        hasExactDocumentApplication(invocationEvents, confirmation, record))
+    })
+    if (incompleteProducer !== undefined) {
+      blockers.push(
+        `document '${kind}' 的 producer invocation/artifact 尚未原子完成: ${incompleteProducer.path}`,
+      )
       items.push(item(kind, 'stale', requiredRead, records, phase, currentVisitId))
       continue
     }

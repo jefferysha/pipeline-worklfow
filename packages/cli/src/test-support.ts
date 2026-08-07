@@ -38,6 +38,10 @@ import type {
   WorkflowRunTransaction,
 } from '@tenon/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo, GuardFileContext } from './deps.js'
+export {
+  recordCanonicalDocumentSkillInvocation,
+  recordNativeDocumentSkillConfirmation,
+} from '../../kernel/dist/skill-invocation/producer-internal.js'
 
 // === 调用记录 spy（不引 vitest，纯手写） ===
 

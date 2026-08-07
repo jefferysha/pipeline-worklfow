@@ -23,11 +23,16 @@ import { scanReadyFromFs } from '../queue/scan.js'
 import {
   createScheduler,
   type ExecutionWiringValidationResult,
+  type RegisterShutdown,
   type RoundReport,
   type RunChange,
   type StateWriter,
 } from '../scheduler/scheduler.js'
 import { type AutomationConfig, DEFAULT_CONFIG } from '../types.js'
+import {
+  createAfkSkillInvocationLifecycle,
+  type AfkInteractionReceiptPort,
+} from '../skillInvocationAfkLifecycle.js'
 
 /**
  * 二次任务（queued 卡死回归修复）：createAutomation 未显式注入 `deps.preparation` 时的缺省
@@ -96,6 +101,30 @@ export interface AutomationDeps {
    * 在此注入替换；测试可注入 fake 断言编排（同 deps.admission 既有惯例）。
    */
   readonly preparation?: ExecutionPreparationPort
+  /** Process/runtime shutdown registration. Production defaults to SIGINT/SIGTERM with async drain. */
+  readonly registerShutdown?: RegisterShutdown
+  /** Verified PR3 InteractionPolicy receipts; absence means AFK records no synthetic default. */
+  readonly interactionReceipts?: AfkInteractionReceiptPort
+}
+
+const registerProcessShutdown: RegisterShutdown = (teardown) => {
+  let active = true
+  const handle = (): void => {
+    if (!active) return
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+    void Promise.resolve(teardown()).catch(() => {
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', handle)
+  process.once('SIGTERM', handle)
+  return () => {
+    active = false
+    process.off('SIGINT', handle)
+    process.off('SIGTERM', handle)
+  }
 }
 
 /**
@@ -180,15 +209,17 @@ export function createAutomation(deps: AutomationDeps): Automation {
   // （none-bundle 直通 + bundle 绑定 fail-loud，见其头注），不再让 runRound 因 preparation 缺席整轮短路成
   // config RoundFailure；显式 production preparation 与安全缺省都经同一字段传给 createScheduler。
   const preparation: ExecutionPreparationPort = deps.preparation ?? createDefaultExecutionPreparation()
+  const skillInvocations = createAfkSkillInvocationLifecycle(changeDir, deps.interactionReceipts)
   const schedulerFor = (runChange: RunChange) => createScheduler({
     state: storeWriter(store, changeDir),
     runChange,
-    registerShutdown: () => () => {},
+    registerShutdown: deps.registerShutdown ?? registerProcessShutdown,
     config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level },
     admission,
     preparation,
     pauseLoop: deps.pauseLoop,
     validateExecutionWiring: deps.validateExecutionWiring,
+    skillInvocations,
   })
 
   return {

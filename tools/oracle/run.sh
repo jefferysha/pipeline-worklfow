@@ -384,7 +384,11 @@ ensure_oracle_document() {
 
 track_oracle_skill() {
   local dir="$1" skill="$2"
-  printf '{"cwd":"%s","tool_name":"Skill","skill":"%s"}' "$dir" "$skill" \
+  # Exercise the same host-neutral native PostToolUse boundary as Claude. Session/tool identity is
+  # required to seal the invocation against the canonical current StepVisit; a bare history row is
+  # deliberately insufficient and would make this fixture fail closed at `document record`.
+  printf '{"cwd":"%s","tool_name":"Skill","skill":"%s","session_id":"oracle-document-bootstrap","tool_use_id":"oracle-%s"}' \
+    "$dir" "$skill" "$skill" \
     | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/skill-tracker.sh" >/dev/null
 }
 
@@ -487,13 +491,24 @@ bootstrap_new_review_receipt() {
   run_new_cli "$dir" review acknowledge "$change"
 }
 
-# Legacy oracle predates the global Build convergence gate. Once the legacy side has proved that a
-# build-complete exit succeeds, model the new protocol's completed full-diff review on the new side
-# before comparing the transition's business effect. As with review receipts, this never runs for a
-# legacy rejection, so it cannot mask the guard failure that a fixture intends to compare.
+# Legacy oracle predates both the current-phase task exit and the global Build convergence gate.
+# Once the legacy side has proved that a build-complete exit succeeds, finish the fixture tasks and
+# bind their changed digest through the real Build Skill/document commands, then model the completed
+# full-diff review. As with review receipts, this never runs for a legacy rejection, so it cannot
+# mask the guard failure that a fixture intends to compare.
 bootstrap_new_pre_verify_review() {
-  local dir="$1" change="$2" event="$3"
+  local dir="$1" change="$2" event="$3" tasks tmp
   [ "$event" = build-complete ] || return 0
+  tasks="$dir/openspec/changes/$change/tasks.md"
+  if [ -f "$tasks" ] && grep -Eq '^- \[ \]' "$tasks"; then
+    tmp="$tasks.oracle-complete.tmp"
+    awk '{ sub(/^- \[ \]/, "- [x]"); print }' "$tasks" > "$tmp" || return 1
+    mv "$tmp" "$tasks" || return 1
+    track_oracle_skill "$dir" tenon-build || return 1
+    run_new_cli "$dir" document record "$change" tasks "openspec/changes/$change/tasks.md" \
+      --producer tenon-build || return 1
+    run_new_cli "$dir" document read "$change" all || return 1
+  fi
   run_new_cli "$dir" set "$change" pre_verify_review_result pass
 }
 

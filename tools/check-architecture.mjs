@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { extname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -319,6 +319,18 @@ for (const path of production) {
   if (/from ['"]@tenon\/[^/'"]+\//.test(code)) {
     failures.push(`${rel}: cross-workspace deep import bypasses public package export (.agent-rules/BACKEND.md)`)
   }
+  const privateProducerBridge = /from ['"](?:\.\.\/)+kernel\/dist\/skill-invocation\/producer-internal\.js['"]/.test(code)
+  const producerBridgeOwners = new Set([
+    'packages/automation/src/skillInvocationAfkInteractionPolicy.ts',
+    'packages/automation/src/skillInvocationAfkLifecycle.ts',
+    'packages/cli/src/codexSkillReceipt.ts',
+    'packages/cli/src/nativeSkillReceipt.ts',
+    'packages/cli/src/commands/document.ts',
+    'packages/cli/src/commands/hostInteraction.ts',
+  ])
+  if (privateProducerBridge && !producerBridgeOwners.has(rel)) {
+    failures.push(`${rel}: private SkillInvocation producer bridge is restricted to audited host/automation adapters`)
+  }
 
   if (/packages\/dashboard-app\/src\/(model|shared|lib)\//.test(rel)) {
     if (/from ['"]\.\.\/(inbox|workbench|progress|afk|shell)\//.test(code)) {
@@ -396,9 +408,27 @@ if (/pipeline_codex_host_cache_roots/.test(source(join(root, 'hooks', 'skill-evi
   failures.push('hooks/skill-evidence.sh: historical Codex cache enumeration is forbidden')
 }
 
+for (const rel of [
+  'packages/cli/dist/test-support.js',
+  'packages/cli/dist/test-support.d.ts',
+  'packages/cli/dist/integration-harness.js',
+  'packages/cli/dist/integration-harness.d.ts',
+]) {
+  if (existsSync(join(root, rel))) {
+    failures.push(`${rel}: test-only evidence producer entrypoint must not ship in CLI dist`)
+  }
+}
+
 const pkg = JSON.parse(source(join(root, 'package.json')))
 for (const script of ['check:architecture', 'test:hooks']) {
   if (typeof pkg.scripts?.[script] !== 'string') failures.push(`package.json: missing '${script}' script`)
+}
+const cliPkg = JSON.parse(source(join(root, 'packages', 'cli', 'package.json')))
+if (JSON.stringify(cliPkg.exports) !== '{}') {
+  failures.push('packages/cli/package.json: CLI package must export no module subpaths')
+}
+if (JSON.stringify(cliPkg.files) !== JSON.stringify(['dist/tenon.mjs'])) {
+  failures.push('packages/cli/package.json: CLI package must publish only the bundled binary')
 }
 
 if (failures.length > 0) {

@@ -132,7 +132,7 @@ if [ -f "$BUNDLE" ]; then
   # 创建的最小骨架；这里通过真实 CLI 绑定产物 hash 和 openspec-propose skill 证据，证明入库 bundle
   # 同时包含新文档链路，而不是把冒烟测试回退成历史上的无证据直转。先调用同包的 PostToolUse
   # skill tracker 生成真实的 `Skill: openspec-propose` 审计行；document record 会验证这条证据。
-  printf '{"cwd":"%s","tool_name":"Skill","skill":"openspec-propose"}' "$TMP" \
+  printf '{"cwd":"%s","tool_name":"Skill","skill":"openspec-propose","session_id":"bundle-smoke-session","tool_use_id":"bundle-smoke-openspec-propose"}' "$TMP" \
     | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ROOT/hooks/skill-tracker.sh" >/dev/null 2>&1
   [ "$?" -eq 0 ] \
     && ok "bundle: hook 记录 openspec-propose 调用证据" \

@@ -89,10 +89,26 @@ CHANGE_STATE="$(pipeline_state_source "$CHANGE_DIR" || true)"
 hook_disabled "$PROOT" skill-tracker "$(yget "$CHANGE_STATE" phase)" && exit 0
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+SESSION_ID="$(json_get session_id || true)"
+TOOL_USE_ID="$(json_get tool_use_id || true)"
+CHANGE_NAME="${CHANGE_DIR##*/}"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd -P || true)"
+BUNDLE="$PLUGIN_ROOT/packages/cli/dist/tenon.mjs"
 while IFS= read -r NAME; do
   [ -n "$NAME" ] || continue
   RAW="$(json_escape "$RAW_TOOL: $NAME")"
   printf '{"ts":"%s","kind":"tool","raw":"%s"}\n' "$TS" "$RAW" >> "$CHANGE_DIR/.pipeline-history.jsonl" 2>/dev/null || true
+  # A native Skill PostToolUse is the start of the governed skill application. Seal its host
+  # identity and canonical StepVisit synchronously so later question and document events can bind
+  # the same invocation. Bare history remains compatibility-only and can never mint completion.
+  if [ "$RAW_TOOL" = "Skill" ] && [ -n "$SESSION_ID" ] && [ -n "$TOOL_USE_ID" ] \
+    && command -v node >/dev/null 2>&1 && [ -f "$BUNDLE" ]; then
+    (
+      cd "$PROOT" || exit 0
+      node "$BUNDLE" internal-native-skill-receipt \
+        "$CHANGE_NAME" "$NAME" "$SESSION_ID" "$TOOL_USE_ID" "$TS"
+    ) >/dev/null 2>&1 || true
+  fi
 done <<< "$NAMES"
 
 exit 0

@@ -1,8 +1,12 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readBoundedRegularFile, readOptionalBoundedRegularTextFile } from './document-path.js'
+import {
+  readBoundedRegularFile,
+  readOptionalBoundedRegularTextFile,
+  readOptionalBoundedRegularTextFileFromAnchoredDirectory,
+} from './document-path.js'
 
 describe('bounded regular file identity fence', () => {
   it('rejects a same-inode same-size mutation during the read window', async () => {
@@ -50,6 +54,50 @@ describe('bounded regular file identity fence', () => {
       )).rejects.toThrow(/读取期间变化/u)
     } finally {
       await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts only an explicitly identity-bound directory alias', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tenon-bounded-anchored-parent-'))
+    const outside = await mkdtemp(join(tmpdir(), 'tenon-bounded-anchored-outside-'))
+    const alias = `${dir}-alias`
+    const path = join(dir, 'ledger.jsonl')
+    const content = '{"event":"ok"}\n'
+    await writeFile(path, content)
+    await writeFile(join(outside, 'ledger.jsonl'), content)
+    await symlink(dir, alias, 'dir')
+    const identity = await lstat(dir)
+    try {
+      const aliasedPath = join(alias, 'ledger.jsonl')
+      await expect(readOptionalBoundedRegularTextFile(aliasedPath, 1024, 'anchored ledger'))
+        .rejects.toThrow(/symlink|\u8def\u5f84\u522b\u540d/u)
+      await expect(readOptionalBoundedRegularTextFileFromAnchoredDirectory(
+        aliasedPath,
+        1024,
+        'anchored ledger',
+        { dev: identity.dev, ino: identity.ino },
+      )).resolves.toBe(content)
+      await expect(readOptionalBoundedRegularTextFileFromAnchoredDirectory(
+        aliasedPath,
+        1024,
+        'anchored ledger',
+        { dev: identity.dev, ino: identity.ino + 1 },
+      )).rejects.toThrow(/symlink|\u8def\u5f84\u522b\u540d/u)
+      await expect(readOptionalBoundedRegularTextFileFromAnchoredDirectory(
+        aliasedPath,
+        1024,
+        'anchored ledger',
+        { dev: identity.dev, ino: identity.ino },
+        async (handle) => {
+          await rm(alias, { force: true })
+          await symlink(outside, alias, 'dir')
+          return handle.readFile()
+        },
+      )).rejects.toThrow(/\u8bfb\u53d6\u671f\u95f4\u53d8\u5316/u)
+    } finally {
+      await rm(alias, { force: true })
+      await rm(dir, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 })

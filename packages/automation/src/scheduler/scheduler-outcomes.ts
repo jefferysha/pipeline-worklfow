@@ -214,7 +214,7 @@ export function createSchedulerOutcomes(deps: SchedulerDeps, tryLedger: TryLedge
         isSnapshotCorrupt ? 'skill-bundle-snapshot-corrupt'
           : isPolicyChanged ? 'skill-bundle-policy-changed'
           : c.cause === 'verify-fail' ? 'verify-fail'
-            : c.cause === 'cancelled' ? 'cancelled'
+            : c.cause === 'cancelled' || c.cause === 'scheduler-interrupted' ? 'cancelled'
               : settled === 'skipped' ? 'claim-lost'
                 : 'infrastructure-error'
       return {

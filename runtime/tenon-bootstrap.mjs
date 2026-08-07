@@ -8,7 +8,7 @@
  * capability, not a workflow-policy bypass.
  */
 import { copyFile, lstat, mkdir, readFile, rename, rm, writeFile, appendFile, readdir, stat, utimes } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
@@ -29,13 +29,10 @@ function safePathSegment(value) {
   return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) ? value : null
 }
 
-// Codex command hooks do not guarantee either plugin-root environment variable. The host does
-// keep an installed plugin's assets under a deterministic cache identity, though. Derive that
-// identity exclusively from the already-verified active payload, never from the command event.
-async function codexPluginCacheRoot(payload) {
+async function codexPluginIdentity(root) {
   try {
-    const plugin = JSON.parse(await readFile(join(payload, '.codex-plugin', 'plugin.json'), 'utf8'))
-    const marketplace = JSON.parse(await readFile(join(payload, '.agents', 'plugins', 'marketplace.json'), 'utf8'))
+    const plugin = JSON.parse(await readFile(join(root, '.codex-plugin', 'plugin.json'), 'utf8'))
+    const marketplace = JSON.parse(await readFile(join(root, '.agents', 'plugins', 'marketplace.json'), 'utf8'))
     if (!isRecord(plugin) || !isRecord(marketplace) || !Array.isArray(marketplace.plugins)) return null
     const pluginName = safePathSegment(plugin.name)
     const pluginVersion = safePathSegment(plugin.version)
@@ -43,11 +40,83 @@ async function codexPluginCacheRoot(payload) {
     if (pluginName === null || pluginVersion === null || marketplaceName === null) return null
     const declared = marketplace.plugins.some((entry) => isRecord(entry) && entry.name === pluginName)
     if (!declared) return null
-    const codexHome = safeRoot(process.env.CODEX_HOME) ?? join(homedir(), '.codex')
-    return join(codexHome, 'plugins', 'cache', marketplaceName, pluginName, pluginVersion)
+    return { pluginName, pluginVersion, marketplaceName }
   } catch {
     return null
   }
+}
+
+async function ordinaryDirectoryChain(base, candidate) {
+  const rel = relative(base, candidate)
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return false
+  let current = base
+  for (const part of ['', ...rel.split(sep).filter((entry) => entry !== '')]) {
+    if (part !== '') current = join(current, part)
+    try {
+      const item = await lstat(current)
+      if (!item.isDirectory() || item.isSymbolicLink()) return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+async function normalDirectory(path) {
+  try {
+    const item = await lstat(path)
+    return item.isDirectory() && !item.isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+async function verifiedCodexPluginCacheRoot(candidate, payloadIdentity) {
+  const root = safeRoot(candidate)
+  if (root === null) return null
+  const codexHome = safeRoot(process.env.CODEX_HOME) ?? join(homedir(), '.codex')
+  const cacheBase = join(codexHome, 'plugins', 'cache')
+  const parts = relative(cacheBase, root).split(sep)
+  if (parts.length !== 3 || parts.some((part) => safePathSegment(part) === null)) return null
+  if (!await ordinaryDirectoryChain(codexHome, root)) return null
+  const identity = await codexPluginIdentity(root)
+  if (identity === null
+    || identity.marketplaceName !== parts[0]
+    || identity.pluginName !== parts[1]
+    || identity.pluginVersion !== parts[2]
+    || identity.marketplaceName !== payloadIdentity.marketplaceName
+    || identity.pluginName !== payloadIdentity.pluginName) return null
+  for (const required of [
+    join(root, '.codex-plugin', 'plugin.json'),
+    join(root, '.agents', 'plugins', 'marketplace.json'),
+    join(root, 'hooks', 'codex-skill-receipt.sh'),
+    join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    join(root, 'skills', 'tenon', 'SKILL.md'),
+  ]) {
+    if (!await normalFile(required)) return null
+  }
+  if (!await normalDirectory(join(root, 'skills'))) return null
+  return root
+}
+
+// The managed payload and the native Codex cache are separate trust identities. A host can already
+// be reading a newer immutable cache while the stable runtime still executes an older verified
+// release. Preserve that exact cache only after independently validating its ordinary cache layout,
+// manifests, and required assets; otherwise use a separately validated payload-derived cache.
+async function codexPluginCacheRoot(payload) {
+  const payloadIdentity = await codexPluginIdentity(payload)
+  if (payloadIdentity === null) return null
+  const inherited = await verifiedCodexPluginCacheRoot(process.env.TENON_CODEX_PLUGIN_ROOT, payloadIdentity)
+  if (inherited !== null) return inherited
+  const codexHome = safeRoot(process.env.CODEX_HOME) ?? join(homedir(), '.codex')
+  return await verifiedCodexPluginCacheRoot(join(
+    codexHome,
+    'plugins',
+    'cache',
+    payloadIdentity.marketplaceName,
+    payloadIdentity.pluginName,
+    payloadIdentity.pluginVersion,
+  ), payloadIdentity)
 }
 
 function runtimePaths() {

@@ -13,6 +13,7 @@
 import { appendFile, lstat, mkdir, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { readSkillInvocationEvidence } from '@tenon/kernel'
 import { freshHarness, rm, type Harness } from './integration-harness.js'
 
 const TWO_STEP_WF = `name: onboarding
@@ -430,15 +431,37 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     await writeFile(documentPath, '# Compact proposal\n', 'utf8')
     await appendFile(
       join(h.cwd, 'openspec', 'changes', 'compact-run', '.pipeline-history.jsonl'),
-      `${JSON.stringify({ ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: 'Skill: writer' })}\n`,
+      `${JSON.stringify({ ts: '2026-07-07T00:00:00Z', kind: 'tool', raw: 'Skill: writer' })}\n`,
       'utf8',
     )
+    // A bare history row cannot mint v1. The native PostToolUse adapter must seal the exact host
+    // session/tool identity against the canonical visit before document production can complete it.
+    expect(
+      await h.run([
+        'document', 'record', 'compact-run', 'proposal', 'docs/compact-run-proposal.md',
+        '--producer', 'writer',
+      ]),
+    ).toBe(1)
+    expect(await h.run([
+      'internal-native-skill-receipt', 'compact-run', 'writer',
+      'native-session-compact', 'native-tool-compact', '2026-07-07T00:00:00Z',
+    ])).toBe(0)
     expect(
       await h.run([
         'document', 'record', 'compact-run', 'proposal', 'docs/compact-run-proposal.md',
         '--producer', 'writer',
       ]),
     ).toBe(0)
+    const evidence = await readSkillInvocationEvidence(
+      join(h.cwd, 'openspec', 'changes', 'compact-run'),
+    )
+    expect(evidence.items).toEqual([
+      expect.objectContaining({
+        skill: { id: 'writer', version: '1' },
+        status: 'completed',
+        artifacts: [expect.objectContaining({ ref: 'docs/compact-run-proposal.md', state: 'bound' })],
+      }),
+    ])
     expect(await h.run(['transition', 'compact-run', 'shape-complete'])).toBe(0)
     expect((await h.read('compact-run'))).toMatch(/^phase: implement$/m)
 

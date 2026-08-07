@@ -1,0 +1,134 @@
+{
+  "schema_version": "skill-invocation-list/v1",
+  "state": "ready",
+  "items": [
+    {
+      "schema_version": "skill-invocation-read/v1",
+      "invocation_id": "fixture-completed",
+      "status": "completed",
+      "skill": { "id": "task-planner", "version": "1.0.1" },
+      "subject": {
+        "workflow_definition_id": "default",
+        "workflow_run_id": "run-fixture",
+        "step_id": "build",
+        "step_visit": { "run_id": "run-fixture", "transition_sequence": 4 },
+        "task_plan_revision_id": "revision-fixture",
+        "work_item_id": "work-item-fixture",
+        "attempt": { "attempt_id": "attempt-fixture", "reservation_id": "reservation-fixture" }
+      },
+      "started_at": "2026-08-04T01:00:00.000Z",
+      "finished_at": "2026-08-04T01:00:02.000Z",
+      "input": {
+        "schema_id": "task-planner-input/v1",
+        "fields": [
+          { "name": "requirements", "classification": "project-data", "validator": { "id": "input-schema", "status": "pass" } }
+        ]
+      },
+      "output": {
+        "schema_id": "task-planner-output/v1",
+        "fields": [
+          { "name": "revision_id", "classification": "identifier", "validator": { "id": "output-schema", "status": "pass" } }
+        ]
+      },
+      "questions": [
+        {
+          "id": "question-mode",
+          "key": "build.mode",
+          "schema_id": "build-mode-question/v1",
+          "option_ids": ["direct", "subagent"],
+          "requiredness": "routine",
+          "shown": false
+        },
+        {
+          "id": "question-scope",
+          "key": "scope.confirmation",
+          "schema_id": "scope-question/v1",
+          "option_ids": ["confirmed", "revise"],
+          "requiredness": "hard-gate",
+          "shown": true
+        }
+      ],
+      "decisions": [
+        {
+          "id": "decision-mode",
+          "question_id": "question-mode",
+          "mode": "recommended-default",
+          "selected_option_ids": ["direct"],
+          "policy": { "id": "interaction-defaults", "version": "3", "rule_id": "build-mode" },
+          "rationale_code": "overlapping-files"
+        },
+        {
+          "id": "decision-scope",
+          "question_id": "question-scope",
+          "mode": "user-answer",
+          "selected_option_ids": ["confirmed"]
+        }
+      ],
+      "artifacts": [
+        {
+          "binding_id": "binding-plan",
+          "output_id": "plan",
+          "kind": "document",
+          "ref": "openspec/changes/task-planner-evidence/tasks.md",
+          "state": "bound",
+          "validators": [{ "id": "document-ledger", "status": "pass" }]
+        }
+      ]
+    },
+    {
+      "schema_version": "skill-invocation-read/v1",
+      "invocation_id": "fixture-incomplete",
+      "status": "incomplete",
+      "skill": { "id": "writing-plans", "version": "1.0.1" },
+      "subject": {
+        "workflow_definition_id": "default",
+        "workflow_run_id": "run-fixture",
+        "step_id": "build",
+        "step_visit": { "run_id": "run-fixture", "transition_sequence": 4 }
+      },
+      "started_at": "2026-08-04T01:01:00.000Z",
+      "input": { "schema_id": "writing-plans-input/v1", "fields": [] },
+      "questions": [],
+      "decisions": [],
+      "artifacts": []
+    },
+    {
+      "schema_version": "skill-invocation-read/v1",
+      "invocation_id": "fixture-failed",
+      "status": "failed",
+      "skill": { "id": "verification-before-completion", "version": "1.0.1" },
+      "subject": {
+        "workflow_definition_id": "default",
+        "workflow_run_id": "run-fixture",
+        "step_id": "verify",
+        "step_visit": { "run_id": "run-fixture", "transition_sequence": 5 }
+      },
+      "started_at": "2026-08-04T01:02:00.000Z",
+      "finished_at": "2026-08-04T01:02:01.000Z",
+      "input": { "schema_id": "verify-input/v1", "fields": [] },
+      "questions": [],
+      "decisions": [],
+      "artifacts": [],
+      "terminal_code": "validator-failed"
+    },
+    {
+      "schema_version": "skill-invocation-read/v1",
+      "invocation_id": "fixture-interrupted",
+      "status": "interrupted",
+      "skill": { "id": "browser-qa", "version": "1.0.1" },
+      "subject": {
+        "workflow_definition_id": "default",
+        "workflow_run_id": "run-fixture",
+        "step_id": "verify",
+        "step_visit": { "run_id": "run-fixture", "transition_sequence": 5 }
+      },
+      "started_at": "2026-08-04T01:03:00.000Z",
+      "finished_at": "2026-08-04T01:03:01.000Z",
+      "input": { "schema_id": "browser-qa-input/v1", "fields": [] },
+      "questions": [],
+      "decisions": [],
+      "artifacts": [],
+      "terminal_code": "owner-recovered"
+    }
+  ]
+}

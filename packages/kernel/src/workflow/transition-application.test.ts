@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +8,8 @@ import { atomicWriteFile, createStateStore } from '../state/store.js'
 import { createTransitionRecordStore } from '../state/transition-record-store.js'
 import { createWorkflowRunRepository } from '../state/workflow-run-repository.js'
 import { recordDocument, recordDocumentReads } from '../state/document-ledger.js'
+import { recordNativeDocumentSkillConfirmation } from '../skill-invocation/document-confirmation.js'
+import { recordCanonicalDocumentSkillInvocation } from '../skill-invocation/document-producer.js'
 import { createFlowEngine, loadManifest } from '../flow/index.js'
 import { compileAutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { LoopEntry } from '../loops/types.js'
@@ -90,8 +92,37 @@ async function seedGovernedDocumentEvidence(root: string, changeDir: string, nam
     'openspec-propose', 'brainstorming', 'writing-plans', 'verification-before-completion', 'openspec-apply-change',
   ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n') + '\n', 'utf8')
 
-  const record = async (phase: 'open' | 'explore' | 'spec' | 'verify' | 'ship', kind: Parameters<typeof recordDocument>[0]['kind'], path: string, producer: string) =>
-    recordDocument({ repoRoot: root, changeDir, phase, kind, path, producer, recordedAt: FIXED_CLOCK() })
+  const store = createStateStore()
+  const originalPhase = String((await store.read(changeDir)).fields.phase)
+  let receiptSequence = 0
+  const record = async (
+    phase: 'open' | 'explore' | 'spec' | 'verify' | 'ship',
+    kind: Parameters<typeof recordDocument>[0]['kind'],
+    path: string,
+    producer: string,
+  ): Promise<void> => {
+    const recordedAt = FIXED_CLOCK()
+    await store.set(changeDir, 'phase', phase)
+    receiptSequence += 1
+    await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${JSON.stringify({
+      ts: recordedAt, kind: 'init', raw: `fixture visit ${phase}`,
+    })}\n${JSON.stringify({
+      ts: recordedAt, kind: 'tool', raw: `Skill: ${producer}`,
+    })}\n`, 'utf8')
+    const confirmed = await recordNativeDocumentSkillConfirmation(changeDir, producer, phase, {
+      sessionId: `transition-application-${name}`,
+      toolUseId: `document-${receiptSequence}`,
+      observedAt: recordedAt,
+    })
+    if (!confirmed) throw new Error(`fixture native confirmation rejected for ${producer}`)
+    const ledger = await recordDocument({ repoRoot: root, changeDir, phase, kind, path, producer, recordedAt })
+    const canonicalRecord = [...ledger.records].reverse().find((candidate) =>
+      candidate.kind === kind && candidate.path === path && candidate.recordedAt === recordedAt)
+    if (canonicalRecord === undefined) throw new Error(`fixture canonical record missing for ${path}`)
+    if (await recordCanonicalDocumentSkillInvocation(
+      changeDir, kind, recordedAt, { record: canonicalRecord },
+    ) === undefined) throw new Error(`fixture canonical invocation missing for ${path}`)
+  }
   await record('open', 'proposal', docs.proposal, 'openspec-propose')
   await record('open', 'openspec-design', docs.design, 'openspec-propose')
   await record('open', 'tasks', docs.tasks, 'openspec-propose')
@@ -102,6 +133,7 @@ async function seedGovernedDocumentEvidence(root: string, changeDir: string, nam
   await record('spec', 'plan', docs.plan, 'writing-plans')
   await record('verify', 'verification-report', docs.report, 'verification-before-completion')
   await record('ship', 'applied-spec', docs.applied, 'openspec-apply-change')
+  await store.set(changeDir, 'phase', originalPhase)
   for (const phase of ['explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
     await recordDocumentReads({ repoRoot: root, changeDir, phase, kind: 'all', readAt: FIXED_CLOCK() })
   }

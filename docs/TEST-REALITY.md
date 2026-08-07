@@ -570,6 +570,15 @@ iteration-35）**：
 
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
 
+## 2026-08-04 Skill Invocation evidence v1
+
+| 能力 | 自动化证据 | 真实运行证据 |
+|---|---|---|
+| closed codec / aggregate / 隐私投影 | kernel 单测覆盖未知字段、唯一 terminal、缺失问题、hard-gate default、adapter 漂移、digest/proof/session 排除 | 只读投影不含原始 prompt/answer/output |
+| repository / canonical binding | repository 单测覆盖 canonical WorkItem/attempt 错绑、并发幂等、坏行、可信 completion、ownership recovery、默认策略与 artifact 漂移 | 生产 API 对当前 `task-planner-evidence` 返回 `skill-invocation-list/v1` empty，而不是推断成功 |
+| Codex/native/AFK adapters | Codex 精确 transcript verifier、native validator gate、AFK prepared run/attempt/reservation 定向测试 | history 只有 completed event 的单向兼容投影，不能作为 v1 receipt |
+| server / Dashboard | anchored reader 路径替换拒绝；client 闭合 decoder；zh/en 卡片 loading/empty/error/retry/ready 与键盘原生 details 测试 | production server `127.0.0.1:18772` 由单一 browser owner 验收；fixture 覆盖 completed/incomplete/failed/interrupted、shown/default question 与 artifact |
+
 ## 2026-07-11 追记(v5 交互重建 T19 收口)
 - G24(P2,新):AFK cancel 起步竞态窗口——running 置位与 automation_worktree/sandbox 写回之间 1-2s,窗口内 cancel kill 旧容器名打空,靠 .cancel-requested 标记在 settle 时兜底(取消意图最终达成,非阻塞)。修复建议:claim 时清旧字段或 cancel 校验字段新鲜度。
 - G22(AFK 轮询非 SSE)维持登记;G21 已闭(T1 history 读端点);G20 已闭(T1 server transition 记账)。
