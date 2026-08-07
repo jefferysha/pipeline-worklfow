@@ -33,10 +33,10 @@
 
 ## 验证
 
-- [ ] 验证旧 Workflow/V1/V2、非法配置、V3 篡改与 frozen/live drift。 (verify)
-- [ ] 验证权限降级、recommended-default、hard boundary 与 AFK 不扩权。 (verify)
-- [ ] 用真实桌面浏览器验证 Dashboard 读写、非法输入、键盘路径、zh/en 与状态恢复。 (verify)
-- [ ] 用 PR2 基线提供的正式 stable launcher/runtime 验证当前任务/turn/phase receipt，禁止以分支 CLI workaround 作为完成证据。 (verify)
+- [x] 验证旧 Workflow/V1/V2、非法配置、V3 篡改与 frozen/live drift。 (verify)
+- [x] 验证权限降级、recommended-default、hard boundary 与 AFK 不扩权。 (verify)
+- [x] 用真实桌面浏览器验证 Dashboard 读写、非法输入、键盘路径、zh/en 与状态恢复。 (verify)
+- [x] 用 PR2 基线提供的正式 stable launcher/runtime 验证当前任务/turn/phase receipt，禁止以分支 CLI workaround 作为完成证据。 (verify)
 
 ## 交付
 

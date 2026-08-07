@@ -160,3 +160,19 @@
 {"ts":"2026-08-07T15:28:28Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T15:28:28Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 17"}
 {"ts":"2026-08-07T18:12:45Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T18:18:25Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T18:18:25Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T18:18:26Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"1b303b3f-bfed-4712-b64b-14cf57e5a507"}
+{"ts":"2026-08-07T18:38:59Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-07T18:38:59Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-07T18:38:59Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-07T18:39:12Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T18:39:12Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 9e508e63-6ed1-4e0d-b226-30cf216621b4 18"}
+{"ts":"2026-08-07T18:39:13Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T18:39:13Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify 9e508e63-6ed1-4e0d-b226-30cf216621b4 18"}
+{"ts":"2026-08-07T18:39:29Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T18:39:29Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-07T18:39:29Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-07T18:39:29Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T18:39:29Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"d94d9e3c-0944-4308-be1b-ad052c4ddcfa"}
+{"ts":"2026-08-07T18:41:22Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-07T18:41:22Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change 9e508e63-6ed1-4e0d-b226-30cf216621b4 19"}
