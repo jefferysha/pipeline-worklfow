@@ -4,6 +4,33 @@ import {
   incompletePipelineTasksForExit,
   projectPipelineTodo,
 } from './todo-projection.js'
+import { renderTaskPlanTasksMd, type TaskPlanRevisionV1 } from '../task-plan/index.js'
+
+function canonicalProjection(groupTitle = 'Verify'): string {
+  const revision: TaskPlanRevisionV1 = {
+    schema_version: 'task-plan/v1',
+    plan_id: 'plan-1',
+    revision_id: 'revision-1',
+    revision_number: 1,
+    status: 'frozen',
+    created_at: '2026-08-03T00:00:00.000Z',
+    requirements: [],
+    acceptance_criteria: [],
+    groups: [{ id: 'group-1', title: groupTitle, parent_id: null, work_item_ids: ['wi-1'] }],
+    work_items: [{
+      id: 'wi-1',
+      title: 'Implement API',
+      group_id: 'group-1',
+      requirement_refs: [],
+      acceptance_refs: [],
+      depends_on: [],
+      resource_claims: [],
+      expected_outputs: [],
+      validators: [],
+    }],
+  }
+  return renderTaskPlanTasksMd(revision, { digest: 'sha256:abc' })
+}
 
 describe('projectPipelineTodo', () => {
   it('default 顺序来自 default.yaml 的生成步骤，并把带阶段标题的 OpenSpec checkbox 投影到对应阶段', () => {
@@ -43,6 +70,55 @@ describe('projectPipelineTodo', () => {
     })
     expect(todo.stages.find((stage) => stage.id === 'explore')?.tasks).toEqual([
       { text: 'Investigate the current implementation', completed: false },
+    ])
+  })
+
+  it.each(['Build', 'Verify', '实现', '验证'])(
+    'canonical TaskGroup 展示标题 %s 不改变当前 phase exit gate',
+    (groupTitle) => {
+      expect(incompletePipelineTasksForExit({
+        phase: 'build',
+        tasksMarkdown: canonicalProjection(groupTitle),
+        trustedCanonicalProjection: true,
+      })).toEqual({ structured: false, incomplete: 1 })
+    },
+  )
+
+  it('canonical Todo 只隐藏受信尾部 WorkItem marker，保留普通或非尾部 comment', () => {
+    const canonical = canonicalProjection().replace(
+      'Implement API',
+      'Implement <!-- work-item:fake --> API <!-- work-item:bad value --> <!-- ordinary -->',
+    )
+    const todo = projectPipelineTodo({
+      phase: 'build',
+      tasksMarkdown: canonical,
+      trustedCanonicalProjection: true,
+    })
+    expect(todo.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
+      {
+        text: 'Implement <!-- work-item:fake --> API <!-- work-item:bad value --> <!-- ordinary -->',
+        completed: false,
+      },
+    ])
+
+    const legacy = projectPipelineTodo({
+      phase: 'build',
+      tasksMarkdown: '- [ ] Keep <!-- work-item:user-text -->\n',
+    })
+    expect(legacy.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
+      { text: 'Keep <!-- work-item:user-text -->', completed: false },
+    ])
+  })
+
+  it('header spoof 不会获得 canonical marker 展示剥离权限', () => {
+    const spoof = canonicalProjection('Notes')
+    const todo = projectPipelineTodo({
+      phase: 'build',
+      tasksMarkdown: spoof,
+      trustedCanonicalProjection: false,
+    })
+    expect(todo.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([
+      { text: 'Implement API <!-- work-item:wi-1 -->', completed: false },
     ])
   })
 

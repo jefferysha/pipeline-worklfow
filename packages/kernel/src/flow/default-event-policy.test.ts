@@ -64,6 +64,17 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 9 事件 + action 一一映射
     const g = DEFAULT_EVENT_POLICY['verify-pass'].guards.find((x) => x.type === 'build-head-unchanged')
     expect(g).toEqual({ type: 'build-head-unchanged', field: 'build_sha' })
   })
+
+  test('tasks-through-phase 只约束完成/归档出口，不阻断 requirements-changed 与 verify-fail 回退', () => {
+    expect(DEFAULT_EVENT_POLICY['requirements-changed'].enforceTaskExit).toBe(false)
+    expect(DEFAULT_EVENT_POLICY['verify-fail'].enforceTaskExit).toBe(false)
+    for (const event of [
+      'open-complete', 'explore-complete', 'spec-complete', 'build-complete',
+      'verify-pass', 'ship-complete', 'archived',
+    ] as const) {
+      expect(DEFAULT_EVENT_POLICY[event].enforceTaskExit).toBe(true)
+    }
+  })
 })
 
 describe('checkDefaultEventPreconditions —— explore-complete（老仓 L120-126，逐字文案）', () => {

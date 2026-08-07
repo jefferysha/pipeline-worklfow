@@ -32,12 +32,26 @@ export type {
   ReadDocumentsInput, RecordDocumentInput,
 } from './document-ledger.js'
 export { evaluateDocumentEvidence } from './document-evidence.js'
+export { decodeUtf8Text } from './document-path.js'
 export type {
   DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
 } from './document-evidence.js'
 export { evaluateSpecMigrationEvidence } from './spec-migration-evidence.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
+export {
+  publishTaskPlanRevision,
+  classifyTaskPlanProjectionForChange,
+  isCurrentTaskPlanProjectionForChange,
+  taskPlanTasksThroughPhaseForChange,
+  readTaskPlanForChange,
+  TASK_PLAN_CURRENT_FILE,
+  TASK_PLAN_REVISIONS_DIR,
+  TASK_PLAN_STATE_DIR,
+  TaskPlanRevisionConflictError,
+  TaskPlanStateCorruptError,
+} from './task-plan-store.js'
+export type { PublishTaskPlanOptions } from './task-plan-store.js'
 export { createHistoryWriter, HISTORY_FILE, transitionRecordToHistoryEntry } from './history.js'
 export {
   createBreadcrumbWriter, formatReviewMarker, parseReviewMarker, reviewHint,

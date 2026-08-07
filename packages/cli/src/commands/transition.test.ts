@@ -2,10 +2,16 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { IllegalTransitionError, TRANSITION_EVENTS, eventEdge as kernelEventEdge } from '@tenon/kernel'
-import type { Phase, PipelineState, TransitionResult } from '@tenon/kernel'
+import {
+  IllegalTransitionError,
+  TRANSITION_EVENTS,
+  eventEdge as kernelEventEdge,
+  publishTaskPlanRevision,
+} from '@tenon/kernel'
+import type { Phase, PipelineState, TaskPlanRevisionV1, TransitionResult } from '@tenon/kernel'
 import { cmdTransition } from './transition.js'
 import { EVENTS, eventEdge } from '../events.js'
+import { makeGuardCtx } from '../guardContext.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
 function approvedReviewState(fields: Parameters<typeof mockState>[0]): PipelineState {
@@ -69,12 +75,94 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(written.fields.phase).toBe('verify')
   })
 
+  test('生产 guardContext 会在 transition 锁内重验未完成 tasks 并阻止提交', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-task-gate-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'tasks.md'), '# Tasks\n\n## Build\n\n- [ ] Finish implementation\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ phase: 'build', build_mode: 'direct', isolation: 'worktree', pre_verify_review_result: 'pass' }),
+      guardCtx: makeGuardCtx(root),
+    })
+    try {
+      expect(await cmdTransition(deps, 'demo', 'build-complete')).toBe(1)
+      expect(deps.errLines).toContain('build 出口：tasks.md 仍有 1 项未勾')
+      expect(deps.store.write.calls).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('verify-pass 在 transition 锁内拒绝 canonical current 的缺失 tasks projection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-missing-canonical-projection-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [],
+      work_items: [],
+    }
+    await publishTaskPlanRevision(dir, revision, { expected_current_revision_id: null })
+    await rm(join(dir, 'tasks.md'))
+    await mkdir(join(root, 'docs'), { recursive: true })
+    await writeFile(join(root, 'docs', 'v.md'), '# Verify\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: approvedReviewState({
+        phase: 'verify',
+        track: 'backend',
+        verification_report: 'docs/v.md',
+        branch_status: 'handled',
+        agent_review_result: 'pass',
+        codex_review_result: 'pass',
+        build_sha: 'null',
+      }),
+      guardCtx: makeGuardCtx(root),
+    })
+
+    try {
+      expect(await cmdTransition(deps, 'demo', 'verify-pass')).toBe(1)
+      expect(deps.errLines).toContain('verify 出口：tasks.md 缺失')
+      expect(deps.store.write.calls).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('verify-fail 回退边：verify -> build（stderr），且 build_sha 清 null', async () => {
     const deps = makeDeps({ state: approvedReviewState({ phase: 'verify', review_gate_event: 'verify-fail' }) })
     const code = await cmdTransition(deps, 'demo', 'verify-fail')
     expect(code).toBe(0)
     expect(deps.outLines).toEqual([])
     expect(deps.errLines).toContain('[TRANSITION] demo: verify -> build')
+  })
+
+  test('生产 guardContext 不用未完成 Verify tasks 阻断 verify-fail 回退', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'transition-verify-fail-task-gate-'))
+    const dir = join(root, 'openspec', 'changes', 'demo')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'tasks.md'), '# Tasks\n\n## Verify\n\n- [ ] Reproduce failure\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: approvedReviewState({
+        phase: 'verify', build_sha: 'FROZEN', review_gate_event: 'verify-fail',
+      }),
+      guardCtx: makeGuardCtx(root),
+    })
+    try {
+      expect(await cmdTransition(deps, 'demo', 'verify-fail')).toBe(0)
+      expect(deps.errLines).toContain('[TRANSITION] demo: verify -> build')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test('archived 终态自环：archive -> archive（stderr）', async () => {

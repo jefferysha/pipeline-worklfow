@@ -1,9 +1,10 @@
 /**
  * Pipeline Todo projection.
  *
- * OpenSpec `tasks.md` remains the editable source of truth. This module only projects its checkbox
- * rows onto the workflow's ordered stages, so a native Todo or dashboard can keep the seven pipeline
- * phases visible without inventing generic work items. It is intentionally pure and accepts custom
+ * This module projects trusted canonical or legacy `tasks.md` checkbox rows onto the workflow's
+ * ordered stages. Canonical TaskPlan current state remains authoritative when present; `tasks.md`
+ * is then its compatibility projection. A native Todo or dashboard can keep the seven pipeline
+ * phases visible without inventing generic work items. The projection stays pure and accepts custom
  * workflow stage definitions as data.
  */
 import { DEFAULT_WORKFLOW_STEPS } from './default-workflow.generated.js'
@@ -101,6 +102,7 @@ function parseTasks(
   markdown: string | undefined,
   currentStage: string,
   stages: readonly PipelineTodoStageDefinition[],
+  trustedCanonicalProjection = false,
 ): {
   readonly byStage: ReadonlyMap<string, readonly PipelineTodoItem[]>
   readonly structured: boolean
@@ -112,6 +114,7 @@ function parseTasks(
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line)
     if (heading) {
+      if (trustedCanonicalProjection && /\s+<!-- task-group:[^>]+ -->\s*$/u.test(heading[1] ?? '')) continue
       const headingStage = stageForHeading(heading[1] ?? '', stages)
       if (headingStage !== undefined) {
         target = headingStage
@@ -121,7 +124,10 @@ function parseTasks(
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line)
     if (!task || target === undefined) continue
-    const text = (task[2] ?? '').trim()
+    const rawText = (task[2] ?? '').trim()
+    const text = trustedCanonicalProjection
+      ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, '').trim()
+      : rawText
     if (text === '') continue
     const items = byStage.get(target) ?? []
     items.push({ text, completed: (task[1] ?? '').toLowerCase() === 'x' })
@@ -141,6 +147,7 @@ export function projectPipelineTodo(input: {
   readonly tasksMarkdown: string | undefined
   readonly stages?: readonly PipelineTodoStageDefinition[]
   readonly additionalItemsByStage?: Readonly<Record<string, readonly PipelineTodoItem[]>>
+  readonly trustedCanonicalProjection?: boolean
 }): PipelineTodoProjection {
   const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES
   const stages = declared.filter((stage, index) =>
@@ -148,7 +155,12 @@ export function projectPipelineTodo(input: {
   )
   const currentIndex = stages.findIndex((stage) => stage.id === input.phase)
   const definitelyCompleted = definitelyCompletedStageIds(stages, input.phase)
-  const tasks = parseTasks(input.tasksMarkdown, input.phase, stages).byStage
+  const tasks = parseTasks(
+    input.tasksMarkdown,
+    input.phase,
+    stages,
+    input.trustedCanonicalProjection,
+  ).byStage
   return {
     hasTaskSource: input.tasksMarkdown !== undefined,
     stages: stages.map((stage, index) => ({
@@ -181,12 +193,18 @@ export function incompletePipelineTasksForExit(input: {
   readonly phase: string
   readonly tasksMarkdown: string
   readonly stages?: readonly PipelineTodoStageDefinition[]
+  readonly trustedCanonicalProjection?: boolean
 }): { readonly structured: boolean; readonly incomplete: number } {
   const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES
   const stages = declared.filter((stage, index) =>
     stage.id !== '' && stage.label !== '' && declared.findIndex((other) => other.id === stage.id) === index,
   )
-  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages)
+  const parsed = parseTasks(
+    input.tasksMarkdown,
+    input.phase,
+    stages,
+    input.trustedCanonicalProjection,
+  )
 
   if (!parsed.structured) {
     const incomplete = input.phase === 'build'

@@ -388,6 +388,8 @@ export interface GuardContext {
   fileNonempty?: (relPath: string) => boolean
   /** 读文件文本，不存在 → undefined（tasks.md 勾选统计 / design_doc coverage 块解析） */
   readFile?: (relPath: string) => string | undefined
+  /** 区分可信 current、无 canonical 的 legacy 与已存在但不可信的 invalid；Markdown 不得自行授信。 */
+  canonicalTasksProjectionStatus?: (input: Readonly<{ changeDirRel: string; tasksMarkdown: string }>) => 'current' | 'legacy' | 'invalid'
   /** 目录存在（depends_on 活跃 change 判定：openspec/changes/<dep>） */
   dirExists?: (relPath: string) => boolean
   /** dep 已归档：openspec/changes/archive/*-<dep> 目录存在（老 guard find -name "*-$dep"） */

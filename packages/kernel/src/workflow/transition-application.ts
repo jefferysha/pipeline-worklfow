@@ -100,6 +100,12 @@ async function planDefaultTransition(
   // 政策从老 checkTransitionPreconditions switch 迁到 DefaultEventPolicy + guard-handlers（G2 P3）。
   const violations = await checkDefaultEventPreconditions(event, state, command.context)
   if (violations) return { kind: 'precondition-violated', lines: violations }
+  if (policy.enforceTaskExit) {
+    const tasks = await command.context.tasksThroughPhase?.(edge.from)
+    if (tasks && !tasks.pass) {
+      return { kind: 'precondition-violated', lines: [tasks.failure ?? `${edge.from} 出口：tasks.md 未通过`] }
+    }
+  }
 
   // ② FlowEngine 推进：合法边检查 + phase/phase_status/updated_at 变换（转换结构不迁——保守分叉，
   // 边选择与相位推进继续由 eventEdge + FlowEngine 承担）。

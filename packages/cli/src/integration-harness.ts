@@ -40,6 +40,7 @@ import {
 } from '@tenon/kernel'
 import type { CliDeps, GuardFileContext } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
+import { readBoundedRegularFileSync } from './guardContext.js'
 
 /** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
 function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
@@ -222,6 +223,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     fileExists: (p) => { try { return statSync(abs(p)).isFile() } catch { return false } },
     fileNonempty: (p) => { try { const s = statSync(abs(p)); return s.isFile() && s.size > 0 } catch { return false } },
     readFile: (p) => { try { return readFileSync(abs(p), 'utf8') } catch { return undefined } },
+    readFileBounded: (p, maxBytes) => readBoundedRegularFileSync(abs(p), maxBytes, cwd),
     dirExists: (p) => { try { return statSync(abs(p)).isDirectory() } catch { return false } },
     activeChangeArchived: (dep) => {
       try {

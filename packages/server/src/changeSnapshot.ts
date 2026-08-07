@@ -8,7 +8,9 @@ import {
 } from 'node:fs'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import {
+  decodeUtf8Text,
   LedgerContextBundleError,
+  isCanonicalTaskPlanTasksMarkdown,
   projectPipelineTodo,
   readPipelineStateFromSync,
   type PipelineState,
@@ -49,7 +51,18 @@ import {
   readBounded,
   readTrustedFile,
 } from './contextBundleTrustedReader.js'
-import { MAX_TASKS_MARKDOWN_BYTES } from './snapshotTasks.js'
+import {
+  hasCurrentCanonicalTaskPlanProjection,
+  MAX_LEGACY_TASKS_MARKDOWN_BYTES,
+  MAX_TASKS_MARKDOWN_BYTES,
+} from './snapshotTasks.js'
+import {
+  assertWorkflowRootMutationVersion,
+  captureWorkflowRootMutationVersion,
+  sameIdentity,
+  traversableDirectoryFdPath,
+  type WorkflowRootMutationVersion,
+} from './workflowRootAnchor.js'
 import {
   captureStableFileVersion,
   matchesStableFileVersion,
@@ -81,15 +94,59 @@ function readBoundedTasksSource(fd: number, maxBytes: number): string {
   if (bytes.byteLength > maxBytes) {
     throw new Error(`Change tasks 超过 ${maxBytes} bytes 上限`)
   }
-  return bytes.toString('utf8')
+  return decodeUtf8Text(bytes, 'Change tasks snapshot')
 }
 
 /** @internal Exported only so the race regression can prove no bytes are read before anchor checks. */
-export function readAnchoredTasksMarkdown(
+interface AnchoredTasksProjection {
+  readonly source: string
+  readonly trustedCanonicalProjection: boolean
+}
+
+export async function readAnchoredTasksProjection(
   changeAnchor: ChangePathAnchor,
   readSource: TasksFdReader = readBoundedTasksSource,
-): string | undefined {
-  const target = join(changeAnchor.changeDir, 'tasks.md')
+  authorizeCanonicalProjection?: (
+    source: string,
+    anchoredChangeDir: string,
+  ) => boolean | Promise<boolean>,
+  rootAnchor?: WorkflowRootAnchor,
+): Promise<AnchoredTasksProjection | undefined> {
+  let rootVersion: WorkflowRootMutationVersion | undefined
+  const assertTrustContext = (): void => {
+    if (rootAnchor === undefined) return
+    try {
+      rootVersion ??= captureWorkflowRootMutationVersion(rootAnchor)
+      assertWorkflowRootMutationVersion(rootAnchor, rootVersion)
+    } catch (cause) {
+      throw new ContextBundlePathError(403, 'Change tasks registered root changed during read', cause)
+    }
+  }
+  assertTrustContext()
+  const lexicalTarget = join(changeAnchor.changeDir, 'tasks.md')
+  const changeIdentity = changeAnchor.chain.at(-1)
+  if (changeIdentity === undefined) {
+    throw new ContextBundlePathError(403, 'Change tasks directory identity is missing')
+  }
+  assertChangePathAnchor(changeAnchor)
+  let changeFd: number
+  try {
+    changeFd = openSync(
+      changeAnchor.changeDir,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    )
+  } catch (cause) {
+    throw new ContextBundlePathError(403, 'Change tasks directory cannot be anchored', cause)
+  }
+  const openedChange = fstatSync(changeFd)
+  const anchoredChangeDir = traversableDirectoryFdPath(changeFd, changeIdentity)
+    ?? changeAnchor.changeDir
+  if (!openedChange.isDirectory() || !sameIdentity(openedChange, changeIdentity)) {
+    closeSync(changeFd)
+    throw new ContextBundlePathError(403, 'Change tasks directory identity changed while anchoring')
+  }
+  assertTrustContext()
+  const target = join(anchoredChangeDir, 'tasks.md')
   let fd: number
   try {
     fd = openSync(
@@ -97,7 +154,11 @@ export function readAnchoredTasksMarkdown(
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     )
   } catch (error) {
-    if (missing(error)) return undefined
+    if (missing(error)) {
+      closeSync(changeFd)
+      return undefined
+    }
+    closeSync(changeFd)
     throw new ContextBundlePathError(403, 'Change tasks 路径不可信', error)
   }
   try {
@@ -111,8 +172,8 @@ export function readAnchoredTasksMarkdown(
       let realPath: string
       try {
         assertChangePathAnchor(changeAnchor)
-        current = lstatSync(target, { bigint: true })
-        realPath = realpathSync(target)
+        current = lstatSync(lexicalTarget, { bigint: true })
+        realPath = realpathSync(lexicalTarget)
       } catch (error) {
         if (error instanceof ContextBundlePathError) throw error
         throw new ContextBundlePathError(403, 'Change tasks 路径在读取期间变化', error)
@@ -139,12 +200,40 @@ export function readAnchoredTasksMarkdown(
       throw new Error(`Change tasks 超过 ${MAX_TASKS_MARKDOWN_BYTES} bytes 上限`)
     }
     const source = readSource(fd, MAX_TASKS_MARKDOWN_BYTES)
+    assertTrustContext()
+    const trustedCanonicalProjection = isCanonicalTaskPlanTasksMarkdown(source)
+      && authorizeCanonicalProjection !== undefined
+      && await authorizeCanonicalProjection(source, anchoredChangeDir)
+    assertTrustContext()
+    if (opened.size > MAX_LEGACY_TASKS_MARKDOWN_BYTES && !trustedCanonicalProjection) {
+      throw new Error(`Legacy Change tasks 超过 ${MAX_LEGACY_TASKS_MARKDOWN_BYTES} bytes 上限`)
+    }
     assertOpenedFdStillStable()
     assertOpenedTargetStillAnchored()
-    return source
+    assertTrustContext()
+    return { source, trustedCanonicalProjection }
   } finally {
     closeSync(fd)
+    closeSync(changeFd)
   }
+}
+
+/** @internal Exported only so existing callers can consume the bounded source without trust metadata. */
+export async function readAnchoredTasksMarkdown(
+  changeAnchor: ChangePathAnchor,
+  readSource: TasksFdReader = readBoundedTasksSource,
+  authorizeCanonicalProjection?: (
+    source: string,
+    anchoredChangeDir: string,
+  ) => boolean | Promise<boolean>,
+  rootAnchor?: WorkflowRootAnchor,
+): Promise<string | undefined> {
+  return (await readAnchoredTasksProjection(
+    changeAnchor,
+    readSource,
+    authorizeCanonicalProjection,
+    rootAnchor,
+  ))?.source
 }
 
 export async function readAnchoredChangeState(
@@ -250,17 +339,26 @@ export async function readChangeSnapshot(
         ? {}
         : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }),
     }
-    const [documents, terminalActivity, tasksMarkdown, workflowExecution] = await Promise.all([
+    const [documents, terminalActivity, tasksProjection, workflowExecution] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
       readTerminalActivity(changeDir, changeName, nowMs),
-      readAnchoredTasksMarkdown(anchored.changeAnchor),
+      readAnchoredTasksProjection(
+        anchored.changeAnchor,
+        undefined,
+        (source, anchoredChangeDir) => hasCurrentCanonicalTaskPlanProjection(
+          anchoredChangeDir,
+          source,
+        ),
+        anchor,
+      ),
       snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps),
     ])
     assertWorkflowRootAnchor(anchor)
     assertChangePathAnchor(anchored.changeAnchor)
     const todo = projectPipelineTodo({
       phase,
-      tasksMarkdown,
+      tasksMarkdown: tasksProjection?.source,
+      trustedCanonicalProjection: tasksProjection?.trustedCanonicalProjection,
       stages: snapshotTodoStages(plan, phase),
       additionalItemsByStage: documentTodoItems(plan, documents),
     })

@@ -12,9 +12,10 @@ import {
   utimes,
   writeFile,
 } from 'node:fs/promises'
+import { constants } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryWriter } from '@tenon/kernel'
 import {
   cmdInternalCodexSkillReceipt,
@@ -25,6 +26,7 @@ import { trustedCodexSkillPath } from './codexSkillTrust.js'
 import type { CodexSkillTrustRoots } from './codexSkillTrust.js'
 import { transcriptExecInvocations } from './codexToolProgram.js'
 import {
+  compareHostTranscriptsNewestFirst,
   hostTranscriptUnchanged,
   openVerifiedHostTranscript,
   recentHostTranscripts,
@@ -627,7 +629,7 @@ describe('Codex transcript skill receipt', () => {
     )).toEqual([{ command: "sed -n '1,20p' /trusted/SKILL.md", workdir: '/repo' }])
     expect(transcriptExecInvocations(
       `const r = await tools.exec_command({cmd:"cat /trusted/SKILL.md",max_output_tokens:1}); text(r);`,
-    )).toEqual([])
+    )).toEqual([{ command: 'cat /trusted/SKILL.md' }])
     expect(transcriptExecInvocations(
       `// @exec: {"max_output_tokens":1}\nconst r = await tools.exec_command({cmd:"cat /trusted/SKILL.md"}); text(r);`,
     )).toEqual([])
@@ -927,8 +929,18 @@ describe('Codex transcript skill receipt', () => {
     },
   )
 
-  it('accepts the current Codex content-array ABI when text(result) forwards the complete Skill', async () => {
-    await writeFile(transcript, eventLines(customResultOutput()), 'utf8')
+  it('accepts safe max_output_tokens on the content-array ABI when text(result) forwards the complete Skill', async () => {
+    await writeFile(
+      transcript,
+      eventLines(
+        customResultOutput(),
+        turnId,
+        [skillPath],
+        '2026-07-24T00:02:00Z',
+        { execArgs: { max_output_tokens: 20_000 } },
+      ),
+      'utf8',
+    )
     await recordPendingReceipt()
 
     const result = await reconcileCodexSkillEvidence({
@@ -985,7 +997,33 @@ describe('Codex transcript skill receipt', () => {
     expect(result.confirmedSkillIds).toEqual([])
   })
 
-  it('rejects max_output_tokens on the function-call exec ABI', async () => {
+  it('accepts safe max_output_tokens on the function-call ABI when stdout is complete', async () => {
+    await writeFile(
+      transcript,
+      functionCallSessionScopedEventLines(
+        root,
+        undefined,
+        'function_call_output',
+        undefined,
+        { max_output_tokens: 20_000 },
+      ),
+      'utf8',
+    )
+    await recordPendingReceipt('call-function-skill-read')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects truncated function-call stdout even when max_output_tokens is a valid exec argument', async () => {
     await writeFile(
       transcript,
       functionCallSessionScopedEventLines(
@@ -1687,6 +1725,41 @@ describe('Codex transcript skill receipt', () => {
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
   })
 
+  it('reconciles the bound completed host session after more than 128 valid transcripts', async () => {
+    const historicalMtime = new Date('2026-07-24T00:01:00Z')
+    for (let index = 0; index < 129; index += 1) {
+      const historical = join(dirname(transcript), `historical-reconcile-${index}.jsonl`)
+      await writeFile(
+        historical,
+        sessionScopedEventLines(root, customResultOutput(), [skillPath], `session-historical-${index}`),
+        'utf8',
+      )
+      await utimes(historical, historicalMtime, historicalMtime)
+    }
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await utimes(
+      transcript,
+      new Date('2026-07-24T00:02:00Z'),
+      new Date('2026-07-24T00:02:00Z'),
+    )
+    await bindHostSession()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .toContain('CodexSkillRead: openspec-propose')
+  })
+
   it('does not discover a completed read from an unselected old plugin cache version', async () => {
     const oldPluginRoot = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.1.0')
     const oldSkillPath = join(oldPluginRoot, 'skills', 'openspec-propose', 'SKILL.md')
@@ -2354,6 +2427,49 @@ describe('Codex transcript skill receipt', () => {
     })).resolves.toBeUndefined()
   })
 
+  it('orders equal-timestamp transcript candidates by locale-independent code units', () => {
+    const common = {
+      modifiedAt: 1,
+      size: 1,
+      device: 1n,
+      inode: 1n,
+      modifiedAtNs: 1n,
+      changedAtNs: 1n,
+    }
+    const localeCompare = vi.spyOn(String.prototype, 'localeCompare').mockReturnValue(0)
+    try {
+      const paths = [
+        { ...common, path: '/sessions/ä.jsonl' },
+        { ...common, path: '/sessions/z.jsonl' },
+      ].sort(compareHostTranscriptsNewestFirst).map((candidate) => candidate.path)
+
+      expect(paths).toEqual(['/sessions/z.jsonl', '/sessions/ä.jsonl'])
+      expect(localeCompare).not.toHaveBeenCalled()
+    } finally {
+      localeCompare.mockRestore()
+    }
+  })
+
+  it('keeps the newest bounded candidates discoverable after more than 128 valid transcripts', async () => {
+    const historicalMtime = new Date('2026-07-24T00:01:00Z')
+    for (let index = 0; index < 129; index += 1) {
+      const historical = join(dirname(transcript), `historical-${index}.jsonl`)
+      await writeFile(historical, sessionScopedEventLines(root), 'utf8')
+      await utimes(historical, historicalMtime, historicalMtime)
+    }
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await utimes(
+      transcript,
+      new Date('2026-07-24T00:02:00Z'),
+      new Date('2026-07-24T00:02:00Z'),
+    )
+
+    const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
+
+    expect(candidates).toHaveLength(32)
+    expect(candidates?.[0]?.path).toBe(transcript)
+  })
+
   it('rejects a fallback candidate replaced after discovery', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     const candidates = await recentHostTranscripts(join(home, '.codex', 'sessions'))
@@ -2365,6 +2481,23 @@ describe('Codex transcript skill receipt', () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
 
     expect(candidate && await openVerifiedHostTranscript(candidate)).toBeUndefined()
+  })
+
+  it('requests a nonblocking open so a replacement FIFO cannot stall receipt discovery', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    const candidate = (await recentHostTranscripts(join(home, '.codex', 'sessions')))?.[0]
+    expect(candidate).toBeDefined()
+    if (candidate === undefined) return
+    let observedFlags = 0
+
+    const handle = await openVerifiedHostTranscript(candidate, async (_path, flags) => {
+      observedFlags = flags
+      throw Object.assign(new Error('replacement FIFO'), { code: 'ENXIO' })
+    })
+    await handle?.close()
+
+    expect(handle).toBeUndefined()
+    expect(observedFlags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
   })
 
   it('detects a fallback candidate that grows after its verified open', async () => {

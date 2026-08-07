@@ -10,8 +10,12 @@
  *     相对项目根（老 guard 在项目根运行，`[ -f "$p" ]` 直接用字段值）。
  */
 import { describe, it, expect } from 'vitest'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { FIELD_ORDER, LIST_FIELDS } from '../types.js'
 import type { FieldName, GuardContext, PipelineState } from '../types.js'
+import { renderTaskPlanTasksMd, type TaskPlanRevisionV1 } from '../task-plan/index.js'
 import type { CoverageProfile } from '../tracks/types.js'
 import { evaluateGuard } from './guard.js'
 import { checkDefaultEventPreconditions } from './default-event-policy.js'
@@ -349,6 +353,77 @@ describe('build 出口（GG3 + B1-B7；B9 build_sha 投影撤销）', () => {
 - [ ] archive
 `
     expect(evaluateGuard(be(), ctxOf(buildFiles(tasks)))).toEqual({ pass: true, failures: [] })
+  })
+
+  it('B2 受信 canonical TaskGroup 的 phase-like 标题不能把未完成项绕到未来 phase', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-guard-task-plan-'))
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1',
+      plan_id: 'plan-1',
+      revision_id: 'revision-1',
+      revision_number: 1,
+      status: 'frozen',
+      created_at: '2026-08-04T00:00:00.000Z',
+      requirements: [],
+      acceptance_criteria: [],
+      groups: [{ id: 'group-1', title: 'Verify', parent_id: null, work_item_ids: ['work-1'] }],
+      work_items: [{
+        id: 'work-1',
+        title: 'Finish Build implementation',
+        group_id: 'group-1',
+        requirement_refs: [],
+        acceptance_refs: [],
+        depends_on: [],
+        resource_claims: [],
+        expected_outputs: [],
+        validators: [],
+      }],
+    }
+    const tasksMarkdown = renderTaskPlanTasksMd(revision, { digest: 'sha256:current-revision' })
+    const tasksPath = join(root, CH, 'tasks.md')
+    mkdirSync(join(root, CH), { recursive: true })
+    writeFileSync(tasksPath, tasksMarkdown, 'utf8')
+
+    try {
+      const readFile = (relPath: string) => readFileSync(join(root, relPath), 'utf8')
+      const legacy = evaluateGuard(be(), {
+        coverageProfile: 'backend',
+        changeDirRel: CH,
+        stateExists: () => true,
+        readFile,
+        canonicalTasksProjectionStatus: () => 'legacy',
+      })
+      expect(legacy.pass).toBe(true)
+
+      const invalid = evaluateGuard(be(), {
+        coverageProfile: 'backend',
+        changeDirRel: CH,
+        stateExists: () => true,
+        readFile,
+        canonicalTasksProjectionStatus: () => 'invalid',
+      })
+      expect(invalid.pass).toBe(false)
+      expect(fails(invalid, 'canonical TaskPlan')).toHaveLength(1)
+
+      const trustInputs: Array<{ changeDirRel: string; tasksMarkdown: string }> = []
+      const ctx: GuardContext = {
+        coverageProfile: 'backend',
+        changeDirRel: CH,
+        stateExists: () => true,
+        readFile,
+        canonicalTasksProjectionStatus: (input) => {
+          trustInputs.push({ ...input })
+          return input.changeDirRel === CH && input.tasksMarkdown === tasksMarkdown ? 'current' : 'invalid'
+        },
+      }
+
+      const result = evaluateGuard(be(), ctx)
+      expect(result.pass).toBe(false)
+      expect(fails(result, '全部勾选')).toHaveLength(1)
+      expect(trustInputs).toEqual([{ changeDirRel: CH, tasksMarkdown }])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('B5 full+direct 要求 direct_override=true；tweak+direct 与 full+worktree 不查', () => {

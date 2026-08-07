@@ -359,7 +359,19 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
             failures.push(`${phase} 出口：要求截至当前阶段的 tasks.md 全部勾选（tasks.md 缺失）`)
           }
         } else {
-          const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: content })
+          const projectionStatus = ctx.canonicalTasksProjectionStatus?.({
+            changeDirRel: changeDir,
+            tasksMarkdown: content,
+          }) ?? 'legacy'
+          if (projectionStatus === 'invalid') {
+            failures.push(`${phase} 出口：canonical TaskPlan tasks.md 投影认证失败`)
+            break
+          }
+          const status = incompletePipelineTasksForExit({
+            phase,
+            tasksMarkdown: content,
+            trustedCanonicalProjection: projectionStatus === 'current',
+          })
           if (status.incomplete > 0) {
             failures.push(
               `${phase} 出口：要求截至当前阶段的 tasks.md 全部勾选（仍有 ${status.incomplete} 项未勾）`,

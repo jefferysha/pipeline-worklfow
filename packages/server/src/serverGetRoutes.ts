@@ -6,7 +6,6 @@ import {
   builtinWorkflow,
   listAutomationPolicyTemplates,
   loadTrackRegistry,
-  stateStorageExistsSync,
   validateWorkflowTrackReferences,
   withTrackRegistryLock,
   type StateStore,
@@ -37,10 +36,12 @@ import {
   type WorkflowRootAnchor,
 } from './workflows.js'
 import { handleGetActivityRoutes } from './serverGetActivityRoutes.js'
+import { handleGetSessionRoutes } from './serverGetSessionRoutes.js'
 import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
+import { readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -110,6 +111,11 @@ export async function handleGet(
     workflowRootForRequest, snapshotDeps, store,
   })
   if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body)
+  const taskPlan = await resolveTaskPlanRoute(req.url ?? '/', path, {
+    workflowRootForRequest,
+    readPlan: readAnchoredTaskPlan,
+  })
+  if (taskPlan !== null) return sendJson(res, taskPlan.status, taskPlan.body)
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
       try {
@@ -319,69 +325,8 @@ export async function handleGet(
       })
       return sendJson(res, 200, r)
     }
-    // ── v9-I：GET /api/mem/session-link?root=&name= —— change ↔ 终端会话关联（恢复命令）。──
-    //    读 change 快照字段 automation_worktree（空则回落 root）作 cwd，经 kernel mem
-    //    listMemSessions 查该目录最近的持久化会话（platform all，recency 首条）；claude/codex
-    //    给真实恢复命令（`claude --resume <id>` / `codex resume <id>`，二者拼法均已在宿主机
-    //    实测 --help 确认），opencode/pi 无把握的恢复拼法 → resumeCmd:null（UI 只显示 id+目录，
-    //    不造假命令）。「查不到会话」是常态不是错误（AFK 沙箱内 claude 会话随容器 HOME=/tmp
-    //    销毁，宿主机本就查不到）→ 恒 200 { found:false, dir, reason }，对齐 /api/afk/readiness
-    //    的恒 200 哲学；查询异常同样收敛 found:false（不 500 裸抛、reason 不带原始路径）。
-    //    校验顺序同 /api/change/:name/history：name 格式 400 → root 信任锚 404 → change 存在 400。
-    if (path === '/api/mem/session-link') {
-      const sp = new URL(req.url ?? '/', 'http://localhost').searchParams
-      const name = sp.get('name') ?? ''
-      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
-        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
-      }
-      const root = sp.get('root') ?? ''
-      if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
-      const changeDir = join(root, 'openspec', 'changes', name)
-      if (!stateStorageExistsSync(changeDir)) {
-        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
-      }
-      return sendJson(res, 200, await resolveSessionLink(root, name))
-    }
-    // ── v9-J：GET /api/mem/session-links?root=&name=&root=&name=... —— 批量版 session-link。──
-    //    进度视图 failed 行「回终端」chip 一次预取全部失败行的恢复命令（产品决策：批量端点而非
-    //    逐行发请求，也不是等用户点开抽屉才有数据——行内 chip 在需要时批量出现，逐条查询不理想）。
-    //    参数用重复键（URLSearchParams.getAll），按下标配对；长度不等 → 400。上限 50 对（超出→400，
-    //    防御性上限，非并发预算——批量查询本身够快，避免离谱请求体拖垮单进程 kernel mem 查询循环）。
-    //    单个 pair 校验不过（名字非法/root 未注册/change 不存在）→ 该 key fail-soft 为
-    //    { found:false, reason:'invalid' }，不让一个坏 pair 拖累整批 400 ——呼应本端点家族
-    //    「查不到是常态不是故障」的哲学（同 /api/afk/readiness 恒 200 先例）。成功恒 200，
-    //    body = { links: Record<string, SessionLinkResult> }，key=`${name}@${root}`
-    //    （与前端 ProgressView rowKeyOf 同款拼法，不要用别的分隔符）。核心查询复用 resolveSessionLink
-    //    （单条端点同款 helper，不复制粘贴）。
-    if (path === '/api/mem/session-links') {
-      const sp = new URL(req.url ?? '/', 'http://localhost').searchParams
-      const roots = sp.getAll('root')
-      const names = sp.getAll('name')
-      if (roots.length !== names.length) {
-        return sendJson(res, 400, { ok: false, error: 'root/name 参数数量不匹配' })
-      }
-      if (roots.length > 50) {
-        return sendJson(res, 400, { ok: false, error: 'items 过多（上限 50）' })
-      }
-      const links: Record<string, unknown> = {}
-      await Promise.all(
-        roots.map(async (root, i) => {
-          const name = names[i] ?? ''
-          const key = `${name}@${root}`
-          const valid =
-            name !== '' &&
-            /^[a-zA-Z0-9_-]+$/.test(name) &&
-            !name.includes('..') &&
-            root !== '' &&
-            isRegisteredRoot(root) &&
-            stateStorageExistsSync(join(root, 'openspec', 'changes', name))
-          links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: 'invalid' }
-        }),
-      )
-      return sendJson(res, 200, { links })
-    }
+    if (await handleGetSessionRoutes(req, res, path, {
+      sendJson, isRegisteredRoot, resolveSessionLink,
+    })) return
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }

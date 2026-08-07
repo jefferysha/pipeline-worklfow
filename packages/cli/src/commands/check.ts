@@ -13,10 +13,14 @@ import {
   evaluateDocumentEvidence,
   evaluateSpecMigrationEvidence,
   evaluateWorkflowIrStepGuards,
+  classifyTaskPlanProjectionForChange,
   isDocumentContractPhase,
   isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
+  TASK_PLAN_CURRENT_FILE,
+  TASK_PLAN_LIMITS,
+  TASK_PLAN_STATE_DIR,
 } from '@tenon/kernel'
 import type {
   DocumentEvidenceReport,
@@ -62,7 +66,75 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
   // state.track 已成 orphan 都 fail-loud，不回退按 track id 的旧静态矩阵。
   const coverageProfile = plan.capabilities.track.coverageProfile
-  const result = deps.flow.guardCheck(state, { ...deps.guardCtx?.(name), coverageProfile })
+  const fileContext = deps.guardCtx?.(name)
+  const tasksPath = fileContext?.changeDirRel === undefined
+    ? undefined
+    : `${fileContext.changeDirRel}/tasks.md`
+  const canonicalStatePath = fileContext?.changeDirRel === undefined
+    ? undefined
+    : `${fileContext.changeDirRel}/${TASK_PLAN_STATE_DIR}/${TASK_PLAN_CURRENT_FILE}`
+  const boundedCanonicalState = canonicalStatePath === undefined
+    ? undefined
+    : fileContext?.readFileBounded === undefined
+      ? { kind: 'invalid' as const }
+      : fileContext.readFileBounded(canonicalStatePath, TASK_PLAN_LIMITS.maxRevisionBytes)
+  const canonicalStatePresent = boundedCanonicalState?.kind === 'ok'
+  const tasksByteLimit = canonicalStatePresent
+    ? TASK_PLAN_LIMITS.maxRevisionBytes
+    : TASK_PLAN_LIMITS.maxLegacyProjectionBytes
+  const boundedTasks = tasksPath === undefined
+    ? undefined
+    : fileContext?.readFileBounded === undefined
+      ? { kind: 'invalid' as const }
+      : fileContext.readFileBounded(tasksPath, tasksByteLimit)
+  const authenticatedTasksSource = boundedTasks?.kind === 'ok' ? boundedTasks.text : undefined
+  let canonicalTasksProjectionStatus: 'current' | 'legacy' | 'invalid' =
+    boundedCanonicalState?.kind === 'invalid'
+    || boundedTasks?.kind === 'invalid'
+    || (canonicalStatePresent && boundedTasks?.kind === 'missing')
+      ? 'invalid'
+      : 'legacy'
+  if (authenticatedTasksSource !== undefined) {
+    try {
+      canonicalTasksProjectionStatus = await classifyTaskPlanProjectionForChange(
+        dir,
+        authenticatedTasksSource,
+      )
+      if (
+        canonicalTasksProjectionStatus === 'legacy'
+        && Buffer.byteLength(authenticatedTasksSource) > TASK_PLAN_LIMITS.maxLegacyProjectionBytes
+      ) canonicalTasksProjectionStatus = 'invalid'
+    } catch {
+      // Corrupt or concurrently replaced canonical state is not legacy. It must block the guard.
+      canonicalTasksProjectionStatus = 'invalid'
+    }
+  }
+  // Invalid bounded input stays present as an empty sentinel so every phase reaches the explicit
+  // authentication failure instead of treating an oversized legacy file as an absent optional one.
+  const guardedTasksSource = canonicalTasksProjectionStatus === 'invalid'
+    && authenticatedTasksSource === undefined
+    ? ''
+    : authenticatedTasksSource
+  const guardedFileContext = fileContext === undefined
+    ? undefined
+    : {
+        ...fileContext,
+        readFile: (path: string) => path === tasksPath
+          ? guardedTasksSource
+          : fileContext.readFile?.(path),
+      }
+  const result = deps.flow.guardCheck(state, {
+    ...guardedFileContext,
+    coverageProfile,
+    ...(guardedTasksSource === undefined
+      ? {}
+      : {
+          canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) =>
+            changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource
+              ? canonicalTasksProjectionStatus
+              : 'invalid',
+        }),
+  })
   const migration = str(state.fields.phase) === 'ship'
     ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
     : undefined

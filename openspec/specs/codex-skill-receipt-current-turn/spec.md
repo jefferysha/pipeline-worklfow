@@ -52,7 +52,8 @@
 且 fallback discovery MUST 要求恰好一个解码成功的 exec invocation。该 invocation MUST
 是顶层 awaited `tools.exec_command`，并把同一变量的完整 result 传给 `text`。表达式、
 模板字符串、computed key、多个 exec invocation、只转发 `.output` 或无法解析的对象 MUST
-失败关闭。
+失败关闭。Inline `max_output_tokens` 仅在值为正安全整数字面量时可作为不受信执行选项被忽略；
+pragma、动态值、零、负数、非整数与超出安全整数范围的值 MUST 失败关闭。
 
 #### Scenario: 当前 JSON ABI 保留 workdir
 
@@ -69,6 +70,16 @@
 - **WHEN** JSON tool-program 除 `cmd` 与 `workdir` 外还包含数组等纯数据选项，例如
   `prefix_rule`
 - **THEN** 解码器 MUST 忽略这些非信任选项，并继续只验证 command 与 workdir
+
+#### Scenario: 合法 inline max_output_tokens 保持完成态证明
+
+- **WHEN** custom 或 function ABI 的 inline exec arguments 包含正安全整数 `max_output_tokens`，nested result 为 `exit_code=0` 且输出逐字节等于受信 Skill
+- **THEN** 解码器 MUST 保留 invocation，完整 reconcile 可追加当前 phase 的 `CodexSkillRead`
+
+#### Scenario: max_output_tokens 不得放宽完整输出
+
+- **WHEN** 合法 `max_output_tokens` 导致 nested output 截断，或值来自 pragma、动态表达式、零、负数、非整数或超出安全整数范围
+- **THEN** 系统 MUST 不确认 Skill，也 MUST 不追加 history evidence
 
 #### Scenario: Output-only wrapper 失败关闭
 
@@ -121,6 +132,13 @@ fallback discovery MUST 只把 `session_meta.payload.id` 作为 host session 身
 或读取失败不得触发旧 transcript 回退。exact receipt 与 fallback discovery 都 MUST 在
 读取前以 `O_NOFOLLOW` 打开候选并把 device/inode/size/mtime/ctime 绑定到枚举快照，按快照
 大小限制读取范围；读取结束后 MUST 同时复核原 fd 和当前 candidate path 仍指向同一完整身份。
+discovery MUST 在 4096 metadata-entry 预算内支持超过 128 个合法 transcript，同时仍只全文读取
+最新 32 个候选并遵守单文件/总字节预算。
+
+#### Scenario: 129 个历史 transcript 后仍发现当前 session
+
+- **WHEN** 精确当前 session Skill read 位于 129 个合法历史 transcript 之后
+- **THEN** 完整 reconcile 只追加该当前 phase 的 `CodexSkillRead`
 
 #### Scenario: Fork 缺少 payload.id 时失败关闭
 

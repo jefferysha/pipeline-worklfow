@@ -125,6 +125,7 @@ function makeAdv(opts: {
       fileExists: () => fx,
       fileNonempty: () => fx,
       readFile: () => 'x',
+      readFileBounded: () => ({ kind: 'ok' as const, text: 'x' }),
       dirExists: () => fx,
       changeArchived: () => false,
     }),
@@ -165,7 +166,8 @@ describe('advance —— auto-transition 中间档停点规则（B14/D12，快�
 
   test('HITL 红线：默认从非复核相位只推进到"进入复核相位"就停（build → verify 停）', async () => {
     const a = makeAdv({ phase: 'build' })
-    expect(await cmdAdvance(a.deps, 'demo', {})).toBe(0)
+    const code = await cmdAdvance(a.deps, 'demo', {})
+    expect(code, JSON.stringify({ out: a.out, err: a.err })).toBe(0)
     // 真推进一步进入 verify（复核相位）后停，绝不跑到 ship/archive
     expect(a.store.phase()).toBe('verify')
     expect(a.store.write.calls).toHaveLength(1)

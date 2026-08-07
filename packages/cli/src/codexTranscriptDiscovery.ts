@@ -6,7 +6,10 @@ const MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024
 const MAX_TOTAL_BYTES = 512 * 1024 * 1024
 const MAX_TRANSCRIPTS = 32
 const MAX_DISCOVERY_ENTRIES = 4096
-const MAX_DISCOVERED_TRANSCRIPTS = 128
+// The metadata walk is already bounded independently. Long-lived Codex installations can retain
+// hundreds of ordinary transcripts, so the transcript count must not fail before that existing
+// entry budget or an otherwise valid, explicitly bound current session becomes undiscoverable.
+const MAX_DISCOVERED_TRANSCRIPTS = MAX_DISCOVERY_ENTRIES
 
 export interface HostTranscriptDiscoveryLimits {
   readonly maxEntries: number
@@ -26,6 +29,16 @@ export interface HostTranscriptCandidate {
   readonly inode: bigint
   readonly modifiedAtNs: bigint
   readonly changedAtNs: bigint
+}
+
+export function compareHostTranscriptsNewestFirst(
+  left: HostTranscriptCandidate,
+  right: HostTranscriptCandidate,
+): number {
+  if (left.modifiedAtNs !== right.modifiedAtNs) return left.modifiedAtNs > right.modifiedAtNs ? -1 : 1
+  if (left.changedAtNs !== right.changedAtNs) return left.changedAtNs > right.changedAtNs ? -1 : 1
+  if (left.path === right.path) return 0
+  return left.path < right.path ? -1 : 1
 }
 
 type HostTranscriptInspection =
@@ -133,7 +146,7 @@ export async function recentHostTranscripts(
 
   let remaining = MAX_TOTAL_BYTES
   const selected: HostTranscriptCandidate[] = []
-  for (const transcript of discovered.sort((left, right) => right.modifiedAt - left.modifiedAt)) {
+  for (const transcript of discovered.sort(compareHostTranscriptsNewestFirst)) {
     if (selected.length >= MAX_TRANSCRIPTS || transcript.size > remaining) break
     selected.push(transcript)
     remaining -= transcript.size
@@ -167,10 +180,14 @@ function matchesCandidate(
 
 export async function openVerifiedHostTranscript(
   candidate: HostTranscriptCandidate,
+  openCandidate: (path: string, flags: number) => Promise<FileHandle> = (path, flags) => open(path, flags),
 ): Promise<FileHandle | undefined> {
   let handle: FileHandle | undefined
   try {
-    handle = await open(candidate.path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    handle = await openCandidate(
+      candidate.path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    )
     const info = await handle.stat({ bigint: true })
     if (matchesCandidate(candidate, info)) return handle
   } catch {

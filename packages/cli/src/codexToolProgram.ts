@@ -37,6 +37,7 @@ const COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS = new Set([
   'command',
   'justification',
   'login',
+  'max_output_tokens',
   'prefix_rule',
   'sandbox_permissions',
   'tty',
@@ -51,12 +52,28 @@ export function isCompleteOutputSafeExecArguments(
     && value !== null
     && !Array.isArray(value)
     && Object.keys(value).every((key) => COMPLETE_OUTPUT_SAFE_EXEC_ARGUMENTS.has(key))
+    && (
+      !Object.hasOwn(value, 'max_output_tokens')
+      || (
+        Number.isSafeInteger((value as Record<string, unknown>).max_output_tokens)
+        && Number((value as Record<string, unknown>).max_output_tokens) > 0
+      )
+    )
 }
 
 function safePrimitiveEnd(source: string, start: number): number | undefined {
   const match = /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[Ee][+-]?\d+)?|true|false|null)\b/
     .exec(source.slice(start))
   return match ? start + match[0].length : undefined
+}
+
+function isSafePositiveIntegerLiteral(source: string, start: number, end: number): boolean {
+  try {
+    const value = JSON.parse(source.slice(start, end)) as unknown
+    return Number.isSafeInteger(value) && Number(value) > 0
+  } catch {
+    return false
+  }
 }
 
 function invocationFromSafeObjectLiteral(source: string): TranscriptExecInvocation | undefined {
@@ -91,6 +108,10 @@ function invocationFromSafeObjectLiteral(source: string): TranscriptExecInvocati
     }
     const valueEnd = stringValue?.end ?? safePrimitiveEnd(source, cursor)
     if (valueEnd === undefined) return undefined
+    if (
+      key === 'max_output_tokens'
+      && (stringValue !== undefined || !isSafePositiveIntegerLiteral(source, cursor, valueEnd))
+    ) return undefined
     cursor = valueEnd
     while (/\s/.test(source[cursor] ?? '')) cursor += 1
     if (cursor >= source.length - 1) break
@@ -134,6 +155,7 @@ export function transcriptExecInvocations(input: string): readonly TranscriptExe
       const parsed = JSON.parse(pragma[1].trim()) as unknown
       if (
         !isCompleteOutputSafeExecArguments(parsed)
+        || Object.hasOwn(parsed, 'max_output_tokens')
       ) return []
     } catch {
       return []
