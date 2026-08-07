@@ -30,4 +30,4 @@
 
 ## 归档
 
-- [ ] 归档 Change 并记录 UI 验收结论。 (archive)
+- [x] 归档 Change 并记录 UI 验收结论。 (archive)
