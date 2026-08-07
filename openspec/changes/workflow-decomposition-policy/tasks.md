@@ -28,6 +28,7 @@
 - [x] 将 require-review receipt 绑定到规范化候选计划 fingerprint，阻止缺失授权被普通确认绕过。 (build)
 - [x] 将 Dashboard 取消与 Escape 收敛为 policy-only 回滚，保留未提交的 stage/guard 草稿。 (build)
 - [x] 在 AFK claim 前冻结并持久化五层有效授权快照，并在同一 Track Registry 锁内按精确 revision、Run、loop、iteration、attempt 与 reservation 重新校验，阻止评估后权限撤销竞态。 (build)
+- [x] 从当前 iteration 的不可变授权 sidecar 投影 server effective grants/denials，逐项绑定 frozen Run identity 并对缺失、损坏或漂移失败关闭。 (build)
 - [x] 刷新生产构建产物并通过架构、类型、OpenSpec、bundle 与全量回归门。 (build)
 
 ## 验证
