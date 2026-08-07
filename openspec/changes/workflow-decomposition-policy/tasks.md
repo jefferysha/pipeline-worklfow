@@ -20,6 +20,8 @@
 - [x] 实现完整 decomposition/interaction 校验和五层 action 权限求交。 (build)
 - [x] 将 continuous/queue 早检与 AFK pre-claim authoritative admission 接线。 (build)
 - [x] 通过安全 definition API 实现 Dashboard 策略编辑、状态展示、zh/en 与 loading/empty/error 闭环。 (build)
+- [x] 按 Verify 返工结论将 missing-authorization 固化为不可被普通 review 绕过的 hard block。 (build)
+- [x] 为公共 createAutomation 默认 admission 补齐显式 authority/binding 端口，保持缺省失败关闭与 bundle preparation 硬门。 (build)
 
 ## 验证
 

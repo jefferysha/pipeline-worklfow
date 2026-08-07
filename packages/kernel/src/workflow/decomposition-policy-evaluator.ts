@@ -186,6 +186,10 @@ export function evaluateWorkflowDecompositionMaterialization(
   if (candidateValid && candidate.resulting_depth > policy.max_depth) {
     add(extra, 'decomposition-max-depth-exceeded', 'revise-decomposition-candidate', true)
   }
+  if (candidateValid && (candidate.classification === 'missing-authorization'
+    || candidate.triggered_ask_when.includes('missing-authorization'))) {
+    add(extra, 'decomposition-missing-authorization', 'repair-authority-binding', true)
+  }
 
   if (policy.mode === 'auto-safe' && candidateValid) {
     if (!candidate.matched_auto_when.some((condition) => policy.auto_when.includes(condition))) {

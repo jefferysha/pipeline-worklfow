@@ -90,6 +90,22 @@ describe('authoritative decomposition materialization', () => {
     }))
   })
 
+  it('hard-blocks missing authorization in auto-safe even when policy does not ask and classification is routine', () => {
+    const result = evaluateWorkflowDecompositionMaterialization(input({
+      policy: policy({ ask_when: [] }),
+      candidate: {
+        ...input().candidate,
+        triggered_ask_when: ['missing-authorization'],
+        classification: 'routine-reversible',
+      },
+    }))
+
+    expect(result).toMatchObject({ allowed: false, status: 'hard-blocked' })
+    expect(result.denials).toContainEqual(expect.objectContaining({
+      code: 'decomposition-missing-authorization',
+    }))
+  })
+
   it.each([
     ['item ceiling', { item_count: 5 }, 'decomposition-max-items-exceeded'],
     ['depth ceiling', { resulting_depth: 3 }, 'decomposition-max-depth-exceeded'],
@@ -170,5 +186,31 @@ describe('authoritative decomposition materialization', () => {
       },
     }))
     expect(result).toMatchObject({ allowed: true, status: 'allowed' })
+  })
+
+  it('hard-blocks missing authorization even with an exact require-review receipt', () => {
+    const result = evaluateWorkflowDecompositionMaterialization(input({
+      policy: policy({ mode: 'require-review', ask_when: [] }),
+      candidate: {
+        ...input().candidate,
+        triggered_ask_when: ['missing-authorization'],
+        classification: 'routine-reversible',
+      },
+      review: {
+        event_id: 'review-event-7',
+        receipt: {
+          status: 'approved',
+          event_id: 'review-event-7',
+          action: 'materialize-work-items',
+          candidate_fingerprint: CANDIDATE_FINGERPRINT,
+          ...authority,
+        },
+      },
+    }))
+
+    expect(result).toMatchObject({ allowed: false, status: 'hard-blocked' })
+    expect(result.denials).toContainEqual(expect.objectContaining({
+      code: 'decomposition-missing-authorization',
+    }))
   })
 })

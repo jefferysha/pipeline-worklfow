@@ -81,3 +81,33 @@
 {"ts":"2026-08-07T12:44:56Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-08-07T12:44:56Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
 {"ts":"2026-08-07T12:44:56Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"c43b8fe2-e5a4-45f4-914e-a868c1f7a54d"}
+{"ts":"2026-08-07T12:50:37Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-workflow-decomposition-policy-verify-barrier.md"}
+{"ts":"2026-08-07T12:50:51Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T12:50:51Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 9e508e63-6ed1-4e0d-b226-30cf216621b4 8"}
+{"ts":"2026-08-07T12:50:51Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-07T12:50:51Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-07T12:32:25Z authority_host_session=019fdc16-6fbd-7ed1-bbb9-a2746951c2ab"}
+{"ts":"2026-08-07T12:50:55Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T12:50:55Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"0f769a1e-780e-4e8f-a0a6-a9e9bb1b019b"}
+{"ts":"2026-08-07T12:51:01Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T12:56:20Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T12:56:20Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans 9e508e63-6ed1-4e0d-b226-30cf216621b4 9"}
+{"ts":"2026-08-07T12:56:48Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T12:56:48Z","kind":"tool","raw":"CodexSkillReadBinding: test-driven-development 9e508e63-6ed1-4e0d-b226-30cf216621b4 9"}
+{"ts":"2026-08-07T12:57:01Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"81691354-ad53-40b4-ab17-c7f5fee843f1"}
+{"ts":"2026-08-07T13:14:55Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-workflow-decomposition-policy-verify-barrier.md"}
+{"ts":"2026-08-07T13:14:55Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T13:14:55Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 9e508e63-6ed1-4e0d-b226-30cf216621b4 10"}
+{"ts":"2026-08-07T13:14:56Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-07T13:14:56Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify 9e508e63-6ed1-4e0d-b226-30cf216621b4 10"}
+{"ts":"2026-08-07T13:15:05Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-07T13:15:36Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdc58-9f81-77e2-8b42-5b8fed4ab75a"}
+{"ts":"2026-08-07T13:15:41Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-07T13:15:36Z authority_host_session=019fdc58-9f81-77e2-8b42-5b8fed4ab75a"}
+{"ts":"2026-08-07T13:15:41Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-07T13:15:41Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-08-07T13:15:41Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"8a61ac4b-dd73-458d-8f44-e34db828ef90"}
+{"ts":"2026-08-07T13:19:15Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T13:21:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T13:21:57Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 11"}
+{"ts":"2026-08-07T13:48:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T13:48:19Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 11"}
+{"ts":"2026-08-07T13:48:49Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

@@ -33232,7 +33232,9 @@ function createAutomation(deps) {
     clock,
     level: config.level,
     image: deps.image,
-    getAutomation: (change) => getAutomation(store2, changeDir2(change))
+    getAutomation: (change) => getAutomation(store2, changeDir2(change)),
+    bindAutomationPolicy: deps.bindAutomationPolicy,
+    workflowActionAuthority: deps.workflowActionAuthority
   });
   const preparation = deps.preparation ?? createDefaultExecutionPreparation();
   const skillInvocations = createAfkSkillInvocationLifecycle(changeDir2, deps.interactionReceipts);
