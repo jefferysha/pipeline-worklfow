@@ -27,8 +27,8 @@
 
 ## 交付
 
-- [ ] 更新运行时契约并创建 base=codex/workflow-decomposition-policy-20260803 的独立非草稿 PR，等待 CI 全绿。 (ship)
+- [x] 更新运行时契约并创建 base=main 的独立非草稿 PR #36；CI run 31213931358 全绿。 (ship)
 
 ## 归档
 
-- [ ] 归档 Change 并记录调度兼容结论。 (archive)
+- [x] 归档 Change 并记录调度兼容结论；主规格 digest 与 applied-spec receipt 一致且无活跃子 Change。 (archive)
