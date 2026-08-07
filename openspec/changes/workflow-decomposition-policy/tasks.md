@@ -24,6 +24,7 @@
 - [x] 按 Verify 返工结论将 missing-authorization 固化为不可被普通 review 绕过的 hard block。 (build)
 - [x] 为公共 createAutomation 默认 admission 补齐显式 authority/binding 端口，保持缺省失败关闭与 bundle preparation 硬门。 (build)
 - [x] 将 Workflow authority provider 异常升级为可观测的 state I/O 失败，并以零扣费终态关闭 reservation，避免普通拒绝路径伪报 round 成功。 (build)
+- [x] 将 Codex review 固定到独立 clone 执行，并以前后状态核对保护 Verify 的冻结 worktree 零输出屏障。 (build)
 
 ## 验证
 

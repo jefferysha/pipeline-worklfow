@@ -145,3 +145,15 @@
 {"ts":"2026-08-07T14:03:26Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 15"}
 {"ts":"2026-08-07T14:10:00Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-07T14:10:00Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 15"}
+{"ts":"2026-08-07T14:22:25Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-07T14:22:25Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-07T14:22:25Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-07T14:22:25Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"a1da2dd1-1646-4fe7-addb-41badbd9beb2"}
+{"ts":"2026-08-07T14:43:46Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-07-workflow-decomposition-policy-verify-barrier.md"}
+{"ts":"2026-08-07T14:43:47Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-07T14:43:47Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 9e508e63-6ed1-4e0d-b226-30cf216621b4 16"}
+{"ts":"2026-08-07T14:43:55Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-07T14:43:56Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-07T13:19:15Z authority_host_session=019fdbac-5c96-79d1-bbe1-b9ed276aeded"}
+{"ts":"2026-08-07T14:43:56Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"e36e7b39-fb67-44c7-b22e-150ac5c0681e"}
+{"ts":"2026-08-07T14:46:26Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-07T14:46:26Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 9e508e63-6ed1-4e0d-b226-30cf216621b4 17"}

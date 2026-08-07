@@ -69,3 +69,38 @@ server effective snapshot 的 generic projection 没有 candidate 时显示 unco
 - `openspec validate --all --strict`：PASS，`40 passed / 0 failed`。
 
 因此必须再次走官方 `verify-fail` 回 Build，并通过受控规格返工路径修复这两个 delta 标题、重新登记/复核规格证据，再生成新的 Build freeze。不得直接在 Verify 修改 delta spec，也不得把隔离副本的归档结果复制回主 worktree。
+
+## 第三次 Verify：Codex 轨违反 repo-zero-output barrier
+
+本轮冻结 HEAD 为 `2d6acde9cfa947d3710ca8db97c7da1f0e697a07`，相对精确 base
+`a710a99f078b78942b501794b019f8c25be7e764`。A/B 修复、OpenSpec operation 修正和新增的
+authority provider fail-loud 修复均已提交；产品回归和两个 `luna_worker` 轨的证据是绿的：
+
+- 主线程在冻结前运行 `npm test -- --minWorkers=4 --maxWorkers=4`：`364/364` 文件通过，
+  `6,353 passed`、`26 skipped`、`0 failed`；`npm run build`、`npm run typecheck:web`、
+  OpenSpec、interaction contract、comments、default workflow freshness、docs、repository hygiene、
+  document templates、architecture 与 `git diff --check` 全部通过。
+- `luna_worker` 完整 reviewer（`/root/worker_1_frozen_pr3_review`）逐一审查
+  `a710a99..2d6acde` 的 `225` 个变更文件，定向 `407`、Dashboard `177`、修复子集 `301`
+  个测试通过，`npm run build` 通过；结论为 PASS，未发现可执行的 Medium 及以上问题。
+- `luna_worker` 隔离 E2E（`/root/worker_2_fresh_api_e2e_verify`）在
+  `/tmp/tenon-pr3-verify-final.1CY9qO/repo` 的 detached `2d6acde9` 上完成：kernel
+  workflow/codec/V1-V3 `315` 通过，admission/authority/scheduler/SDK `262` 通过，provider
+  exception 专项 `1` 通过，CLI AFK `38` 通过并诚实跳过 `4` 个 Docker 用例，server
+  workflow/status/API `352` 通过并诚实跳过 `9` 个环境用例；TypeScript 检查全过，前后只有预期的
+  `?? node_modules` 依赖 symlink，tracked diff 为空。
+- 从精确 HEAD 建立的 `/tmp/tenon-pr3-archive-final2.hqP1YH/repo` 中，
+  `openspec validate workflow-decomposition-policy --strict`、官方 archive 和
+  `openspec validate --all --strict` 全部通过；应用结果为 `13 added / 0 modified / 0 removed /
+  0 renamed`，真实主规格前后 aggregate digest 均为
+  `08a6648a747ba939f4e47d42b8684bc9ef0224689e42d49272af171e78baf748`。
+
+但是独立 Codex CLI review 轨在真实冻结 worktree 中先后创建并删除
+`.review-check-legacy-drift.ts` 与 `.review-check-action.ts`，用于执行临时 `vite-node` 探针。主线程发现
+后终止 PID `27094` 并检查：两个临时文件均已消失，产品 tracked 文件无残留漂移；但 Verify 的
+repo-zero-output barrier 明确规定任一瞬时实现/配置/生成物写入都会使该轨无效，删除临时文件不能恢复
+冻结结论。因此该 Codex 轨不得记为 PASS，本轮聚合结果为 **FAIL**，即使另外两轨和产品测试均通过。
+
+下一轮必须走官方 `verify-fail` 返回 Build，不改产品代码也不接受偏差；重新冻结同一产品 HEAD 后，
+把 Codex review 放到独立 clone/worktree 中执行，并在前后核对真实冻结 worktree 的状态与摘要。四项
+Verify task 保持未勾选，直到新一轮三轨和逐文件 spec mapping 全部完成。
