@@ -180,7 +180,7 @@ describe('stable host-hook ABI', () => {
       'bash', [launchers.tenon, 'document', 'record', change, 'proposal', proposal, '--producer', 'openspec-propose'], '', env, project,
     )
     expect(beforeEvidence.code).toBe(1)
-    expect(beforeEvidence.stderr).toContain('current StepVisit lacks exact Codex confirmation')
+    expect(beforeEvidence.stderr).toContain('current StepVisit lacks exact host confirmation')
 
     const skillPath = join(hostCache, 'skills', 'openspec-propose', 'SKILL.md')
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'receipt.jsonl')
@@ -249,9 +249,10 @@ describe('stable host-hook ABI', () => {
     })
     expect((await run('bash', [launchers.hook, 'codex-skill-receipt'], skillEvent, env, project)).code).toBe(0)
     for (const [kind, path] of [['proposal', proposal], ['openspec-design', design], ['tasks', tasks]] as const) {
-      expect((await run(
+      const recorded = await run(
         'bash', [launchers.tenon, 'document', 'record', change, kind, path, '--producer', 'openspec-propose'], '', env, project,
-      )).code).toBe(0)
+      )
+      expect(recorded.code, `${kind}: ${recorded.stderr}`).toBe(0)
     }
     const status = await run('bash', [launchers.tenon, 'document', 'status', change, '--json'], '', env, project)
     expect(status.code).toBe(0)

@@ -32,14 +32,27 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLoopLedgerStore, loadRegistry } from '@tenon/kernel'
 import { skillActionAuthorityContract } from '@tenon/automation'
+import { createLoopLedgerStore, emptyFields, loadRegistry } from '@tenon/kernel'
+import { publishInitialRunRevision } from '../../../kernel/src/state/run-revision-store.js'
 import { makeDeps, mockAfkState, mockState } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
 import { cmdAfk, probeGitCommitAncestry } from './afk.js'
 
 const execFileAsync = promisify(execFile)
 const SHA = 'a'.repeat(40)
+
+async function initializeCanonicalStepVisit(cwd: string, change = 'w'): Promise<void> {
+  const fields = emptyFields()
+  fields.phase = 'build'
+  fields.workflow = 'default'
+  fields.track = 'backend'
+  await publishInitialRunRevision(join(cwd, 'openspec', 'changes', change), {
+    fields,
+    runMetadata: { runId: 'mock-run', transitionSequence: 0, transitionHead: undefined },
+    opaqueTail: '',
+  }, '2026-08-04T00:00:00.000Z')
+}
 
 /** fake exec 的 argv 记录（vi.mock 工厂被 hoist，必须用 vi.hoisted 共享可变引用）。 */
 const h = vi.hoisted(() => ({ calls: [] as string[][], executorCalls: 0, dockerAvailable: true }))
@@ -189,6 +202,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
     cwd = await mkdtemp(join(tmpdir(), 'afk-docker-unavailable-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -243,6 +257,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
     await execFileAsync('git', ['init', '-q'], { cwd })
     // scanReadyFromFs 真 readdir openspec/changes/*；字段值由 makeDeps 的 mockStore 供给
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -309,6 +324,7 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
     cwd = await mkdtemp(join(tmpdir(), 'afk-cred-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -423,6 +439,7 @@ loops:
     cwd = await mkdtemp(join(tmpdir(), 'afk-skillbundle-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'v'), { recursive: true })
+    await initializeCanonicalStepVisit(cwd, 'v')
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), V_LOOPS_YAML)
   })

@@ -14,12 +14,16 @@ import {
   isDocumentPolicyStep,
   migrateLegacyDeltaDocument,
   recordDocument,
-  recordCanonicalDocumentSkillInvocation,
+  currentDocumentSkillConfirmation,
   recordDocumentReads,
   renderDocumentTemplate,
   documentPathForKind,
   documentTemplateIdForKind,
 } from '@tenon/kernel'
+import {
+  recordCanonicalDocumentSkillInvocation,
+  withSkillInvocationChangeLock,
+} from '../../../kernel/dist/skill-invocation/producer-internal.js'
 import type {
   DocumentContractPhase,
   DocumentEvidenceReport,
@@ -214,17 +218,17 @@ export async function cmdDocumentRecord(
   if (producer.includes('|')) return reject(deps, `--producer '${producer}' 必须是单个具体 skill id`)
   try {
     const recordedAt = deps.clock()
-    await deps.store.withLock(dir, async () => {
+    await withSkillInvocationChangeLock(dir, async (lock) => {
       const state = await deps.store.read(dir)
       const context = governedDocumentContext(deps, state)
       const { phase, policy } = assertGoverned(context)
       const runMetadata = state.runMetadata
       if (runMetadata === undefined) throw new Error('canonical WorkflowRun StepVisit identity is missing')
-      // Native PostToolUse remains the fast path.  On Codex hosts that omit that callback for a
-      // completed `exec` tool call, reconcile the earlier PreToolUse receipt against the
-      // host-owned transcript *inside this same change lock* before the kernel inspects history.
-      // A receipt alone cannot pass this point.
-      const reconciled = await reconcileCodexSkillEvidence({
+      // Both adapters land one host-neutral confirmation derived from this canonical StepVisit.
+      // Native Skill PostToolUse history is the fast path; Codex may instead reconcile a pending
+      // receipt against its host-owned completed transcript. Neither path can accept a caller-
+      // supplied run/sequence binding, and a receipt or old history row alone cannot pass.
+      await reconcileCodexSkillEvidence({
         repoRoot: deps.cwd,
         changeDir: dir,
         producer,
@@ -235,9 +239,10 @@ export async function cmdDocumentRecord(
           runId: runMetadata.runId,
           transitionSequence: runMetadata.transitionSequence,
         },
+        applicationKey: `${kind}\0${path}`,
       })
-      if (reconciled.confirmedSkillIds.length === 0) {
-        throw new Error(`current StepVisit lacks exact Codex confirmation for document producer '${producer}'`)
+      if (await currentDocumentSkillConfirmation(dir, producer, phase, recordedAt) === undefined) {
+        throw new Error(`current StepVisit lacks exact host confirmation for document producer '${producer}'`)
       }
       const ledger = await recordDocument({
         repoRoot: deps.cwd,
@@ -250,18 +255,23 @@ export async function cmdDocumentRecord(
         recordedAt,
         allowBackfill: backfill,
       })
-      const canonicalRecord = ledger.records.find((record) =>
+      const requestedPath = relative(resolve(deps.cwd), resolve(deps.cwd, path))
+      const canonicalRecords = ledger.records.filter((record) =>
         record.kind === kind
         && record.producer === producer
-        && record.recordedAt === recordedAt)
-      if (canonicalRecord === undefined) throw new Error('canonical document record missing after registration')
+        && record.recordedAt === recordedAt
+        && record.path === requestedPath)
+      if (canonicalRecords.length !== 1) {
+        throw new Error('canonical document record is missing or ambiguous after registration')
+      }
+      const canonicalRecord = canonicalRecords[0]!
+      const invocation = await recordCanonicalDocumentSkillInvocation(
+        dir, kind as DocumentKind, recordedAt, { lock, record: canonicalRecord },
+      )
+      if (invocation === undefined) {
+        throw new Error('canonical document record lacks exact current-StepVisit invocation evidence')
+      }
     })
-    // The evidence repository takes the same Change lock internally. It derives every event field
-    // from the canonical document record and current transcript confirmation after this lock exits.
-    const invocation = await recordCanonicalDocumentSkillInvocation(dir, kind as DocumentKind, recordedAt)
-    if (invocation === undefined) {
-      throw new Error('canonical document record lacks exact current-StepVisit invocation evidence')
-    }
     return 0
   } catch (error) {
     return reject(deps, errMsg(error))

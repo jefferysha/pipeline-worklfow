@@ -41,7 +41,6 @@ import { cmdReview } from './commands/review.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
 import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
 import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
-import { cmdInternalCodexSkillReceipt } from './codexSkillReceipt.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 import { cmdStateProjection } from './commands/state-projection.js'
 import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
@@ -49,6 +48,7 @@ import { bail, stripNl } from './program-exit.js'
 import { registerInstallCommands } from './program-install.js'
 import { registerTrackCommands } from './program-tracks.js'
 import { registerHandoffCommand, registerWorkflowCommands } from './program-workflows.js'
+import { registerSkillInvocationInternalCommands } from './program-skill-invocations.js'
 import { LOOPS_HELP } from './program-help.js'
 export { CliExit } from './program-exit.js'
 
@@ -356,14 +356,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .action(async (mode: string, jsonlPath: string) =>
       bail(await cmdInternalCodexJsonl(deps, mode, jsonlPath)))
 
-  program
-    .command('internal-codex-skill-receipt <changeName> <skillId> <skillPath> <transcriptPath> <sessionId> <turnId> <toolUseId>')
-    .description('[内部] 仅登记 Codex PreToolUse 的待核验 skill receipt；不会直接写完成证据')
-    .action(async (
-      changeName: string, skillId: string, skillPath: string, transcriptPath: string, sessionId: string, turnId: string, toolUseId: string,
-    ) => bail(await cmdInternalCodexSkillReceipt(
-      deps, changeName, skillId, skillPath, transcriptPath, sessionId, turnId, toolUseId,
-    )))
+  registerSkillInvocationInternalCommands(program, deps)
 
   program
     .command('migrate-workflow <name>')

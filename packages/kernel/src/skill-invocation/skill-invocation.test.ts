@@ -182,6 +182,26 @@ describe('SkillInvocation evidence contract', () => {
     expect(() => projectSkillInvocationEvents([started, ...questions])).toThrow(/question.*budget/u)
   })
 
+  it('refuses completion while a shown hard gate is unanswered or an unshown question lacks its default', () => {
+    const completed = event('invocation-completed', {
+      output: { schema_id: 'output/v1', fields: [] },
+      adapter: { kind: 'native', proof_ref: 'proof-1' },
+    }, 3)
+    const shownHardGate = event('question-recorded', {
+      question_id: 'question-1', key: 'release.confirm', schema_id: 'release-confirm/v1',
+      option_ids: ['approve'], requiredness: 'hard-gate', shown: true,
+    }, 2)
+    expect(() => projectSkillInvocationEvents([started, shownHardGate, completed]))
+      .toThrow(/hard-gate.*user answer/u)
+
+    const unshownRoutine = event('question-recorded', {
+      question_id: 'question-1', key: 'build.mode', schema_id: 'build-mode/v1',
+      option_ids: ['direct'], requiredness: 'routine', shown: false,
+    }, 2)
+    expect(() => projectSkillInvocationEvents([started, unshownRoutine, completed]))
+      .toThrow(/unshown.*recommended default/u)
+  })
+
   it('binds artifacts only to unique declared outputs with passing validator verdicts', () => {
     const completed = event('invocation-completed', {
       output: { schema_id: 'output/v1', fields: [{

@@ -32,6 +32,22 @@ function assertSubject(first: SkillInvocationEventV1, event: SkillInvocationEven
   }
 }
 
+function assertCompletedQuestions(
+  questions: ReadonlyMap<string, SkillInvocationQuestionPayloadV1>,
+  decisions: ReadonlyMap<string, SkillInvocationDecisionPayloadV1>,
+): void {
+  for (const question of questions.values()) {
+    const decision = decisions.get(question.question_id)
+    if (question.requiredness === 'hard-gate'
+      && (!question.shown || decision?.mode !== 'user-answer')) {
+      throw new SkillInvocationEvidenceConflictError('hard-gate completion requires a shown question and non-empty user answer')
+    }
+    if (!question.shown && decision?.mode !== 'recommended-default') {
+      throw new SkillInvocationEvidenceConflictError('unshown question completion requires a verified recommended default')
+    }
+  }
+}
+
 export function projectSkillInvocationEvents(events: readonly SkillInvocationEventV1[]): SkillInvocationReadModelV1 {
   const ordered = [...events].sort((a, b) => a.sequence - b.sequence)
   const first = ordered[0]
@@ -97,6 +113,7 @@ export function projectSkillInvocationEvents(events: readonly SkillInvocationEve
       if (event.type === 'invocation-completed' && event.payload.adapter.kind !== started.adapter.kind) {
         throw new SkillInvocationEvidenceConflictError('completion adapter does not match invocation start')
       }
+      if (event.type === 'invocation-completed') assertCompletedQuestions(questions, decisions)
       terminal = event
     }
     if (event.type === 'artifact-binding-intent') {

@@ -3,7 +3,7 @@
  * 非 *.test.ts（会被 tsc 编入 dist），但仅测试引用；生产 index.ts 不导出。
  */
 import { request as httpRequest, get as httpGet, type IncomingHttpHeaders } from 'node:http'
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,6 +19,10 @@ import {
   recordDocumentReads,
 } from '@tenon/kernel'
 import type { FlowEngine, InitOptions, StateStore } from '@tenon/kernel'
+import {
+  recordCanonicalDocumentSkillInvocation,
+  recordNativeDocumentSkillConfirmation,
+} from '../../kernel/dist/skill-invocation/producer-internal.js'
 
 /** 新仓根 templates/manifest.yaml（src 下运行时：src → server → packages → 根）。 */
 export function repoManifestPath(): string {
@@ -145,6 +149,37 @@ export async function seedGovernedDocumentEvidence(root: string, changeDir: stri
     'openspec-propose', 'brainstorming', 'writing-plans', 'verification-before-completion', 'openspec-apply-change',
   ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
   await writeFile(historyPath, `${originalHistory ?? ''}${skillLines}\n`, 'utf8')
+  const store = createStateStore()
+  const originalPhase = String((await store.read(changeDir)).fields.phase)
+  let receiptSequence = 0
+  const record = async (
+    phase: string,
+    kind: Parameters<typeof recordDocument>[0]['kind'],
+    path: string,
+    producer: string,
+    recordedAt: string,
+  ): Promise<void> => {
+    await store.set(changeDir, 'phase', phase)
+    receiptSequence += 1
+    await appendFile(historyPath, `${JSON.stringify({
+      ts: recordedAt, kind: 'init', raw: `fixture visit ${phase}`,
+    })}\n${JSON.stringify({
+      ts: recordedAt, kind: 'tool', raw: `Skill: ${producer}`,
+    })}\n`, 'utf8')
+    const confirmed = await recordNativeDocumentSkillConfirmation(changeDir, producer, phase, {
+      sessionId: `server-test-support-${name}`,
+      toolUseId: `document-${receiptSequence}`,
+      observedAt: recordedAt,
+    })
+    if (!confirmed) throw new Error(`fixture native confirmation rejected for ${producer}`)
+    const ledger = await recordDocument({ repoRoot: root, changeDir, phase, kind, path, producer, recordedAt })
+    const canonicalRecord = [...ledger.records].reverse().find((candidate) =>
+      candidate.kind === kind && candidate.path === path && candidate.recordedAt === recordedAt)
+    if (canonicalRecord === undefined) throw new Error(`fixture canonical record missing for ${path}`)
+    if (await recordCanonicalDocumentSkillInvocation(
+      changeDir, kind, recordedAt, { record: canonicalRecord },
+    ) === undefined) throw new Error(`fixture canonical invocation missing for ${path}`)
+  }
   try {
     const recordedAt = '2026-07-07T00:00:00Z'
     await createWorkflowRunRepository({
@@ -156,16 +191,17 @@ export async function seedGovernedDocumentEvidence(root: string, changeDir: stri
     // migration-safe sidecar, but server fixtures use StateStore directly, so establish the
     // same real ledger before registering hash-bound documents.
     await ensureDocumentLedger(changeDir, recordedAt)
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: docs.proposal, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'openspec-design', path: docs.design, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'tasks', path: docs.tasks, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'superpower-design', path: docs.superpowerDesign, producer: 'brainstorming', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: docs.adr, producer: 'brainstorming', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: docs.delta, producer: 'openspec-propose', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'superpower-plan', path: docs.plan, producer: 'writing-plans', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
-    await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
+    await record('open', 'proposal', docs.proposal, 'openspec-propose', recordedAt)
+    await record('open', 'openspec-design', docs.design, 'openspec-propose', recordedAt)
+    await record('open', 'tasks', docs.tasks, 'openspec-propose', recordedAt)
+    await record('explore', 'superpower-design', docs.superpowerDesign, 'brainstorming', recordedAt)
+    await record('explore', 'adr', docs.adr, 'brainstorming', recordedAt)
+    await record('spec', 'delta-spec', docs.delta, 'openspec-propose', recordedAt)
+    await record('spec', 'superpower-plan', docs.plan, 'writing-plans', recordedAt)
+    await record('spec', 'plan', docs.plan, 'writing-plans', recordedAt)
+    await record('verify', 'verification-report', docs.report, 'verification-before-completion', recordedAt)
+    await record('ship', 'applied-spec', docs.applied, 'openspec-apply-change', recordedAt)
+    await store.set(changeDir, 'phase', originalPhase)
     await readGovernedDocumentsForCurrentVisit(root, changeDir, recordedAt)
   } finally {
     if (originalHistory === undefined) await rm(historyPath, { force: true })

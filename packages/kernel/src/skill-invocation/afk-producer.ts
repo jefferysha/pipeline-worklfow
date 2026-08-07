@@ -10,6 +10,11 @@ import type {
 import { readCurrentRunRevision } from '../state/run-revision-store.js'
 import { appendSkillInvocationEvent, skillInvocationProjectId } from './repository.js'
 import type { SkillInvocationEventV1, SkillInvocationSubjectV1 } from './types.js'
+import {
+  consumeVerifiedAfkInteractionReceipt,
+  inspectVerifiedAfkInteractionReceipt,
+  type VerifiedAfkInteractionReceipt,
+} from './afk-interaction-receipt.js'
 
 export class AfkSkillInvocationProofError extends Error {
   override readonly name = 'AfkSkillInvocationProofError'
@@ -23,6 +28,7 @@ export interface DurableAfkSkillInvocationHandle {
   readonly snapshotSha256: string
   readonly started: Extract<SkillInvocationEventV1, { type: 'invocation-started' }>
   readonly attempt: { readonly attempt_id: string; readonly reservation_id: string }
+  readonly nextSequence: number
 }
 
 const issuedHandles = new WeakSet<object>()
@@ -101,9 +107,22 @@ async function anchoredStart(changeDir: string, reservationId: string): Promise<
 export async function startDurableAfkSkillInvocations(
   changeDir: string,
   reservationId: string,
+  interactionReceipts: readonly VerifiedAfkInteractionReceipt[] = [],
 ): Promise<readonly DurableAfkSkillInvocationHandle[]> {
   const { subject, reservation, activation, snapshot } = await anchoredStart(changeDir, reservationId)
   const attempt = { attempt_id: reservation.attempt_id, reservation_id: reservation.reservation_id }
+  const interactions = interactionReceipts.map((receipt) => ({
+    receipt,
+    input: inspectVerifiedAfkInteractionReceipt(receipt),
+  }))
+  if (interactions.some(({ input }) => input === undefined)
+    || new Set(interactions.map(({ input }) => input?.skill_id)).size !== interactions.length
+    || interactions.some(({ input }) => input?.attempt_id !== attempt.attempt_id
+      || input.reservation_id !== attempt.reservation_id
+      || input.snapshot_sha256 !== snapshot.snapshot_sha256
+      || !snapshot.slots.some((slot) => slot.concrete_skill_id === input.skill_id))) {
+    throw new AfkSkillInvocationProofError('AFK interaction receipt does not match the exact prepared attempt and skill bundle')
+  }
   const handles: DurableAfkSkillInvocationHandle[] = []
   for (const slot of snapshot.slots) {
     const invocationId = `invocation-${digest('afk', attempt.attempt_id, attempt.reservation_id, slot.concrete_skill_id, slot.tree_sha256)}`
@@ -121,6 +140,27 @@ export async function startDurableAfkSkillInvocations(
       },
     }
     await appendSkillInvocationEvent(changeDir, started, { attempt })
+    const interaction = interactions.find(({ input }) => input?.skill_id === slot.concrete_skill_id)
+    let nextSequence = 2
+    if (interaction?.input !== undefined) {
+      const { input } = interaction
+      await appendSkillInvocationEvent(changeDir, {
+        ...started, event_id: eventId(invocationId, 'question'), sequence: nextSequence,
+        type: 'question-recorded', recorded_at: input.recorded_at, payload: input.question,
+      }, { attempt })
+      nextSequence += 1
+      await appendSkillInvocationEvent(changeDir, {
+        ...started, event_id: eventId(invocationId, 'decision'), sequence: nextSequence,
+        type: 'decision-recorded', recorded_at: input.recorded_at, payload: input.decision,
+      }, {
+        attempt,
+        verify_recommended_default: async ({ decision, question }) =>
+          JSON.stringify(decision) === JSON.stringify(input.decision)
+          && JSON.stringify(question) === JSON.stringify(input.question),
+      })
+      nextSequence += 1
+      consumeVerifiedAfkInteractionReceipt(interaction.receipt)
+    }
     const handle = Object.freeze({
       changeDir,
       change: reservation.change,
@@ -129,6 +169,7 @@ export async function startDurableAfkSkillInvocations(
       snapshotSha256: snapshot.snapshot_sha256,
       started,
       attempt,
+      nextSequence,
     })
     issuedHandles.add(handle)
     handles.push(handle)
@@ -162,7 +203,7 @@ export async function finishDurableAfkSkillInvocations(
     consume(handle)
     if (terminal.error?.cause === 'scheduler-interrupted') {
       await appendSkillInvocationEvent(handle.changeDir, {
-        ...handle.started, event_id: eventId(handle.started.invocation_id, 'interrupted'), sequence: 2,
+        ...handle.started, event_id: eventId(handle.started.invocation_id, 'interrupted'), sequence: handle.nextSequence,
         type: 'invocation-interrupted', recorded_at: terminal.finished_at,
         payload: { code: 'scheduler-interrupted', recovery: {
           owner_id: 'tenon-afk-scheduler',
@@ -171,12 +212,12 @@ export async function finishDurableAfkSkillInvocations(
       }, { attempt: handle.attempt, verify_interruption_recovery: async () => true })
     } else if (terminal.error !== undefined) {
       await appendSkillInvocationEvent(handle.changeDir, {
-        ...handle.started, event_id: eventId(handle.started.invocation_id, 'failed'), sequence: 2,
+        ...handle.started, event_id: eventId(handle.started.invocation_id, 'failed'), sequence: handle.nextSequence,
         type: 'invocation-failed', recorded_at: terminal.finished_at, payload: { code: 'afk-run-failed' },
       }, { attempt: handle.attempt })
     } else {
       await appendSkillInvocationEvent(handle.changeDir, {
-        ...handle.started, event_id: eventId(handle.started.invocation_id, 'completed'), sequence: 2,
+        ...handle.started, event_id: eventId(handle.started.invocation_id, 'completed'), sequence: handle.nextSequence,
         type: 'invocation-completed', recorded_at: terminal.finished_at,
         payload: { output: { schema_id: 'tenon-afk-skill-output/v1', fields: [{
           name: 'run_outcome', classification: 'project-data', digest: `sha256:${digest(JSON.stringify(terminal))}`,

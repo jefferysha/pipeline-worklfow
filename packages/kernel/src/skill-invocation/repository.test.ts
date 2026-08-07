@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -14,6 +14,8 @@ import {
   type SkillInvocationEventV1,
 } from './index.js'
 import { appendSkillInvocationEvent } from './repository.js'
+import { recordHostSkillInvocationInteraction } from './interaction-command.js'
+import { recordNativeDocumentSkillConfirmation } from './document-confirmation.js'
 import { emptyFields } from '../state/parse.js'
 import { publishInitialRunRevision } from '../state/run-revision-store.js'
 import { publishTaskPlanRevision } from '../state/task-plan-store.js'
@@ -89,6 +91,21 @@ function started(
 }
 
 describe('SkillInvocationEvidence repository', () => {
+  it('reads through a directory-fd-style alias only when bound to its verified identity', async () => {
+    const { changeDir } = await fixture()
+    const alias = `${changeDir}-alias`
+    await symlink(changeDir, alias, 'dir')
+    const identity = await lstat(changeDir)
+    await expect(readPersistedSkillInvocationEvidence(alias))
+      .rejects.toBeInstanceOf(SkillInvocationEvidenceCorruptError)
+    await expect(readPersistedSkillInvocationEvidence(alias, {
+      anchoredDirectoryIdentity: { dev: identity.dev, ino: identity.ino },
+    })).resolves.toMatchObject({
+      state: 'ready',
+      items: [expect.objectContaining({ skill: { id: 'task-planner', version: 'task-plan/v1' } })],
+    })
+  })
+
   it('records the native Task Planner publication through the production lifecycle', async () => {
     const { changeDir } = await fixture()
     await expect(readPersistedSkillInvocationEvidence(changeDir)).resolves.toMatchObject({
@@ -147,7 +164,7 @@ describe('SkillInvocationEvidence repository', () => {
       event_id: 'event-2',
       sequence: 2,
       type: 'question-recorded',
-      recorded_at: '2026-08-03T00:00:02.000Z',
+      recorded_at: '2026-08-03T00:02:00.000Z',
       payload: {
         question_id: 'question-1', key: 'build.mode', schema_id: 'question/v1',
         option_ids: ['direct'], requiredness: 'routine', shown: false,
@@ -233,6 +250,65 @@ describe('SkillInvocationEvidence repository', () => {
       ...options,
       verify_interruption_recovery: async (event) => event.payload.recovery.proof_ref === 'lease-2',
     })).resolves.toEqual({ appended: true })
+  })
+
+  it('rejects a trusted completion verdict while a shown hard gate remains unanswered', async () => {
+    const { changeDir, started } = await fixture()
+    const options = { attempt: { attempt_id: 'attempt-1', reservation_id: 'reservation-1' } }
+    await appendSkillInvocationEvent(changeDir, started(), options)
+    await appendSkillInvocationEvent(changeDir, {
+      ...started(), event_id: 'event-2', sequence: 2, type: 'question-recorded',
+      recorded_at: '2026-08-03T00:00:02.000Z',
+      payload: {
+        question_id: 'question-1', key: 'release.confirm', schema_id: 'release-confirm/v1',
+        option_ids: ['approve'], requiredness: 'hard-gate', shown: true,
+      },
+    }, options)
+    await expect(appendSkillInvocationEvent(changeDir, {
+      ...started(), event_id: 'event-3', sequence: 3, type: 'invocation-completed',
+      recorded_at: '2026-08-03T00:00:03.000Z',
+      payload: {
+        output: { schema_id: 'output/v1', fields: [] },
+        adapter: { kind: 'afk', proof_ref: 'trusted-completion-proof' },
+      },
+    }, { ...options, verify_completed_adapter: async () => true }))
+      .rejects.toThrow(/hard-gate.*user answer/u)
+  })
+
+  it('records a host question and privacy-safe answer against the unique current incomplete invocation', async () => {
+    const { changeDir } = await fixture()
+    await appendFile(join(changeDir, '.pipeline-history.jsonl'), [
+      JSON.stringify({ ts: '2026-08-03T00:00:00.000Z', kind: 'init' }),
+      JSON.stringify({ ts: '2026-08-03T00:01:00.000Z', kind: 'tool', raw: 'Skill: tenon-build' }),
+      '',
+    ].join('\n'))
+    await expect(recordNativeDocumentSkillConfirmation(changeDir, 'tenon-build', 'build', {
+      sessionId: 'session-1', toolUseId: 'skill-tool-1', observedAt: '2026-08-03T00:01:00.000Z',
+    })).resolves.toBe(true)
+    await recordHostSkillInvocationInteraction(changeDir, {
+      schema_version: 'host-skill-interaction-receipt/v1',
+      receipt_id: 'tool-1',
+      recorded_at: '2026-08-03T00:02:00.000Z',
+      binding: { host_session_id: 'session-1' },
+      questions: [{
+        question: {
+          question_id: 'ignored-by-command', key: 'host.release', schema_id: 'host-question/v1',
+          option_ids: [], requiredness: 'hard-gate', shown: true,
+        },
+        decision: {
+          selected_option_ids: [],
+          free_text: { classification: 'user-provided', digest: `sha256:${'f'.repeat(64)}` },
+        },
+      }],
+    })
+    const raw = await readFile(join(changeDir, SKILL_INVOCATION_LEDGER_FILE), 'utf8')
+    expect(raw).not.toContain('private approval')
+    await expect(readSkillInvocationEvidence(changeDir)).resolves.toMatchObject({
+      items: [{
+        questions: [{ shown: true, requiredness: 'hard-gate' }],
+        decisions: [{ mode: 'user-answer', free_text_classification: 'user-provided' }],
+      }],
+    })
   })
 
   it('keeps an uncommitted artifact intent orphaned and rejects digest drift', async () => {
