@@ -3725,6 +3725,12 @@ function decodeTaskPlanRevisionV1(input) {
   }
   return deepFreeze({ ok: true, value: attempt.value });
 }
+function encodeTaskPlanRevisionV1(value) {
+  const decoded = decodeTaskPlanRevisionV1(value);
+  if (!decoded.ok)
+    throw new TypeError(`invalid TaskPlan revision at ${decoded.errors[0]?.path ?? "$"}`);
+  return JSON.stringify(decoded.value);
+}
 
 // packages/kernel/dist/task-plan/domain.js
 function taskPlanAggregateEntityIdEntries(value) {
@@ -3895,6 +3901,12 @@ function taskPlanDtoToDomain(dto) {
   return taskPlanRecordToDomain(dto);
 }
 
+// packages/kernel/dist/sha256.js
+import { createHash } from "node:crypto";
+function sha256Hex(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
 // packages/kernel/dist/task-plan/validation.js
 function ordinalCompare(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -4037,7 +4049,6 @@ function resourceDiagnostics(revision, dependents, collector) {
           });
         } else {
           conflicts.push({ resource, work_item_ids: [left, right] });
-          issue(collector, "resource-write-conflict", "$.work_items", [resource, left, right]);
         }
       }
     }
@@ -4259,6 +4270,7 @@ function toTaskPlanReadModelV1(revision, projection) {
     plan_id: projectedRevision.plan_id,
     revision_id: projectedRevision.revision_id,
     revision_number: projectedRevision.revision_number,
+    fingerprint: `sha256:${sha256Hex(encodeTaskPlanRevisionV1(projectedRevision))}`,
     revision_status: projectedRevision.status,
     validation,
     completeness: { state: validation.coverage.complete ? "complete" : "incomplete" },
@@ -4836,12 +4848,6 @@ async function atomicReplaceFile(target, content) {
     await unlink(tmp).catch(() => {
     });
   }
-}
-
-// packages/kernel/dist/sha256.js
-import { createHash } from "node:crypto";
-function sha256Hex(content) {
-  return createHash("sha256").update(content).digest("hex");
 }
 
 // packages/kernel/dist/loops/automation-policy.js
@@ -35224,6 +35230,9 @@ async function enforceActiveLoopExecutionWiring(loopIds, deps) {
   }
   return { blocked };
 }
+
+// packages/automation/dist/task-plan-run/journal.js
+var MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
 
 // packages/tap/dist/paths.js
 import { homedir as homedir4, tmpdir as tmpdir2 } from "node:os";

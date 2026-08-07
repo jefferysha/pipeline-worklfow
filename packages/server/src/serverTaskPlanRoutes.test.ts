@@ -112,6 +112,7 @@ describe('resolveTaskPlanRoute', () => {
       plan_id: 'plan-1',
       revision_id: 'rev-1',
       revision_number: 1,
+      fingerprint: `sha256:${'a'.repeat(64)}`,
       revision_status: 'frozen',
       validation: {
         valid: true,

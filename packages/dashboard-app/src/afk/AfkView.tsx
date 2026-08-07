@@ -32,6 +32,7 @@ import { shortTime } from '../model/time'
 import { OperationsPanel } from './OperationsPanel'
 import { formatApiError, formatServerProse } from '../api/transport'
 import { MiniTrack, phaseLabel } from './AfkMiniTrack'
+import { TaskRunPanel } from './TaskRunPanel'
 
 gsap.registerPlugin(useGSAP)
 
@@ -447,6 +448,8 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
                   </div>
                 </div>
               </section>
+
+              <TaskRunPanel root={currentRoot} change={selectedChange.name} />
 
               {selectedState === 'failed' && (
                 <section className="mt-5 rounded-xl border border-red-b bg-red-t/45 px-4 py-3">
