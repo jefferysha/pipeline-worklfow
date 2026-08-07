@@ -23,13 +23,14 @@
 
 ## Browser owner audit
 
-状态：`pending`，尚未执行浏览器验收。
+状态：第一轮冻结基线验收已完成；测试发现问题修复后，Verify 将在新冻结 SHA 上复跑关键路径。
 
 - 审计时 Codex host 已有 11 个历史 `playwright-mcp` node、3 个历史 Playwright browser root，另有
   1 个用户日常 Chrome root。
 - 这些既有进程没有可证明的本项目 owner/session 身份；本任务不会盲连、冒认或终止它们。
-- 实现冻结后必须建立或复用一个可证明身份的项目专用长期 owner，并在同一 owner 中完成
-  1024/1280/1440/1920px、zh/en、状态矩阵、键盘与焦点验收；截图和日志写入仓库外目录。
+- 已使用单一项目专用 Playwright owner/session，在 1024/1280/1440/1920px 完成无横向溢出、
+  zh/en、真实 legacy/empty、canonical/blocked/stale/error fixture、键盘打开/关闭和焦点返回验收；
+  截图和日志均写入仓库外目录。新冻结 SHA 不含生产代码变化，Verify 仍将复跑关键路径。
 
 ## Design review rounds
 
@@ -51,6 +52,18 @@
 - TaskRun 默认/只读路径共用服务端 DTO 的 `taskRunPresentation`，只读路径无操作按钮且不发 POST。
 - WorkItem 证据有独立 zh/en 空态；scope-key 在 root/Change 切换的首次新渲染即屏蔽旧 WorkItem。
 - `TaskDetail.tsx` 保持 396 行；新增 46 行单一职责协调组件，未把跨域装配继续堆进共享详情。
+
+### Round 3 — Verify-fail 回炉与测试发现修复
+
+- 第一轮 Verify 由主线程发现 `taskPlanPresentation.test.ts` 不匹配 Dashboard Vitest 的
+  `src/**/*.test.tsx`，此前 1735 项结果实际没有执行该文件；按 Medium 阻塞项走 `verify-fail`，
+  没有以“已有大量测试”为由放宽测试完整性。
+- `luna_worker` 只在独立 worktree 中执行边界明确的机械改名；主线程检查提交为唯一 `R100`，
+  无断言、配置或生产代码变化后才接受到原 Change。
+- 修复后定向测试 2/2、Dashboard suite 97 files / 1737 tests、仓库 suite 374 files /
+  6462 tests（14 项按环境诚实 skip）、`typecheck:web` 与生产 `build` 全部通过；构建后工作树无产物漂移。
+- 主线程重新按 Standards 与 Spec 两轴审阅完整待冻结 diff；本轮修复未改变需求、公共契约、运行时
+  行为或视觉结果，因此不扩大范围处理嵌套详情单次 Escape 同时关闭外层这一 Low 级非验收路径。
 
 ### 最终结论
 
