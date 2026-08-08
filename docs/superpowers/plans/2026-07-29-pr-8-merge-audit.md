@@ -120,6 +120,23 @@ design-doc: docs/superpowers/specs/2026-07-29-pr-8-merge-audit-design.md
 
 此处建议 `/clear`。
 
+## 最新版 OpenSpec 场景漂移恢复
+
+1. 逐项比较 `openspec/changes/pr-8-merge-audit/specs/host-target-plan/spec.md` 中全部
+   `MODIFIED` requirement 与当前 `openspec/specs/host-target-plan/spec.md` 的 scenario 集合和正文。
+2. 在 `Dashboard 宿主计划中心` 保留 delta 的全部增强场景，并以当前主 spec 原文补回
+   `用户首次进入 Host Plan`；不得删除、改名或弱化主 spec 场景，也不扩大产品功能范围。
+3. 运行仓库固定 OpenSpec 门禁、
+   `npx --yes @fission-ai/openspec@latest validate pr-8-merge-audit --strict` 与独立场景集合解析；
+   确认所有主 spec 场景均被保留，delta 的既有扩展仍存在。
+4. 用官方 Tenon 命令重新登记 delta、tasks 和计划，全文读取并通过 Spec 出口检查；只在确切
+   `spec-complete` 人工确认后回到 Build。
+
+回滚：只回退本次场景同步、tasks 与计划记录；保留 append-only transition、review 和文档 ledger，
+不得手改 `.pipeline.yaml` 或 receipts。
+
+此处建议 `/clear`。
+
 ## 子阶段 6：冻结 Verify
 
 1. `build-complete` 冻结精确 SHA，记录 base、路径清单、capability mapping 和 repo-zero 指纹。

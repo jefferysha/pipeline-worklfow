@@ -118,3 +118,38 @@
 {"ts":"2026-07-29T00:24:03Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"c92e13a3-83fc-456b-a6ff-3d04edea5c3a"}
 {"ts":"2026-07-29T00:26:17Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-29T00:26:18Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/7"}
+{"ts":"2026-08-08T01:29:37Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-08T01:29:37Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship 46dd7c88-d8d2-444f-94c1-51b504ea8919 15"}
+{"ts":"2026-08-08T01:33:07Z","kind":"set","field":"phase","to":"build"}
+{"ts":"2026-08-08T01:33:07Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"754cc5f1-ca48-46c3-aea6-18cb85339d00"}
+{"ts":"2026-08-08T01:33:33Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-08T01:33:33Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec 46dd7c88-d8d2-444f-94c1-51b504ea8919 16"}
+{"ts":"2026-08-08T01:36:48Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md"}
+{"ts":"2026-08-08T01:36:48Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T01:36:48Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans 46dd7c88-d8d2-444f-94c1-51b504ea8919 16"}
+{"ts":"2026-08-08T01:36:48Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T01:36:48Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans 46dd7c88-d8d2-444f-94c1-51b504ea8919 16"}
+{"ts":"2026-08-08T01:36:49Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-08T01:36:49Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose 46dd7c88-d8d2-444f-94c1-51b504ea8919 16"}
+{"ts":"2026-08-08T01:36:49Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-08T01:36:49Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec 46dd7c88-d8d2-444f-94c1-51b504ea8919 16"}
+{"ts":"2026-08-08T01:39:35Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-08T01:41:17Z","kind":"tool","raw":"review:acknowledge phase=spec event=spec-complete"}
+{"ts":"2026-08-08T01:41:18Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d702f465-3d0b-4bca-a4b5-e9e275bf6dd9"}
+{"ts":"2026-08-08T01:41:38Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-08-08T01:41:38Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-08T01:41:38Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-08-08T01:42:16Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-08T01:42:16Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 46dd7c88-d8d2-444f-94c1-51b504ea8919 17"}
+{"ts":"2026-08-08T01:43:41Z","kind":"set","field":"build_sha","to":"null"}
+{"ts":"2026-08-08T01:43:42Z","kind":"set","field":"agent_review_result","to":"pending"}
+{"ts":"2026-08-08T01:43:42Z","kind":"set","field":"codex_review_result","to":"pending"}
+{"ts":"2026-08-08T01:43:42Z","kind":"set","field":"verify_result","to":"pending"}
+{"ts":"2026-08-08T01:43:42Z","kind":"set","field":"branch_status","to":"pending"}
+{"ts":"2026-08-08T01:43:42Z","kind":"set","field":"verification_report","to":"null"}
+{"ts":"2026-08-08T01:43:43Z","kind":"set","field":"verified_at","to":"null"}
+{"ts":"2026-08-08T01:43:43Z","kind":"set","field":"pr_url","to":"null"}
+{"ts":"2026-08-08T01:43:43Z","kind":"set","field":"branch","to":"codex/openspec-scenario-drift-20260808"}
+{"ts":"2026-08-08T01:43:43Z","kind":"set","field":"base_branch","to":"main"}
+{"ts":"2026-08-08T01:57:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T01:57:36Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

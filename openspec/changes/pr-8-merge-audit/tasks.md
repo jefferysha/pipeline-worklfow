@@ -17,9 +17,11 @@
 - [x] 生成可执行计划：主线集成、TDD 修复、全量门禁、真实 API/浏览器、独立审查、CI、合并与回滚。
 - [x] 登记 delta spec 与 plan，完成 Spec review 门禁。
 - [x] 第一轮 Verify 回退后补回五项 MODIFIED requirements 的全部 canonical scenarios，并在计划中冻结排队 deadline 的 TDD 修复与完整重验步骤。
+- [x] 对照当前 main 审计全部 `MODIFIED` requirement 的场景集合，补回“用户首次进入 Host Plan”并通过最新版 OpenSpec strict validation。
 
 ## 实现
 
+- [x] 以最新版 OpenSpec strict 的原始失败为红证据，复跑完整场景审计、仓库固定门禁与 Node 22 CI 同款检查并取得绿色结果。
 - [x] 以 Codex setup 为 tracer bullet，普通合并最新 `origin/main`，解决源码冲突并从最终源码重建全部生成物。
 - [x] 以 TDD 核对 12×2 CLI truth table、当前 setup/update/runtime/WAL 语义、输入拒绝，以及 adapter `--target .` 的安全可复制命令展示契约。
 - [x] 以 TDD 加固 GET/Host/query/fixed argv/strict JSON/DTO/错误脱敏、同 key 共享、失败重试、有界缓存/并发/超时。

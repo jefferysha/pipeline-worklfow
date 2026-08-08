@@ -19,9 +19,11 @@
 - [x] 将五条既有 requirement 改为完整 `MODIFIED`、共存能力保留 `ADDED`，并通过隔离 archive/apply。
 - [x] 把默认阶段标签 i18n、custom 作者标签保留及修订后的架构/测试事实同步到 design、proposal 与 plan。
 - [x] 重新登记并全文读取所有变更的 Spec 文档，完成本次 `requirements-changed` 的确切 review 门禁。
+- [x] 对照当前 main 审计全部 `MODIFIED` requirement 的场景集合，以完整现行 requirement 修复最新 OpenSpec strict 场景漂移。
 
 ## 实现
 
+- [x] 以最新版 OpenSpec strict 的原始失败为红证据，复跑完整场景审计、仓库固定门禁与 Node 22 CI 同款检查并取得绿色结果。
 - [x] 普通合并最新 `origin/main`，显式保留 context bundle 与 verification evidence 两组 API/抽屉能力，并从最终源码重生成 dist。
 - [x] 增加 Verify 抽屉两工具共存组合红测并完成 tracer bullet 定向链路。
 - [x] 按职责拆分超建议线 Dashboard 组件和接近硬上限 server handler，保持 public contract。

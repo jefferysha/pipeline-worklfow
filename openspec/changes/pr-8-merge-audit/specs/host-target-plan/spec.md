@@ -172,6 +172,12 @@ Dashboard SHALL 提供不依赖 project context 的 Host Plan 视图，通过统
 - **THEN** 目标网格与计划区域按 900/769/768/390 的既定 breakpoint 变为 master-detail、两列后置 detail 或单列
 - **AND** 长命令、长宿主名和错误文案不造成 body 横向溢出或不可达控件
 
+#### Scenario: 用户首次进入 Host Plan
+
+- **WHEN** 页面开始加载 catalog 与 detection
+- **THEN** 标题说明“自动检测并预览，不在页面执行”
+- **AND** ready 后突出推荐上下文、为何推荐以及用户是否需要在终端运行命令。
+
 #### Scenario: 完整请求状态与陈旧响应抑制
 
 - **WHEN** catalog/plan 处于 loading、empty、network/HTTP/decoder/mismatch error、retry 或 ready

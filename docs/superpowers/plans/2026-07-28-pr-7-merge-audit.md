@@ -112,6 +112,25 @@ policy；安全负面路径和第二次视觉审查通过。
 
 **子阶段边界：此处建议 /clear**
 
+## 子阶段 4.6：最新版 OpenSpec 场景漂移恢复
+
+1. 逐项比较 `openspec/changes/pr-7-merge-audit/specs/context-bundle-budget-preview/spec.md`
+   中每个 `MODIFIED` requirement 与当前
+   `openspec/specs/context-bundle-budget-preview/spec.md` 的 scenario 标题和完整正文。
+2. 对存在漂移的 `Dashboard SHALL 提供可操作的完整预览状态` 使用当前主 spec 的完整 requirement
+   语义，保留容量摘要、确定性输入清单、静态 loading、reduced motion、键盘和 i18n 场景；不改动
+   其他已匹配 requirement，也不新增产品范围。
+3. 运行仓库固定版本的 OpenSpec 检查，以及
+   `npx --yes @fission-ai/openspec@latest validate pr-7-merge-audit --strict`，再以独立解析检查确认
+   所有主 spec scenario 均由 delta 保留。
+4. 通过 `tenon document record` 重新登记 delta、tasks 与本计划，全文读取后执行 Spec 出口检查；
+   仅在确切 `spec-complete` 人工回执后进入 Build。
+
+回滚：只回退本次 delta、tasks 和计划的场景同步提交；不得删除、改名或弱化主 spec 的既有场景，
+不得手改 canonical state 或 receipts。
+
+**子阶段边界：此处建议 /clear**
+
 ## 子阶段 5：冻结 Verify、交付和归档
 
 1. 在冻结 SHA 上并行完成 Reviewer、真实 E2E/API/浏览器、Codex CLI（允许 Skill 声明的诚实降级）和
