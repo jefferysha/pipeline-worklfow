@@ -21,6 +21,7 @@
 - [x] Verify 语义复审回退后，将 5 条 `MODIFIED` requirement 修订为 current main 与既有 delta 的语义并集，保留全部 narrative、场景正文与既有加强项。
 - [x] 最终 Verify 错误映射复审后，恢复 CLI/stdout/DTO 无效场景的确定性 `502 HOST_TARGET_PLAN_INVALID` 语义。
 - [x] 冻结前 CI 风险匹配发现 reference-identity hygiene 门禁后，以不弱化许可边界的中性表述移除外部项目身份。
+- [x] 最终文档复审后，将 proposal 从重复 New/无 Modified 修正为五条完整 `MODIFIED` requirement 与八个既有加强场景。
 
 ## 实现
 

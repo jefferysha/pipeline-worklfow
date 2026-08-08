@@ -16,11 +16,13 @@ PR #8 提供 Host Target Plan Center，但它基于 `main@15fe619b`，当前 `ma
 
 ### New Capabilities
 
-- `host-target-plan`：为已注册宿主提供零副作用 catalog/计划契约，并通过严格只读 API 和 Dashboard copy-only 预览呈现。
+无。`host-target-plan` 已落入 current main；本审计 Change 不得把既有 requirement 重复声明为 `ADDED`。
 
 ### Modified Capabilities
 
-无。现有 `plugin-distribution`、`plugin-runtime` 与 Dashboard requirements 是约束来源；若 Build 证明它们的 requirement 必须变化，将通过 `requirements-changed` 回 Spec。
+- `host-target-plan`：完整修改五条已落盘的 requirement，保留 current main 的全部既有场景与语义，
+  并继续保留本 Change 已批准的八个加强场景；现有 `plugin-distribution`、`plugin-runtime` 与
+  Dashboard requirements 继续作为兼容约束来源。
 
 ## Impact
 

@@ -247,3 +247,26 @@
 {"ts":"2026-08-08T02:49:04Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-08T02:49:04Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 46dd7c88-d8d2-444f-94c1-51b504ea8919 27"}
 {"ts":"2026-08-08T02:49:05Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-08T02:50:27Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T02:50:27Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T02:50:27Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:50:27Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:50:27Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"d21170af-9974-479a-9b39-111482f02292"}
+{"ts":"2026-08-08T02:51:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:58:01Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-08T02:58:01Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 46dd7c88-d8d2-444f-94c1-51b504ea8919 28"}
+{"ts":"2026-08-08T02:58:01Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-08-pr-7-merge-audit-ledger-digest-verify-fail.md"}
+{"ts":"2026-08-08T02:58:02Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-08T02:58:02Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 46dd7c88-d8d2-444f-94c1-51b504ea8919 28"}
+{"ts":"2026-08-08T02:58:08Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-08T02:58:09Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-08T02:51:08Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:58:09Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-08T02:58:09Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-08T02:58:09Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:58:09Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:58:09Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"2608f2f3-8fef-47cc-816f-538f11aa2ad2"}
+{"ts":"2026-08-08T03:01:23Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T03:04:25Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T03:04:28Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-08T03:04:28Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 46dd7c88-d8d2-444f-94c1-51b504ea8919 29"}
+{"ts":"2026-08-08T03:04:36Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

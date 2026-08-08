@@ -3,10 +3,10 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: pending
+phase_status: in_progress
 design_doc: docs/superpowers/specs/2026-07-28-pr-7-merge-audit-design.md
 plan: docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md
-verification_report: docs/superpowers/reports/2026-08-08-pr-7-merge-audit-proposal-alignment-verify-fail.md
+verification_report: docs/superpowers/reports/2026-08-08-pr-7-merge-audit-ledger-digest-verify-fail.md
 build_mode: direct
 isolation: worktree
 build_sha: null
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-28T17:10:41Z
-updated_at: 2026-08-08T02:42:34Z
+updated_at: 2026-08-08T02:58:09Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,10 +39,10 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 46dd7c88-d8d2-444f-94c1-51b504ea8919
-pipeline_transition_sequence: 27
-pipeline_transition_head: f7500411-0834-4937-9145-9c105c8de8a9
-pipeline_state_revision: 96
-pipeline_state_revision_id: 4f1acddc-9675-4e27-baff-86586d022cf1
-pipeline_state_digest: 9568e119d898bb3d1c342c00b81479f2afea530ee95d9f108dbe5e2ea9b88d07
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6OTYsInJldmlzaW9uSWQiOiI0ZjFhY2RkYy05Njc1LTRlMjctYmFmZi04NjU4NmQwMjJjZjEiLCJwYXlsb2FkRGlnZXN0IjoiZTYzM2FiNWRkMzNkOWI3NmI3ZWM0ZjU5NTJiNDA0MTQ5ZjZkOWU5YjdlZTY1ODM0MTQ0YjMyNTIzYWNjNjgzNyJ9
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6IjQ2ZGQ3Yzg4LWQ4ZDItNDQ0Zi05NGMxLTUxYjUwNGVhODkxOSIsInNlcXVlbmNlIjoyNywicmVjb3JkSWQiOiJmNzUwMDQxMS0wODM0LTQ5MzctOTE0NS05YzEwNWM4ZGU4YTkiLCJyZWNvcmREaWdlc3QiOiI1NWMzMjhkZWQ0NjU3MzQzMGY4NzQzNjE1YWIzMTE5ZmYxNWNjMzgzZTAyMzI3M2NkODI4MDdjNGExNGQ1NzI3In0
+pipeline_transition_sequence: 29
+pipeline_transition_head: 2608f2f3-8fef-47cc-816f-538f11aa2ad2
+pipeline_state_revision: 102
+pipeline_state_revision_id: 33c62482-7563-436b-82f8-280473d2e7e9
+pipeline_state_digest: bceeb20ada63812f0b526bc985e73afe3fc0bce445cf620cdeb4461bd579a890
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTAyLCJyZXZpc2lvbklkIjoiMzNjNjI0ODItNzU2My00MzZiLTgyZjgtMjgwNDczZDJlN2U5IiwicGF5bG9hZERpZ2VzdCI6Ijg4NDQ0N2FlMDcyY2E5MTlhYjA1ZTU3OWNlNzM3YzgxNmI1YzA0NDE1ZmFkOTY1OWIwNjQ4ODBlZDY1NTAwNzgifQ
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6IjQ2ZGQ3Yzg4LWQ4ZDItNDQ0Zi05NGMxLTUxYjUwNGVhODkxOSIsInNlcXVlbmNlIjoyOSwicmVjb3JkSWQiOiIyNjA4ZjJmMy04ZmVmLTQ3Y2MtODE2Zi01MzhmMTFhYTJhZDIiLCJyZWNvcmREaWdlc3QiOiIwNTQxYjNmOTBkNzIyODY4MmQwMGU0NTBiN2UyNzk3N2UyY2RkNDk5MjljODk1OTlhZDViOWQyNjdjNWRiYmU4In0
