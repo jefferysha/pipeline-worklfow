@@ -18,6 +18,7 @@
 - [x] 登记 delta spec 与 plan，完成 Spec review 门禁。
 - [x] 第一轮 Verify 回退后补回五项 MODIFIED requirements 的全部 canonical scenarios，并在计划中冻结排队 deadline 的 TDD 修复与完整重验步骤。
 - [x] 对照当前 main 审计全部 `MODIFIED` requirement 的场景集合，补回“用户首次进入 Host Plan”并通过最新版 OpenSpec strict validation。
+- [x] Verify 语义复审回退后，将 5 条 `MODIFIED` requirement 修订为 current main 与既有 delta 的语义并集，保留全部 narrative、场景正文与既有加强项。
 
 ## 实现
 

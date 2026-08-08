@@ -124,11 +124,12 @@ design-doc: docs/superpowers/specs/2026-07-29-pr-8-merge-audit-design.md
 
 1. 逐项比较 `openspec/changes/pr-8-merge-audit/specs/host-target-plan/spec.md` 中全部
    `MODIFIED` requirement 与当前 `openspec/specs/host-target-plan/spec.md` 的 scenario 集合和正文。
-2. 在 `Dashboard 宿主计划中心` 保留 delta 的全部增强场景，并以当前主 spec 原文补回
-   `用户首次进入 Host Plan`；不得删除、改名或弱化主 spec 场景，也不扩大产品功能范围。
-3. 运行仓库固定 OpenSpec 门禁、
+2. 对 5 条 `MODIFIED` requirement 取“当前主 spec 语义 + 既有 delta 加强项”的并集：保留
+   delta 的全部增强场景，以当前主 spec 原文补回 `用户首次进入 Host Plan`，并完整保留主 spec
+   narrative 与每个既有场景正文；不得删除、改名或弱化既有语义，也不扩大产品功能范围。
+3. 以隔离 archive 的 canonical 前后 diff 复核 requirement narrative 与场景正文，再运行仓库固定 OpenSpec 门禁、
    `npx --yes @fission-ai/openspec@latest validate pr-8-merge-audit --strict` 与独立场景集合解析；
-   确认所有主 spec 场景均被保留，delta 的既有扩展仍存在。
+   确认所有主 spec 场景及其语义均被保留，delta 的既有扩展仍存在。
 4. 用官方 Tenon 命令重新登记 delta、tasks 和计划，全文读取并通过 Spec 出口检查；只在确切
    `spec-complete` 人工确认后回到 Build。
 

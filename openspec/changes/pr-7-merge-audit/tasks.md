@@ -20,6 +20,7 @@
 - [x] 把默认阶段标签 i18n、custom 作者标签保留及修订后的架构/测试事实同步到 design、proposal 与 plan。
 - [x] 重新登记并全文读取所有变更的 Spec 文档，完成本次 `requirements-changed` 的确切 review 门禁。
 - [x] 对照当前 main 审计全部 `MODIFIED` requirement 的场景集合，以完整现行 requirement 修复最新 OpenSpec strict 场景漂移。
+- [x] Verify 兼容性复审回退后，将 current main 已存在的共存 requirement 从重复 `ADDED` 改为完整 `MODIFIED`，并固定 OpenSpec 1.8.0 重放证据。
 
 ## 实现
 

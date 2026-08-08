@@ -120,11 +120,13 @@ policy；安全负面路径和第二次视觉审查通过。
 2. 对存在漂移的 `Dashboard SHALL 提供可操作的完整预览状态` 使用当前主 spec 的完整 requirement
    语义，保留容量摘要、确定性输入清单、静态 loading、reduced motion、键盘和 i18n 场景；不改动
    其他已匹配 requirement，也不新增产品范围。
-3. 运行仓库固定版本的 OpenSpec 检查，以及
-   `npx --yes @fission-ai/openspec@latest validate pr-7-merge-audit --strict`，再以独立解析检查确认
-   所有主 spec scenario 均由 delta 保留。
+3. 先确认 `@fission-ai/openspec@latest` 在本轮解析为 `1.8.0`，再固定运行
+   `npx --yes @fission-ai/openspec@1.8.0 validate pr-7-merge-audit --strict` 与仓库固定版检查；
+   以独立解析确认所有主 spec scenario 均由 delta 保留，并分别用 1.6.0、1.8.0 隔离 archive。
 4. 通过 `tenon document record` 重新登记 delta、tasks 与本计划，全文读取后执行 Spec 出口检查；
    仅在确切 `spec-complete` 人工回执后进入 Build。
+5. current main 已存在的共存 requirement 必须作为完整 `MODIFIED` 处理，不得继续以重复 `ADDED`
+   依赖新 CLI 的隐式 no-op；两版 archive 都必须成功且主 spec 字节不漂移。
 
 回滚：只回退本次 delta、tasks 和计划的场景同步提交；不得删除、改名或弱化主 spec 的既有场景，
 不得手改 canonical state 或 receipts。

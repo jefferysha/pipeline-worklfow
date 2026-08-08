@@ -153,3 +153,40 @@
 {"ts":"2026-08-08T01:56:28Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-08T01:56:28Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build a7034a88-62cb-4445-9cdd-609d3a8f931b 17"}
 {"ts":"2026-08-08T01:57:16Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-08T01:58:03Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T01:58:04Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T01:58:04Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T01:58:04Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T01:58:04Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T01:58:04Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"9ade11fd-0c7f-4cfd-87e9-a00e33cf5ca5"}
+{"ts":"2026-08-08T02:03:44Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/38"}
+{"ts":"2026-08-08T02:09:36Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-08-pr-8-merge-audit-scenario-drift-verify-fail.md"}
+{"ts":"2026-08-08T02:09:36Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-08T02:09:36Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion a7034a88-62cb-4445-9cdd-609d3a8f931b 18"}
+{"ts":"2026-08-08T02:09:43Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-08T02:09:48Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-08T01:58:03Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:09:53Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-08T02:09:53Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-08T02:10:09Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:10:09Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:10:09Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"ea08c26d-d884-4c5a-bb41-50bfd0e6d75f"}
+{"ts":"2026-08-08T02:10:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T02:10:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T02:10:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:10:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:10:44Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"e496b70f-9104-44f4-b8a1-59d0d14384ae"}
+{"ts":"2026-08-08T02:12:51Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-29-pr-8-merge-audit.md"}
+{"ts":"2026-08-08T02:12:51Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-08T02:12:51Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose a7034a88-62cb-4445-9cdd-609d3a8f931b 20"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans a7034a88-62cb-4445-9cdd-609d3a8f931b 20"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans a7034a88-62cb-4445-9cdd-609d3a8f931b 20"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-08T02:12:52Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec a7034a88-62cb-4445-9cdd-609d3a8f931b 20"}
+{"ts":"2026-08-08T02:12:59Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-08T02:13:04Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-08T01:58:03Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:13:04Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"4f9eef31-e6d5-4a74-b340-41707b821366"}
+{"ts":"2026-08-08T02:18:43Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:18:43Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-08T02:18:43Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build a7034a88-62cb-4445-9cdd-609d3a8f931b 21"}

@@ -9,7 +9,7 @@
 #### Scenario: 获取完整目录
 
 - **WHEN** 调用 `tenon host-target-plan --json`
-- **THEN** 返回 `schema_version: "host-target-plan/v1"` 和按 `TENON_HOSTS` 顺序排列的全部 12 个目标
+- **THEN** 返回 `schema_version: "host-target-plan/v1"` 和按 `TENON_HOSTS` 顺序排列的全部已注册目标（当前为 12 个）
 - **AND** Codex 与 Claude 为 `native`，其余为 `adapter`
 - **AND** 文件、网络、环境、host auth、runtime 与 setup/update 写指纹均保持不变
 
@@ -28,12 +28,12 @@
 
 ### Requirement: 单目标 setup/update 计划
 
-系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 生成确定性 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标、operation、结构化可复制命令、有序稳定层级步骤与 notices。native 的外部宿主命令 MUST 从当前 `nativeInstallPlan/nativeUpdatePlan` owner 派生；adapter 只描述当前稳定 release adapter 外层流程，并以执行命令时的当前工作目录作为项目目标。计划不得把粗粒度摘要声称为逐条执行日志。
+系统 SHALL 为恰好一个已注册宿主和一个 `setup|update` 生成确定性 `HostTargetPlan`。计划 SHALL 包含 `side_effects: "none"`、目标、operation、结构化可复制命令、有序稳定层级步骤与 notices。native 与 adapter 步骤 SHALL 分别与当前真实 setup/update 命令编排一致；native 的外部宿主命令 MUST 从当前 `nativeInstallPlan/nativeUpdatePlan` owner 派生。adapter 只描述当前稳定 release adapter 外层流程，不执行或解析脚本，并以执行命令时的当前工作目录作为项目目标。计划不得把粗粒度摘要声称为逐条执行日志。
 
 #### Scenario: native setup 计划
 
 - **WHEN** 调用 `tenon host-target-plan --host codex --operation setup --json`
-- **THEN** 返回 Codex 目标、`tenon setup --codex` 命令与当前 `nativeInstallPlan` owner 的有序 argv
+- **THEN** 返回 Codex 目标、可复制的 `tenon setup --codex` 命令与当前 `nativeInstallPlan` owner 的有序 argv
 - **AND** `side_effects` 等于 `none`
 - **AND** 计划包含 `managed-runtime` 与 setup-only `bundled-skills`、`runtime-readiness`
 - **AND** 计划生成不探测真实登录、不执行外部命令、不进入事务/WAL 或 Dashboard handoff
@@ -135,7 +135,7 @@ server SHALL 暴露 `GET /api/host-targets` 与 `GET /api/host-target-plan`。�
 
 ### Requirement: Dashboard 宿主计划中心
 
-Dashboard SHALL 提供不依赖 project context 的 Host Plan 视图，通过统一 API client/decoder 展示目标、operation 和 copy-only 计划。它 MUST NOT 提供 Run/Execute 或任何写端点，并必须与当前 Dashboard IA、主题 token、i18n 和共享状态边界共存。
+Dashboard SHALL 提供无需 project context 即可访问的 Host Plan 视图，通过统一 API client/decoder 展示目标卡、native/adapter、scope、能力、setup/update operation 和 copy-only 只读计划。所有用户可见文本 SHALL 同时提供中文与英文翻译。页面 MUST NOT 提供 Run/Execute、setup/update 执行入口或任何写端点，并 SHALL 清楚说明计划生成不会安装或更新，只有用户复制并在终端运行命令才会产生副作用。推荐宿主/操作与手动候选 SHALL 使用一致、整齐的 master-detail 层级，并必须与当前 Dashboard IA、主题 token、i18n 和共享状态边界共存。
 
 #### Scenario: 初始加载与选择
 
@@ -200,7 +200,7 @@ Dashboard SHALL 提供不依赖 project context 的 Host Plan 视图，通过统
 
 ### Requirement: 向后兼容与许可边界
 
-能力 SHALL additive 地保留当前 `setup`、`update`、host selector、managed runtime/事务、Dashboard、本机 API 与已合并 capability 行为。实现 SHALL 不新增运行时依赖，不复制受限上游源码/测试/文案。源码、测试、CLI/server bundle、Dashboard hashed assets、OpenSpec 与用户文档必须来自同一最终源码并原子提交。
+能力 SHALL additive 地保留当前 `setup`、`update`、host flags、host selector、managed runtime/事务、Dashboard、本机 API 与已合并 capability 行为。实现 SHALL 不新增外部运行时依赖，不复制受限上游源码、测试、文案或文件结构，包括 Comet 或受 AGPL-3.0 约束的 Trellis 内容。源码、测试、CLI/server bundle、Dashboard hashed assets、OpenSpec 与用户文档必须来自同一最终源码并原子提交。
 
 #### Scenario: 既有命令兼容
 
@@ -223,5 +223,5 @@ Dashboard SHALL 提供不依赖 project context 的 Host Plan 视图，通过统
 #### Scenario: clean-room 审查
 
 - **WHEN** 审查源码、测试、文案、依赖与历史研究
-- **THEN** 只保留可核验上游引用与独立设计结论
-- **AND** 不引入任何外部参考项目的源码、测试、文案、文件结构或受限许可证依赖
+- **THEN** 只保留带固定 URL/SHA 的可核验上游引用与独立设计结论
+- **AND** 不引入任何外部参考项目的源码、测试、文案、文件结构或受限许可证依赖，包括 Comet/Trellis 代码或 AGPL 依赖

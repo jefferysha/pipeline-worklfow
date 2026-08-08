@@ -259,8 +259,6 @@ handoff 默认预算或任何项目配置。
 - **THEN** 在途请求被取消或其结果被忽略
 - **AND** 不留下项目文件、状态字段或配置变更。
 
-## ADDED Requirements
-
 ### Requirement: Context Bundle preview 与 Verify evidence SHALL 在 Dashboard 共存
 
 最新 main 的 Verify evidence composer 与 Context Bundle preview SHALL 同时保留。Verify phase

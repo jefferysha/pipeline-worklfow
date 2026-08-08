@@ -99,6 +99,24 @@
           "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
           "readAt": "2026-08-08T01:42:17Z",
           "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+          "readAt": "2026-08-08T02:15:37Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",18]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+          "readAt": "2026-08-08T02:17:45Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "32cb77fda18998b12a5a6ca9a1e8f565385e197df1bdaa241a4d46e98141a2da",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
@@ -180,6 +198,24 @@
           "sha256": "5c71e6ac5ad3d8bc6fc0ce53b3c51f8b2393294721a972526eb560a6d8fc95b8",
           "readAt": "2026-08-08T01:42:17Z",
           "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5c71e6ac5ad3d8bc6fc0ce53b3c51f8b2393294721a972526eb560a6d8fc95b8",
+          "readAt": "2026-08-08T02:15:37Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",18]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "5c71e6ac5ad3d8bc6fc0ce53b3c51f8b2393294721a972526eb560a6d8fc95b8",
+          "readAt": "2026-08-08T02:17:45Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5c71e6ac5ad3d8bc6fc0ce53b3c51f8b2393294721a972526eb560a6d8fc95b8",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
@@ -261,6 +297,24 @@
           "sha256": "e7d5ffdace08a8537363f056bcf3db6e158f6e3c3f016219a4d8e65c8bfd10e4",
           "readAt": "2026-08-08T01:42:17Z",
           "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "e7d5ffdace08a8537363f056bcf3db6e158f6e3c3f016219a4d8e65c8bfd10e4",
+          "readAt": "2026-08-08T02:15:37Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",18]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "e7d5ffdace08a8537363f056bcf3db6e158f6e3c3f016219a4d8e65c8bfd10e4",
+          "readAt": "2026-08-08T02:17:45Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e7d5ffdace08a8537363f056bcf3db6e158f6e3c3f016219a4d8e65c8bfd10e4",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
@@ -330,21 +384,24 @@
           "sha256": "d97a083859eddcb440934ac45344dee75033a1f55a101eaf202b867449fca7cb",
           "readAt": "2026-08-08T01:42:17Z",
           "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
-        }
-      ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-28-pr-7-merge-audit-verify.md",
-      "sha256": "dd81131c8951048eae97c410560f3818185a7f84b23c777c80e77a76de10df75",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-29T00:22:09Z",
-      "reads": [
+        },
         {
-          "phase": "ship",
-          "sha256": "dd81131c8951048eae97c410560f3818185a7f84b23c777c80e77a76de10df75",
-          "readAt": "2026-08-08T01:29:38Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",15]"
+          "phase": "verify",
+          "sha256": "d97a083859eddcb440934ac45344dee75033a1f55a101eaf202b867449fca7cb",
+          "readAt": "2026-08-08T02:15:37Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",18]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d97a083859eddcb440934ac45344dee75033a1f55a101eaf202b867449fca7cb",
+          "readAt": "2026-08-08T02:17:45Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d97a083859eddcb440934ac45344dee75033a1f55a101eaf202b867449fca7cb",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
@@ -357,94 +414,116 @@
       "reads": []
     },
     {
-      "kind": "superpower-plan",
-      "path": "docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md",
-      "sha256": "628c0824068afd7f673bf7e77ec21fa1800466db2bba398d279f585841d6dea0",
-      "producer": "writing-plans",
-      "recordedAt": "2026-08-08T01:36:48Z",
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-08-pr-7-merge-audit-openspec-compat-verify-fail.md",
+      "sha256": "1ef365dcb846ba279cca09379b361493c670483cedce22bb9141bc84f19e1f50",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-08T02:15:37Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-cc44f5f394dff1a05d43719c59aa7ae83e16b50e2beceeac9d6580048349dc9a",
+        "confirmationInvocationId": "invocation-3d1ff5dce14ac723427934287f33a836b0d4789f86c9a453f900958807c9ea44",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
+          "transitionSequence": 18
+        }
+      },
+      "reads": []
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/pr-7-merge-audit/specs/context-bundle-budget-preview/spec.md",
+      "sha256": "7f086c8d04739c86282b60bca939a7801f978393036069f75a4eb98e5e4de56b",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T02:17:43Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-421af1192b7865fca020984eacfe80b8e938a16fa8ec99e976a4c360b4cffa7e",
         "evidenceScope": "spec",
         "stepVisit": {
           "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
-          "transitionSequence": 16
+          "transitionSequence": 20
         }
       },
       "reads": [
         {
           "phase": "build",
-          "sha256": "628c0824068afd7f673bf7e77ec21fa1800466db2bba398d279f585841d6dea0",
-          "readAt": "2026-08-08T01:42:17Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+          "sha256": "7f086c8d04739c86282b60bca939a7801f978393036069f75a4eb98e5e4de56b",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md",
+      "sha256": "5e646a0e8fa06b64b5e7ab975b5b2de1f35d7fbcae3fd11dabc82aef3dff83c3",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-08T02:17:43Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-2b9373dc06952735648234d194a986712c8af432f6160fa92be306b2b6327543",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
+          "transitionSequence": 20
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "5e646a0e8fa06b64b5e7ab975b5b2de1f35d7fbcae3fd11dabc82aef3dff83c3",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
     {
       "kind": "plan",
       "path": "docs/superpowers/plans/2026-07-28-pr-7-merge-audit.md",
-      "sha256": "628c0824068afd7f673bf7e77ec21fa1800466db2bba398d279f585841d6dea0",
+      "sha256": "5e646a0e8fa06b64b5e7ab975b5b2de1f35d7fbcae3fd11dabc82aef3dff83c3",
       "producer": "writing-plans",
-      "recordedAt": "2026-08-08T01:36:48Z",
+      "recordedAt": "2026-08-08T02:17:44Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-a42f37ee56dfb51068fd08ae06cda7d9df43da90779ecb61577ca4f6627272c0",
+        "confirmationInvocationId": "invocation-80550d5009cb9c7eccfe46bbc965e7240171df83ede8b35b386131fa38b5fd6f",
         "evidenceScope": "spec",
         "stepVisit": {
           "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
-          "transitionSequence": 16
+          "transitionSequence": 20
         }
       },
       "reads": [
         {
           "phase": "build",
-          "sha256": "628c0824068afd7f673bf7e77ec21fa1800466db2bba398d279f585841d6dea0",
-          "readAt": "2026-08-08T01:42:17Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/pr-7-merge-audit/specs/context-bundle-budget-preview/spec.md",
-      "sha256": "ba60b40b5e2d475fa63c8397aa713d673a0ee72282f08ae839b27e15038ea52b",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-08-08T01:36:49Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-5073bc5e5cc6f63518d82d50aa278b1d0aa336ab83867d511838031989667706",
-        "evidenceScope": "spec",
-        "stepVisit": {
-          "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
-          "transitionSequence": 16
-        }
-      },
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "ba60b40b5e2d475fa63c8397aa713d673a0ee72282f08ae839b27e15038ea52b",
-          "readAt": "2026-08-08T01:42:17Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+          "sha256": "5e646a0e8fa06b64b5e7ab975b5b2de1f35d7fbcae3fd11dabc82aef3dff83c3",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/pr-7-merge-audit/tasks.md",
-      "sha256": "4ec1166cb6db57e7896427ea6f7ff086b102840da61e2fcace40616c3dcd90e4",
+      "sha256": "5e78fde91bcc1d7d7c6d73f5927a653b993cb56fab0c39a4f103255c77dd8111",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-08T01:42:16Z",
+      "recordedAt": "2026-08-08T02:18:42Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-7c39c2418d25baf1b8f054672c063fe1b98f52a5160d9b1c199f428c95293a2e",
+        "confirmationInvocationId": "invocation-096974d021233ac86d82a550928603c9c703bf08651a90ab048741db94163f0a",
         "evidenceScope": "build",
         "stepVisit": {
           "runId": "46dd7c88-d8d2-444f-94c1-51b504ea8919",
-          "transitionSequence": 17
+          "transitionSequence": 21
         }
       },
       "reads": [
         {
+          "phase": "spec",
+          "sha256": "5e78fde91bcc1d7d7c6d73f5927a653b993cb56fab0c39a4f103255c77dd8111",
+          "readAt": "2026-08-08T02:17:45Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",20]"
+        },
+        {
           "phase": "build",
-          "sha256": "4ec1166cb6db57e7896427ea6f7ff086b102840da61e2fcace40616c3dcd90e4",
-          "readAt": "2026-08-08T01:42:17Z",
-          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",17]"
+          "sha256": "5e78fde91bcc1d7d7c6d73f5927a653b993cb56fab0c39a4f103255c77dd8111",
+          "readAt": "2026-08-08T02:18:42Z",
+          "visitId": "[\"46dd7c88-d8d2-444f-94c1-51b504ea8919\",21]"
         }
       ]
     }
