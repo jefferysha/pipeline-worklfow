@@ -126,7 +126,9 @@ policy；安全负面路径和第二次视觉审查通过。
 4. 通过 `tenon document record` 重新登记 delta、tasks 与本计划，全文读取后执行 Spec 出口检查；
    仅在确切 `spec-complete` 人工回执后进入 Build。
 5. current main 已存在的共存 requirement 必须作为完整 `MODIFIED` 处理，不得继续以重复 `ADDED`
-   依赖新 CLI 的隐式 no-op；两版 archive 都必须成功且主 spec 字节不漂移。
+   依赖新 CLI 的隐式 no-op；两版 archive 都必须成功，requirement/场景语义不得漂移。固定版
+   1.6.0 重组相同 spec 时可能追加一个 EOF 空行，正式 apply 后须规范为单一末尾 LF，不把格式差异
+   冒充产品语义变化或字节级 no-op。
 
 回滚：只回退本次 delta、tasks 和计划的场景同步提交；不得删除、改名或弱化主 spec 的既有场景，
 不得手改 canonical state 或 receipts。
