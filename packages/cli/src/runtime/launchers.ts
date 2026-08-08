@@ -23,7 +23,7 @@ function launcherText(paths: RuntimePaths, mode: 'cli' | 'hook'): string {
   const missing = mode === 'hook'
     ? 'exit 0'
     : 'printf "tenon runtime bootstrap unavailable; run tenon setup --codex or tenon setup --claude\\n" >&2\n  exit 1'
-  return `#!/usr/bin/env bash
+  return `#!/bin/sh
 set -eu
 export TENON_RUNTIME_ROOTS=${shellQuote(rootContract)}
 # N-1 bootstrap ABI: previous verified releases read these exact roots during rollback.
@@ -31,7 +31,7 @@ export TENON_RUNTIME_DATA_ROOT=${shellQuote(paths.dataRoot)}
 export TENON_RUNTIME_STATE_ROOT=${shellQuote(paths.stateRoot)}
 export TENON_RUNTIME_CONFIG_ROOT=${shellQuote(paths.configRoot)}
 [ -f ${shellQuote(bootstrap)} ] || { ${missing}; }
-exec node ${shellQuote(bootstrap)} ${mode} "$@"
+exec ${shellQuote(process.execPath)} ${shellQuote(bootstrap)} ${mode} "$@"
 `
 }
 

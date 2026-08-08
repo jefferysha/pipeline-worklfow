@@ -7,7 +7,7 @@ import {
 } from './host-target-plan.js'
 import {
   TENON_HOSTS,
-  nativeInstallPlan,
+  TENON_RELEASE_VERSION,
   nativeUpdatePlan,
 } from './plugin-host.js'
 
@@ -42,6 +42,11 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
 
   test('native setup/update 逐项复用现有 host command plan，并按真实外层流程追加产品与 Codex 认证步骤', () => {
     const previewTarget = { version: '<latest-stable>', tag: '<latest-stable>', commit: '0'.repeat(40) }
+    const setupTarget = {
+      version: TENON_RELEASE_VERSION,
+      tag: `v${TENON_RELEASE_VERSION}`,
+      commit: '0'.repeat(40),
+    }
     const setup = createHostTargetPlan('codex', 'setup')
     const codexUpdate = createHostTargetPlan('codex', 'update')
     const update = createHostTargetPlan('claude', 'update')
@@ -52,8 +57,8 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       args: ['setup', '--codex'],
       display: 'tenon setup --codex',
     })
-    expect(setup.steps.slice(1, 1 + nativeInstallPlan('codex').length).map(({ command }) => command)).toEqual(
-      nativeInstallPlan('codex').map(({ cmd, args }) => ({
+    expect(setup.steps.slice(1, 1 + nativeUpdatePlan('codex', setupTarget).length).map(({ command }) => command)).toEqual(
+      nativeUpdatePlan('codex', setupTarget).map(({ cmd, args }) => ({
         executable: cmd,
         args: [...args],
         display: [cmd, ...args].join(' '),
@@ -107,6 +112,7 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     expect(codexUpdate.notices).toContain('host-plan.notice.codex-auth-guidance')
     expect(codexUpdate.notices).toContain('host-plan.notice.update-target-frozen-at-execution')
     expect(setup.notices).toContain('host-plan.notice.first-setup-browser')
+    expect(setup.notices).toContain('host-plan.notice.setup-rebind-conditional')
     expect(update.steps.slice(1 + nativeUpdatePlan('claude', previewTarget).length)).toEqual([
       { id: 'candidate-validation', label: 'host-plan.step.candidate-validation', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },

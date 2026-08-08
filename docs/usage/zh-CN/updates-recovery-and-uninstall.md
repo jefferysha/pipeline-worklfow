@@ -18,6 +18,10 @@ Tenon 把插件 release 与项目 Change 分离。更新切换已验证的不可
 
 ### 1. 更新指定宿主
 
+若已安装 launcher 是公开的 v1.0.1，先一次性运行不可变的 `v1.0.2/install.sh` 一行命令完成 legacy
+bridge；v1.0.1 无法在一次旧 updater 调用中安全自重绑版本标签。从 v1.0.2 起，下面这条命令就是
+唯一的常规一键更新入口。
+
 ```bash
 tenon update --codex
 ```

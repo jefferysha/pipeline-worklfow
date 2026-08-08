@@ -23,6 +23,7 @@ const EXPECTED_IDS = [
   'project:changes',
   'project:markers',
   'quality:verify-skills',
+  'identity:release',
   'skills:mandatory',
   'skills:recommended',
   'integration:codex-project-skills',
@@ -45,13 +46,13 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
 }
 
 describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > tenon doctor）', () => {
-  test('全绿基线：19 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
+  test('全绿基线：20 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(0)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[DOCTOR]')
-    expect(text).toContain('绿 19')
+    expect(text).toContain('绿 20')
     expect(text).not.toContain('[WARN]')
     expect(text).not.toContain('[FAIL]')
     expect(text).not.toContain('fix:')
@@ -68,7 +69,30 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
       expect(typeof c.detail).toBe('string')
       expect(typeof c.hint).toBe('string')
     }
-    expect(payload.summary).toEqual({ green: 19, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 20, yellow: 0, red: 0 })
+  })
+
+  test('native host/runtime/Dashboard 任一版本漂移时 identity:release red', async () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const deps = makeDeps({ doctor: {
+      productIdentity: async () => ({
+        state: 'native' as const,
+        expectedVersion: '1.0.2',
+        host: 'codex' as const,
+        hostPluginVersion: '1.0.1',
+        runtimePluginVersion: '1.0.2',
+        runtimeReleaseId: releaseId,
+        dashboardServerVersion: '1.0.2',
+        dashboardReleaseId: releaseId,
+      }),
+    } })
+
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const identity = byId(payload, 'identity:release')
+    expect(identity.status).toBe('red')
+    expect(identity.detail).toContain('host=1.0.1')
+    expect(identity.detail).toContain('expected=1.0.2')
   })
 
   test('Codex runtime 未登录 → auth:codex yellow 且一次给全两类账号登录路径', async () => {
@@ -495,7 +519,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     }
     expect(code).toBe(0)
     const payload = JSON.parse(deps.outLines.join('\n')) as DoctorJson
-    expect(payload.summary).toEqual({ green: 19, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 20, yellow: 0, red: 0 })
   })
 })
 

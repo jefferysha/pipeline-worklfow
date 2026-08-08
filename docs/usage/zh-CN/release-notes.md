@@ -23,7 +23,9 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 ### 升级动作
 
-运行 `tenon update --codex`。新开 Codex 会话加载已发布 Skills/hooks 后，运行 `tenon doctor --json`。
+v1.0.1 用户先一次性运行不可变的 `v1.0.2/install.sh` 一行命令；旧 launcher 无法在一次旧 updater
+调用中安全自重绑新 tag。从 v1.0.2 起，每次只运行一条 `tenon update --codex`。新开 Codex 会话
+加载已发布 Skills/hooks 后，运行 `tenon doctor --json`。
 
 ## v1.0.1 · 2026-07-26
 

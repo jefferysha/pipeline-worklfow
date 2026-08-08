@@ -3,6 +3,7 @@ import type { ProductPathInput } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeInspection } from '../runtime/types.js'
+import { resolveCommandOnPath } from './commandExists.js'
 
 export interface RuntimeCommandOpts {
   readonly json?: boolean
@@ -12,15 +13,29 @@ export interface RuntimeCommandOpts {
 export interface RuntimeCommandEnv {
   homeDir(): string
   runtimeEnv(): NonNullable<ProductPathInput['env']>
+  resolveTrustedBash?(): string | undefined
 }
 
 export const REAL_RUNTIME_COMMAND_ENV: RuntimeCommandEnv = {
   homeDir: () => homedir(),
   runtimeEnv: () => ({ ...process.env }),
+  resolveTrustedBash: () => resolveCommandOnPath('bash', {
+    pathValue: process.env.PATH,
+    platform: process.platform,
+    requireAbsolutePathEntries: true,
+  }),
 }
 
 function runtimeScope(env: RuntimeCommandEnv) {
-  return { homeDir: env.homeDir(), env: env.runtimeEnv() }
+  const trustedBashPath = env.resolveTrustedBash?.()
+  if (env.resolveTrustedBash !== undefined && trustedBashPath === undefined) {
+    throw new Error('可信 Bash 不可执行')
+  }
+  return {
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv(),
+    ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
+  }
 }
 
 function statusPayload(inspection: RuntimeInspection): Record<string, unknown> {

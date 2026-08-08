@@ -114,13 +114,14 @@ function fakeRuntimeInstaller(
 function fakeDashboardStarter(
   failures: readonly boolean[] = [],
   initialRelease: string | null = null,
+  initialServerVersion = '1.2.3',
 ): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
   const calls: DashboardCalls = { starts: [] }
   let running: Awaited<ReturnType<ReleasedDashboardStarter['inspect']>> = initialRelease === null
     ? null
     : {
         version: 1,
-        serverVersion: '1.2.3',
+        serverVersion: initialServerVersion,
         port: 18_765,
         pid: 320,
         releaseId: initialRelease,
@@ -195,8 +196,24 @@ function updateEnv(
     listDir: () => [],
     writeText: (path, text) => { calls.writes.push([path, text]) },
     writeTextAtomic: (path, text) => { calls.writes.push([path, text]) },
+    inspectCandidatePayload: async () => ({
+      pluginVersion: STABLE_TARGET.version,
+      payloadDigest: 'b'.repeat(64),
+    }),
     runCommand: (cmd, args) => {
       calls.exec.push([cmd, args])
+      if (cmd === 'git' && args.join(' ') === [
+        'ls-remote',
+        'https://github.com/jefferysha/tenon.git',
+        `refs/tags/${STABLE_TARGET.tag}`,
+        `refs/tags/${STABLE_TARGET.tag}^{}`,
+      ].join(' ')) {
+        return {
+          code: 0,
+          stdout: `${STABLE_TARGET.commit}\trefs/tags/${STABLE_TARGET.tag}\n`,
+          stderr: '',
+        }
+      }
       const result = run(cmd, args)
       const text = `${cmd} ${args.join(' ')}`
       if (result.stdout.trim() !== '' || result.code !== 0) {
@@ -392,7 +409,9 @@ describe('tenon update', () => {
 
   test('--dry-run is read-only: it prints the exact refresh plan without marketplace calls or runtime publication', () => {
     const deps = makeDeps()
-    const { env, calls } = updateEnv(() => ({ code: 0, stdout: '', stderr: '' }))
+    const { env, calls } = updateEnv((cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
     expect(cmdUpdate(deps, { codex: true, dryRun: true }, env)).toBe(0)
     expect(deps.outLines.join('\n')).toContain('codex plugin marketplace add jefferysha/tenon --ref <latest-stable> --json')
     expect(deps.outLines.join('\n')).toContain('dry-run 不联网')
@@ -402,7 +421,9 @@ describe('tenon update', () => {
 
   test('a missing trusted Codex CLI fails before update mutation and gives an acquisition path', () => {
     const deps = makeDeps()
-    const { env, calls } = updateEnv(() => ({ code: 0, stdout: '', stderr: '' }))
+    const { env, calls } = updateEnv((cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
     env.resolveHostCommand = () => undefined
 
     expect(cmdUpdate(deps, { codex: true }, env)).toBe(1)
@@ -456,7 +477,7 @@ describe('tenon update', () => {
       fakeDashboardStarter().starter,
       STABLE_RESOLVER,
     )).toBe(1)
-    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd !== 'git').map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
     ])
     expect(runtime.calls.activations).toEqual([])
@@ -480,7 +501,7 @@ describe('tenon update', () => {
       fakeDashboardStarter().starter,
       STABLE_RESOLVER,
     )).toBe(1)
-    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd !== 'git').map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
     ])
     expect(runtime.calls.activations).toEqual([])
@@ -527,7 +548,9 @@ describe('tenon update', () => {
         payloadDigest: 'c'.repeat(64),
       }),
     )).toBe(0)
-    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec
+      .filter(([cmd, args]) => !(cmd === 'git' && args[0] === 'ls-remote'))
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['codex', 'plugin marketplace list --json'],
       ['git', '-C /new/tenon rev-parse HEAD'],
@@ -560,7 +583,8 @@ describe('tenon update', () => {
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
     expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, dashboard.starter, STABLE_RESOLVER)).toBe(0)
-    expect(calls.exec.slice(0, 6).map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd === 'codex').slice(0, 6)
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['codex', 'plugin remove tenon@tenon --json'],
       ['codex', 'plugin marketplace remove tenon --json'],
@@ -677,7 +701,8 @@ describe('tenon update', () => {
     )).toBe(0)
     expect(authCalls).toBe(0)
     expect(deps.outLines.join('\n')).not.toContain('[Codex 认证]')
-    expect(calls.exec.slice(0, 6).map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd === 'claude').slice(0, 6)
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['claude', 'plugin list --json'],
       ['claude', 'plugin uninstall tenon@tenon --scope user'],
       ['claude', 'plugin marketplace remove tenon'],
@@ -738,7 +763,14 @@ describe('tenon update', () => {
     const inventory = JSON.stringify({
       installed: [
         { pluginId: 'pipeline-lite@pipeline-lite', enabled: true, source: { path: '/old/workflow' } },
-        { pluginId: 'tenon@tenon', enabled: true, source: { path: '/new/tenon' } },
+        {
+          pluginId: 'tenon@tenon',
+          name: 'tenon',
+          marketplaceName: 'tenon',
+          enabled: true,
+          version: STABLE_TARGET.version,
+          source: { path: '/new/tenon' },
+        },
       ],
     })
     const { env, calls } = updateEnv((cmd, args) => {
@@ -771,14 +803,158 @@ describe('tenon update', () => {
       }
       return baseReadText(path)
     }
-    const runtime = fakeRuntimeInstaller(false, null, releaseId)
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, STABLE_TARGET.version)
+    const dashboard = fakeDashboardStarter([], releaseId, STABLE_TARGET.version)
 
-    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(1)
+    expect(await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+      STABLE_RESOLVER,
+      async () => ({ pluginVersion: STABLE_TARGET.version, payloadDigest: 'b'.repeat(64) }),
+    )).toBe(1)
     expect(runtime.calls.activations).toEqual([])
-    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
-      ['codex', 'plugin list --json'],
-      ['codex', 'plugin remove pipeline-lite@pipeline-lite --json'],
-    ])
+    const commands = calls.exec.map(([cmd, args]) => `${cmd} ${args.join(' ')}`)
+    const removeIndex = commands.indexOf('codex plugin remove pipeline-lite@pipeline-lite --json')
+    expect(removeIndex).toBeGreaterThan(commands.indexOf('codex plugin list --json'))
+    expect(commands.slice(0, removeIndex)).toContain('git -C /new/marketplace rev-parse HEAD')
+  })
+
+  test('cleanup receipt waiting recovery re-proves runtime and Dashboard before reporting URL', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'b'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/update-test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const { env, calls } = updateEnv((cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
+    const baseReadText = env.readText
+    env.readText = (path) => path === receiptPath
+      ? JSON.stringify({
+          version: 3,
+          transactionId: 'recovery-transaction',
+          state: 'cleanup-pending',
+          host: 'codex',
+          conflictPluginId: 'pipeline-lite@pipeline-lite',
+          conflictScopes: ['user'],
+          releaseId,
+          releaseRoot: `/runtime/releases/${releaseId}/payload`,
+          candidateRoot: '/new/tenon',
+          createdAtEpoch: 1_700_000_000,
+          updatedAt: '2026-07-26T00:00:00Z',
+        })
+      : baseReadText(path)
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, STABLE_TARGET.version)
+    const dashboard = fakeDashboardStarter([], releaseId, STABLE_TARGET.version)
+
+    expect(await cmdUpdate(
+      deps,
+      { codex: true, auto: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+      STABLE_RESOLVER,
+      async () => ({ pluginVersion: STABLE_TARGET.version, payloadDigest: 'b'.repeat(64) }),
+    )).toBe(0)
+    expect(runtime.calls.activations).toEqual([])
+    expect(calls.exec.some(([cmd, args]) => cmd === 'codex'
+      && (args.includes('remove') || args.includes('add')))).toBe(false)
+    expect(deps.outLines.join('\n')).toContain('等待新宿主会话')
+    expect(deps.outLines.join('\n')).toContain('http://127.0.0.1:18765/')
+    expect(deps.outLines.join('\n')).toContain('tenon dashboard --open')
+  })
+
+  test('cleanup receipt recovery rejects a marketplace that drifted back to main', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'b'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/update-test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const { env, calls } = updateEnv((cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
+    const baseReadText = env.readText
+    env.readText = (path) => {
+      if (path === receiptPath) {
+        return JSON.stringify({
+          version: 3,
+          transactionId: 'recovery-transaction',
+          state: 'cleanup-pending',
+          host: 'codex',
+          conflictPluginId: 'pipeline-lite@pipeline-lite',
+          conflictScopes: ['user'],
+          releaseId,
+          releaseRoot: `/runtime/releases/${releaseId}/payload`,
+          candidateRoot: '/new/tenon',
+          createdAtEpoch: 1_700_000_000,
+          updatedAt: '2026-07-26T00:00:00Z',
+        })
+      }
+      if (path === proofPath) {
+        return `version=2\nloaded_at_epoch=1800000000\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+      }
+      if (path === '/new/marketplace/.codex-marketplace-install.json') {
+        return JSON.stringify({ ref_name: 'main' })
+      }
+      return baseReadText(path)
+    }
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, STABLE_TARGET.version)
+    const dashboard = fakeDashboardStarter([], releaseId, STABLE_TARGET.version)
+
+    expect(await cmdUpdate(
+      deps,
+      { codex: true, auto: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+      STABLE_RESOLVER,
+      async () => ({ pluginVersion: STABLE_TARGET.version, payloadDigest: 'b'.repeat(64) }),
+    )).toBe(1)
+    expect(runtime.calls.activations).toEqual([])
+    expect(calls.exec.some(([cmd, args]) => cmd === 'codex'
+      && (args.includes('remove') || args.includes('add')))).toBe(false)
+    expect(deps.errLines.join('\n')).toContain('收敛 cleanup 前完整 identity 无法重新证明')
+  })
+
+  test('cleanup receipt recovery rejects a Dashboard with the wrong product version', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'b'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/update-test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const { env } = updateEnv((cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
+    const baseReadText = env.readText
+    env.readText = (path) => path === receiptPath
+      ? JSON.stringify({
+          version: 3,
+          transactionId: 'recovery-transaction',
+          state: 'cleanup-pending',
+          host: 'codex',
+          conflictPluginId: 'pipeline-lite@pipeline-lite',
+          conflictScopes: ['user'],
+          releaseId,
+          releaseRoot: `/runtime/releases/${releaseId}/payload`,
+          candidateRoot: '/new/tenon',
+          createdAtEpoch: 1_700_000_000,
+          updatedAt: '2026-07-26T00:00:00Z',
+        })
+      : baseReadText(path)
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, STABLE_TARGET.version)
+    const dashboard = fakeDashboardStarter([], releaseId, '9.9.9')
+
+    expect(await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      runtime.installer,
+      dashboard.starter,
+      STABLE_RESOLVER,
+      async () => ({ pluginVersion: STABLE_TARGET.version, payloadDigest: 'b'.repeat(64) }),
+    )).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('Dashboard 未与 active managed runtime 精确一致')
   })
 
   test('dashboard readiness failure compensates the exact published activation', async () => {
@@ -847,7 +1023,8 @@ describe('tenon update', () => {
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
     expect(await cmdUpdate(deps, { codex: true, auto: true }, env, runtime.installer, dashboard.starter, STABLE_RESOLVER)).toBe(0)
-    expect(calls.exec.slice(0, 6).map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd === 'codex').slice(0, 6)
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['codex', 'plugin remove tenon@tenon --json'],
       ['codex', 'plugin marketplace remove tenon --json'],
@@ -926,7 +1103,8 @@ describe('tenon update', () => {
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
     expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, dashboard.starter, STABLE_RESOLVER)).toBe(0)
-    expect(calls.exec.slice(0, 6).map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+    expect(calls.exec.filter(([cmd]) => cmd === 'codex').slice(0, 6)
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['codex', 'plugin remove tenon@tenon --json'],
       ['codex', 'plugin marketplace remove tenon --json'],

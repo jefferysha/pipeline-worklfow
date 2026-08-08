@@ -346,4 +346,36 @@ describe('managed release write-ahead journal', () => {
 
     await expect(journal.read()).rejects.toThrow('格式非法')
   })
+
+  test('decodes a v1.0.1 Dashboard identity without serverVersion as legacy unverified state', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(
+      join(paths.managedTransactionRoot, 'release-transaction.json'),
+      JSON.stringify({
+        ...initial,
+        phase: 'candidate-resolved',
+        dashboardPort: 18_765,
+        candidateRoot: '/host/tenon',
+        dashboardBefore: {
+          version: 1,
+          port: 18_765,
+          pid: 4242,
+          releaseId: `sha256-${'a'.repeat(64)}`,
+          stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+        },
+      }),
+      'utf8',
+    )
+
+    await expect(journal.read()).resolves.toMatchObject({
+      phase: 'candidate-resolved',
+      dashboardBefore: {
+        serverVersion: '',
+        port: 18_765,
+        pid: 4242,
+      },
+    })
+  })
 })

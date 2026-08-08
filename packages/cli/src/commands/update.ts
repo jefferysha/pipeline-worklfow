@@ -1,20 +1,10 @@
-/**
- * Release update command for the one packaged Tenon plugin.
- *
- * Codex and Claude own their marketplace/cache lifecycles, so this command only asks the selected
- * host to refresh and reinstall its own plugin.  Other supported runtimes are adapters rather than
- * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
- * package instead of falsely claiming to fetch a release from that host.
- */
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import {
   inspectCandidatePayload,
   type CandidatePayloadIdentity,
 } from '../runtime/release-store.js'
-import {
-  REAL_RELEASED_DASHBOARD_STARTER,
-} from './released-dashboard-starter.js'
+import { REAL_RELEASED_DASHBOARD_STARTER } from './released-dashboard-starter.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
@@ -27,15 +17,18 @@ import {
   type PipelineHostFlags,
 } from './plugin-host.js'
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
-import { bindNativeHostCommand } from './native-host-command-binding.js'
+import {
+  bindNativeHostCommand,
+  freezeTrustedLifecycleCommands,
+} from './native-host-command-binding.js'
 import { publishManagedRelease } from './release-coordinator.js'
 import { parseDashboardPort } from './dashboard-launch-options.js'
 import { runManagedHostCommand } from './managed-host-command.js'
 import {
-  finalizePendingHostPluginConflict,
   readHostPluginConvergenceReceipt,
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
+import { recoverPendingHostConvergence } from './host-convergence-recovery.js'
 import { printCodexAuthGuidance, renderDeferredCodexAuthLine } from '../codexAuth.js'
 import {
   REAL_STABLE_RELEASE_RESOLVER,
@@ -48,6 +41,12 @@ import { nativeHostMatchesStableTarget } from './managed-host-observation.js'
 import { DEFAULT_DASHBOARD_PORT } from './dashboard.js'
 import { reportRegisteredProjects } from './update-project-report.js'
 import { verifyUpdatedRoot } from './update-candidate-verification.js'
+import { revalidateNativeStableCandidate } from './native-candidate-revalidation.js'
+import {
+  boundaryDetail,
+  reportHostBoundary,
+  type HostBoundaryState,
+} from './update-boundary-report.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -79,31 +78,6 @@ function rejectUpdate(
   }, detail)
   if (record === undefined) return 1
   return record.then(() => 1).catch(() => 1)
-}
-
-type HostBoundaryState = 'in-progress' | 'committed'
-type ManagedBoundaryState = 'unchanged' | 'restored' | 'indeterminate'
-
-function boundaryDetail(
-  hostState: HostBoundaryState,
-  managedState: ManagedBoundaryState,
-  detail: string,
-): string {
-  return `host=${hostState}; managed=${managedState}; ${detail}`
-}
-
-function reportHostBoundary(deps: CliDeps, host: PipelineHost, state: HostBoundaryState): void {
-  if (state === 'committed') {
-    deps.io.err(
-      `[update] 宿主插件缓存已由 ${host === 'codex' ? 'Codex' : 'Claude'} 更新；` +
-      'Tenon 未回滚宿主私有缓存，当前会话仍使用其已加载版本。',
-    )
-    return
-  }
-  deps.io.err(
-    `[update] ${hostFlag(host)} 宿主更新在 inventory 提交确认前失败；` +
-    '宿主私有缓存状态由宿主 CLI 管理，Tenon 未直接写入或恢复该缓存。',
-  )
 }
 
 export function cmdUpdate(
@@ -145,32 +119,51 @@ export function cmdUpdate(
     deps.io.err(`ERROR: ${host} CLI 不在可信的绝对 PATH 项中；未执行宿主或 Tenon 状态变更。`)
     return 1
   }
-  const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding)
+  const trustedCommands = freezeTrustedLifecycleCommands(env)
+  if (trustedCommands.missing.length > 0) {
+    deps.io.err(
+      `ERROR: ${trustedCommands.missing.join('/')} 不在可信的绝对 PATH 项中；`
+      + '未执行宿主或 Tenon 状态变更。',
+    )
+    return 1
+  }
+  const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding, trustedCommands)
+  const inspectCandidate = candidateInspector !== inspectCandidatePayload
+    ? candidateInspector
+    : lifecycleEnv.inspectCandidatePayload
+      ?? ((root: string) => inspectCandidatePayload(root, { bashPath: trustedCommands.bash }))
 
   return (async () => {
+  const dashboardPort = parseDashboardPort(lifecycleEnv.runtimeEnv().TENON_DASHBOARD_PORT)
+  const readyPort = dashboardPort ?? DEFAULT_DASHBOARD_PORT
   const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host)
   if (convergence.state === 'invalid') {
     deps.io.err(`ERROR: ${convergence.detail}；未执行新的 marketplace/runtime 变更。`)
     return 1
   }
   if (convergence.state === 'receipt' && convergence.receipt.state === 'cleanup-pending') {
-    const finalized = await finalizePendingHostPluginConflict(deps, lifecycleEnv, installer, host, convergence.receipt)
-    if (finalized.state === 'failed') {
-      deps.io.err(`ERROR: 冲突插件官方清理失败：${finalized.detail}`)
-      return 1
-    }
+    const recovered = await recoverPendingHostConvergence(
+      deps,
+      lifecycleEnv,
+      installer,
+      dashboardStarter,
+      host,
+      convergence.receipt,
+      readyPort,
+      inspectCandidate,
+    )
     // waiting/completed 都终止本次 update，避免同一调用继续刷新或发布另一个候选。
-    return 0
+    return recovered ? 0 : 1
   }
 
   let hostBoundary: HostBoundaryState = 'in-progress'
-  const dashboardPort = parseDashboardPort(lifecycleEnv.runtimeEnv().TENON_DASHBOARD_PORT)
   const outcome = await publishManagedRelease(
     deps,
     {
       operation: 'update',
       source: host,
       requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: () => releaseResolver.resolve(lifecycleEnv),
       proveFrozenTarget: (frozen) => {
         const proven = resolveStableTagTarget(lifecycleEnv, frozen.version)
         if (proven.tag !== frozen.tag || proven.commit !== frozen.commit) {
@@ -182,6 +175,7 @@ export function cmdUpdate(
       runtime: {
         homeDir: lifecycleEnv.homeDir(),
         env: lifecycleEnv.runtimeEnv(),
+        trustedBashPath: trustedCommands.bash,
       },
       openBrowser: false,
       ...(dashboardPort === null ? {} : { dashboardPort }),
@@ -211,6 +205,7 @@ export function cmdUpdate(
         const runtime = await installer.inspect({
           homeDir: lifecycleEnv.homeDir(),
           env: lifecycleEnv.runtimeEnv(),
+          trustedBashPath: trustedCommands.bash,
         })
         for (const [label, version] of [
           ['宿主 plugin', beforeInventory.tenonVersion],
@@ -235,7 +230,7 @@ export function cmdUpdate(
           && runtimeExact
           && nativeHostMatchesStableTarget(lifecycleEnv, host, target)
         if (hostExact && verifyUpdatedRoot(deps, lifecycleEnv, beforeInventory.tenonRoot, target.version)) {
-          const candidateIdentity = await candidateInspector(beforeInventory.tenonRoot)
+          const candidateIdentity = await inspectCandidate(beforeInventory.tenonRoot)
           if (candidateIdentity.pluginVersion === target.version
             && candidateIdentity.payloadDigest === runtime.active?.payloadDigest
             && nativeHostMatchesStableTarget(lifecycleEnv, host, target)) {
@@ -318,11 +313,34 @@ export function cmdUpdate(
         }
         return { candidateRoot: root, evidence: inventory }
       },
-      commitReadyEvidence: (activation, candidate, transactionId) => {
-        const parsedInventory = candidate.evidence === undefined
-          ? null
-          : parseHostPluginInventory(host, candidate.evidence)
-        if (parsedInventory === null) throw new Error('journal 中的宿主 inventory evidence 无效')
+      revalidateCandidate: (candidate, context) => {
+        const target = context.stableTarget
+        if (target === undefined) throw new Error('候选重证缺少冻结 stable target')
+        revalidateNativeStableCandidate(
+          deps,
+          lifecycleEnv,
+          host,
+          target,
+          candidate.candidateRoot,
+          (root) => verifyUpdatedRoot(deps, lifecycleEnv, root, target.version),
+        )
+      },
+      commitReadyEvidence: async (activation, candidate, transactionId, context) => {
+        const target = context.stableTarget
+        if (target === undefined) throw new Error('ready evidence 缺少冻结 stable target context')
+        const parsedInventory = revalidateNativeStableCandidate(
+          deps,
+          lifecycleEnv,
+          host,
+          target,
+          candidate.candidateRoot,
+          (root) => verifyUpdatedRoot(deps, lifecycleEnv, root, target.version),
+        )
+        const candidateIdentity = await inspectCandidate(candidate.candidateRoot)
+        if (candidateIdentity.pluginVersion !== target.version
+          || candidateIdentity.payloadDigest !== activation.release.payloadDigest) {
+          throw new Error('ready evidence 的宿主 candidate digest 与 active runtime 不一致')
+        }
         if (!recordPendingHostPluginConflict(
           deps,
           lifecycleEnv,
@@ -331,6 +349,7 @@ export function cmdUpdate(
           activation,
           candidate.candidateRoot,
           transactionId,
+          target,
         )) throw new Error('宿主插件收敛 receipt 未能持久化')
       },
     },
@@ -342,7 +361,6 @@ export function cmdUpdate(
     reportHostBoundary(deps, host, hostBoundary)
     return await rejectUpdate(installer, lifecycleEnv, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
   }
-  const readyPort = dashboardPort ?? DEFAULT_DASHBOARD_PORT
   if (outcome.state === 'current') {
     const tag = outcome.stableTarget?.tag ?? 'latest stable'
     deps.io.out(`[update] ${tag} 已在宿主、managed runtime 与 Dashboard 精确生效；无需更新。`)

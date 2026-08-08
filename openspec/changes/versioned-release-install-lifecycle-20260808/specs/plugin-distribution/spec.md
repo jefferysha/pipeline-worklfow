@@ -12,12 +12,19 @@
 - **THEN** installer 只调用受信任 PATH 中的 Codex CLI、Node 和标签内已发布 bundle
 - **AND** 安装后的插件包含 CLI、server、Dashboard、Skills、hooks 和 manifests
 - **AND** 命令历史不包含 `npm install`、`npm run build` 或本地源码路径
+- **AND** installer 与生成的稳定 launcher 执行冻结的绝对 Node/Bash/host CLI 路径，不重新从 cwd 或相对 PATH 解析程序
 
 #### Scenario: 标签内版本身份漂移
 
 - **WHEN** install 脚本默认 ref、根 package、Codex/Claude plugin manifest 或 workspace package 版本与标签不一致
 - **THEN** release/identity 门禁失败
 - **AND** 该候选不得成为正式安装命令
+
+#### Scenario: 同版本插件登记存在但被禁用
+
+- **WHEN** 预检发现 Tenon plugin/marketplace 版本与目标一致但 plugin registration 被禁用
+- **THEN** installer 把它视为可修复状态并通过公开 remove/add 收敛
+- **AND** 不在任何 mutation 前错误拒绝本次安装
 
 ### Requirement: 正式新用户验收 SHALL 使用宿主级卸载与版本化重装
 

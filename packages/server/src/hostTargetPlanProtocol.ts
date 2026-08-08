@@ -40,6 +40,7 @@ const NOTICE_IDS = [
   'host-plan.notice.manual-command-has-effects',
   'host-plan.notice.dashboard-readiness',
   'host-plan.notice.first-setup-browser',
+  'host-plan.notice.setup-rebind-conditional',
   'host-plan.notice.update-target-frozen-at-execution',
   'host-plan.notice.codex-auth-guidance',
   'host-plan.notice.current-project-target',
@@ -133,6 +134,8 @@ function nativeCommandTruth(
   if (host === 'codex') {
     return operation === 'setup'
       ? [
+          planCommand('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+          planCommand('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
           planCommand('codex', [
             'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', HOST_PLAN_RELEASE_TAG, '--json',
           ]),
@@ -151,6 +154,8 @@ function nativeCommandTruth(
   }
   return operation === 'setup'
     ? [
+        planCommand('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+        planCommand('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
         planCommand('claude', ['plugin', 'marketplace', 'add', `jefferysha/tenon@${HOST_PLAN_RELEASE_TAG}`]),
         planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
         planCommand('claude', ['plugin', 'list', '--json']),
@@ -290,15 +295,13 @@ export function decodeHostTargetPlan(
   const expectedStepIds: readonly HostPlanStepId[] = native
     ? [
         expectedOperation === 'setup' ? 'stable-release-target' : 'stable-release-resolve',
-        ...(expectedOperation === 'setup'
-          ? ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
-          : [
-              'plugin-remove',
-              'marketplace-remove',
-              'marketplace-register',
-              'plugin-install',
-              'plugin-inventory',
-            ] as const),
+        ...[
+          'plugin-remove',
+          'marketplace-remove',
+          'marketplace-register',
+          'plugin-install',
+          'plugin-inventory',
+        ] as const,
         'candidate-validation',
         'managed-runtime',
         'dashboard-readiness',
@@ -336,9 +339,10 @@ export function decodeHostTargetPlan(
     NOTICE_IDS[1],
     NOTICE_IDS[2],
     ...(expectedOperation === 'setup' ? [NOTICE_IDS[3]] : []),
-    ...(native && expectedOperation === 'update' ? [NOTICE_IDS[4]] : []),
-    ...(expectedHost === 'codex' ? [NOTICE_IDS[5]] : []),
-    ...(native ? [] : [NOTICE_IDS[6]]),
+    ...(native && expectedOperation === 'setup' ? [NOTICE_IDS[4]] : []),
+    ...(native && expectedOperation === 'update' ? [NOTICE_IDS[5]] : []),
+    ...(expectedHost === 'codex' ? [NOTICE_IDS[6]] : []),
+    ...(native ? [] : [NOTICE_IDS[7]]),
   ]
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {

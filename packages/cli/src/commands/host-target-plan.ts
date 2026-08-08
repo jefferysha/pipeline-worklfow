@@ -1,9 +1,9 @@
 import type { CliDeps } from '../deps.js'
 import {
   TENON_HOSTS,
+  TENON_RELEASE_VERSION,
   hostFlag,
   isNativePipelineHost,
-  nativeInstallPlan,
   nativeUpdatePlan,
   type HostCommandPlanItem,
   type NativePipelineHost,
@@ -97,7 +97,6 @@ const CODEX_AUTH_STATUS_STEP = {
   },
 } as const satisfies HostTargetPlanStep
 
-const NATIVE_SETUP_STEP_IDS = ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
 const VERSIONED_UPDATE_STEP_IDS = [
   'plugin-remove',
   'marketplace-remove',
@@ -152,9 +151,7 @@ function nativeSteps(
   operation: HostTargetOperation,
   plan: readonly HostCommandPlanItem[],
 ): readonly HostTargetPlanStep[] {
-  const ids = operation === 'setup'
-    ? NATIVE_SETUP_STEP_IDS
-    : VERSIONED_UPDATE_STEP_IDS
+  const ids = VERSIONED_UPDATE_STEP_IDS
   return [
     operation === 'setup' ? SETUP_RELEASE_TARGET_STEP : UPDATE_RELEASE_RESOLVER_STEP,
     ...plan.map((item, index) => {
@@ -202,7 +199,11 @@ export function createHostTargetPlan(
         host,
         operation,
         operation === 'setup'
-          ? nativeInstallPlan(host)
+          ? nativeUpdatePlan(host, {
+              version: TENON_RELEASE_VERSION,
+              tag: `v${TENON_RELEASE_VERSION}`,
+              commit: '0'.repeat(40),
+            })
           : nativeUpdatePlan(
               host,
               { version: '<latest-stable>', tag: '<latest-stable>', commit: '0'.repeat(40) },
@@ -221,7 +222,12 @@ export function createHostTargetPlan(
       'host-plan.notice.manual-command-has-effects',
       'host-plan.notice.dashboard-readiness',
       ...(operation === 'setup'
-        ? ['host-plan.notice.first-setup-browser']
+        ? [
+            'host-plan.notice.first-setup-browser',
+            ...(isNativePipelineHost(host)
+              ? ['host-plan.notice.setup-rebind-conditional']
+              : []),
+          ]
         : []),
       ...(isNativePipelineHost(host) && operation === 'update'
         ? ['host-plan.notice.update-target-frozen-at-execution']

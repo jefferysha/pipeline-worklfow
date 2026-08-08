@@ -143,6 +143,8 @@ export interface RuntimeInstallerScope {
   readonly homeDir: string
   readonly env: NonNullable<RuntimePathInput['env']>
   readonly platform?: NodeJS.Platform
+  /** Absolute Bash executable frozen by native setup/update before any host mutation. */
+  readonly trustedBashPath?: string
 }
 
 export interface RuntimeInstaller {
@@ -171,17 +173,34 @@ function pathsFor(scope: RuntimeInstallerScope): RuntimePaths {
 }
 
 function storeFor(scope: RuntimeInstallerScope): RuntimeReleaseStore {
-  return new RuntimeReleaseStore({ paths: pathsFor(scope) })
+  return new RuntimeReleaseStore({
+    paths: pathsFor(scope),
+    ...(scope.trustedBashPath === undefined ? {} : { bashPath: scope.trustedBashPath }),
+  })
+}
+
+function transactionStore(
+  paths: RuntimePaths,
+  trustedBashPath: string | undefined,
+): RuntimeReleaseStore {
+  return new RuntimeReleaseStore({
+    paths,
+    ...(trustedBashPath === undefined ? {} : { bashPath: trustedBashPath }),
+  })
 }
 
 async function activateWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
   candidateRoot: string,
   host: RuntimeReleaseSource['host'],
   expectedPluginVersion?: string,
 ): Promise<RuntimeActivation> {
-  const store = new RuntimeReleaseStore({ paths })
+  const store = new RuntimeReleaseStore({
+    paths,
+    ...(trustedBashPath === undefined ? {} : { bashPath: trustedBashPath }),
+  })
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
   const launcherCommitted = expectedStableLaunchers(paths, homeDir)
   const activation = await store.stageAndActivate(candidateRoot, host, expectedPluginVersion)
@@ -212,9 +231,10 @@ async function activateWithinTransaction(
 async function revertWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
   activation: RuntimeActivation,
 ): Promise<void> {
-  const store = new RuntimeReleaseStore({ paths })
+  const store = transactionStore(paths, trustedBashPath)
   const compensatedSelection = {
     version: 1 as const,
     revision: activation.selection.revision + 1,
@@ -273,9 +293,10 @@ async function revertWithinTransaction(
 async function proveActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
   activation: RuntimeActivation,
 ): Promise<boolean> {
-  const inspection = await new RuntimeReleaseStore({ paths }).inspect()
+  const inspection = await transactionStore(paths, trustedBashPath).inspect()
   if (
     !inspection.activeValid
     || inspection.selection.revision !== activation.selection.revision
@@ -291,8 +312,9 @@ async function proveActivationWithinTransaction(
 async function checkpointActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
 ): Promise<RuntimeActivationCheckpoint> {
-  const selection = (await new RuntimeReleaseStore({ paths }).inspect()).selection
+  const selection = (await transactionStore(paths, trustedBashPath).inspect()).selection
   return {
     selection,
     launchers: await captureStableLaunchers(paths, homeDir),
@@ -306,10 +328,11 @@ function sameJson(left: unknown, right: unknown): boolean {
 async function recoverActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
   checkpoint: RuntimeActivationCheckpoint,
   host: RuntimeReleaseSource['host'],
 ): Promise<{ readonly state: 'not-started' } | { readonly state: 'activated'; readonly activation: RuntimeActivation }> {
-  const store = new RuntimeReleaseStore({ paths })
+  const store = transactionStore(paths, trustedBashPath)
   const inspection = await store.inspect()
   const launchers = await captureStableLaunchers(paths, homeDir)
   if (sameJson(inspection.selection, checkpoint.selection) && sameJson(launchers, checkpoint.launchers)) {
@@ -347,8 +370,9 @@ async function recoverActivationWithinTransaction(
 async function rollbackWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
+  trustedBashPath: string | undefined,
 ): Promise<RuntimeActivation> {
-  const store = new RuntimeReleaseStore({ paths })
+  const store = transactionStore(paths, trustedBashPath)
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
   const launcherCommitted = expectedStableLaunchers(paths, homeDir)
   const activation = await store.rollbackToPrevious()
@@ -384,21 +408,28 @@ async function withExclusiveRuntimeTransaction<T>(
   await mkdir(paths.managedTransactionRoot, { recursive: true })
   return withLock(paths.managedTransactionRoot, () => operation({
     checkpointActivation: () =>
-      checkpointActivationWithinTransaction(paths, scope.homeDir),
+      checkpointActivationWithinTransaction(paths, scope.homeDir, scope.trustedBashPath),
     activate: (candidateRoot, host, expectedPluginVersion) =>
       activateWithinTransaction(
         paths,
         scope.homeDir,
+        scope.trustedBashPath,
         candidateRoot,
         host,
         expectedPluginVersion,
       ),
     recoverActivation: (checkpoint, host) =>
-      recoverActivationWithinTransaction(paths, scope.homeDir, checkpoint, host),
+      recoverActivationWithinTransaction(
+        paths,
+        scope.homeDir,
+        scope.trustedBashPath,
+        checkpoint,
+        host,
+      ),
     revertActivation: (activation) =>
-      revertWithinTransaction(paths, scope.homeDir, activation),
+      revertWithinTransaction(paths, scope.homeDir, scope.trustedBashPath, activation),
     proveActivation: (activation) =>
-      proveActivationWithinTransaction(paths, scope.homeDir, activation),
+      proveActivationWithinTransaction(paths, scope.homeDir, scope.trustedBashPath, activation),
     journal: createManagedReleaseJournal(paths),
   }))
 }
@@ -415,7 +446,7 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
     await mkdir(paths.managedTransactionRoot, { recursive: true })
     return withLock(
       paths.managedTransactionRoot,
-      () => rollbackWithinTransaction(paths, scope.homeDir),
+      () => rollbackWithinTransaction(paths, scope.homeDir, scope.trustedBashPath),
     )
   },
   recordUpdateFailure(scope, detail) {

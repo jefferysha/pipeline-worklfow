@@ -208,6 +208,12 @@ const LATEST_STABLE_TAG = '<latest-stable>'
 function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation): readonly ExpectedStep[] {
   if (host === 'codex' && operation === 'setup') {
     return [
+      { id: 'plugin-remove', executable: 'codex', args: ['plugin', 'remove', 'tenon@tenon', '--json'] },
+      {
+        id: 'marketplace-remove',
+        executable: 'codex',
+        args: ['plugin', 'marketplace', 'remove', 'tenon', '--json'],
+      },
       {
         id: 'marketplace-register',
         executable: 'codex',
@@ -240,6 +246,16 @@ function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation):
   }
   if (operation === 'setup') {
     return [
+      {
+        id: 'plugin-remove',
+        executable: 'claude',
+        args: ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user'],
+      },
+      {
+        id: 'marketplace-remove',
+        executable: 'claude',
+        args: ['plugin', 'marketplace', 'remove', 'tenon'],
+      },
       {
         id: 'marketplace-register',
         executable: 'claude',
@@ -345,7 +361,12 @@ export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {
 
   const expectedNotices = [
     ...BASE_NOTICES,
-    ...(value.operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
+    ...(value.operation === 'setup'
+      ? [
+          'host-plan.notice.first-setup-browser',
+          ...(host.kind === 'native' ? ['host-plan.notice.setup-rebind-conditional'] : []),
+        ]
+      : []),
     ...(host.kind === 'native' && value.operation === 'update'
       ? ['host-plan.notice.update-target-frozen-at-execution']
       : []),

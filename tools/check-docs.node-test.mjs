@@ -123,6 +123,8 @@ async function fixture() {
       `# ${file}\n`,
     )
   }
+  await write(root, 'docs/usage/quickstart.md', `# Quickstart\n\n${installUrl}\n\nUses a prebuilt release; no source compilation.\n`)
+  await write(root, 'docs/usage/zh-CN/quickstart.md', `# 快速开始\n\n${installUrl}\n\n使用预构建发布包，不从源码编译。\n`)
   await write(
     root,
     'docs/usage/README.md',
@@ -275,6 +277,18 @@ test('rejects main-based public installation and release-version drift', async (
   const failures = checkRepository(root).join('\n')
   assert.match(failures, /install\.sh.*1\.0\.2/)
   assert.match(failures, /README\.md.*main\/install\.sh/)
+})
+
+test('quickstarts must use the versioned official installer instead of main', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const quickstart = await readFile(join(root, 'docs/usage/quickstart.md'), 'utf8')
+  await write(root, 'docs/usage/quickstart.md', quickstart.replace(
+    'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh',
+    'https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh',
+  ))
+  const failures = checkRepository(root).join('\n')
+  assert.match(failures, /docs\/usage\/quickstart\.md.*main\/install\.sh/)
 })
 
 test('detects workflow shape drift from the YAML step list', async (t) => {

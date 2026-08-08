@@ -10,6 +10,7 @@
 
 - **WHEN** 用户请求 Codex setup host target plan
 - **THEN** 计划显示当前已发布插件版本对应的 `vX.Y.Z` marketplace ref
+- **AND** 显示非精确状态下实际执行的 conditional plugin remove、marketplace remove、目标标签 register、plugin install 与 inventory proof
 - **AND** 显示候选校验、managed runtime、Dashboard readiness 和浏览器策略提示
 
 #### Scenario: 用户预览 Codex update 计划

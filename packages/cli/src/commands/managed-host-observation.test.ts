@@ -6,6 +6,7 @@ import {
   nativeHostMatchesStableTarget,
   observeNativeHost,
 } from './managed-host-observation.js'
+import { equivalentNativeHostDesired } from './managed-host-desired-identity.js'
 
 function observationEnv(state: {
   head: string
@@ -29,7 +30,8 @@ function observationEnv(state: {
     readText: (path) => {
       const root = state.marketplaceRoot ?? initialRoot
       if (path === '/home/observation/.codex/config.toml') return state.codexConfig
-      if (path === `${root}/.codex-plugin/plugin.json`) {
+      if (path === `${root}/.codex-plugin/plugin.json`
+        || path === `${root}/.claude-plugin/plugin.json`) {
         return JSON.stringify({ version: state.marketplacePluginVersion ?? '1.0.1' })
       }
       if (path === `${root}/.codex-marketplace-install.json`) {
@@ -293,6 +295,40 @@ describe('managed native-host observation', () => {
     expect(current.isEquivalentDesired(JSON.stringify({
       ...original,
       pluginVersion: '9.9.9',
+    }))).toBe(false)
+  })
+
+  test('Claude plugin install recovery accepts only the one-way null-to-authoritative plugin root upgrade', () => {
+    const marketplace = {
+      root: '/host/tenon-marketplace',
+      source: 'jefferysha/tenon',
+      sourceType: 'github',
+      head: 'a'.repeat(40),
+      ref: 'v1.0.2',
+      clean: true,
+    }
+    const persisted = JSON.stringify({
+      version: 1,
+      kind: 'plugin-version',
+      marketplace,
+      pluginRoot: null,
+      pluginVersion: '1.0.2',
+    })
+    const current = JSON.stringify({
+      version: 1,
+      kind: 'plugin-version',
+      marketplace,
+      pluginRoot: '/host/claude-cache/tenon',
+      pluginVersion: '1.0.2',
+    })
+    expect(equivalentNativeHostDesired(persisted, current)).toBe(true)
+    expect(equivalentNativeHostDesired(current, persisted)).toBe(false)
+    expect(equivalentNativeHostDesired(persisted, JSON.stringify({
+      version: 1,
+      kind: 'plugin-version',
+      marketplace: { ...marketplace, ref: 'main' },
+      pluginRoot: '/host/claude-cache/tenon',
+      pluginVersion: '1.0.2',
     }))).toBe(false)
   })
 

@@ -189,6 +189,6 @@ export function equivalentNativeHostDesired(
   if (current.kind !== 'plugin-version' || persisted.kind !== 'plugin-version') return false
   return persisted.kind === current.kind
     && sameMarketplaceIdentity(persisted.marketplace, current.marketplace)
-    && persisted.pluginRoot === current.pluginRoot
+    && (persisted.pluginRoot === null || persisted.pluginRoot === current.pluginRoot)
     && persisted.pluginVersion === current.pluginVersion
 }

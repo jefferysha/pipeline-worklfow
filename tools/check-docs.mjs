@@ -268,7 +268,9 @@ function checkSourceBoundedClaims(root, contents, failures) {
         'README.md',
         'README.en.md',
         'docs/usage/installation.md',
+        'docs/usage/quickstart.md',
         'docs/usage/zh-CN/installation.md',
+        'docs/usage/zh-CN/quickstart.md',
         'packages/npm-bootstrap/README.md',
       ]) {
         const text = contents.get(document)

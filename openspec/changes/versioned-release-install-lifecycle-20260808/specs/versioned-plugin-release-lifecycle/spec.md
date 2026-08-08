@@ -21,7 +21,7 @@ Tenon SHALL 只把官方仓库中不可变、完整、稳定的 `vX.Y.Z` Release
 
 ### Requirement: 一键更新 SHALL 在 mutation 前冻结 latest stable Release
 
-`tenon update --codex` SHALL 从官方 GitHub Releases 元数据解析 latest stable，并在任何宿主或 runtime mutation 前冻结目标版本、标签和 peeled commit。解析 SHALL 拒绝 draft、prerelease、非完整稳定 SemVer、仓库身份不匹配、标签证明失败、超时、网络失败和 schema 异常，且 SHALL NOT 回退到移动分支或移动标签。
+从 v1.0.2 起，`tenon update --codex` SHALL 从官方 GitHub Releases 元数据解析 latest stable，并在任何宿主或 runtime mutation 前冻结目标版本、标签和 peeled commit。解析 SHALL 拒绝 draft、prerelease、非完整稳定 SemVer、仓库身份不匹配、标签证明失败、超时、网络失败和 schema 异常，且 SHALL NOT 回退到移动分支或移动标签。
 
 #### Scenario: latest stable 解析成功
 
@@ -34,6 +34,21 @@ Tenon SHALL 只把官方仓库中不可变、完整、稳定的 `vX.Y.Z` Release
 - **WHEN** Release 响应超时、损坏、属于 prerelease/draft、标签不满足稳定 SemVer 或无法证明提交
 - **THEN** update 失败并输出可操作诊断
 - **AND** 不执行 plugin、marketplace、managed runtime 或 Dashboard mutation
+
+#### Scenario: 已发布 v1.0.1 用户迁移到版本化通道
+
+- **WHEN** 用户当前 launcher/runtime 是无法追溯修改的 v1.0.1
+- **THEN** 文档要求执行一次固定到 `v1.0.2/install.sh` 的官方迁移命令
+- **AND** 安装器在同一调用中把 plugin、marketplace、runtime 与 Dashboard 收敛到 `v1.0.2`
+- **AND** 不宣称旧 v1.0.1 `tenon update` 能同进程运行尚未激活的新版 updater
+- **AND** v1.0.2 起的后续升级只需单条 `tenon update --codex`
+
+#### Scenario: v1.0.1 收敛 receipt 遇到已经重绑的 v1.0.2 宿主
+
+- **WHEN** 公开 installer 已把宿主精确绑定到 `v1.0.2`，但本机仍保留 active v1.0.1 runtime 和旧 cleanup-pending receipt
+- **THEN** 同一次 installer 调用先验证并发布 v1.0.2 runtime 与 Dashboard，而不是按旧 receipt 删除或拒绝新宿主
+- **AND** ready evidence 后把旧 receipt 原子升级为绑定 v1.0.2 release、stable target 与新 transaction 的 v4 receipt
+- **AND** 即使存在旧 release 的有效 SessionStart proof，本次调用也不按它提前删除旧插件入口
 
 ### Requirement: 版本化宿主重绑定 SHALL 可对账恢复
 
@@ -72,3 +87,17 @@ Tenon SHALL 只把官方仓库中不可变、完整、稳定的 `vX.Y.Z` Release
 - **WHEN** resolver 返回的稳定版本低于当前已验证版本
 - **THEN** 常规 update 拒绝隐式降级
 - **AND** 只允许现有显式 runtime repair 在本机已验证 release 间回滚
+
+#### Scenario: candidate-resolved 后宿主或候选漂移
+
+- **WHEN** journal 已记录 candidate-resolved，但 activation 前 marketplace ref/HEAD/clean、plugin root 或候选 payload 被外部修改
+- **THEN** coordinator 重新观察 frozen target 与候选完整性并拒绝第三状态
+- **AND** journal 中旧 inventory/evidence 不单独构成 activation 证明
+
+#### Scenario: cleanup receipt 完成旧插件清理
+
+- **WHEN** 新宿主会话提供晚于 cleanup-pending receipt 且绑定同一 release/root 的 proof
+- **THEN** coordinator 在同一个 managed transaction 内依次重新证明 stable tag、宿主 ref/HEAD/clean/root/version、payload digest、active runtime 与 Dashboard
+- **AND** 旧 v2/v3 receipt 在任何 remove 前持久化升级为带 `stableTarget` 的 pending v4
+- **AND** 官方 remove 后再次证明完整 identity，最后才写 completed v4
+- **AND** 任一证明失败时不执行后续清理，也不把未复证的清理写成 completed

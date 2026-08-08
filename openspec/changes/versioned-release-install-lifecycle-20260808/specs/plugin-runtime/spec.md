@@ -18,15 +18,31 @@ Native setup/update 发布的每个 managed runtime SHALL 记录来自已验证�
 - **THEN** coordinator 拒绝 activation 和 ready evidence
 - **AND** 旧 active runtime selection 保持可用
 
+#### Scenario: 恢复 v1.0.1 旧 journal
+
+- **WHEN** 旧 schema version 1 journal 的 Dashboard identity 没有 `serverVersion`
+- **THEN** codec 保留可验证的恢复坐标而不是把整个 WAL 判为损坏
+- **AND** coordinator 重新探测 Dashboard health 并只接受与目标 release 精确相等的 server version
+- **AND** 缺失字段本身不构成 readiness 或完成证据
+
+#### Scenario: v1.0.1 setup WAL 缺少 frozen stable target
+
+- **WHEN** 版本化 installer 发现 v1.0.1 setup WAL 已越过纯空的 preparing-host，但旧 schema 没有 `stableTarget`
+- **THEN** coordinator 在 stop Dashboard、清 WAL 或执行任何新 mutation 前证明 successor `v1.0.2` tag/commit
+- **AND** 使用原 transaction id 将旧 WAL 原子转换为带冻结目标的新 preparing-host 事务
+- **AND** `starting-dashboard` 的旧进程若在空探针之后迟到，只能由同一 successor transaction 按旧 release identity 精确 stop
+- **AND** successor tag 无法证明时保留旧 WAL、旧 active runtime 与旧 Dashboard
+
 ### Requirement: Dashboard 发布 SHALL 区分启动 readiness 与浏览器打开策略
 
 Setup/update SHALL 始终从新 active managed payload 启动或收养 Dashboard 并证明 readiness。浏览器打开 SHALL 只发生在交互式首次 setup；curl 管道、CI、手动 update 和后台 auto-update SHALL NOT 自动打开，但 SHALL 输出健康 URL 和 `tenon dashboard --open`。浏览器打开失败 SHALL NOT 回滚已经健康的 runtime。
 
 #### Scenario: 交互式首次 setup
 
-- **WHEN** setup 在交互终端完成 Dashboard readiness
+- **WHEN** setup 在交互终端开始时没有有效 managed runtime，并完成 Dashboard readiness
 - **THEN** Tenon 尝试打开已验证 URL
 - **AND** 打开失败时保持成功安装并输出手动 URL
+- **AND** 宿主候选此前是否已验证不改变首次 setup 判定
 
 #### Scenario: 非交互安装或更新
 

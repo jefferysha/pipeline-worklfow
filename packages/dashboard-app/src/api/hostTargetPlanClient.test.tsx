@@ -39,6 +39,8 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
   const nativeCommands = host === 'codex'
     ? operation === 'setup'
       ? [
+          command('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
           command('codex', [
             'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
           ]),
@@ -56,6 +58,8 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
         ]
     : operation === 'setup'
       ? [
+          command('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+          command('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
           command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
           command('claude', ['plugin', 'install', 'tenon@tenon']),
           command('claude', ['plugin', 'list', '--json']),
@@ -67,9 +71,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
           command('claude', ['plugin', 'install', 'tenon@tenon']),
           command('claude', ['plugin', 'list', '--json']),
         ]
-  const nativeIds = operation === 'setup'
-    ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
-    : ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
+  const nativeIds = ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',
@@ -109,6 +111,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
       'host-plan.notice.manual-command-has-effects',
       'host-plan.notice.dashboard-readiness',
       ...(operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
+      ...(operation === 'setup' ? ['host-plan.notice.setup-rebind-conditional'] : []),
       ...(operation === 'update' ? ['host-plan.notice.update-target-frozen-at-execution'] : []),
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
     ],
@@ -283,6 +286,8 @@ describe('host target plan read-only client', () => {
     expect(value.steps.map(({ id }) => id)).toEqual(operation === 'setup'
       ? [
           'stable-release-target',
+          'plugin-remove',
+          'marketplace-remove',
           'marketplace-register',
           'plugin-install',
           'plugin-inventory',

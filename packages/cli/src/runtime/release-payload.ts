@@ -4,7 +4,8 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'n
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { RuntimeFailure } from './types.js'
-import { isRecord, nonEmptyString, PAYLOAD_ENTRIES } from './release-store-codecs.js'
+import { decodePluginManifestVersion } from './plugin-manifest-version.js'
+import { isRecord, PAYLOAD_ENTRIES } from './release-store-codecs.js'
 
 interface CommandResult {
   readonly code: number
@@ -166,7 +167,11 @@ export async function runChecked(
   throw new RuntimeFailure('candidate-invalid', `${label} 失败: ${detail}`)
 }
 
-export async function verifyReleasePayload(payloadRoot: string, runner: RuntimeCommandRunner): Promise<void> {
+export async function verifyReleasePayload(
+  payloadRoot: string,
+  runner: RuntimeCommandRunner,
+  bashPath = 'bash',
+): Promise<void> {
   const verifier = join(payloadRoot, 'tools', 'verify-skills.sh')
   const cli = join(payloadRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
   const server = join(payloadRoot, 'packages', 'server', 'dist', 'dashboard.mjs')
@@ -176,12 +181,12 @@ export async function verifyReleasePayload(payloadRoot: string, runner: RuntimeC
   await assertFile(server, 'dashboard server bundle')
   await assertFile(bootstrap, 'runtime bootstrap')
   await verifyHookAbi(payloadRoot)
-  await runChecked(runner, 'bash', [verifier, '--quiet', '--root', payloadRoot], payloadRoot, '插件资产校验')
+  await runChecked(runner, bashPath, [verifier, '--quiet', '--root', payloadRoot], payloadRoot, '插件资产校验')
   for (const file of await shellFiles(join(payloadRoot, 'hooks'))) {
-    await runChecked(runner, 'bash', ['-n', file], payloadRoot, `hook 语法 ${basename(file)}`)
+    await runChecked(runner, bashPath, ['-n', file], payloadRoot, `hook 语法 ${basename(file)}`)
   }
   for (const file of await shellFiles(join(payloadRoot, 'adapters'))) {
-    await runChecked(runner, 'bash', ['-n', file], payloadRoot, `adapter 语法 ${basename(file)}`)
+    await runChecked(runner, bashPath, ['-n', file], payloadRoot, `adapter 语法 ${basename(file)}`)
   }
   for (const file of [cli, server, bootstrap]) {
     await runChecked(runner, process.execPath, ['--check', file], payloadRoot, `Node 语法 ${basename(file)}`)
@@ -190,16 +195,20 @@ export async function verifyReleasePayload(payloadRoot: string, runner: RuntimeC
 }
 
 export async function releaseCandidateVersion(candidateRoot: string): Promise<string> {
-  for (const manifest of ['.codex-plugin/plugin.json', '.claude-plugin/plugin.json']) {
+  const read = async (manifest: string): Promise<string | undefined> => {
     try {
-      const parsed: unknown = JSON.parse(await readFile(join(candidateRoot, manifest), 'utf8'))
-      const version = isRecord(parsed) ? nonEmptyString(parsed.version) : null
-      if (version !== null) return version
+      return await readFile(join(candidateRoot, manifest), 'utf8')
     } catch {
-      // Try the compatibility manifest; verification later reports a missing manifest precisely.
+      return undefined
     }
   }
-  throw new RuntimeFailure('candidate-invalid', '候选发布缺少可验证的 plugin manifest version')
+  const [codex, claude] = await Promise.all([
+    read('.codex-plugin/plugin.json'),
+    read('.claude-plugin/plugin.json'),
+  ])
+  const decoded = decodePluginManifestVersion({ codex, claude })
+  if (!decoded.ok) throw new RuntimeFailure('candidate-invalid', decoded.detail)
+  return decoded.version
 }
 
 export interface CandidatePayloadIdentity {
@@ -208,16 +217,26 @@ export interface CandidatePayloadIdentity {
 }
 
 /** Verify and hash exactly the payload entries that activation would publish, without selection mutation. */
-export async function inspectCandidatePayload(candidateRoot: string): Promise<CandidatePayloadIdentity> {
+export async function inspectCandidatePayload(
+  candidateRoot: string,
+  options: {
+    readonly runner?: RuntimeCommandRunner
+    readonly bashPath?: string
+  } = {},
+): Promise<CandidatePayloadIdentity> {
   const stageRoot = await mkdtemp(join(tmpdir(), 'tenon-candidate-inspect-'))
   const payloadRoot = join(stageRoot, 'payload')
   try {
     await mkdir(payloadRoot, { recursive: true })
     await copyReleasePayload(resolve(candidateRoot), payloadRoot)
-    await verifyReleasePayload(payloadRoot, defaultRuntimeCommandRunner())
+    await verifyReleasePayload(
+      payloadRoot,
+      options.runner ?? defaultRuntimeCommandRunner(),
+      options.bashPath ?? 'bash',
+    )
     return {
       payloadDigest: await hashReleasePayload(payloadRoot),
-      pluginVersion: await releaseCandidateVersion(candidateRoot),
+      pluginVersion: await releaseCandidateVersion(payloadRoot),
     }
   } finally {
     await rm(stageRoot, { recursive: true, force: true })

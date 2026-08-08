@@ -61,6 +61,8 @@ function planCommand(executable: string, args: readonly string[]) {
 const NATIVE_COMMANDS = {
   codex: {
     setup: [
+      planCommand('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+      planCommand('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
       planCommand('codex', [
         'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
       ]),
@@ -79,6 +81,8 @@ const NATIVE_COMMANDS = {
   },
   claude: {
     setup: [
+      planCommand('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+      planCommand('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
       planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
       planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
       planCommand('claude', ['plugin', 'list', '--json']),
@@ -101,9 +105,7 @@ function planFor(host: HostId, operation: Operation) {
     'tenon',
     native ? [operation, `--${host}`] : [operation, `--${host}`, '--target', '.'],
   )
-  const nativeIds = operation === 'setup'
-    ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
-    : ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
+  const nativeIds = ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
   const steps = native
     ? [
         {
@@ -153,6 +155,9 @@ function planFor(host: HostId, operation: Operation) {
       'host-plan.notice.manual-command-has-effects',
       'host-plan.notice.dashboard-readiness',
       ...(operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
+      ...(native && operation === 'setup'
+        ? ['host-plan.notice.setup-rebind-conditional']
+        : []),
       ...(native && operation === 'update'
         ? ['host-plan.notice.update-target-frozen-at-execution']
         : []),

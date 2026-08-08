@@ -6,7 +6,8 @@
 
 ## What Changes
 
-- 将公开安装与一键更新从 `main` 通道迁移到明确的稳定 SemVer Release。
+- 将公开安装与 v1.0.2 起的一键更新从 `main` 通道迁移到明确的稳定 SemVer Release。
+- 对已经发布、无法被后续代码追溯修改的 v1.0.1，提供一次官方版本化安装器迁移；不得把需要第二次命令或校验脚本暗中写宿主状态描述成单次 `tenon update` 成功。
 - 确保新用户无需 clone、安装依赖或本地编译即可完成 Codex 插件、CLI、Skills、hooks、managed runtime 和 Dashboard 安装。
 - 用真实“卸载当前安装 → 官方版本化命令全新安装 → 一键更新”路径验收新用户一致性。
 - 明确 Dashboard 在交互安装、非交互/CI 更新和后续手动访问中的启动与提示行为。
@@ -28,4 +29,4 @@
 
 ## Impact
 
-影响公开 `install.sh`、Codex Marketplace 注册与更新命令、版本解析器、版本清单、Release 门禁、managed runtime 选择、安装验收、文档及 Dashboard 启动提示。现有 Release workflow 继续负责“候选已合并且通过 CI”的资格验证，但发布和用户安装身份只认不可变稳定标签。该变更属于发布基础设施和公共 CLI 契约，必须保留旧 release 回滚能力，并由宿主 CLI 独占其插件 cache。
+影响公开 `install.sh`、Codex Marketplace 注册与更新命令、版本解析器、版本清单、Release 门禁、managed runtime 选择、旧 WAL 解码、稳定 launcher、安装验收、文档及 Dashboard 启动提示。现有 Release workflow 继续负责“候选已合并且通过 CI”的资格验证，但发布和用户安装身份只认不可变稳定标签。该变更属于发布基础设施和公共 CLI 契约，必须保留旧 release 回滚能力，并由宿主 CLI 独占其插件 cache。v1.0.1 的一次性迁移例外必须显式记录；v1.0.2 及以后版本的日常升级仍只使用单条 `tenon update --codex`。

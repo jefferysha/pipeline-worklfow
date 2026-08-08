@@ -38,7 +38,7 @@ test('builds a release-pinned thin package without repository or test payload', 
       /unsupported option/,
     )
     await assert.rejects(
-      generated.verifyInstaller('#!/usr/bin/env bash\necho tampered\n'),
+      generated.verifyInstaller('#!/bin/bash\necho tampered\n'),
       /digest mismatch/,
     )
     assert.deepEqual((await readdir(output)).sort(), ['LICENSE', 'README.md', 'bin', 'package.json', 'product'])

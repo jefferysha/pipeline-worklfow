@@ -35,6 +35,8 @@ import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime
 import { enabledHostPluginIds } from './commands/plugin-host.js'
 import { probeCodexAuth } from './codexAuth.js'
 import { createManifestSkillActionAuthorityResolver } from './skill-action-authority-provider.js'
+import { createDoctorProductIdentityProbe } from './commands/doctor-product-identity.js'
+import { resolveCommandOnPath } from './commands/commandExists.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -235,12 +237,29 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
  */
 function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbes {
   const root = pluginRoot()
+  const trustedCommand = (name: string): string | undefined => {
+    const scope = runtimeScope()
+    return resolveCommandOnPath(name, {
+      pathValue: scope.env.PATH,
+      platform: process.platform,
+      requireAbsolutePathEntries: true,
+    })
+  }
+  const runtimeInstallerScope = () => {
+    const scope = runtimeScope()
+    const trustedBashPath = trustedCommand('bash')
+    if (trustedBashPath === undefined) throw new Error('可信 Bash 不可执行')
+    return { homeDir: scope.homeDir, env: scope.env, trustedBashPath }
+  }
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () =>
-      new Promise((resolve) => {
-        execFile('git', ['--version'], (err) => resolve(!err))
-      }),
+    gitAvailable: () => {
+      const git = trustedCommand('git')
+      if (git === undefined) return Promise.resolve(false)
+      return new Promise((resolve) => {
+        execFile(git, ['--version'], (err) => resolve(!err))
+      })
+    },
     pluginRoot: root,
     manifestError: () => {
       try {
@@ -269,18 +288,16 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
       }
     },
     nativeRuntimeHost: async () => {
-      const scope = runtimeScope()
-      const host = (await REAL_RUNTIME_INSTALLER.inspect({
-        homeDir: scope.homeDir,
-        env: scope.env,
-      })).active?.source.host
+      const host = (await REAL_RUNTIME_INSTALLER.inspect(runtimeInstallerScope())).active?.source.host
       return host === 'codex' || host === 'claude' ? host : null
     },
     codexAuthStatus: () => probeCodexAuth(),
-    runVerifySkills: () =>
-      new Promise((resolve) => {
+    runVerifySkills: () => {
+      const bash = trustedCommand('bash')
+      if (bash === undefined) return Promise.resolve({ code: 1, output: '可信 Bash 不可执行' })
+      return new Promise((resolve) => {
         execFile(
-          'bash',
+          bash,
           [join(root, 'tools', 'verify-skills.sh'), '--quiet'],
           { timeout: 30_000 },
           (err, stdout, stderr) => {
@@ -289,7 +306,9 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
             resolve({ code, output: `${stdout ?? ''}${stderr ?? ''}` })
           },
         )
-      }),
+      })
+    },
+    productIdentity: createDoctorProductIdentityProbe(runtimeScope, REAL_RUNTIME_INSTALLER),
     // BACKLOG #34e：tap 敏感能力状态供 doctor 明示（读 tap 本地状态，无副作用）
     tapStatus: () => {
       const s = tapStatus()
@@ -299,15 +318,15 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
     hostPluginInventory: async () => {
-      const scope = runtimeScope()
-      const active = (await REAL_RUNTIME_INSTALLER.inspect({
-        homeDir: scope.homeDir,
-        env: scope.env,
-      })).active
+      const active = (await REAL_RUNTIME_INSTALLER.inspect(runtimeInstallerScope())).active
       const host = active?.source.host
       if (host !== 'codex' && host !== 'claude') return { kind: 'static' as const }
       try {
-        const stdout = execFileSync(host, ['plugin', 'list', '--json'], {
+        const executable = trustedCommand(host)
+        if (executable === undefined) {
+          return { kind: 'unavailable' as const, host, detail: '宿主不在可信绝对 PATH 项中' }
+        }
+        const stdout = execFileSync(executable, ['plugin', 'list', '--json'], {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: 5_000,
@@ -321,10 +340,7 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
       }
     },
     codexSkillDiscovery: async () => {
-      const active = (await REAL_RUNTIME_INSTALLER.inspect({
-        homeDir: runtimeScope().homeDir,
-        env: runtimeScope().env,
-      })).active?.source.host
+      const active = (await REAL_RUNTIME_INSTALLER.inspect(runtimeInstallerScope())).active?.source.host
       const native = active === 'codex' || active === 'claude'
       return {
         ...(native ? { selectedRoot: root } : {}),

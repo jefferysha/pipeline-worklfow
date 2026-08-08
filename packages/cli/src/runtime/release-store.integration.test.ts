@@ -101,6 +101,30 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).activeValid).toBe(true)
   }, 30_000)
 
+  it('uses the frozen absolute Bash for both candidate and stored-release verification', async () => {
+    const root = await freshRoot('trusted-bash-revalidation')
+    const candidate = await candidateCopy(root)
+    const invocations: string[] = []
+    const trustedBash = '/trusted/runtime/bash'
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      bashPath: trustedBash,
+      runner: {
+        run: async (file) => {
+          invocations.push(file)
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    })
+
+    await store.stageAndActivate(candidate, 'codex')
+    invocations.splice(0)
+
+    expect((await store.inspect()).activeValid).toBe(true)
+    expect(invocations).toContain(trustedBash)
+    expect(invocations).not.toContain('bash')
+  }, 30_000)
+
   it('recovers an activation crash window from the pre-activation selection and launcher checkpoint', async () => {
     const root = await freshRoot('activation-checkpoint')
     const home = join(root, 'home')
@@ -166,6 +190,33 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).selection.activeRelease).toBeNull()
   }, 30_000)
 
+  it('rejects a candidate whose source identity changes after its payload was staged', async () => {
+    const root = await freshRoot('candidate-stage-toctou')
+    const candidate = await candidateCopy(root)
+    let mutated = false
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      runner: {
+        run: async () => {
+          if (!mutated) {
+            mutated = true
+            for (const manifest of ['.codex-plugin/plugin.json', '.claude-plugin/plugin.json']) {
+              const path = join(candidate, manifest)
+              const value = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+              value.version = '9.9.9'
+              await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+            }
+          }
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    })
+
+    await expect(store.stageAndActivate(candidate, 'codex', '9.9.9'))
+      .rejects.toThrow(/候选.*漂移|payload.*不一致|staged/i)
+    expect((await store.inspect()).selection.activeRelease).toBeNull()
+  }, 30_000)
+
   it('rejects a candidate with no manifest version instead of publishing unknown identity', async () => {
     const root = await freshRoot('missing-version')
     const candidate = await candidateCopy(root)
@@ -178,6 +229,19 @@ describe('RuntimeReleaseStore', () => {
 
     await expect(storeFor(root).stageAndActivate(candidate, 'codex'))
       .rejects.toThrow(/version|插件资产/i)
+    expect((await storeFor(root).inspect()).selection.activeRelease).toBeNull()
+  }, 30_000)
+
+  it('rejects a candidate when the Codex and Claude plugin manifest versions differ', async () => {
+    const root = await freshRoot('split-manifest-version')
+    const candidate = await candidateCopy(root)
+    const claudeManifest = join(candidate, '.claude-plugin', 'plugin.json')
+    const value = JSON.parse(await readFile(claudeManifest, 'utf8')) as Record<string, unknown>
+    value.version = '9.9.9'
+    await writeFile(claudeManifest, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+
+    await expect(storeFor(root).stageAndActivate(candidate, 'codex', '1.0.2'))
+      .rejects.toThrow(/manifest version 不一致|插件资产/i)
     expect((await storeFor(root).inspect()).selection.activeRelease).toBeNull()
   }, 30_000)
 
@@ -1027,6 +1091,12 @@ describe('RuntimeReleaseStore', () => {
               operation: 'update',
               source: 'codex',
               requiresStableTarget: true,
+              resolveStableTargetBeforeRecovery: async () => {
+                const host = readHost()
+                host.resolverCalls += 1
+                writeHost(host)
+                return target
+              },
               proveFrozenTarget: (value) => {
                 if (JSON.stringify(value) !== JSON.stringify(target)) throw new Error('frozen target drift')
               },
@@ -1034,12 +1104,7 @@ describe('RuntimeReleaseStore', () => {
               openBrowser: false,
               prepareCandidate: async (transaction) => {
                 const frozen = await transaction.resolveStableTarget(
-                  async () => {
-                    const host = readHost()
-                    host.resolverCalls += 1
-                    writeHost(host)
-                    return target
-                  },
+                  async () => target,
                   (value) => {
                     if (JSON.stringify(value) !== JSON.stringify(target)) throw new Error('frozen target drift')
                   },

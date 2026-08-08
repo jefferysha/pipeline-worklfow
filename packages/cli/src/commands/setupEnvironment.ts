@@ -87,6 +87,9 @@ export const REAL_SETUP_ENV: SetupEnv = {
     })
     return executable === undefined ? undefined : nativeHostCommandBinding(executable)
   },
+  resolveTrustedCommand: (name) => resolveCommandOnPath(name, {
+    requireAbsolutePathEntries: true,
+  }),
   codexAuthStatus: (codexExecutable) => {
     if (codexExecutable === undefined) return probeCodexAuth()
     const plan = codexStatusSpawnPlan(

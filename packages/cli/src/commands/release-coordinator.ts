@@ -76,6 +76,10 @@ async function publishWithinManagedTransaction(
   let { journal } = prepared
   const { candidate } = prepared
 
+  if (journal.phase === 'candidate-resolved') {
+    await revalidateCandidate(request, journal, candidate)
+  }
+
   if (
     journal.phase === 'candidate-resolved'
     && dashboardStarter !== undefined
@@ -169,6 +173,7 @@ async function publishWithinManagedTransaction(
     if (recovered.state === 'activated') {
       activation = recovered.activation
     } else {
+      await revalidateCandidate(request, journal, candidate)
       try {
         activation = await transaction.activate(
           candidate.candidateRoot,
@@ -268,7 +273,9 @@ async function publishWithinManagedTransaction(
       }
     }
     try {
-      await request.commitReadyEvidence?.(activation, candidate, journal.transactionId)
+      await request.commitReadyEvidence?.(activation, candidate, journal.transactionId, {
+        ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+      })
     } catch (error) {
       dashboardFailure = `ready evidence 提交失败：${error instanceof Error ? error.message : String(error)}`
     }
@@ -332,6 +339,27 @@ async function publishWithinManagedTransaction(
     dashboardStarter,
     candidateDashboard,
   )
+}
+
+async function revalidateCandidate(
+  request: ManagedReleaseRequest,
+  journal: ManagedReleaseJournalRecord,
+  candidate: { readonly candidateRoot: string; readonly evidence?: string },
+): Promise<void> {
+  if (request.revalidateCandidate === undefined) return
+  try {
+    await request.revalidateCandidate(candidate, {
+      transactionId: journal.transactionId,
+      ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+    })
+  } catch (error) {
+    throw error instanceof ManagedRuntimeIndeterminateError
+      ? error
+      : new ManagedRuntimeIndeterminateError(
+          `candidate-resolved 后的宿主/候选重证失败；拒绝开始 runtime activation：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+        )
+  }
 }
 
 function assertActivationVersion(

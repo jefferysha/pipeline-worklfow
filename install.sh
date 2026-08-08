@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # install.sh — bootstrap the complete Tenon plugin for one selected host.
 #
 # This script is part of the same repository release, not a second package manager.  Once the
@@ -102,9 +102,22 @@ resolve_trusted_path_command() {
   return 1
 }
 
+trusted_absolute_path() {
+  local path_entry joined=""
+  local -a path_entries=()
+  IFS=: read -r -a path_entries <<< "${PATH:-}"
+  for path_entry in "${path_entries[@]}"; do
+    case "$path_entry" in
+      /*) joined="${joined:+${joined}:}${path_entry}" ;;
+    esac
+  done
+  printf '%s\n' "$joined"
+}
+
 HOST_BIN="$(resolve_trusted_path_command "$HOST" || true)"
 NODE_BIN="$(resolve_trusted_path_command node || true)"
 GIT_BIN="$(resolve_trusted_path_command git || true)"
+BASH_BIN="$(resolve_trusted_path_command bash || true)"
 
 if [ -z "$HOST_BIN" ]; then
   echo "install.sh: ${HOST} CLI was not found in a trusted absolute PATH entry; no plugin or Tenon state was changed." >&2
@@ -118,6 +131,10 @@ if [ -z "$HOST_BIN" ]; then
 fi
 [ -n "$NODE_BIN" ] || { echo "install.sh: node is required before any plugin mutation." >&2; exit 1; }
 [ -n "$GIT_BIN" ] || { echo "install.sh: git is required before any plugin mutation." >&2; exit 1; }
+[ -n "$BASH_BIN" ] || { echo "install.sh: bash is required before any plugin mutation." >&2; exit 1; }
+TRUSTED_PATH="$(trusted_absolute_path)"
+[ -n "$TRUSTED_PATH" ] || { echo "install.sh: no trusted absolute PATH entries remain." >&2; exit 1; }
+export PATH="$TRUSTED_PATH"
 
 host_plugin_list() {
   "$HOST_BIN" plugin list --json
@@ -145,7 +162,7 @@ decode_plugin_state() {
       if (matches.length === 0) { process.stdout.write("absent"); return; }
       if (matches.length !== 1) process.exit(12);
       const item = matches[0];
-      if (item.enabled === false || (item.enabled !== undefined && typeof item.enabled !== "boolean")) process.exit(13);
+      if (item.enabled !== undefined && typeof item.enabled !== "boolean") process.exit(13);
       const root = host === "codex" ? item.source?.path : item.installPath;
       const scope = host === "claude" ? (item.scope ?? "user") : "user";
       if (typeof root !== "string" || !root.startsWith("/") || /[\r\n\t]/u.test(root)
@@ -202,6 +219,48 @@ read_marketplace_state() {
     echo "install.sh: ${HOST} marketplace inventory was malformed or ambiguous." >&2
     return 1
   fi
+}
+
+TAG_PROOF="$("$NODE_BIN" -e '
+  const { spawnSync } = require("node:child_process");
+  const [git, repository, tag] = process.argv.slice(1);
+  const result = spawnSync(git, [
+    "ls-remote",
+    repository,
+    `refs/tags/${tag}`,
+    `refs/tags/${tag}^{}`,
+  ], {
+    encoding: "utf8",
+    timeout: 10_000,
+    killSignal: "SIGKILL",
+  });
+  if (result.error) {
+    process.stderr.write(`stable tag proof command failed: ${result.error.message}\n`);
+    process.exit(41);
+  }
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || `stable tag proof exited ${result.status}\n`);
+    process.exit(42);
+  }
+  process.stdout.write(result.stdout);
+' "$GIT_BIN" "https://github.com/${MARKETPLACE_SOURCE}.git" "$MARKETPLACE_REF")" || {
+  echo "install.sh: stable tag proof command failed or timed out; existing installation was not changed." >&2
+  exit 1
+}
+TARGET_COMMIT="$(printf '%s' "$TAG_PROOF" | "$NODE_BIN" -e '
+  const tag = process.argv[1]; let text="";
+  process.stdin.on("data", c => { text += c }); process.stdin.on("end", () => {
+    const rows = text.trim().split(/\r?\n/u).filter(Boolean).map(line => line.split(/\s+/u));
+    const peeled = rows.filter(row => row[1] === `refs/tags/${tag}^{}`).map(row => row[0]);
+    const direct = rows.filter(row => row[1] === `refs/tags/${tag}`).map(row => row[0]);
+    const candidates = peeled.length > 0 ? peeled : direct;
+    const unique = [...new Set(candidates)];
+    if (unique.length !== 1 || !/^[a-f0-9]{40}$/u.test(unique[0])) process.exit(40);
+    process.stdout.write(unique[0]);
+  });
+' "$MARKETPLACE_REF")" || {
+  echo "install.sh: stable tag proof failed; existing installation was not changed." >&2
+  exit 1
 }
 
 PLUGIN_STATE="$(read_plugin_state)"
@@ -296,44 +355,6 @@ for manifest in "$ROOT/.claude-plugin/plugin.json" "$ROOT/.codex-plugin/plugin.j
   }
 done
 
-TAG_PROOF="$("$NODE_BIN" -e '
-  const { spawnSync } = require("node:child_process");
-  const [git, repository, tag] = process.argv.slice(1);
-  const result = spawnSync(git, [
-    "ls-remote",
-    repository,
-    `refs/tags/${tag}`,
-    `refs/tags/${tag}^{}`,
-  ], {
-    encoding: "utf8",
-    timeout: 10_000,
-    killSignal: "SIGKILL",
-  });
-  if (result.error) {
-    process.stderr.write(`stable tag proof command failed: ${result.error.message}\n`);
-    process.exit(41);
-  }
-  if (result.status !== 0) {
-    process.stderr.write(result.stderr || `stable tag proof exited ${result.status}\n`);
-    process.exit(42);
-  }
-  process.stdout.write(result.stdout);
-' "$GIT_BIN" "https://github.com/${MARKETPLACE_SOURCE}.git" "$MARKETPLACE_REF")" || {
-  echo "install.sh: stable tag proof command failed or timed out." >&2
-  exit 1
-}
-TARGET_COMMIT="$(printf '%s' "$TAG_PROOF" | "$NODE_BIN" -e '
-  const tag = process.argv[1]; let text="";
-  process.stdin.on("data", c => { text += c }); process.stdin.on("end", () => {
-    const rows = text.trim().split(/\r?\n/u).filter(Boolean).map(line => line.split(/\s+/u));
-    const peeled = rows.filter(row => row[1] === `refs/tags/${tag}^{}`).map(row => row[0]);
-    const direct = rows.filter(row => row[1] === `refs/tags/${tag}`).map(row => row[0]);
-    const candidates = peeled.length > 0 ? peeled : direct;
-    const unique = [...new Set(candidates)];
-    if (unique.length !== 1 || !/^[a-f0-9]{40}$/u.test(unique[0])) process.exit(40);
-    process.stdout.write(unique[0]);
-  });
-' "$MARKETPLACE_REF")" || { echo "install.sh: stable tag proof failed." >&2; exit 1; }
 [ "$("$GIT_BIN" -C "$MARKETPLACE_ROOT" rev-parse HEAD)" = "$TARGET_COMMIT" ] || {
   echo "install.sh: marketplace HEAD does not equal ${MARKETPLACE_REF}." >&2
   exit 1
@@ -416,11 +437,11 @@ if [ "$MARKETPLACE_ROOT" != "$ROOT" ]; then
     }
   done
 fi
-bash "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT"
+"$BASH_BIN" "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT"
 
 ARGS=(setup "--${HOST}" --yes)
 [ "$AUTO_UPDATE" = 1 ] && ARGS+=(--auto-update)
-node "$ROOT/packages/cli/dist/tenon.mjs" "${ARGS[@]}"
+"$NODE_BIN" "$ROOT/packages/cli/dist/tenon.mjs" "${ARGS[@]}"
 if [ "$HOST" = "codex" ]; then
   echo "Codex requires one local hook trust: open Codex, run /hooks, and trust tenon to enable normal-chat routing."
 fi

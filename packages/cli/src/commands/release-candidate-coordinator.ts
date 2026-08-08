@@ -16,6 +16,8 @@ import type {
   ManagedReleaseOutcome,
   ManagedReleaseRequest,
 } from './release-coordinator-contract.js'
+import { sameManagedDashboardCoordinates } from './managed-dashboard-identity.js'
+import { retireLegacyNativeSetupJournal } from './release-legacy-setup-retirement.js'
 
 export interface PreparedManagedReleaseCandidate {
   readonly journal: ManagedReleaseJournalRecord
@@ -33,6 +35,13 @@ export async function prepareManagedReleaseCandidate(
   dashboardStarter: ReleasedDashboardStarter | undefined,
 ): Promise<PreparedManagedReleaseCandidate | { readonly outcome: ManagedReleaseOutcome }> {
   let journal = await resolveManagedReleaseJournal(deps, request, transaction)
+  journal = await retireLegacyNativeSetupJournal(
+    deps,
+    request,
+    transaction,
+    journal,
+    dashboardStarter,
+  ) ?? journal
   if (request.requiresStableTarget === true
     && journal.stableTarget === undefined
     && (journal.phase !== 'preparing-host' || (journal.hostSteps?.length ?? 0) > 0)) {
@@ -48,6 +57,27 @@ export async function prepareManagedReleaseCandidate(
         `journal stable target 已漂移或无法重新证明：${error instanceof Error ? error.message : String(error)}`,
       )
     }
+  }
+  if (dashboardStarter !== undefined
+    && journal.dashboardBefore?.serverVersion === ''
+    && (journal.phase === 'candidate-resolved'
+      || journal.phase === 'activating-runtime'
+      || journal.phase === 'runtime-activated')) {
+    const port = journal.dashboardPort ?? journal.dashboardBefore.port
+    const current = await dashboardStarter.inspect(deps, { openBrowser: false, port })
+    if (current === null
+      || current.serverVersion === ''
+      || !sameManagedDashboardCoordinates(current, journal.dashboardBefore)) {
+      throw new ManagedRuntimeIndeterminateError(
+        'legacy pre-activation Dashboard identity 无法从当前 health 精确补证；保留 WAL',
+      )
+    }
+    journal = {
+      ...journal,
+      dashboardBefore: { ...journal.dashboardBefore, serverVersion: current.serverVersion },
+      updatedAt: deps.clock(),
+    }
+    await transaction.journal.write(journal)
   }
   if (isCompensationPhase(journal.phase)) {
     return {
@@ -153,7 +183,6 @@ export async function prepareManagedReleaseCandidate(
       await transaction.journal.write(journal)
     } catch (error) {
       const freshPreparation = journal.phase === 'preparing-host'
-        && journal.stableTarget === undefined
         && (journal.hostSteps?.length ?? 0) === 0
       if (freshPreparation) {
         try {

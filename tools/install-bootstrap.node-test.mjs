@@ -31,6 +31,8 @@ async function prepareReleasedBootstrapFixture(
     initiallyInstalled = false,
     initialMarketplaceKind = 'exact',
     reportedVersion = '1.0.2',
+    reportedEnabled = true,
+    remoteTagProofFails = false,
   } = {},
 ) {
   const bin = join(fixture, 'bin')
@@ -96,7 +98,9 @@ writeFileSync(process.env.TENON_TEST_SETUP_ARGS, JSON.stringify(process.argv.sli
   await writeFile(join(bin, 'git'), `#!/usr/bin/env bash
 set -eu
 if [ "${'$'}{1:-}" = "ls-remote" ]; then
-  printf '%s\\trefs/tags/v1.0.2\\n' "${commit}"
+  ${remoteTagProofFails
+    ? 'echo "injected stable tag proof failure" >&2; exit 73'
+    : `printf '%s\\trefs/tags/v1.0.2\\n' "${commit}"`}
   exit 0
 fi
 exec /usr/bin/git "${'$'}@"
@@ -110,7 +114,7 @@ printf '%s\\n' "${'$'}*" >> "${'$'}TENON_TEST_HOST_LOG"
 case "${'$'}*" in
   "plugin list --json")
     if [ -f "${'$'}TENON_TEST_PLUGIN_STATE" ]; then
-      printf '{"installed":[{"pluginId":"tenon@tenon","name":"tenon","marketplaceName":"tenon","version":"${reportedVersion}","enabled":true,"source":{"path":"%s"}}]}\\n' "${'$'}TENON_TEST_PLUGIN_ROOT"
+      printf '{"installed":[{"pluginId":"tenon@tenon","name":"tenon","marketplaceName":"tenon","version":"${reportedVersion}","enabled":${reportedEnabled},"source":{"path":"%s"}}]}\\n' "${'$'}TENON_TEST_PLUGIN_ROOT"
     else
       printf '{"installed":[]}\\n'
     fi ;;
@@ -140,7 +144,7 @@ printf '%s\\n' "${'$'}*" >> "${'$'}TENON_TEST_HOST_LOG"
 case "${'$'}*" in
   "plugin list --json")
     if [ -f "${'$'}TENON_TEST_PLUGIN_STATE" ]; then
-      printf '[{"id":"tenon@tenon","version":"${reportedVersion}","enabled":true,"scope":"user","installPath":"%s"}]\\n' "${'$'}TENON_TEST_PLUGIN_ROOT"
+      printf '[{"id":"tenon@tenon","version":"${reportedVersion}","enabled":${reportedEnabled},"scope":"user","installPath":"%s"}]\\n' "${'$'}TENON_TEST_PLUGIN_ROOT"
     else
       printf '[]\\n'
     fi ;;
@@ -338,6 +342,80 @@ exit 98
   }
 })
 
+test('the documented one-line installer starts curl and the bootstrap from absolute system paths', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-documented-bash-'))
+  try {
+    const maliciousLog = join(fixture, 'malicious-runtime.log')
+    const installer = join(fixture, 'installer.sh')
+    await writeFile(join(fixture, 'bash'), `#!/bin/sh
+printf 'malicious bash invoked\n' >> "$TENON_TEST_MALICIOUS_RUNTIME_LOG"
+exit 97
+`)
+    await chmod(join(fixture, 'bash'), 0o755)
+    await writeFile(join(fixture, 'curl'), `#!/bin/sh
+printf 'malicious curl invoked\n' >> "$TENON_TEST_MALICIOUS_RUNTIME_LOG"
+exit 96
+`)
+    await chmod(join(fixture, 'curl'), 0o755)
+    await writeFile(installer, '#!/bin/bash\nexit 0\n')
+    const readme = await readFile(join(root, 'README.md'), 'utf8')
+    const documented = readme.split(/\r?\n/u).find((line) =>
+      line.includes('/v1.0.2/install.sh') && line.includes('--codex'))
+    assert.equal(typeof documented, 'string')
+    assert.match(documented, /^\/usr\/bin\/curl .*\| \/bin\/bash -s -- --codex$/u)
+    const command = documented.replace(
+      'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh',
+      `file://${installer}`,
+    )
+
+    await exec('/bin/sh', ['-c', command], {
+      cwd: fixture,
+      env: {
+        ...process.env,
+        PATH: '.:/usr/bin:/bin',
+        TENON_TEST_MALICIOUS_RUNTIME_LOG: maliciousLog,
+      },
+    })
+    await assert.rejects(readFile(maliciousLog, 'utf8'), /ENOENT/)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+test('bootstrap freezes absolute bash and node paths before plugin mutation', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-trusted-runtimes-'))
+  try {
+    const prepared = await prepareReleasedBootstrapFixture(fixture, 'codex')
+    const maliciousLog = join(fixture, 'malicious-runtime.log')
+    await writeFile(join(fixture, 'bash'), `#!/bin/sh
+printf 'bash:%s\\n' "$*" >> "$TENON_TEST_MALICIOUS_RUNTIME_LOG"
+exec /bin/bash "$@"
+`)
+    await writeFile(join(fixture, 'node'), `#!/bin/sh
+printf 'node:%s\\n' "$*" >> "$TENON_TEST_MALICIOUS_RUNTIME_LOG"
+exec '${process.execPath}' "$@"
+`)
+    await chmod(join(fixture, 'bash'), 0o755)
+    await chmod(join(fixture, 'node'), 0o755)
+
+    await exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+      cwd: fixture,
+      env: {
+        ...prepared.env,
+        PATH: `:relative-bin:${prepared.bin}:${process.env.PATH ?? ''}`,
+        TENON_TEST_MALICIOUS_RUNTIME_LOG: maliciousLog,
+      },
+    })
+
+    await assert.rejects(readFile(maliciousLog, 'utf8'), /ENOENT/)
+    assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
+      'setup', '--codex', '--yes',
+    ])
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
 test('Codex one-line bootstrap registers Marketplace and invokes the packaged Tenon setup', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-'))
   try {
@@ -388,6 +466,56 @@ for (const initialMarketplaceKind of ['exact', 'main', 'local']) {
     }
   })
 }
+
+test('Codex bootstrap repairs an exact but disabled Tenon registration through official remove and add', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-disabled-'))
+  try {
+    const prepared = await prepareReleasedBootstrapFixture(fixture, 'codex', {
+      initiallyInstalled: true,
+      reportedEnabled: false,
+    })
+    await exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+      cwd: fixture,
+      env: prepared.env,
+    })
+    const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
+    const pluginRemove = commands.indexOf('plugin remove tenon@tenon --json')
+    const pluginAdd = commands.indexOf('plugin add tenon@tenon --json')
+    assert.ok(pluginRemove >= 0)
+    assert.ok(pluginAdd > pluginRemove)
+    assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
+      'setup', '--codex', '--yes',
+    ])
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+test('Codex bootstrap proves the immutable remote tag before changing an existing installation', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-tag-proof-first-'))
+  try {
+    const prepared = await prepareReleasedBootstrapFixture(fixture, 'codex', {
+      initiallyInstalled: true,
+      remoteTagProofFails: true,
+    })
+    await assert.rejects(
+      exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+        cwd: fixture,
+        env: prepared.env,
+      }),
+      (error) => {
+        assert.match(error.stderr, /stable tag proof/i)
+        return true
+      },
+    )
+    const commands = await readFile(prepared.log, 'utf8').catch(() => '')
+    assert.doesNotMatch(commands, /plugin remove|marketplace remove|marketplace add|plugin add/u)
+    await readFile(prepared.env.TENON_TEST_PLUGIN_STATE)
+    await readFile(prepared.env.TENON_TEST_MARKETPLACE_STATE)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
 
 test('Codex bootstrap fails closed when the host reports a different installed version', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-wrong-version-'))

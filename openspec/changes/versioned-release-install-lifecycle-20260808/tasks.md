@@ -16,6 +16,7 @@
 
 - [x] 编写版本化安装、更新、回滚、幂等重装和 Dashboard 提示的 delta spec。 (spec)
 - [x] 形成可执行实施计划、失败恢复策略与版本升级清单。 (spec)
+- [x] 根据 Verify 事实修订 v1.0.1 legacy bridge、候选复证、旧 WAL 与可信可执行文件契约。 (spec)
 
 ## 实现
 
@@ -25,6 +26,20 @@
 - [x] 扩展 managed host desired-state 和恢复测试，覆盖 plugin/marketplace absent、目标 tag commit 与目标插件版本。 (build)
 - [x] 保持交互首次 setup、curl/CI、手动 update、后台 update 的 Dashboard 行为一致且可诊断。 (build)
 - [x] 同步 `1.0.2` 全部版本清单、公开命令、发布资产、用户文档和生成 bundle。 (build)
+- [x] 在 candidate-resolved 恢复与 activation 前重新证明 frozen target、host identity 和 candidate payload。 (build)
+- [x] 兼容读取 v1.0.1 缺 `serverVersion` 的 journal，并通过新健康探测补齐证明。 (build)
+- [x] 冻结 installer/launcher 的绝对 Node/Bash 路径，并让 disabled exact registration 可通过 remove/add 修复。 (build)
+- [x] 修正首次 setup 浏览器判据、setup 只读计划与 clean acceptance Dashboard 清理。 (build)
+- [x] 同步一次性 v1.0.1 安装器迁移文档、受控 dist 和新增回归测试。 (build)
+- [x] 在 staged payload 取版本并对源候选做 activation/ready 前 digest 复证，拒绝候选 TOCTOU。 (build)
+- [x] 将 native lifecycle 冻结的绝对 Bash 传入 runtime payload verifier，禁止 PATH 回退。 (build)
+- [x] 让公开安装器在任何宿主 remove/add 前证明远端不可变 tag/commit。 (build)
+- [x] fresh native managed release 在 resolver/proof 成功前不写 WAL 或候选状态。 (build)
+- [x] legacy 插件已消失时把旧 cleanup receipt 收敛为当前 completed v4 identity。 (build)
+- [x] 为 `tenon doctor --json` 增加宿主/runtime/Dashboard 发布版本与 release digest 对账。 (build)
+- [x] 在中英文 quickstart 固定版本化一键安装且明确不从源码编译，并纳入文档门禁。 (build)
+- [x] fresh native 准备在首个宿主步骤前失败时清除 target-only WAL，允许下次命令重新解析更高稳定版本。 (build)
+- [x] 将冻结的绝对 Bash 贯穿候选、已存 runtime、恢复、回滚与 doctor 复证，禁止任何裸 PATH 回退。 (build)
 
 ## 验证
 

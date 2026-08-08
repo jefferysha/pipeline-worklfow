@@ -51,6 +51,10 @@ export interface ManagedReleaseRequest {
   readonly expectedPluginVersion?: string
   /** Native update recovery requires a persisted stable target in every post-prepare phase. */
   readonly requiresStableTarget?: boolean
+  /** Resolve the successor release before retiring a legacy transaction that had no frozen target. */
+  readonly resolveStableTargetBeforeRecovery?: () =>
+    | ManagedStableReleaseTarget
+    | Promise<ManagedStableReleaseTarget>
   readonly proveFrozenTarget?: (
     target: ManagedStableReleaseTarget,
   ) => void | Promise<void>
@@ -67,10 +71,25 @@ export interface ManagedReleaseRequest {
         | { readonly candidateRoot: string; readonly evidence?: string; readonly openBrowser?: boolean }
         | { readonly alreadyCurrent: true }
       >
+  /**
+   * Re-proves a persisted candidate against the current host immediately before activation.
+   * Recovery must never trust candidate-resolved inventory evidence after another process could
+   * have changed the marketplace ref, checkout, plugin root, or payload.
+   */
+  readonly revalidateCandidate?: (
+    candidate: { readonly candidateRoot: string; readonly evidence?: string },
+    context: {
+      readonly transactionId: string
+      readonly stableTarget?: ManagedStableReleaseTarget
+    },
+  ) => void | Promise<void>
   /** Dashboard ready 后才提交与 activation 绑定的外部证据。抛错会回滚 runtime 与 Dashboard。 */
   readonly commitReadyEvidence?: (
     activation: RuntimeActivation,
     candidate: { readonly candidateRoot: string; readonly evidence?: string },
     transactionId: string,
+    context: {
+      readonly stableTarget?: ManagedStableReleaseTarget
+    },
   ) => void | Promise<void>
 }

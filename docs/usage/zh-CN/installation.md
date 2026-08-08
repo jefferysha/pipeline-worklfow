@@ -30,20 +30,20 @@ git --version
 新用户无需 clone、安装 monorepo 依赖或本地 build。安装 Codex：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex
 ```
 
 安装 Claude Code：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --claude
 ```
 
 首次安装前可执行零写入预览。它会列出完整的宿主 Marketplace 命令和包内 setup 计划，但不会调用
 Codex/Claude，也不会写 Tenon、宿主或项目状态：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex --dry-run
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex --dry-run
 ```
 
 版本化脚本只使用不可变稳定版本 `v1.0.2` 的预构建资产，不 clone 仓库、不执行源码编译。
@@ -51,6 +51,11 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh 
 `tenon setup --<host>`。已经安装的用户可以直接再次运行 `tenon setup --codex`
 修复宿主接线；更新时运行 `tenon update --codex`（或 `--claude`）。手动更新和显式启用的
 自动更新复用同一个整包事务，不再拆出第二套 CLI 自更新通道。
+
+如果当前安装是已发布的 `v1.0.1`，请把上面的 `v1.0.2/install.sh` 命令作为一次性迁移桥执行一次。
+v1.0.1 launcher 每次只派发一次旧 updater，无法在同一调用中安全重绑新的 release tag；因此不能用
+第二次命令或 Dashboard/校验脚本副作用冒充一键升级。从 v1.0.2 起，之后每次常规升级只运行一条
+`tenon update --codex`（或 `--claude`），交付身份始终是稳定 release tag。
 
 setup 始终启动 Dashboard 并等待 readiness。curl/CI 安装不会自动打开浏览器，而会打印已验证 URL 与
 `tenon dashboard --open`；交互式首次 setup 可以自动打开，手动更新和后台更新都不自动打开。

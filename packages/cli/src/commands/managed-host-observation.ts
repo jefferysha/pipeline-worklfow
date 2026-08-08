@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { ManagedRuntimeIndeterminateError } from '../runtime/installer.js'
 import { PAYLOAD_ENTRIES } from '../runtime/release-store-codecs.js'
+import { decodePluginManifestVersion } from '../runtime/plugin-manifest-version.js'
 import {
   TENON_MARKETPLACE_SOURCE,
   TENON_RELEASE_VERSION,
@@ -49,21 +50,14 @@ type NativeHostDesired =
     }
 
 function pluginVersionAtMarketplace(env: SetupEnv, marketplace: TenonMarketplaceState): string {
-  const candidates = [
-    join(marketplace.root, '.codex-plugin', 'plugin.json'),
-    join(marketplace.root, '.claude-plugin', 'plugin.json'),
-    join(marketplace.root, 'package.json'),
-  ]
-  for (const path of candidates) {
-    const text = env.readText(path)
-    if (text === undefined) continue
-    const value = parseManagedHostJson(text, path)
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)
-      && typeof (value as { version?: unknown }).version === 'string') {
-      return (value as { version: string }).version
-    }
+  const decoded = decodePluginManifestVersion({
+    codex: env.readText(join(marketplace.root, '.codex-plugin', 'plugin.json')),
+    claude: env.readText(join(marketplace.root, '.claude-plugin', 'plugin.json')),
+  })
+  if (!decoded.ok) {
+    throw new ManagedRuntimeIndeterminateError(`无法从 tenon marketplace 解析目标 plugin version：${decoded.detail}`)
   }
-  throw new ManagedRuntimeIndeterminateError('无法从 tenon marketplace 解析目标 plugin version')
+  return decoded.version
 }
 
 function remoteMainHead(env: SetupEnv): string {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { createConnection, createServer } from 'node:net'
@@ -15,9 +16,11 @@ import {
   assertSameDashboardIdentity,
   assertSupportedAcceptancePlatform,
   commandResultError,
+  cleanupIsolatedDashboardAfterFailure,
   dashboardIdentityMatches,
   fetchWithTimeout,
   hasExactLocalTenonMarketplace,
+  isolatedAcceptanceStateScopeId,
   parseJson,
   preserveOwnedDashboardIdentity,
   publicInstallUrl,
@@ -482,6 +485,65 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
     assert.deepEqual(registered, health)
   } finally {
     await new Promise((resolve) => server.close(resolve))
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('failure cleanup discovers and stops an isolated Dashboard before ownership registration', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-late-cleanup-'))
+  const runtimeHome = join(root, 'runtime')
+  const releaseId = `sha256-${'f'.repeat(64)}`
+  const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
+  const probe = createServer()
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', resolve)
+  })
+  const address = probe.address()
+  assert.notEqual(address, null)
+  assert.equal(typeof address, 'object')
+  const port = address.port
+  await new Promise((resolve) => probe.close(resolve))
+  const env = { ...process.env, TENON_RUNTIME_HOME: runtimeHome }
+  const stateScopeId = isolatedAcceptanceStateScopeId(env)
+  await mkdir(releaseRoot, { recursive: true })
+  await writeFile(join(releaseRoot, 'release.json'), JSON.stringify({
+    version: 1,
+    releaseId,
+    source: { host: 'codex', pluginVersion: '1.0.2' },
+  }))
+  const serverSource = [
+    "const http = require('node:http')",
+    "const health = JSON.parse(process.env.HEALTH)",
+    "health.pid = process.pid",
+    "http.createServer((req, res) => {",
+    "res.writeHead(200, {'content-type':'application/json'})",
+    "res.end(JSON.stringify(health))",
+    `}).listen(${port}, '127.0.0.1')`,
+  ].join(';')
+  const child = spawn(process.execPath, ['-e', serverSource], {
+    env: {
+      ...process.env,
+      HEALTH: JSON.stringify({
+        ok: true,
+        version: '1.0.2',
+        releaseId,
+        stateScopeId,
+        transactionId: 'transaction-late-cleanup',
+      }),
+    },
+    stdio: 'ignore',
+  })
+  try {
+    const health = await waitForHealth(port)
+    assert.equal(health.pid, child.pid)
+    const recovered = await cleanupIsolatedDashboardAfterFailure(env, port, null)
+    assert.deepEqual(recovered, health)
+    await assertProcessReapedWithClosedPort(child.pid, port)
+  } finally {
+    try { process.kill(child.pid, 'SIGKILL') } catch (error) {
+      if (error.code !== 'ESRCH') throw error
+    }
     await rm(root, { recursive: true, force: true })
   }
 })

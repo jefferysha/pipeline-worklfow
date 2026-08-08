@@ -16,6 +16,8 @@ export interface NativeHostCommandBinding {
 
 export interface NativeHostCommandEnvironment {
   resolveHostCommand(host: NativePipelineHost): NativeHostCommandBinding | undefined
+  /** Security-sensitive lifecycle tools use only absolute PATH entries and are frozen once. */
+  resolveTrustedCommand?(name: TrustedLifecycleCommand): string | undefined
   codexAuthStatus(codexExecutable?: string): Promise<unknown>
   runCommand(
     cmd: string,
@@ -32,6 +34,33 @@ export interface NativeHostCommandEnvironment {
     observe(): string
     isDesired(observation: string): boolean
     isCompletedCompatible?(observation: string): boolean
+  }
+}
+
+export type TrustedLifecycleCommand = 'bash' | 'git'
+
+export interface FrozenTrustedLifecycleCommands {
+  /** False only for legacy injected test/adapter environments without the resolver capability. */
+  readonly enforced: boolean
+  readonly bash?: string
+  readonly git?: string
+  readonly missing: readonly TrustedLifecycleCommand[]
+}
+
+export function freezeTrustedLifecycleCommands(
+  env: NativeHostCommandEnvironment,
+): FrozenTrustedLifecycleCommands {
+  if (env.resolveTrustedCommand === undefined) return { enforced: false, missing: [] }
+  const bash = env.resolveTrustedCommand('bash')
+  const git = env.resolveTrustedCommand('git')
+  return {
+    enforced: true,
+    ...(bash === undefined ? {} : { bash }),
+    ...(git === undefined ? {} : { git }),
+    missing: [
+      ...(bash === undefined ? ['bash' as const] : []),
+      ...(git === undefined ? ['git' as const] : []),
+    ],
   }
 }
 
@@ -86,15 +115,25 @@ export function bindNativeHostCommand<T extends NativeHostCommandEnvironment>(
   env: T,
   host: NativePipelineHost,
   binding: NativeHostCommandBinding,
+  frozenTrustedCommands: FrozenTrustedLifecycleCommands = freezeTrustedLifecycleCommands(env),
 ): T {
-  const invocation = (command: string, args: readonly string[]): HostCommandInvocation | undefined =>
-    command === host ? binding.invocation(args) : { file: command, args: [...args] }
+  const invocation = (command: string, args: readonly string[]): HostCommandInvocation | undefined => {
+    if (command === host) return binding.invocation(args)
+    if ((command === 'bash' || command === 'git') && frozenTrustedCommands.enforced) {
+      const file = frozenTrustedCommands[command]
+      return file === undefined ? undefined : { file, args: [...args] }
+    }
+    return { file: command, args: [...args] }
+  }
   const reconcile = env.managedHostReconciliation
   return {
     ...env,
     resolveHostCommand: (candidate) => candidate === host
       ? binding
       : env.resolveHostCommand(candidate),
+    resolveTrustedCommand: frozenTrustedCommands.enforced
+      ? (name) => frozenTrustedCommands[name]
+      : env.resolveTrustedCommand,
     codexAuthStatus: host === 'codex'
       ? () => env.codexAuthStatus(binding.executable)
       : env.codexAuthStatus,

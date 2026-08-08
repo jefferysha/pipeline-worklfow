@@ -1521,6 +1521,95 @@ describe('managed release coordinator', () => {
     expect(events).not.toContain('dashboard:start')
   })
 
+  test.each(['preexisting', 'transaction'] as const)(
+    'legacy dashboard-ready %s ownership is upgraded only from exact target-version health',
+    async (owner) => {
+      const events: string[] = []
+      const activation = activationFor('/candidate/one', 'codex')
+      const transactionId = 'transaction-legacy-dashboard'
+      const ownership = dashboardOwnership(
+        activation.release.releaseId,
+        owner === 'transaction' ? transactionId : 'transaction-before',
+      )
+      const legacy = { ...ownership, serverVersion: '' }
+      const installer = serializedInstaller(events, activationFor, {
+        initialJournal: {
+          version: 1,
+          transactionId,
+          operation: 'setup',
+          source: 'codex',
+          phase: 'dashboard-ready',
+          startedAt: '2026-07-26T00:00:00Z',
+          updatedAt: '2026-07-26T00:00:00Z',
+          dashboardPort: 18_765,
+          candidateRoot: '/candidate/one',
+          activation,
+          ...(owner === 'preexisting'
+            ? { dashboardBefore: legacy }
+            : { dashboardBeforeAbsent: true as const }),
+          dashboard: { ...legacy, owner },
+        },
+      })
+      const outcome = await publishManagedRelease(
+        makeDeps(),
+        request('/candidate/one'),
+        installer,
+        {
+          inspect: async () => ownership,
+          adopt: async () => owner === 'transaction'
+            ? {
+                ownership,
+                stop: async () => ({ state: 'stopped' as const }),
+              }
+            : null,
+          start: async () => readyDashboard(),
+        },
+      )
+
+      expect(outcome).toMatchObject({ ok: true, state: 'ready' })
+      expect(events.filter((event) => event === 'journal:dashboard-ready').length)
+        .toBeGreaterThanOrEqual(1)
+      expect(events).toContain('journal:cleared')
+    },
+  )
+
+  test('legacy dashboard-ready ownership rejects a health server version outside the target release', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const transactionId = 'transaction-legacy-dashboard-wrong-version'
+    const ownership = dashboardOwnership(activation.release.releaseId, transactionId)
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId,
+        operation: 'setup',
+        source: 'codex',
+        phase: 'dashboard-ready',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+        dashboard: { ...ownership, serverVersion: '', owner: 'transaction' },
+      },
+    })
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      {
+        inspect: async () => ({ ...ownership, serverVersion: '9.9.9' }),
+        adopt: async () => null,
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('目标 release health')
+    expect(events).not.toContain('journal:cleared')
+  })
+
   test('dashboard-ready recovery rejects an adopted session whose ownership differs from the WAL', async () => {
     const events: string[] = []
     const activation = activationFor('/candidate/one', 'codex')
@@ -1793,6 +1882,10 @@ describe('managed release coordinator', () => {
       ...request('/candidate/one'),
       operation: 'update' as const,
       requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => {
+        resolverCalls += 1
+        return resolverCalls === 1 ? frozen : newer
+      },
       proveFrozenTarget: (target: typeof frozen) => { proofs.push(`entry:${target.tag}`) },
       prepareCandidate: async (host: {
         resolveStableTarget(
@@ -1801,10 +1894,7 @@ describe('managed release coordinator', () => {
         ): Promise<typeof frozen>
       }) => {
         const target = await host.resolveStableTarget(
-          async () => {
-            resolverCalls += 1
-            return resolverCalls === 1 ? frozen : newer
-          },
+          async () => newer,
           (value) => { proofs.push(`prepare:${value.tag}`) },
         )
         return { candidateRoot: '/candidate/one', evidence: target.tag }
@@ -1816,7 +1906,81 @@ describe('managed release coordinator', () => {
     expect(await publishManagedRelease(makeDeps(), managedRequest, installer, undefined))
       .toMatchObject({ ok: true, stableTarget: frozen })
     expect(resolverCalls).toBe(1)
-    expect(proofs).toEqual(['entry:v1.0.0', 'prepare:v1.0.0'])
+    expect(proofs).toEqual([
+      'entry:v1.0.0',
+      'entry:v1.0.0',
+      'prepare:v1.0.0',
+      'entry:v1.0.0',
+      'prepare:v1.0.0',
+    ])
+  })
+
+  test('fresh native resolver failure writes no managed journal or candidate state', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events)
+    let preparations = 0
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/one'),
+      operation: 'update',
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => {
+        throw new Error('latest stable unavailable')
+      },
+      proveFrozenTarget: () => {},
+      prepareCandidate: () => {
+        preparations += 1
+        return { candidateRoot: '/candidate/one' }
+      },
+    }, installer, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'unchanged' })
+    expect(preparations).toBe(0)
+    expect(events.filter((event) => event.startsWith('journal:'))).toEqual([])
+    expect(events.some((event) => event.startsWith('activate:'))).toBe(false)
+  })
+
+  test('fresh target-only preparation failure clears WAL so a newer latest can be resolved', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events, (candidateRoot, host) => {
+      const activation = activationFor(candidateRoot, host)
+      return {
+        ...activation,
+        release: {
+          ...activation.release,
+          source: { ...activation.release.source, pluginVersion: '1.0.1' },
+        },
+      }
+    })
+    const frozen = { version: '1.0.0', tag: 'v1.0.0', commit: 'a'.repeat(40) }
+    const newer = { version: '1.0.1', tag: 'v1.0.1', commit: 'b'.repeat(40) }
+    let resolverCalls = 0
+    let preparations = 0
+    const managedRequest = {
+      ...request('/candidate/one'),
+      operation: 'update' as const,
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => {
+        resolverCalls += 1
+        return resolverCalls === 1 ? frozen : newer
+      },
+      proveFrozenTarget: () => {},
+      prepareCandidate: () => {
+        preparations += 1
+        if (preparations === 1) throw new Error('downgrade rejected before host steps')
+        return { candidateRoot: '/candidate/one' }
+      },
+    }
+
+    expect(await publishManagedRelease(makeDeps(), managedRequest, installer, undefined))
+      .toMatchObject({ ok: false, state: 'unchanged' })
+    expect(events.filter((event) => event.startsWith('journal:'))).toEqual([
+      'journal:preparing-host',
+      'journal:cleared',
+    ])
+
+    expect(await publishManagedRelease(makeDeps(), managedRequest, installer, undefined))
+      .toMatchObject({ ok: true, stableTarget: newer })
+    expect(resolverCalls).toBe(2)
   })
 
   test('dashboard-ready recovery completes evidence and clears WAL without re-running same-version preparation', async () => {
@@ -1923,5 +2087,92 @@ describe('managed release coordinator', () => {
     expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
     expect(outcome.detail).toContain('错误 ownership')
     expect(evidenceCommits).toBe(0)
+  })
+
+  test('candidate-resolved recovery revalidates the persisted candidate before activation', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-candidate-drift',
+        operation: 'update',
+        source: 'codex',
+        phase: 'candidate-resolved',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        candidateRoot: '/candidate/one',
+        evidence: 'frozen-host-proof',
+      },
+    })
+    let revalidations = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/ignored'),
+      operation: 'update',
+      revalidateCandidate: (candidate) => {
+        revalidations += 1
+        expect(candidate).toEqual({
+          candidateRoot: '/candidate/one',
+          evidence: 'frozen-host-proof',
+        })
+        throw new Error('marketplace ref drifted after candidate checkpoint')
+      },
+    }, installer, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('marketplace ref drifted')
+    expect(revalidations).toBe(1)
+    expect(events).not.toContain('activate:/candidate/one')
+    expect(events).not.toContain('journal:cleared')
+  })
+
+  test('activating-runtime recovery revalidates a not-started candidate before retrying activation', async () => {
+    const events: string[] = []
+    let recoveries = 0
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-activating-drift',
+        operation: 'update',
+        source: 'codex',
+        phase: 'activating-runtime',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        dashboardBeforeAbsent: true,
+        candidateRoot: '/candidate/one',
+        activationCheckpoint: {
+          selection: {
+            version: 1,
+            revision: 0,
+            activeRelease: null,
+            previousRelease: null,
+            updatedAt: '2026-07-25T00:00:00Z',
+          },
+          launchers: {
+            tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+            hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+          },
+        },
+      },
+      recoverActivation: async () => {
+        recoveries += 1
+        return { state: 'not-started' as const }
+      },
+    })
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/ignored'),
+      operation: 'update',
+      revalidateCandidate: () => {
+        throw new Error('candidate payload drifted before activation retry')
+      },
+    }, installer, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('candidate payload drifted')
+    expect(recoveries).toBe(1)
+    expect(events).not.toContain('activate:/candidate/one')
+    expect(events).not.toContain('journal:cleared')
   })
 })

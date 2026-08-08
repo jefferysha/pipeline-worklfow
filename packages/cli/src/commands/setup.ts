@@ -84,19 +84,44 @@ export function cmdSetup(
           })
       }
       const runHost = (): number | Promise<number> => {
-        const openDashboard = lifecycleEnv.isInteractive?.() ?? true
-        const hostCode = cmdSetupHost(
-          deps,
-          host,
-          o,
-          lifecycleEnv,
-          installer,
-          dashboardStarter,
-          openDashboard,
+        const interactive = lifecycleEnv.isInteractive?.() ?? true
+        const runWithBrowserPolicy = (openDashboard: boolean): number | Promise<number> => {
+          const hostCode = cmdSetupHost(
+            deps,
+            host,
+            o,
+            lifecycleEnv,
+            installer,
+            dashboardStarter,
+            openDashboard,
+          )
+          return typeof hostCode === 'number'
+            ? finish(hostCode)
+            : hostCode.then((code) => finish(code))
+        }
+        if (o.dryRun || !interactive) return runWithBrowserPolicy(false)
+        const trustedBashPath = isNativePipelineHost(host)
+          ? lifecycleEnv.resolveTrustedCommand?.('bash')
+          : undefined
+        if (isNativePipelineHost(host)
+          && lifecycleEnv.resolveTrustedCommand !== undefined
+          && trustedBashPath === undefined) {
+          return runWithBrowserPolicy(false)
+        }
+        return installer.inspect({
+          homeDir: lifecycleEnv.homeDir(),
+          env: lifecycleEnv.runtimeEnv(),
+          ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
+        }).then(
+          (before) => runWithBrowserPolicy(!before.activeValid),
+          (error) => {
+            deps.io.out(
+              `[dashboard] 无法证明这是首次 setup，不自动打开浏览器；`
+              + `将输出手动打开命令：${error instanceof Error ? error.message : String(error)}`,
+            )
+            return runWithBrowserPolicy(false)
+          },
         )
-        return typeof hostCode === 'number'
-          ? finish(hostCode)
-          : hostCode.then((code) => finish(code))
       }
       if (host !== 'codex' || o.dryRun) return runHost()
       if (nativeBinding === undefined) {

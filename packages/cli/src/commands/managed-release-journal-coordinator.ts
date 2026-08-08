@@ -12,6 +12,13 @@ interface JournalRequest {
   readonly operation: ManagedReleaseOperation
   readonly source: NativeRuntimeHost | 'adapter'
   readonly dashboardPort?: number
+  readonly requiresStableTarget?: boolean
+  readonly resolveStableTargetBeforeRecovery?: () =>
+    | import('../runtime/installer.js').ManagedStableReleaseTarget
+    | Promise<import('../runtime/installer.js').ManagedStableReleaseTarget>
+  readonly proveFrozenTarget?: (
+    target: import('../runtime/installer.js').ManagedStableReleaseTarget,
+  ) => void | Promise<void>
 }
 
 /**
@@ -24,16 +31,40 @@ export async function resolveManagedReleaseJournal(
   request: JournalRequest,
   transaction: ManagedRuntimeTransaction,
 ): Promise<ManagedReleaseJournalRecord> {
+  let pending: ManagedReleaseJournalRecord | null
   try {
-    const pending = await transaction.journal.read()
-    if (pending === null) {
-      const created = {
-        ...transaction.journal.create(request.operation, request.source, deps.clock()),
-        dashboardPort: request.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+    pending = await transaction.journal.read()
+  } catch (error) {
+    throw new ManagedRuntimeIndeterminateError(
+      `无法读取 write-ahead journal：${String(error)}`,
+      { cause: error },
+    )
+  }
+  if (pending === null) {
+    let stableTarget: import('../runtime/installer.js').ManagedStableReleaseTarget | undefined
+    if (request.requiresStableTarget === true) {
+      if (request.resolveStableTargetBeforeRecovery === undefined) {
+        throw new Error('native managed release 缺少 mutation 前 stable target resolver')
       }
+      stableTarget = await request.resolveStableTargetBeforeRecovery()
+      await request.proveFrozenTarget?.(stableTarget)
+    }
+    const created = {
+      ...transaction.journal.create(request.operation, request.source, deps.clock()),
+      dashboardPort: request.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+      ...(stableTarget === undefined ? {} : { stableTarget }),
+    }
+    try {
       await transaction.journal.write(created)
       return created
+    } catch (error) {
+      throw new ManagedRuntimeIndeterminateError(
+        `稳定目标已证明，但无法创建 write-ahead journal：${String(error)}`,
+        { cause: error },
+      )
     }
+  }
+  try {
     if (pending.operation !== request.operation || pending.source !== request.source) {
       throw new ManagedRuntimeIndeterminateError(
         `存在未完成的 ${pending.operation}/${pending.source} 事务 ${pending.transactionId}，`
@@ -45,7 +76,11 @@ export async function resolveManagedReleaseJournal(
     const inferredPort = pending.dashboard?.port ?? pending.dashboardBefore?.port
     const canAdoptRequestedPort = pending.phase === 'preparing-host'
       || pending.phase === 'candidate-resolved'
-    if (inferredPort === undefined && !canAdoptRequestedPort) {
+    const legacyNativeSetup = pending.operation === 'setup'
+      && (pending.source === 'codex' || pending.source === 'claude')
+      && pending.stableTarget === undefined
+      && request.requiresStableTarget === true
+    if (inferredPort === undefined && !canAdoptRequestedPort && !legacyNativeSetup) {
       throw new ManagedRuntimeIndeterminateError(
         `未完成事务 ${pending.transactionId} 已进入 ${pending.phase}，但旧 journal 缺少 `
         + 'pre-activation Dashboard port；拒绝从 retry 环境补证',

@@ -109,6 +109,24 @@ export function assertDashboardHealthIdentity(health, activeRelease, expectedVer
   }
 }
 
+export function isolatedAcceptanceStateScopeId(env) {
+  let stateRoot
+  if (typeof env.TENON_RUNTIME_ROOTS === 'string') {
+    const roots = requireJsonObject(parseJson(env.TENON_RUNTIME_ROOTS, 'TENON_RUNTIME_ROOTS'), 'TENON_RUNTIME_ROOTS')
+    stateRoot = roots.stateRoot
+  } else if (typeof env.TENON_RUNTIME_HOME === 'string') {
+    stateRoot = join(env.TENON_RUNTIME_HOME, 'state')
+  }
+  if (typeof stateRoot !== 'string' || !isAbsolute(stateRoot)) {
+    throw new Error('isolated Dashboard cleanup requires an absolute Tenon state root')
+  }
+  const digest = createHash('sha256')
+    .update('tenon:machine-state-scope:v1\0')
+    .update(resolve(stateRoot))
+    .digest('hex')
+  return `sha256-v1-${digest}`
+}
+
 export function assertCodexDiscovery(discovery) {
   const plugins = discovery.pluginInstalled?.marketplaces
     ?.flatMap((marketplace) => marketplace.plugins ?? []) ?? []
@@ -672,6 +690,41 @@ async function stopOwnedDashboard(port, expected) {
   await waitForHealth(port, false)
 }
 
+async function recoverIsolatedDashboardOwnership(env, port) {
+  if (!await portAcceptsConnections(port)) return null
+  const health = await waitForHealth(port, true, {
+    overallTimeoutMs: 2_000,
+    requestTimeoutMs: 500,
+  })
+  if (health?.stateScopeId !== isolatedAcceptanceStateScopeId(env)) {
+    throw new Error('isolated Dashboard cleanup refused a listener from another state scope')
+  }
+  const runtimeHome = env.TENON_RUNTIME_HOME
+  if (typeof runtimeHome !== 'string' || !isAbsolute(runtimeHome)) {
+    throw new Error('isolated Dashboard cleanup requires TENON_RUNTIME_HOME')
+  }
+  if (typeof health.releaseId !== 'string') {
+    throw new Error('isolated Dashboard cleanup health is missing release identity')
+  }
+  const manifest = requireJsonObject(parseJson(await readFile(
+    join(runtimeHome, 'data', 'releases', health.releaseId, 'release.json'),
+    'utf8',
+  ), 'cleanup runtime release manifest'), 'cleanup runtime release manifest')
+  if (manifest.releaseId !== health.releaseId
+    || typeof manifest.source?.pluginVersion !== 'string') {
+    throw new Error('isolated Dashboard cleanup release manifest does not match health')
+  }
+  assertDashboardHealthIdentity(health, health.releaseId, manifest.source.pluginVersion)
+  return health
+}
+
+export async function cleanupIsolatedDashboardAfterFailure(env, port, ownedHealth) {
+  const expected = ownedHealth ?? await recoverIsolatedDashboardOwnership(env, port)
+  if (expected === null) return null
+  await stopOwnedDashboard(port, expected)
+  return expected
+}
+
 function pathIsWithin(candidate, root) {
   const remainder = relative(root, candidate)
   return remainder === '' || (!remainder.startsWith(`..${sep}`) && remainder !== '..')
@@ -987,9 +1040,11 @@ export async function main(argv = process.argv.slice(2)) {
     }
   } finally {
     if (!installationStarted && ownedHealth === null) cleanupComplete = true
-    if (!cleanupComplete && ownedHealth !== null && port !== null) {
+    if (!cleanupComplete && port !== null && fixture !== null) {
       try {
-        await stopOwnedDashboard(port, ownedHealth)
+        await cleanupIsolatedDashboardAfterFailure({
+          TENON_RUNTIME_HOME: join(fixture, 'runtime'),
+        }, port, ownedHealth)
         cleanupComplete = true
       } catch (error) {
         process.stderr.write(`[clean-install] ${error.message}\n`)

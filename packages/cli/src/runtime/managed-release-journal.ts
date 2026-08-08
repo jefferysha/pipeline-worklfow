@@ -178,11 +178,15 @@ function decodeStableTarget(
 
 function decodeDashboardIdentity(value: unknown): ManagedReleaseJournalRecord['dashboardBefore'] | null {
   if (value === undefined) return undefined
+  const serverVersion = isRecord(value) && value.serverVersion === undefined
+    ? ''
+    : isRecord(value) ? value.serverVersion : undefined
   if (!isRecord(value)
-    || !exactKeys(value, ['version', 'serverVersion', 'port', 'pid', 'releaseId', 'stateScopeId'], ['transactionId'])
+    || !exactKeys(value, ['version', 'port', 'pid', 'releaseId', 'stateScopeId'], ['serverVersion', 'transactionId'])
     || value.version !== 1
-    || typeof value.serverVersion !== 'string'
-    || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.serverVersion)
+    || typeof serverVersion !== 'string'
+    || (serverVersion !== ''
+      && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(serverVersion))
     || !Number.isSafeInteger(value.port)
     || (value.port as number) < 1
     || (value.port as number) > 65_535
@@ -196,7 +200,7 @@ function decodeDashboardIdentity(value: unknown): ManagedReleaseJournalRecord['d
         || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId)))) return null
   return {
     version: 1,
-    serverVersion: value.serverVersion,
+    serverVersion,
     port: value.port as number,
     pid: value.pid as number,
     releaseId: value.releaseId,
@@ -220,8 +224,8 @@ function decodeDashboard(value: unknown): ManagedReleaseJournalRecord['dashboard
   if (identity === null || identity === undefined
     || !exactKeys(
       value,
-      ['version', 'serverVersion', 'port', 'pid', 'releaseId', 'stateScopeId', 'owner'],
-      ['transactionId'],
+      ['version', 'port', 'pid', 'releaseId', 'stateScopeId', 'owner'],
+      ['serverVersion', 'transactionId'],
     )) return null
   return { ...identity, owner: value.owner }
 }
@@ -350,7 +354,8 @@ function decodeJournal(raw: string, paths: RuntimePaths): ManagedReleaseJournalR
         || value.phase === 'restoring-previous'
         || value.phase === 'previous-restored'
         || value.phase === 'evidence-committed')
-      && value.dashboardPort === undefined)
+      && value.dashboardPort === undefined
+      && !(value.operation === 'setup' && value.stableTarget === undefined))
   ) return null
   return {
     version: 1,

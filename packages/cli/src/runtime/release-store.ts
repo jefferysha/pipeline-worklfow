@@ -35,6 +35,7 @@ import {
   copyReleasePayload,
   defaultRuntimeCommandRunner,
   hashReleasePayload,
+  inspectCandidatePayload,
   releaseCandidateVersion,
   runChecked,
   verifyReleasePayload,
@@ -52,6 +53,8 @@ export interface RuntimeReleaseStoreOptions {
   readonly paths: RuntimePaths
   readonly now?: () => string
   readonly runner?: RuntimeCommandRunner
+  /** Native setup/update inject the absolute Bash path frozen before any host mutation. */
+  readonly bashPath?: string
   readonly retainedReleases?: number
   readonly auditWriter?: RuntimeAuditWriter
 }
@@ -59,6 +62,7 @@ export class RuntimeReleaseStore {
   private readonly paths: RuntimePaths
   private readonly now: () => string
   private readonly runner: RuntimeCommandRunner
+  private readonly bashPath: string
   private readonly retainedReleases: number
   private readonly auditWriter: RuntimeAuditWriter
 
@@ -66,6 +70,7 @@ export class RuntimeReleaseStore {
     this.paths = options.paths
     this.now = options.now ?? (() => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'))
     this.runner = options.runner ?? defaultRuntimeCommandRunner()
+    this.bashPath = options.bashPath ?? 'bash'
     this.retainedReleases = Math.max(2, options.retainedReleases ?? 3)
     this.auditWriter = options.auditWriter ?? writeAudit
   }
@@ -185,10 +190,21 @@ export class RuntimeReleaseStore {
     try {
       await mkdir(payloadRoot, { recursive: true })
       await copyReleasePayload(candidateRoot, payloadRoot)
-      await verifyReleasePayload(payloadRoot, this.runner)
+      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
       const payloadDigest = await hashReleasePayload(payloadRoot)
       releaseId = `sha256-${payloadDigest}`
-      const pluginVersion = await releaseCandidateVersion(candidateRoot)
+      const pluginVersion = await releaseCandidateVersion(payloadRoot)
+      const currentCandidate = await inspectCandidatePayload(candidateRoot, {
+        runner: this.runner,
+        bashPath: this.bashPath,
+      })
+      if (currentCandidate.pluginVersion !== pluginVersion
+        || currentCandidate.payloadDigest !== payloadDigest) {
+        throw new RuntimeFailure(
+          'candidate-invalid',
+          '候选 payload 在 staging 后发生漂移；拒绝发布混合身份 runtime',
+        )
+      }
       if (expectedPluginVersion !== undefined && pluginVersion !== expectedPluginVersion) {
         throw new RuntimeFailure(
           'candidate-invalid',
@@ -278,7 +294,7 @@ export class RuntimeReleaseStore {
     const payloadRoot = join(root, 'payload')
     try {
       if ((await hashReleasePayload(payloadRoot)) !== manifest.payloadDigest) return null
-      await verifyReleasePayload(payloadRoot, this.runner)
+      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
       return manifest
     } catch {
       return null

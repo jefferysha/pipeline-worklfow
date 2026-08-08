@@ -75,3 +75,28 @@ design-doc: docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycl
 验证：GitHub Release `v1.0.2` 非 draft/prerelease且 tag peel 到已合并 SHA；开放 PR `[]`；插件、runtime、Dashboard 均报告 `1.0.2`，来源无本地 path/`main`，新用户命令未构建源码。
 
 回滚：若发布前失败则不创建 tag；若发布后安装失败，保留 v1.0.1 和旧 managed runtime，修复后发布更高 patch，绝不移动或覆盖 v1.0.2。
+
+**此处建议 /clear**
+
+## 子阶段 6：Verify 失败后的兼容与信任边界修复
+
+1. 先更新 `release-coordinator.test.ts`、`update.test.ts` 与 `managed-release-journal.test.ts`，覆盖
+   candidate-resolved 后 host/payload 漂移拒绝、v1.0.1 缺 `serverVersion` WAL 的可恢复读取和重新健康证明。
+2. 为 coordinator 增加 activation 前候选复证回调；update/setup 在首次和恢复路径都重新证明 frozen tag、
+   marketplace/plugin identity、candidate version 与 payload digest，旧 journal evidence 只作恢复输入。
+3. 先更新 `install-bootstrap.node-test.mjs` 与 `launchers.test.ts`，覆盖 disabled exact registration、空/相对
+   PATH 与 cwd 恶意 `node`/`bash`；再让 installer 和 launcher 只执行已冻结的绝对程序。
+4. 先更新 `setup.test.ts`、`host-target-plan.test.ts` 与 clean-install acceptance 测试，覆盖“宿主候选精确但
+   pre-transaction runtime 为空”的首次打开、setup 计划的条件 remove/rebind 诚实投影，以及 acceptance
+   失败后的 Dashboard 清理。
+5. 更新 README/安装文档：v1.0.1 只走一次 `v1.0.2/install.sh` legacy bridge；从 v1.0.2 起每次更新都走
+   单条 `tenon update --codex`。禁止把无法追溯修改的旧进程描述成新版自迁移。
+6. 重建 CLI/server/Dashboard 受控资产，运行定向、全量、clean install、跨进程恢复和 release identity 门禁。
+7. 用真实形状 v1.0.1 setup WAL 与 v2/v3 convergence receipt 补充恢复矩阵：successor resolver 失败零清理、
+   `starting-dashboard` 迟到进程、已重绑 v1.0.2 宿主的一次性 runtime bridge、cleanup 前 v4 升级，以及
+   completed receipt 只能在 cleanup 后完整复证之后提交。
+
+验证：`node --test tools/install-bootstrap.node-test.mjs && npx vitest run packages/cli/src/commands/update.test.ts packages/cli/src/commands/setup.test.ts packages/cli/src/commands/release-coordinator.test.ts packages/cli/src/runtime/managed-release-journal.test.ts packages/cli/src/runtime/launchers.test.ts && npm run build && npm test && npm run test:web && npm run test:clean-install`。
+
+回滚：所有 coordinator/codec 修复保持 schema version 1 向后读；若新复证失败则保留 WAL 与旧 active runtime，
+不回退到旧的 fail-open activation。launcher/installer 变更只在正式安装或 activation 提交时覆盖产品自有文件。

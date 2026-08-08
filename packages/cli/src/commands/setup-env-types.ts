@@ -5,6 +5,7 @@ import type {
   LegacyProjectRegistryMigrationResult,
 } from '../migration/legacy-project-registry.js'
 import type { NativeHostCommandEnvironment } from './native-host-command-binding.js'
+import type { CandidatePayloadIdentity } from '../runtime/release-store.js'
 
 export interface SetupEnv extends NativeHostCommandEnvironment {
   homeDir(): string
@@ -26,6 +27,8 @@ export interface SetupEnv extends NativeHostCommandEnvironment {
   listDir(dir: string): string[]
   writeText(path: string, text: string): void
   writeTextAtomic(path: string, text: string): void
+  /** Test/adapter seam; production leaves this absent and uses the trusted Bash payload verifier. */
+  inspectCandidatePayload?(root: string): Promise<CandidatePayloadIdentity>
   migrateProjectRegistry?(
     input: LegacyProjectRegistryMigrationInput,
   ): Promise<LegacyProjectRegistryMigrationResult>
